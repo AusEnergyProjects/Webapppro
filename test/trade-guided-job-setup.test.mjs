@@ -43,7 +43,7 @@ test("admin and installer expose and search the same job ID", () => {
   assert.match(form, /TLJ-X3KHTUEF/);
   assert.match(adminDirectory, /TLJ-X3KHTUEF/);
   assert.doesNotMatch(`${form}\n${adminDirectory}`, /TLJ-00000124/);
-  assert.match(workspace, /This same ID is used by your team, Creditex and TLink support/);
+  assert.match(workspace, /This same ID is used by your team, the assigned compliance team and TLink support/);
   assert.match(adminJobs, /LOWER\(w\.work_number\) LIKE/);
   assert.match(adminJobs, /LOWER\(w\.id\) LIKE/);
   assert.match(adminJobs, /installer_business/);
@@ -63,11 +63,11 @@ test("guided setup attaches duplicates and creates one appointment plus planned 
   assert.match(crm, /INSERT INTO trade_work_order_events[\s\S]*'compliance_intent_planned'/);
   assert.doesNotMatch(crm, /INSERT INTO trade_crm_photo_requests|sendPhotoRequestDelivery/);
   assert.doesNotMatch(crm, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
-  assert.match(workspace, /planned government activity is visible to Creditex for setup review/);
+  assert.match(workspace, /planned government activity is available to the assigned compliance team for setup review/);
   assert.match(workspace, /TradePhotoRequestPanel/);
   assert.match(workspace, /TradeQuickInvoicePanel/);
   assert.match(crm, /appointmentTitle = `\$\{displayName\} \$\{SERVICE_LABELS\[serviceCategory\]\}`/);
-  assert.match(form, /technician receives the same job, program and evidence context that Creditex audits/);
+  assert.match(form, /technician receives the same job, activity and evidence context used by the assigned compliance team/);
 });
 
 test("enquiry handoff keeps the selected service site and safely supports customers without one", () => {
@@ -83,11 +83,41 @@ test("enquiry handoff keeps the selected service site and safely supports custom
 test("certificate planning cascades from output type to jurisdiction program and activity", () => {
   assert.match(form, /Certificate or support type/);
   assert.match(form, /claimOutputOptions/);
-  assert.match(form, /program\.claimOutputCode === claimOutputCode/);
-  assert.match(form, /setProgramTemplateId\(""\);[\s\S]*setActivityTemplateId\(""\)/);
+  assert.match(form, /program\.claimOutputCode === draftClaimOutputCode/);
+  assert.match(form, /setDraftProgramTemplateId\(""\);[\s\S]*setDraftActivityTemplateId\(""\)/);
   assert.match(form, /aria-current=\{step === target \? "step" : undefined\}/);
   assert.match(form, /querySelector<HTMLHeadingElement>\(`\[data-step="\$\{step\}"\] h3`\)/);
-  assert.match(form, /Saving creates the TLink job, field appointment and Creditex intake together/);
+  assert.match(form, /Saving creates the TLink job, field appointment and planned activity review records together/);
+});
+
+test("blank guided jobs open mandatory new-customer fields while seeded jobs keep existing-customer mode", () => {
+  assert.match(
+    form,
+    /useState<"existing" \| "new">\(initial\?\.customerId \? "existing" : "new"\)/,
+  );
+  assert.match(form, /<strong>New customer<\/strong>[\s\S]*?Find existing customer<\/button>/);
+  assert.match(form, /<strong>Find an existing customer<\/strong>[\s\S]*?Create new customer<\/button>/);
+  assert.match(form, /<span>Mobile<\/span><input type="tel" name="phone" required=\{step === 2\}/);
+  assert.match(form, /<span>Email<\/span><input type="email" name="email" required=\{step === 2\}/);
+  assert.doesNotMatch(form, /Mobile, optional|Email, optional/);
+});
+
+test("guided jobs collect a bounded deduplicated list of controlled activities", () => {
+  assert.match(form, /const MAX_PLANNED_COMPLIANCE_ACTIVITIES = 12/);
+  assert.match(form, /useState<PlannedComplianceActivity\[]>\(\[\]\)/);
+  assert.match(form, /plannedActivities\.some\(\(item\) =>[\s\S]*item\.programTemplateId === draftProgram\.templateId[\s\S]*item\.activityTemplateId === draftActivity\.templateId/);
+  assert.match(form, /That exact government program and activity is already added/);
+  assert.match(form, />Add activity<\/button>/);
+  assert.match(form, /No government activity added/);
+  assert.match(form, /name="complianceActivitiesJson" value=\{complianceActivitiesJson\}/);
+  assert.match(form, /const complianceActivitiesJson = JSON\.stringify\(plannedActivities\)/);
+  assert.match(form, /legacyComplianceActivity\?\.programTemplateId/);
+  assert.match(form, /legacyComplianceActivity\?\.activityTemplateId/);
+  for (const label of ["Program", "Activity", "Certificate output", "Product category", "Approved product", "Evidence form", "Calculation"]) {
+    assert.match(form, new RegExp(`<dt>${label}</dt>`));
+  }
+  assert.match(form, /plannedActivityDetails\.map/);
+  assert.doesNotMatch(form, /Creditex/);
 });
 
 test("enquiry selection ignores stale detail responses and refreshes only the current record", () => {
@@ -114,7 +144,7 @@ test("guided setup clears incompatible plans and recovers when customer sites ca
   );
   assert.match(
     form,
-    /function changeServiceCategory\(value: string, preserveCompliance = false\)[\s\S]*if \(!preserveCompliance\) clearCompliancePlan\(\)/,
+    /function changeServiceCategory\(value: string\)[\s\S]*setServiceCategory\(value\);[\s\S]*clearCompliancePlan\(\)/,
   );
   assert.match(
     form,
@@ -122,9 +152,9 @@ test("guided setup clears incompatible plans and recovers when customer sites ca
   );
   assert.match(
     form,
-    /Government program<\/span><select[\s\S]*setHighestStep\(\(current\) => Math\.min\(current, 3\)\); setProgramTemplateId/,
+    /Government program<\/span><select[\s\S]*setHighestStep\(\(current\) => Math\.min\(current, 3\)\); setDraftProgramTemplateId/,
   );
-  assert.match(form, /changeServiceCategory\(activity\.serviceCategory, true\)/);
+  assert.doesNotMatch(form, /changeServiceCategory\(activity\.serviceCategory/);
   assert.match(
     form,
     /const customer = result\.customer;[\s\S]*if \(!response\.ok \|\| !customer\)/,
@@ -156,10 +186,11 @@ test("planning starts with the job while governed compliance remains source cont
   assert.doesNotMatch(form, /name="complianceActivityVersionId"/);
   assert.doesNotMatch(form, /\/api\/trade-compliance/);
   assert.match(form, /name="complianceIntentMode"/);
+  assert.match(form, /name="complianceActivitiesJson"/);
   assert.match(form, /name="programTemplateId"/);
   assert.match(form, /name="activityTemplateId"/);
-  assert.match(form, /This creates the Creditex intake with the job/);
-  assert.match(crm, /governed activity version is resolved by TLink and Creditex/);
+  assert.match(form, /assigned compliance team can review the customer, site, activity and schedule/);
+  assert.match(crm, /governed activity version is resolved during compliance review/);
   assert.doesNotMatch(crm, /appendLiveComplianceCaseStatements\(db, batchStatements/);
   assert.match(crm, /resolveTradeComplianceIntent/);
   assert.match(crm, /INSERT INTO trade_work_order_compliance_intents/);

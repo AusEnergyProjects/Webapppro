@@ -425,8 +425,9 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /exact application commit `a45f250ee805aac1545c8643726dfde3964de22b`[\s\S]{0,500}Sites version 271/i);
   assert.match(roadmap, /## Released milestone: TRADE-CREDITEX-OPERATING-ALIGNMENT-41/);
   assert.match(roadmap, /primary application commit `836bc779f33a5f77fc4a18a41227dc76dfbf9914`[\s\S]{0,500}corrective commit `c32be214558dd1a20ccb26d04bcf7b054b00f110`[\s\S]{0,500}final application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`[\s\S]{0,500}Sites version 274/i);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` released and live/);
-  assert.match(handover, /Milestone ID: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41`/);
+  assert.match(roadmap, /## Release candidate milestone: TRADE-MULTI-ACTIVITY-USABILITY-42/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TRADE-MULTI-ACTIVITY-USABILITY-42` in progress/);
+  assert.match(handover, /Milestone ID: `TRADE-MULTI-ACTIVITY-USABILITY-42`/);
   assert.match(handover, /Current production: Sites version 274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`/);
   assert.match(handover, /Primary implementation source commit: `836bc779f33a5f77fc4a18a41227dc76dfbf9914`/);
   assert.match(handover, /Installer-register corrective commit: `c32be214558dd1a20ccb26d04bcf7b054b00f110`/);
@@ -562,10 +563,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(handoverStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.match(normalisedRoadmapNextFive, /^1\. \*\*Approve one complete VEU, SRES and NSW governed bundle each:/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Add immutable intent revision and case supersession:/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Complete immutable intent revision and case supersession:/);
   assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Configure one approved Australian production address provider:/);
   assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Complete the Dataforce field and import contract:/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Bind the pinned evidence form into the field job:/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Complete physical field acceptance and governed form publishing:/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

@@ -31,7 +31,7 @@ import {
 type Member = { id: string; displayName: string; role: string; status: string; isOwner: boolean };
 type WorkingHours = { id?: string; teamMemberId: string; weekday: number; startMinute: number; endMinute: number; isAvailable: boolean };
 type Unavailability = { id: string; teamMemberId: string; startsAt: string; endsAt: string; reason: string };
-type Appointment = { id: string; workOrderId: string; workNumber: string; title: string; appointmentType: string; startsAt: string; endsAt: string; assigneeMemberId: string; assigneeLabel: string; status: string; revision: number; serviceCategory: string; customerDisplayName: string; suburbLabel: string; siteLabel: string; siteSummary: string; protectedJob: boolean; conflicts: boolean; outsideWorkingHours: boolean };
+type Appointment = { id: string; workOrderId: string; workNumber: string; title: string; appointmentType: string; startsAt: string; endsAt: string; assigneeMemberId: string; assigneeLabel: string; status: string; revision: number; serviceCategory: string; customerDisplayName: string; suburbLabel: string; siteLabel: string; siteSummary: string; quoteStatus: string; quotedValueCents: number; protectedJob: boolean; conflicts: boolean; outsideWorkingHours: boolean };
 type RescheduleRequest = { id: string; appointmentId: string; workOrderId: string; workNumber: string; title: string; status: string;
   preferredWindows: Array<{ startsAt: string; endsAt: string }>; reason: string; accessNotes: string;
   originalStartsAt: string; originalEndsAt: string; proposedStartsAt: string; proposedEndsAt: string;
@@ -70,6 +70,7 @@ function minuteLabel(value: number) { return `${String(Math.floor(value / 60)).p
 function minuteValue(value: string) { const [hour, minute] = value.split(":").map(Number); return hour * 60 + minute; }
 function defaultHours(weekday: number): WorkingHours { return { teamMemberId: "", weekday, startMinute: 540, endMinute: 1020, isAvailable: weekday >= 1 && weekday <= 5 }; }
 function readable(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function money(cents: number) { return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
 function memberLabel(member: Member) { return member.isOwner ? "Me" : member.displayName; }
 function editFromRange(memberId: string, startsAt: string, endsAt: string): Edit {
   return { memberId, date: startsAt.slice(0, 10), time: startsAt.slice(11, 16), durationMinutes: appointmentDurationMinutes(startsAt, endsAt) };
@@ -109,7 +110,7 @@ function DurationControl({ id, value, onChange }: { id: string; value: number; o
   return <label className="schedule-duration" htmlFor={id}><span>Duration <strong>{durationLabel(value)}</strong></span><input id={id} type="range" min={APPOINTMENT_MIN_DURATION_MINUTES} max={APPOINTMENT_MAX_DURATION_MINUTES} step="15" value={value} onChange={(event) => onChange(Number(event.target.value))} /><small>15 min</small><small>8 hours</small></label>;
 }
 
-export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, initialWeekStart }: { user: User; onOpenJob?: (workOrderId: string) => void; initialWeekStart?: string }) {
+export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, onOpenQuote, initialWeekStart }: { user: User; onOpenJob?: (workOrderId: string) => void; onOpenQuote?: (workOrderId: string) => void; initialWeekStart?: string }) {
   const [initialTarget] = useState(() => initialScheduleWeekStart(initialWeekStart));
   const [initialFocusDate] = useState(() => initialScheduleFocusDate(initialWeekStart));
   const [rangeStart, setRangeStart] = useState(() => addDays(initialTarget, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
@@ -582,10 +583,11 @@ export function TradeScheduleWorkspace({ user, onOpenJob = () => undefined, init
           <header><div><span>Appointment</span><strong id="schedule-appointment-title">{selectedAppointment.customerDisplayName}</strong><small>{selectedAppointment.assigneeLabel || "Unassigned"} | {selectedAppointment.suburbLabel}</small></div><button type="button" autoFocus onClick={closeAppointment} aria-label="Close appointment details">Close</button></header>
           <div className="schedule-selection" style={{ border: 0, borderRadius: 0, overflowY: "auto" }}>
             <p><strong>{selectedAppointment.title}</strong><br />{readable(selectedAppointment.serviceCategory)} | {selectedAppointment.siteSummary || selectedAppointment.siteLabel}<br />Job reference {selectedAppointment.workNumber}</p>
+            <div className="schedule-quote-summary"><span><small>Quote</small><strong>{readable(selectedAppointment.quoteStatus || "not_started")}</strong></span><b>{money(selectedAppointment.quotedValueCents || 0)}</b></div>
             <div className="schedule-selection-fields"><label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label><label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`appointment-duration-${selectedAppointment.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, durationMinutes } }))} /></div>
             {status && <p className="crm-status schedule-dialog-status" role="status">{status}</p>}
           </div>
-          <footer><button type="button" onClick={() => { closeAppointment(); onOpenJob(selectedAppointment.workOrderId); }}>Open full job</button><button className="primary" type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `appointment:${selectedAppointment.id}`} onClick={() => void update({ action: "schedule_appointment", appointmentId: selectedAppointment.id, expectedRevision: selectedAppointment.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `appointment:${selectedAppointment.id}`, `${selectedAppointment.customerDisplayName} schedule updated.`)}>{busy === `appointment:${selectedAppointment.id}` ? "Saving..." : "Save appointment"}</button></footer>
+          <footer><button type="button" onClick={() => { closeAppointment(); onOpenJob(selectedAppointment.workOrderId); }}>Open full job</button>{onOpenQuote && !selectedAppointment.protectedJob && <button className="schedule-secondary" type="button" onClick={() => { closeAppointment(); onOpenQuote(selectedAppointment.workOrderId); }}>View, send or revise quote</button>}<button className="primary" type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `appointment:${selectedAppointment.id}`} onClick={() => void update({ action: "schedule_appointment", appointmentId: selectedAppointment.id, expectedRevision: selectedAppointment.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `appointment:${selectedAppointment.id}`, `${selectedAppointment.customerDisplayName} schedule updated.`)}>{busy === `appointment:${selectedAppointment.id}` ? "Saving..." : "Save appointment"}</button></footer>
         </section>
       </div>;
     })()}

@@ -1,18 +1,14 @@
 # Next task handover
 
-Status: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41` released and live
+Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` in progress
 
-Prepared: 3 August 2026
+Prepared: 4 August 2026
 
-Milestone ID: `TRADE-CREDITEX-OPERATING-ALIGNMENT-41`
+Milestone ID: `TRADE-MULTI-ACTIVITY-USABILITY-42`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Released application source commit: `c51934456c2248da4cfde9a0b759b70d69df56ee`
-
-Primary implementation source commit: `836bc779f33a5f77fc4a18a41227dc76dfbf9914`
-
-Installer-register corrective commit: `c32be214558dd1a20ccb26d04bcf7b054b00f110`
+Baseline production application source: `c51934456c2248da4cfde9a0b759b70d69df56ee`
 
 Current production: Sites version 274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
 
@@ -27,38 +23,43 @@ Creditex URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 ## Active milestone contract
 
 Outcome: an installer can create one accurate scheduled certificate-work job
-without duplicate entry, while Creditex receives the complete authorised
-planning record immediately and both teams operate the same exact 23-column
-Dataforce-compatible job register.
+with a complete customer record and one or more compatible program activities,
+then carry the same private job, activity, schedule and commercial context into
+field work and the assigned compliance review without duplicate entry.
 
 Owning workflow:
 
-- guided job creation and review in `TradeNewJobForm`;
-- service-address validation and provenance in `trade-crm` and
-  `trade-address-suggestions`;
-- installer-to-Creditex case initiation in `trade-compliance`;
-- exact Dataforce projection and complete filtered export in
-  `InstallerCrmWorkspace` and `creditex-dataforce-job-csv`;
-- additive address and compliance-policy migrations plus focused regressions.
+- guided customer, multi-activity, appointment and review capture in
+  `TradeNewJobForm`;
+- durable multi-activity planning intents in `trade-crm`,
+  `trade-compliance-intent` and an additive migration;
+- installer Jobs and Customers navigation in `InstallerCrmWorkspace`;
+- appointment and quote handoff in `TradeScheduleWorkspace`;
+- the shared `SiteDatePicker`, installer-visible compliance wording and focused
+  regressions for each changed boundary.
 
 In scope:
 
-- make every reached New Job stage directly clickable and keep appointment
-  type, duration and notes visible;
-- remove the unused visible site-name field and keep one automatic internal
-  service-site label;
-- validate the complete Australian address and state/postcode combination,
-  retain signed provider provenance when configured, and visibly mark manual
-  addresses for Creditex review;
-- replace the shallow final card with a detail-rich customer, site, work,
-  commercial, program, certificate, product, evidence, schedule and technician
-  review;
-- expose one installer-owned job per row using the exact known Dataforce
-  23-column contract, remove row-selection checkboxes and download every
-  filtered row through the authoritative CSV exporter;
-- let governed intake start from the progressing job without requiring quote
-  acceptance, while recording the installer as the actor and validating any
-  optional accepted-quote linkage at application and database boundaries.
+- keep existing-customer search available while showing the new-customer form
+  by default and require a valid phone and email for every newly created
+  customer;
+- let one job contain multiple controlled program and activity selections,
+  reject exact duplicates and retain one immutable planning intent per selected
+  activity;
+- keep the final review detail rich and show every selected program activity
+  without implying that a certificate, rebate or governed case exists;
+- keep date and time selection usable inside the viewport on desktop and mobile;
+- retain the exact known Dataforce 23-column order while making the customer
+  identity visible in the frozen leading job context and phone values directly
+  callable;
+- sort customers by first name then last name, expose filters for every customer
+  directory category and show a date with the latest job;
+- make in-product back navigation prominent and preserve the current filtered
+  list state;
+- expose quote status and direct view, revise and prepare-to-send actions from
+  the schedule appointment workspace;
+- remove the compliance partner name from installer and customer-facing TLink
+  dashboard copy while preserving the internal authorised partner boundary.
 
 Out of scope:
 
@@ -68,81 +69,86 @@ Out of scope:
 - adding or guessing Dataforce meanings that are absent from the supplied
   23-column export;
 - provisioning an address-provider account or secret;
+- changing the internal compliance partner organisation, access model or
+  dedicated administrator portal;
 - creating production customers, jobs, evidence or compliance cases during
   release verification.
 
 Acceptance criteria:
 
-- the wizard stages are accessible buttons and only forward progress is
-  validation-gated;
-- a guided job cannot use a malformed postcode or mismatched state and
-  postcode;
-- editing any provider-selected address either proves the new provider
-  selection or downgrades the address to manual Creditex review;
-- the review shows the exact captured customer, contact, address, job,
-  certificate plan, approved-product state, evidence-policy state, appointment
-  and technician without implying that a certificate exists;
-- Creditex receives the planning intent with the job and private data remains
-  organisation-scoped;
-- installer case initiation records the authenticated installer actor; quote
-  linkage is optional, all-or-none and immutable when present;
-- the Jobs register has the exact supplied 23 headers in order, one job per
-  row, no selection checkboxes and one bounded complete filtered CSV export;
+- the new-customer fields are open by default and cannot submit without a valid
+  email, phone and service address;
+- a job can save two or more compatible controlled activities atomically and
+  every activity remains independently identifiable for later audit;
+- the shared date-time picker remains fully visible and keyboard-operable at
+  the top and bottom of the viewport;
+- the Jobs register still has exactly the supplied 23 headers in order and one
+  job per row, while customer identity and callable phone values are usable
+  without scrolling to the far-right columns;
+- the customer directory defaults to first-name then last-name order, every
+  shown category has a corresponding filter, and latest job includes its date;
+- schedule appointment details provide safe paths into quote view, revision and
+  send preparation without bypassing the quote preview and consent controls;
+- installer and customer TLink dashboards contain no visible compliance partner
+  name, while the authorised internal portal and tenant checks remain intact;
 - type checking, lint, focused tests, migration replay, integration tests, the
   complete suite, production build and Sites bundle audit pass.
 
-Stop condition: stop if the exact official government source and policy are
-not independently verified, if an address provider requires an unapproved
-credential or contract, if a tenant or actor boundary fails, if migration
-replay diverges, or if release verification would mutate production data.
+Stop condition: stop if multiple activities cannot remain atomic and
+independently identifiable, if an existing tenant or actor boundary fails, if
+the Dataforce 23-column contract changes, if migration replay diverges, or if
+release verification would mutate production data.
 
 ## Release result
 
-The complete operating-alignment slice is live. The installer New Job stages
-are clickable, appointment controls stay visible, the unused site-name field is
-removed, address provenance is retained, progressing work can create the
-planning intent without an accepted quote, the review is detail rich, and both
-installer and Creditex registers use the exact known 23-column Dataforce
-contract. Creditex can open the complete authorised customer, installer,
-service-site and job projection, then load each retained audit domain in
-bounded 50-record keyset pages.
+Release candidate assembled and validated; production remains Sites version
+274 from application commit `c51934456c2248da4cfde9a0b759b70d69df56ee`
+until the exact-source commit, Sites package and signed-in read-only inspection
+all pass.
 
-The release required two production corrections after the primary
-implementation. Sites version 272 from
-`836bc779f33a5f77fc4a18a41227dc76dfbf9914` exposed a missing installer Jobs
-index. Sites version 273 from
-`c32be214558dd1a20ccb26d04bcf7b054b00f110` restored that index, then live
-Creditex QA exposed invented installer projection fields and a request shape
-that could exceed the D1 Free query limit. Current commit
-`c51934456c2248da4cfde9a0b759b70d69df56ee` removes those fields, uses the
-production schema as the executable contract, loads core records first and
-loads each of 53 audit domains on demand.
+The candidate keeps new-customer entry open beside existing-customer search,
+requires phone and email, and creates every selected controlled activity in one
+atomic job transaction. Each activity retains its exact program, activity,
+policy and later case identity across web and mobile field capture. The
+installer Jobs register preserves the exact known 23-column Dataforce contract
+while showing identity first, callable contact details, complete filters and
+explicit navigation. Customer sorting, latest-job dates, schedule quote
+actions, the portalled date-time picker and detail-rich multi-activity review
+are included.
 
-Validation and release evidence:
+The completion boundary now fails closed if any active governed case is missing
+submitted evidence, if an evidence item has been superseded, or if photo proof
+changes between preflight and the atomic transition. JSON control requests are
+stream-bounded by actual bytes, and offline bootstrap companion rows are
+restricted to the selected 500-job cohort with an overall fail-closed
+cardinality limit.
 
-- `npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
-  integration tests, the complete application suite, all 119 migrations,
-  customer-plan PDF audit, Vinext production build and Sites bundle audit.
-- The persistent SQL regression replayed all 53 first pages and all 53 cursor
-  pages against a fresh database: 106 of 106 audit-group statements passed.
-- Independent final review found no remaining P0, P1 or P2 defect.
-- Archive `.openai/site-release-c519344.tar.gz` is 7,775,395 bytes with
-  SHA-256
-  `CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C`
-  and 373 entries. Sites stored 359 files and 31,590,400 bytes with content
-  hash
+A changed installation date now immutably supersedes each still-planned
+activity intent and inserts its exact next revision in the same guarded
+schedule transaction. Concurrent schedule writes roll back completely, while
+case-linked intents remain date-locked.
+
+`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+integration tests, 1,440 main tests with 1,438 passed, 2 intentionally skipped
+and 0 failed, all 120 migrations through
+`0119_trade_multi_activity_jobs.sql`, the customer-plan PDF audit, Vinext
+production build and Sites server-bundle audit. Exact release provenance and
+signed-in production inspection remain pending. Historical version-274
+evidence below describes the production baseline, not this candidate.
+
+Production baseline provenance for released milestone 41:
+
+- Primary implementation source commit: `836bc779f33a5f77fc4a18a41227dc76dfbf9914`
+- Installer-register corrective commit: `c32be214558dd1a20ccb26d04bcf7b054b00f110`
+- Released application source commit: `c51934456c2248da4cfde9a0b759b70d69df56ee`
+- Saved version:
+  `appgprj_6a550c378000819185caf094173422bb~appgver_02f3ce1e33ec8191919abea0bc24f6ac`
+- Deployment: `appgdep_6a7082f95d2881919e97336aa038fc5a`
+- The baseline archive is 7,775,395 bytes with SHA-256
+  `CD5CA5072B17BC6970CB6EDEE0CA1A3C29D195A535397A91C9A0794810975F9C`.
+  Sites stored 359 files and 31,590,400 bytes with content hash
   `sha256:455c203ec7dfe5c21c5559453b33e4e7f1b92910412d9cd4130ac903ccb2aeb7`.
-- Sites version 274 was deployed through
-  `appgdep_6a7082f95d2881919e97336aa038fc5a` with environment revision 19.
-  The custom-domain health endpoint returned HTTP 200.
-- Signed-in installer QA loaded 7 company-scoped jobs, the exact 23 columns,
-  no visible row-selection checkboxes and a successful 7-row exact-order CSV
-  export. Signed-in Creditex QA loaded the single assigned planning job,
-  complete private audit core, manual-address provenance, one appointment and
-  correct empty quote, compliance-case and governed-evidence groups. No
-  customer, job, intent, case, evidence, certificate, submission, trade or
-  settlement record was created or changed during release QA. The authorised
-  workspace and group reads appended their designed audit-view events.
+- The baseline production-schema regression reported 106 of 106 audit-group statements passed.
 
 Remaining controlled limitation: production has no
 `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` or
@@ -152,10 +158,10 @@ but it is explicitly stored and shown to Creditex as `manual_pending_review`.
 ## Next five logical product steps
 
 1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
-2. **Add immutable intent revision and case supersession:** create a new planning version when the address, installation date, activity, product or technician changes, visibly supersede the prior version and provide a clear Creditex return-to-installer path.
+2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
 3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
 4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
-5. **Bind the pinned evidence form into the field job:** deliver Creditex-editable operational prompts, original photo bytes and metadata, offline recovery and simple evidence-complete installer and auditor gates.
+5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
 
 ## Previous released milestone
 

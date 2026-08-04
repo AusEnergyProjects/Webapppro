@@ -11,6 +11,10 @@ import {
   CREDITEX_PARTNER_ORGANISATION_CODE,
 } from "@/lib/trade-compliance-intent";
 import {
+  BoundedJsonRequestError,
+  readBoundedJsonRequest,
+} from "@/lib/bounded-json-request";
+import {
   requireVerifiedTradeAccess,
   TradeAccessError,
 } from "@/lib/trade-access-server";
@@ -18,8 +22,10 @@ import {
 export const runtime = "edge";
 
 const ACTIVITY_PAGE_SIZE = 200;
+const MAX_COMPLIANCE_INTAKE_JSON_BYTES = 4_096;
 const POST_FIELDS = new Set([
   "workOrderId",
+  "complianceIntentId",
   "activityVersionId",
   "idempotencyKey",
   "commercialHandoffId",
@@ -36,12 +42,13 @@ type OptionalCommercialHandoff = {
 
 type JobComplianceContext = {
   workOrderId: string;
+  complianceIntentId: string;
   serviceCategory: string;
   jurisdiction: string;
   activityDate: string;
-  activeCaseId: string;
-  activeCaseNumber: string;
-  activeActivityVersionId: string;
+  programCode: string;
+  registryActivityCode: string;
+  activityKey: string;
 };
 
 type ComplianceOrganisationRef = {
@@ -165,9 +172,9 @@ async function activeCreditexOrganisation(
     .first<Row>();
   if (!row?.id || row.organisation_code !== CREDITEX_PARTNER_ORGANISATION_CODE) {
     throw new ComplianceDomainError(
-      "CREDITEX_PARTNER_UNAVAILABLE",
+      "COMPLIANCE_PARTNER_UNAVAILABLE",
       503,
-      "Creditex compliance intake is temporarily unavailable.",
+      "Compliance intake is temporarily unavailable.",
     );
   }
   return {
@@ -191,7 +198,31 @@ async function ownedJobContext(
   installerUid: string,
   workOrderId: string,
   complianceOrganisationId: string,
+  complianceIntentId = "",
 ): Promise<JobComplianceContext> {
+  let resolvedComplianceIntentId = complianceIntentId;
+  if (!resolvedComplianceIntentId) {
+    const governedIntents = await database.prepare(`SELECT id
+      FROM trade_work_order_compliance_intents
+      WHERE compliance_organisation_id = ?
+        AND work_order_id = ?
+        AND installer_uid = ?
+        AND status IN ('planned', 'case_linked')
+      ORDER BY created_at ASC, id ASC
+      LIMIT 2`)
+      .bind(complianceOrganisationId, workOrderId, installerUid)
+      .all<{ id: string }>();
+    if (governedIntents.results.length > 1) {
+      throw new ComplianceDomainError(
+        "COMPLIANCE_INTENT_REQUIRED",
+        409,
+        "Choose the exact planned activity before opening compliance intake.",
+      );
+    }
+    resolvedComplianceIntentId = String(
+      governedIntents.results[0]?.id || "",
+    );
+  }
   const row = await database.prepare(`SELECT
       work.id,
       work.source_type,
@@ -210,9 +241,17 @@ async function ownedJobContext(
       detail.customer_source,
       detail.service_site_id,
       service_site.address_state,
-      active_case.id active_case_id,
-      active_case.case_number active_case_number,
-      active_case.activity_version_id active_activity_version_id
+      intent.id compliance_intent_id,
+      intent.status compliance_intent_status,
+      intent.service_category intent_service_category,
+      intent.site_jurisdiction intent_site_jurisdiction,
+      intent.planned_start intent_planned_start,
+      intent.program_code intent_program_code,
+      intent.registry_activity_code intent_registry_activity_code,
+      json_extract(
+        intent.intent_snapshot,
+        '$.activity.activityKey'
+      ) intent_activity_key
     FROM trade_work_orders work
     JOIN trade_crm_job_details detail
       ON detail.work_order_id = work.id
@@ -221,17 +260,22 @@ async function ownedJobContext(
       ON service_site.id = detail.service_site_id
       AND service_site.firebase_uid = detail.firebase_uid
       AND service_site.record_status = 'active'
-    LEFT JOIN compliance_cases active_case
-      ON active_case.work_order_id = work.id
-      AND active_case.installer_uid = work.firebase_uid
-      AND active_case.organisation_id = ?
-      AND active_case.status <> 'closed'
+    LEFT JOIN trade_work_order_compliance_intents intent
+      ON intent.id = ?
+      AND intent.work_order_id = work.id
+      AND intent.installer_uid = work.firebase_uid
+      AND intent.compliance_organisation_id = ?
+      AND intent.status IN ('planned', 'case_linked')
     WHERE work.id = ? AND work.firebase_uid = ?
       AND work.partner_type = 'installer'
       AND work.record_status = 'active'
-    ORDER BY active_case.created_at DESC
     LIMIT 1`)
-    .bind(complianceOrganisationId, workOrderId, installerUid)
+    .bind(
+      resolvedComplianceIntentId,
+      complianceOrganisationId,
+      workOrderId,
+      installerUid,
+    )
     .first<Row>();
   if (!row) {
     throw new ComplianceDomainError(
@@ -246,7 +290,20 @@ async function ownedJobContext(
   ) {
     throw new Error("DIRECT_CUSTOMER_REQUIRED");
   }
-  const jurisdiction = String(row.address_state || "").trim().toUpperCase();
+  if (
+    resolvedComplianceIntentId
+    && row.compliance_intent_id !== resolvedComplianceIntentId
+  ) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_INTENT_NOT_FOUND",
+      404,
+      "The selected planned activity was not found for this job.",
+    );
+  }
+  const siteJurisdiction = String(row.address_state || "").trim().toUpperCase();
+  const jurisdiction = String(
+    row.intent_site_jurisdiction || siteJurisdiction,
+  ).trim().toUpperCase();
   if (!AUSTRALIAN_SITE_JURISDICTIONS.includes(
     jurisdiction as typeof AUSTRALIAN_SITE_JURISDICTIONS[number],
   )) {
@@ -257,7 +314,9 @@ async function ownedJobContext(
     );
   }
   const installationStart = String(row.installation_start || "");
-  const activityDate = installationStart.slice(0, 10);
+  const activityDate = String(
+    row.intent_planned_start || installationStart,
+  ).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(activityDate)) {
     throw new ComplianceDomainError(
       "ACTIVITY_DATE_REQUIRED",
@@ -272,7 +331,16 @@ async function ownedJobContext(
       "Set the installation appointment as the current job schedule before opening compliance intake.",
     );
   }
-  const serviceCategory = String(row.service_category || "").trim();
+  if (jurisdiction !== siteJurisdiction) {
+    throw new ComplianceDomainError(
+      "PLANNED_JURISDICTION_MISMATCH",
+      409,
+      "The planned activity no longer matches the service-site state.",
+    );
+  }
+  const serviceCategory = String(
+    row.intent_service_category || row.service_category || "",
+  ).trim();
   if (!serviceCategory) {
     throw new ComplianceDomainError(
       "SERVICE_CATEGORY_REQUIRED",
@@ -282,12 +350,13 @@ async function ownedJobContext(
   }
   return {
     workOrderId: String(row.id),
+    complianceIntentId: String(row.compliance_intent_id || ""),
     serviceCategory,
     jurisdiction,
     activityDate,
-    activeCaseId: String(row.active_case_id || ""),
-    activeCaseNumber: String(row.active_case_number || ""),
-    activeActivityVersionId: String(row.active_activity_version_id || ""),
+    programCode: String(row.intent_program_code || ""),
+    registryActivityCode: String(row.intent_registry_activity_code || ""),
+    activityKey: String(row.intent_activity_key || ""),
   };
 }
 
@@ -299,7 +368,6 @@ function activityJson(
   return {
     id: activity.id,
     programId: activity.programId,
-    organisationName: activity.organisationName,
     programName: activity.programName,
     programCode: activity.programCode,
     schemeKind: activity.schemeKind,
@@ -341,20 +409,33 @@ export async function GET(request: Request) {
       url.searchParams.get("workOrderId"),
       "Work order",
     );
+    const complianceIntentId = optionalInput(
+      url.searchParams.get("complianceIntentId"),
+      "Planned activity",
+      180,
+    );
     const context = await ownedJobContext(
       database,
       access.identity.uid,
       workOrderId,
       creditexOrganisation.id,
+      complianceIntentId,
     );
-    if (context.activeCaseId) {
+    const currentCase = await activeCase(
+      database,
+      creditexOrganisation.id,
+      access.identity.uid,
+      workOrderId,
+      context.complianceIntentId,
+    );
+    if (currentCase) {
       return adminJson({
         ok: true,
         context,
         existingCase: {
-          id: context.activeCaseId,
-          caseNumber: context.activeCaseNumber,
-          activityVersionId: context.activeActivityVersionId,
+          id: String(currentCase.id),
+          caseNumber: String(currentCase.case_number),
+          activityVersionId: String(currentCase.activity_version_id),
         },
         activities: [],
         pagination: {
@@ -372,6 +453,9 @@ export async function GET(request: Request) {
       serviceCategory: context.serviceCategory,
       jurisdiction: context.jurisdiction,
       organisationCode: creditexOrganisation.code,
+      programCode: context.programCode,
+      registryActivityCode: context.registryActivityCode,
+      activityKey: context.activityKey,
       onDate: context.activityDate,
       limit: ACTIVITY_PAGE_SIZE + 1,
       afterActivityId,
@@ -398,6 +482,7 @@ async function activeCase(
   complianceOrganisationId: string,
   installerUid: string,
   workOrderId: string,
+  complianceIntentId: string,
 ) {
   return database.prepare(`SELECT id, case_number, activity_version_id,
       commercial_handoff_id, accepted_quote_version_id,
@@ -406,10 +491,16 @@ async function activeCase(
     WHERE organisation_id = ?
       AND installer_uid = ?
       AND work_order_id = ?
+      AND compliance_intent_id = ?
       AND status <> 'closed'
     ORDER BY created_at DESC
     LIMIT 1`)
-    .bind(complianceOrganisationId, installerUid, workOrderId)
+    .bind(
+      complianceOrganisationId,
+      installerUid,
+      workOrderId,
+      complianceIntentId,
+    )
     .first<Row>();
 }
 
@@ -461,21 +552,20 @@ export async function POST(request: Request) {
     const access = await requireVerifiedTradeAccess(request, {
       partnerTypes: ["installer"],
     });
-    const contentLength = Number(request.headers.get("content-length") || 0);
-    if (Number.isFinite(contentLength) && contentLength > 4_096) {
-      return adminJson({
-        ok: false,
-        error: "The compliance intake request is too large.",
-      }, 413);
-    }
     let parsedBody: unknown;
     try {
-      parsedBody = await request.json();
-    } catch {
+      parsedBody = await readBoundedJsonRequest(
+        request,
+        MAX_COMPLIANCE_INTAKE_JSON_BYTES,
+      );
+    } catch (error) {
       return adminJson({
         ok: false,
-        error: "The compliance intake request is invalid.",
-      }, 400);
+        error: error instanceof BoundedJsonRequestError
+          && error.code === "REQUEST_TOO_LARGE"
+          ? "The compliance intake request is too large."
+          : "The compliance intake request is invalid.",
+      }, error instanceof BoundedJsonRequestError ? error.status : 400);
     }
     if (
       !parsedBody
@@ -493,10 +583,15 @@ export async function POST(request: Request) {
     if (unexpected.length) {
       return adminJson({
         ok: false,
-        error: "Compliance intake only accepts the job, activity version, idempotency key and optional accepted quote linkage.",
+        error: "Compliance intake only accepts the job, planned activity, published activity version, idempotency key and optional accepted quote linkage.",
       }, 400);
     }
     const workOrderId = requiredInput(body.workOrderId, "Work order");
+    const complianceIntentId = optionalInput(
+      body.complianceIntentId,
+      "Planned activity",
+      180,
+    );
     const activityVersionId = requiredInput(
       body.activityVersionId,
       "Published activity version",
@@ -514,12 +609,14 @@ export async function POST(request: Request) {
       access.identity.uid,
       workOrderId,
       creditexOrganisation.id,
+      complianceIntentId,
     );
     const currentCase = await activeCase(
       database,
       creditexOrganisation.id,
       access.identity.uid,
       workOrderId,
+      context.complianceIntentId,
     );
     if (currentCase) {
       return activeCaseResponse(
@@ -533,6 +630,7 @@ export async function POST(request: Request) {
         "tlink-compliance-intake-v1",
         access.identity.uid,
         workOrderId,
+        context.complianceIntentId,
         activityVersionId,
         idempotencyKey,
         optionalHandoff.commercialHandoffId,
@@ -551,6 +649,7 @@ export async function POST(request: Request) {
         serviceCategory: context.serviceCategory,
         jurisdiction: context.jurisdiction,
         workOrderId,
+        complianceIntentId: context.complianceIntentId,
         ...optionalHandoff,
         installerUid: access.identity.uid,
         actorType: "installer",
@@ -571,72 +670,21 @@ export async function POST(request: Request) {
         `${prepared.caseNumber} opened from the governed installer job.`,
         now,
       ));
-    const caseProgramCode = String(
-      prepared.activitySnapshot.programCode || "",
-    );
-    const caseRegistryActivityCode = String(
-      prepared.activitySnapshot.registryActivityCode || "",
-    );
-    const caseActivityKey = String(
-      prepared.activitySnapshot.activityKey || "",
-    );
     statements.push(
       database.prepare(`UPDATE trade_work_order_compliance_intents
         SET status = 'case_linked', compliance_case_id = ?, updated_at = ?
-        WHERE compliance_organisation_id = ?
-          AND work_order_id = ? AND installer_uid = ? AND status = 'planned'
-          AND program_code = ?
-          AND (
-            (registry_activity_code <> '' AND registry_activity_code = ?)
-            OR (
-              registry_activity_code = ''
-              AND json_extract(intent_snapshot, '$.activity.activityKey') = ?
-            )
-          )
-          AND service_category = ?
-          AND site_jurisdiction = ?
-          AND substr(planned_start, 1, 10) = ?`)
+        WHERE id = ?
+          AND compliance_organisation_id = ?
+          AND work_order_id = ?
+          AND installer_uid = ?
+          AND status = 'planned'`)
         .bind(
           prepared.caseId,
           now,
+          context.complianceIntentId,
           prepared.organisationId,
           workOrderId,
           access.identity.uid,
-          caseProgramCode,
-          caseRegistryActivityCode,
-          caseActivityKey,
-          context.serviceCategory,
-          context.jurisdiction,
-          context.activityDate,
-        ),
-      database.prepare(`UPDATE trade_work_order_compliance_intents
-        SET status = 'superseded', compliance_case_id = '', updated_at = ?
-        WHERE compliance_organisation_id = ?
-          AND work_order_id = ? AND installer_uid = ? AND status = 'planned'
-          AND NOT (
-            program_code = ?
-            AND (
-              (registry_activity_code <> '' AND registry_activity_code = ?)
-              OR (
-                registry_activity_code = ''
-                AND json_extract(intent_snapshot, '$.activity.activityKey') = ?
-              )
-            )
-            AND service_category = ?
-            AND site_jurisdiction = ?
-            AND substr(planned_start, 1, 10) = ?
-          )`)
-        .bind(
-          now,
-          prepared.organisationId,
-          workOrderId,
-          access.identity.uid,
-          caseProgramCode,
-          caseRegistryActivityCode,
-          caseActivityKey,
-          context.serviceCategory,
-          context.jurisdiction,
-          context.activityDate,
         ),
     );
     try {
@@ -647,6 +695,7 @@ export async function POST(request: Request) {
         creditexOrganisation.id,
         access.identity.uid,
         workOrderId,
+        context.complianceIntentId,
       );
       if (concurrentCase) {
         return activeCaseResponse(

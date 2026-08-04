@@ -8,12 +8,21 @@ import { normalizeTradeFormAnswers, tradeFormCompletion } from "@/lib/trade-form
 import { addMonthsToIsoDate } from "@/lib/asset-lifecycle.mjs";
 import { photoRequestEvidenceKey } from "@/lib/photo-request-review";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
+import {
+  BoundedJsonRequestError,
+  readBoundedJsonRequest,
+} from "@/lib/bounded-json-request";
 
 export const runtime = "edge";
 
 const CONTRACT_VERSION = MOBILE_CONTRACT_VERSION;
 const MAX_ACTIONS = 50;
 const MAX_CHANGES = 200;
+const MAX_SYNC_JSON_BYTES = 512 * 1024;
+const MAX_SYNC_JOBS = 500;
+const MAX_SYNC_COMPANION_ROWS = 10_000;
+const MAX_ACTIVE_COMPLIANCE_CASES_PER_JOB = 12;
+const MAX_COMPLIANCE_REQUIREMENTS_PER_CASE = 200;
 const TASK_STATUSES = new Set(["pending", "done"]);
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;
@@ -37,6 +46,15 @@ const WORK_STAGE_TRANSITIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   cancelled: new Set(),
 };
 const TERMINAL_WORK_STAGES = new Set(["completed", "cancelled"]);
+const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
+  FROM trade_work_orders cohort
+  WHERE cohort.firebase_uid = ?
+    AND cohort.partner_type = 'installer'
+    AND cohort.record_status = 'active'
+    AND (? <> 'technician' OR cohort.assignee_member_id = ?)
+  ORDER BY cohort.scheduled_start = '', cohort.scheduled_start,
+    cohort.updated_at DESC
+  LIMIT ${MAX_SYNC_JOBS}`;
 
 type OfflineAction = Record<string, unknown>;
 
@@ -66,6 +84,13 @@ function syncError(error: unknown) {
   if (mobile) return adminJson({ ok: false, code: mobile.code, error: mobile.error,
     ...(mobile.minimumVersion ? { minimumVersion: mobile.minimumVersion } : {}) }, mobile.status);
   const code = error instanceof Error ? error.message : "";
+  if (code === "SYNC_RESPONSE_CARDINALITY_EXCEEDED") {
+    return adminJson({
+      ok: false,
+      code,
+      error: "This account has too much active field data for one safe sync. Complete or archive older work before retrying.",
+    }, 409);
+  }
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Offline team sync requires team access on the installer account." }, 403);
@@ -215,29 +240,70 @@ async function accessibleJobs(access: TeamAccess) {
         ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
-      ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC LIMIT 500`)
-      .bind(access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+      ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        MAX_SYNC_JOBS,
+      ).all<Record<string, unknown>>(),
     db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at, t.revision, t.updated_at
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
       WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
-      ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at`)
-      .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+        AND t.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
+      ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
     db.prepare(`SELECT m.id, m.work_order_id, m.category, m.file_name, m.content_type, m.size_bytes, m.caption, m.created_at
       FROM trade_crm_job_media m JOIN trade_work_orders w ON w.id = m.work_order_id
       WHERE m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
-      ORDER BY m.created_at DESC`)
-      .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+        AND m.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
+      ORDER BY m.created_at DESC
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
     db.prepare(`SELECT f.id, f.work_order_id, f.template_key, f.template_version, f.template_name, f.jurisdiction,
         f.template_snapshot, f.answers, f.status, f.revision, f.completed_at, f.updated_at
       FROM trade_job_forms f JOIN trade_work_orders w ON w.id = f.work_order_id
       WHERE f.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
-      ORDER BY f.status = 'complete', f.created_at`)
-      .bind(access.ownerUid, access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+        AND f.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
+      ORDER BY f.status = 'complete', f.created_at
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
     db.prepare(`SELECT
         c.work_order_id, c.id case_id, c.case_number, c.activity_version_id,
+        c.status case_status, c.evidence_status case_evidence_status,
+        c.revision case_revision,
         a.activity_key, a.registry_activity_code, a.title activity_title,
         p.id evidence_policy_version_id,
         r.id requirement_id, r.requirement_code, r.title requirement_title,
@@ -258,15 +324,18 @@ async function accessibleJobs(access: TeamAccess) {
         ON p.id = c.evidence_policy_version_id
         AND p.activity_version_id = c.activity_version_id
         AND p.organisation_id = c.organisation_id
-      JOIN compliance_evidence_requirements r
+      LEFT JOIN compliance_evidence_requirements r
         ON r.policy_version_id = p.id AND r.organisation_id = c.organisation_id
       LEFT JOIN compliance_case_evidence e
         ON e.case_id = c.id AND e.requirement_id = r.id
+        AND e.organisation_id = c.organisation_id
       WHERE c.installer_uid = ? AND c.status NOT IN ('rejected', 'closed')
         AND w.record_status = 'active'
         AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND c.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       GROUP BY
         c.work_order_id, c.id, c.case_number, c.activity_version_id,
+        c.status, c.evidence_status, c.revision,
         a.activity_key, a.registry_activity_code, a.title, p.id,
         r.id, r.requirement_code, r.title, r.description,
         r.evidence_type, r.capture_timing,
@@ -274,9 +343,32 @@ async function accessibleJobs(access: TeamAccess) {
         r.metadata_required, r.gps_required, r.date_stamp_required,
         r.installer_signature_required, r.customer_signature_required,
         r.allowed_content_types, r.condition_snapshot, r.field_schema
-      ORDER BY c.updated_at DESC, r.sort_order, r.requirement_code`)
-      .bind(access.ownerUid, access.role, access.memberId).all<Record<string, unknown>>(),
+      ORDER BY c.work_order_id, c.updated_at DESC, c.id, r.sort_order,
+        r.requirement_code
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        access.ownerUid,
+        access.role,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
   ]);
+  const companionRowCount = taskRows.results.length
+    + mediaRows.results.length
+    + formRows.results.length
+    + complianceRows.results.length;
+  if (
+    taskRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || mediaRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || formRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || complianceRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || companionRowCount > MAX_SYNC_COMPANION_ROWS
+  ) {
+    throw new Error("SYNC_RESPONSE_CARDINALITY_EXCEEDED");
+  }
   return new Map(jobRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
     const directCustomer = !protectedJob && row.customer_source === "trade_owned";
@@ -338,49 +430,79 @@ async function accessibleJobs(access: TeamAccess) {
           revision: Number(form.revision || 1), ready: completion.ready, missing: completion.missing,
           completedAt: form.completed_at, updatedAt: form.updated_at };
       }),
-      compliance: (() => {
-        const first = complianceRows.results.find((item) => item.work_order_id === row.id);
-        if (!first) return undefined;
-        const requirements = complianceRows.results
-          .filter((item) => item.work_order_id === row.id && item.case_id === first.case_id)
-          .map((item) => {
-            const minimumCount = Number(item.minimum_count || 0);
-            const acceptedCount = Number(item.accepted_count || 0);
-            const submittedCount = Number(item.submitted_count || 0);
-            const captureCompatibility = evidenceCaptureCompatibility(item);
-            return {
-              id: item.requirement_id,
-              code: item.requirement_code,
-              title: item.requirement_title,
-              description: item.requirement_description || "",
-              evidenceType: item.evidence_type,
-              captureTiming: item.capture_timing,
-              minimumCount,
-              maximumCount: Number(item.maximum_count || 0),
-              acceptedCount,
-              submittedCount,
-              originalRequired: Number(item.original_required) === 1,
-              metadataRequired: Number(item.metadata_required) === 1,
-              gpsRequired: Number(item.gps_required) === 1,
-              dateStampRequired: Number(item.date_stamp_required) === 1,
-              installerSignatureRequired: Number(item.installer_signature_required) === 1,
-              customerSignatureRequired: Number(item.customer_signature_required) === 1,
-              ...captureCompatibility,
-              status: acceptedCount >= minimumCount
-                ? "complete"
-                : submittedCount >= minimumCount
-                  ? "in_review"
-                  : "pending",
+      ...(() => {
+        const cases = new Map<string, {
+          caseId: unknown;
+          caseNumber: unknown;
+          activityVersionId: unknown;
+          activityCode: unknown;
+          activityTitle: unknown;
+          evidencePolicyVersionId: unknown;
+          status: unknown;
+          evidenceStatus: unknown;
+          revision: number;
+          requirements: Array<Record<string, unknown>>;
+        }>();
+        for (const item of complianceRows.results) {
+          if (item.work_order_id !== row.id) continue;
+          const caseId = String(item.case_id || "");
+          if (!caseId) continue;
+          let complianceCase = cases.get(caseId);
+          if (!complianceCase) {
+            if (cases.size >= MAX_ACTIVE_COMPLIANCE_CASES_PER_JOB) {
+              throw new Error("COMPLIANCE_SYNC_CASE_LIMIT_EXCEEDED");
+            }
+            complianceCase = {
+              caseId: item.case_id,
+              caseNumber: item.case_number,
+              activityVersionId: item.activity_version_id,
+              activityCode: item.registry_activity_code || item.activity_key,
+              activityTitle: item.activity_title,
+              evidencePolicyVersionId: item.evidence_policy_version_id,
+              status: item.case_status,
+              evidenceStatus: item.case_evidence_status,
+              revision: Number(item.case_revision || 1),
+              requirements: [],
             };
+            cases.set(caseId, complianceCase);
+          }
+          if (!item.requirement_id) continue;
+          if (complianceCase.requirements.length >= MAX_COMPLIANCE_REQUIREMENTS_PER_CASE) {
+            throw new Error("COMPLIANCE_SYNC_REQUIREMENT_LIMIT_EXCEEDED");
+          }
+          const minimumCount = Number(item.minimum_count || 0);
+          const acceptedCount = Number(item.accepted_count || 0);
+          const submittedCount = Number(item.submitted_count || 0);
+          const captureCompatibility = evidenceCaptureCompatibility(item);
+          complianceCase.requirements.push({
+            id: item.requirement_id,
+            code: item.requirement_code,
+            title: item.requirement_title,
+            description: item.requirement_description || "",
+            evidenceType: item.evidence_type,
+            captureTiming: item.capture_timing,
+            minimumCount,
+            maximumCount: Number(item.maximum_count || 0),
+            acceptedCount,
+            submittedCount,
+            originalRequired: Number(item.original_required) === 1,
+            metadataRequired: Number(item.metadata_required) === 1,
+            gpsRequired: Number(item.gps_required) === 1,
+            dateStampRequired: Number(item.date_stamp_required) === 1,
+            installerSignatureRequired: Number(item.installer_signature_required) === 1,
+            customerSignatureRequired: Number(item.customer_signature_required) === 1,
+            ...captureCompatibility,
+            status: acceptedCount >= minimumCount
+              ? "complete"
+              : submittedCount >= minimumCount
+                ? "in_review"
+                : "pending",
           });
+        }
+        const complianceCases = [...cases.values()];
         return {
-          caseId: first.case_id,
-          caseNumber: first.case_number,
-          activityVersionId: first.activity_version_id,
-          activityCode: first.registry_activity_code || first.activity_key,
-          activityTitle: first.activity_title,
-          evidencePolicyVersionId: first.evidence_policy_version_id,
-          requirements,
+          complianceCases,
+          compliance: complianceCases.length === 1 ? complianceCases[0] : undefined,
         };
       })(),
     }];
@@ -843,17 +965,54 @@ async function photoFinishState(
   }
 }
 
+const UNSATISFIED_GOVERNED_EVIDENCE_SQL = `SELECT 1
+  FROM compliance_cases governed_case
+  JOIN trade_work_orders governed_work
+    ON governed_work.id = governed_case.work_order_id
+    AND governed_work.firebase_uid = governed_case.installer_uid
+    AND governed_work.partner_type = 'installer'
+    AND governed_work.record_status = 'active'
+  JOIN compliance_evidence_policy_versions governed_policy
+    ON governed_policy.id = governed_case.evidence_policy_version_id
+    AND governed_policy.activity_version_id = governed_case.activity_version_id
+    AND governed_policy.organisation_id = governed_case.organisation_id
+  JOIN compliance_evidence_requirements governed_requirement
+    ON governed_requirement.policy_version_id = governed_policy.id
+    AND governed_requirement.organisation_id = governed_case.organisation_id
+  WHERE governed_case.work_order_id = ?
+    AND governed_case.installer_uid = ?
+    AND governed_case.status NOT IN ('rejected', 'closed')
+    AND (
+      SELECT COUNT(DISTINCT governed_evidence.original_sha256)
+      FROM compliance_case_evidence governed_evidence
+      WHERE governed_evidence.organisation_id = governed_case.organisation_id
+        AND governed_evidence.case_id = governed_case.id
+        AND governed_evidence.requirement_id = governed_requirement.id
+        AND governed_evidence.status IN ('received', 'under_review', 'accepted')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM compliance_case_evidence replacement
+          WHERE replacement.organisation_id = governed_evidence.organisation_id
+            AND replacement.case_id = governed_evidence.case_id
+            AND replacement.supersedes_evidence_id = governed_evidence.id
+        )
+    ) < governed_requirement.minimum_count`;
+
 async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
-  const [tasks, forms, issues, plan, photo] = await Promise.all([
+  const [tasks, forms, issues, plan, compliance, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL}) blocked`)
+      .bind(workOrderId, ownerUid)
+      .first<Record<string, unknown>>(),
     photoFinishState(db, ownerUid, workOrderId),
   ]);
   const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
+  if (Number(compliance?.blocked || 0)) blockers.push("governed evidence");
   if (!photo.ready) blockers.push("required photo proof");
   return { blockers, photoGuard: photo.guard };
 }
@@ -952,6 +1111,7 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               'installed', 'complete', 'completed', 'done', 'not_required'
             )
         )
+        AND NOT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL})
         AND (
           (
             ? = 'none'
@@ -986,6 +1146,8 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const photoGuard = finishState.photoGuard;
     const finishBlockerValues = [
       transitionName,
+      workOrderId,
+      access.ownerUid,
       workOrderId,
       access.ownerUid,
       workOrderId,
@@ -1776,9 +1938,29 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    let body: Record<string, unknown>;
-    try { body = await request.json() as Record<string, unknown>; }
-    catch { return adminJson({ ok: false, error: "The offline action batch is invalid." }, 400); }
+    let parsedBody: unknown;
+    try {
+      parsedBody = await readBoundedJsonRequest(request, MAX_SYNC_JSON_BYTES);
+    } catch (error) {
+      return adminJson({
+        ok: false,
+        error: error instanceof BoundedJsonRequestError
+          && error.code === "REQUEST_TOO_LARGE"
+          ? "The offline action batch is too large."
+          : "The offline action batch is invalid.",
+      }, error instanceof BoundedJsonRequestError ? error.status : 400);
+    }
+    if (
+      !parsedBody
+      || typeof parsedBody !== "object"
+      || Array.isArray(parsedBody)
+    ) {
+      return adminJson({
+        ok: false,
+        error: "The offline action batch is invalid.",
+      }, 400);
+    }
+    const body = parsedBody as Record<string, unknown>;
     const deviceId = cleanAdminText(body.deviceId, 100);
     const actions = Array.isArray(body.actions) ? body.actions.filter((item): item is OfflineAction => Boolean(item && typeof item === "object")) : [];
     if (!MOBILE_CLIENT_ID_PATTERN.test(deviceId)) return adminJson({ ok: false, error: "Register a stable device ID before syncing field actions." }, 400);

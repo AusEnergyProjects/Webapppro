@@ -1336,6 +1336,9 @@ export function DirectTradeDashboard() {
               {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} initialWeekStart={scheduleWeekStart} onOpenJob={(workOrderId) => {
                 setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "summary", nonce: Date.now() });
                 setWorkspace("work");
+              }} onOpenQuote={(workOrderId) => {
+                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "quote", nonce: Date.now() });
+                setWorkspace("work");
               }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "invoices" && (hasBusinessOperations ? <TradeInvoiceWorkspace user={user} onOpenJob={(workOrderId) => {

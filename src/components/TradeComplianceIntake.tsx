@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 type ComplianceActivity = {
   id: string;
   programId: string;
-  organisationName: string;
   programName: string;
   programCode: string;
   schemeKind: string;
@@ -68,6 +67,7 @@ export function TradeComplianceIntake({
   user: User;
   workOrderId: string;
   initialIntent?: {
+    id: string;
     programCode: string;
     activityKey: string;
     registryActivityCode: string;
@@ -104,6 +104,9 @@ export function TradeComplianceIntake({
         }
         seenCursors.add(afterActivityId);
         const query = new URLSearchParams({ workOrderId });
+        if (initialIntent?.id) {
+          query.set("complianceIntentId", initialIntent.id);
+        }
         if (afterActivityId) query.set("afterActivityId", afterActivityId);
         const response = await fetch(`/api/trade-compliance?${query}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -139,7 +142,6 @@ export function TradeComplianceIntake({
       }
       nextActivities.sort((left, right) =>
         [
-          left.organisationName,
           left.programName,
           left.registryActivityCode,
           left.activityKey,
@@ -147,7 +149,6 @@ export function TradeComplianceIntake({
           left.scenarioCode,
           String(9999 - left.version).padStart(4, "0"),
         ].join("|").localeCompare([
-          right.organisationName,
           right.programName,
           right.registryActivityCode,
           right.activityKey,
@@ -162,9 +163,12 @@ export function TradeComplianceIntake({
         ? nextActivities.find((item) =>
           item.programCode === initialIntent.programCode
           && (
-            initialIntent.registryActivityCode
-              ? item.registryActivityCode === initialIntent.registryActivityCode
-              : item.activityKey === initialIntent.activityKey
+            !initialIntent.registryActivityCode
+            || item.registryActivityCode === initialIntent.registryActivityCode
+          )
+          && (
+            !initialIntent.activityKey
+            || item.activityKey === initialIntent.activityKey
           ))
         : undefined;
       if (plannedActivity) {
@@ -179,7 +183,7 @@ export function TradeComplianceIntake({
           ? `${initialIntent?.programCode} ${initialIntent?.registryActivityCode || initialIntent?.activityKey} was planned when the job was created. Confirm the exact governed product, scenario and source version.`
           : "Choose the exact government activity for the accepted work."
         : initialIntent
-          ? `${initialIntent.programCode} ${initialIntent.registryActivityCode || initialIntent.activityKey} is planned, but Creditex has not published a matching governed activity and evidence policy for this job yet.`
+          ? `${initialIntent.programCode} ${initialIntent.registryActivityCode || initialIntent.activityKey} is planned, but a matching governed activity and evidence policy have not been published for this job yet.`
           : "No governed published activity applies to this job type, state and planned installation date.");
     } catch (error) {
       setActivities([]);
@@ -286,7 +290,7 @@ export function TradeComplianceIntake({
       return;
     }
     setSaving(true);
-    setMessage("Opening the Creditex compliance intake...");
+    setMessage("Opening the compliance intake...");
     try {
       const token = await user.getIdToken();
       if (!idempotencyKey.current) {
@@ -300,6 +304,7 @@ export function TradeComplianceIntake({
         },
         body: JSON.stringify({
           workOrderId,
+          complianceIntentId: initialIntent?.id || "",
           activityVersionId: effectiveActivityVersionId,
           idempotencyKey: idempotencyKey.current,
         }),
@@ -316,7 +321,7 @@ export function TradeComplianceIntake({
       }
       setReady(false);
       setMessage(
-        `${result.complianceCaseNumber || "Compliance case"} is ready for Creditex review.`,
+        `${result.complianceCaseNumber || "Compliance case"} is ready for review.`,
       );
       await onChanged();
     } catch (error) {
@@ -340,8 +345,8 @@ export function TradeComplianceIntake({
     </header>
     <p>
       TLink uses the job address, work type and planned installation date.
-      Creditex receives the complete authorised record and resulting governed
-      case for audit.
+      The assigned compliance team receives the complete authorised record and
+      resulting governed case for audit.
     </p>
     {ready && <div className="crm-form-grid">
       <label>
@@ -411,7 +416,7 @@ export function TradeComplianceIntake({
       {context.jurisdiction} | {context.serviceCategory} | planned installation {context.activityDate}
     </small>}
     {selectedActivity && <div className="crm-compliance-notice">
-      <strong>{selectedActivity.organisationName} will audit this case</strong>
+      <strong>The assigned compliance team will audit this case</strong>
       <p>
         TLink will pin the exact government source, activity, product,
         scenario and evidence policy version.
@@ -425,7 +430,7 @@ export function TradeComplianceIntake({
         Check again
       </button>}
       {ready && <button type="button" className="btn" disabled={saving || !effectiveActivityVersionId} onClick={() => void openIntake()}>
-        {saving ? "Opening intake..." : "Open Creditex intake"}
+        {saving ? "Opening intake..." : "Open compliance intake"}
       </button>}
     </div>
     <p role="status">{message}</p>

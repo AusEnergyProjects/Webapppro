@@ -29,6 +29,7 @@ test("calendar formatting and keyboard date movement use Australian labels", () 
 test("the root layout installs one delegated picker for current and future date inputs", () => {
   const layout = fs.readFileSync(path.join(root, "src", "app", "layout.tsx"), "utf8");
   const picker = fs.readFileSync(path.join(root, "src", "components", "SiteDatePicker.tsx"), "utf8");
+  const styles = fs.readFileSync(path.join(root, "src", "app", "globals.css"), "utf8");
   assert.match(layout, /<SiteDatePicker \/>/);
   assert.match(picker, /target\.type === "date" \|\| target\.type === "datetime-local"/);
   assert.match(picker, /data-date-range-group/);
@@ -37,4 +38,8 @@ test("the root layout installs one delegated picker for current and future date 
   assert.match(picker, /event\.key === "ArrowLeft"/);
   assert.match(picker, /<select aria-label="Appointment time"/);
   assert.match(picker, /timeOptions\(active\.input\.step/);
+  assert.match(picker, /popoverRef\.current\?\.getBoundingClientRect\(\)\.height/);
+  assert.match(picker, /new ResizeObserver\(reposition\)/);
+  assert.match(picker, /window\.innerHeight - visibleHeight - margin/);
+  assert.match(styles, /\.site-date-popover \{[^}]*max-height: calc\(100dvh - 24px\);[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;/);
 });

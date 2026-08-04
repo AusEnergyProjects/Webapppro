@@ -14,6 +14,8 @@ const hub = read("../src/components/TradeBusinessHub.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
 const numberer = read("../src/lib/trade-job-number-server.ts");
+const dataforceCsv = read("../src/lib/creditex-dataforce-job-csv.ts");
+const listViews = read("../src/lib/workspace-list-views.ts");
 
 test("installer CRM customers, job details, appointments and notes are durable and indexed", () => {
   assert.match(schema, /sqliteTable\("trade_crm_customers"/);
@@ -64,12 +66,14 @@ test("direct customers have full addresses while global TLink job IDs are read o
   assert.match(crm, /name="addressLine1"/);
   assert.match(crm, /name="addressLine2"/);
   assert.match(newJob, /Assigned automatically/);
-  assert.match(newJob, /One private global reference is shown to your team, Creditex and TLink support/);
+  assert.match(newJob, /One private global reference is shown to your team, the assigned compliance team and TLink support/);
   assert.doesNotMatch(newJob, /name="(?:workNumber|jobId)"/);
   assert.doesNotMatch(crm, /name="customerReference"/);
   assert.match(route, /nextTlinkJobNumber/);
   assert.match(numberer, /ON CONFLICT\(firebase_uid, counter_key\) DO UPDATE/);
   assert.match(numberer, /last_value = last_value \+ 1/);
+  assert.doesNotMatch(route, /organisationName:\s*String\(snapshot\.organisation/);
+  assert.doesNotMatch(crm, /item\.organisationName/);
   assert.match(numberer, /return `TLJ-\$\{TLINK_OPAQUE_JOB_MARKER\}\$\{code\}`/);
   assert.match(numberer, /formatTlinkJobNumber\(value\)/);
 });
@@ -168,18 +172,42 @@ test("installer jobs export every filtered page through the owner scoped Datafor
   assert.match(route, /customerSource === "platform_private" \? undefined/);
 });
 
-test("obsolete saved job columns reset to the complete Dataforce register contract", () => {
+test("legacy job columns migrate to an identity first display without changing the Dataforce contract", () => {
   assert.match(crm, /const DATAFORCE_JOB_COLUMN_KEYS: string\[\] = \[\.\.\.DATAFORCE_JOB_CSV_HEADERS\]/);
-  assert.match(crm, /function safeDataforceJobColumns\(columns: unknown\): string\[\]/);
+  assert.match(crm, /DATAFORCE_JOB_IDENTITY_COLUMNS = \["Customer", "Mobile", "Job Id"\] as const/);
+  assert.match(crm, /DATAFORCE_JOB_DEFAULT_COLUMNS/);
+  assert.match(crm, /function safeDataforceJobColumns\(columns: unknown, migrateLegacyDefault = false\): string\[\]/);
   assert.match(crm, /!DATAFORCE_JOB_COLUMN_KEY_SET\.has\(key\)/);
   assert.match(crm, /new Set\(columns\)\.size !== columns\.length/);
-  assert.equal((crm.match(/setJobColumns\(safeDataforceJobColumns\(preferences\.columns\)\)/g) || []).length, 2);
+  assert.match(crm, /const isLegacyExactOrder = columns\.length === DATAFORCE_JOB_COLUMN_KEYS\.length/);
+  assert.match(crm, /if \(migrateLegacyDefault && isLegacyExactOrder\) return \[\.\.\.DATAFORCE_JOB_DEFAULT_COLUMNS\]/);
+  assert.match(crm, /return \[\.\.\.columns\] as string\[\]/);
+  assert.match(crm, /setJobColumns\(safeDataforceJobColumns\(preferences\.columns, preferences\.jobColumnOrderVersion !== 2\)\)/);
+  assert.match(crm, /setJobColumns\(safeDataforceJobColumns\(preferences\.columns\)\)/);
   assert.doesNotMatch(crm, /setJobColumns\(preferences\.columns\?\./);
+  const headerBlock = dataforceCsv.match(/DATAFORCE_JOB_CSV_HEADERS = Object\.freeze\(\[([\s\S]*?)\] as const\)/);
+  assert.ok(headerBlock);
+  const headers = Array.from(headerBlock[1].matchAll(/"([^"]+)"/g), (match) => match[1]);
+  assert.deepEqual(headers, [
+    "App Id", "Job Id", "Status", "SubStatus", "Type", "Work Type", "Scheduled Datetime", "Balance",
+    "Certificates (VEECs)", "Submission", "Invoiced", "Field Worker", "Agent", "Client", "Customer",
+    "Company Name", "Ext Cust Ref", "Phone", "Mobile", "Email", "Address", "Suburb", "Postcode",
+  ]);
 });
 
-test("the New Job mobile field projects to Dataforce Mobile rather than Phone", () => {
-  assert.match(newJob, /<span>Mobile, optional<\/span><input type="tel" name="phone"/);
+test("the New Job requires direct contact details and projects Mobile rather than Phone", () => {
+  assert.match(newJob, /<span>Mobile<\/span><input type="tel" name="phone" required=\{step === 2\}/);
+  assert.match(newJob, /<span>Email<\/span><input type="email" name="email" required=\{step === 2\}/);
   assert.match(route, /phone: "",\s+mobile: String\(row\.customer_phone \|\| ""\)/);
+});
+
+test("the New Job handoff carries a bounded ordered set of planned government activities", () => {
+  assert.match(newJob, /MAX_PLANNED_COMPLIANCE_ACTIVITIES = 12/);
+  assert.match(newJob, /const complianceActivitiesJson = JSON\.stringify\(plannedActivities\)/);
+  assert.match(newJob, /name="complianceActivitiesJson" value=\{complianceActivitiesJson\}/);
+  assert.match(newJob, /const legacyComplianceActivity = plannedActivities\[0\]/);
+  assert.match(newJob, /name="programTemplateId" value=\{legacyComplianceActivity\?\.programTemplateId \|\| ""\}/);
+  assert.match(newJob, /name="activityTemplateId" value=\{legacyComplianceActivity\?\.activityTemplateId \|\| ""\}/);
 });
 
 test("saved preferences and job or customer reads cancel stale requests before they can replace current state", () => {
@@ -224,6 +252,31 @@ test("job and customer directories expose granular server filters and single-lin
   }
 });
 
+test("job filters persist every populated Dataforce identity, contact, schedule and invoice field", () => {
+  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference"]) {
+    assert.match(crm, new RegExp(`${field}:`));
+    assert.match(crm, new RegExp(`preferences\\.${field}`));
+    assert.match(listViews, new RegExp(`raw\\.${field}`));
+  }
+  for (const field of ["jobId", "email", "phone", "suburb", "postcode"]) {
+    assert.match(crm, new RegExp(`${field}`));
+  }
+  assert.match(crm, /data-date-range-group="installer-job-scheduled"/);
+  assert.match(crm, /data-date-range-role="start"/);
+  assert.match(crm, /data-date-range-role="end"/);
+  assert.match(crm, /<span>Invoice status<\/span>/);
+  assert.match(crm, /<span>Customer reference<\/span>/);
+});
+
+test("job and customer indexes use explicit open and direct contact actions", () => {
+  assert.match(crm, /className="crm-index-open-button"/);
+  assert.match(crm, /className="crm-index-phone-link" href=\{phoneHref/);
+  assert.match(crm, /return compact \? `tel:\$\{compact\}` : ""/);
+  assert.match(crm, /className="crm-index-email-link" href=\{`mailto:\$\{customer\.email\}`\}/);
+  assert.match(crm, /className="crm-record-data-row crm-index-row"/);
+  assert.doesNotMatch(crm, /<button[^>]*className="crm-row-open crm-record-data-row"/);
+});
+
 test("the customer index aggregates owned job facts once without crossing the privacy boundary", () => {
   assert.match(route, /WITH owned_jobs AS \(/);
   assert.match(route, /ROW_NUMBER\(\) OVER \(PARTITION BY d\.crm_customer_id ORDER BY w\.updated_at DESC, w\.id DESC\) latest_rank/);
@@ -239,8 +292,10 @@ test("job and customer directories open focused records without automatic or inl
   assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
   assert.match(crm, /crm-view crm-job-focus/);
   assert.match(crm, /crm-view crm-customer-focus/);
-  assert.match(crm, /Back to jobs/);
-  assert.match(crm, /Back to customers/);
+  assert.match(crm, /Back to all jobs/);
+  assert.match(crm, /Back to all customers/);
+  assert.match(crm, /jobReturnTarget\.kind === "customer"/);
+  assert.match(crm, /kind: "customer", customerId: selectedCustomerDetail\.id, customerName: selectedCustomerDetail\.displayName/);
 
   const jobDirectoryStart = crm.indexOf('{view === "jobs" && creating !== "job" && !focusedJobId');
   const jobDirectoryEnd = crm.indexOf('{view === "schedule"', jobDirectoryStart);
@@ -258,8 +313,15 @@ test("all installer CRM destinations are visible in the primary navigation", () 
   assert.match(crm, /\.\.\.\(hasTeamAccess \? \["team" as View\] : \[\]\)/);
   assert.doesNotMatch(crm, /crm-more-nav/);
   assert.match(crm, /item === "import" \? "Import data"/);
-  assert.match(crm, /if \(item === "jobs"\) setFocusedJobId\(""\)/);
+  assert.match(crm, /if \(item === "jobs"\) \{ setFocusedJobId\(""\); setJobReturnTarget\(\{ kind: "jobs" \}\); \}/);
   assert.match(crm, /if \(item === "customers"\) \{ setSelectedCustomerId\(""\); setSelectedCustomerDetail\(null\); \}/);
+});
+
+test("customer detail exposes prominent contact actions and dates every linked job", () => {
+  assert.match(crm, /className="crm-customer-contact-actions"/);
+  assert.match(crm, /className="crm-customer-call-action" href=\{phoneHref\(customer\.phone\)\}/);
+  assert.match(crm, /className="crm-customer-email-action" href=\{`mailto:\$\{customer\.email\}`\}/);
+  assert.match(crm, /job\.scheduledStart \? `Scheduled \$\{dateLabel\(job\.scheduledStart\)\}` : `Created \$\{dateLabel\(job\.createdAt\)\}`/);
 });
 
 test("bulk CRM actions are bounded, owner scoped and protect active customer work", () => {
@@ -297,9 +359,21 @@ test("both installer Schedule entry paths use the visual dispatch workspace", ()
   assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
   assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
   assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
+  assert.match(crm, /onOpenQuote=\{\(id\) => openFocusedJob\(id, "quote"\)\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
   assert.match(dashboard, /workspace === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
   assert.match(dashboard, /onOpenSchedule=\{\(weekStart\) => \{ setScheduleWeekStart\(weekStart \|\| ""\); setWorkspace\("schedule"\); \}\}/);
+});
+
+test("job summary renders every planned compliance activity without exposing raw governance copy", () => {
+  assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
+  assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
+  assert.match(crm, /complianceIntents\.map\(\(intent\) => <section className="crm-job-compliance" key=\{intent\.id\}>/);
+  assert.match(crm, /\{unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
+  assert.doesNotMatch(crm, /!isProtected && customer && unlinkedComplianceIntents\.map/);
+  assert.match(crm, /initialIntent=\{intent\}/);
+  assert.doesNotMatch(crm, /\{(?:job\.complianceIntent|intent)\.governanceMessage\}/);
+  assert.match(crm, /Confirm the governed activity, product, scenario and evidence requirements before work starts/);
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
@@ -354,9 +428,9 @@ test("My day exposes owner scoped local workload and direct action charts", () =
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: Boolean\(complianceIntent\),\s*calendarSynced, calendarFailed \}, 201\)/);
-  assert.match(crm, /type CreateJobResult = \{ ok\?: boolean; id\?: string; workNumber\?: string; customerId\?: string; serviceSiteId\?: string; complianceIntentPlanned\?: boolean; calendarSynced\?: number; calendarFailed\?: number;/);
-  assert.match(newJob, /This creates the Creditex intake with the job/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*calendarSynced, calendarFailed \}, 201\)/);
+  assert.match(crm, /type CreateJobResult = \{ ok\?: boolean; id\?: string; workNumber\?: string; customerId\?: string; serviceSiteId\?: string; complianceIntentPlanned\?: boolean; complianceIntentCount\?: number; calendarSynced\?: number; calendarFailed\?: number;/);
+  assert.match(newJob, /The assigned compliance team can review the customer, site, activity and schedule/);
   assert.match(newJob, /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);
   assert.match(crm, /CustomerLookupSelect/);

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
 import { verifyJpegExif } from "../src/lib/jpeg-exif-verifier.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -80,6 +81,9 @@ function loadTypescriptModule(source, mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "@/lib/bounded-json-request") {
+      return boundedJsonRequest;
+    }
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(

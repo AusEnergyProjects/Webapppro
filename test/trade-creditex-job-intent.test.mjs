@@ -36,6 +36,7 @@ const intentHelperSource = stripTypeScriptTypes(
 const {
   CREDITEX_PARTNER_ORGANISATION_CODE,
   resolveTradeComplianceIntent,
+  resolveTradeComplianceIntents,
   stableTradeComplianceIntentJson,
   TRADE_COMPLIANCE_INTENT_CONTRACT,
   TradeComplianceIntentError,
@@ -52,6 +53,9 @@ const creditexAuditRoute = read(
   "../src/app/api/creditex/job-intents/[intentId]/route.ts",
 );
 const migration = read("../drizzle/0115_trade_creditex_job_intent.sql");
+const multiActivityMigration = read(
+  "../drizzle/0119_trade_multi_activity_jobs.sql",
+);
 const crmWriteGuardMigration = read(
   "../drizzle/0116_trade_crm_write_guard.sql",
 );
@@ -127,11 +131,8 @@ function assertIntentError(action, expectedCode) {
   );
 }
 
-function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 119);
-  assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0118_/);
-  for (const name of completeMigrationChain) {
+function applyMigrationChain(database, names) {
+  for (const name of names) {
     const migrationSource = fs.readFileSync(
       new URL(name, migrationDirectory),
       "utf8",
@@ -164,6 +165,13 @@ function applyCompleteMigrationChain(database) {
       }
     }
   }
+}
+
+function applyCompleteMigrationChain(database) {
+  assert.equal(completeMigrationChain.length, 120);
+  assert.match(completeMigrationChain[0], /^0000_/);
+  assert.match(completeMigrationChain.at(-1), /^0119_/);
+  applyMigrationChain(database, completeMigrationChain);
 }
 
 function routeTemplate(name) {
@@ -416,6 +424,65 @@ test("planning resolution requires an exact controlled program and activity pair
   );
 });
 
+test("one installer job accepts a bounded ordered set of exact program and activity pairs", () => {
+  const selections = [
+    {
+      programTemplateId: program("SRES").templateId,
+      activityTemplateId: activity("SRES", "ASHP").templateId,
+    },
+    {
+      programTemplateId: program("VEU").templateId,
+      activityTemplateId: activity("VEU", "1").templateId,
+    },
+  ];
+  const resolved = resolveTradeComplianceIntents({
+    mode: "planned",
+    activities: selections,
+    siteJurisdiction: "VIC",
+    plannedStart: PLANNED_START,
+  });
+  assert.deepEqual(
+    resolved.map((item) => [
+      item.program.programCode,
+      item.activity.registryActivityCode,
+    ]),
+    [["SRES", "ASHP"], ["VEU", "1"]],
+  );
+  assertIntentError(
+    () => resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [...selections, selections[0]],
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    }),
+    "COMPLIANCE_ACTIVITY_DUPLICATE",
+  );
+  assertIntentError(
+    () => resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [{
+        ...selections[0],
+        unexpected: "not accepted",
+      }],
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    }),
+    "COMPLIANCE_ACTIVITIES_INVALID",
+  );
+  assertIntentError(
+    () => resolveTradeComplianceIntents({
+      mode: "planned",
+      activities: [{
+        programTemplateId: "x".repeat(181),
+        activityTemplateId: selections[0].activityTemplateId,
+      }],
+      siteJurisdiction: "VIC",
+      plannedStart: PLANNED_START,
+    }),
+    "COMPLIANCE_ACTIVITIES_INVALID",
+  );
+});
+
 test("future, closed and specialist catalogue activities fail closed", () => {
   assertIntentError(
     () =>
@@ -490,7 +557,7 @@ test("planned intent snapshot is deterministic and remains setup-required", () =
     governance: {
       state: "setup_required",
       message:
-        "Creditex intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
+        "Compliance intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
     },
   };
   assert.equal(
@@ -594,7 +661,7 @@ test("planned work is assigned fail-closed to the active Creditex partner", () =
   );
   assert.match(
     crmRoute,
-    /if \(complianceIntent && !creditexOrganisation(?:\?\.id)?\)/,
+    /if \(complianceIntents\.length && !creditexOrganisation(?:\?\.id)?\)/,
   );
   assert.doesNotMatch(
     crmRoute,
@@ -622,7 +689,7 @@ test("planned work is assigned fail-closed to the active Creditex partner", () =
   );
   assert.match(
     complianceRoute,
-    /active_case\.organisation_id = \?/,
+    /WHERE organisation_id = \?[\s\S]*AND work_order_id = \?[\s\S]*AND compliance_intent_id = \?/,
   );
 });
 
@@ -734,26 +801,26 @@ test("Creditex planned-intake queue SQL executes against the complete migration 
   assert.deepEqual(database.prepare(query).all(...bindings), []);
 });
 
-test("governed case creation links only the matching planned intent and supersedes a mismatch", () => {
+test("governed case creation links only the exact planned intent without superseding siblings", () => {
   assert.match(
     complianceRoute,
-    /prepared\.activitySnapshot\.programCode/,
+    /context\.programCode/,
   );
   assert.match(
     complianceRoute,
-    /prepared\.activitySnapshot\.registryActivityCode/,
+    /context\.registryActivityCode/,
   );
   assert.match(
     complianceRoute,
-    /prepared\.activitySnapshot\.activityKey/,
+    /context\.activityKey/,
   );
   assert.match(
     complianceRoute,
-    /UPDATE trade_work_order_compliance_intents[\s\S]*SET status = 'case_linked', compliance_case_id = \?, updated_at = \?[\s\S]*WHERE compliance_organisation_id = \?[\s\S]*work_order_id = \? AND installer_uid = \? AND status = 'planned'[\s\S]*program_code = \?[\s\S]*registry_activity_code = \?[\s\S]*json_extract\(intent_snapshot, '\$\.activity\.activityKey'\) = \?[\s\S]*service_category = \?[\s\S]*site_jurisdiction = \?[\s\S]*substr\(planned_start, 1, 10\) = \?/,
+    /UPDATE trade_work_order_compliance_intents[\s\S]*SET status = 'case_linked', compliance_case_id = \?, updated_at = \?[\s\S]*WHERE id = \?[\s\S]*AND compliance_organisation_id = \?[\s\S]*AND work_order_id = \?[\s\S]*AND installer_uid = \?[\s\S]*AND status = 'planned'/,
   );
-  assert.match(
+  assert.doesNotMatch(
     complianceRoute,
-    /UPDATE trade_work_order_compliance_intents[\s\S]*SET status = 'superseded', compliance_case_id = '', updated_at = \?[\s\S]*WHERE compliance_organisation_id = \?[\s\S]*work_order_id = \? AND installer_uid = \? AND status = 'planned'[\s\S]*AND NOT \([\s\S]*program_code = \?[\s\S]*registry_activity_code = \?[\s\S]*json_extract\(intent_snapshot, '\$\.activity\.activityKey'\) = \?[\s\S]*service_category = \?[\s\S]*site_jurisdiction = \?[\s\S]*substr\(planned_start, 1, 10\) = \?/,
+    /SET status = 'superseded'[\s\S]*trade_work_order_compliance_intents/,
   );
 
   const linkUpdate = complianceRoute.indexOf(
@@ -768,11 +835,108 @@ test("governed case creation links only the matching planned intent and supersed
     batchExecution > linkUpdate,
     "Intent lifecycle updates must share the governed case batch",
   );
+  const ownerGuard = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+    (definition) =>
+      definition.name === "compliance_cases_work_order_owner_guard",
+  );
+  assert.ok(ownerGuard);
+  assert.match(
+    ownerGuard.sql,
+    /registry_activity_code` = '' OR intent\.`registry_activity_code` = activity\.`registry_activity_code`/,
+  );
+  assert.match(
+    ownerGuard.sql,
+    /activity\.activityKey'[\s\S]*activity\.`activity_key`/,
+  );
+  assert.match(
+    ownerGuard.sql,
+    /registry_activity_code` <> ''[\s\S]*activity\.activityKey'[\s\S]*<> ''/,
+  );
+});
+
+test("multi-activity migration upgrades existing guarded intents and linked cases without losing identity", () => {
+  const database = new DatabaseSync(":memory:");
+  applyMigrationChain(database, completeMigrationChain.slice(0, -1));
+  const snapshot = resolve({
+    programCode: "SRES",
+    registryActivityCode: "PV",
+    siteJurisdiction: "VIC",
+  })?.snapshot;
+  assert.ok(snapshot);
+  const snapshotJson = stableTradeComplianceIntentJson(snapshot);
+  const snapshotSha256 = createHash("sha256")
+    .update(snapshotJson)
+    .digest("hex");
+  database.prepare(`INSERT INTO compliance_cases (
+      id, case_number, organisation_id, program_id, work_order_id,
+      installer_uid, activity_version_id, activity_date,
+      site_jurisdiction, activity_snapshot, status, evidence_status,
+      revision, created_by_type, created_by_uid, created_at, updated_at
+    ) VALUES (
+      'case-existing', 'CASE-EXISTING', 'creditex-org', 'program-existing',
+      'work-existing', 'installer-1', 'activity-existing', '2026-08-10',
+      'VIC', '{}', 'draft', 'not_started', 1, 'installer',
+      'installer-1', ?, ?
+    )`).run(NOW, NOW);
+  database.prepare(`INSERT INTO trade_work_order_compliance_intents (
+      id, work_order_id, installer_uid, compliance_organisation_id,
+      program_template_id, activity_template_id, program_code,
+      registry_activity_code, service_category, site_jurisdiction,
+      planned_start, catalogue_reviewed_on, intent_snapshot,
+      intent_snapshot_sha256, status, compliance_case_id, revision,
+      created_by_uid, created_at, updated_at
+    ) VALUES (
+      'intent-existing', 'work-existing', 'installer-1', 'creditex-org',
+      'au-sres', 'sres-pv', 'SRES', 'PV', 'solar', 'VIC', ?,
+      ?, ?, ?, 'case_linked', 'case-existing', 1, 'installer-1', ?, ?
+    )`).run(
+    PLANNED_START,
+    snapshot.catalogueReviewedOn,
+    snapshotJson,
+    snapshotSha256,
+    NOW,
+    NOW,
+  );
+  const currentIntentGuard = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+    (definition) => definition.name === "trade_compliance_intent_update_guard",
+  );
+  assert.ok(currentIntentGuard);
+  database.exec(
+    currentIntentGuard.sql.replace(
+      " OR NEW.intent_key <> OLD.intent_key",
+      "",
+    ),
+  );
+
+  assert.doesNotThrow(() => database.exec(multiActivityMigration));
+  const migratedIntent = database.prepare(`SELECT intent_key, compliance_case_id
+    FROM trade_work_order_compliance_intents
+    WHERE id = 'intent-existing'`).get();
+  assert.equal(
+    migratedIntent.intent_key,
+    "program:au-sres:activity:sres-pv",
+  );
+  assert.equal(migratedIntent.compliance_case_id, "case-existing");
+  assert.equal(
+    database.prepare(`SELECT compliance_intent_id
+      FROM compliance_cases
+      WHERE id = 'case-existing'`).get().compliance_intent_id,
+    "intent-existing",
+  );
+  database.close();
 });
 
 function intentDatabase() {
   const database = new DatabaseSync(":memory:");
   database.exec(migration);
+  for (const statement of multiActivityMigration
+    .split("--> statement-breakpoint")
+    .flatMap((part) => part.split(/;\s*(?=(?:ALTER|UPDATE|DROP|CREATE)\s)/i))
+    .map((item) => item.trim())
+    .filter(Boolean)) {
+    if (/^ALTER TABLE `compliance_cases`/i.test(statement)) break;
+    database.exec(`${statement.replace(/;\s*$/, "")};`);
+  }
   for (const name of INTENT_GUARD_NAMES) {
     const definition = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
       (candidate) => candidate.name === name,
@@ -793,6 +957,8 @@ function insertIntent(
     complianceCaseId = "",
     snapshot,
     programTemplateId = snapshot.program.templateId,
+    intentKey =
+      `program:${snapshot.program.templateId}:activity:${snapshot.activity.templateId}`,
   },
 ) {
   const intentSnapshot = stableTradeComplianceIntentJson(snapshot);
@@ -801,16 +967,17 @@ function insertIntent(
     .digest("hex");
   return database.prepare(`
     INSERT INTO trade_work_order_compliance_intents (
-      id, work_order_id, installer_uid, compliance_organisation_id,
+      id, work_order_id, intent_key, installer_uid, compliance_organisation_id,
       program_template_id, activity_template_id, program_code,
       registry_activity_code, service_category, site_jurisdiction,
       planned_start, catalogue_reviewed_on, intent_snapshot,
       intent_snapshot_sha256, status, compliance_case_id, revision,
       created_by_uid, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     workOrderId,
+    intentKey,
     "installer-1",
     "creditex-org",
     programTemplateId,

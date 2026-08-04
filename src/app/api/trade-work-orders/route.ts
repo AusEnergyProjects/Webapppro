@@ -12,6 +12,10 @@ import {
   type SyncOperation,
 } from "@/lib/trade-team-sync-server";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
+import {
+  isTradeComplianceIntentScheduleConflict,
+  plannedComplianceIntentReplanStatements,
+} from "@/lib/trade-compliance-intent-replan-server";
 
 export const runtime = "edge";
 
@@ -110,6 +114,9 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
 
 function errorResponse(error: unknown) {
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (isTradeComplianceIntentScheduleConflict(error)) {
+    return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
+  }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
   }
@@ -613,7 +620,17 @@ export async function PATCH(request: Request) {
     if (scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end) changes.push("Schedule updated.");
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
     const revision = nextJobRevision(current.revision);
+    const complianceIntentStatements = scheduledStart !== current.scheduled_start
+      ? await plannedComplianceIntentReplanStatements(db, {
+        actorUid: identity.uid,
+        changedAt: now,
+        ownerUid: identity.uid,
+        plannedStart: scheduledStart,
+        workOrderId,
+      })
+      : [];
     await guardedOnlineJobMutationBatch(db, [
+      ...complianceIntentStatements,
       db.prepare(`UPDATE trade_work_orders SET stage = ?, priority = ?, scheduled_start = ?, scheduled_end = ?,
         assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'

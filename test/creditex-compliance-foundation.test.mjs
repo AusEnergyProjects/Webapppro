@@ -134,6 +134,8 @@ function applyEvidencePolicyFixtureSchema(database) {
       ADD accepted_quote_version_id text DEFAULT '' NOT NULL;
     ALTER TABLE compliance_cases
       ADD accepted_scope_sha256 text DEFAULT '' NOT NULL;
+    ALTER TABLE compliance_cases
+      ADD compliance_intent_id text DEFAULT '' NOT NULL;
     CREATE TABLE compliance_evidence_policy_versions (
       id text PRIMARY KEY NOT NULL,
       organisation_id text NOT NULL,
@@ -157,6 +159,19 @@ function applyEvidencePolicyFixtureSchema(database) {
       target_id text NOT NULL,
       action text NOT NULL,
       status text NOT NULL
+    );
+    CREATE TABLE trade_work_order_compliance_intents (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      installer_uid text NOT NULL,
+      compliance_organisation_id text NOT NULL,
+      status text NOT NULL,
+      service_category text NOT NULL,
+      program_code text NOT NULL,
+      planned_start text NOT NULL,
+      site_jurisdiction text NOT NULL,
+      registry_activity_code text NOT NULL,
+      intent_snapshot text NOT NULL
     );
   `);
 }
@@ -888,7 +903,10 @@ test("case creation derives the organisation, snapshots the exact rule date, and
     eventId: "event-wrong-owner",
     createdAt: "2026-06-01T00:02:00.000Z",
   });
-  await assert.rejects(d1.batch(wrongOwner.statements), /installer do not match/i);
+  await assert.rejects(
+    d1.batch(wrongOwner.statements),
+    /installer and planned activity do not match/i,
+  );
   assert.equal(
     database.prepare("SELECT COUNT(*) count FROM compliance_cases WHERE id = 'case-wrong-owner'").get().count,
     0,
@@ -913,7 +931,14 @@ test("case creation derives the organisation, snapshots the exact rule date, and
   });
   const caseStatement = tampered.statements[0];
   const tamperedValues = [...caseStatement.values];
-  const activitySnapshotIndex = 13;
+  const activitySnapshotIndex = tamperedValues.findIndex((value) => {
+    try {
+      return JSON.parse(String(value)).programCode === "VEU";
+    } catch {
+      return false;
+    }
+  });
+  assert.notEqual(activitySnapshotIndex, -1);
   const tamperedSnapshot = JSON.parse(
     tamperedValues[activitySnapshotIndex],
   );

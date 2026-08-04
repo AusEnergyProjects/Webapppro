@@ -9,6 +9,10 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
+import {
+  complianceCasesForJob,
+  type GovernedEvidenceSelection,
+} from '@/lib/compliance';
 import { getSetting, setSetting } from '@/lib/database';
 import {
   buildEvidenceEnvelope,
@@ -21,7 +25,12 @@ import {
   type PendingPhotoCapture,
 } from '@/lib/evidence';
 import { colours, radius, spacing } from '@/lib/theme';
-import type { ComplianceEvidenceRequirement, FieldForm, FieldJob } from '@/lib/types';
+import type {
+  ComplianceEvidenceRequirement,
+  FieldForm,
+  FieldJob,
+  FieldJobCompliance,
+} from '@/lib/types';
 import { useApp } from '@/providers/app-provider';
 
 const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'start_work' | 'finish'; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
@@ -58,15 +67,34 @@ function captureBlocker(requirement: ComplianceEvidenceRequirement, mode: 'camer
   return '';
 }
 
-function evidenceCategory(requirement?: ComplianceEvidenceRequirement) {
+function evidenceCategory(selection?: GovernedEvidenceSelection) {
+  const requirement = selection?.requirement;
   const timing = requirement?.captureTiming.toLowerCase() || '';
   if (timing.includes('before') || timing.startsWith('pre_')) return 'before' as const;
   if (timing.includes('after') || timing.startsWith('post_')) return 'after' as const;
   return 'progress' as const;
 }
 
-function evidenceCaption(requirement?: ComplianceEvidenceRequirement) {
-  return requirement ? `${requirement.code}: ${requirement.title}`.slice(0, 300) : '';
+function evidenceCaption(selection?: GovernedEvidenceSelection) {
+  if (!selection) return '';
+  const { complianceCase, requirement } = selection;
+  return `${complianceCase.activityCode} | ${requirement.code}: ${requirement.title}`.slice(0, 300);
+}
+
+function evidenceBusyKey(
+  mode: 'photo' | 'document',
+  selection?: GovernedEvidenceSelection,
+) {
+  return selection
+    ? `${mode}:${selection.complianceCase.caseId}:${selection.requirement.id}`
+    : `${mode}:general`;
+}
+
+function pendingEvidenceBusyKey(pending: PendingPhotoCapture) {
+  const { complianceCaseId, evidenceRequirementId } = pending.identifiers;
+  return evidenceRequirementId
+    ? `photo:${complianceCaseId || 'unbound'}:${evidenceRequirementId}`
+    : 'photo:general';
 }
 
 function gpsPreflightBlocker(location: PendingPhotoCapture['preCaptureLocation']) {
@@ -111,7 +139,7 @@ export default function JobScreen() {
   const processPendingPhoto = useCallback(async (pending: PendingPhotoCapture) => {
     if (!pending.asset || recoveringPhoto.current) return;
     recoveringPhoto.current = true;
-    const busyKey = `photo:${pending.identifiers.evidenceRequirementId || 'general'}`;
+    const busyKey = pendingEvidenceBusyKey(pending);
     setBusy(busyKey);
     try {
       const location = pending.preCaptureLocation;
@@ -164,7 +192,7 @@ export default function JobScreen() {
         : ` Location was recorded as ${readable(location.state)}.`;
       Alert.alert(
         'Evidence saved',
-        `${sync.online ? 'The original file and capture record are uploading securely.' : 'The original file and capture record will upload when reception returns.'}${locationMessage} Creditex must still review it against the applicable scheme rules.`,
+        `${sync.online ? 'The original file and capture record are uploading securely.' : 'The original file and capture record will upload when reception returns.'}${locationMessage} Compliance review is still required against the applicable scheme rules.`,
       );
     } catch (error) {
       Alert.alert(
@@ -212,7 +240,17 @@ export default function JobScreen() {
 
   async function advanceFieldJob() {
     if (!job) return; const action = fieldActions[job.appointmentStatus]; if (!action) return;
-    const localBlockers = [job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '', job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '', job.openIssues ? 'open issues' : ''].filter(Boolean);
+    const governedEvidenceIncomplete = complianceCasesForJob(job).some(
+      (complianceCase) => complianceCase.requirements.some(
+        (requirement) => requirement.submittedCount < requirement.minimumCount,
+      ),
+    );
+    const localBlockers = [
+      job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
+      job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
+      governedEvidenceIncomplete ? 'governed evidence' : '',
+      job.openIssues ? 'open issues' : '',
+    ].filter(Boolean);
     if (action.transition === 'finish' && !sync.online) return Alert.alert('Reconnect before finishing', 'Finish must check current forms, evidence, issues and unsynchronised changes. Other field updates remain safely queued offline.');
     if (action.transition === 'finish' && localBlockers.length) return Alert.alert('Finish the required work', `Complete ${localBlockers.join(', ')} first.`);
     setBusy(`field:${action.transition}`);
@@ -235,7 +273,7 @@ export default function JobScreen() {
     if (job.fieldLane === 'creditex_manual') {
       return Alert.alert(
         'Time entry unavailable',
-        'Creditex manual test jobs do not support time entries.',
+        'Manual compliance test jobs do not support time entries.',
       );
     }
     const minutes = Number(duration);
@@ -257,14 +295,24 @@ export default function JobScreen() {
     Alert.alert(complete ? 'Form completed' : 'Draft saved', sync.online ? 'The field record is syncing now.' : 'The field record is secure on this device and will sync when reception returns.');
   }
 
-  async function capturePhoto(requirement?: ComplianceEvidenceRequirement) {
+  async function capturePhoto(selection?: GovernedEvidenceSelection) {
     if (!job || launchingCamera.current) return;
+    const requirement = selection?.requirement;
+    let identifiers;
+    try {
+      identifiers = evidenceIdentifiers(job, selection);
+    } catch (error) {
+      return Alert.alert(
+        'Sync this requirement',
+        error instanceof Error ? error.message : 'This governed evidence requirement is not ready for capture.',
+      );
+    }
     if (requirement) {
       const blocker = captureBlocker(requirement, 'camera');
       if (blocker) return Alert.alert('Camera capture is unavailable', blocker);
     }
     launchingCamera.current = true;
-    setBusy(`photo:${requirement?.id || 'general'}`);
+    setBusy(evidenceBusyKey('photo', selection));
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -285,9 +333,9 @@ export default function JobScreen() {
       let pending: PendingPhotoCapture = {
         captureSessionId: captureSessionId(),
         ...observedTime(),
-        identifiers: evidenceIdentifiers(job, requirement),
-        category: evidenceCategory(requirement),
-        caption: evidenceCaption(requirement),
+        identifiers,
+        category: evidenceCategory(selection),
+        caption: evidenceCaption(selection),
         gpsRequired: requirement?.gpsRequired || false,
         cameraPermission: cameraPermissionState(permission),
         preCaptureLocationPermission: preCaptureLocation.permission,
@@ -320,8 +368,18 @@ export default function JobScreen() {
     }
   }
 
-  async function chooseDocument(requirement?: ComplianceEvidenceRequirement) {
+  async function chooseDocument(selection?: GovernedEvidenceSelection) {
     if (!job) return;
+    const requirement = selection?.requirement;
+    let identifiers;
+    try {
+      identifiers = evidenceIdentifiers(job, selection);
+    } catch (error) {
+      return Alert.alert(
+        'Sync this requirement',
+        error instanceof Error ? error.message : 'This governed evidence requirement is not ready for capture.',
+      );
+    }
     if (requirement) {
       const blocker = captureBlocker(requirement, 'document');
       if (blocker) return Alert.alert('Document capture is unavailable', blocker);
@@ -345,9 +403,9 @@ export default function JobScreen() {
     const envelope = await buildEvidenceEnvelope({
       captureSessionId: captureSessionId(),
       source: 'document_picker',
-      identifiers: evidenceIdentifiers(job, requirement),
+      identifiers,
     });
-    setBusy(`document:${requirement?.id || 'general'}`);
+    setBusy(evidenceBusyKey('document', selection));
     try {
       await saveUpload({
         workOrderId: job.id,
@@ -355,13 +413,13 @@ export default function JobScreen() {
         fileName: asset.name,
         contentType,
         sizeBytes: file.size,
-        category: requirement ? evidenceCategory(requirement) : 'document',
-        caption: evidenceCaption(requirement),
+        category: requirement ? evidenceCategory(selection) : 'document',
+        caption: evidenceCaption(selection),
         evidenceEnvelope: envelope,
       });
       Alert.alert(
         'Original file saved',
-        `${sync.online ? 'The file and SHA-256 capture record are uploading securely.' : 'The file and SHA-256 capture record will upload when reception returns.'} Creditex must still review it against the applicable scheme rules.`,
+        `${sync.online ? 'The file and SHA-256 capture record are uploading securely.' : 'The file and SHA-256 capture record will upload when reception returns.'} Compliance review is still required against the applicable scheme rules.`,
       );
     } catch (error) {
       Alert.alert('File was not saved', error instanceof Error ? error.message : 'Choose the original file and try again.');
@@ -374,7 +432,16 @@ export default function JobScreen() {
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
-  const complianceRequirements = job.compliance?.requirements || [];
+  const complianceCases = complianceCasesForJob(job);
+  const complianceRequirements = complianceCases.flatMap(
+    (complianceCase) => complianceCase.requirements,
+  );
+  const acceptedComplianceRequirements = complianceRequirements.filter(
+    (requirement) => requirement.acceptedCount >= requirement.minimumCount,
+  ).length;
+  const submittedComplianceRequirements = complianceRequirements.filter(
+    (requirement) => requirement.submittedCount >= requirement.minimumCount,
+  ).length;
   const fieldAction = fieldActions[job.appointmentStatus];
   const syncLabel = !sync.online ? 'Offline' : sync.conflicts ? 'Action required' : sync.running || sync.queuedActions || sync.queuedUploads ? 'Syncing' : 'Saved';
   const creditexManual = job.fieldLane === 'creditex_manual';
@@ -390,7 +457,7 @@ export default function JobScreen() {
 
       <View style={[styles.privacy, job.protectedJob && styles.protected]}>
         <MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-check-outline'} size={26} color={colours.green} />
-        <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Creditex manual workflow test' : job.protectedJob ? 'AEA protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the AEA platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
+        <View style={styles.flex}><Text style={styles.cardTitle}>{syntheticManual ? 'Manual compliance workflow test' : job.protectedJob ? 'AEA protected job' : 'Direct customer job'}</Text><Text style={styles.body}>{syntheticManual ? 'Use only the supplied test alias and synthetic postcode. This lane cannot create certificates, registry submissions, trades or settlements.' : job.protectedJob ? 'Customer name, phone, email and street address stay protected. Use the AEA platform for communication.' : job.serviceAddress || `${job.siteArea || 'Service area'} | Address is not stored offline yet.`}</Text></View>
       </View>
 
       <View style={styles.card}>
@@ -405,6 +472,7 @@ export default function JobScreen() {
         <View style={styles.todayItem}><MaterialCommunityIcons name={completed === job.tasks.length ? 'check-circle-outline' : 'clipboard-check-outline'} size={25} color={completed === job.tasks.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Assigned tasks</Text><Text style={styles.meta}>{completed}/{job.tasks.length} complete</Text></View></View>
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
         <View style={styles.todayItem}><MaterialCommunityIcons name={fieldForms.every((form) => form.status === 'complete') ? 'check-circle-outline' : 'file-document-edit-outline'} size={25} color={fieldForms.every((form) => form.status === 'complete') ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required forms</Text><Text style={styles.meta}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length} complete</Text></View></View>
+        {complianceCases.length ? <View style={styles.todayItem}><MaterialCommunityIcons name={submittedComplianceRequirements === complianceRequirements.length ? 'check-circle-outline' : 'certificate-outline'} size={25} color={submittedComplianceRequirements === complianceRequirements.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Government program evidence</Text><Text style={styles.meta}>{submittedComplianceRequirements}/{complianceRequirements.length} requirements submitted, {acceptedComplianceRequirements} accepted, across {complianceCases.length} activit{complianceCases.length === 1 ? 'y' : 'ies'}</Text></View></View> : null}
         <View style={styles.todayItem}><MaterialCommunityIcons name={job.media.length ? 'check-circle-outline' : 'camera-outline'} size={25} color={job.media.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required photo proof</Text><Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} synced</Text></View></View>
         <View style={styles.todayItem}><MaterialCommunityIcons name={!job.openIssues ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={!job.openIssues ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Open issues or blockers</Text><Text style={styles.meta}>{job.openIssues ? `${job.openIssues} need attention in TLink Notes` : 'None open'}</Text></View></View>
       </View>
@@ -418,85 +486,23 @@ export default function JobScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
         <Text style={styles.body}>The app preserves the exact file returned by the camera picker without further editing or recompression, requests available EXIF, adds independent time and location observations, and hashes the exact queued bytes with SHA-256. Files save encrypted on this device first and resume automatically after a connection drops.</Text>
-        {syntheticManual ? <Text style={styles.warningText}>Manual program testing only. A physical-device report and server-verified retained bytes are required before a prompt counts as complete. Creditex review is still separate.</Text> : null}
+        {syntheticManual ? <Text style={styles.warningText}>Manual program testing only. A physical-device report and server-verified retained bytes are required before a prompt counts as complete. Compliance review is still separate.</Text> : null}
         <Text style={styles.meta}>These records support audit review. They are not a government or scheme acceptance decision.</Text>
-        {job.compliance ? <View style={styles.complianceBlock}>
-          <View style={styles.complianceHeading}>
-            <MaterialCommunityIcons name="certificate-outline" size={25} color={colours.green} />
-            <View style={styles.flex}>
-              <Text style={styles.taskTitle}>{job.compliance.activityCode} | {job.compliance.activityTitle}</Text>
-              <Text style={styles.meta}>Case {job.compliance.caseNumber || job.compliance.caseId} | Evidence policy {job.compliance.evidencePolicyVersionId || 'not assigned'}</Text>
-            </View>
-          </View>
-          {complianceRequirements.length ? complianceRequirements.map((requirement) => {
-            const atMaximum = maximumReached(requirement);
-            const captureModes = requirement.captureModes || [];
-            const compatibilityBlockers = requirement.compatibility?.blockers || [
-              'This requirement was saved by an older field contract. Sync the job before capturing evidence.',
-            ];
-            const maximumLabel = requirement.maximumCount > 0
-              ? `Maximum ${requirement.maximumCount}`
-              : 'No policy maximum';
-            return (
-              <View key={requirement.id} style={styles.requirement}>
-                <View style={styles.requirementHeading}>
-                  <View style={styles.flex}>
-                    <Text style={styles.taskTitle}>{requirement.code} | {requirement.title}</Text>
-                    <Text style={styles.meta}>
-                      {readable(requirement.captureTiming || 'timing not specified')} | Accepted {requirement.acceptedCount || 0}/{requirement.minimumCount} | Submitted {requirement.submittedCount || 0} | {maximumLabel} | {readable(requirement.status || 'pending')}
-                    </Text>
-                  </View>
-                  {requirement.gpsRequired ? <View style={styles.gpsBadge}><Text style={styles.gpsBadgeText}>GPS required</Text></View> : null}
-                </View>
-                {requirement.description ? <Text style={styles.body}>{requirement.description}</Text> : null}
-                <Text style={styles.meta}>
-                  {requirement.originalRequired ? 'Original file required. ' : ''}
-                  {requirement.metadataRequired ? 'Camera metadata required. ' : ''}
-                  {requirement.dateStampRequired ? 'Capture date and time required. ' : ''}
-                  {readable(requirement.evidenceType || 'evidence')} evidence. Creditex review remains required.
-                </Text>
-                {requirement.allowedContentTypes?.length
-                  ? <Text style={styles.meta}>Allowed file types: {requirement.allowedContentTypes.join(', ')}</Text>
-                  : <Text style={styles.meta}>Allowed file types: standard field JPEG, PNG, WebP or PDF as compatible with this evidence type.</Text>}
-                {compatibilityBlockers.map((blocker) => (
-                  <Text key={blocker} style={styles.warningText}>{blocker}</Text>
-                ))}
-                {atMaximum
-                  ? <Text style={styles.warningText}>The policy maximum has been submitted. Wait for Creditex review before adding another file.</Text>
-                  : null}
-                {!compatibilityBlockers.length && !atMaximum && captureModes.length ? (
-                  <View style={styles.row}>
-                    {captureModes.includes('camera') ? (
-                      <FieldButton
-                        variant="secondary"
-                        loading={busy === `photo:${requirement.id}`}
-                        style={styles.flex}
-                        onPress={() => void capturePhoto(requirement)}
-                      >
-                        Take photo
-                      </FieldButton>
-                    ) : null}
-                    {captureModes.includes('document') ? (
-                      <FieldButton
-                        variant="secondary"
-                        loading={busy === `document:${requirement.id}`}
-                        style={styles.flex}
-                        onPress={() => void chooseDocument(requirement)}
-                      >
-                        Add original file
-                      </FieldButton>
-                    ) : null}
-                  </View>
-                ) : null}
-                {!compatibilityBlockers.length && captureModes.includes('camera') && (requirement.gpsRequired || requirement.metadataRequired)
-                  ? <Text style={styles.meta}>Use Take photo so the app can capture the required location or camera metadata.</Text>
-                  : null}
-              </View>
-            );
-          }) : <Text style={styles.body}>No governed evidence requirements have been assigned. Do not treat general uploads as compliance evidence.</Text>}
-        </View> : null}
-        {!syntheticManual ? <><Text style={styles.inputLabel}>{job.compliance ? 'General job files' : 'Job files'}</Text>
+        {complianceCases.length > 1 ? <Text style={styles.multiCaseNotice}>This job has {complianceCases.length} governed activities. Capture each requirement inside its matching case below.</Text> : null}
+        {complianceCases.map((complianceCase, index) => (
+          <ComplianceCaseEvidence
+            key={complianceCase.caseId}
+            complianceCase={complianceCase}
+            index={index}
+            total={complianceCases.length}
+            busy={busy}
+            onPhoto={(selection) => void capturePhoto(selection)}
+            onDocument={(selection) => void chooseDocument(selection)}
+          />
+        ))}
+        {!syntheticManual ? <><Text style={styles.inputLabel}>{complianceCases.length ? 'General job files' : 'Job files'}</Text>
         <View style={styles.row}><FieldButton variant="secondary" loading={busy === 'photo:general'} style={styles.flex} onPress={() => void capturePhoto()}>Take photo</FieldButton><FieldButton variant="secondary" loading={busy === 'document:general'} style={styles.flex} onPress={() => void chooseDocument()}>Add document</FieldButton></View></> : null}
+        {complianceCases.length ? <Text style={styles.meta}>General job files remain separate and are not submitted against a governed requirement.</Text> : null}
         <Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} already synced</Text>
       </View>
 
@@ -510,6 +516,103 @@ export default function JobScreen() {
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
     </Screen>
   );
+}
+
+function ComplianceCaseEvidence({
+  complianceCase,
+  index,
+  total,
+  busy,
+  onPhoto,
+  onDocument,
+}: {
+  complianceCase: FieldJobCompliance;
+  index: number;
+  total: number;
+  busy: string;
+  onPhoto: (selection: GovernedEvidenceSelection) => void;
+  onDocument: (selection: GovernedEvidenceSelection) => void;
+}) {
+  return <View style={styles.complianceBlock}>
+    <View style={styles.caseSequence}>
+      <Text style={styles.caseSequenceText}>GOVERNED ACTIVITY {index + 1} OF {total}</Text>
+    </View>
+    <View style={styles.complianceHeading}>
+      <MaterialCommunityIcons name="certificate-outline" size={25} color={colours.green} />
+      <View style={styles.flex}>
+        <Text style={styles.taskTitle}>{complianceCase.activityCode} | {complianceCase.activityTitle}</Text>
+        <Text style={styles.meta}>Case {complianceCase.caseNumber || complianceCase.caseId} | Evidence policy {complianceCase.evidencePolicyVersionId || 'not assigned'}</Text>
+        <Text style={styles.meta}>Case {readable(complianceCase.status || 'not started')} | Evidence {readable(complianceCase.evidenceStatus || 'not started')}</Text>
+      </View>
+    </View>
+    {complianceCase.requirements.length ? complianceCase.requirements.map((requirement) => {
+      const selection = { complianceCase, requirement };
+      const atMaximum = maximumReached(requirement);
+      const captureModes = requirement.captureModes || [];
+      const compatibilityBlockers = requirement.compatibility?.blockers || [
+        'This requirement was saved by an older field contract. Sync the job before capturing evidence.',
+      ];
+      const maximumLabel = requirement.maximumCount > 0
+        ? `Maximum ${requirement.maximumCount}`
+        : 'No policy maximum';
+      return (
+        <View key={requirement.id} style={styles.requirement}>
+          <View style={styles.requirementHeading}>
+            <View style={styles.flex}>
+              <Text style={styles.taskTitle}>{requirement.code} | {requirement.title}</Text>
+              <Text style={styles.meta}>
+                {readable(requirement.captureTiming || 'timing not specified')} | Accepted {requirement.acceptedCount || 0}/{requirement.minimumCount} | Submitted {requirement.submittedCount || 0} | {maximumLabel} | {readable(requirement.status || 'pending')}
+              </Text>
+            </View>
+            {requirement.gpsRequired ? <View style={styles.gpsBadge}><Text style={styles.gpsBadgeText}>GPS required</Text></View> : null}
+          </View>
+          {requirement.description ? <Text style={styles.body}>{requirement.description}</Text> : null}
+          <Text style={styles.meta}>
+            {requirement.originalRequired ? 'Original file required. ' : ''}
+            {requirement.metadataRequired ? 'Camera metadata required. ' : ''}
+            {requirement.dateStampRequired ? 'Capture date and time required. ' : ''}
+            {readable(requirement.evidenceType || 'evidence')} evidence. Compliance review remains required.
+          </Text>
+          {requirement.allowedContentTypes?.length
+            ? <Text style={styles.meta}>Allowed file types: {requirement.allowedContentTypes.join(', ')}</Text>
+            : <Text style={styles.meta}>Allowed file types: standard field JPEG, PNG, WebP or PDF as compatible with this evidence type.</Text>}
+          {compatibilityBlockers.map((blocker) => (
+            <Text key={blocker} style={styles.warningText}>{blocker}</Text>
+          ))}
+          {atMaximum
+            ? <Text style={styles.warningText}>The policy maximum has been submitted. Wait for compliance review before adding another file.</Text>
+            : null}
+          {!compatibilityBlockers.length && !atMaximum && captureModes.length ? (
+            <View style={styles.row}>
+              {captureModes.includes('camera') ? (
+                <FieldButton
+                  variant="secondary"
+                  loading={busy === evidenceBusyKey('photo', selection)}
+                  style={styles.flex}
+                  onPress={() => onPhoto(selection)}
+                >
+                  Take {requirement.code} photo
+                </FieldButton>
+              ) : null}
+              {captureModes.includes('document') ? (
+                <FieldButton
+                  variant="secondary"
+                  loading={busy === evidenceBusyKey('document', selection)}
+                  style={styles.flex}
+                  onPress={() => onDocument(selection)}
+                >
+                  Add {requirement.code} file
+                </FieldButton>
+              ) : null}
+            </View>
+          ) : null}
+          {!compatibilityBlockers.length && captureModes.includes('camera') && (requirement.gpsRequired || requirement.metadataRequired)
+            ? <Text style={styles.meta}>Use the requirement photo button so the app can capture the required location or camera metadata.</Text>
+            : null}
+        </View>
+      );
+    }) : <Text style={styles.body}>No governed evidence requirements have been assigned to this case. Do not treat general uploads as compliance evidence.</Text>}
+  </View>;
 }
 
 function JobFieldForm({ form, busy, onSave }: { form: FieldForm; busy: boolean; onSave: (form: FieldForm, answers: Record<string, string | boolean>, complete: boolean) => Promise<void> }) {
@@ -574,6 +677,9 @@ const styles = StyleSheet.create({
   formActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   complianceBlock: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   complianceHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  caseSequence: { alignSelf: 'flex-start', backgroundColor: colours.forest, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },
+  caseSequenceText: { color: colours.white, fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  multiCaseNotice: { backgroundColor: '#fff8e7', borderColor: colours.amber, borderRadius: radius.sm, borderWidth: 1, color: colours.ink, fontSize: 13, fontWeight: '700', lineHeight: 19, padding: spacing.sm },
   requirement: { backgroundColor: colours.white, borderColor: colours.line, borderRadius: radius.sm, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
   requirementHeading: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
   gpsBadge: { backgroundColor: colours.forest, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },

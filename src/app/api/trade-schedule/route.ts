@@ -6,11 +6,19 @@ import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaL
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
 import { queueAppointmentNotifications } from "@/lib/appointment-notification-server";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
+import {
+  isTradeComplianceIntentScheduleConflict,
+  plannedComplianceIntentReplanStatements,
+  previousTradeScheduleMutationGuardStatement,
+} from "@/lib/trade-compliance-intent-replan-server";
 
 export const runtime = "edge";
 
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
+  if (isTradeComplianceIntentScheduleConflict(error)) {
+    return adminJson({ ok: false, error: "This job or its compliance plan changed after you opened it. Refresh the schedule before saving again." }, 409);
+  }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
   }
@@ -65,7 +73,7 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       WHERE owner_uid = ? AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`).bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.id, a.work_order_id, a.appointment_type, a.title, a.starts_at, a.ends_at, a.assignee_member_id,
         a.assignee_label, a.status, a.revision, w.work_number, w.service_category, w.site_area, w.source_type,
-        d.customer_source, c.first_name customer_first_name, c.last_name customer_last_name,
+        d.customer_source, d.quote_status, d.quoted_value_cents, c.first_name customer_first_name, c.last_name customer_last_name,
         c.business_name customer_business_name, s.site_label, s.suburb, s.address_state, s.postcode
       FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
       LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -120,7 +128,8 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       startsAt: row.starts_at, endsAt: row.ends_at, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
       status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
-      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "), protectedJob, conflicts,
+      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
+      quoteStatus: String(row.quote_status || "not_started"), quotedValueCents: Number(row.quoted_value_cents || 0), protectedJob, conflicts,
       outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
   return { weekStart: rangeStart, weekEnd: rangeEnd, rangeStart, rangeEnd, rangeWeeks,
@@ -244,7 +253,15 @@ export async function PATCH(request: Request) {
           ]);
         } else {
           const appointmentRevision = Number(current.appointment_revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
+          const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+            actorUid: access.actorUid,
+            changedAt: now,
+            ownerUid: access.ownerUid,
+            plannedStart: startsAt,
+            workOrderId: String(current.work_order_id),
+          });
           await db.batch([
+            ...complianceIntentStatements,
             db.prepare(`INSERT OR IGNORE INTO trade_crm_appointment_revisions
               (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
                assignee_label, change_source, source_reference, changed_by_uid, created_at)
@@ -274,9 +291,13 @@ export async function PATCH(request: Request) {
             db.prepare(`UPDATE trade_work_order_tasks SET status = 'completed', completed_at = ?, revision = revision + 1, updated_at = ?
               WHERE id = ? AND firebase_uid = ?`).bind(now, now, `${requestId}:review-task`, access.ownerUid),
             db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?,
-              revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?`).bind(
+              revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(
                 memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
-                current.work_order_id, access.ownerUid),
+                current.work_order_id, access.ownerUid, current.job_revision),
+            previousTradeScheduleMutationGuardStatement(db, {
+              changedAt: now,
+              ownerUid: access.ownerUid,
+            }),
             db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
               WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, current.appointment_id),
             db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
@@ -308,11 +329,27 @@ export async function PATCH(request: Request) {
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(current.revision)) throw new Error("REVISION_CONFLICT");
       await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt, appointmentId);
       const revision = Number(current.revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
+      const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+        actorUid: access.actorUid,
+        changedAt: now,
+        ownerUid: access.ownerUid,
+        plannedStart: startsAt,
+        workOrderId: String(current.work_order_id),
+      });
       await db.batch([
+        ...complianceIntentStatements,
         db.prepare(`UPDATE trade_crm_appointments SET starts_at = ?, ends_at = ?, assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
           WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(startsAt, endsAt, memberId, member.display_name, revision, now, appointmentId, access.ownerUid, current.revision),
+        previousTradeScheduleMutationGuardStatement(db, {
+          changedAt: now,
+          ownerUid: access.ownerUid,
+        }),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now, current.work_order_id, access.ownerUid),
+          WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now, current.work_order_id, access.ownerUid, current.job_revision),
+        previousTradeScheduleMutationGuardStatement(db, {
+          changedAt: now,
+          ownerUid: access.ownerUid,
+        }),
         db.prepare(`UPDATE customer_project_arrival_proposals SET preparation_acknowledged_at = '', updated_at = ?
           WHERE crm_appointment_id = ? AND preparation_acknowledged_at <> ''`).bind(now, appointmentId),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
@@ -333,12 +370,24 @@ export async function PATCH(request: Request) {
       if (!job) throw new Error("JOB_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
       await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt); const revision = nextJobRevision(job.revision);
       const appointmentId = crypto.randomUUID();
+      const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+        actorUid: access.actorUid,
+        changedAt: now,
+        ownerUid: access.ownerUid,
+        plannedStart: startsAt,
+        workOrderId,
+      });
       await db.batch([
+        ...complianceIntentStatements,
         db.prepare(`INSERT INTO trade_crm_appointments (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id,
           assignee_label, status, notes, revision, created_at, updated_at) VALUES (?, ?, ?, 'work', ?, ?, ?, ?, ?, 'scheduled', '', 1, ?, ?)`)
           .bind(appointmentId, workOrderId, access.ownerUid, job.title, startsAt, endsAt, memberId, member.display_name, now, now),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = 'scheduled', revision = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now, workOrderId, access.ownerUid),
+          WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now, workOrderId, access.ownerUid, job.revision),
+        previousTradeScheduleMutationGuardStatement(db, {
+          changedAt: now,
+          ownerUid: access.ownerUid,
+        }),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'schedule_created', ?, ?)`).bind(crypto.randomUUID(), workOrderId, access.ownerUid, `${job.work_number} scheduled with ${member.display_name} for ${startsAt}.`, now),
         ...jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now, audienceMemberId: memberId,

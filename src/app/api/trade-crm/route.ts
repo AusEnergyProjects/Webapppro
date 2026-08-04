@@ -14,10 +14,15 @@ import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar
 import { ComplianceDomainError } from "@/lib/creditex-compliance-server";
 import {
   CREDITEX_PARTNER_ORGANISATION_CODE,
-  resolveTradeComplianceIntent,
+  resolveTradeComplianceIntents,
   stableTradeComplianceIntentJson,
   TradeComplianceIntentError,
 } from "@/lib/trade-compliance-intent";
+import {
+  isTradeComplianceIntentScheduleConflict,
+  plannedComplianceIntentReplanStatements,
+  previousTradeScheduleMutationGuardStatement,
+} from "@/lib/trade-compliance-intent-replan-server";
 import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataforce-job-csv";
 import { integrationEnvironment } from "@/lib/trade-integrations-server";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "@/lib/trade-crm-job-index-sql";
@@ -53,6 +58,7 @@ const QUOTE_STATUSES = new Set(["not_started", "draft", "sent", "accepted", "dec
 const INVOICE_STATUSES = new Set(["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAGE_SIZES = new Set([25, 50, 100]);
+const CRM_REQUEST_MAX_BYTES = 96 * 1024;
 const SERVICE_LABELS: Record<string, string> = {
   assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
   "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
@@ -80,8 +86,18 @@ const JOB_SORTS: Record<string, CrmSort> = {
   "updated-desc": crmSort([crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
 };
 const CUSTOMER_SORTS: Record<string, CrmSort> = {
-  "name-asc": crmSort([crmTerm("CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE", "asc", "sort_name")], "c.id"),
-  "name-desc": crmSort([crmTerm("CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END COLLATE NOCASE", "desc", "sort_name")], "c.id"),
+  "name-asc": crmSort([
+    crmTerm("CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END", "asc", "person_name_missing", true),
+    crmTerm("c.first_name COLLATE NOCASE", "asc", "first_name"),
+    crmTerm("c.last_name COLLATE NOCASE", "asc", "last_name"),
+    crmTerm("c.business_name COLLATE NOCASE", "asc", "business_name"),
+  ], "c.id"),
+  "name-desc": crmSort([
+    crmTerm("CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END", "asc", "person_name_missing", true),
+    crmTerm("c.first_name COLLATE NOCASE", "desc", "first_name"),
+    crmTerm("c.last_name COLLATE NOCASE", "desc", "last_name"),
+    crmTerm("c.business_name COLLATE NOCASE", "desc", "business_name"),
+  ], "c.id"),
   "updated-desc": crmSort([crmTerm("c.updated_at", "desc", "updated_at")], "c.id"),
 };
 const SCHEDULE_SORT = crmSort([crmTerm("a.starts_at", "asc", "starts_at"), crmTerm("a.created_at", "asc", "created_at")], "a.id");
@@ -94,6 +110,25 @@ type AddressCandidate = AustralianAddressComponents & {
   addressFormatted?: unknown;
   addressSelectionProof?: unknown;
 };
+
+async function boundedCrmRequestBody(request: Request) {
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (
+    Number.isFinite(declaredLength)
+    && declaredLength > CRM_REQUEST_MAX_BYTES
+  ) {
+    throw new Error("CRM_REQUEST_TOO_LARGE");
+  }
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > CRM_REQUEST_MAX_BYTES) {
+    throw new Error("CRM_REQUEST_TOO_LARGE");
+  }
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("INVALID_CRM_REQUEST");
+  }
+  return parsed as Record<string, unknown>;
+}
 
 const ADDRESS_COMPONENT_KEYS = ["addressLine1", "addressLine2", "suburb", "addressState", "postcode"] as const;
 const ADDRESS_PROVENANCE_KEYS = ["addressEntryMode", "addressProvider", "addressProviderReference", "addressFormatted", "addressSelectionProof"] as const;
@@ -189,6 +224,9 @@ function errorResponse(error: unknown) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (isTradeComplianceIntentScheduleConflict(error)) {
+    return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
+  }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
   }
@@ -357,7 +395,7 @@ function indexedJob(row: Record<string, unknown>) {
     quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
     paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
     invoiceStatus: row.invoice_status || "not_started", paymentDueAt: row.payment_due_at || "",
-    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [], complianceIntent: null,
+    handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [], complianceIntents: [], complianceIntent: null,
     dataforceRecord,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
@@ -369,7 +407,6 @@ function indexedComplianceCase(row: Record<string, unknown>) {
     id: String(row.id),
     caseNumber: String(row.case_number),
     activityDate: String(row.activity_date),
-    organisationName: String(snapshot.organisationTradingName || snapshot.organisationLegalName || "Compliance provider"),
     programCode: String(snapshot.programCode || ""),
     programName: String(snapshot.programName || ""),
     activityKey: String(snapshot.activityKey || ""),
@@ -458,6 +495,7 @@ function indexedCustomer(row: Record<string, unknown>) {
     jobCount: Number(row.job_count || 0), activeJobCount: Number(row.active_job_count || 0),
     activities: String(row.activities || "").split(",").filter(Boolean),
     latestJobNumber: String(row.latest_job_number || ""), latestPipelineStage: String(row.latest_pipeline_stage || ""),
+    latestJobAt: String(row.latest_job_at || ""),
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -482,13 +520,30 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         COALESCE(c.email, '') || ' ' || COALESCE(c.phone, '') || ' ' ||
         COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' ||
         COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '') || ' ' ||
-        COALESCE((SELECT json_extract(ci.intent_snapshot, '$.activity.title')
+        COALESCE((SELECT GROUP_CONCAT(
+            json_extract(ci.intent_snapshot, '$.activity.title'),
+            ' '
+          )
           FROM trade_work_order_compliance_intents ci
           WHERE ci.work_order_id = w.id AND ci.installer_uid = w.firebase_uid
-            AND ci.status IN ('planned', 'case_linked')
-          ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1), '')
+            AND ci.status IN ('planned', 'case_linked')), '')
       ) LIKE ?`);
       bindings.push(`%${search}%`);
+    }
+    const appointmentId = cleanAdminText(url.searchParams.get("appointmentId"), 180).toLowerCase();
+    if (appointmentId) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM trade_crm_appointments filter_appointment
+        WHERE filter_appointment.work_order_id = w.id
+          AND filter_appointment.firebase_uid = w.firebase_uid
+          AND LOWER(filter_appointment.id) LIKE ?
+      )`);
+      bindings.push(`%${appointmentId}%`);
+    }
+    const jobId = cleanAdminText(url.searchParams.get("jobId"), 180).toLowerCase();
+    if (jobId) {
+      conditions.push("(LOWER(w.id) LIKE ? OR LOWER(w.work_number) LIKE ?)");
+      bindings.push(`%${jobId}%`, `%${jobId}%`);
     }
     const customer = cleanAdminText(url.searchParams.get("customer"), 100).toLowerCase();
     if (customer) {
@@ -507,6 +562,46 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     if (location) {
       conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' || COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '')) LIKE ?`);
       bindings.push(`%${location}%`);
+    }
+    const scheduledFrom = cleanAdminText(url.searchParams.get("scheduledFrom"), 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledFrom)) {
+      conditions.push("substr(w.scheduled_start, 1, 10) >= ?");
+      bindings.push(scheduledFrom);
+    }
+    const scheduledTo = cleanAdminText(url.searchParams.get("scheduledTo"), 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledTo)) {
+      conditions.push("substr(w.scheduled_start, 1, 10) <= ?");
+      bindings.push(scheduledTo);
+    }
+    const invoiceStatus = cleanAdminText(url.searchParams.get("invoiceStatus"), 30);
+    if (INVOICE_STATUSES.has(invoiceStatus)) {
+      conditions.push("d.invoice_status = ?");
+      bindings.push(invoiceStatus);
+    }
+    const customerReference = cleanAdminText(url.searchParams.get("customerReference"), 120).toLowerCase();
+    if (customerReference) {
+      conditions.push("LOWER(d.customer_reference) LIKE ?");
+      bindings.push(`%${customerReference}%`);
+    }
+    const email = cleanAdminText(url.searchParams.get("email"), 180).toLowerCase();
+    if (email) {
+      conditions.push("LOWER(c.email) LIKE ?");
+      bindings.push(`%${email}%`);
+    }
+    const phone = cleanAdminText(url.searchParams.get("phone"), 50).toLowerCase();
+    if (phone) {
+      conditions.push("LOWER(c.phone) LIKE ?");
+      bindings.push(`%${phone}%`);
+    }
+    const suburb = cleanAdminText(url.searchParams.get("suburb"), 100).toLowerCase();
+    if (suburb) {
+      conditions.push("LOWER(ss.suburb) LIKE ?");
+      bindings.push(`%${suburb}%`);
+    }
+    const postcode = cleanAdminText(url.searchParams.get("postcode"), 12).toLowerCase();
+    if (postcode) {
+      conditions.push("LOWER(ss.postcode) LIKE ?");
+      bindings.push(`%${postcode}%`);
     }
     if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
     else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
@@ -614,7 +709,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
   const [countRow, rows] = await Promise.all([
     includeTotal ? db.prepare(`SELECT COUNT(*) total FROM trade_crm_customers c WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
     db.prepare(`WITH owned_jobs AS (
-      SELECT d.crm_customer_id, w.service_category, w.work_number, d.pipeline_stage, w.stage, w.updated_at,
+      SELECT d.crm_customer_id, w.service_category, w.work_number, d.pipeline_stage, w.stage, w.created_at, w.updated_at,
         ROW_NUMBER() OVER (PARTITION BY d.crm_customer_id ORDER BY w.updated_at DESC, w.id DESC) latest_rank
       FROM trade_crm_job_details d JOIN trade_work_orders w ON w.id = d.work_order_id AND w.firebase_uid = d.firebase_uid
       WHERE d.firebase_uid = ? AND w.record_status = 'active'
@@ -623,20 +718,32 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         SUM(CASE WHEN stage NOT IN ('completed', 'cancelled') THEN 1 ELSE 0 END) active_job_count,
         GROUP_CONCAT(DISTINCT service_category) activities,
         MAX(CASE WHEN latest_rank = 1 THEN work_number ELSE '' END) latest_job_number,
-        MAX(CASE WHEN latest_rank = 1 THEN pipeline_stage ELSE '' END) latest_pipeline_stage
+        MAX(CASE WHEN latest_rank = 1 THEN pipeline_stage ELSE '' END) latest_pipeline_stage,
+        MAX(CASE WHEN latest_rank = 1 THEN updated_at ELSE '' END) latest_job_at
       FROM owned_jobs GROUP BY crm_customer_id
     )
       SELECT c.*, CASE WHEN c.business_name <> '' THEN c.business_name ELSE c.last_name || ' ' || c.first_name END sort_name,
         COALESCE(js.job_count, 0) job_count, COALESCE(js.active_job_count, 0) active_job_count,
         COALESCE(js.activities, '') activities, COALESCE(js.latest_job_number, '') latest_job_number,
-        COALESCE(js.latest_pipeline_stage, '') latest_pipeline_stage
+        COALESCE(js.latest_pipeline_stage, '') latest_pipeline_stage,
+        COALESCE(js.latest_job_at, '') latest_job_at,
+        CASE WHEN trim(c.first_name) = '' AND trim(c.last_name) = '' THEN 1 ELSE 0 END person_name_missing
       FROM trade_crm_customers c LEFT JOIN customer_job_summary js ON js.crm_customer_id = c.id
       WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
       .bind(identity.uid, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
   ]);
   const total = countRow ? Number(countRow.total || 0) : undefined;
   const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);
-  const nextCursor = hasNext && pageRows.length ? encodeKeysetCursor(`customers:${sort}`, selectedSort.terms.map((item) => String(pageRows.at(-1)![item.rowKey] || ""))) : "";
+  const nextCursor = hasNext && pageRows.length
+    ? encodeKeysetCursor(
+      `customers:${sort}`,
+      selectedSort.terms.map((item) =>
+        item.numeric
+          ? Number(pageRows.at(-1)![item.rowKey])
+          : String(pageRows.at(-1)![item.rowKey] || "")
+      ),
+    )
+    : "";
   return { items: pageRows.map((row: Record<string, unknown>) => indexedCustomer(row)), pagination: { page, pageSize, total, pageCount: total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)), hasNext, nextCursor } };
 }
 
@@ -687,7 +794,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     .bind(id, identity.uid).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   const customerId = String(row.crm_customer_id || "");
-  const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases, complianceIntent] = await Promise.all([
+  const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases, complianceIntents] = await Promise.all([
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? ORDER BY created_at DESC LIMIT 200").bind(id, identity.uid).all<Record<string, unknown>>(),
@@ -712,18 +819,26 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
       ORDER BY created_at, id LIMIT 50`).bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare(`SELECT * FROM trade_work_order_compliance_intents
       WHERE work_order_id = ? AND installer_uid = ?
-      ORDER BY revision DESC, created_at DESC LIMIT 1`)
+      ORDER BY
+        CASE status WHEN 'planned' THEN 0 WHEN 'case_linked' THEN 1 ELSE 2 END,
+        intent_key,
+        revision DESC,
+        created_at DESC
+      LIMIT 50`)
       .bind(id, identity.uid)
-      .first<Record<string, unknown>>(),
+      .all<Record<string, unknown>>(),
   ]);
   const job = indexedJob(row);
+  const projectedComplianceIntents =
+    complianceIntents.results.map(indexedComplianceIntent).filter(Boolean);
   return { customer: customer ? indexedCustomer(customer) : null,
     sites: sites.results.map((site: Record<string, unknown>) => indexedServiceSite(site, siteContacts.results)), job: { ...job,
     tasks: tasks.results.map((item: Record<string, unknown>) => ({ id: item.id, title: item.title, dueAt: item.due_at, status: item.status, completedAt: item.completed_at })),
     appointments: appointments.results.map((item: Record<string, unknown>) => ({ id: item.id, appointmentType: item.appointment_type, title: item.title, startsAt: item.starts_at, endsAt: item.ends_at, assigneeLabel: item.assignee_label, status: item.status, notes: item.notes })),
     notes: notes.results.map((item: Record<string, unknown>) => ({ id: item.id, noteType: item.note_type, body: item.body, issueStatus: item.issue_status, createdAt: item.created_at, updatedAt: item.updated_at })),
     complianceCases: complianceCases.results.map(indexedComplianceCase),
-    complianceIntent: indexedComplianceIntent(complianceIntent),
+    complianceIntents: projectedComplianceIntents,
+    complianceIntent: projectedComplianceIntents[0] || null,
   } };
 }
 
@@ -974,7 +1089,7 @@ export async function POST(request: Request) {
   try {
     const identity = await crmIdentity(request);
     let body: Record<string, unknown>;
-    try { body = await request.json() as Record<string, unknown>; }
+    try { body = await boundedCrmRequestBody(request); }
     catch { return adminJson({ ok: false, error: "Invalid CRM request." }, 400); }
     const db = getD1();
     const action = cleanAdminText(body.action, 40);
@@ -1025,7 +1140,9 @@ export async function POST(request: Request) {
       if (customerType === "business" ? !businessName : !firstName && !lastName) {
         return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
       }
-      if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+      if (!email) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
+      if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+      if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
       const id = crypto.randomUUID();
       const contactId = crypto.randomUUID();
       const siteId = crypto.randomUUID();
@@ -1133,7 +1250,7 @@ export async function POST(request: Request) {
       if (complianceActivityVersionId) {
         return adminJson({
           ok: false,
-          error: "The governed activity version is resolved by TLink and Creditex. Choose the program and activity instead.",
+          error: "The governed activity version is resolved during compliance review. Choose the program and activity instead.",
         }, 409);
       }
       const activeJobs = await db.prepare(`SELECT COUNT(*) count FROM trade_work_orders
@@ -1183,7 +1300,9 @@ export async function POST(request: Request) {
           .bind(identity.uid).first<Record<string, unknown>>();
         if (Number(customerCount?.count || 0) >= CRM_CUSTOMER_LIMIT) throw new Error("CUSTOMER_LIMIT_REACHED");
         if (customerType === "business" ? !businessName : !firstName && !lastName) return adminJson({ ok: false, error: customerType === "business" ? "Add the business name." : "Add the customer name." }, 400);
-        if (email && !EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+        if (!email) return adminJson({ ok: false, error: "Add the customer email address." }, 400);
+        if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: false, error: "Check the customer email address." }, 400);
+        if (phone.replace(/\D/g, "").length < 8) return adminJson({ ok: false, error: "Add a valid customer mobile number." }, 400);
         if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
         const duplicateCandidates = await findDirectCustomerDuplicates(db, identity.uid, { email, phone, businessNumber, addressLine1, suburb, addressState, postcode });
         const duplicateOverride = body.duplicateOverride === true || body.duplicateOverride === "true" || body.duplicateOverride === "on";
@@ -1344,8 +1463,9 @@ export async function POST(request: Request) {
           postcode: canonicalSite.postcode,
         };
       }
-      const complianceIntent = resolveTradeComplianceIntent({
+      const complianceIntents = resolveTradeComplianceIntents({
         mode: body.complianceIntentMode,
+        activities: body.complianceActivitiesJson,
         programTemplateId: body.programTemplateId,
         activityTemplateId: body.activityTemplateId,
         siteJurisdiction: serviceSite?.address_state,
@@ -1355,8 +1475,7 @@ export async function POST(request: Request) {
       const template = templateId ? await db.prepare(`SELECT * FROM trade_crm_job_templates
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(templateId, identity.uid).first<Record<string, unknown>>() : null;
       if (templateId && !template) return adminJson({ ok: false, error: "Job template not found." }, 404);
-      const requestedCategory = complianceIntent?.activity.serviceCategory
-        || cleanAdminText(body.serviceCategory, 60)
+      const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
       const displayName = createCustomer
@@ -1399,27 +1518,33 @@ export async function POST(request: Request) {
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
       if (serviceSite) serviceArea = [serviceSite.suburb, serviceSite.address_state, serviceSite.postcode].filter(Boolean).join(" ").trim();
-      const creditexOrganisation = complianceIntent
+      const creditexOrganisation = complianceIntents.length
         ? await db.prepare(`SELECT id FROM compliance_organisations
             WHERE organisation_code = ? AND status = 'active' LIMIT 1`)
           .bind(CREDITEX_PARTNER_ORGANISATION_CODE)
           .first<Record<string, unknown>>()
         : null;
-      if (complianceIntent && !creditexOrganisation?.id) {
+      if (complianceIntents.length && !creditexOrganisation?.id) {
         throw new TradeComplianceIntentError(
           "CREDITEX_PARTNER_UNAVAILABLE",
-          "Creditex planning is not configured. Create an ordinary job or ask TLink support to restore the compliance partner connection.",
+          "Compliance planning is not configured. Create an ordinary job or ask TLink support to restore the compliance connection.",
         );
       }
-      const intentSnapshot = complianceIntent
-        ? stableTradeComplianceIntentJson({
-          ...complianceIntent.snapshot,
-          plannedStart: scheduledStart,
-        })
-        : "";
-      const intentSnapshotSha256 = intentSnapshot
-        ? await sha256Text(intentSnapshot)
-        : "";
+      const preparedComplianceIntents = await Promise.all(
+        complianceIntents.map(async (intent) => {
+          const snapshot = stableTradeComplianceIntentJson({
+            ...intent.snapshot,
+            plannedStart: scheduledStart,
+          });
+          return {
+            intent,
+            intentKey:
+              `program:${intent.program.templateId}:activity:${intent.activity.templateId}`,
+            snapshot,
+            snapshotSha256: await sha256Text(snapshot),
+          };
+        }),
+      );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
       const batchStatements: D1PreparedStatement[] = [
@@ -1454,29 +1579,30 @@ export async function POST(request: Request) {
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
         ] : []),
-        ...(complianceIntent ? [
+        ...preparedComplianceIntents.flatMap((preparedIntent) => [
           db.prepare(`INSERT INTO trade_work_order_compliance_intents
-            (id, work_order_id, installer_uid, compliance_organisation_id, program_template_id,
+            (id, work_order_id, intent_key, installer_uid, compliance_organisation_id, program_template_id,
              activity_template_id, program_code, registry_activity_code, service_category,
              site_jurisdiction, planned_start, catalogue_reviewed_on, intent_snapshot,
              intent_snapshot_sha256, status, compliance_case_id, revision, created_by_uid,
              created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', '', 1, ?, ?, ?)`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'planned', '', 1, ?, ?, ?)`)
             .bind(
               crypto.randomUUID(),
               workOrderId,
+              preparedIntent.intentKey,
               identity.uid,
               String(creditexOrganisation?.id),
-              complianceIntent.program.templateId,
-              complianceIntent.activity.templateId,
-              complianceIntent.program.programCode,
-              complianceIntent.activity.registryActivityCode,
-              complianceIntent.activity.serviceCategory,
-              complianceIntent.snapshot.siteJurisdiction,
+              preparedIntent.intent.program.templateId,
+              preparedIntent.intent.activity.templateId,
+              preparedIntent.intent.program.programCode,
+              preparedIntent.intent.activity.registryActivityCode,
+              preparedIntent.intent.activity.serviceCategory,
+              preparedIntent.intent.snapshot.siteJurisdiction,
               scheduledStart,
-              complianceIntent.snapshot.catalogueReviewedOn,
-              intentSnapshot,
-              intentSnapshotSha256,
+              preparedIntent.intent.snapshot.catalogueReviewedOn,
+              preparedIntent.snapshot,
+              preparedIntent.snapshotSha256,
               identity.uid,
               now,
               now,
@@ -1488,10 +1614,10 @@ export async function POST(request: Request) {
               crypto.randomUUID(),
               workOrderId,
               identity.uid,
-              `${complianceIntent.program.programCode} ${complianceIntent.activity.registryActivityCode || complianceIntent.activity.activityKey} planned for Creditex setup review. No regulated case was created.`,
+              `${preparedIntent.intent.program.programCode} ${preparedIntent.intent.activity.registryActivityCode || preparedIntent.intent.activity.activityKey} planned for compliance setup review. No regulated case was created.`,
               now,
             ),
-        ] : []),
+        ]),
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
       await db.batch(batchStatements);
@@ -1507,7 +1633,8 @@ export async function POST(request: Request) {
         }
       }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
-        appointmentId, complianceIntentPlanned: Boolean(complianceIntent),
+        appointmentId, complianceIntentPlanned: complianceIntents.length > 0,
+        complianceIntentCount: complianceIntents.length,
         calendarSynced, calendarFailed }, 201);
     }
 
@@ -1539,11 +1666,19 @@ export async function POST(request: Request) {
           cleanAdminText(body.notes, 1000), now, now)];
       if (appointmentType === "installation") {
         const revision = nextJobRevision(job.revision);
+        const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
+          actorUid: identity.uid,
+          changedAt: now,
+          ownerUid: identity.uid,
+          plannedStart: startsAt,
+          workOrderId,
+        });
         statements.push(
+          ...complianceIntentStatements,
           db.prepare(`UPDATE trade_work_orders
             SET scheduled_start = ?, scheduled_end = ?, stage = 'scheduled',
               revision = ?, updated_at = ?
-            WHERE id = ? AND firebase_uid = ?`)
+            WHERE id = ? AND firebase_uid = ? AND revision = ?`)
             .bind(
               startsAt,
               endsAt,
@@ -1551,7 +1686,12 @@ export async function POST(request: Request) {
               now,
               workOrderId,
               identity.uid,
+              job.revision,
             ),
+          previousTradeScheduleMutationGuardStatement(db, {
+            changedAt: now,
+            ownerUid: identity.uid,
+          }),
           db.prepare(`INSERT INTO trade_work_order_events
             (id, work_order_id, firebase_uid, event_type, summary, created_at)
             VALUES (?, ?, ?, 'installation_scheduled',
@@ -1592,7 +1732,7 @@ export async function PATCH(request: Request) {
   try {
     const identity = await crmIdentity(request);
     let body: Record<string, unknown>;
-    try { body = await request.json() as Record<string, unknown>; }
+    try { body = await boundedCrmRequestBody(request); }
     catch { return adminJson({ ok: false, error: "Invalid CRM update." }, 400); }
     const db = getD1();
     const action = cleanAdminText(body.action, 40);

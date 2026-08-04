@@ -9,6 +9,9 @@ import {
 export const TRADE_COMPLIANCE_INTENT_CONTRACT =
   "tlink-creditex-job-intent-v1";
 export const CREDITEX_PARTNER_ORGANISATION_CODE = "CREDITEX-AU";
+export const MAX_TRADE_COMPLIANCE_ACTIVITIES = 12;
+const MAX_ACTIVITY_SELECTION_BYTES = 20_000;
+const MAX_ACTIVITY_SELECTION_ID_LENGTH = 180;
 
 export type TradeComplianceIntentMode = "none" | "planned";
 
@@ -53,6 +56,11 @@ export type ResolvedTradeComplianceIntent = {
   program: GovernmentProgramTemplate;
   activity: GovernmentActivityTemplate;
   snapshot: TradeComplianceIntentSnapshot;
+};
+
+export type TradeComplianceActivitySelection = {
+  programTemplateId: string;
+  activityTemplateId: string;
 };
 
 export class TradeComplianceIntentError extends Error {
@@ -193,10 +201,142 @@ export function resolveTradeComplianceIntent(input: {
     governance: {
       state: "setup_required",
       message:
-        "Creditex intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
+        "Compliance intake starts with the job. TLink must resolve the exact published government rule and evidence policy before a regulated case opens.",
     },
   };
   return { program, activity, snapshot };
+}
+
+function activitySelections(value: unknown): TradeComplianceActivitySelection[] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    if (parsed.length > MAX_ACTIVITY_SELECTION_BYTES) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITY_LIMIT",
+        `Add no more than ${MAX_TRADE_COMPLIANCE_ACTIVITIES} government activities to one job.`,
+      );
+    }
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITIES_INVALID",
+        "The selected government activities could not be read.",
+      );
+    }
+  }
+  if (parsed === undefined || parsed === null || parsed === "") return [];
+  if (!Array.isArray(parsed)) {
+    throw new TradeComplianceIntentError(
+      "COMPLIANCE_ACTIVITIES_INVALID",
+      "Government activities must be supplied as a list.",
+    );
+  }
+  if (parsed.length > MAX_TRADE_COMPLIANCE_ACTIVITIES) {
+    throw new TradeComplianceIntentError(
+      "COMPLIANCE_ACTIVITY_LIMIT",
+      `Add no more than ${MAX_TRADE_COMPLIANCE_ACTIVITIES} government activities to one job.`,
+    );
+  }
+  let serialisedSelections = "";
+  try {
+    serialisedSelections = JSON.stringify(parsed);
+  } catch {
+    throw new TradeComplianceIntentError(
+      "COMPLIANCE_ACTIVITIES_INVALID",
+      "The selected government activities could not be read.",
+    );
+  }
+  if (serialisedSelections.length > MAX_ACTIVITY_SELECTION_BYTES) {
+    throw new TradeComplianceIntentError(
+      "COMPLIANCE_ACTIVITY_LIMIT",
+      `Add no more than ${MAX_TRADE_COMPLIANCE_ACTIVITIES} government activities to one job.`,
+    );
+  }
+  return parsed.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITIES_INVALID",
+        "Each government activity must identify one controlled program and activity.",
+      );
+    }
+    const selection = item as Record<string, unknown>;
+    if (
+      Object.keys(selection).some((key) =>
+        key !== "programTemplateId" && key !== "activityTemplateId"
+      )
+    ) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITIES_INVALID",
+        "Each government activity may only identify one controlled program and activity.",
+      );
+    }
+    const programTemplateId = typeof selection.programTemplateId === "string"
+      ? selection.programTemplateId.trim()
+      : "";
+    const activityTemplateId = typeof selection.activityTemplateId === "string"
+      ? selection.activityTemplateId.trim()
+      : "";
+    if (
+      !programTemplateId
+      || !activityTemplateId
+      || programTemplateId.length > MAX_ACTIVITY_SELECTION_ID_LENGTH
+      || activityTemplateId.length > MAX_ACTIVITY_SELECTION_ID_LENGTH
+    ) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITIES_INVALID",
+        "Each government activity must identify one controlled program and activity.",
+      );
+    }
+    return { programTemplateId, activityTemplateId };
+  });
+}
+
+export function resolveTradeComplianceIntents(input: {
+  mode?: unknown;
+  activities?: unknown;
+  programTemplateId?: unknown;
+  activityTemplateId?: unknown;
+  siteJurisdiction?: unknown;
+  plannedStart?: unknown;
+}): ResolvedTradeComplianceIntent[] {
+  const selections = activitySelections(input.activities);
+  if (!selections.length) {
+    const legacy = resolveTradeComplianceIntent({
+      mode: input.mode,
+      programTemplateId: input.programTemplateId,
+      activityTemplateId: input.activityTemplateId,
+      siteJurisdiction: input.siteJurisdiction,
+      plannedStart: input.plannedStart,
+    });
+    return legacy ? [legacy] : [];
+  }
+
+  const seen = new Set<string>();
+  return selections.map((selection) => {
+    const duplicateKey =
+      `${selection.programTemplateId}\n${selection.activityTemplateId}`;
+    if (seen.has(duplicateKey)) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITY_DUPLICATE",
+        "The same government activity cannot be added to a job more than once.",
+      );
+    }
+    seen.add(duplicateKey);
+    const resolved = resolveTradeComplianceIntent({
+      mode: "planned",
+      ...selection,
+      siteJurisdiction: input.siteJurisdiction,
+      plannedStart: input.plannedStart,
+    });
+    if (!resolved) {
+      throw new TradeComplianceIntentError(
+        "COMPLIANCE_ACTIVITIES_INVALID",
+        "The selected government activity could not be resolved.",
+      );
+    }
+    return resolved;
+  });
 }
 
 export function stableTradeComplianceIntentJson(

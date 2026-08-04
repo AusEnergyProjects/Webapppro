@@ -71,6 +71,74 @@ function currentApprovedOfficialSourceBindingGuardSql(
   ].join(" ");
 }
 
+const COMPLIANCE_CASES_WORK_ORDER_OWNER_GUARD_SQL = [
+  "CREATE TRIGGER IF NOT EXISTS `compliance_cases_work_order_owner_guard`",
+  "BEFORE INSERT ON `compliance_cases`",
+  "WHEN NOT EXISTS (",
+  "SELECT 1",
+  "FROM `trade_work_orders` work",
+  "JOIN `trade_crm_job_details` job_detail",
+  "ON job_detail.`work_order_id` = work.`id`",
+  "AND job_detail.`firebase_uid` = work.`firebase_uid`",
+  "JOIN `trade_crm_service_sites` service_site",
+  "ON service_site.`id` = job_detail.`service_site_id`",
+  "AND service_site.`firebase_uid` = job_detail.`firebase_uid`",
+  "JOIN `compliance_activity_versions` activity",
+  "ON activity.`id` = NEW.`activity_version_id`",
+  "WHERE work.`id` = NEW.`work_order_id`",
+  "AND work.`firebase_uid` = NEW.`installer_uid`",
+  "AND substr(work.`scheduled_start`, 1, 10) = NEW.`activity_date`",
+  "AND service_site.`address_state` = NEW.`site_jurisdiction`",
+  "AND (",
+  "(",
+  "NEW.`compliance_intent_id` = ''",
+  "AND activity.`service_category` = work.`service_category`",
+  "AND NOT EXISTS (",
+  "SELECT 1",
+  "FROM `trade_work_order_compliance_intents` governed_intent",
+  "WHERE governed_intent.`work_order_id` = work.`id`",
+  "AND governed_intent.`installer_uid` = work.`firebase_uid`",
+  "AND governed_intent.`compliance_organisation_id` = NEW.`organisation_id`",
+  "AND governed_intent.`status` IN ('planned', 'case_linked')",
+  ")",
+  ")",
+  "OR EXISTS (",
+  "SELECT 1",
+  "FROM `trade_work_order_compliance_intents` intent",
+  "JOIN `compliance_programs` program",
+  "ON program.`id` = activity.`program_id`",
+  "WHERE intent.`id` = NEW.`compliance_intent_id`",
+  "AND intent.`work_order_id` = work.`id`",
+  "AND intent.`installer_uid` = work.`firebase_uid`",
+  "AND intent.`compliance_organisation_id` = NEW.`organisation_id`",
+  "AND intent.`status` = 'planned'",
+  "AND intent.`service_category` = activity.`service_category`",
+  "AND intent.`program_code` = program.`program_code`",
+  "AND substr(intent.`planned_start`, 1, 10) = NEW.`activity_date`",
+  "AND intent.`site_jurisdiction` = NEW.`site_jurisdiction`",
+  "AND (",
+  "intent.`registry_activity_code` = ''",
+  "OR intent.`registry_activity_code` = activity.`registry_activity_code`",
+  ")",
+  "AND (",
+  "COALESCE(json_extract(intent.`intent_snapshot`, '$.activity.activityKey'), '') = ''",
+  "OR json_extract(intent.`intent_snapshot`, '$.activity.activityKey') = activity.`activity_key`",
+  ")",
+  "AND (",
+  "intent.`registry_activity_code` <> ''",
+  "OR COALESCE(json_extract(intent.`intent_snapshot`, '$.activity.activityKey'), '') <> ''",
+  ")",
+  ")",
+  ")",
+  ")",
+  "BEGIN",
+  "SELECT RAISE(",
+  "ABORT,",
+  "'Compliance case work order, installer and planned activity do not match'",
+  ");",
+  "END;",
+].join(" ");
+
 const CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS = [
   { name: "compliance_cases_synthetic_work_order_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_synthetic_work_order_guard` BEFORE INSERT ON `compliance_cases` WHEN EXISTS ( SELECT 1 FROM `trade_work_orders` work WHERE work.`id` = NEW.`work_order_id` AND work.`source_type` = 'synthetic_pilot' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_SYNTHETIC_CASE_FORBIDDEN'); END;" },
   { name: "compliance_batch_items_synthetic_case_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_batch_items_synthetic_case_guard` BEFORE INSERT ON `compliance_submission_batch_items` WHEN EXISTS ( SELECT 1 FROM `compliance_cases` compliance_case JOIN `trade_work_orders` work ON work.`id` = compliance_case.`work_order_id` WHERE compliance_case.`id` = NEW.`case_id` AND work.`source_type` = 'synthetic_pilot' ) BEGIN SELECT RAISE(ABORT, 'COMPLIANCE_SYNTHETIC_SUBMISSION_FORBIDDEN'); END;" },
@@ -128,10 +196,10 @@ const CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS = [
   { name: "compliance_activity_versions_program_jurisdiction_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_activity_versions_program_jurisdiction_insert_guard` BEFORE INSERT ON `compliance_activity_versions` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_programs` program WHERE program.`id` = NEW.`program_id` AND ( program.`jurisdiction` = 'AU' OR program.`jurisdiction` = NEW.`jurisdiction` ) ) BEGIN SELECT RAISE(ABORT, 'Compliance activity jurisdiction must match its program'); END;" },
   { name: "compliance_activity_versions_program_jurisdiction_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_activity_versions_program_jurisdiction_update_guard` BEFORE UPDATE OF `program_id`, `jurisdiction` ON `compliance_activity_versions` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_programs` program WHERE program.`id` = NEW.`program_id` AND ( program.`jurisdiction` = 'AU' OR program.`jurisdiction` = NEW.`jurisdiction` ) ) BEGIN SELECT RAISE(ABORT, 'Compliance activity jurisdiction must match its program'); END;" },
   { name: "compliance_programs_activity_jurisdiction_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_programs_activity_jurisdiction_update_guard` BEFORE UPDATE OF `jurisdiction` ON `compliance_programs` WHEN EXISTS ( SELECT 1 FROM `compliance_activity_versions` activity WHERE activity.`program_id` = OLD.`id` AND NEW.`jurisdiction` <> 'AU' AND activity.`jurisdiction` <> NEW.`jurisdiction` ) BEGIN SELECT RAISE(ABORT, 'Compliance program jurisdiction conflicts with an activity version'); END;" },
-  { name: "compliance_cases_work_order_owner_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_work_order_owner_guard` BEFORE INSERT ON `compliance_cases` WHEN NOT EXISTS ( SELECT 1 FROM `trade_work_orders` work WHERE work.`id` = NEW.`work_order_id` AND work.`firebase_uid` = NEW.`installer_uid` AND substr(work.`scheduled_start`, 1, 10) = NEW.`activity_date` AND EXISTS ( SELECT 1 FROM `compliance_activity_versions` activity WHERE activity.`id` = NEW.`activity_version_id` AND activity.`service_category` = work.`service_category` ) AND EXISTS ( SELECT 1 FROM `trade_crm_job_details` job_detail JOIN `trade_crm_service_sites` service_site ON service_site.`id` = job_detail.`service_site_id` AND service_site.`firebase_uid` = job_detail.`firebase_uid` WHERE job_detail.`work_order_id` = work.`id` AND job_detail.`firebase_uid` = work.`firebase_uid` AND service_site.`address_state` = NEW.`site_jurisdiction` ) ) BEGIN SELECT RAISE(ABORT, 'Compliance case work order and installer do not match'); END;" },
+  { name: "compliance_cases_work_order_owner_guard", sql: COMPLIANCE_CASES_WORK_ORDER_OWNER_GUARD_SQL },
   { name: "compliance_cases_live_activity_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_live_activity_guard` BEFORE INSERT ON `compliance_cases` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_activity_versions` activity JOIN `compliance_programs` program ON program.`id` = activity.`program_id` JOIN `compliance_organisations` organisation ON organisation.`id` = program.`organisation_id` WHERE activity.`id` = NEW.`activity_version_id` AND activity.`program_id` = NEW.`program_id` AND program.`organisation_id` = NEW.`organisation_id` AND organisation.`status` = 'active' AND program.`publish_state` = 'published' AND activity.`publish_state` = 'published' AND activity.`jurisdiction` IN (NEW.`site_jurisdiction`, 'AU') AND activity.`effective_from` <= NEW.`activity_date` AND ( activity.`effective_to` = '' OR activity.`effective_to` >= NEW.`activity_date` ) ) BEGIN SELECT RAISE(ABORT, 'Compliance case activity is not live for the case date'); END;" },
   { name: "compliance_cases_snapshot_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_snapshot_guard` BEFORE INSERT ON `compliance_cases` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_activity_versions` activity JOIN `compliance_programs` program ON program.`id` = activity.`program_id` JOIN `compliance_organisations` organisation ON organisation.`id` = program.`organisation_id` WHERE activity.`id` = NEW.`activity_version_id` AND json_extract(NEW.`activity_snapshot`, '$.activityVersionId') = activity.`id` AND json_extract(NEW.`activity_snapshot`, '$.programId') = program.`id` AND json_extract(NEW.`activity_snapshot`, '$.organisationId') = organisation.`id` AND json_extract(NEW.`activity_snapshot`, '$.activityDate') = NEW.`activity_date` AND json_extract(NEW.`activity_snapshot`, '$.siteJurisdiction') = NEW.`site_jurisdiction` AND json_extract(NEW.`activity_snapshot`, '$.organisationCode') = organisation.`organisation_code` AND json_extract(NEW.`activity_snapshot`, '$.organisationLegalName') = organisation.`legal_name` AND json_extract(NEW.`activity_snapshot`, '$.organisationTradingName') = organisation.`trading_name` AND json_extract(NEW.`activity_snapshot`, '$.programCode') = program.`program_code` AND json_extract(NEW.`activity_snapshot`, '$.programName') = program.`name` AND json_extract(NEW.`activity_snapshot`, '$.schemeKind') = program.`scheme_kind` AND json_extract(NEW.`activity_snapshot`, '$.programJurisdiction') = program.`jurisdiction` AND json_extract(NEW.`activity_snapshot`, '$.administeringBody') = program.`administering_body` AND json_extract(NEW.`activity_snapshot`, '$.activityKey') = activity.`activity_key` AND CAST(json_extract(NEW.`activity_snapshot`, '$.version') AS INTEGER) = activity.`version` AND json_extract(NEW.`activity_snapshot`, '$.title') = activity.`title` AND json_extract(NEW.`activity_snapshot`, '$.serviceCategory') = activity.`service_category` AND json_extract(NEW.`activity_snapshot`, '$.registryActivityCode') = activity.`registry_activity_code` AND json_extract(NEW.`activity_snapshot`, '$.specificationPart') = activity.`specification_part` AND json_extract(NEW.`activity_snapshot`, '$.productCategory') = activity.`product_category` AND json_extract(NEW.`activity_snapshot`, '$.scenarioCode') = activity.`scenario_code` AND json_extract(NEW.`activity_snapshot`, '$.scenario') = activity.`scenario` AND json_extract(NEW.`activity_snapshot`, '$.jurisdiction') = activity.`jurisdiction` AND json_extract(NEW.`activity_snapshot`, '$.effectiveFrom') = activity.`effective_from` AND json_extract(NEW.`activity_snapshot`, '$.effectiveTo') = activity.`effective_to` AND json_extract(NEW.`activity_snapshot`, '$.officialSourceUrl') = activity.`official_source_url` AND json_extract(NEW.`activity_snapshot`, '$.officialSourceTitle') = activity.`official_source_title` AND json_extract(NEW.`activity_snapshot`, '$.officialSourceVersion') = activity.`official_source_version` AND json_extract(NEW.`activity_snapshot`, '$.officialSourceSha256') = activity.`official_source_sha256` AND json_extract(NEW.`activity_snapshot`, '$.officialSourceCheckedAt') = activity.`official_source_checked_at` AND json_extract(NEW.`activity_snapshot`, '$.calculationApprovalState') = activity.`calculation_approval_state` AND json_extract(NEW.`activity_snapshot`, '$.requirementsSnapshotJson') = activity.`requirements_snapshot` AND json(json_extract(NEW.`activity_snapshot`, '$.requirementsSnapshot')) = json(activity.`requirements_snapshot`) ) BEGIN SELECT RAISE(ABORT, 'Compliance case activity snapshot does not match the governed version'); END;" },
-  { name: "compliance_cases_linkage_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_linkage_no_update` BEFORE UPDATE OF `case_number`, `organisation_id`, `program_id`, `work_order_id`, `installer_uid`, `activity_version_id`, `activity_date`, `site_jurisdiction`, `activity_snapshot`, `created_by_type`, `created_by_uid`, `created_at` ON `compliance_cases` BEGIN SELECT RAISE(ABORT, 'Compliance case linkage and activity snapshot are immutable'); END;" },
+  { name: "compliance_cases_linkage_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_linkage_no_update` BEFORE UPDATE OF `case_number`, `organisation_id`, `program_id`, `work_order_id`, `compliance_intent_id`, `installer_uid`, `activity_version_id`, `activity_date`, `site_jurisdiction`, `activity_snapshot`, `created_by_type`, `created_by_uid`, `created_at` ON `compliance_cases` BEGIN SELECT RAISE(ABORT, 'Compliance case linkage and activity snapshot are immutable'); END;" },
   { name: "compliance_cases_no_delete", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_cases_no_delete` BEFORE DELETE ON `compliance_cases` BEGIN SELECT RAISE(ABORT, 'Compliance cases cannot be deleted'); END;" },
   { name: "compliance_case_events_case_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_case_events_case_guard` BEFORE INSERT ON `compliance_case_events` WHEN NOT EXISTS ( SELECT 1 FROM `compliance_cases` compliance_case WHERE compliance_case.`id` = NEW.`case_id` AND compliance_case.`organisation_id` = NEW.`organisation_id` ) BEGIN SELECT RAISE(ABORT, 'Compliance case event organisation does not match the case'); END;" },
   { name: "compliance_case_events_no_update", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_case_events_no_update` BEFORE UPDATE ON `compliance_case_events` BEGIN SELECT RAISE(ABORT, 'Compliance case events are append-only'); END;" },
@@ -410,7 +478,7 @@ const CREDITEX_ALL_SCHEMA_GUARD_DEFINITIONS = [
   { name: "compliance_manual_policy_approval_source_guard", sql: "CREATE TRIGGER IF NOT EXISTS compliance_manual_policy_approval_source_guard BEFORE UPDATE ON compliance_manual_policy_bindings WHEN OLD.lifecycle_state = 'draft' AND NEW.lifecycle_state = 'approved' BEGIN SELECT CASE WHEN EXISTS ( WITH expected( target_type, target_id, binding_id, source_sha256 ) AS ( VALUES ( 'program', NEW.program_id, NEW.program_source_binding_id, json_extract( NEW.binding_snapshot, '$.program.officialSourceSha256' ) ), ( 'activity', NEW.activity_version_id, NEW.activity_source_binding_id, json_extract( NEW.binding_snapshot, '$.activity.officialSourceSha256' ) ), ( 'evidence_policy', NEW.evidence_policy_version_id, NEW.evidence_policy_source_binding_id, json_extract( NEW.binding_snapshot, '$.evidencePolicy.officialSourceSha256' ) ) ) SELECT 1 FROM expected WHERE NOT EXISTS ( SELECT 1 FROM compliance_official_source_bindings binding JOIN compliance_official_source_artifacts artifact ON artifact.id = binding.artifact_id AND artifact.organisation_id = binding.organisation_id AND artifact.sha256 = expected.source_sha256 AND artifact.custody_state IN ('draft', 'pending_review') AND artifact.rule_activation_enabled = 0 JOIN compliance_official_source_review_decisions artifact_review ON artifact_review.organisation_id = artifact.organisation_id AND artifact_review.subject_type = 'artifact' AND artifact_review.subject_id = artifact.id AND artifact_review.artifact_id = artifact.id AND artifact_review.artifact_sha256 = artifact.sha256 AND artifact_review.artifact_object_key = artifact.object_key AND artifact_review.decision = 'approved' AND NOT EXISTS ( SELECT 1 FROM compliance_official_source_review_decisions newer_artifact WHERE newer_artifact.organisation_id = artifact_review.organisation_id AND newer_artifact.subject_type = artifact_review.subject_type AND newer_artifact.subject_id = artifact_review.subject_id AND ( newer_artifact.reviewed_at > artifact_review.reviewed_at OR ( newer_artifact.reviewed_at = artifact_review.reviewed_at AND newer_artifact.id > artifact_review.id ) ) ) JOIN compliance_official_source_review_decisions binding_review ON binding_review.organisation_id = binding.organisation_id AND binding_review.subject_type = 'binding' AND binding_review.subject_id = binding.id AND binding_review.artifact_id = artifact.id AND binding_review.artifact_sha256 = artifact.sha256 AND binding_review.artifact_object_key = artifact.object_key AND binding_review.binding_target_type = binding.target_type AND binding_review.binding_target_id = binding.target_id AND binding_review.citation_location = binding.citation_location AND binding_review.decision = 'approved' AND NOT EXISTS ( SELECT 1 FROM compliance_official_source_review_decisions newer_binding WHERE newer_binding.organisation_id = binding_review.organisation_id AND newer_binding.subject_type = binding_review.subject_type AND newer_binding.subject_id = binding_review.subject_id AND ( newer_binding.reviewed_at > binding_review.reviewed_at OR ( newer_binding.reviewed_at = binding_review.reviewed_at AND newer_binding.id > binding_review.id ) ) ) WHERE binding.id = expected.binding_id AND binding.organisation_id = NEW.organisation_id AND binding.target_type = expected.target_type AND binding.target_id = expected.target_id AND binding.binding_state IN ('draft', 'pending_review') AND binding.rule_activation_enabled = 0 ) ) THEN RAISE( ABORT, 'COMPLIANCE_MANUAL_POLICY_SOURCE_APPROVAL_REQUIRED' ) END; END;" },
   { name: "compliance_manual_policy_withdrawal_guard", sql: "CREATE TRIGGER IF NOT EXISTS compliance_manual_policy_withdrawal_guard BEFORE UPDATE ON compliance_manual_policy_bindings WHEN OLD.lifecycle_state = 'approved' AND NEW.lifecycle_state = 'withdrawn' BEGIN SELECT CASE WHEN NOT EXISTS ( SELECT 1 FROM compliance_users member WHERE member.organisation_id = NEW.organisation_id AND member.firebase_uid = NEW.withdrawn_by_uid AND member.status = 'active' AND member.role = 'admin' AND member.governance_identity_verified = 1 AND trim(member.display_name) <> '' AND trim(member.email) <> '' AND trim(member.governance_identity_verified_by_uid) <> '' AND member.governance_identity_verified_by_uid <> member.firebase_uid AND datetime(member.governance_identity_verified_at) IS NOT NULL AND trim(member.governance_identity_verification_basis) <> '' ) THEN RAISE( ABORT, 'COMPLIANCE_MANUAL_POLICY_NAMED_WITHDRAWER_REQUIRED' ) END; END;" },
   { name: "compliance_manual_policy_delete_guard", sql: "CREATE TRIGGER IF NOT EXISTS compliance_manual_policy_delete_guard BEFORE DELETE ON compliance_manual_policy_bindings BEGIN SELECT RAISE( ABORT, 'COMPLIANCE_MANUAL_POLICY_DELETE_BLOCKED' ); END;" },
-  { name: "trade_compliance_intent_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS trade_compliance_intent_update_guard BEFORE UPDATE ON trade_work_order_compliance_intents FOR EACH ROW WHEN NEW.id <> OLD.id OR NEW.work_order_id <> OLD.work_order_id OR NEW.installer_uid <> OLD.installer_uid OR NEW.compliance_organisation_id <> OLD.compliance_organisation_id OR NEW.program_template_id <> OLD.program_template_id OR NEW.activity_template_id <> OLD.activity_template_id OR NEW.program_code <> OLD.program_code OR NEW.registry_activity_code <> OLD.registry_activity_code OR NEW.service_category <> OLD.service_category OR NEW.site_jurisdiction <> OLD.site_jurisdiction OR NEW.planned_start <> OLD.planned_start OR NEW.catalogue_reviewed_on <> OLD.catalogue_reviewed_on OR NEW.intent_snapshot <> OLD.intent_snapshot OR NEW.intent_snapshot_sha256 <> OLD.intent_snapshot_sha256 OR NEW.revision <> OLD.revision OR NEW.created_by_uid <> OLD.created_by_uid OR NEW.created_at <> OLD.created_at OR NEW.status NOT IN ('case_linked', 'superseded') OR OLD.status <> 'planned' OR ( NEW.status = 'case_linked' AND trim(NEW.compliance_case_id) = '' ) OR ( NEW.status = 'superseded' AND NEW.compliance_case_id <> '' ) BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_IMMUTABLE'); END;" },
+  { name: "trade_compliance_intent_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS trade_compliance_intent_update_guard BEFORE UPDATE ON trade_work_order_compliance_intents FOR EACH ROW WHEN NEW.id <> OLD.id OR NEW.work_order_id <> OLD.work_order_id OR NEW.intent_key <> OLD.intent_key OR NEW.installer_uid <> OLD.installer_uid OR NEW.compliance_organisation_id <> OLD.compliance_organisation_id OR NEW.program_template_id <> OLD.program_template_id OR NEW.activity_template_id <> OLD.activity_template_id OR NEW.program_code <> OLD.program_code OR NEW.registry_activity_code <> OLD.registry_activity_code OR NEW.service_category <> OLD.service_category OR NEW.site_jurisdiction <> OLD.site_jurisdiction OR NEW.planned_start <> OLD.planned_start OR NEW.catalogue_reviewed_on <> OLD.catalogue_reviewed_on OR NEW.intent_snapshot <> OLD.intent_snapshot OR NEW.intent_snapshot_sha256 <> OLD.intent_snapshot_sha256 OR NEW.revision <> OLD.revision OR NEW.created_by_uid <> OLD.created_by_uid OR NEW.created_at <> OLD.created_at OR NEW.status NOT IN ('case_linked', 'superseded') OR OLD.status <> 'planned' OR ( NEW.status = 'case_linked' AND trim(NEW.compliance_case_id) = '' ) OR ( NEW.status = 'superseded' AND NEW.compliance_case_id <> '' ) BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_IMMUTABLE'); END;" },
   { name: "trade_compliance_intent_delete_guard", sql: "CREATE TRIGGER IF NOT EXISTS trade_compliance_intent_delete_guard BEFORE DELETE ON trade_work_order_compliance_intents FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'TRADE_COMPLIANCE_INTENT_DELETE_BLOCKED'); END;" },
 ] as const;
 
@@ -493,6 +561,10 @@ const CREDITEX_REQUIRED_CASE_COLUMNS = [
   "commercial_handoff_id",
   "accepted_quote_version_id",
   "accepted_scope_sha256",
+  "compliance_intent_id",
+] as const;
+const CREDITEX_REQUIRED_INTENT_COLUMNS = [
+  "intent_key",
 ] as const;
 
 type SchemaGuardDefinition = {
@@ -568,11 +640,17 @@ async function requireCreditexSchemaMigrations(database: D1Database) {
   const caseColumns = await database.prepare(
     "PRAGMA table_xinfo(`compliance_cases`)",
   ).all<{ name: string }>();
+  const intentColumns = await database.prepare(
+    "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)",
+  ).all<{ name: string }>();
   const installedTables = new Set(
     tables.results.map((row) => String(row.name)),
   );
   const installedCaseColumns = new Set(
     caseColumns.results.map((row) => String(row.name)),
+  );
+  const installedIntentColumns = new Set(
+    intentColumns.results.map((row) => String(row.name)),
   );
   const missing = [
     ...CREDITEX_REQUIRED_SCHEMA_TABLES
@@ -581,6 +659,9 @@ async function requireCreditexSchemaMigrations(database: D1Database) {
     ...CREDITEX_REQUIRED_CASE_COLUMNS
       .filter((name) => !installedCaseColumns.has(name))
       .map((name) => `column:compliance_cases.${name}`),
+    ...CREDITEX_REQUIRED_INTENT_COLUMNS
+      .filter((name) => !installedIntentColumns.has(name))
+      .map((name) => `column:trade_work_order_compliance_intents.${name}`),
   ];
   if (missing.length) {
     throw new Error(`CREDITEX_SCHEMA_MIGRATIONS_REQUIRED:${missing.join(",")}`);

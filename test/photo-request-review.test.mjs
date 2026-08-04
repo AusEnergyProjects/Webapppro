@@ -72,7 +72,10 @@ test("governed field evidence is checked before object storage deletion", () => 
   const evidenceCheck = fieldRoute.indexOf("FROM compliance_case_evidence");
   const objectDelete = fieldRoute.indexOf("await bucket().delete(record.object_key)");
   assert.ok(evidenceCheck >= 0 && objectDelete > evidenceCheck);
-  assert.match(fieldRoute, /ask Creditex to record a supersession/);
+  assert.match(
+    fieldRoute,
+    /ask the assigned compliance team to record a supersession/,
+  );
 });
 
 test("installer review is manager scoped, append only and uses fixed retake guidance", () => {

@@ -84,6 +84,6 @@ export async function GET(request: Request) {
     ok: false,
     code: "FIELD_ACCESS_REQUIRED",
     error:
-      "No active installer-team or assigned Creditex manual-test access was found.",
+      "No active installer-team or assigned compliance manual-test access was found.",
   }, 403);
 }

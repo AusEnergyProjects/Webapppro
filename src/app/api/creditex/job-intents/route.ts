@@ -197,7 +197,6 @@ export async function GET(request: Request) {
         CASE
           WHEN work.id IS NOT NULL
             AND site.id IS NOT NULL
-            AND intent.service_category = work.service_category
             AND intent.site_jurisdiction = site.address_state
             AND substr(intent.planned_start, 1, 10) = substr(work.scheduled_start, 1, 10)
           THEN 1

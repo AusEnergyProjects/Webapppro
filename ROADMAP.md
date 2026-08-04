@@ -1291,13 +1291,62 @@ Installer Jobs now mirrors the exact known Dataforce 23-column order with one co
 - Sites versions 272 and 273 were superseded during signed-in QA. Version 272 exposed the missing installer Jobs index; version 273 restored that index but exposed invented installer projection columns and an over-broad audit request. Both defects are covered by the final production-schema regression.
 - Production still lacks `TLINK_ADDRESS_AUTOCOMPLETE_ENDPOINT` and `TLINK_ADDRESS_AUTOCOMPLETE_TOKEN`. Manual entry remains available and visibly fails closed to `manual_pending_review`; an approved provider and credential remain required for verified autocomplete.
 
+## Release candidate milestone: TRADE-MULTI-ACTIVITY-USABILITY-42
+
+Status: implementation and validation complete; exact-source publication and
+signed-in production inspection pending
+
+### Outcome
+
+One installer job can plan multiple compatible government program activities
+atomically, retain each exact activity independently and carry the same job,
+customer, schedule, commercial and governed-evidence context through web and
+mobile field work to the authorised compliance workspace. The new-customer form
+is open by default, phone and email are mandatory, existing-customer search
+remains available, the date-time picker stays within the viewport, and the
+final review shows every activity without implying that a certificate or case
+already exists.
+
+The installer Jobs register retains the exact known 23-column Dataforce
+interchange while placing customer identity first for daily work, providing
+callable contact links, complete populated-category filters and explicit
+navigation. Customers sort by first name then last name and show dated latest
+jobs. Schedule appointments expose controlled quote view, revision and send
+preparation.
+
+### Safety boundary
+
+- Every activity selection is validated server-side and retained in the same
+  atomic job transaction; duplicate selections and partial mappings fail.
+- Web and offline completion require submitted evidence for every active case,
+  exclude superseded evidence and atomically revalidate photo proof.
+- A changed installation date immutably supersedes every still-planned
+  activity intent and creates an exact next revision in the same guarded
+  schedule transaction. Linked cases remain date-locked.
+- JSON control bodies are limited by streamed actual bytes, and offline
+  bootstrap companion rows are bounded to the selected 500-job cohort with an
+  overall fail-closed cardinality limit.
+- Government activity, evidence policy and calculation authority remains
+  external and independently governed. This milestone does not create a
+  certificate, regulator submission, trade or settlement.
+- Production remains Sites version 274 from application commit
+  `c51934456c2248da4cfde9a0b759b70d69df56ee` until release and signed-in
+  inspection complete.
+
+`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+integration tests, 1,440 main tests with 1,438 passed, 2 intentionally skipped
+and 0 failed, all 120 migrations through
+`0119_trade_multi_activity_jobs.sql`, the customer-plan PDF audit, Vinext
+production build and Sites server-bundle audit. Independent final diff review
+is required before publication.
+
 ## Next five logical product steps
 
 1. **Approve one complete VEU, SRES and NSW governed bundle each:** retain exact current official-source bytes, effective dates, product and participant registers, evidence policy and calculation vectors under independent review, then exercise every bundle through a manual non-submitting job.
-2. **Add immutable intent revision and case supersession:** create a new planning version when the address, installation date, activity, product or technician changes, visibly supersede the prior version and provide a clear Creditex return-to-installer path.
+2. **Complete immutable intent revision and case supersession:** extend the guarded planned-date revision path to address, activity, product and technician changes, then add linked-case supersession and a clear authorised return-to-installer path.
 3. **Configure one approved Australian production address provider:** reuse the same signed address component for customer, service-site and New Job creation and edits while preserving the manual-review fallback.
 4. **Complete the Dataforce field and import contract:** split Phone and Mobile into explicit durable fields and reconcile unresolved lifecycle, agent, client, submission and certificate mappings without adding unverified columns.
-5. **Bind the pinned evidence form into the field job:** deliver Creditex-editable operational prompts, original photo bytes and metadata, offline recovery and simple evidence-complete installer and auditor gates.
+5. **Complete physical field acceptance and governed form publishing:** publish versioned compliance-managed forms into real jobs, validate original bytes, GPS, EXIF and offline recovery on named iOS and Android devices, and keep installer completion separate from audit acceptance.
 
 ## Global stop conditions
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -177,9 +178,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 119);
+  assert.equal(completeMigrationChain.length, 120);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0118_/);
+  assert.match(completeMigrationChain.at(-1), /^0119_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -1268,16 +1269,94 @@ test("complete migration chain provisions and reconciles the governed 10/30/300 
     ) VALUES (
       'control-work', 'control-installer', 'installer', 'job', 'internal',
       'control', 'CONTROL-JOB-1', 'Control job', 'other', '["other"]', '',
-      'scheduled', 'standard', '', '', '', '', 1, 'active',
+      'scheduled', 'standard', '2026-08-01T09:00:00.000Z',
+      '2026-08-01T10:00:00.000Z', '', '', 1, 'active',
       '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
     )`).run();
-  insertCase.run(
-    "control-case",
-    "CONTROL-CASE",
-    member.organisationId,
-    "control-work",
-    member.uid,
-  );
+  database.prepare(`INSERT INTO trade_crm_service_sites (
+      id, firebase_uid, customer_id, address_state, record_status,
+      created_at, updated_at
+    ) VALUES (
+      'control-site', 'control-installer', '', 'VIC', 'active',
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run();
+  database.prepare(`INSERT INTO trade_crm_job_details (
+      id, work_order_id, firebase_uid, service_site_id, created_at, updated_at
+    ) VALUES (
+      'control-detail', 'control-work', 'control-installer', 'control-site',
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run();
+  database.prepare(`INSERT INTO compliance_programs (
+      id, organisation_id, program_code, name, scheme_kind, jurisdiction,
+      administering_body, official_source_url, official_source_title,
+      official_source_checked_at, created_by_uid, created_at, updated_at
+    ) VALUES (
+      'control-program', ?, 'CONTROL', 'Control program', 'other', 'VIC',
+      'Test regulator', 'https://example.test/control',
+      'Control source', '2026-08-01T00:00:00.000Z', ?,
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run(member.organisationId, member.uid);
+  database.prepare(`INSERT INTO compliance_activity_versions (
+      id, program_id, activity_key, version, title, service_category,
+      product_category, scenario, jurisdiction, effective_from,
+      official_source_url, official_source_title,
+      official_source_checked_at, created_by_uid, created_at, updated_at
+    ) VALUES (
+      'control-activity-version', 'control-program', 'control-activity', 1,
+      'Control activity', 'other', 'Other', 'Control scenario', 'VIC',
+      '2026-01-01', 'https://example.test/control',
+      'Control source', '2026-08-01T00:00:00.000Z', ?,
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run(member.uid);
+  const controlIntentSnapshot = JSON.stringify({
+    contract: "tlink-creditex-job-intent-v1",
+    program: {
+      templateId: "control-program-template",
+      programCode: "CONTROL",
+    },
+    activity: {
+      templateId: "control-activity-template",
+      activityKey: "control-activity",
+      serviceCategory: "other",
+    },
+    siteJurisdiction: "VIC",
+    catalogueReviewedOn: "2026-08-01",
+  });
+  const controlIntentSha256 = createHash("sha256")
+    .update(controlIntentSnapshot)
+    .digest("hex");
+  database.prepare(`INSERT INTO trade_work_order_compliance_intents (
+      id, work_order_id, intent_key, installer_uid,
+      compliance_organisation_id, program_template_id, activity_template_id,
+      program_code, registry_activity_code, service_category,
+      site_jurisdiction, planned_start, catalogue_reviewed_on,
+      intent_snapshot, intent_snapshot_sha256, status, compliance_case_id,
+      revision, created_by_uid, created_at, updated_at
+    ) VALUES (
+      'control-intent', 'control-work',
+      'program:control-program-template:activity:control-activity-template',
+      'control-installer', ?, 'control-program-template',
+      'control-activity-template', 'CONTROL', '', 'other', 'VIC',
+      '2026-08-01T09:00:00.000Z', '2026-08-01', ?, ?, 'planned', '', 1, ?,
+      '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+    )`).run(
+      member.organisationId,
+      controlIntentSnapshot,
+      controlIntentSha256,
+      member.uid,
+    );
+  database.prepare(`INSERT INTO compliance_cases (
+      id, case_number, organisation_id, program_id, work_order_id,
+      compliance_intent_id, installer_uid, activity_version_id, activity_date,
+      site_jurisdiction, activity_snapshot, created_by_type, created_by_uid,
+      created_at, updated_at
+    ) VALUES (
+      'control-case', 'CONTROL-CASE', ?, 'control-program', 'control-work',
+      'control-intent', 'control-installer', 'control-activity-version',
+      '2026-08-01', 'VIC', '{}', 'compliance', ?,
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-01T00:00:00.000Z'
+    )`).run(member.organisationId, member.uid);
   database.prepare(`UPDATE trade_work_orders
       SET source_type = 'synthetic_pilot'
       WHERE id = 'control-work'`).run();

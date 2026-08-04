@@ -817,9 +817,25 @@ test("governed installer intake uses controlled dropdowns and binds the exact so
   assert.doesNotMatch(tradeNewJobForm, /complianceActivityVersionId/);
   assert.match(
     tradeNewJobForm,
-    /This creates the Creditex intake with the job/,
+    /assigned compliance team can review the customer, site, activity and schedule/,
   );
   assert.match(tradeComplianceRoute, /programId: activity\.programId/);
+  assert.match(
+    tradeComplianceIntake,
+    /!initialIntent\.registryActivityCode[\s\S]*item\.registryActivityCode === initialIntent\.registryActivityCode[\s\S]*!initialIntent\.activityKey[\s\S]*item\.activityKey === initialIntent\.activityKey/,
+  );
+  assert.doesNotMatch(
+    tradeComplianceRoute,
+    /organisationName:\s*activity\.organisationName/,
+  );
+  assert.doesNotMatch(
+    tradeComplianceIntake,
+    /selectedActivity\.organisationName/,
+  );
+  assert.match(
+    tradeComplianceIntake,
+    /The assigned compliance team will audit this case/,
+  );
   assert.doesNotMatch(tradeComplianceRoute, /ensureAcceptedCommercialHandoff/);
   assert.match(tradeComplianceRoute, /actorType: "installer"/);
   assert.doesNotMatch(
@@ -840,12 +856,12 @@ test("planned activity stays non-regulated until an exact governed chain promote
   const createJobSource = tradeCrmRoute.slice(createJobStart, createJobEnd);
 
   for (const contract of [
-    /resolveTradeComplianceIntent\(/,
+    /resolveTradeComplianceIntents\(/,
     /INSERT INTO trade_work_order_compliance_intents/,
     /'planned', '', 1/,
     /compliance_intent_planned/,
     /No regulated case was created/,
-    /complianceIntentPlanned: Boolean\(complianceIntent\)/,
+    /complianceIntentPlanned: complianceIntents\.length > 0/,
   ]) assert.match(createJobSource, contract);
   assert.doesNotMatch(
     createJobSource,

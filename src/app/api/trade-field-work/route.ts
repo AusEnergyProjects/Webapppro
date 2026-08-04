@@ -5,6 +5,10 @@ import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess }
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
+import {
+  BoundedJsonRequestError,
+  readBoundedJsonRequest,
+} from "@/lib/bounded-json-request";
 
 export const runtime = "edge";
 
@@ -12,6 +16,151 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MEDIA_CATEGORIES = new Set(["before", "progress", "after", "document"]);
 const SIGNER_ROLES = new Set(["technician", "customer"]);
+const UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL = `SELECT 1
+  FROM compliance_cases compliance_case
+  JOIN compliance_evidence_requirements requirement
+    ON requirement.policy_version_id = compliance_case.evidence_policy_version_id
+    AND requirement.organisation_id = compliance_case.organisation_id
+  WHERE compliance_case.work_order_id = ?
+    AND compliance_case.installer_uid = ?
+    AND compliance_case.status NOT IN ('rejected', 'closed')
+    AND requirement.minimum_count > 0
+    AND (
+      SELECT COUNT(DISTINCT evidence.original_sha256)
+      FROM compliance_case_evidence evidence
+      WHERE evidence.organisation_id = compliance_case.organisation_id
+        AND evidence.case_id = compliance_case.id
+        AND evidence.requirement_id = requirement.id
+        AND evidence.status IN ('received', 'under_review', 'accepted')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM compliance_case_evidence replacement
+          WHERE replacement.organisation_id = evidence.organisation_id
+            AND replacement.case_id = evidence.case_id
+            AND replacement.supersedes_evidence_id = evidence.id
+        )
+    ) < requirement.minimum_count`;
+
+const PHOTO_MEDIA_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_group_array(json(photo_media.item))
+  FROM (
+    SELECT json_object(
+      'id', media.id,
+      'photoRequirementId', media.photo_requirement_id,
+      'createdAt', media.created_at
+    ) item
+    FROM trade_crm_job_media media
+    WHERE media.firebase_uid = finish_request.firebase_uid
+      AND media.work_order_id = finish_request.work_order_id
+      AND media.photo_request_id = finish_request.id
+      AND media.source = 'customer_request'
+    ORDER BY media.created_at, media.id
+  ) photo_media
+), '[]')`;
+
+const PHOTO_REVIEW_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_group_array(json(photo_review.item))
+  FROM (
+    SELECT json_object(
+      'id', review.id,
+      'photoRequirementId', review.photo_requirement_id,
+      'status', review.status,
+      'reasonCode', review.reason_code,
+      'guidance', review.guidance,
+      'reviewRevision', review.review_revision,
+      'reviewedUploadCount', review.reviewed_upload_count,
+      'createdAt', review.created_at
+    ) item
+    FROM trade_crm_photo_requirement_reviews review
+    WHERE review.firebase_uid = finish_request.firebase_uid
+      AND review.work_order_id = finish_request.work_order_id
+      AND review.photo_request_id = finish_request.id
+      AND review.request_revision = finish_request.revision
+    ORDER BY review.review_revision, review.id
+  ) photo_review
+), '[]')`;
+
+const PHOTO_COMPLETION_SNAPSHOT_SQL = `COALESCE((
+  SELECT json_object(
+    'id', completion.id,
+    'completionRevision', completion.completion_revision,
+    'checklistVersion', completion.checklist_version,
+    'evidenceKey', completion.evidence_key,
+    'requiredCount', completion.required_count,
+    'suppliedCount', completion.supplied_count,
+    'completedAt', completion.completed_at
+  )
+  FROM trade_crm_photo_request_completions completion
+  WHERE completion.firebase_uid = finish_request.firebase_uid
+    AND completion.work_order_id = finish_request.work_order_id
+    AND completion.photo_request_id = finish_request.id
+    AND completion.request_revision = finish_request.revision
+  ORDER BY completion.completion_revision DESC
+  LIMIT 1
+), '')`;
+
+type PhotoFinishGuard = {
+  kind: "none";
+} | {
+  kind: "active";
+  requestId: string;
+  revision: number;
+  status: string;
+  requirements: string;
+  mediaSnapshot: string;
+  reviewSnapshot: string;
+  completionSnapshot: string;
+};
+
+async function photoFinishState(
+  db: D1Database,
+  ownerUid: string,
+  workOrderId: string,
+): Promise<{ ready: boolean; guard: PhotoFinishGuard }> {
+  const request = await db.prepare(`SELECT
+      finish_request.id,
+      finish_request.revision,
+      finish_request.requirements,
+      finish_request.status,
+      ${PHOTO_MEDIA_SNAPSHOT_SQL} media_snapshot,
+      ${PHOTO_REVIEW_SNAPSHOT_SQL} review_snapshot,
+      ${PHOTO_COMPLETION_SNAPSHOT_SQL} completion_snapshot
+    FROM trade_crm_photo_requests finish_request
+    WHERE finish_request.work_order_id = ?
+      AND finish_request.firebase_uid = ?
+    LIMIT 1`)
+    .bind(workOrderId, ownerUid)
+    .first<Record<string, unknown>>();
+  if (!request || String(request.status) === "revoked") {
+    return { ready: true, guard: { kind: "none" } };
+  }
+  const guard: PhotoFinishGuard = {
+    kind: "active",
+    requestId: String(request.id),
+    revision: Number(request.revision),
+    status: String(request.status),
+    requirements: String(request.requirements || "[]"),
+    mediaSnapshot: String(request.media_snapshot || "[]"),
+    reviewSnapshot: String(request.review_snapshot || "[]"),
+    completionSnapshot: String(request.completion_snapshot || ""),
+  };
+  try {
+    const requirements = normalisePhotoRequirements(
+      JSON.parse(guard.requirements),
+    );
+    const proof = await photoRequestProofOverview({
+      ownerUid,
+      workOrderId,
+      requestId: guard.requestId,
+      requestRevision: guard.revision,
+      requirements,
+    });
+    return { ready: Boolean(proof.proofReady), guard };
+  } catch {
+    return { ready: false, guard };
+  }
+}
+
 const FIELD_TRANSITIONS = {
   start_travel: { from: "scheduled", to: "en_route", timestamp: "travel_started_at", label: "Start travel" },
   arrive: { from: "en_route", to: "arrived", timestamp: "arrived_at", label: "Arrive" },
@@ -37,6 +186,14 @@ function safeName(value: string) {
 }
 
 function fieldError(error: unknown) {
+  if (error instanceof BoundedJsonRequestError) {
+    return adminJson({
+      ok: false,
+      error: error.code === "REQUEST_TOO_LARGE"
+        ? "The field-work request is too large."
+        : "Invalid field-work request.",
+    }, error.status);
+  }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "PROFILE_REQUIRED") return adminJson({ ok: false, error: "Complete the installer profile first." }, 404);
@@ -94,17 +251,19 @@ async function payload(access: TeamAccess, workOrderId: string) {
       AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
       ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, issueCount, planCount, unsyncedCount] = await Promise.all([
+  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE owner_uid = ? AND entity_id = ? AND status IN ('processing', 'conflict')").bind(firebaseUid, workOrderId).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})`)
+      .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
   ]);
   const direct = job?.source_type !== "opportunity" && job?.customer_source === "trade_owned";
   const address = direct ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
-  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0) };
+  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
     ...(counts.forms ? [{ key: "forms", label: `${counts.forms} required form${counts.forms === 1 ? " is" : "s are"} not complete`, target: "forms" }] : []),
@@ -112,6 +271,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
     ...(counts.issues ? [{ key: "issues", label: `${counts.issues} open issue${counts.issues === 1 ? " needs" : "s need"} attention`, target: "notes" }] : []),
     ...(counts.plan ? [{ key: "scope", label: `${counts.plan} work-plan item${counts.plan === 1 ? " is" : "s are"} not complete`, target: "work-plan" }] : []),
     ...(counts.unsynced ? [{ key: "sync", label: "Unsynchronised field changes need attention", target: "sync" }] : []),
+    ...(counts.compliance ? [{ key: "compliance", label: `${counts.compliance} governed evidence requirement${counts.compliance === 1 ? " is" : "s are"} awaiting submitted evidence`, target: "evidence" }] : []),
   ];
   const appointmentStatus = String(job?.appointment_status || "");
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
@@ -129,6 +289,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
       { key: "tasks", label: "Assigned tasks", complete: !counts.tasks, count: counts.tasks, target: "tasks" },
       { key: "forms", label: "Required forms", complete: !counts.forms, count: counts.forms, target: "forms" },
       { key: "proof", label: "Required photo proof", complete: !request || request.status === "revoked" || Boolean(proofReview?.proofReady), count: request && request.status !== "revoked" && !proofReview?.proofReady ? 1 : 0, target: "evidence" },
+      { key: "compliance", label: "Governed compliance evidence", complete: !counts.compliance, count: counts.compliance, target: "evidence" },
       { key: "issues", label: "Open issues or blockers", complete: !counts.issues, count: counts.issues, target: "notes" },
     ], blockers, completion: { ready: blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
   return {
@@ -165,21 +326,134 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
   if (!appointment) return adminJson({ ok: false, error: "Schedule this job before starting field work." }, 409);
   if (appointment.status !== transition.from) return adminJson({ ok: false, error: `This action is out of order. The appointment is ${String(appointment.status).replaceAll("_", " ")}.` }, 409);
+  let photoFinish: { ready: boolean; guard: PhotoFinishGuard } = {
+    ready: true,
+    guard: { kind: "none" },
+  };
   if (action === "finish") {
     const current = await payload(access, workOrderId);
     const blockers = (current.fieldJob as { blockers?: Array<{ key: string; label: string; target: string }> } | null)?.blockers || [];
     if (blockers.length) return adminJson({ ok: false, error: "Finish the required job items before completing this work.", blockers }, 409);
+    photoFinish = await photoFinishState(db, access.ownerUid, workOrderId);
+    if (!photoFinish.ready) {
+      return adminJson({
+        ok: false,
+        error: "Finish the required job items before completing this work.",
+        blockers: [{
+          key: "proof",
+          label: "Required photo proof is not ready",
+          target: "evidence",
+        }],
+      }, 409);
+    }
   }
   const now = new Date().toISOString(); const revision = nextJobRevision(job.revision); const receiptId = crypto.randomUUID();
   const timestampColumn = transition.timestamp;
+  const finishGuard = `(
+    ? <> 'finish'
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM trade_work_order_tasks blocker
+        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+          AND blocker.status <> 'done'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM trade_job_forms blocker
+        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+          AND blocker.status <> 'complete'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM trade_crm_job_notes blocker
+        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+          AND blocker.note_type = 'issue' AND blocker.issue_status = 'open'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM trade_crm_job_plan_requirements blocker
+        JOIN trade_crm_job_plans blocker_plan
+          ON blocker_plan.id = blocker.job_plan_id
+          AND blocker_plan.firebase_uid = blocker.firebase_uid
+        WHERE blocker_plan.work_order_id = ? AND blocker_plan.firebase_uid = ?
+          AND blocker.status NOT IN (
+            'installed', 'complete', 'completed', 'done', 'not_required'
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM trade_offline_actions blocker
+        WHERE blocker.owner_uid = ? AND blocker.entity_id = ?
+          AND blocker.status IN ('processing', 'conflict')
+      )
+      AND NOT EXISTS (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})
+      AND (
+        (
+          ? = 'none'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM trade_crm_photo_requests finish_request
+            WHERE finish_request.work_order_id = ?
+              AND finish_request.firebase_uid = ?
+              AND finish_request.status <> 'revoked'
+          )
+        )
+        OR (
+          ? = 'active'
+          AND EXISTS (
+            SELECT 1
+            FROM trade_crm_photo_requests finish_request
+            WHERE finish_request.work_order_id = ?
+              AND finish_request.firebase_uid = ?
+              AND finish_request.id = ?
+              AND finish_request.revision = ?
+              AND finish_request.status = ?
+              AND finish_request.status <> 'revoked'
+              AND finish_request.requirements = ?
+              AND ${PHOTO_MEDIA_SNAPSHOT_SQL} = ?
+              AND ${PHOTO_REVIEW_SNAPSHOT_SQL} = ?
+              AND ${PHOTO_COMPLETION_SNAPSHOT_SQL} = ?
+          )
+        )
+      )
+    )
+  )`;
+  const photoGuard = photoFinish.guard;
+  const finishGuardValues = [
+    action,
+    workOrderId,
+    access.ownerUid,
+    workOrderId,
+    access.ownerUid,
+    workOrderId,
+    access.ownerUid,
+    workOrderId,
+    access.ownerUid,
+    access.ownerUid,
+    workOrderId,
+    workOrderId,
+    access.ownerUid,
+    photoGuard.kind,
+    workOrderId,
+    access.ownerUid,
+    photoGuard.kind,
+    workOrderId,
+    access.ownerUid,
+    photoGuard.kind === "active" ? photoGuard.requestId : "",
+    photoGuard.kind === "active" ? photoGuard.revision : 0,
+    photoGuard.kind === "active" ? photoGuard.status : "",
+    photoGuard.kind === "active" ? photoGuard.requirements : "",
+    photoGuard.kind === "active" ? photoGuard.mediaSnapshot : "",
+    photoGuard.kind === "active" ? photoGuard.reviewSnapshot : "",
+    photoGuard.kind === "active" ? photoGuard.completionSnapshot : "",
+  ];
   const results = await db.batch([
     db.prepare(`INSERT INTO trade_offline_actions
       (id, owner_uid, actor_uid, member_id, device_id, client_action_id, payload_hash, action_type, entity_type, entity_id,
        base_revision, result_revision, status, lease_until, error_code, created_at, updated_at)
       SELECT ?, ?, ?, ?, 'web-field', ?, ?, ?, 'job', ?, ?, ?, 'applied', '', '', ?, ?
-      WHERE EXISTS (SELECT 1 FROM trade_crm_appointments WHERE id = ? AND firebase_uid = ? AND status = ?)`)
+       WHERE EXISTS (SELECT 1 FROM trade_crm_appointments WHERE id = ? AND firebase_uid = ? AND status = ?)
+         AND ${finishGuard}`)
       .bind(receiptId, access.ownerUid, access.actorUid, access.memberId || "", clientActionId, `${workOrderId}:${action}`, actionType,
-        workOrderId, Number(job.revision), revision, now, now, appointment.id, access.ownerUid, transition.from),
+        workOrderId, Number(job.revision), revision, now, now, appointment.id, access.ownerUid, transition.from,
+        ...finishGuardValues),
     db.prepare(`UPDATE trade_crm_appointments SET status = ?, ${timestampColumn} = ?, last_transition_by_uid = ?, revision = revision + 1, updated_at = ?
       WHERE id = ? AND firebase_uid = ? AND status = ? AND EXISTS (SELECT 1 FROM trade_offline_actions WHERE id = ?)`)
       .bind(transition.to, now, access.actorUid, now, appointment.id, access.ownerUid, transition.from, receiptId),
@@ -281,9 +555,11 @@ export async function POST(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request);
     if ((request.headers.get("content-type") || "").includes("multipart/form-data")) return await upload(request, access);
-    let body: Record<string, unknown>;
-    try { body = await request.json() as Record<string, unknown>; }
-    catch { return adminJson({ ok: false, error: "Invalid field-work request." }, 400); }
+    const parsedBody = await readBoundedJsonRequest(request);
+    if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+      return adminJson({ ok: false, error: "Invalid field-work request." }, 400);
+    }
+    const body = parsedBody as Record<string, unknown>;
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const job = await assignedJob(access, workOrderId);
     const action = cleanAdminText(body.action, 30);
@@ -346,7 +622,7 @@ export async function DELETE(request: Request) {
     if (governedEvidence) {
       return adminJson({
         ok: false,
-        error: "This file is part of a compliance evidence record and cannot be deleted. Add a replacement or ask Creditex to record a supersession.",
+        error: "This file is part of a compliance evidence record and cannot be deleted. Add a replacement or ask the assigned compliance team to record a supersession.",
       }, 409);
     }
     const job = await assignedJob(access, record.work_order_id);

@@ -285,6 +285,10 @@ function workOrdersRoute(db) {
     "@/lib/appointment-notification-server": {
       queueAppointmentNotifications: async () => {},
     },
+    "@/lib/trade-compliance-intent-replan-server": {
+      isTradeComplianceIntentScheduleConflict: () => false,
+      plannedComplianceIntentReplanStatements: async () => [],
+    },
   });
 }
 

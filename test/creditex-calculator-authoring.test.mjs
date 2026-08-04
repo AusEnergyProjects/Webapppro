@@ -146,10 +146,23 @@ function schemaGuardD1(database) {
           async all() {
             return {
               results: [
+                { name: "compliance_intent_id" },
                 { name: "commercial_handoff_id" },
                 { name: "accepted_quote_version_id" },
                 { name: "accepted_scope_sha256" },
               ],
+            };
+          },
+        };
+      }
+      if (
+        sql
+        === "PRAGMA table_xinfo(`trade_work_order_compliance_intents`)"
+      ) {
+        return {
+          async all() {
+            return {
+              results: [{ name: "intent_key" }],
             };
           },
         };

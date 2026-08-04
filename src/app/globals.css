@@ -4976,6 +4976,15 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-compliance-notice strong { color: #173f6d; font-size: .68rem; }
 .crm-compliance-notice p { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.5; margin: 0; }
 .crm-compliance-notice a { color: #174f8b; font-size: .58rem; font-weight: 800; width: fit-content; }
+.crm-planned-activity-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.crm-planned-activity-card { border: 1px solid #c9d8ee; border-left: 4px solid #245f9b; }
+.crm-planned-activity-card dl,
+.crm-review-activity-card dl { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 4px 0 0; }
+.crm-planned-activity-card dl > div,
+.crm-review-activity-card dl > div { background: #f3f7fb; border-radius: 7px; display: grid; gap: 2px; padding: 8px 9px; }
+.crm-add-activity-action { justify-content: flex-start; margin-top: 8px; }
+.crm-activity-builder { border: 1px solid #c9d8ee; border-left: 4px solid #245f9b; margin-top: 10px; padding: 14px; }
+.crm-activity-builder > strong { font-size: .72rem; margin-bottom: 4px; }
 .crm-compliance-intake-preview dl { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 5px 0; }
 .crm-compliance-intake-preview dl div { background: #f3f7fb; border-radius: 7px; display: grid; gap: 2px; padding: 8px 9px; }
 .crm-compliance-intake-preview dt, .crm-audit-review dt { color: #5e746d; font-size: .49rem; font-weight: 900; letter-spacing: .03em; text-transform: uppercase; }
@@ -4997,6 +5006,11 @@ body input[type="number"]::-webkit-outer-spin-button {
 .crm-audit-review dl > div { border-bottom: 1px solid #e5eeeb; display: grid; gap: 3px; min-height: 57px; padding: 9px 11px; }
 .crm-audit-review dl > div:nth-child(odd) { border-right: 1px solid #e5eeeb; }
 .crm-audit-review dl > div.wide { border-right: 0; grid-column: 1 / -1; }
+.crm-audit-review > section.crm-review-activities { grid-column: 1 / -1; }
+.crm-review-activity-list { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px; }
+.crm-review-activity-card { background: #fff; border: 1px solid #d5e2ed; border-radius: 9px; display: grid; gap: 8px; padding: 11px; }
+.crm-review-activity-card > strong { color: #173f6d; font-size: .66rem; }
+.crm-review-activity-card a { color: #174f8b; font-size: .56rem; font-weight: 800; width: fit-content; }
 .crm-review-source { color: #0a6c51; display: inline-flex; font-size: .59rem; font-weight: 850; margin-top: 12px; text-underline-offset: 3px; }
 .crm-job-compliance { background: #f5f9ff; border: 1px solid #c9d8ee; border-radius: 12px; display: grid; gap: 10px; padding: 14px; }
 .crm-job-compliance > header { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
@@ -5106,7 +5120,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 @media (max-width: 680px) {
   .crm-wizard-steps { grid-template-columns: repeat(5, 1fr); }
   .crm-wizard-steps li button { font-size: 0; justify-content: center; }
-  .crm-compliance-intake-preview dl, .crm-audit-review, .crm-review-header { grid-template-columns: 1fr; }
+  .crm-compliance-intake-preview dl, .crm-planned-activity-card dl, .crm-review-activity-card dl, .crm-audit-review, .crm-review-header { grid-template-columns: 1fr; }
   .crm-review-header > div + div { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
   .crm-wizard-actions { align-items: stretch; flex-direction: column-reverse; }
   .crm-wizard-actions > button { width: 100%; }
@@ -5356,7 +5370,7 @@ body input[type="number"]::-webkit-outer-spin-button {
 input[type="date"], input[type="datetime-local"] { cursor: pointer; }
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; pointer-events: none; }
-.site-date-popover { background: #fff; border: 1px solid #b7ddd4; border-radius: 22px; box-shadow: 0 24px 70px rgba(3, 25, 45, .3); color: var(--color-aea-ink); padding: 16px; position: fixed; width: min(342px, calc(100vw - 24px)); z-index: 10000; }
+.site-date-popover { background: #fff; border: 1px solid #b7ddd4; border-radius: 22px; box-shadow: 0 24px 70px rgba(3, 25, 45, .3); color: var(--color-aea-ink); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; padding: 16px; position: fixed; width: min(342px, calc(100vw - 24px)); z-index: 10000; }
 .site-date-popover-heading { align-items: center; display: grid; grid-template-columns: 44px 1fr 44px; gap: 8px; }
 .site-date-popover-heading strong { font-size: .98rem; text-align: center; }
 .site-date-popover-heading button { align-items: center; background: #f1f8f6; border: 0; border-radius: 12px; color: #29463f; cursor: pointer; display: inline-flex; font-size: 1.7rem; height: 42px; justify-content: center; line-height: 1; width: 42px; }
@@ -5629,8 +5643,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .crm-invoice-preview-dialog .schedule-selection > p { background: #edf8f4; border-left: 3px solid #16a77a; border-radius: 8px; color: #526f66; font-size: .61rem; line-height: 1.55; margin: 0; padding: 11px 12px; }
 .crm-invoice-preview-dialog .schedule-selection > p strong { color: #173f36; }
 .crm-invoice-preview-dialog .schedule-selection > .schedule-dialog-status { background: #eef8f4; border: 1px solid #badccd; color: #315f53; margin: 0; }
+.crm-invoice-preview-dialog .schedule-quote-summary { align-items: center; background: #f7fbfa; border: 1px solid #d4e6df; border-radius: 8px; display: flex; gap: 12px; justify-content: space-between; padding: 9px 12px; }
+.crm-invoice-preview-dialog .schedule-quote-summary span { display: grid; gap: 2px; }
+.crm-invoice-preview-dialog .schedule-quote-summary small { color: #688079; font-size: .52rem; font-weight: 850; text-transform: uppercase; }
+.crm-invoice-preview-dialog .schedule-quote-summary strong, .crm-invoice-preview-dialog .schedule-quote-summary b { color: #173f36; font-size: .68rem; }
 .crm-invoice-preview-dialog .schedule-selection-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-invoice-preview-dialog .schedule-selection-fields .schedule-duration { grid-column: 1 / -1; }
+.crm-invoice-preview-dialog > footer > button.schedule-secondary { background: #fff; border: 1px solid #bcd2ca; border-radius: 8px; color: #17684f; cursor: pointer; font-size: .6rem; font-weight: 850; padding: 9px 12px; }
 .crm-invoice-preview-dialog > footer > button.primary { background: #0b8d63; border: 1px solid #0b8d63; border-radius: 8px; color: #fff; cursor: pointer; font-size: .6rem; font-weight: 850; padding: 9px 12px; }
 .crm-invoice-preview-dialog > footer > button:disabled { cursor: not-allowed; opacity: .5; }
 .schedule-selection > header { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
@@ -6301,6 +6320,29 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .crm-record-table .crm-index-cell strong { color: var(--color-aea-ink); font-weight: 850; }
 .crm-record-table .crm-index-cell b { color: var(--color-aea-green-dark); font-weight: 850; }
 .crm-record-table .crm-index-cell em { background: #e6f5ee; border-radius: 999px; color: #176348; justify-self: start; padding: 4px 7px; }
+.crm-index-row { min-height: 39px; width: 100%; }
+.crm-index-open-button,
+.crm-index-phone-link,
+.crm-index-email-link { background: transparent; border: 0; color: #0b684e !important; cursor: pointer; font: inherit; padding: 0; text-align: left; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.crm-index-open-button:hover,
+.crm-index-open-button:focus-visible,
+.crm-index-phone-link:hover,
+.crm-index-phone-link:focus-visible,
+.crm-index-email-link:hover,
+.crm-index-email-link:focus-visible { color: #064f3a !important; outline: none; text-decoration-thickness: 2px; }
+.trade-portal-shell .crm-back-button { align-items: center; background: #e7f6f0; border: 1px solid #95ccb8; color: #075e45; display: inline-flex; font-weight: 900; min-height: 40px; }
+.trade-portal-shell .crm-back-button:hover,
+.trade-portal-shell .crm-back-button:focus-visible { background: #d5f0e6; border-color: #43a985; box-shadow: 0 3px 11px rgba(7, 94, 69, .12); outline: 3px solid rgba(12, 175, 125, .24); }
+.crm-customer-header-actions { align-items: flex-end; display: grid; gap: 8px; justify-items: end; }
+.crm-customer-header-actions > strong { background: #e6f5ee; border-radius: 999px; color: #176348; font-size: .54rem; padding: 6px 9px; }
+.crm-customer-contact-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+.crm-customer-call-action,
+.crm-customer-email-action { background: #fff; border: 1px solid #9ecaba; border-radius: 8px; color: #0b684e; font-size: .59rem; font-weight: 850; padding: 8px 10px; text-decoration: none; }
+.crm-customer-call-action:hover,
+.crm-customer-call-action:focus-visible,
+.crm-customer-email-action:hover,
+.crm-customer-email-action:focus-visible { background: #e7f6f0; border-color: #43a985; outline: 3px solid rgba(12, 175, 125, .2); }
+.crm-summary-workspace { display: grid; gap: 14px; }
 
 @media (max-width: 650px) {
   .crm-index-view-tools { display: grid; grid-template-columns: 1fr; }
@@ -6308,6 +6350,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .workspace-saved-views form { grid-template-columns: 1fr; min-width: min(88vw, 390px); }
   .workspace-saved-views select { width: 100%; }
   .crm-index-view-tools .workspace-table-actionbar { justify-content: stretch; }
+  .crm-review-activity-list { grid-template-columns: 1fr; }
+  .crm-customer-header-actions { align-items: stretch; justify-items: stretch; }
+  .crm-customer-contact-actions { justify-content: flex-start; }
 }
 
 /* Dispatch: make today and current time unmistakable before secondary settings. */

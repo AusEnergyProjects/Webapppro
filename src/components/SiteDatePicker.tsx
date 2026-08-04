@@ -91,14 +91,18 @@ export function SiteDatePicker() {
     });
   }, []);
 
-  const updatePosition = useCallback((input: HTMLInputElement) => {
+  const updatePosition = useCallback((input: HTMLInputElement, popoverHeight = 430) => {
     const rect = input.getBoundingClientRect();
-    const width = Math.min(342, window.innerWidth - 24);
-    const estimatedHeight = 430;
-    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-    const below = rect.bottom + 8;
-    const top = below + estimatedHeight <= window.innerHeight ? below : Math.max(12, rect.top - estimatedHeight - 8);
-    setPosition({ left, top });
+    const margin = 12;
+    const gap = 8;
+    const width = Math.max(1, Math.min(342, window.innerWidth - margin * 2));
+    const visibleHeight = Math.min(Math.max(1, popoverHeight), Math.max(1, window.innerHeight - margin * 2));
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+    const below = rect.bottom + gap;
+    const above = rect.top - visibleHeight - gap;
+    const preferredTop = below + visibleHeight <= window.innerHeight - margin ? below : above;
+    const top = Math.max(margin, Math.min(preferredTop, window.innerHeight - visibleHeight - margin));
+    setPosition((current) => current.left === left && current.top === top ? current : { left, top });
   }, []);
 
   const open = useCallback((input: HTMLInputElement) => {
@@ -149,10 +153,15 @@ export function SiteDatePicker() {
 
   useEffect(() => {
     if (!active) return;
-    const reposition = () => updatePosition(active.input);
+    const reposition = () => updatePosition(active.input, popoverRef.current?.getBoundingClientRect().height || 430);
+    const frame = window.requestAnimationFrame(reposition);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reposition);
+    if (popoverRef.current) observer?.observe(popoverRef.current);
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
     };

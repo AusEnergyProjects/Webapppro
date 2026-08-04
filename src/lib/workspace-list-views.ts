@@ -24,6 +24,7 @@ type ListViewDefaults = {
   filter: string;
   sort: string;
   pageSize: number;
+  jobColumnOrderVersion?: number;
   type: string;
   synthetic: string;
   customer?: string;
@@ -32,6 +33,11 @@ type ListViewDefaults = {
   stage?: string;
   assignee?: string;
   location?: string;
+  appointmentId?: string;
+  scheduledFrom?: string;
+  scheduledTo?: string;
+  invoiceStatus?: string;
+  customerReference?: string;
   firstName?: string;
   lastName?: string;
   businessName?: string;
@@ -54,6 +60,12 @@ type ListViewDefaults = {
   listing?: string;
   columns?: string[];
 };
+
+const INSTALLER_JOB_IDENTITY_COLUMNS = ["Customer", "Mobile", "Job Id"] as const;
+export const INSTALLER_JOB_DEFAULT_COLUMNS = [
+  ...INSTALLER_JOB_IDENTITY_COLUMNS,
+  ...DATAFORCE_JOB_CSV_HEADERS.filter((header) => !INSTALLER_JOB_IDENTITY_COLUMNS.includes(header as (typeof INSTALLER_JOB_IDENTITY_COLUMNS)[number])),
+];
 
 const columnsByView: Record<string, string[]> = {
   "installer-jobs": [...DATAFORCE_JOB_CSV_HEADERS],
@@ -101,19 +113,28 @@ const sortsByView: Record<string, Set<string>> = {
 
 export function defaultListView(viewKey: string): ListViewDefaults {
   const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
+  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 2, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
   return columnsByView[viewKey] ? { ...defaults, columns: [...columnsByView[viewKey]] } : defaults;
 }
 
-export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
+export function cleanListView(
+  viewKey: string,
+  raw: Record<string, unknown>,
+  options: { migrateLegacyInstallerJobColumns?: boolean } = {},
+) {
   const defaults = defaultListView(viewKey);
   const filter = cleanAdminText(raw.filter, 40);
   const sort = cleanAdminText(raw.sort, 40);
   const pageSize = Number(raw.pageSize);
+  const legacyInstallerJobColumns = viewKey === "installer-jobs"
+    && options.migrateLegacyInstallerJobColumns
+    && Number(raw.jobColumnOrderVersion || 0) < 2;
   return {
     search: cleanAdminText(raw.search, 100),
     filter: filtersByView[viewKey]?.has(filter) ? filter : defaults.filter,
     sort: sortsByView[viewKey]?.has(sort) ? sort : defaults.sort,
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
+    jobColumnOrderVersion: viewKey === "installer-jobs" ? 2 : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
     customer: cleanAdminText(raw.customer, 100),
@@ -122,6 +143,11 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
     stage: cleanAdminText(raw.stage, 40),
     assignee: cleanAdminText(raw.assignee, 100),
     location: cleanAdminText(raw.location, 100),
+    appointmentId: cleanAdminText(raw.appointmentId, 100),
+    scheduledFrom: cleanAdminText(raw.scheduledFrom, 10),
+    scheduledTo: cleanAdminText(raw.scheduledTo, 10),
+    invoiceStatus: cleanAdminText(raw.invoiceStatus, 40),
+    customerReference: cleanAdminText(raw.customerReference, 100),
     firstName: cleanAdminText(raw.firstName, 100),
     lastName: cleanAdminText(raw.lastName, 100),
     businessName: cleanAdminText(raw.businessName, 160),
@@ -146,6 +172,11 @@ export function cleanListView(viewKey: string, raw: Record<string, unknown>) {
       const columns = Array.isArray(raw.columns)
         ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)
         : [];
+      if (viewKey === "installer-jobs") {
+        const isLegacyExactOrder = columns.length === DATAFORCE_JOB_CSV_HEADERS.length
+          && columns.every((column, index) => column === DATAFORCE_JOB_CSV_HEADERS[index]);
+        if ((legacyInstallerJobColumns && isLegacyExactOrder) || !columns.length) return [...INSTALLER_JOB_DEFAULT_COLUMNS];
+      }
       return columns.length ? columns : [...columnsByView[viewKey]];
     })() : undefined,
   };
@@ -158,7 +189,7 @@ export async function readListView(ownerUid: string, ownerScope: string, viewKey
   if (!row) return { preferences: defaultListView(viewKey), saved: false };
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(String(row.preferences || "{}")) as Record<string, unknown>; } catch { parsed = {}; }
-  return { preferences: cleanListView(viewKey, parsed), saved: true };
+  return { preferences: cleanListView(viewKey, parsed, { migrateLegacyInstallerJobColumns: true }), saved: true };
 }
 
 export async function saveListView(ownerUid: string, ownerScope: string, viewKey: string, raw: Record<string, unknown>) {

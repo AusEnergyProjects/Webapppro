@@ -8,6 +8,10 @@ import {
   type JpegExifVerification,
   verifyJpegExif,
 } from "@/lib/jpeg-exif-verifier";
+import {
+  BoundedJsonRequestError,
+  readBoundedJsonRequest,
+} from "@/lib/bounded-json-request";
 
 export const runtime = "edge";
 
@@ -24,6 +28,7 @@ const MAX_GOVERNED_CAPTURE_AGE_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
 const MAX_GOVERNED_FUTURE_SKEW_MILLISECONDS = 15 * 60 * 1000;
 const MAX_EVIDENCE_ENVELOPE_BYTES = 65_536;
 const MAX_CLIENT_EVIDENCE_ENVELOPE_BYTES = 60 * 1024;
+const MAX_MEDIA_JSON_BYTES = 128 * 1024;
 const CLEANUP_PENDING_PREFIX = "cleanup_pending:";
 const CLEANUP_CLAIMED_PREFIX = "cleanup_claimed:";
 const CLEANUP_CLAIM_LEASE_MILLISECONDS = 5 * 60 * 1000;
@@ -410,7 +415,7 @@ async function validateEvidenceContract(
     if (await complianceCaseForWorkOrder(access, workOrderId)) {
       throw new EvidenceContractError(
         "EVIDENCE_REQUIREMENT_REQUIRED",
-        "Choose the applicable Creditex evidence requirement before capturing this file.",
+        "Choose the applicable compliance evidence requirement before capturing this file.",
       );
     }
     return { envelopeJson: "{}", originalSha256: "", link: null };
@@ -463,13 +468,13 @@ async function validateEvidenceContract(
     if (await complianceCaseForWorkOrder(access, workOrderId)) {
       throw new EvidenceContractError(
         "EVIDENCE_REQUIREMENT_REQUIRED",
-        "Choose the applicable Creditex evidence requirement before capturing this file.",
+        "Choose the applicable compliance evidence requirement before capturing this file.",
       );
     }
     return { envelopeJson, originalSha256: digestHex, link: null };
   }
   if (Object.values(linkValues).some((value) => !value)) {
-    throw new EvidenceContractError("EVIDENCE_LINK_INVALID", "The Creditex evidence requirement link is incomplete.");
+    throw new EvidenceContractError("EVIDENCE_LINK_INVALID", "The compliance evidence requirement link is incomplete.");
   }
   if (
     !registeredDevice
@@ -551,14 +556,14 @@ async function validateEvidenceContract(
   if (!row || String(row.requirement_code) !== linkValues.requirementCode) {
     throw new EvidenceContractError(
       "EVIDENCE_LINK_INVALID",
-      "This evidence requirement is no longer active for the selected Creditex case.",
+      "This evidence requirement is no longer active for the selected compliance case.",
       409,
     );
   }
   if (String(row.capture_timing) !== "any") {
     throw new EvidenceContractError(
       "EVIDENCE_CAPTURE_TIMING_UNSUPPORTED",
-      "This evidence timing rule is not supported by the current field workflow. Creditex must keep it unavailable until the required job milestone can be verified.",
+      "This evidence timing rule is not supported by the current field workflow. It must remain unavailable until the required job milestone can be verified.",
       409,
     );
   }
@@ -1493,8 +1498,8 @@ async function finalise(
           )`)
         .bind(caseEventId, evidence.link.caseId, evidence.link.organisationId, access.actorUid,
           supersedesEvidenceId
-            ? "Correction field evidence received for Creditex review."
-            : "Original field evidence received for Creditex review.",
+            ? "Correction field evidence received for compliance review."
+            : "Original field evidence received for compliance review.",
           JSON.stringify({
             evidenceId,
             mediaId,
@@ -1529,8 +1534,8 @@ async function finalise(
           )`)
         .bind(auditEventId, evidence.link.organisationId, access.actorUid, evidence.link.caseId,
           supersedesEvidenceId
-            ? "Correction field evidence received for Creditex review."
-            : "Original field evidence received for Creditex review.",
+            ? "Correction field evidence received for compliance review."
+            : "Original field evidence received for compliance review.",
           JSON.stringify({
             evidenceId,
             mediaId,
@@ -2262,9 +2267,29 @@ export async function POST(request: Request) {
       if (cleanAdminText(form.get("action"), 30) !== "upload_part") return adminJson({ ok: false, error: "Unsupported upload action." }, 400);
       return await uploadPart(request, access, form);
     }
-    let body: Record<string, unknown>;
-    try { body = await request.json() as Record<string, unknown>; }
-    catch { return adminJson({ ok: false, error: "The upload request is invalid." }, 400); }
+    let parsedBody: unknown;
+    try {
+      parsedBody = await readBoundedJsonRequest(request, MAX_MEDIA_JSON_BYTES);
+    } catch (error) {
+      return adminJson({
+        ok: false,
+        error: error instanceof BoundedJsonRequestError
+          && error.code === "REQUEST_TOO_LARGE"
+          ? "The upload request is too large."
+          : "The upload request is invalid.",
+      }, error instanceof BoundedJsonRequestError ? error.status : 400);
+    }
+    if (
+      !parsedBody
+      || typeof parsedBody !== "object"
+      || Array.isArray(parsedBody)
+    ) {
+      return adminJson({
+        ok: false,
+        error: "The upload request is invalid.",
+      }, 400);
+    }
+    const body = parsedBody as Record<string, unknown>;
     const action = cleanAdminText(body.action, 30);
     if (action === "initiate") return await initiate(request, access, body);
     if (action === "complete") return await complete(request, access, body);

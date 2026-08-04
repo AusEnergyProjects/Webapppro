@@ -6,8 +6,12 @@ import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 
 import { APP_VERSION } from '@/lib/config';
+import {
+  governedEvidenceBinding,
+  type GovernedEvidenceSelection,
+} from '@/lib/compliance';
 import { getDeviceId } from '@/lib/device';
-import type { ComplianceEvidenceRequirement, FieldJob } from '@/lib/types';
+import type { FieldJob } from '@/lib/types';
 
 export type EvidenceCaptureSource = 'in_app_camera' | 'document_picker';
 export type EvidenceLocationState =
@@ -128,17 +132,45 @@ const notRequestedPermission: EvidencePermissionState = {
 };
 
 export function evidenceIdentifiers(
-  job: Pick<FieldJob, 'id' | 'compliance'>,
-  requirement?: ComplianceEvidenceRequirement,
+  job: Pick<FieldJob, 'id'>,
+  selection?: GovernedEvidenceSelection,
 ): EvidenceIdentifiers {
+  const binding = selection ? governedEvidenceBinding(selection) : {
+    complianceCaseId: '',
+    complianceActivityVersionId: '',
+    evidencePolicyVersionId: '',
+    evidenceRequirementId: '',
+    evidenceRequirementCode: '',
+  };
   return {
     jobId: job.id,
-    complianceCaseId: job.compliance?.caseId || '',
-    complianceActivityVersionId: job.compliance?.activityVersionId || '',
-    evidencePolicyVersionId: job.compliance?.evidencePolicyVersionId || '',
-    evidenceRequirementId: requirement?.id || '',
-    evidenceRequirementCode: requirement?.code || '',
+    ...binding,
   };
+}
+
+export function validateEvidenceIdentifiers(identifiers: EvidenceIdentifiers) {
+  if (typeof identifiers.jobId !== 'string' || !identifiers.jobId.trim()) {
+    throw new Error('The evidence capture is missing its job ID.');
+  }
+  const governed = [
+    identifiers.complianceCaseId,
+    identifiers.complianceActivityVersionId,
+    identifiers.evidencePolicyVersionId,
+    identifiers.evidenceRequirementId,
+    identifiers.evidenceRequirementCode,
+  ];
+  if (governed.some((value) => typeof value !== 'string')) {
+    throw new Error(
+      'Governed evidence identifiers are malformed. Sync the job before capturing evidence.',
+    );
+  }
+  const populated = governed.filter((value) => value.trim()).length;
+  if (populated !== 0 && populated !== governed.length) {
+    throw new Error(
+      'Governed evidence must be bound to one complete case, activity, policy and requirement.',
+    );
+  }
+  return identifiers;
 }
 
 export function cameraPermissionState(permission?: CameraPermissionResponse): EvidencePermissionState {
@@ -268,6 +300,7 @@ export async function buildEvidenceEnvelope(input: {
   observedTime?: ReturnType<typeof observedTime>;
 }): Promise<Omit<EvidenceCaptureEnvelope, 'integrity'>> {
   const observed = input.observedTime || observedTime();
+  validateEvidenceIdentifiers(input.identifiers);
   return {
     schemaVersion: 1,
     captureSessionId: input.captureSessionId,
@@ -312,7 +345,7 @@ export async function buildEvidenceEnvelope(input: {
     },
     acceptance: {
       status: 'not_assessed',
-      statement: 'Captured evidence still requires the applicable scheme and Creditex review.',
+      statement: 'Captured evidence still requires the applicable scheme and compliance review.',
     },
   };
 }

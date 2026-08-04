@@ -307,6 +307,7 @@ export const tradeWorkOrders = sqliteTable("trade_work_orders", {
 export const tradeWorkOrderComplianceIntents = sqliteTable("trade_work_order_compliance_intents", {
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
+  intentKey: text("intent_key").notNull().default("primary"),
   installerUid: text("installer_uid").notNull(),
   complianceOrganisationId: text("compliance_organisation_id").notNull().default(""),
   programTemplateId: text("program_template_id").notNull(),
@@ -326,8 +327,8 @@ export const tradeWorkOrderComplianceIntents = sqliteTable("trade_work_order_com
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
-  uniqueIndex("trade_compliance_intent_work_revision_idx").on(table.workOrderId, table.revision),
-  uniqueIndex("trade_compliance_intent_active_work_idx").on(table.workOrderId).where(sql`${table.status} = 'planned'`),
+  uniqueIndex("trade_compliance_intent_work_key_revision_idx").on(table.workOrderId, table.intentKey, table.revision),
+  uniqueIndex("trade_compliance_intent_active_work_key_idx").on(table.workOrderId, table.intentKey).where(sql`${table.status} = 'planned'`),
   uniqueIndex("trade_compliance_intent_case_idx").on(table.complianceCaseId).where(sql`${table.complianceCaseId} <> ''`),
   index("trade_compliance_intent_installer_status_idx").on(table.installerUid, table.status, table.updatedAt),
   index("trade_compliance_intent_creditex_queue_idx").on(table.complianceOrganisationId, table.status, table.plannedStart, table.updatedAt),
@@ -3163,6 +3164,7 @@ export const complianceCases = sqliteTable("compliance_cases", {
   organisationId: text("organisation_id").notNull(),
   programId: text("program_id").notNull(),
   workOrderId: text("work_order_id").notNull(),
+  complianceIntentId: text("compliance_intent_id").notNull().default(""),
   commercialHandoffId: text("commercial_handoff_id").notNull().default(""),
   acceptedQuoteVersionId: text("accepted_quote_version_id").notNull().default(""),
   acceptedScopeSha256: text("accepted_scope_sha256").notNull().default(""),
@@ -3181,8 +3183,8 @@ export const complianceCases = sqliteTable("compliance_cases", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("compliance_cases_number_idx").on(table.caseNumber),
-  uniqueIndex("compliance_cases_active_work_order_idx")
-    .on(table.workOrderId)
+  uniqueIndex("compliance_cases_active_intent_idx")
+    .on(table.workOrderId, table.complianceIntentId)
     .where(sql`${table.status} <> 'closed'`),
   index("compliance_cases_org_status_idx").on(table.organisationId, table.status, table.evidenceStatus, table.updatedAt),
   index("compliance_cases_work_order_idx").on(table.workOrderId, table.createdAt),

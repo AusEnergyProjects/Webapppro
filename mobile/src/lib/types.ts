@@ -77,6 +77,9 @@ export type FieldJobCompliance = {
   activityCode: string;
   activityTitle: string;
   evidencePolicyVersionId: string;
+  status?: string;
+  evidenceStatus?: string;
+  revision?: number;
   requirements: ComplianceEvidenceRequirement[];
 };
 
@@ -118,6 +121,7 @@ export type FieldJob = {
   tasks: FieldTask[];
   media: FieldMedia[];
   forms: FieldForm[];
+  complianceCases?: FieldJobCompliance[];
   compliance?: FieldJobCompliance;
 };
 

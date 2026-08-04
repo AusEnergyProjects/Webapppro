@@ -88,10 +88,30 @@ test("installer indexes apply named views, movable columns and matching visible 
   assert.match(crmUi, /jobCursors\.current = \[""\]; jobTotalReady\.current = false/);
   assert.match(crmUi, /customerCursors\.current = \[""\]; customerTotalReady\.current = false/);
   assert.match(shared, /"installer-jobs": \[\.\.\.DATAFORCE_JOB_CSV_HEADERS\]/);
+  assert.match(shared, /INSTALLER_JOB_IDENTITY_COLUMNS = \["Customer", "Mobile", "Job Id"\] as const/);
+  assert.match(shared, /if \(viewKey === "installer-jobs"\) return \{ \.\.\.defaults, jobColumnOrderVersion: 2, columns: \[\.\.\.INSTALLER_JOB_DEFAULT_COLUMNS\] \}/);
+  assert.match(shared, /migrateLegacyInstallerJobColumns\?: boolean/);
+  assert.match(shared, /Number\(raw\.jobColumnOrderVersion \|\| 0\) < 2/);
+  assert.match(shared, /const isLegacyExactOrder = columns\.length === DATAFORCE_JOB_CSV_HEADERS\.length/);
+  assert.match(shared, /if \(\(legacyInstallerJobColumns && isLegacyExactOrder\) \|\| !columns\.length\) return \[\.\.\.INSTALLER_JOB_DEFAULT_COLUMNS\]/);
+  assert.match(shared, /cleanListView\(viewKey, parsed, \{ migrateLegacyInstallerJobColumns: true \}\)/);
+  assert.match(shared, /const preferences = cleanListView\(viewKey, \(raw\.preferences \|\| \{\}\) as Record<string, unknown>\)/);
+  assert.match(shared, /return columns\.length \? columns : \[\.\.\.columnsByView\[viewKey\]\]/);
   assert.match(shared, /"installer-customers": \["customer", "firstName", "lastName"/);
   assert.match(savedViewsUi, /Save current view/);
   assert.match(savedViewsUi, /Update view/);
   assert.match(savedViewsUi, /Delete/);
+});
+
+test("installer saved views retain bounded populated job filters", () => {
+  for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference"]) {
+    assert.match(shared, new RegExp(`${field}\\?: string`));
+    assert.match(shared, new RegExp(`${field}: cleanAdminText\\(raw\\.${field},`));
+    assert.match(crmUi, new RegExp(`${field}:`));
+  }
+  for (const field of ["jobId", "email", "phone", "suburb", "postcode"]) {
+    assert.match(crmUi, new RegExp(`${field}:`));
+  }
 });
 
 test("high volume catalogue, order and account indexes use server paging", () => {

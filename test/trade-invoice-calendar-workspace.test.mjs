@@ -29,16 +29,19 @@ test("invoices are a main installer workspace over existing owner-scoped records
   assert.match(dashboard, /jobTab: "invoice"/);
 });
 
-test("jobs expose focused single and double-click navigation while schedule appointments retain explicit open actions", () => {
-  assert.match(crm, /className="crm-row-open crm-record-data-row"[^>]*onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
-  assert.match(crm, /onDoubleClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
+test("jobs expose explicit and guarded double-click navigation while schedule appointments retain explicit open actions", () => {
+  assert.match(crm, /className="crm-index-open-button" onClick=\{onOpen\}/);
+  assert.match(crm, /className="crm-row-open"[^>]*onDoubleClick=\{\(event\) => \{ if \(\(event\.target as HTMLElement\)\.closest\("a, button, input, select, textarea"\)\) return; openFocusedJob\(job\.id\); \}\}/);
   assert.match(crm, /crm-job-focus/);
-  assert.match(crm, /Back to jobs/);
+  assert.match(crm, /Back to all jobs/);
   assert.match(crm, /initialTab=\{focusedJobTab\}/);
   assert.match(schedule, /onDoubleClick=\{\(event\) => \{ event\.stopPropagation\(\); closeAppointment\(\); onOpenJob\(item\.workOrderId\); \}\}/);
   assert.match(schedule, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(schedule, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
   assert.match(schedule, />Open full job</);
+  assert.match(schedule, /onOpenQuote && !selectedAppointment\.protectedJob/);
+  assert.match(schedule, />View, send or revise quote<\/button>/);
+  assert.match(dashboard, /onOpenQuote=\{\(workOrderId\) => \{[\s\S]*?jobTab: "quote"/);
 });
 
 test("appointment editing uses a bounded 15-minute duration instead of a finish field", () => {

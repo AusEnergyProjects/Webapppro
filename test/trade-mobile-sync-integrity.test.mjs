@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
 
 const source = fs.readFileSync(
   new URL("../src/app/api/trade-team/sync/route.ts", import.meta.url),
@@ -78,6 +79,9 @@ function loadRoute(mocks) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier === "@/lib/bounded-json-request") {
+      return boundedJsonRequest;
+    }
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
   new Function("require", "module", "exports", output)(
@@ -96,7 +100,17 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       firebase_uid text NOT NULL,
       partner_type text NOT NULL,
       record_status text NOT NULL,
+      work_number text NOT NULL DEFAULT '',
+      title text NOT NULL DEFAULT '',
+      service_category text NOT NULL DEFAULT '',
+      site_area text NOT NULL DEFAULT '',
       stage text NOT NULL,
+      priority text NOT NULL DEFAULT 'standard',
+      scheduled_start text NOT NULL DEFAULT '',
+      scheduled_end text NOT NULL DEFAULT '',
+      assignee_member_id text NOT NULL DEFAULT 'member-1',
+      assignee_label text NOT NULL DEFAULT 'Field technician',
+      source_type text NOT NULL DEFAULT 'internal',
       revision integer NOT NULL,
       updated_at text NOT NULL
     );
@@ -104,23 +118,30 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
+      title text NOT NULL DEFAULT '',
+      due_at text NOT NULL DEFAULT '',
       status text NOT NULL,
       completed_at text NOT NULL,
       revision integer NOT NULL,
-      updated_at text NOT NULL
+      updated_at text NOT NULL,
+      created_at text NOT NULL DEFAULT ''
     );
     CREATE TABLE trade_job_forms (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
       template_key text NOT NULL,
+      template_version integer NOT NULL DEFAULT 1,
+      template_name text NOT NULL DEFAULT '',
+      jurisdiction text NOT NULL DEFAULT 'VIC',
       template_snapshot text NOT NULL,
       status text NOT NULL,
       revision integer NOT NULL,
       answers text NOT NULL,
       completed_by_uid text NOT NULL,
       completed_at text NOT NULL,
-      updated_at text NOT NULL
+      updated_at text NOT NULL,
+      created_at text NOT NULL DEFAULT ''
     );
     CREATE TABLE trade_crm_job_notes (
       id text PRIMARY KEY NOT NULL,
@@ -166,6 +187,11 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       photo_request_id text NOT NULL,
       photo_requirement_id text NOT NULL,
       source text NOT NULL,
+      category text NOT NULL DEFAULT '',
+      file_name text NOT NULL DEFAULT '',
+      content_type text NOT NULL DEFAULT '',
+      size_bytes integer NOT NULL DEFAULT 0,
+      caption text NOT NULL DEFAULT '',
       created_at text NOT NULL
     );
     CREATE TABLE trade_crm_photo_requirement_reviews (
@@ -201,6 +227,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       firebase_uid text NOT NULL,
       status text NOT NULL,
       starts_at text NOT NULL,
+      ends_at text NOT NULL DEFAULT '',
       travel_started_at text NOT NULL DEFAULT '',
       arrived_at text NOT NULL DEFAULT '',
       work_started_at text NOT NULL DEFAULT '',
@@ -213,8 +240,101 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
+      customer_source text NOT NULL DEFAULT 'internal',
+      description text NOT NULL DEFAULT '',
+      crm_customer_id text NOT NULL DEFAULT '',
+      service_site_id text NOT NULL DEFAULT '',
       pipeline_stage text NOT NULL,
       updated_at text NOT NULL
+    );
+    CREATE TABLE trade_crm_customers (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      record_status text NOT NULL,
+      business_name text NOT NULL,
+      first_name text NOT NULL,
+      last_name text NOT NULL,
+      phone text NOT NULL
+    );
+    CREATE TABLE trade_crm_service_sites (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      site_label text NOT NULL,
+      address_line_1 text NOT NULL,
+      address_line_2 text NOT NULL,
+      suburb text NOT NULL,
+      address_state text NOT NULL,
+      postcode text NOT NULL
+    );
+    CREATE TABLE trade_crm_customer_contacts (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      record_status text NOT NULL,
+      phone text NOT NULL
+    );
+    CREATE TABLE trade_crm_site_contacts (
+      id text PRIMARY KEY NOT NULL,
+      service_site_id text NOT NULL,
+      customer_contact_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      record_status text NOT NULL,
+      is_primary integer NOT NULL,
+      created_at text NOT NULL
+    );
+    CREATE TABLE compliance_activity_versions (
+      id text PRIMARY KEY NOT NULL,
+      activity_key text NOT NULL,
+      registry_activity_code text NOT NULL,
+      title text NOT NULL
+    );
+    CREATE TABLE compliance_evidence_policy_versions (
+      id text PRIMARY KEY NOT NULL,
+      activity_version_id text NOT NULL,
+      organisation_id text NOT NULL
+    );
+    CREATE TABLE compliance_evidence_requirements (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      policy_version_id text NOT NULL,
+      requirement_code text NOT NULL,
+      title text NOT NULL,
+      description text NOT NULL,
+      evidence_type text NOT NULL,
+      capture_timing text NOT NULL,
+      minimum_count integer NOT NULL,
+      maximum_count integer NOT NULL,
+      original_required integer NOT NULL,
+      metadata_required integer NOT NULL,
+      gps_required integer NOT NULL,
+      date_stamp_required integer NOT NULL,
+      installer_signature_required integer NOT NULL,
+      customer_signature_required integer NOT NULL,
+      allowed_content_types text NOT NULL,
+      condition_snapshot text NOT NULL,
+      field_schema text NOT NULL,
+      sort_order integer NOT NULL
+    );
+    CREATE TABLE compliance_cases (
+      id text PRIMARY KEY NOT NULL,
+      case_number text NOT NULL,
+      organisation_id text NOT NULL,
+      work_order_id text NOT NULL,
+      installer_uid text NOT NULL,
+      activity_version_id text NOT NULL,
+      evidence_policy_version_id text NOT NULL,
+      status text NOT NULL,
+      evidence_status text NOT NULL,
+      revision integer NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE compliance_case_evidence (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      case_id text NOT NULL,
+      requirement_id text NOT NULL,
+      status text NOT NULL,
+      original_sha256 text NOT NULL,
+      supersedes_evidence_id text NOT NULL DEFAULT ''
     );
     CREATE TABLE trade_offline_actions (
       id text PRIMARY KEY NOT NULL,
@@ -406,6 +526,62 @@ function prepareFinishableJob(database) {
   seedReadyPhotoProof(database);
 }
 
+function seedGovernedComplianceCases(database) {
+  const activities = [
+    ["activity-stc", "SRES_HEAT_PUMP", "STC", "Heat-pump water heater"],
+    ["activity-veec", "VEU_HOT_WATER", "1", "Victorian hot-water upgrade"],
+    ["activity-foreign", "FOREIGN_ACTIVITY", "FOREIGN", "Foreign tenant activity"],
+  ];
+  const policies = [
+    ["policy-stc", "activity-stc", "org-stc"],
+    ["policy-veec", "activity-veec", "org-veec"],
+    ["policy-foreign", "activity-foreign", "org-foreign"],
+  ];
+  const requirements = [
+    ["requirement-stc", "org-stc", "policy-stc", "STC_INSTALLED_UNIT", "Installed unit"],
+    ["requirement-veec", "org-veec", "policy-veec", "VEEC_DECOMMISSION", "Decommissioned unit"],
+    ["requirement-foreign", "org-foreign", "policy-foreign", "FOREIGN_PROOF", "Foreign proof"],
+  ];
+  const cases = [
+    ["case-stc", "STC-001", "org-stc", "owner-1", "activity-stc", "policy-stc"],
+    ["case-veec", "VEEC-001", "org-veec", "owner-1", "activity-veec", "policy-veec"],
+    ["case-foreign", "FOREIGN-001", "org-foreign", "owner-2", "activity-foreign", "policy-foreign"],
+  ];
+  const insertActivity = database.prepare(`INSERT INTO compliance_activity_versions
+    (id, activity_key, registry_activity_code, title) VALUES (?, ?, ?, ?)`);
+  for (const row of activities) insertActivity.run(...row);
+  const insertPolicy = database.prepare(`INSERT INTO compliance_evidence_policy_versions
+    (id, activity_version_id, organisation_id) VALUES (?, ?, ?)`);
+  for (const row of policies) insertPolicy.run(...row);
+  const insertRequirement = database.prepare(`INSERT INTO compliance_evidence_requirements
+    (id, organisation_id, policy_version_id, requirement_code, title,
+     description, evidence_type, capture_timing, minimum_count, maximum_count,
+     original_required, metadata_required, gps_required, date_stamp_required,
+     installer_signature_required, customer_signature_required,
+     allowed_content_types, condition_snapshot, field_schema, sort_order)
+    VALUES (?, ?, ?, ?, ?, '', 'photo', 'any', 1, 1, 0, 0, 0, 0, 0, 0,
+      '["image/jpeg"]', '{}', '{}', 1)`);
+  for (const row of requirements) insertRequirement.run(...row);
+  const insertCase = database.prepare(`INSERT INTO compliance_cases
+    (id, case_number, organisation_id, work_order_id, installer_uid,
+     activity_version_id, evidence_policy_version_id, status, evidence_status,
+     revision, updated_at)
+    VALUES (?, ?, ?, 'job-1', ?, ?, ?, 'draft', 'in_progress', 1,
+      '2026-08-01T00:00:00.000Z')`);
+  for (const row of cases) insertCase.run(...row);
+  database.prepare(`INSERT INTO compliance_case_evidence
+    (id, organisation_id, case_id, requirement_id, status, original_sha256)
+    VALUES ('evidence-stc', 'org-stc', 'case-stc', 'requirement-stc',
+      'received', 'hash-stc')`).run();
+}
+
+async function bootstrap(route) {
+  const response = await route.GET(new Request(
+    "https://app.example/api/trade-team/sync?deviceId=device-001&platform=ios&appVersion=1.0.0",
+  ));
+  return { response, payload: await response.json() };
+}
+
 async function postActions(route, actions) {
   const response = await route.POST(new Request(
     "https://app.example/api/trade-team/sync",
@@ -422,6 +598,24 @@ async function postActions(route, actions) {
   ));
   return { response, payload: await response.json() };
 }
+
+test("bootstrap fails closed before companion rows can exceed its response cap", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const insert = database.prepare(`INSERT INTO trade_work_order_tasks
+    (id, work_order_id, firebase_uid, status, completed_at, revision, updated_at)
+    VALUES (?, 'job-1', 'owner-1', 'pending', '', 1, 'initial')`);
+  database.exec("BEGIN");
+  for (let index = 0; index < 10_000; index += 1) {
+    insert.run(`bounded-task-${index}`);
+  }
+  database.exec("COMMIT");
+  const { route } = routeHarness(database);
+
+  const result = await bootstrap(route);
+  assert.equal(result.response.status, 409);
+  assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
+  assert.match(result.payload.error, /too much active field data/);
+});
 
 test("offline stage changes cannot complete blocked work or reopen a terminal job", async () => {
   const database = syncDatabase("in_progress", 5);
@@ -453,6 +647,181 @@ test("offline stage changes cannot complete blocked work or reopen a terminal jo
   }]);
   assert.equal(result.payload.results[0].code, "JOB_TERMINAL");
   assert.equal(database.prepare("SELECT stage FROM trade_work_orders WHERE id = 'job-1'").get().stage, "completed");
+});
+
+test("bootstrap returns every owner-scoped compliance pack and both finish preflights require all governed evidence", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  seedGovernedComplianceCases(database);
+  const { route } = routeHarness(database);
+
+  const initial = await bootstrap(route);
+  assert.equal(initial.response.status, 200);
+  const job = initial.payload.changes.find((change) => change.entityId === "job-1")?.entity;
+  assert.ok(job);
+  assert.deepEqual(
+    job.complianceCases.map((item) => item.caseId),
+    ["case-stc", "case-veec"],
+  );
+  assert.equal(job.compliance, undefined);
+  assert.deepEqual(
+    job.complianceCases.map((item) => ({
+      caseId: item.caseId,
+      evidenceStatus: item.evidenceStatus,
+      requirementIds: item.requirements.map((requirement) => requirement.id),
+      requirementStates: item.requirements.map((requirement) => requirement.status),
+    })),
+    [
+      {
+        caseId: "case-stc",
+        evidenceStatus: "in_progress",
+        requirementIds: ["requirement-stc"],
+        requirementStates: ["in_review"],
+      },
+      {
+        caseId: "case-veec",
+        evidenceStatus: "in_progress",
+        requirementIds: ["requirement-veec"],
+        requirementStates: ["pending"],
+      },
+    ],
+  );
+
+  const stageAttempt = await postActions(route, [{
+    clientActionId: "multi-case-stage-finish",
+    type: "set_job_stage",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    stage: "completed",
+  }]);
+  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(stageAttempt.payload.results[0].error, /governed evidence/);
+
+  const fieldAttempt = await postActions(route, [{
+    clientActionId: "multi-case-field-finish",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(fieldAttempt.payload.results[0].error, /governed evidence/);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+
+  database.prepare("DELETE FROM compliance_cases WHERE id = 'case-veec'").run();
+  const singleCase = await bootstrap(route);
+  const singleCaseJob = singleCase.payload.changes.find(
+    (change) => change.entityId === "job-1",
+  )?.entity;
+  assert.deepEqual(
+    {
+      arrayCaseIds: singleCaseJob.complianceCases.map((item) => item.caseId),
+      legacyCaseId: singleCaseJob.compliance.caseId,
+    },
+    {
+      arrayCaseIds: ["case-stc"],
+      legacyCaseId: "case-stc",
+    },
+  );
+});
+
+test("the atomic finish guard rechecks every governed case without foreign-tenant leakage", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  seedGovernedComplianceCases(database);
+  database.prepare(`INSERT INTO compliance_case_evidence
+    (id, organisation_id, case_id, requirement_id, status, original_sha256)
+    VALUES ('evidence-veec', 'org-veec', 'case-veec', 'requirement-veec',
+      'received', 'hash-veec')`).run();
+  const { route, d1 } = routeHarness(database);
+
+  d1.injectBeforeNextBatch(() => {
+    database.prepare(`UPDATE compliance_case_evidence
+      SET status = 'rejected' WHERE id = 'evidence-veec'`).run();
+  });
+  const raced = await postActions(route, [{
+    clientActionId: "multi-case-evidence-race",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(raced.payload.results[0].status, "conflict");
+  assert.deepEqual(
+    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
+      WHERE id = 'job-1'`).get() },
+    { stage: "in_progress", revision: 5 },
+  );
+  assert.deepEqual(
+    { ...database.prepare(`SELECT status, revision FROM trade_crm_appointments
+      WHERE id = 'appointment-1'`).get() },
+    { status: "in_progress", revision: 1 },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+
+  database.prepare(`UPDATE compliance_case_evidence
+    SET status = 'received' WHERE id = 'evidence-veec'`).run();
+  const completed = await postActions(route, [{
+    clientActionId: "multi-case-finish-ready",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(completed.payload.results[0].status, "applied");
+  assert.deepEqual(
+    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
+      WHERE id = 'job-1'`).get() },
+    { stage: "completed", revision: 6 },
+  );
+});
+
+test("superseded governed evidence cannot satisfy an offline finish", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  seedGovernedComplianceCases(database);
+  database.exec(`
+    INSERT INTO compliance_case_evidence
+      (id, organisation_id, case_id, requirement_id, status, original_sha256)
+    VALUES
+      ('evidence-veec-original', 'org-veec', 'case-veec',
+       'requirement-veec', 'received', 'hash-veec-original');
+    INSERT INTO compliance_case_evidence
+      (id, organisation_id, case_id, requirement_id, status, original_sha256,
+       supersedes_evidence_id)
+    VALUES
+      ('evidence-veec-replacement', 'org-veec', 'case-veec',
+       'requirement-veec', 'rejected', 'hash-veec-replacement',
+       'evidence-veec-original');
+  `);
+  const { route } = routeHarness(database);
+
+  const blocked = await postActions(route, [{
+    clientActionId: "multi-case-superseded-evidence",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(blocked.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(blocked.payload.results[0].error, /governed evidence/);
+  assert.deepEqual(
+    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
+      WHERE id = 'job-1'`).get() },
+    { stage: "in_progress", revision: 5 },
+  );
+
+  database.prepare(`UPDATE compliance_case_evidence
+    SET status = 'under_review'
+    WHERE id = 'evidence-veec-replacement'`).run();
+  const completed = await postActions(route, [{
+    clientActionId: "multi-case-replacement-evidence",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(completed.payload.results[0].status, "applied");
 });
 
 for (const terminalStage of ["completed", "cancelled"]) {

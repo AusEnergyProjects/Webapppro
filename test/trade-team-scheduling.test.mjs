@@ -124,6 +124,20 @@ test("schedule payloads preserve customer privacy boundaries", () => {
   assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1/);
 });
 
+test("appointments expose compact quote state without bypassing the existing quote workspace", () => {
+  assert.match(route, /d\.quote_status, d\.quoted_value_cents/);
+  assert.match(route, /quoteStatus: String\(row\.quote_status \|\| "not_started"\)/);
+  assert.match(route, /quotedValueCents: Number\(row\.quoted_value_cents \|\| 0\)/);
+  assert.match(ui, /onOpenQuote\?: \(workOrderId: string\) => void/);
+  assert.match(ui, /className="schedule-quote-summary"/);
+  assert.match(ui, /readable\(selectedAppointment\.quoteStatus \|\| "not_started"\)/);
+  assert.match(ui, /money\(selectedAppointment\.quotedValueCents \|\| 0\)/);
+  assert.match(ui, /onOpenQuote && !selectedAppointment\.protectedJob/);
+  assert.match(ui, />View, send or revise quote<\/button>/);
+  assert.match(dashboard, /onOpenQuote=\{\(workOrderId\) => \{[\s\S]*?jobTab: "quote"[\s\S]*?setWorkspace\("work"\)/);
+  assert.doesNotMatch(teamPortal, /onOpenQuote=/);
+});
+
 test("the installer dashboard exposes stable one-week scheduling with adjacent drag buffering", () => {
   for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
   assert.match(ui, /draggable=\{!busy && !loading\}/);

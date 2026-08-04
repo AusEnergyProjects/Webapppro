@@ -46,14 +46,15 @@ test('capture envelope records governed identifiers, observed time, permissions,
     assert.match(evidence, new RegExp(`\\b${field}\\b`), `missing ${field}`);
   }
   assert.match(evidence, /status:\s*'not_assessed'/);
-  assert.match(evidence, /Creditex review/);
+  assert.match(evidence, /compliance review/);
 });
 
 test('compliance jobs expose exact activity and evidence requirement contracts', () => {
+  assert.match(types, /complianceCases\?:\s*FieldJobCompliance\[\]/);
   assert.match(types, /compliance\?:\s*FieldJobCompliance/);
   assert.match(types, /evidencePolicyVersionId:\s*string/);
   assert.match(types, /requirements:\s*ComplianceEvidenceRequirement\[\]/);
-  assert.match(jobScreen, /complianceRequirements\.map/);
+  assert.match(jobScreen, /complianceCases\.map/);
   assert.match(jobScreen, /timing\.startsWith\('pre_'\)/);
   assert.match(jobScreen, /timing\.startsWith\('post_'\)/);
   assert.match(jobScreen, /GPS required/);
@@ -175,7 +176,7 @@ test('GPS governed capture rejects mocked or imprecise locations before queueing
   );
 });
 
-test('Creditex manual jobs cannot show or queue unsupported time entries', () => {
+test('manual compliance jobs cannot show or queue unsupported time entries', () => {
   const addTime = jobScreen.match(
     /async function addTime[\s\S]*?(?=\n  async function saveForm)/,
   )?.[0];
@@ -194,6 +195,11 @@ test('Creditex manual jobs cannot show or queue unsupported time entries', () =>
     jobScreen,
     /\{!creditexManual \? <View style=\{styles\.card\}>[\s\S]*TIME ENTRY[\s\S]*<\/View> : null\}/,
   );
+});
+
+test('installer-visible evidence copy does not identify the compliance partner', () => {
+  assert.doesNotMatch(jobScreen, /Creditex/);
+  assert.doesNotMatch(syncScreen, /Creditex/);
 });
 
 test('conflict retry uses the current child revision for tasks and forms', () => {

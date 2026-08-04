@@ -619,6 +619,9 @@ export type InstallerActivityFilters = {
   serviceCategory?: string;
   jurisdiction?: string;
   organisationCode?: string;
+  programCode?: string;
+  registryActivityCode?: string;
+  activityKey?: string;
   onDate?: string;
   afterActivityId?: string;
   limit?: number;
@@ -648,6 +651,9 @@ export async function listInstallerSelectableActivities(
     );
   }
   const organisationCode = cleanText(filters.organisationCode, 80);
+  const programCode = cleanText(filters.programCode, 80);
+  const registryActivityCode = cleanText(filters.registryActivityCode, 120);
+  const activityKey = cleanText(filters.activityKey, 180);
   const afterActivityId = cleanText(filters.afterActivityId, 180);
   const conditions = [
     "organisation.status = 'active'",
@@ -676,60 +682,82 @@ export async function listInstallerSelectableActivities(
     conditions.push("organisation.organisation_code = ?");
     bindings.push(organisationCode);
   }
-  if (afterActivityId) {
-    conditions.push("activity.id > ?");
-    bindings.push(afterActivityId);
+  if (programCode) {
+    conditions.push("program.program_code = ?");
+    bindings.push(programCode);
+  }
+  if (registryActivityCode) {
+    conditions.push("activity.registry_activity_code = ?");
+    bindings.push(registryActivityCode);
+  }
+  if (activityKey) {
+    conditions.push("activity.activity_key = ?");
+    bindings.push(activityKey);
   }
   const limit = Math.max(1, Math.min(500, Math.floor(filters.limit || 200)));
-  const rows = await database.prepare(`${ACTIVITY_SELECT}
-    WHERE ${conditions.join(" AND ")}
-    ORDER BY activity.id ASC
-    LIMIT ?`)
-    .bind(...bindings, limit)
-    .all<Record<string, unknown>>();
   const selectable = [];
-  for (const row of rows.results) {
-    const activity = activityProjection(row);
-    try {
-      await requireCurrentApprovedOfficialSourceBinding(
-        database,
-        activity.organisationId,
-        "program",
-        activity.programId,
-        String(row.program_official_source_sha256 || ""),
-      );
-      await requireCurrentApprovedOfficialSourceBinding(
-        database,
-        activity.organisationId,
-        "activity",
-        activity.id,
-        activity.officialSourceSha256,
-      );
-      const evidencePolicy = await database.prepare(`SELECT
-          evidence_policy.id,
-          evidence_policy.official_source_sha256
-        FROM compliance_evidence_policy_versions evidence_policy
-        WHERE evidence_policy.organisation_id = ?
-          AND evidence_policy.activity_version_id = ?
-          AND evidence_policy.publish_state = 'published'
-          AND evidence_policy.requirements_complete = 1
-        ORDER BY evidence_policy.version DESC, evidence_policy.id DESC
-        LIMIT 1`)
-        .bind(activity.organisationId, activity.id)
-        .first<Record<string, unknown>>();
-      if (!evidencePolicy) continue;
-      await requireCurrentApprovedOfficialSourceBinding(
-        database,
-        activity.organisationId,
-        "evidence_policy",
-        String(evidencePolicy.id),
-        String(evidencePolicy.official_source_sha256),
-      );
-      selectable.push(activity);
-    } catch (error) {
-      if (error instanceof CreditexSourceLookupReviewError) continue;
-      throw error;
+  let scanAfterActivityId = afterActivityId;
+  const scanLimit = Math.min(500, Math.max(50, limit * 2));
+  while (selectable.length < limit) {
+    const scanConditions = [...conditions];
+    const scanBindings = [...bindings];
+    if (scanAfterActivityId) {
+      scanConditions.push("activity.id > ?");
+      scanBindings.push(scanAfterActivityId);
     }
+    const rows = await database.prepare(`${ACTIVITY_SELECT}
+      WHERE ${scanConditions.join(" AND ")}
+      ORDER BY activity.id ASC
+      LIMIT ?`)
+      .bind(...scanBindings, scanLimit)
+      .all<Record<string, unknown>>();
+    if (!rows.results.length) break;
+    for (const row of rows.results) {
+      const activity = activityProjection(row);
+      scanAfterActivityId = activity.id;
+      try {
+        await requireCurrentApprovedOfficialSourceBinding(
+          database,
+          activity.organisationId,
+          "program",
+          activity.programId,
+          String(row.program_official_source_sha256 || ""),
+        );
+        await requireCurrentApprovedOfficialSourceBinding(
+          database,
+          activity.organisationId,
+          "activity",
+          activity.id,
+          activity.officialSourceSha256,
+        );
+        const evidencePolicy = await database.prepare(`SELECT
+            evidence_policy.id,
+            evidence_policy.official_source_sha256
+          FROM compliance_evidence_policy_versions evidence_policy
+          WHERE evidence_policy.organisation_id = ?
+            AND evidence_policy.activity_version_id = ?
+            AND evidence_policy.publish_state = 'published'
+            AND evidence_policy.requirements_complete = 1
+          ORDER BY evidence_policy.version DESC, evidence_policy.id DESC
+          LIMIT 1`)
+          .bind(activity.organisationId, activity.id)
+          .first<Record<string, unknown>>();
+        if (!evidencePolicy) continue;
+        await requireCurrentApprovedOfficialSourceBinding(
+          database,
+          activity.organisationId,
+          "evidence_policy",
+          String(evidencePolicy.id),
+          String(evidencePolicy.official_source_sha256),
+        );
+        selectable.push(activity);
+        if (selectable.length >= limit) break;
+      } catch (error) {
+        if (error instanceof CreditexSourceLookupReviewError) continue;
+        throw error;
+      }
+    }
+    if (rows.results.length < scanLimit) break;
   }
   return selectable;
 }
@@ -3590,6 +3618,7 @@ export type CreateLiveComplianceCaseInput = {
   serviceCategory: string;
   jurisdiction: string;
   workOrderId: string;
+  complianceIntentId?: string;
   commercialHandoffId?: string;
   acceptedQuoteVersionId?: string;
   acceptedScopeSha256?: string;
@@ -3752,7 +3781,7 @@ export async function appendLiveComplianceCaseStatements(
     throw new ComplianceDomainError(
       "EVIDENCE_POLICY_REQUIRED",
       409,
-      "The selected activity is not available until Creditex publishes its complete evidence policy.",
+      "The selected activity is not available until the assigned compliance team publishes its complete evidence policy.",
     );
   }
   const evidencePolicySha256 = checkedSourceSha256(
@@ -3843,6 +3872,7 @@ export async function appendLiveComplianceCaseStatements(
     "INSTALLER_REQUIRED",
     "Installer",
   );
+  const complianceIntentId = cleanText(input.complianceIntentId, 180);
   const actorUid = requiredText(
     input.actorUid,
     180,
@@ -3951,6 +3981,7 @@ export async function appendLiveComplianceCaseStatements(
   const caseStatementIndex = batch.push(
     database.prepare(`INSERT INTO compliance_cases
       (id, case_number, organisation_id, program_id, work_order_id,
+       compliance_intent_id,
        commercial_handoff_id, accepted_quote_version_id,
        accepted_scope_sha256,
        installer_uid, activity_version_id, evidence_policy_version_id,
@@ -3958,7 +3989,7 @@ export async function appendLiveComplianceCaseStatements(
        activity_snapshot, status,
        evidence_status, revision, created_by_type, created_by_uid,
        created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
         'not_started', 1, ?, ?, ?, ?)`)
       .bind(
         caseId,
@@ -3966,6 +3997,7 @@ export async function appendLiveComplianceCaseStatements(
         activity.organisationId,
         activity.programId,
         workOrderId,
+        complianceIntentId,
         commercialHandoffId,
         acceptedQuoteVersionId,
         acceptedScopeSha256,

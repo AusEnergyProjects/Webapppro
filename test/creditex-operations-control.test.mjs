@@ -45,6 +45,12 @@ const tradeComplianceMigration = [
   "../drizzle/0115_trade_creditex_job_intent.sql",
   "../drizzle/0116_trade_crm_write_guard.sql",
 ].map(read).join("\n");
+const multiActivitySchemaColumnsMigration = `
+  ALTER TABLE trade_work_order_compliance_intents
+    ADD COLUMN intent_key text DEFAULT 'primary' NOT NULL;
+  ALTER TABLE compliance_cases
+    ADD COLUMN compliance_intent_id text DEFAULT '' NOT NULL;
+`;
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const syncRoute = read("../src/app/api/trade-team/sync/route.ts");
 
@@ -264,6 +270,7 @@ function databaseWithComplianceOperations({ installGuards = true } = {}) {
   applyStatements(database, operationsMigration);
   applyStatements(database, custodyMigration);
   applyStatements(database, tradeComplianceMigration);
+  database.exec(multiActivitySchemaColumnsMigration);
   if (installGuards) {
     for (const definition of CREDITEX_SCHEMA_GUARD_DEFINITIONS) {
       database.exec(definition.sql);
