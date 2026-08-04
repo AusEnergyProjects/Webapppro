@@ -13,6 +13,7 @@ const supplierCatalogue = read(
 );
 const purchasing = read("../src/components/TradePurchasingWorkspace.tsx");
 const businessHub = read("../src/components/TradeBusinessHub.tsx");
+const installerCrm = read("../src/components/InstallerCrmWorkspace.tsx");
 const verification = read(
   "../src/components/DirectTradeVerificationCentre.tsx",
 );
@@ -54,7 +55,7 @@ test("unified Business settings remain durable and owner protected", () => {
 });
 
 test("Business settings expose bounded branding, service, template and closure controls", () => {
-  assert.match(businessSettings, /Business settings sections/);
+  assert.match(businessSettings, /Jump to business settings section/);
   for (const section of [
     "Account",
     "Appearance",
@@ -163,6 +164,10 @@ test("installer leads can be narrowed without exposing household details", () =>
 
 test("installer and wholesaler dashboards share the clean operations shell", () => {
   assert.match(dashboard, /trade-portal-shell/);
+  assert.match(
+    dashboard,
+    /data-trade-theme=\{profile\.brandThemeKey \|\| DEFAULT_TRADE_BRAND_THEME\}/,
+  );
   assert.match(dashboard, /TLinkBrand/);
   assert.match(dashboard, /Wholesaler control centre/);
   assert.match(dashboard, /Installer control centre/);
@@ -175,6 +180,25 @@ test("installer and wholesaler dashboards share the clean operations shell", () 
   for (const shortcut of ["Jobs", "Customers", "Price book"]) assert.match(dashboard, new RegExp(`'${shortcut}'`));
   assert.match(dashboard, /kind: "crm-view"/);
   assert.match(styles, /dashboard-workspace-shortcuts/);
+});
+
+test("schedule remains inside the permanent installer CRM navigation", () => {
+  assert.match(
+    dashboard,
+    /kind: "crm-view", id: "schedule"[\s\S]*setWorkspace\("work"\)/,
+  );
+  assert.doesNotMatch(dashboard, /workspace === "schedule"/);
+  assert.doesNotMatch(dashboard, /<TradeScheduleWorkspace/);
+  assert.match(installerCrm, /navigationTarget\.id === "schedule"/);
+  assert.match(
+    installerCrm,
+    /<nav className="crm-nav"[\s\S]*view === "schedule"[\s\S]*<TradeScheduleWorkspace/,
+  );
+});
+
+test("focused jobs use the available CRM workspace width", () => {
+  assert.match(installerCrm, /className="crm-view crm-job-workspace"/);
+  assert.doesNotMatch(installerCrm, /className="crm-view crm-job-focus"/);
 });
 
 test("TLink has a consistent trade platform identity and installable app icon", () => {

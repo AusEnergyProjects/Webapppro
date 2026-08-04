@@ -17,7 +17,7 @@ type Row = Record<string, unknown>;
 function publicError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "INVALID_QUOTE_SELECTION") return adminJson({ ok: false, error: "Choose one package and one answer from each required choice." }, 400);
-  return tradeQuoteTokenErrorResponse(error);
+  return tradeQuoteTokenErrorResponse(error, "review");
 }
 
 export async function GET(_request: Request, context: Context) {
@@ -33,7 +33,9 @@ export async function GET(_request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const row = await authoriseTradeQuoteLink((await context.params).token); const body = await request.json() as Row; const action = cleanAdminText(body.action, 20); const now = new Date().toISOString(); const db = getD1();
+    const row = await authoriseTradeQuoteLink((await context.params).token, {
+      requireCurrentTradeAccess: true,
+    }); const body = await request.json() as Row; const action = cleanAdminText(body.action, 20); const now = new Date().toISOString(); const db = getD1();
     if (action === "ask_question") {
       const question = cleanAdminText(body.question, 1000); if (question.length < 5) return adminJson({ ok: false, error: "Enter a clear question for the trade business." }, 400);
       const questionId = crypto.randomUUID();

@@ -1,5 +1,6 @@
 import {
   PDFDocument,
+  StandardFonts,
   rgb,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
@@ -54,23 +55,76 @@ const THEMES = {
     soft: rgb(0.95, 0.96, 0.96),
     line: rgb(0.82, 0.84, 0.85),
   },
+  rose_plum: {
+    ink: rgb(0.18, 0.08, 0.22),
+    primary: rgb(0.35, 0.16, 0.44),
+    accent: rgb(0.72, 0.28, 0.40),
+    soft: rgb(0.98, 0.94, 0.97),
+    line: rgb(0.88, 0.79, 0.86),
+  },
+  forest_jade: {
+    ink: rgb(0.05, 0.18, 0.13),
+    primary: rgb(0.07, 0.29, 0.21),
+    accent: rgb(0.09, 0.56, 0.41),
+    soft: rgb(0.93, 0.97, 0.95),
+    line: rgb(0.77, 0.88, 0.82),
+  },
+  bronze_olive: {
+    ink: rgb(0.18, 0.14, 0.05),
+    primary: rgb(0.42, 0.25, 0.03),
+    accent: rgb(0.42, 0.52, 0.10),
+    soft: rgb(0.98, 0.97, 0.91),
+    line: rgb(0.88, 0.84, 0.68),
+  },
+  midnight_rose: {
+    ink: rgb(0.07, 0.09, 0.24),
+    primary: rgb(0.12, 0.15, 0.38),
+    accent: rgb(0.62, 0.25, 0.38),
+    soft: rgb(0.96, 0.94, 0.97),
+    line: rgb(0.81, 0.79, 0.88),
+  },
+  teal_indigo: {
+    ink: rgb(0.03, 0.17, 0.18),
+    primary: rgb(0.03, 0.36, 0.35),
+    accent: rgb(0.20, 0.28, 0.60),
+    soft: rgb(0.92, 0.97, 0.97),
+    line: rgb(0.75, 0.87, 0.87),
+  },
+  graphite_copper: {
+    ink: rgb(0.13, 0.13, 0.15),
+    primary: rgb(0.20, 0.20, 0.22),
+    accent: rgb(0.58, 0.26, 0.15),
+    soft: rgb(0.96, 0.95, 0.94),
+    line: rgb(0.84, 0.81, 0.78),
+  },
+  indigo_orchid: {
+    ink: rgb(0.13, 0.12, 0.31),
+    primary: rgb(0.19, 0.19, 0.48),
+    accent: rgb(0.51, 0.25, 0.57),
+    soft: rgb(0.96, 0.94, 0.98),
+    line: rgb(0.83, 0.79, 0.89),
+  },
+  burgundy_slate: {
+    ink: rgb(0.24, 0.07, 0.12),
+    primary: rgb(0.42, 0.13, 0.22),
+    accent: rgb(0.20, 0.29, 0.37),
+    soft: rgb(0.97, 0.94, 0.95),
+    line: rgb(0.87, 0.78, 0.81),
+  },
 };
 
-function bytes(value, label) {
+function optionalBytes(value) {
   const result =
     value instanceof Uint8Array
       ? value
       : value instanceof ArrayBuffer
         ? new Uint8Array(value)
         : null;
-  if (
-    !result ||
-    result.byteLength < 10_000 ||
-    result.byteLength > MAX_FONT_BYTES
-  ) {
-    throw new TypeError(`A valid embedded ${label} font is required.`);
-  }
-  return result;
+  return result &&
+    result.byteLength >= 10_000 &&
+    result.byteLength <= MAX_FONT_BYTES
+    ? result
+    : null;
 }
 
 function characterSet(fontBytes, label) {
@@ -186,7 +240,7 @@ async function embeddedImage(pdf, asset) {
 
 export async function createTradeQuotePdfBytes(
   suppliedSnapshot,
-  suppliedFonts,
+  suppliedFonts = {},
   suppliedAssets = {},
 ) {
   const snapshot =
@@ -203,17 +257,29 @@ export async function createTradeQuotePdfBytes(
   ) {
     throw new TypeError("A valid quote document snapshot is required.");
   }
-  const regularBytes = bytes(suppliedFonts?.regular, "regular");
-  const boldBytes = bytes(suppliedFonts?.bold, "bold");
-  const regularCharacters = characterSet(regularBytes, "regular");
-  const boldCharacters = characterSet(boldBytes, "bold");
+  const regularBytes = optionalBytes(suppliedFonts?.regular);
+  const boldBytes = optionalBytes(suppliedFonts?.bold);
+  const useEmbeddedFonts = Boolean(regularBytes && boldBytes);
+  const standardCharacters = new Set(
+    Array.from({ length: 95 }, (_value, index) => index + 32),
+  );
+  const regularCharacters = useEmbeddedFonts
+    ? characterSet(regularBytes, "regular")
+    : standardCharacters;
+  const boldCharacters = useEmbeddedFonts
+    ? characterSet(boldBytes, "bold")
+    : standardCharacters;
   const supported = new Set(
     [...regularCharacters].filter((code) => boldCharacters.has(code)),
   );
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const regular = await pdf.embedFont(regularBytes, { subset: false });
-  const bold = await pdf.embedFont(boldBytes, { subset: false });
+  if (useEmbeddedFonts) pdf.registerFontkit(fontkit);
+  const regular = useEmbeddedFonts
+    ? await pdf.embedFont(regularBytes, { subset: false })
+    : await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = useEmbeddedFonts
+    ? await pdf.embedFont(boldBytes, { subset: false })
+    : await pdf.embedFont(StandardFonts.HelveticaBold);
   const logo = await embeddedImage(pdf, suppliedAssets.logo);
   const banner = await embeddedImage(pdf, suppliedAssets.banner);
   const palette =

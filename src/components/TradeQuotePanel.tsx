@@ -12,11 +12,12 @@ type JobPacket = { id: string; packetCode: string; name: string; revision: numbe
 type QuoteChoice = { id?: string; clientKey: string; kind: "package" | "addon" | "choose_one"; groupKey: string; name: string; summary: string; recommended: boolean; subtotalCents?: number; taxCents?: number; totalCents?: number; lines: QuoteLine[] };
 type SavedChoice = Omit<QuoteChoice, "lines"> & { id: string; items: SavedLine[]; subtotalCents: number; taxCents: number; totalCents: number };
 type QuoteVersion = { id: string; versionNumber: number; status: string; customerEmail: string; subtotalCents: number; taxCents: number; totalCents: number; terms: string; customerMessage: string; validUntil: string; consentStatement: string; issuedAt: string; items: SavedLine[]; choices: SavedChoice[]; internalSummary?: { costCentsExGst: number; sellCentsExGst: number; marginCentsExGst: number }; acceptance: null | { decision: string; actorEmail: string; actorType: string; signerName: string; decidedAt: string; consentStatement: string; selectionSummary: string; selectedTotalCents: number } };
+type QuoteDelivery = { id: string; channel: string; provider: string; status: string; recipientPreview: string; attempts: number; providerStatus: string; sentAt: string; deliveredAt: string; createdAt: string; lastError: string };
 type Quote = { id: string; quoteNumber: string; currentVersionNumber: number; status: string; versions: QuoteVersion[];
   link: null | { id: string; status: string; expiresAt: string; tokenIssue: number; shareUrl: string; pdfUrl: string; recipientPreview: string };
   timeline: Array<{ type: string; actorType: string; summary: string; occurredAt: string }>;
   questions: Array<{ id: string; question: string; answer: string; status: string; askedAt: string; answeredAt: string }>;
-  deliveries: Array<{ id: string; channel: string; provider: string; status: string; recipientPreview: string; attempts: number; sentAt: string; deliveredAt: string; lastError: string }> };
+  deliveries: QuoteDelivery[] };
 type QuoteJob = { customerId: string; customerNumber: string; customerName: string; workNumber: string; title: string; siteLabel: string; siteSummary: string };
 type QuoteBusiness = { businessName: string; quoteEmailSubjectTemplate: string; quoteEmailIntro: string; quoteDefaultTerms: string; brandThemeKey: string; brandBorderStyle: string; hasLogo: boolean; hasBanner: boolean };
 type QuoteResult = { ok?: boolean; authorisedEmails?: string[]; priceBookItems?: PriceBookItem[]; jobPackets?: JobPacket[]; quote?: Quote | null; job?: QuoteJob; business?: QuoteBusiness; error?: string };
@@ -85,6 +86,55 @@ function quotePdfFilename(quoteNumber: string, versionNumber: number) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "quote";
   return `${number}-v${Math.max(1, Number(versionNumber) || 1)}.pdf`;
+}
+
+function deliveryStatusCopy(delivery: QuoteDelivery) {
+  if (delivery.status === "delivered") {
+    return {
+      label: "Delivery confirmed",
+      detail: "An authenticated email provider event confirmed delivery.",
+    };
+  }
+  if (delivery.status === "sent") {
+    return {
+      label: "Provider reports sent",
+      detail: "The email provider reports sending the message. Inbox placement is not confirmed.",
+    };
+  }
+  if (delivery.status === "provider_accepted") {
+    return {
+      label: "Accepted by email provider",
+      detail: "The provider accepted the email and PDF for delivery. Inbox delivery is not yet confirmed.",
+    };
+  }
+  if (delivery.status === "sending" || delivery.status === "queued") {
+    return {
+      label: "Submitting to email provider",
+      detail: "TLink is preparing this exact quote for the email provider.",
+    };
+  }
+  if (delivery.status === "bounced") {
+    return {
+      label: "Email bounced",
+      detail: "The authenticated email provider reported that the recipient did not accept the message.",
+    };
+  }
+  if (delivery.status === "opted_out") {
+    return {
+      label: "Email delivery stopped",
+      detail: "The recipient or email provider stopped further quote delivery to this address.",
+    };
+  }
+  if (delivery.status === "failed") {
+    return {
+      label: "Email submission failed",
+      detail: "The provider did not accept this attempt. Review the address and retry when ready.",
+    };
+  }
+  return {
+    label: delivery.status.replaceAll("_", " "),
+    detail: "The latest delivery state is shown exactly as recorded.",
+  };
 }
 
 function nextQuoteIdentity(quote: Quote | null, job: QuoteJob | null) {
@@ -331,12 +381,12 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
       quoteIssued = true; applyResult({ ...issued, authorisedEmails: emails, priceBookItems, jobPackets });
       const sent = await request({ method: "POST", body: JSON.stringify({ action: "send_quote", workOrderId, channel: "email", consentConfirmed: true }) });
       applyResult({ ...sent, authorisedEmails: emails, priceBookItems, jobPackets }); setSendPreview(null); setSendConsent(false);
-      setMessage("Quote saved, issued and emailed to the customer."); await onChanged?.();
+      setMessage("Quote saved and issued. The email provider accepted it for delivery; inbox delivery is not yet confirmed."); await onChanged?.();
     } catch (error) {
       const reason = error instanceof Error ? error.message : "The quote could not be sent.";
       if (quoteIssued) {
-        setSendPreview(null); setSendConsent(false); setMessage(`Quote issued, but the email was not sent. ${reason} Use Email quote below to retry.`); await onChanged?.();
-      } else if (draftSaved) setMessage(`Draft saved, but the quote was not issued or emailed. ${reason}`);
+        setSendPreview(null); setSendConsent(false); setMessage(`Quote issued, but the email was not accepted for delivery. ${reason} Use Email quote below to retry.`); await onChanged?.();
+      } else if (draftSaved) setMessage(`Draft saved, but the quote was not issued or submitted for delivery. ${reason}`);
       else setMessage(reason);
     } finally { setBusy(""); }
   }
@@ -356,7 +406,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
   async function linkAction(action: "replace_link" | "revoke_link" | "send_quote" | "answer_question", extra: Record<string, unknown> = {}) {
     setBusy(action); setMessage("");
     try { const result = await request({ method: "POST", body: JSON.stringify({ action, workOrderId, consentConfirmed: deliveryConfirmed, ...extra }) }); applyResult({ ...result, authorisedEmails: emails, priceBookItems, jobPackets });
-      setMessage(action === "send_quote" ? "Quote email sent once through the consent-aware delivery channel." : action === "replace_link" ? "A new secure link replaced the old one." : action === "revoke_link" ? "The secure link is revoked." : "Response added to the quote timeline.");
+      setMessage(action === "send_quote" ? "The email provider accepted this quote for delivery. Inbox delivery is not yet confirmed." : action === "replace_link" ? "A new secure link replaced the old one." : action === "revoke_link" ? "The secure link is revoked." : "Response added to the quote timeline.");
       if (action === "answer_question") { setAnswer(""); setAnsweringId(""); } await onChanged?.();
     } catch (error) { setMessage(error instanceof Error ? error.message : "The quote link could not be updated."); } finally { setBusy(""); }
   }
@@ -379,6 +429,8 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
 
   if (!available) return <section className="trade-quote-panel unavailable"><strong>Direct quote unavailable</strong><p>Link an authoritative direct customer and service site before creating a customer-acceptance quote. Protected marketplace jobs remain in the platform quote workflow.</p></section>;
   const current = quote?.versions.find((version) => version.versionNumber === quote.currentVersionNumber); const draftMode = !current || current.status === "draft";
+  const latestDelivery = quote?.deliveries?.[0] || null;
+  const latestDeliveryStatus = latestDelivery ? deliveryStatusCopy(latestDelivery) : null;
   const openQuestions = quote?.questions?.filter((item) => item.status === "open") || [];
   return <section className="trade-quote-panel">
     <header><div><span>Clear customer quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Keep a simple quote fast, or build clear choices without retyping standard work. Issued versions are immutable.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
@@ -398,7 +450,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
     </div>
     {current && <><div className="trade-quote-totals"><div><span>Always included</span><strong>{money(current.subtotalCents)}</strong></div><div><span>GST on included</span><strong>{money(current.taxCents)}</strong></div><div><span>Included total</span><strong>{money(current.totalCents)}</strong></div></div>{current.internalSummary && <aside className="trade-quote-internal" aria-label="Internal commercial summary"><div><span>Internal only</span><strong>All saved scope</strong></div><dl><div><dt>Cost ex GST</dt><dd>{money(current.internalSummary.costCentsExGst)}</dd></div><div><dt>Sell ex GST</dt><dd>{money(current.internalSummary.sellCentsExGst)}</dd></div><div><dt>Margin ex GST</dt><dd>{money(current.internalSummary.marginCentsExGst)}</dd></div></dl><small>Customers never receive supplier cost, markup or margin.</small></aside>}</>}
     <div className="trade-quote-actions"><button type="button" disabled={Boolean(busy)} onClick={() => void saveDraft()}>{busy === "save_draft" ? "Saving..." : draftMode ? "Save draft" : "Save as next draft"}</button><button ref={previewTriggerRef} className="primary" type="button" disabled={Boolean(busy)} onClick={openSendPreview}>{draftMode ? "Preview and send" : "Preview and send next version"}</button></div>
-    {quote?.link && <section className="trade-quote-share"><header><div><span>Effortless customer review</span><h5>One secure quote link and matching PDF</h5><p>The customer can review, ask, sign, accept or decline without creating an account. The emailed PDF is generated from this exact issued version.</p></div><strong>{quote.link.status}</strong></header>{quote.link.shareUrl ? <><div className="trade-quote-share-link"><input aria-label="Secure quote link" readOnly value={quote.link.shareUrl} /><button type="button" onClick={() => void copyLink()}>Copy link</button><a href={quote.link.shareUrl} target="_blank" rel="noreferrer">Preview</a></div><small>Expires {new Date(quote.link.expiresAt).toLocaleDateString("en-AU")} | Current issue {quote.link.tokenIssue}</small><label className="trade-quote-delivery-confirm"><input type="checkbox" checked={deliveryConfirmed} onChange={(event) => setDeliveryConfirmed(event.target.checked)} /><span>I confirm {quote.link.recipientPreview || "this customer"} asked to receive this current quote by email.</span></label><div className="trade-quote-share-actions"><button type="button" disabled={Boolean(busy) || !deliveryConfirmed} onClick={() => void linkAction("send_quote")}>{busy === "send_quote" ? "Sending..." : "Email quote"}</button>{quote.link.pdfUrl && <a href={quote.link.pdfUrl} target="_blank" rel="noreferrer">Download issued PDF</a>}<button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("replace_link")}>Replace link</button><button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("revoke_link")}>Revoke link</button></div><small>SMS stays unavailable until the approved Australian sender gate is active.</small></> : <div className="trade-quote-share-actions"><button type="button" disabled={Boolean(busy) || quote.link.status === "accepted" || quote.link.status === "declined"} onClick={() => void linkAction("replace_link")}>Create replacement link</button></div>}</section>}
+    {quote?.link && <section className="trade-quote-share"><header><div><span>Effortless customer review</span><h5>One secure quote link and matching PDF</h5><p>The customer can review, ask, sign, accept or decline without creating an account. The PDF is generated from this exact issued version.</p></div><strong>{quote.link.status}</strong></header>{latestDelivery && latestDeliveryStatus && <aside className="trade-quote-internal" aria-label="Email delivery status"><div><span>Email delivery</span><strong>{latestDeliveryStatus.label}</strong></div><small>{latestDeliveryStatus.detail}{latestDelivery.recipientPreview ? ` Recipient ${latestDelivery.recipientPreview}.` : ""}{latestDelivery.createdAt ? ` Submitted ${new Date(latestDelivery.createdAt).toLocaleString("en-AU")}.` : ""}</small></aside>}{quote.link.shareUrl ? <><div className="trade-quote-share-link"><input aria-label="Secure quote link" readOnly value={quote.link.shareUrl} /><button type="button" onClick={() => void copyLink()}>Copy link</button><a href={quote.link.shareUrl} target="_blank" rel="noreferrer">Preview</a></div><small>Expires {new Date(quote.link.expiresAt).toLocaleDateString("en-AU")} | Current issue {quote.link.tokenIssue}</small><label className="trade-quote-delivery-confirm"><input type="checkbox" checked={deliveryConfirmed} onChange={(event) => setDeliveryConfirmed(event.target.checked)} /><span>I confirm {quote.link.recipientPreview || "this customer"} asked to receive this current quote by email.</span></label><div className="trade-quote-share-actions"><button type="button" disabled={Boolean(busy) || !deliveryConfirmed} onClick={() => void linkAction("send_quote")}>{busy === "send_quote" ? "Submitting..." : "Email quote"}</button>{quote.link.pdfUrl && <a href={quote.link.pdfUrl} target="_blank" rel="noreferrer">Download issued PDF</a>}<button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("replace_link")}>Replace link</button><button type="button" disabled={Boolean(busy)} onClick={() => void linkAction("revoke_link")}>Revoke link</button></div><small>SMS stays unavailable until the approved Australian sender gate is active.</small></> : <div className="trade-quote-share-actions"><button type="button" disabled={Boolean(busy) || quote.link.status === "accepted" || quote.link.status === "declined"} onClick={() => void linkAction("replace_link")}>Create replacement link</button></div>}</section>}
     {(quote?.timeline?.length || 0) > 0 && <details className="trade-quote-timeline"><summary>Quote activity ({quote?.timeline?.length || 0})</summary>{quote?.timeline?.map((event, index) => <article key={`${event.occurredAt}:${index}`}><strong>{event.type.replaceAll("_", " ")}</strong><span>{event.summary}</span><small>{new Date(event.occurredAt).toLocaleString("en-AU")}</small></article>)}</details>}
     {quote && quote.versions.length > 0 && <details className="trade-quote-history"><summary>Quote history ({quote.versions.length})</summary>{quote.versions.map((version) => <article key={version.id}><div><strong>Version {version.versionNumber} | {version.status.replaceAll("_", " ")}</strong><span>{version.choices.length ? `${version.choices.length} customer choices` : money(version.totalCents)}{version.issuedAt ? ` | Issued ${new Date(version.issuedAt).toLocaleDateString("en-AU")}` : " | Draft"}</span></div>{version.acceptance && <small>{version.acceptance.decision.replaceAll("_", " ")} by {version.acceptance.actorType === "secure_link_holder" ? version.acceptance.signerName : `verified account ${version.acceptance.actorEmail}`} on {new Date(version.acceptance.decidedAt).toLocaleString("en-AU")}{version.acceptance.selectionSummary ? ` | ${version.acceptance.selectionSummary} | ${money(version.acceptance.selectedTotalCents)}` : ""}</small>}</article>)}</details>}
     {message && <p className="trade-import-status" role="status">{message}</p>}
@@ -406,8 +458,8 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
       <section ref={previewDialogRef} className="crm-invoice-preview-dialog crm-quote-preview-dialog" role="dialog" aria-modal="true" aria-busy={Boolean(busy)} aria-labelledby="quote-send-preview-title" tabIndex={-1}>
         <header><div><span>{sendPreview.delivery.identityKnown ? "Exact customer delivery" : "Pre-save customer delivery preview"}</span><strong id="quote-send-preview-title">{sendPreview.delivery.subject}</strong><small>{sendPreview.delivery.identityKnown ? `To ${customerEmail} | Issues ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} | PDF attachment ${sendPreview.delivery.attachmentName}` : `To ${customerEmail} | Quote number, version and PDF filename will be confirmed by the server when this draft is saved.`}</small></div><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Close</button></header>
         <div className="trade-quote-send-preview" data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
-          <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The button in the delivered email opens the secure review where the customer can ask a question, choose options, sign, accept or decline.</p><button type="button" disabled>Review quote securely</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
-          <section className="trade-quote-pdf-attachment"><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Attached on send</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
+          <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The email includes a secure review button where the customer can ask a question, choose options, sign, accept or decline.</p><button type="button" disabled>Review quote securely</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
+          <section className="trade-quote-pdf-attachment"><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Submitted as attachment</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
             <section><span>Included work</span><div className="trade-quote-preview-lines">{sendPreview.base.lines.length ? sendPreview.base.lines.map((line, index) => <article key={`${line.description}:${index}`}><div><strong>{line.description}</strong><small>{line.sectionHeading} | {(line.quantityMilli / 1000).toLocaleString("en-AU")} x {money(line.unitPriceCents)}{line.taxCode === "gst" ? " plus GST" : " no GST"}</small></div><b>{money(line.totalCents)}</b></article>) : <p>No work is included before the customer chooses an option.</p>}</div></section>
             {sendPreview.choices.length > 0 && <section><span>Customer choices</span><div className="trade-quote-preview-choices">{sendPreview.choices.map((choice) => <article key={choice.clientKey}><div><strong>{choice.name}{choice.recommended ? " | Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Customer choice")}</small></div><b>{choice.kind === "addon" ? `Adds ${money(choice.totals.totalCents)}` : `${money(sendPreview.base.totalCents + choice.totals.totalCents)} total`}</b></article>)}</div></section>}
             <dl><div><dt>Subtotal</dt><dd>{money(sendPreview.displayTotals.subtotalCents)}</dd></div><div><dt>GST</dt><dd>{money(sendPreview.displayTotals.taxCents)}</dd></div><div className="total"><dt>{sendPreview.displayTotals.label}</dt><dd>{money(sendPreview.displayTotals.totalCents)}</dd></div></dl>
@@ -415,7 +467,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
           </article></section>
           <label className="trade-quote-delivery-confirm"><input type="checkbox" checked={sendConsent} disabled={Boolean(busy)} onChange={(event) => setSendConsent(event.target.checked)} /><span>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>
         </div>
-        <footer><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and sending..." : "Confirm and send quote"}</button></footer>
+        <footer><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : "Confirm and submit email"}</button></footer>
       </section>
     </div>}
   </section>;

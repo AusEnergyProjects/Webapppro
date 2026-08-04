@@ -10,6 +10,7 @@ const migration = read("../drizzle/0051_team_scheduling_capacity.sql");
 const route = read("../src/app/api/trade-schedule/route.ts");
 const ui = read("../src/components/TradeScheduleWorkspace.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const teamPortal = read("../src/components/TradeTeamPortal.tsx");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
 const adminRoute = read("../src/app/api/admin/accounts/route.ts");
@@ -134,7 +135,7 @@ test("appointments expose compact quote state without bypassing the existing quo
   assert.match(ui, /money\(selectedAppointment\.quotedValueCents \|\| 0\)/);
   assert.match(ui, /onOpenQuote && !selectedAppointment\.protectedJob/);
   assert.match(ui, />View, send or revise quote<\/button>/);
-  assert.match(dashboard, /onOpenQuote=\{\(workOrderId\) => \{[\s\S]*?jobTab: "quote"[\s\S]*?setWorkspace\("work"\)/);
+  assert.match(crm, /onOpenQuote=\{\(id\) => openFocusedJob\(id, "quote"\)\}/);
   assert.doesNotMatch(teamPortal, /onOpenQuote=/);
 });
 
@@ -181,7 +182,8 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(route, /normaliseScheduleRangeWeeks\(search\.get\("rangeWeeks"\), 1\)/);
   assert.match(route, /schedulePayload\(access\.ownerUid, rangeStart, rangeWeeks\)/);
   assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, syncAppointmentId\)/);
-  assert.match(dashboard, /workspace === "schedule"/); assert.match(dashboard, /<TradeScheduleWorkspace/);
+  assert.doesNotMatch(dashboard, /workspace === "schedule"/);
+  assert.match(dashboard, /kind: "crm-view", id: "schedule"/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);
   assert.match(teamPortal, /data\.access\.canDispatch && <TradeScheduleWorkspace/);
 });

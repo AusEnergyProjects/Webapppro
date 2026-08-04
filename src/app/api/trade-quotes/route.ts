@@ -28,6 +28,7 @@ export const runtime = "edge";
 
 type Row = Record<string, unknown>;
 type ResolvedGroup = Awaited<ReturnType<typeof resolveLineGroup>>;
+type StagedQuoteError = Error & { stage?: string };
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -50,7 +51,39 @@ function errorResponse(error: unknown) {
   if (["JOB_PACKET_UNAVAILABLE", "JOB_PACKET_DUPLICATE_LINE"].includes(code)) return adminJson({ ok: false, error: "That job packet changed or is no longer ready. Apply its current version again." }, 409);
   if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
   if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code)) return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
-  return adminJson({ ok: false, error: "The private quote request could not be completed." }, 500);
+  const requestId = crypto.randomUUID();
+  console.error("Trade quote private request failed", {
+    code: code === "QUOTE_PDF_UNAVAILABLE" ? code : "QUOTE_PRIVATE_REQUEST_FAILED",
+    requestId,
+    stage: String((error as StagedQuoteError | null)?.stage || "request"),
+  });
+  const response = code === "QUOTE_PDF_UNAVAILABLE"
+    ? adminJson({
+        ok: false,
+        error: "The quote PDF could not be prepared. No customer email was submitted. Try again.",
+        requestId,
+      }, 503)
+    : adminJson({
+        ok: false,
+        error: "The private quote request could not be completed.",
+        requestId,
+      }, 500);
+  response.headers.set("X-TLink-Request-Id", requestId);
+  return response;
+}
+
+async function renderQuotePdfOrThrow(
+  snapshot: Parameters<typeof renderTradeQuotePdf>[0],
+  origin: string,
+  stage: string,
+) {
+  try {
+    return await renderTradeQuotePdf(snapshot, { origin });
+  } catch {
+    const error = new Error("QUOTE_PDF_UNAVAILABLE") as StagedQuoteError;
+    error.stage = stage;
+    throw error;
+  }
 }
 
 async function directJob(ownerUid: string, workOrderId: string) {
@@ -317,6 +350,8 @@ export async function POST(request: Request) {
       if (new TextEncoder().encode(documentSnapshotJson).byteLength > 1_000_000) {
         return adminJson({ ok: false, error: "This quote is too large to issue as one customer document." }, 400);
       }
+      const origin = new URL(request.url).origin;
+      await renderQuotePdfOrThrow(documentSnapshot, origin, "issue_pdf_preflight");
       const linkId = crypto.randomUUID(); const secret = newQuoteLinkSecret(); const tokenIssue = 1;
       const validExpiry = version.valid_until ? new Date(`${version.valid_until}T23:59:59.999Z`) : new Date(Date.now() + 30 * 86400000);
       const expiresAt = new Date(Math.min(validExpiry.getTime(), Date.now() + 30 * 86400000)).toISOString();
@@ -339,7 +374,7 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?, ?, 'issued', 'office', 'Secure quote link issued.', ?, ?)`)
           .bind(crypto.randomUUID(), linkId, quote.id, version.id, workOrderId, access.ownerUid, `issued:${version.id}`, now),
       ]);
-      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, origin) });
     }
     if (["replace_link", "revoke_link", "send_quote", "answer_question"].includes(action)) {
       const quote = await db.prepare("SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?").bind(workOrderId, access.ownerUid).first<Row>();
@@ -391,7 +426,7 @@ export async function POST(request: Request) {
         const idempotencyKey = `quote:${version.id}:${link.token_issue}:email:initial`;
         const existing = await db.prepare("SELECT id, status, attempts, updated_at FROM trade_crm_quote_deliveries WHERE idempotency_key = ?")
           .bind(idempotencyKey).first<Row>();
-        if (existing && ["sent", "delivered"].includes(String(existing.status))) {
+        if (existing && ["provider_accepted", "sent", "delivered"].includes(String(existing.status))) {
           return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
         }
         if (existing && existing.status === "sending" && Date.parse(String(existing.updated_at || "")) > Date.now() - 10 * 60 * 1000) {
@@ -415,7 +450,7 @@ export async function POST(request: Request) {
         const origin = new URL(request.url).origin;
         const shareUrl = `${origin}${quoteReviewPath(String(link.id), secret)}`;
         const emailContent = buildTradeQuoteEmail({ snapshot, shareUrl, expiresAt: String(link.expires_at) });
-        const pdfBytes = await renderTradeQuotePdf(snapshot, { origin });
+        const pdfBytes = await renderQuotePdfOrThrow(snapshot, origin, "send_pdf");
         const [emailContentSha256, attachmentSha256] = await Promise.all([
           tradeQuoteEmailContentSha256(emailContent),
           tradeQuotePdfSha256(pdfBytes),
@@ -468,16 +503,14 @@ export async function POST(request: Request) {
             messageType: "trade_quote",
           });
           await db.batch([
-            db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'sent', provider_message_id = ?, provider_status = ?, sent_at = ?, updated_at = ? WHERE id = ?")
-              .bind(sent.providerMessageId, sent.providerStatus, now, now, deliveryId),
-            db.prepare("UPDATE trade_crm_job_details SET quote_status = 'sent', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?")
-              .bind(now, workOrderId, access.ownerUid),
+            db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'provider_accepted', provider_message_id = ?, provider_status = ?, sent_at = '', updated_at = ? WHERE id = ?")
+              .bind(sent.providerMessageId, sent.providerStatus, now, deliveryId),
             db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events
               (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid,
                event_type, actor_type, summary, evidence_key, occurred_at)
-              VALUES (?, ?, ?, ?, ?, ?, 'sent', 'office',
-                'Secure quote email and matching PDF sent.', ?, ?)`)
-              .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `sent:${idempotencyKey}`, now),
+              VALUES (?, ?, ?, ?, ?, ?, 'provider_accepted', 'provider',
+                'Email provider accepted the secure quote and matching PDF for delivery.', ?, ?)`)
+              .bind(crypto.randomUUID(), link.id, quote.id, version.id, workOrderId, access.ownerUid, `provider_accepted:${idempotencyKey}`, now),
           ]);
         } catch (error) {
           await db.prepare("UPDATE trade_crm_quote_deliveries SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?")

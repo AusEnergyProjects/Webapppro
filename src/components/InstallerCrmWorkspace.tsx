@@ -238,11 +238,12 @@ function customerIndexCell(customer: Customer, key: string, onOpen: () => void):
   return <em>{customer.latestPipelineStage ? pipelineLabels[customer.latestPipelineStage] || customer.latestPipelineStage : "No status"}</em>;
 }
 
-export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOpenSchedule, onOpenInvoices }: { user: User; teamAccess: boolean; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onOpenInvoices?: () => void }) {
+export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOpenSchedule, onViewChange, onOpenInvoices }: { user: User; teamAccess: boolean; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void }) {
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [hasTeamAccess, setHasTeamAccess] = useState(teamAccess);
   const [view, setView] = useState<View>("today");
+  const [scheduleWeekStart, setScheduleWeekStart] = useState("");
   const [priceBookView, setPriceBookView] = useState<"items" | "packets">("items");
   const [creating, setCreating] = useState<"" | "job" | "customer">("");
   const [newJobSeed, setNewJobSeed] = useState<ConvertedEnquiryJobSeed | null>(null);
@@ -645,6 +646,10 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOp
   }, [jobLayout, refreshNonce, user, view]);
 
   useEffect(() => {
+    onViewChange?.(view);
+  }, [onViewChange, view]);
+
+  useEffect(() => {
     if (!navigationTarget) return;
     const frame = window.requestAnimationFrame(() => {
       if (navigationTarget.kind === "job") {
@@ -671,8 +676,16 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOp
       } else if (navigationTarget.kind === "crm-view" && (
         navigationTarget.id === "jobs" || navigationTarget.id === "customers"
         || navigationTarget.id === "pricebook" || navigationTarget.id === "today"
+        || navigationTarget.id === "schedule"
         || navigationTarget.id === "integrations"
       )) {
+        if (navigationTarget.id === "schedule") {
+          setScheduleWeekStart(
+            /^\d{4}-\d{2}-\d{2}$/.test(navigationTarget.query)
+              ? navigationTarget.query
+              : "",
+          );
+        }
         setCreating("");
         setFocusedJobId("");
         setJobReturnTarget({ kind: "jobs" });
@@ -760,6 +773,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOp
   const customerRecordStyle: CSSProperties = { gridTemplateColumns: "30px minmax(0, 1fr)", minWidth: Number(customerGridStyle.minWidth || 0) + 40 };
   function openVisualSchedule(weekStart?: string) {
     if (onOpenSchedule) { onOpenSchedule(weekStart); return; }
+    setScheduleWeekStart(weekStart || "");
     setView("schedule");
   }
   function openJobsForStage(stage: string) {
@@ -951,7 +965,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOp
       <section className="crm-create-card"><div className="crm-create-guidance"><strong>One guided setup</strong><p>Create the job once, plan the relevant certificate activity, schedule the visit and carry the same TLink ID into field capture and compliance review.</p></div><TradeNewJobForm key={newJobSeed?.sourceEnquiryId || "blank-job"} user={user} templates={templates} teamMembers={teamMembers} busy={busy === "create-job"} initial={newJobSeed || undefined} onSubmit={createJob} /></section>
     </div>}
 
-    {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-focus">
+    {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `← Back to ${jobReturnTarget.customerName}` : "← Back to all jobs"}</button></div>
       {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={workOrderRequest} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
@@ -994,7 +1008,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, navigationTarget, onOp
       </div> : <div className="crm-pipeline-board">{[["enquiry", "New"], ["qualifying", "Checking"], ["quoting", "Quoting"], ["approved", "Approved"], ["scheduled", "Scheduled"], ["in_progress", "Underway"]].map(([stage, label]) => { const stageJobs = boardJobs[stage] || []; return <section key={stage}><header><button type="button" onClick={() => { setPipelineFocus(stage); setJobLayout("list"); }}>{label}</button><strong>{boardCounts[stage] || 0}</strong></header><div>{stageJobs.map((job) => <button type="button" key={job.id} onClick={() => openFocusedJob(job.id)}><span>{job.workNumber}</span><strong>{job.customerDisplayName || job.title}</strong><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}</small><em>{job.nextAction || workStageLabels[job.stage] || job.stage}</em></button>)}{!stageJobs.length && <p>No jobs</p>}</div></section>; })}</div>}
     </div>}
 
-    {view === "schedule" && <div className="crm-view crm-dispatch-view"><TradeScheduleWorkspace user={user} onOpenJob={(id) => openFocusedJob(id)} onOpenQuote={(id) => openFocusedJob(id, "quote")} /></div>}
+    {view === "schedule" && <div className="crm-view crm-dispatch-view"><TradeScheduleWorkspace user={user} initialWeekStart={scheduleWeekStart} onOpenJob={(id) => openFocusedJob(id)} onOpenQuote={(id) => openFocusedJob(id, "quote")} /></div>}
 
     {view === "customers" && creating === "customer" && <div className="crm-view crm-create-screen">
       <div className="crm-page-heading"><div><span>New direct customer</span><h3>Add a customer your business owns</h3><p>Contact details and the full service address remain private to your installer workspace.</p></div><button type="button" className="crm-back-button" onClick={() => setCreating("")}>← Back to all customers</button></div>

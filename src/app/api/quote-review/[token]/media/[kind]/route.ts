@@ -60,6 +60,6 @@ export async function GET(_request: Request, context: Context) {
       },
     });
   } catch (error) {
-    return tradeQuoteTokenErrorResponse(error);
+    return tradeQuoteTokenErrorResponse(error, "media");
   }
 }

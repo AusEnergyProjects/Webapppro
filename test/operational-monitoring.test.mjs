@@ -6,9 +6,38 @@ import test from "node:test";
 import { runApiHealthMonitor } from "../src/lib/api-health-monitor.mjs";
 import { createOperationalRecorder } from "../src/lib/operational-events.mjs";
 
+const leadRoute = fs.readFileSync(
+  new URL("../src/app/api/leads/route.js", import.meta.url),
+  "utf8",
+);
+const monitorSource = fs.readFileSync(
+  new URL("../src/lib/api-health-monitor.mjs", import.meta.url),
+  "utf8",
+);
+
 function jsonResponse(body, status = 200) {
   return Response.json(body, { status });
 }
+
+test("public leads and the protected probe share one downstream timeout", () => {
+  assert.match(leadRoute, /LEAD_PROCESSOR_TIMEOUT_MS/);
+  assert.doesNotMatch(
+    leadRoute,
+    /setTimeout\(\(\) => controller\.abort\(\), 10000\)/,
+  );
+});
+
+test("the lead health check outlives the protected endpoint timeout", () => {
+  assert.match(monitorSource, /const LEAD_CHECK_TIMEOUT_MS = 25_000/);
+  assert.match(
+    monitorSource,
+    /new URL\("\/api\/internal\/lead-webhook-probe", siteUrl\)[\s\S]*LEAD_CHECK_TIMEOUT_MS/,
+  );
+  assert.match(
+    monitorSource,
+    /fetchWithTimeout\(fetchImpl, url, options, timeoutMs = CHECK_TIMEOUT_MS\)/,
+  );
+});
 
 function createStateStore(initial = null) {
   let state = initial;

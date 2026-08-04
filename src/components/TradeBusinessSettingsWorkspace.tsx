@@ -17,6 +17,7 @@ import {
   DEFAULT_TRADE_BRAND_THEME,
   TRADE_BRAND_BORDER_STYLES,
   TRADE_BRAND_THEME_KEYS,
+  TRADE_BRAND_THEME_OPTIONS,
   type TradeBrandBorderStyle,
   type TradeBrandThemeKey,
 } from "@/lib/trade-business-branding";
@@ -92,46 +93,10 @@ const sectionOptions: Array<{
   { id: "closure", label: "Close account", detail: "Access and retained records" },
 ];
 
-const themeOptions: Record<
-  TradeBrandThemeKey,
-  { label: string; gradient: string; ink: string }
-> = {
-  emerald_navy: {
-    label: "Emerald navy",
-    gradient: "linear-gradient(135deg, #062d3d 0%, #0d8f78 100%)",
-    ink: "#ffffff",
-  },
-  ocean_mint: {
-    label: "Ocean mint",
-    gradient: "linear-gradient(135deg, #0b4a6b 0%, #2bc9a8 100%)",
-    ink: "#ffffff",
-  },
-  cobalt_aqua: {
-    label: "Cobalt aqua",
-    gradient: "linear-gradient(135deg, #16378b 0%, #19b8c9 100%)",
-    ink: "#ffffff",
-  },
-  violet_sunset: {
-    label: "Violet sunset",
-    gradient: "linear-gradient(135deg, #4b2a84 0%, #e3787b 100%)",
-    ink: "#ffffff",
-  },
-  amber_ink: {
-    label: "Amber ink",
-    gradient: "linear-gradient(135deg, #b36d08 0%, #162533 100%)",
-    ink: "#ffffff",
-  },
-  charcoal_silver: {
-    label: "Charcoal silver",
-    gradient: "linear-gradient(135deg, #111827 0%, #64748b 100%)",
-    ink: "#ffffff",
-  },
-};
-
 export function tradeBusinessThemeGradient(
   themeKey?: TradeBrandThemeKey,
 ) {
-  return themeOptions[themeKey || DEFAULT_TRADE_BRAND_THEME].gradient;
+  return TRADE_BRAND_THEME_OPTIONS[themeKey || DEFAULT_TRADE_BRAND_THEME].gradient;
 }
 
 const borderOptions: Record<
@@ -146,35 +111,6 @@ const borderOptions: Record<
 const settingsShellStyle: CSSProperties = {
   display: "grid",
   gap: 16,
-};
-
-const settingsNavStyle: CSSProperties = {
-  display: "grid",
-  gap: 8,
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-};
-
-const settingsNavButtonStyle: CSSProperties = {
-  alignItems: "flex-start",
-  background: "#f5faf8",
-  border: "1px solid #cfe0da",
-  borderRadius: 12,
-  color: "#173f34",
-  cursor: "pointer",
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  minHeight: 70,
-  padding: "12px 13px",
-  textAlign: "left",
-};
-
-const settingsNavActiveStyle: CSSProperties = {
-  ...settingsNavButtonStyle,
-  background: "#073746",
-  borderColor: "#0d8f78",
-  boxShadow: "0 8px 22px rgba(3, 35, 48, .16)",
-  color: "#ffffff",
 };
 
 const summaryGridStyle: CSSProperties = {
@@ -279,7 +215,6 @@ export function TradeBusinessSettingsWorkspace({
   onProfileChange,
   onAccountClosed,
 }: Props) {
-  const [section, setSection] = useState<SettingsSection>("account");
   const [availabilityStatus, setAvailabilityStatus] =
     useState<AvailabilityStatus>(profile.availabilityStatus);
   const [emailOpportunities, setEmailOpportunities] = useState(
@@ -309,6 +244,7 @@ export function TradeBusinessSettingsWorkspace({
   );
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
+  const [saveSection, setSaveSection] = useState("");
   const [mediaBusy, setMediaBusy] = useState<"" | "logo" | "banner">("");
   const [mediaStatus, setMediaStatus] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
@@ -415,7 +351,7 @@ export function TradeBusinessSettingsWorkspace({
     [bannerPreview],
   );
 
-  const selectedTheme = themeOptions[brandThemeKey];
+  const selectedTheme = TRADE_BRAND_THEME_OPTIONS[brandThemeKey];
   const selectedBorder = borderOptions[brandBorderStyle];
   const businessWebsiteHref = useMemo(
     () => safeBusinessWebsiteHref(profile.businessWebsite),
@@ -459,36 +395,42 @@ export function TradeBusinessSettingsWorkspace({
     );
   }
 
-  function validateSettings() {
-    if (!serviceAreas.length || serviceAreas.length > 6) {
-      return "Keep between one and six service areas.";
+  function validateSettings(targetSection: string) {
+    if (targetSection === "service") {
+      if (!serviceAreas.length || serviceAreas.length > 6) {
+        return "Keep between one and six service areas.";
+      }
+      if (
+        serviceAreas.some(
+          (area) =>
+            !/^\d{4}$/.test(area.postcode) ||
+            !Number.isInteger(area.radiusKm) ||
+            area.radiusKm < 10 ||
+            area.radiusKm > 1000,
+        )
+      ) {
+        return "Each service area needs a four digit postcode and a radius from 10 to 1,000 kilometres.";
+      }
+      if (new Set(serviceAreas.map((area) => area.postcode)).size !== serviceAreas.length) {
+        return "Use each service postcode once.";
+      }
     }
-    if (
-      serviceAreas.some(
-        (area) =>
-          !/^\d{4}$/.test(area.postcode) ||
-          !Number.isInteger(area.radiusKm) ||
-          area.radiusKm < 10 ||
-          area.radiusKm > 1000,
-      )
-    ) {
-      return "Each service area needs a four digit postcode and a radius from 10 to 1,000 kilometres.";
-    }
-    if (new Set(serviceAreas.map((area) => area.postcode)).size !== serviceAreas.length) {
-      return "Use each service postcode once.";
-    }
-    if (!quoteEmailSubjectTemplate.trim()) {
-      return "Enter a quote email subject.";
-    }
-    if (!quoteEmailIntro.trim()) {
-      return "Enter a quote email introduction.";
+    if (targetSection === "quotes") {
+      if (!quoteEmailSubjectTemplate.trim()) {
+        return "Enter a quote email subject.";
+      }
+      if (!quoteEmailIntro.trim()) {
+        return "Enter a quote email introduction.";
+      }
     }
     return "";
   }
 
-  async function saveSettings(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    const validationError = validateSettings();
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const targetSection = event.currentTarget.dataset.settingsSection || "";
+    setSaveSection(targetSection);
+    const validationError = validateSettings(targetSection);
     if (validationError) {
       setSaveStatus(validationError);
       return;
@@ -496,23 +438,37 @@ export function TradeBusinessSettingsWorkspace({
 
     setSaveBusy(true);
     setSaveStatus("Saving business settings...");
-    const primaryArea = serviceAreas[0];
-    const payload = {
-      availabilityStatus,
-      emailOpportunities,
-      emailWeeklySummary,
-      serviceBasePostcode: primaryArea.postcode,
-      serviceRadiusKm: primaryArea.radiusKm,
-      serviceAreas: serviceAreas.map((area) => ({
-        postcode: area.postcode,
-        radiusKm: area.radiusKm,
-      })),
-      brandThemeKey,
-      brandBorderStyle,
-      quoteEmailSubjectTemplate: quoteEmailSubjectTemplate.trim(),
-      quoteEmailIntro: quoteEmailIntro.trim(),
-      quoteDefaultTerms: quoteDefaultTerms.trim(),
-    };
+    const payload: Partial<TradeBusinessSettingsProfile> =
+      targetSection === "appearance"
+        ? { brandThemeKey, brandBorderStyle }
+        : targetSection === "service"
+          ? {
+              serviceBasePostcode: serviceAreas[0]?.postcode || "",
+              serviceRadiusKm: serviceAreas[0]?.radiusKm || 50,
+              serviceAreas: serviceAreas.map((area) => ({
+                postcode: area.postcode,
+                radiusKm: area.radiusKm,
+              })),
+            }
+          : targetSection === "quotes"
+            ? {
+                quoteEmailSubjectTemplate:
+                  quoteEmailSubjectTemplate.trim(),
+                quoteEmailIntro: quoteEmailIntro.trim(),
+                quoteDefaultTerms: quoteDefaultTerms.trim(),
+              }
+            : targetSection === "notifications"
+              ? {
+                  availabilityStatus,
+                  emailOpportunities,
+                  emailWeeklySummary,
+                }
+              : {};
+    if (!Object.keys(payload).length) {
+      setSaveBusy(false);
+      setSaveStatus("Choose a business settings section to save.");
+      return;
+    }
 
     try {
       const token = await user.getIdToken();
@@ -688,42 +644,39 @@ export function TradeBusinessSettingsWorkspace({
       </div>
 
       <div style={settingsShellStyle}>
-        <nav style={settingsNavStyle} aria-label="Business settings sections">
-          {sectionOptions.map((option) => {
-            const active = section === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                style={active ? settingsNavActiveStyle : settingsNavButtonStyle}
-                onClick={() => {
-                  setSection(option.id);
-                  setSaveStatus("");
-                }}
-              >
-                <strong style={{ fontSize: ".76rem" }}>{option.label}</strong>
-                <small
-                  style={{
-                    color: active ? "#b9e8db" : "#667b74",
-                    fontSize: ".64rem",
-                    lineHeight: 1.35,
-                  }}
-                >
-                  {option.detail}
-                </small>
-              </button>
-            );
-          })}
+        <nav
+          className="business-settings-jump-nav"
+          aria-label="Jump to business settings section"
+        >
+          {sectionOptions.map((option) => (
+            <a key={option.id} href={`#business-settings-${option.id}`}>
+              <strong>{option.label}</strong>
+              <small>{option.detail}</small>
+            </a>
+          ))}
         </nav>
 
-        {section === "account" && (
+        <section
+          id="business-settings-account"
+          className="business-settings-section"
+          aria-labelledby="business-settings-account-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Account</span>
+            <h3 id="business-settings-account-title">
+              Business identity and verification
+            </h3>
+            <p>
+              Review the identity that controls workspace access and customer
+              documents.
+            </p>
+          </header>
           <div style={{ display: "grid", gap: 14 }}>
             <div style={summaryGridStyle}>
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "#0a7a59",
+                    color: "var(--trade-accent)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -739,7 +692,7 @@ export function TradeBusinessSettingsWorkspace({
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "#0a7a59",
+                    color: "var(--trade-accent)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -757,7 +710,7 @@ export function TradeBusinessSettingsWorkspace({
               <article style={summaryCardStyle}>
                 <span
                   style={{
-                    color: "#0a7a59",
+                    color: "var(--trade-accent)",
                     fontSize: ".62rem",
                     fontWeight: 900,
                     textTransform: "uppercase",
@@ -783,7 +736,11 @@ export function TradeBusinessSettingsWorkspace({
                   href={businessWebsiteHref}
                   target="_blank"
                   rel="noreferrer"
-                  style={{ color: "#08794c", fontSize: ".7rem", fontWeight: 800 }}
+                  style={{
+                    color: "var(--trade-accent)",
+                    fontSize: ".7rem",
+                    fontWeight: 800,
+                  }}
                 >
                   Open business website
                 </a>
@@ -805,10 +762,28 @@ export function TradeBusinessSettingsWorkspace({
               </a>
             </div>
           </div>
-        )}
+        </section>
 
-        {section === "appearance" && (
-          <form onSubmit={saveSettings} style={{ display: "grid", gap: 18 }}>
+        <section
+          id="business-settings-appearance"
+          className="business-settings-section"
+          aria-labelledby="business-settings-appearance-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Appearance</span>
+            <h3 id="business-settings-appearance-title">
+              Logo, banner and colour theme
+            </h3>
+            <p>
+              Apply one accessible visual identity across the workspace and
+              customer documents.
+            </p>
+          </header>
+          <form
+            onSubmit={saveSettings}
+            data-settings-section="appearance"
+            style={{ display: "grid", gap: 18 }}
+          >
             <fieldset>
               <legend>Business images</legend>
               <div style={fieldGridStyle}>
@@ -858,7 +833,7 @@ export function TradeBusinessSettingsWorkspace({
               <legend>Workspace and document colour</legend>
               <div className="dashboard-choice-grid">
                 {TRADE_BRAND_THEME_KEYS.map((themeKey) => {
-                  const theme = themeOptions[themeKey];
+                  const theme = TRADE_BRAND_THEME_OPTIONS[themeKey];
                   return (
                     <label
                       key={themeKey}
@@ -920,11 +895,34 @@ export function TradeBusinessSettingsWorkspace({
             <button className="btn" disabled={saveBusy || Boolean(mediaBusy)}>
               {saveBusy ? "Saving..." : "Save appearance"}
             </button>
+            {saveStatus && saveSection === "appearance" && (
+              <p className="dashboard-settings-status" role="status">
+                {saveStatus}
+              </p>
+            )}
           </form>
-        )}
+        </section>
 
-        {section === "service" && (
-          <form onSubmit={saveSettings} style={{ display: "grid", gap: 16 }}>
+        <section
+          id="business-settings-service"
+          className="business-settings-section"
+          aria-labelledby="business-settings-service-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Service areas</span>
+            <h3 id="business-settings-service-title">
+              Postcodes and travel radius
+            </h3>
+            <p>
+              Keep customer matching inside the locations the business can
+              actually service.
+            </p>
+          </header>
+          <form
+            onSubmit={saveSettings}
+            data-settings-section="service"
+            style={{ display: "grid", gap: 16 }}
+          >
             <div>
               <strong style={{ color: "#173f34", fontSize: ".82rem" }}>
                 Serviceability
@@ -987,7 +985,7 @@ export function TradeBusinessSettingsWorkspace({
                           radiusKm: Number(event.target.value),
                         })
                       }
-                      style={{ ...controlStyle, accentColor: "#0b8f67" }}
+                      style={{ ...controlStyle, accentColor: "var(--trade-accent)" }}
                     />
                   </label>
                 </div>
@@ -1025,11 +1023,33 @@ export function TradeBusinessSettingsWorkspace({
                 {saveBusy ? "Saving..." : "Save service areas"}
               </button>
             </div>
+            {saveStatus && saveSection === "service" && (
+              <p className="dashboard-settings-status" role="status">
+                {saveStatus}
+              </p>
+            )}
           </form>
-        )}
+        </section>
 
-        {section === "quotes" && (
-          <form onSubmit={saveSettings} style={{ display: "grid", gap: 16 }}>
+        <section
+          id="business-settings-quotes"
+          className="business-settings-section"
+          aria-labelledby="business-settings-quotes-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Quote defaults</span>
+            <h3 id="business-settings-quotes-title">
+              Customer email and standard terms
+            </h3>
+            <p>
+              Set the reusable wording that starts each new customer quote.
+            </p>
+          </header>
+          <form
+            onSubmit={saveSettings}
+            data-settings-section="quotes"
+            style={{ display: "grid", gap: 16 }}
+          >
             <label style={fieldStyle}>
               <span>Default quote email subject</span>
               <input
@@ -1075,11 +1095,34 @@ export function TradeBusinessSettingsWorkspace({
             <button className="btn" disabled={saveBusy}>
               {saveBusy ? "Saving..." : "Save quote defaults"}
             </button>
+            {saveStatus && saveSection === "quotes" && (
+              <p className="dashboard-settings-status" role="status">
+                {saveStatus}
+              </p>
+            )}
           </form>
-        )}
+        </section>
 
-        {section === "notifications" && (
-          <form onSubmit={saveSettings} style={{ display: "grid", gap: 18 }}>
+        <section
+          id="business-settings-notifications"
+          className="business-settings-section"
+          aria-labelledby="business-settings-notifications-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Notifications</span>
+            <h3 id="business-settings-notifications-title">
+              Capacity and account emails
+            </h3>
+            <p>
+              Control work availability and the operational messages sent to
+              the account contact.
+            </p>
+          </header>
+          <form
+            onSubmit={saveSettings}
+            data-settings-section="notifications"
+            style={{ display: "grid", gap: 18 }}
+          >
             {profile.partnerType === "installer" && (
               <fieldset>
                 <legend>Current availability</legend>
@@ -1157,10 +1200,29 @@ export function TradeBusinessSettingsWorkspace({
             <button className="btn" disabled={saveBusy}>
               {saveBusy ? "Saving..." : "Save notifications"}
             </button>
+            {saveStatus && saveSection === "notifications" && (
+              <p className="dashboard-settings-status" role="status">
+                {saveStatus}
+              </p>
+            )}
           </form>
-        )}
+        </section>
 
-        {section === "templates" && (
+        <section
+          id="business-settings-templates"
+          className="business-settings-section"
+          aria-labelledby="business-settings-templates-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Templates</span>
+            <h3 id="business-settings-templates-title">
+              Quote and invoice preview
+            </h3>
+            <p>
+              Confirm how the saved business identity will appear to
+              customers.
+            </p>
+          </header>
           <div style={{ display: "grid", gap: 14 }}>
             <div
               style={{
@@ -1372,15 +1434,33 @@ export function TradeBusinessSettingsWorkspace({
             <button
               type="button"
               className="btn"
-              onClick={() => setSection("appearance")}
+              onClick={() =>
+                document
+                  .getElementById("business-settings-appearance")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
               style={{ justifySelf: "start" }}
             >
               Edit document appearance
             </button>
           </div>
-        )}
+        </section>
 
-        {section === "closure" && (
+        <section
+          id="business-settings-closure"
+          className="business-settings-section business-settings-section-danger"
+          aria-labelledby="business-settings-closure-title"
+        >
+          <header className="business-settings-section-heading">
+            <span>Close account</span>
+            <h3 id="business-settings-closure-title">
+              Remove workspace access
+            </h3>
+            <p>
+              Close the account only when this business should no longer use
+              TLink.
+            </p>
+          </header>
           <div style={{ display: "grid", gap: 14 }}>
             <div
               style={{
@@ -1425,13 +1505,8 @@ export function TradeBusinessSettingsWorkspace({
               Close account and remove access
             </button>
           </div>
-        )}
+        </section>
 
-        {saveStatus && section !== "closure" && (
-          <p className="dashboard-settings-status" role="status">
-            {saveStatus}
-          </p>
-        )}
       </div>
 
       {closeOpen && (

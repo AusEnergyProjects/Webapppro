@@ -2,6 +2,7 @@ import { validateLeadPayload } from "@/lib/lead-validation.mjs";
 import { createLeadEnvelope } from "@/lib/lead-envelope.mjs";
 import { createSharedLeadRateLimiter } from "@/lib/lead-rate-limit.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
+import { LEAD_PROCESSOR_TIMEOUT_MS } from "@/lib/lead-webhook-probe.mjs";
 import { getD1 } from "../../../../db";
 import { createAdminNotification, resolveSystemAdminNotifications } from "@/lib/admin-notifications";
 
@@ -125,7 +126,7 @@ export async function POST(request) {
 
   payload.magicLink = safeMagicLink(payload.magicLink, request.url);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), LEAD_PROCESSOR_TIMEOUT_MS);
   try {
     const response = await fetch(webhook, {
       method: "POST",

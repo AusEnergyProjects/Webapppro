@@ -533,8 +533,12 @@ export async function buildTradeQuoteDocumentSnapshot(
 
 export async function authoriseTradeQuoteLink(
   token: string,
+  options: { requireCurrentTradeAccess?: boolean } = {},
 ): Promise<AuthorisedTradeQuoteLink> {
   const { linkId, secret } = splitQuoteLinkToken(token);
+  const tradeAccessPredicate = options.requireCurrentTradeAccess
+    ? verifiedTradeAccountPredicate("trade")
+    : "trade.account_status = 'active'";
   const row = await getD1()
     .prepare(
       `SELECT link.*, version.version_number, version.status version_status,
@@ -552,7 +556,7 @@ export async function authoriseTradeQuoteLink(
       JOIN trade_accounts trade
         ON trade.firebase_uid = link.firebase_uid
         AND trade.partner_type = 'installer'
-        AND ${verifiedTradeAccountPredicate("trade")}
+        AND ${tradeAccessPredicate}
       WHERE link.id = ?
       LIMIT 1`,
     )
@@ -673,10 +677,39 @@ export async function buildTradeQuoteReviewPayload(
   };
 }
 
-export function tradeQuoteTokenErrorResponse(error: unknown) {
+function publicFailureCode(error: unknown) {
   const code = error instanceof Error ? error.message : "";
+  if (
+    [
+      "QUOTE_DOCUMENT_SNAPSHOT_INVALID",
+      "QUOTE_LINK_EXPIRED",
+      "QUOTE_LINK_STOPPED",
+      "QUOTE_LINK_INVALID",
+      "QUOTE_LINK_NOT_FOUND",
+    ].includes(code)
+  ) {
+    return code;
+  }
+  if (code.startsWith("PDF_") || code.includes("font")) {
+    return "QUOTE_PDF_RENDER_FAILED";
+  }
+  return "QUOTE_PUBLIC_REQUEST_FAILED";
+}
+
+export function tradeQuoteTokenErrorResponse(
+  error: unknown,
+  stage = "review",
+) {
+  const code = error instanceof Error ? error.message : "";
+  const requestId = crypto.randomUUID();
+  console.error("Trade quote public request failed", {
+    code: publicFailureCode(error),
+    requestId,
+    stage,
+  });
+  let response: Response;
   if (code === "QUOTE_DOCUMENT_SNAPSHOT_INVALID") {
-    return adminJson(
+    response = adminJson(
       {
         ok: false,
         error:
@@ -684,30 +717,34 @@ export function tradeQuoteTokenErrorResponse(error: unknown) {
       },
       409,
     );
-  }
-  if (code === "QUOTE_LINK_EXPIRED") {
-    return adminJson(
+  } else if (code === "QUOTE_LINK_EXPIRED") {
+    response = adminJson(
       {
         ok: false,
         error: "This quote link has expired. Ask the trade business for a new one.",
       },
       410,
     );
-  }
-  if (code === "QUOTE_LINK_STOPPED") {
-    return adminJson(
+  } else if (code === "QUOTE_LINK_STOPPED") {
+    response = adminJson(
       { ok: false, error: "This quote link is no longer active." },
       410,
     );
-  }
-  if (code === "QUOTE_LINK_INVALID" || code === "QUOTE_LINK_NOT_FOUND") {
-    return adminJson(
+  } else if (code === "QUOTE_LINK_INVALID" || code === "QUOTE_LINK_NOT_FOUND") {
+    response = adminJson(
       { ok: false, error: "This quote link is not valid." },
       404,
     );
+  } else {
+    response = adminJson(
+      {
+        ok: false,
+        error: "This quote could not be opened.",
+        requestId,
+      },
+      500,
+    );
   }
-  return adminJson(
-    { ok: false, error: "This quote could not be opened." },
-    500,
-  );
+  response.headers.set("X-TLink-Request-Id", requestId);
+  return response;
 }

@@ -166,14 +166,21 @@ export async function renderTradeQuotePdf(
   options: RenderTradeQuotePdfOptions,
 ) {
   const [fonts, assets] = await Promise.all([
-    fontsForOrigin(options.origin),
+    fontsForOrigin(options.origin).catch(() => null),
     options.assets
       ? Promise.resolve(options.assets)
-      : loadTradeQuoteBrandAssets(snapshot),
+      : loadTradeQuoteBrandAssets(snapshot).catch(() => ({})),
   ]);
-  return new Uint8Array(
-    await createTradeQuotePdfBytes(snapshot, fonts, assets),
-  );
+  try {
+    return new Uint8Array(
+      await createTradeQuotePdfBytes(snapshot, fonts || undefined, assets),
+    );
+  } catch (error) {
+    if (!fonts) throw error;
+    return new Uint8Array(
+      await createTradeQuotePdfBytes(snapshot, undefined, assets),
+    );
+  }
 }
 
 export function tradeQuotePdfFilename(

@@ -1,4 +1,5 @@
 const CHECK_TIMEOUT_MS = 12_000;
+const LEAD_CHECK_TIMEOUT_MS = 25_000;
 const REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 const STATE_KEY = "api-health/v1";
 
@@ -28,9 +29,9 @@ async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
   }
 }
 
-async function fetchWithTimeout(fetchImpl, url, options) {
+async function fetchWithTimeout(fetchImpl, url, options, timeoutMs = CHECK_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetchImpl(url, { ...options, signal: controller.signal });
   } finally {
@@ -153,6 +154,7 @@ async function checkLeadDelivery({ fetchImpl, siteUrl, leadProbeToken, now }) {
         headers: { Authorization: `Bearer ${leadProbeToken}`, Accept: "application/json" },
         cache: "no-store",
       },
+      LEAD_CHECK_TIMEOUT_MS,
     );
     const body = await response.json().catch(() => null);
     const probeId = typeof body?.probeId === "string" ? body.probeId.slice(0, 100) : "";

@@ -43,6 +43,6 @@ export async function GET(request: Request, context: Context) {
       },
     });
   } catch (error) {
-    return tradeQuoteTokenErrorResponse(error);
+    return tradeQuoteTokenErrorResponse(error, "pdf");
   }
 }

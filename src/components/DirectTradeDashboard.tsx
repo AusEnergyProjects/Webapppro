@@ -26,6 +26,7 @@ import type { CustomerPlanReportView } from "@/lib/customer-plan-report";
 import {
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
+import { DEFAULT_TRADE_BRAND_THEME } from "@/lib/trade-business-branding";
 import {
   TradeBusinessSettingsWorkspace,
   tradeBusinessThemeGradient,
@@ -38,7 +39,6 @@ const InstallerPlatformQuote = dynamic(() => import("./InstallerPlatformQuote").
 const InstallerArrivalWindows = dynamic(() => import("./InstallerArrivalWindows").then((module) => module.InstallerArrivalWindows));
 const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspace").then((module) => module.TradePurchasingWorkspace));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
-const TradeScheduleWorkspace = dynamic(() => import("./TradeScheduleWorkspace").then((module) => module.TradeScheduleWorkspace));
 const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 
@@ -147,10 +147,9 @@ type DashboardOpportunity = {
     customerDecision: string;
   };
 };
-type DashboardWorkspace = "work" | "schedule" | "invoices" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "invoices" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
-  "schedule",
   "invoices",
   "follow-ups",
   "leads",
@@ -162,6 +161,7 @@ const dashboardWorkspaces = new Set<DashboardWorkspace>([
 
 function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
   const requested = new URLSearchParams(search).get("workspace");
+  if (requested === "schedule") return "work";
   return dashboardWorkspaces.has(requested as DashboardWorkspace)
     ? requested as DashboardWorkspace
     : "work";
@@ -508,8 +508,18 @@ export function DirectTradeDashboard() {
       ? "work"
       : dashboardWorkspaceFromSearch(window.location.search)
   );
-  const [scheduleWeekStart, setScheduleWeekStart] = useState("");
-  const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(null);
+  const [activeWorkView, setActiveWorkView] = useState(() =>
+    typeof window !== "undefined"
+      && new URLSearchParams(window.location.search).get("workspace") === "schedule"
+      ? "schedule"
+      : "today"
+  );
+  const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(() =>
+    typeof window !== "undefined"
+      && new URLSearchParams(window.location.search).get("workspace") === "schedule"
+      ? { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() }
+      : null
+  );
   const [visibleEvidenceMatches, setVisibleEvidenceMatches] = useState<Record<string, boolean>>({});
   const [evidencePhotoUrls, setEvidencePhotoUrls] = useState<Record<string, Record<string, string>>>({});
   const [evidencePhotoBusy, setEvidencePhotoBusy] = useState("");
@@ -554,7 +564,8 @@ export function DirectTradeDashboard() {
       const returned = readIntegrationReturn(window.location.search);
       if (!returned) return;
       if (isCalendarIntegration(returned.provider)) {
-        setWorkspace("schedule");
+        setWorkspace("work");
+        setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
         return;
       }
       setWorkspace("work");
@@ -1156,7 +1167,10 @@ export function DirectTradeDashboard() {
           <TradeAccessPanel profile={profile} />
         </section>
       ) : (
-        <div className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}>
+        <div
+          className={`trade-portal-shell ${isSupplier ? "is-supplier" : "is-installer"}`}
+          data-trade-theme={profile.brandThemeKey || DEFAULT_TRADE_BRAND_THEME}
+        >
           <header
             className="dashboard-hero"
             style={{
@@ -1258,8 +1272,9 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="TLink installer account"
               >
-                <button type="button" className={workspace === "work" ? "active" : ""} onClick={() => {
+                <button type="button" className={workspace === "work" && activeWorkView !== "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
+                  setActiveWorkView("today");
                   setWorkspace("work");
                 }}><b aria-hidden="true">01</b><span>Work</span><small>Today and next actions</small></button>
                 <div className="dashboard-workspace-shortcuts" aria-label="Work shortcuts">
@@ -1268,7 +1283,11 @@ export function DirectTradeDashboard() {
                     setWorkspace("work");
                   }}><span>{label}</span></button>)}
                 </div>
-                <button type="button" className={workspace === "schedule" ? "active" : ""} onClick={() => { setScheduleWeekStart(""); setWorkspace("schedule"); }}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
+                <button type="button" className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
+                  setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
+                  setActiveWorkView("schedule");
+                  setWorkspace("work");
+                }}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
                 <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
@@ -1283,17 +1302,20 @@ export function DirectTradeDashboard() {
                 fullAccess={hasBusinessOperations}
                 teamAccess={hasTeamAccess}
                 navigationTarget={commandTarget}
-                onOpenSchedule={(weekStart) => { setScheduleWeekStart(weekStart || ""); setWorkspace("schedule"); }}
+                onOpenSchedule={(weekStart) => {
+                  setCommandTarget({
+                    workspace: "work",
+                    kind: "crm-view",
+                    id: "schedule",
+                    query: weekStart || "",
+                    nonce: Date.now(),
+                  });
+                  setActiveWorkView("schedule");
+                  setWorkspace("work");
+                }}
+                onWorkViewChange={setActiveWorkView}
                 onOpenInvoices={() => setWorkspace("invoices")}
               />}
-
-              {workspace === "schedule" && (hasBusinessOperations && hasTeamAccess ? <TradeScheduleWorkspace user={user} initialWeekStart={scheduleWeekStart} onOpenJob={(workOrderId) => {
-                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "summary", nonce: Date.now() });
-                setWorkspace("work");
-              }} onOpenQuote={(workOrderId) => {
-                setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "quote", nonce: Date.now() });
-                setWorkspace("work");
-              }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team scheduling is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "invoices" && (hasBusinessOperations ? <TradeInvoiceWorkspace user={user} onOpenJob={(workOrderId) => {
                 setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "invoice", nonce: Date.now() });

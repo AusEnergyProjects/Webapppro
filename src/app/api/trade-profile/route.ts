@@ -314,21 +314,35 @@ export async function PATCH(request: Request) {
     return json({ ok: false, error: "Invalid dashboard settings." }, 400);
   }
 
-  const availabilityStatus = typeof raw.availabilityStatus === "string" ? raw.availabilityStatus : "";
-  if (!["open", "limited", "paused"].includes(availabilityStatus)) {
-    return json({ ok: false, error: "Choose a valid availability setting." }, 400);
-  }
-  if (typeof raw.emailOpportunities !== "boolean" || typeof raw.emailWeeklySummary !== "boolean") {
-    return json({ ok: false, error: "Choose valid email preferences." }, 400);
-  }
-
   const db = getD1();
   const account = await db.prepare(`SELECT partner_type, postcode, service_base_postcode,
-      service_radius_km, brand_theme_key, brand_border_style,
+      service_radius_km, availability_status, email_opportunities,
+      email_weekly_summary, brand_theme_key, brand_border_style,
       quote_email_subject_template, quote_email_intro, quote_default_terms
     FROM trade_accounts WHERE firebase_uid = ?`)
     .bind(identity.uid).first<Record<string, unknown>>();
   if (!account) return json({ ok: false, error: "Complete the business profile first." }, 404);
+
+  const availabilityStatus = raw.availabilityStatus === undefined
+    ? String(account.availability_status || "open")
+    : typeof raw.availabilityStatus === "string"
+      ? raw.availabilityStatus
+      : "";
+  if (!["open", "limited", "paused"].includes(availabilityStatus)) {
+    return json({ ok: false, error: "Choose a valid availability setting." }, 400);
+  }
+  if (
+    (raw.emailOpportunities !== undefined && typeof raw.emailOpportunities !== "boolean")
+    || (raw.emailWeeklySummary !== undefined && typeof raw.emailWeeklySummary !== "boolean")
+  ) {
+    return json({ ok: false, error: "Choose valid email preferences." }, 400);
+  }
+  const emailOpportunities = raw.emailOpportunities === undefined
+    ? Boolean(account.email_opportunities)
+    : raw.emailOpportunities;
+  const emailWeeklySummary = raw.emailWeeklySummary === undefined
+    ? Boolean(account.email_weekly_summary)
+    : raw.emailWeeklySummary;
 
   const currentAreaRows = await db.prepare(`
     SELECT postcode, radius_km
@@ -430,8 +444,8 @@ export async function PATCH(request: Request) {
     availabilityStatus,
     serviceBasePostcode,
     serviceRadiusKm,
-    raw.emailOpportunities ? 1 : 0,
-    raw.emailWeeklySummary ? 1 : 0,
+    emailOpportunities ? 1 : 0,
+    emailWeeklySummary ? 1 : 0,
     brandThemeKey,
     brandBorderStyle,
     quoteEmailSubjectTemplate,
@@ -472,8 +486,8 @@ export async function PATCH(request: Request) {
       availabilityStatus,
       serviceBasePostcode,
       serviceRadiusKm,
-      emailOpportunities: raw.emailOpportunities,
-      emailWeeklySummary: raw.emailWeeklySummary,
+      emailOpportunities,
+      emailWeeklySummary,
       serviceAreas,
       brandThemeKey,
       brandBorderStyle,

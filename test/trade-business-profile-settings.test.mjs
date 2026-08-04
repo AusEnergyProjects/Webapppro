@@ -10,6 +10,7 @@ import {
   QUOTE_SUBJECT_PLACEHOLDERS,
   TRADE_BRAND_BORDER_STYLES,
   TRADE_BRAND_THEME_KEYS,
+  TRADE_BRAND_THEME_OPTIONS,
 } from "../src/lib/trade-business-branding.ts";
 import {
   hasAllowedSignature,
@@ -22,6 +23,7 @@ const mediaRoute = read("../src/app/api/trade-profile-media/route.ts");
 const migration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
 const schema = read("../db/schema.ts");
 const settingsUi = read("../src/components/TradeBusinessSettingsWorkspace.tsx");
+const globalStyles = read("../src/app/globals.css");
 
 function pngChunk(type, payload = []) {
   const bytes = new Uint8Array(12 + payload.length);
@@ -42,6 +44,22 @@ function joinBytes(...parts) {
     offset += part.byteLength;
   }
   return result;
+}
+
+function relativeLuminance(hex) {
+  const channels = [1, 3, 5].map((offset) =>
+    Number.parseInt(hex.slice(offset, offset + 2), 16) / 255,
+  );
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+}
+
+function contrastAgainstWhite(hex) {
+  return 1.05 / (relativeLuminance(hex) + 0.05);
 }
 
 test("the trade account type is immutable after initial setup", () => {
@@ -121,7 +139,31 @@ test("business branding and quote defaults use one curated contract", () => {
     "violet_sunset",
     "amber_ink",
     "charcoal_silver",
+    "rose_plum",
+    "forest_jade",
+    "bronze_olive",
+    "midnight_rose",
+    "teal_indigo",
+    "graphite_copper",
+    "indigo_orchid",
+    "burgundy_slate",
   ]);
+  assert.equal(
+    Object.keys(TRADE_BRAND_THEME_OPTIONS).length,
+    TRADE_BRAND_THEME_KEYS.length,
+  );
+  for (const theme of Object.values(TRADE_BRAND_THEME_OPTIONS)) {
+    assert.match(theme.gradient, /^linear-gradient\(135deg,/);
+    assert.equal(theme.ink, "#ffffff");
+    const stops = theme.gradient.match(/#[0-9a-f]{6}/gi) || [];
+    assert.equal(stops.length, 2);
+    for (const stop of stops) {
+      assert.ok(
+        contrastAgainstWhite(stop) >= 4.5,
+        `${theme.label} ${stop} must retain readable white text`,
+      );
+    }
+  }
   assert.deepEqual(TRADE_BRAND_BORDER_STYLES, [
     "soft",
     "square",
@@ -159,6 +201,115 @@ test("business branding and quote defaults use one curated contract", () => {
   ]) {
     assert.ok(migration.includes("ADD `" + column + "`"));
   }
+});
+
+test("business settings render as one continuous page with explicit section actions", () => {
+  for (const section of [
+    "account",
+    "appearance",
+    "service",
+    "quotes",
+    "notifications",
+    "templates",
+    "closure",
+  ]) {
+    assert.match(
+      settingsUi,
+      new RegExp(`id="business-settings-${section}"`),
+    );
+  }
+  assert.doesNotMatch(
+    settingsUi,
+    /section === "(?:account|appearance|service|quotes|notifications|templates|closure)"/,
+    "settings sections must remain mounted together instead of behaving as hidden tabs",
+  );
+  for (const action of [
+    "Save appearance",
+    "Save service areas",
+    "Save quote defaults",
+    "Save notifications",
+    "Edit document appearance",
+    "Close account and remove access",
+  ]) {
+    assert.ok(settingsUi.includes(action), `missing section action: ${action}`);
+  }
+  assert.match(settingsUi, /className="business-settings-jump-nav"/);
+  assert.match(settingsUi, /href=\{`#business-settings-\$\{option\.id\}`\}/);
+  for (const section of ["appearance", "service", "quotes", "notifications"]) {
+    assert.match(
+      settingsUi,
+      new RegExp(`data-settings-section="${section}"`),
+    );
+  }
+  assert.match(
+    settingsUi,
+    /targetSection === "appearance"[\s\S]*\? \{ brandThemeKey, brandBorderStyle \}/,
+  );
+  assert.match(
+    settingsUi,
+    /targetSection === "notifications"[\s\S]*availabilityStatus[\s\S]*emailOpportunities[\s\S]*emailWeeklySummary/,
+  );
+});
+
+test("saved themes expose readable workspace, rail, search and action tokens", () => {
+  for (const themeKey of TRADE_BRAND_THEME_KEYS.slice(1)) {
+    assert.ok(
+      globalStyles.includes(
+        `.trade-portal-shell[data-trade-theme="${themeKey}"]`,
+      ),
+      `missing workspace token set for ${themeKey}`,
+    );
+  }
+  for (const token of [
+    "--trade-dark",
+    "--trade-header-control",
+    "--trade-header-control-border",
+    "--trade-accent",
+    "--trade-accent-hover",
+    "--trade-accent-soft",
+    "--trade-accent-soft-ink",
+  ]) {
+    assert.ok(globalStyles.includes(token), `missing theme token ${token}`);
+  }
+  assert.match(
+    globalStyles,
+    /\.tlink-command-launcher \{[^}]*background: var\(--trade-header-control\)/,
+  );
+  assert.match(
+    globalStyles,
+    /\.trade-portal-shell > \.dashboard-workspace-nav \{[^}]*background: var\(--trade-dark\)/,
+  );
+  assert.match(
+    globalStyles,
+    /\.trade-portal-shell \.dashboard-settings \.btn \{[^}]*background: var\(--trade-accent\)/,
+  );
+  assert.match(settingsUi, /accentColor: "var\(--trade-accent\)"/);
+  assert.doesNotMatch(settingsUi, /accentColor: "#0b8f67"/);
+  assert.doesNotMatch(settingsUi, /color: "#0a7a59"/);
+  assert.doesNotMatch(settingsUi, /color: "#08794c"/);
+});
+
+test("business settings PATCH accepts section-local payloads without overwriting other sections", () => {
+  assert.match(
+    profileRoute,
+    /availability_status, email_opportunities,[\s\S]*email_weekly_summary/,
+  );
+  assert.match(
+    profileRoute,
+    /raw\.availabilityStatus === undefined[\s\S]*account\.availability_status/,
+  );
+  assert.match(
+    profileRoute,
+    /raw\.emailOpportunities === undefined[\s\S]*account\.email_opportunities/,
+  );
+  assert.match(
+    profileRoute,
+    /raw\.emailWeeklySummary === undefined[\s\S]*account\.email_weekly_summary/,
+  );
+  assert.doesNotMatch(
+    profileRoute,
+    /typeof raw\.emailOpportunities !== "boolean" \|\| typeof raw\.emailWeeklySummary !== "boolean"/,
+  );
 });
 
 test("business websites are canonical HTTPS links at both trust boundaries", () => {

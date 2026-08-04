@@ -2,7 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 
 const PROBE_EVENT = "webhook.delivery_probe";
 const TOKEN_MIN_LENGTH = 32;
-const TIMEOUT_MS = 10_000;
+export const LEAD_PROCESSOR_TIMEOUT_MS = 20_000;
 
 function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
@@ -27,6 +27,7 @@ export function createLeadWebhookProbeHandler({
   createId = randomUUID,
   onFailure = async () => {},
   onRecovery = async () => {},
+  timeoutMs = LEAD_PROCESSOR_TIMEOUT_MS,
 } = {}) {
   return async function postLeadWebhookProbe(request) {
     const expectedToken = env.AEA_LEAD_WEBHOOK_TEST_TOKEN;
@@ -58,7 +59,7 @@ export function createLeadWebhookProbeHandler({
       source: "aea-energy",
     };
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetchImpl(webhook, {

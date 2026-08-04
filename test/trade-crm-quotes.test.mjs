@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { calculateTradeQuoteLine, dollarsToCents, normaliseTradeQuoteLines, quantityToMilli } from "../src/lib/trade-quote.ts";
 import { calculateQuoteSelection, normaliseQuoteChoices } from "../src/lib/trade-quote-options.ts";
 import { tradeQuoteDocumentDisplayTotals } from "../src/lib/trade-quote-document-totals.mjs";
+import { createTradeQuotePdfBytes } from "../src/lib/trade-quote-pdf.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -135,6 +136,65 @@ test("document totals include one default required choice and exclude optional e
   );
 });
 
+test("quote PDF generation falls back to built-in fonts and supports current themes", async () => {
+  const bytes = await createTradeQuotePdfBytes({
+    schemaVersion: "trade-quote-document-v1",
+    capturedAt: "2026-08-04T00:00:00.000Z",
+    quoteId: "quote-1",
+    quoteVersionId: "version-1",
+    quoteNumber: "Q-TLJ-TEST",
+    versionNumber: 1,
+    work: { id: "work-1", number: "TLJ-TEST", title: "Heat pump installation" },
+    customer: { id: "customer-1", number: "CUS-1", name: "Test Customer", email: "test@example.com" },
+    site: {
+      id: "site-1",
+      label: "Primary site",
+      addressLine1: "1 Test Street",
+      addressLine2: "",
+      suburb: "Melbourne",
+      state: "VIC",
+      postcode: "3000",
+      summary: "1 Test Street, Melbourne VIC 3000",
+    },
+    business: {
+      name: "Test Electrical",
+      email: "office@example.com",
+      phone: "0400000000",
+      abn: "12345678901",
+      website: "https://example.com",
+      address: "2 Office Street, Melbourne VIC 3000",
+      themeKey: "rose_plum",
+      borderStyle: "soft",
+      logo: null,
+      banner: null,
+      quoteEmailSubjectTemplate: "{business_name} sent quote {quote_number}",
+      quoteEmailIntro: "Thank you for the opportunity to quote.",
+    },
+    acceptanceEmail: "test@example.com",
+    subtotalCents: 100000,
+    taxCents: 10000,
+    totalCents: 110000,
+    customerMessage: "Thank you for the opportunity to quote.",
+    terms: "Installation is subject to safe site access.",
+    validUntil: "2026-08-31",
+    consentStatement: "I accept this exact quote.",
+    issuedAt: "2026-08-04T00:00:00.000Z",
+    items: [{
+      id: "line-1",
+      description: "Heat pump installation",
+      quantityMilli: 1000,
+      unitPriceCents: 100000,
+      subtotalCents: 100000,
+      taxCents: 10000,
+      totalCents: 110000,
+      sectionHeading: "Included work",
+    }],
+    choices: [],
+  });
+  assert.ok(bytes.byteLength > 1_000);
+  assert.equal(Buffer.from(bytes).subarray(0, 4).toString("ascii"), "%PDF");
+});
+
 test("secure quote sharing is revocable, expiring and commercially provider neutral", () => {
   for (const table of ["trade_crm_quote_links", "trade_crm_quote_events", "trade_crm_quote_questions", "trade_crm_quote_deliveries"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
@@ -161,7 +221,8 @@ test("installer quote actions preserve direct-customer ownership and immutable i
   assert.match(installerRoute, /action === "issue_quote"/);
   assert.match(installerRoute, /status = 'issued'/);
   assert.match(installerRoute, /quote_status = 'issued'/);
-  assert.match(installerRoute, /sendServiceReminderProviderMessage[\s\S]*?quote_status = 'sent'/);
+  assert.match(installerRoute, /sendServiceReminderProviderMessage[\s\S]*?status = 'provider_accepted'/);
+  assert.doesNotMatch(installerRoute, /quote_status = 'sent'/);
   assert.match(installerRoute, /authorisedEmails/);
   assert.doesNotMatch(installerRoute, /trade_opportunities|opportunity_matches/);
 });
@@ -187,7 +248,21 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
     "tradeQuoteEmailContentSha256",
     "tradeQuotePdfSha256",
     "tradeQuotePdfBase64",
+    "provider_accepted",
   ]) assert.match(installerRoute, new RegExp(boundary));
+  const issueBlock = installerRoute.slice(
+    installerRoute.indexOf('action === "issue_quote"'),
+    installerRoute.indexOf('["replace_link", "revoke_link", "send_quote", "answer_question"]'),
+  );
+  assert.ok(issueBlock.includes("renderQuotePdfOrThrow(documentSnapshot"));
+  assert.ok(issueBlock.includes("INSERT INTO trade_crm_quote_links"));
+  assert.ok(
+    issueBlock.indexOf("renderQuotePdfOrThrow(documentSnapshot") <
+      issueBlock.indexOf("INSERT INTO trade_crm_quote_links"),
+    "the PDF must render successfully before the issued link is committed",
+  );
+  assert.match(installerRoute, /QUOTE_PDF_UNAVAILABLE/);
+  assert.match(installerRoute, /X-TLink-Request-Id/);
   assert.match(installerRoute, /attachments: \[\{/);
   assert.match(installerRoute, /replyTo: emailContent\.replyTo/);
   assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);
@@ -198,6 +273,16 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   assert.match(providerDelivery, /replyTo\?: string/);
   assert.match(documentServer, /QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
   assert.match(documentServer, /if \(storedSnapshot\)[\s\S]*?QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
+  assert.match(
+    documentServer,
+    /options\.requireCurrentTradeAccess[\s\S]*verifiedTradeAccountPredicate\("trade"\)[\s\S]*trade\.account_status = 'active'/,
+  );
+  assert.match(
+    linkRoute,
+    /authoriseTradeQuoteLink\([\s\S]*requireCurrentTradeAccess: true/,
+  );
+  assert.match(documentServer, /X-TLink-Request-Id/);
+  assert.match(documentPdfRoute, /tradeQuoteTokenErrorResponse\(error, "pdf"\)/);
 });
 
 test("customer decisions require verified matching identity and retain exact acceptance evidence", () => {
@@ -221,7 +306,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and send quote", "Internal only", "Quote history"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Accepted by email provider", "Inbox delivery is not yet confirmed"]) assert.match(installerUi, new RegExp(copy));
   assert.match(installerUi, /async function sendPreviewedQuote\(\)[\s\S]*?action: "save_draft"[\s\S]*?action: "issue_quote"[\s\S]*?action: "send_quote"/);
   assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
   assert.match(installerUi, /sendPreview\.displayTotals\.subtotalCents[\s\S]*?sendPreview\.displayTotals\.taxCents[\s\S]*?sendPreview\.displayTotals\.label[\s\S]*?sendPreview\.displayTotals\.totalCents/);
@@ -236,7 +321,7 @@ test("installer and customer interfaces expose the version and consent contract"
     "returnFocus.focus({ preventScroll: true })",
   ]) assert.match(installerUi, new RegExp(modalBoundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(installerUi, /consentConfirmed: true/);
-  assert.match(installerUi, /Quote issued, but the email was not sent/);
+  assert.match(installerUi, /Quote issued, but the email was not accepted for delivery/);
   assert.doesNotMatch(installerUi, /Issue for customer review/);
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
   for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));

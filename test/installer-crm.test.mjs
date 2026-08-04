@@ -290,7 +290,7 @@ test("job and customer directories open focused records without automatic or inl
   assert.doesNotMatch(crm, /items\[0\]\?\.id/);
   assert.doesNotMatch(crm, /\bsetSelectedJobId\(/);
   assert.match(crm, /onClick=\{\(\) => openFocusedJob\(job\.id\)\}/);
-  assert.match(crm, /crm-view crm-job-focus/);
+  assert.match(crm, /crm-view crm-job-workspace/);
   assert.match(crm, /crm-view crm-customer-focus/);
   assert.match(crm, /Back to all jobs/);
   assert.match(crm, /Back to all customers/);
@@ -354,15 +354,17 @@ test("installer dashboard and reports use compact server-owned read models", () 
   }
 });
 
-test("both installer Schedule entry paths use the visual dispatch workspace", () => {
+test("all installer Schedule entry paths use the one permanent CRM dispatch workspace", () => {
   assert.match(crm, /const TradeScheduleWorkspace = dynamic\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
   assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
   assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
-  assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
+  assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\} initialWeekStart=\{scheduleWeekStart\}/);
   assert.match(crm, /onOpenQuote=\{\(id\) => openFocusedJob\(id, "quote"\)\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
-  assert.match(dashboard, /workspace === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\}/);
-  assert.match(dashboard, /onOpenSchedule=\{\(weekStart\) => \{ setScheduleWeekStart\(weekStart \|\| ""\); setWorkspace\("schedule"\); \}\}/);
+  assert.match(hub, /onViewChange=\{props\.onWorkViewChange\}/);
+  assert.doesNotMatch(dashboard, /<TradeScheduleWorkspace/);
+  assert.doesNotMatch(dashboard, /workspace === "schedule"/);
+  assert.match(dashboard, /onOpenSchedule=\{\(weekStart\) => \{[\s\S]*id: "schedule"[\s\S]*query: weekStart \|\| ""[\s\S]*setWorkspace\("work"\)/);
 });
 
 test("job summary renders every planned compliance activity without exposing raw governance copy", () => {
@@ -377,11 +379,11 @@ test("job summary renders every planned compliance activity without exposing raw
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
-  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeScheduleWorkspace", "TradeInvoiceWorkspace", "TradeServiceFollowUpWorkspace"]) {
+  for (const workspace of ["SupplierCatalogueWorkspace", "TradePurchasingWorkspace", "TradeDataImportWorkspace", "TradeInvoiceWorkspace", "TradeServiceFollowUpWorkspace"]) {
     assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
     assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
   }
-  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradeTeamCentre", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel"]) {
+  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradeTeamCentre", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel", "TradeScheduleWorkspace"]) {
     assert.match(crm, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
   }
 
@@ -420,9 +422,11 @@ test("My day exposes owner scoped local workload and direct action charts", () =
   assert.match(crm, /initialView=\{priceBookView\}/);
   assert.match(crm, /key=\{priceBookView\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
+  assert.match(hub, /onViewChange=\{props\.onWorkViewChange\}/);
   assert.match(hub, /onOpenInvoices=\{props\.onOpenInvoices\}/);
-  assert.match(dashboard, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
-  assert.match(dashboard, /initialWeekStart=\{scheduleWeekStart\}/);
+  assert.match(crm, /const \[scheduleWeekStart, setScheduleWeekStart\] = useState\(""\)/);
+  assert.match(crm, /initialWeekStart=\{scheduleWeekStart\}/);
+  assert.match(dashboard, /onWorkViewChange=\{setActiveWorkView\}/);
   assert.match(dashboard, /onOpenInvoices=\{\(\) => setWorkspace\("invoices"\)\}/);
 });
 

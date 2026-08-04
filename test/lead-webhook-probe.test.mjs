@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLeadWebhookProbeHandler } from "../src/lib/lead-webhook-probe.mjs";
+import {
+  createLeadWebhookProbeHandler,
+  LEAD_PROCESSOR_TIMEOUT_MS,
+} from "../src/lib/lead-webhook-probe.mjs";
 
 const TEST_TOKEN = "a-secure-test-token-with-32-characters";
 const TEST_WEBHOOK = "https://lead-processor.example/webhook";
+
+test("lead processor timeout covers the observed Google Apps Script cold start", () => {
+  assert.ok(LEAD_PROCESSOR_TIMEOUT_MS > 12_590);
+  assert.ok(LEAD_PROCESSOR_TIMEOUT_MS <= 20_000);
+});
 
 function request(token = TEST_TOKEN) {
   return new Request("https://compare.example/api/internal/lead-webhook-probe", {
