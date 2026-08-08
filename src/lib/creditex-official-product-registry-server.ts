@@ -413,10 +413,15 @@ async function resolveEligibilityStarts(
   registryCode: string,
   records: readonly CreditexOfficialProductRecord[],
   activatedOn: string,
+  hasAcceptedSnapshot: boolean,
 ) {
   const missing = records.filter((record) => !record.eligibleFrom);
   const carriedStarts = new Map<string, string>();
-  for (let offset = 0; offset < missing.length; offset += PRODUCT_LOOKUP_CHUNK) {
+  for (
+    let offset = 0;
+    hasAcceptedSnapshot && offset < missing.length;
+    offset += PRODUCT_LOOKUP_CHUNK
+  ) {
     const requested = missing
       .slice(offset, offset + PRODUCT_LOOKUP_CHUNK)
       .map((record) => ({
@@ -1257,6 +1262,7 @@ export async function syncOfficialProductRegistry(
         definition.registryCode,
         records,
         checkedOn,
+        current !== null,
       );
       let stagedRecords: readonly StagedOfficialProductRecord[] | null =
         await resolveRegistryEffectiveStarts(

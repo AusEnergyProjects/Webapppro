@@ -509,8 +509,15 @@ test("source receipts and staged R2 replays materialize only one source at a tim
 test("product staging keeps every D1 JSON binding below the governed byte budget", async () => {
   const encoder = new TextEncoder();
   const insertPayloads = [];
+  let historicalLookupCount = 0;
   const { d1, artifactStore } = fixture({
     onBind(sql, values) {
+      if (
+        sql.includes("WITH requested AS")
+        && sql.includes("JOIN compliance_official_products product")
+      ) {
+        historicalLookupCount += 1;
+      }
       if (
         sql.includes("INSERT INTO compliance_official_products")
         && sql.includes("FROM json_each(?)")
@@ -566,6 +573,7 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
 
   assert.equal(result.changed, true);
   assert.equal(result.recordCount, largeRecords.length);
+  assert.equal(historicalLookupCount, 0);
   assert.ok(insertPayloads.length >= 2);
   assert.ok(Math.max(...insertPayloads.map(({ byteLength }) => byteLength)) <= 1_500_000);
   assert.ok(Math.max(...insertPayloads.map(({ rowCount }) => rowCount)) <= 500);
