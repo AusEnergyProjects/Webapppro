@@ -65,12 +65,16 @@ class TestD1Statement {
   }
 }
 
-function testD1(database, { onBind = () => undefined } = {}) {
+function testD1(
+  database,
+  { onBind = () => undefined, onBatch = () => undefined } = {},
+) {
   return {
     prepare(sql) {
       return new TestD1Statement(database, sql, [], onBind);
     },
     async batch(statements) {
+      onBatch(statements);
       database.exec("BEGIN");
       try {
         const results = statements.map((statement) => statement.runSync());
@@ -509,6 +513,7 @@ test("source receipts and staged R2 replays materialize only one source at a tim
 test("product staging keeps every D1 JSON binding below the governed byte budget", async () => {
   const encoder = new TextEncoder();
   const insertPayloads = [];
+  const insertBatches = [];
   let historicalLookupCount = 0;
   const { d1, artifactStore } = fixture({
     onBind(sql, values) {
@@ -533,8 +538,29 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
         });
       }
     },
+    onBatch(statements) {
+      const inserts = statements.filter((statement) => (
+        statement.sql.includes("INSERT INTO compliance_official_products")
+        && statement.sql.includes("FROM json_each(?)")
+      ));
+      if (inserts.length > 0) {
+        insertBatches.push({
+          statementCount: inserts.length,
+          bindBytes: inserts.reduce(
+            (total, statement) => total
+              + encoder.encode(String(statement.values[0])).byteLength,
+            0,
+          ),
+          rowCount: inserts.reduce(
+            (total, statement) => total
+              + JSON.parse(String(statement.values[0])).length,
+            0,
+          ),
+        });
+      }
+    },
   });
-  const largeRecords = Array.from({ length: 501 }, (_, index) => ({
+  const largeRecords = Array.from({ length: 1_001 }, (_, index) => ({
     sourceKey: "fixture-gems-large",
     sourceRecordKey: `GEMS-LARGE-${String(index).padStart(4, "0")}`,
     productKind: "air_conditioner",
@@ -548,7 +574,7 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
     eligibleFrom: "2026-01-01",
     eligibleTo: "2030-12-31",
     availableInAustralia: true,
-    attributes: { governedTechnicalPayload: "x".repeat(4_000) },
+    attributes: { governedTechnicalPayload: "x".repeat(8_000) },
   }));
   const largeSource = {
     ...source(
@@ -557,7 +583,7 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
       "gems-products",
     ),
     minimumRecords: 1,
-    maximumBytes: 5_000_000,
+    maximumBytes: 12_000_000,
   };
   const largeDefinition = {
     registryCode: "gems-products",
@@ -574,9 +600,21 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
   assert.equal(result.changed, true);
   assert.equal(result.recordCount, largeRecords.length);
   assert.equal(historicalLookupCount, 0);
-  assert.ok(insertPayloads.length >= 2);
+  assert.ok(insertPayloads.length > 4);
+  assert.ok(insertBatches.length >= 2);
   assert.ok(Math.max(...insertPayloads.map(({ byteLength }) => byteLength)) <= 1_500_000);
   assert.ok(Math.max(...insertPayloads.map(({ rowCount }) => rowCount)) <= 500);
+  assert.ok(Math.max(...insertBatches.map(({ statementCount }) => statementCount)) <= 4);
+  assert.ok(Math.max(...insertBatches.map(({ bindBytes }) => bindBytes)) <= 6_000_000);
+  assert.ok(insertBatches.some(({ statementCount }) => statementCount > 1));
+  assert.equal(
+    insertBatches.reduce((total, { statementCount }) => total + statementCount, 0),
+    insertPayloads.length,
+  );
+  assert.equal(
+    insertBatches.reduce((total, { rowCount }) => total + rowCount, 0),
+    largeRecords.length,
+  );
   assert.equal(insertPayloads.some(({ hasRawAttributes }) => hasRawAttributes), false);
   assert.equal(
     insertPayloads.reduce((total, { rowCount }) => total + rowCount, 0),

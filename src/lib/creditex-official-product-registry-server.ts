@@ -16,6 +16,8 @@ const SYNC_LEASE_MS = 20 * 60 * 1000;
 const PRODUCT_LOOKUP_CHUNK = 500;
 const PRODUCT_INSERT_MAX_ROWS = 500;
 const PRODUCT_INSERT_MAX_BIND_BYTES = 1_500_000;
+const PRODUCT_INSERT_BATCH_MAX_STATEMENTS = 4;
+const PRODUCT_INSERT_BATCH_MAX_BIND_BYTES = 6_000_000;
 const PRODUCT_SELECTION_ID_PREFIX = "official-product-v1:";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9:_-]*$/;
@@ -976,9 +978,33 @@ async function insertProductChunks(
   snapshotId: string,
   records: readonly StagedOfficialProductRecord[],
 ) {
-  const insertRows = async (serializedRows: readonly string[]) => {
+  let pendingStatements: D1PreparedStatement[] = [];
+  let pendingBindBytes = 0;
+  const flushPendingStatements = async () => {
+    if (pendingStatements.length === 0) {
+      return;
+    }
+    const statements = pendingStatements;
+    pendingStatements = [];
+    pendingBindBytes = 0;
+    await db.batch(statements);
+  };
+  const queueRows = async (
+    serializedRows: readonly string[],
+    payloadBytes: number,
+  ) => {
     const payload = `[${serializedRows.join(",")}]`;
-    await db.prepare(`INSERT INTO compliance_official_products (
+    if (
+      pendingStatements.length > 0
+      && (
+        pendingStatements.length >= PRODUCT_INSERT_BATCH_MAX_STATEMENTS
+        || pendingBindBytes + payloadBytes
+          > PRODUCT_INSERT_BATCH_MAX_BIND_BYTES
+      )
+    ) {
+      await flushPendingStatements();
+    }
+    pendingStatements.push(db.prepare(`INSERT INTO compliance_official_products (
       id, snapshot_id, source_key, source_record_key, product_kind,
       manufacturer, brand, model, series, registration_number,
       certificate_number, approval_status, eligible_from, eligible_to,
@@ -1004,8 +1030,8 @@ async function insertProductChunks(
       json_extract(value, '$.searchText'),
       json_extract(value, '$.attributesJson')
     FROM json_each(?)`)
-      .bind(payload)
-      .run();
+      .bind(payload));
+    pendingBindBytes += payloadBytes;
   };
   const encoder = new TextEncoder();
   let serializedRows: string[] = [];
@@ -1050,7 +1076,7 @@ async function insertProductChunks(
           > PRODUCT_INSERT_MAX_BIND_BYTES
       )
     ) {
-      await insertRows(serializedRows);
+      await queueRows(serializedRows, payloadBytes);
       serializedRows = [];
       payloadBytes = 2;
     }
@@ -1065,8 +1091,9 @@ async function insertProductChunks(
     payloadBytes += (serializedRows.length === 1 ? 0 : 1) + serializedRowBytes;
   }
   if (serializedRows.length > 0) {
-    await insertRows(serializedRows);
+    await queueRows(serializedRows, payloadBytes);
   }
+  await flushPendingStatements();
 }
 
 async function recordFailure(
