@@ -20,6 +20,7 @@ import {
   syncOfficialProductRegistry,
   type CreditexOfficialProductArtifactStore,
 } from "../src/lib/creditex-official-product-registry-server";
+import { matchesAustralianRegulatorClock } from "../src/lib/creditex-australian-regulator-date";
 import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
@@ -29,8 +30,8 @@ const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
 const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
 const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
-const SRES_REGISTRY_CRON = "45 20 * * *";
-const OFFICIAL_PRODUCT_REGISTRY_CRON = "5 21 * * *";
+const SRES_REGISTRY_CRON = "5 13,14 * * *";
+const OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 * * *";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
@@ -205,7 +206,10 @@ const worker = {
         }),
       );
     }
-    if (controller.cron === SRES_REGISTRY_CRON) {
+    if (
+      controller.cron === SRES_REGISTRY_CRON
+      && matchesAustralianRegulatorClock(controller.scheduledTime, 0, 5)
+    ) {
       const db = getD1();
       const artifactStore = (workerEnv as {
         EVIDENCE?: CreditexSresArtifactStore;
@@ -216,10 +220,14 @@ const worker = {
           await syncCerSresProductRegistry(db, { artifactStore });
         })().catch((error) => {
           console.error("CER SRES product registry refresh failed.", error instanceof Error ? error.message : "Unknown error");
+          throw error;
         }),
       );
     }
-    if (controller.cron === OFFICIAL_PRODUCT_REGISTRY_CRON) {
+    if (
+      controller.cron === OFFICIAL_PRODUCT_REGISTRY_CRON
+      && matchesAustralianRegulatorClock(controller.scheduledTime, 0, 25)
+    ) {
       const db = getD1();
       const artifactStore = (workerEnv as {
         EVIDENCE?: CreditexOfficialProductArtifactStore;
@@ -237,6 +245,7 @@ const worker = {
             "Official product registry refresh failed.",
             error instanceof Error ? error.message : "Unknown error",
           );
+          throw error;
         }),
       );
     }

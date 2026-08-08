@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
-import { australianRegulatorDate } from "../src/lib/creditex-australian-regulator-date.ts";
+import {
+  australianRegulatorDate,
+  matchesAustralianRegulatorClock,
+} from "../src/lib/creditex-australian-regulator-date.ts";
 
 test("Australian registry observations use the Sydney regulator calendar day", () => {
   assert.equal(
@@ -21,5 +25,46 @@ test("Australian registry observation dates reject invalid instants", () => {
   assert.throws(
     () => australianRegulatorDate("not-a-date"),
     /valid instant/,
+  );
+});
+
+test("nightly registry candidates resolve once at Sydney midnight across DST", () => {
+  const cases = [
+    ["2026-01-08T13:05:00.000Z", 0, 5, true],
+    ["2026-01-08T14:05:00.000Z", 0, 5, false],
+    ["2026-07-08T13:05:00.000Z", 0, 5, false],
+    ["2026-07-08T14:05:00.000Z", 0, 5, true],
+    ["2026-04-04T13:05:00.000Z", 0, 5, true],
+    ["2026-04-05T14:05:00.000Z", 0, 5, true],
+    ["2026-10-03T14:05:00.000Z", 0, 5, true],
+    ["2026-10-04T13:05:00.000Z", 0, 5, true],
+    ["2026-01-08T13:25:00.000Z", 0, 25, true],
+    ["2026-07-08T14:25:00.000Z", 0, 25, true],
+  ];
+  for (const [instant, hour, minute, expected] of cases) {
+    assert.equal(
+      matchesAustralianRegulatorClock(instant, hour, minute),
+      expected,
+      instant,
+    );
+  }
+  assert.equal(matchesAustralianRegulatorClock("not-a-date", 0, 5), false);
+  assert.equal(matchesAustralianRegulatorClock(Date.now(), 24, 0), false);
+});
+
+test("the Worker gates both UTC candidates against the Sydney regulator clock", () => {
+  const worker = fs.readFileSync(
+    new URL("../worker/index.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(worker, /SRES_REGISTRY_CRON = "5 13,14 \* \* \*"/);
+  assert.match(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 \* \* \*"/);
+  assert.match(
+    worker,
+    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 5\)/,
+  );
+  assert.match(
+    worker,
+    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 25\)/,
   );
 });

@@ -35,14 +35,16 @@ const officialMigration = fs.readFileSync(
 );
 
 class TestD1Statement {
-  constructor(database, sql, values = []) {
+  constructor(database, sql, values = [], onBind = () => undefined) {
     this.database = database;
     this.sql = sql;
     this.values = values;
+    this.onBind = onBind;
   }
 
   bind(...values) {
-    return new TestD1Statement(this.database, this.sql, values);
+    this.onBind(this.sql, values);
+    return new TestD1Statement(this.database, this.sql, values, this.onBind);
   }
 
   async first() {
@@ -63,10 +65,10 @@ class TestD1Statement {
   }
 }
 
-function testD1(database) {
+function testD1(database, { onBind = () => undefined } = {}) {
   return {
     prepare(sql) {
-      return new TestD1Statement(database, sql);
+      return new TestD1Statement(database, sql, [], onBind);
     },
     async batch(statements) {
       database.exec("BEGIN");
@@ -111,7 +113,7 @@ function memoryArtifactStore() {
   };
 }
 
-function fixture() {
+function fixture(options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(sresMigration);
@@ -121,7 +123,7 @@ function fixture() {
   }
   return {
     database,
-    d1: testD1(database),
+    d1: testD1(database, options),
     artifactStore: memoryArtifactStore(),
   };
 }
@@ -502,6 +504,76 @@ test("source receipts and staged R2 replays materialize only one source at a tim
     "fixture-pv": 3,
     "fixture-inverter": 3,
   }, "an unchanged receipt is not parsed for a second staging pass");
+});
+
+test("product staging keeps every D1 JSON binding below the governed byte budget", async () => {
+  const encoder = new TextEncoder();
+  const insertPayloads = [];
+  const { d1, artifactStore } = fixture({
+    onBind(sql, values) {
+      if (
+        sql.includes("INSERT INTO compliance_official_products")
+        && sql.includes("FROM json_each(?)")
+      ) {
+        const payload = String(values[0]);
+        const byteLength = encoder.encode(payload).byteLength;
+        const parsedRows = JSON.parse(payload);
+        assert.ok(byteLength <= 2_000_000, "the D1 binding limit was exceeded");
+        insertPayloads.push({
+          byteLength,
+          rowCount: parsedRows.length,
+          hasRawAttributes: parsedRows.some((row) => "attributes" in row),
+        });
+      }
+    },
+  });
+  const largeRecords = Array.from({ length: 501 }, (_, index) => ({
+    sourceKey: "fixture-gems-large",
+    sourceRecordKey: `GEMS-LARGE-${String(index).padStart(4, "0")}`,
+    productKind: "air_conditioner",
+    manufacturer: "",
+    brand: "Efficient Air",
+    model: `AC-${String(index).padStart(4, "0")}`,
+    series: "Large governed staging fixture",
+    registrationNumber: `GEMS-LARGE-${index}`,
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "2030-12-31",
+    availableInAustralia: true,
+    attributes: { governedTechnicalPayload: "x".repeat(4_000) },
+  }));
+  const largeSource = {
+    ...source(
+      "fixture-gems-large",
+      "air_conditioner",
+      "gems-products",
+    ),
+    minimumRecords: 1,
+    maximumBytes: 5_000_000,
+  };
+  const largeDefinition = {
+    registryCode: "gems-products",
+    title: "Large fixture official GEMS products",
+    sources: [largeSource],
+  };
+
+  const result = await syncOfficialProductRegistry(d1, largeDefinition, {
+    fetchImpl: fetchFixture({ "fixture-gems-large": largeRecords }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.recordCount, largeRecords.length);
+  assert.ok(insertPayloads.length >= 2);
+  assert.ok(Math.max(...insertPayloads.map(({ byteLength }) => byteLength)) <= 1_500_000);
+  assert.ok(Math.max(...insertPayloads.map(({ rowCount }) => rowCount)) <= 500);
+  assert.equal(insertPayloads.some(({ hasRawAttributes }) => hasRawAttributes), false);
+  assert.equal(
+    insertPayloads.reduce((total, { rowCount }) => total + rowCount, 0),
+    largeRecords.length,
+  );
 });
 
 test("GEMS exposes only approved status while retaining approved historical versions", async () => {

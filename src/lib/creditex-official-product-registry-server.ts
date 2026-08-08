@@ -13,7 +13,9 @@ import { ensureCreditexProductRegistrySchemaGuards } from "./creditex-product-re
 
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
 const SYNC_LEASE_MS = 20 * 60 * 1000;
-const PRODUCT_INSERT_CHUNK = 500;
+const PRODUCT_LOOKUP_CHUNK = 500;
+const PRODUCT_INSERT_MAX_ROWS = 500;
+const PRODUCT_INSERT_MAX_BIND_BYTES = 1_500_000;
 const PRODUCT_SELECTION_ID_PREFIX = "official-product-v1:";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9:_-]*$/;
@@ -414,9 +416,9 @@ async function resolveEligibilityStarts(
 ) {
   const missing = records.filter((record) => !record.eligibleFrom);
   const carriedStarts = new Map<string, string>();
-  for (let offset = 0; offset < missing.length; offset += PRODUCT_INSERT_CHUNK) {
+  for (let offset = 0; offset < missing.length; offset += PRODUCT_LOOKUP_CHUNK) {
     const requested = missing
-      .slice(offset, offset + PRODUCT_INSERT_CHUNK)
+      .slice(offset, offset + PRODUCT_LOOKUP_CHUNK)
       .map((record) => ({
         sourceKey: record.sourceKey,
         sourceRecordKey: record.sourceRecordKey,
@@ -506,9 +508,9 @@ async function resolveRegistryEffectiveStarts(
     }));
   }
   const currentVersions = new Map<string, CurrentProductVersionRow>();
-  for (let offset = 0; offset < records.length; offset += PRODUCT_INSERT_CHUNK) {
+  for (let offset = 0; offset < records.length; offset += PRODUCT_LOOKUP_CHUNK) {
     const requested = records
-      .slice(offset, offset + PRODUCT_INSERT_CHUNK)
+      .slice(offset, offset + PRODUCT_LOOKUP_CHUNK)
       .map((record) => ({
         sourceKey: record.sourceKey,
         sourceRecordKey: record.sourceRecordKey,
@@ -969,26 +971,8 @@ async function insertProductChunks(
   snapshotId: string,
   records: readonly StagedOfficialProductRecord[],
 ) {
-  for (let offset = 0; offset < records.length; offset += PRODUCT_INSERT_CHUNK) {
-    const rows = records.slice(offset, offset + PRODUCT_INSERT_CHUNK).map((record) => {
-      const attributesJson = canonicalJson(record.attributes);
-      const searchText = [
-        record.manufacturer,
-        record.brand,
-        record.model,
-        record.series,
-        record.registrationNumber,
-        record.certificateNumber,
-      ].filter(Boolean).join(" ").toLowerCase();
-      return {
-        id: `${snapshotId}:${record.sourceKey}:${record.sourceRecordKey}`,
-        snapshotId,
-        ...record,
-        searchText,
-        attributesJson,
-        availableInAustralia: record.availableInAustralia ? 1 : 0,
-      };
-    });
+  const insertRows = async (serializedRows: readonly string[]) => {
+    const payload = `[${serializedRows.join(",")}]`;
     await db.prepare(`INSERT INTO compliance_official_products (
       id, snapshot_id, source_key, source_record_key, product_kind,
       manufacturer, brand, model, series, registration_number,
@@ -1015,8 +999,68 @@ async function insertProductChunks(
       json_extract(value, '$.searchText'),
       json_extract(value, '$.attributesJson')
     FROM json_each(?)`)
-      .bind(JSON.stringify(rows))
+      .bind(payload)
       .run();
+  };
+  const encoder = new TextEncoder();
+  let serializedRows: string[] = [];
+  let payloadBytes = 2;
+  for (const record of records) {
+    const attributesJson = canonicalJson(record.attributes);
+    const searchText = [
+      record.manufacturer,
+      record.brand,
+      record.model,
+      record.series,
+      record.registrationNumber,
+      record.certificateNumber,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const serializedRow = JSON.stringify({
+      id: `${snapshotId}:${record.sourceKey}:${record.sourceRecordKey}`,
+      snapshotId,
+      sourceKey: record.sourceKey,
+      sourceRecordKey: record.sourceRecordKey,
+      productKind: record.productKind,
+      manufacturer: record.manufacturer,
+      brand: record.brand,
+      model: record.model,
+      series: record.series,
+      registrationNumber: record.registrationNumber,
+      certificateNumber: record.certificateNumber,
+      approvalStatus: record.approvalStatus,
+      eligibleFrom: record.eligibleFrom,
+      eligibleTo: record.eligibleTo,
+      availableInAustralia: record.availableInAustralia ? 1 : 0,
+      registryEffectiveFrom: record.registryEffectiveFrom,
+      searchText,
+      attributesJson,
+    });
+    const serializedRowBytes = encoder.encode(serializedRow).byteLength;
+    const separatorBytes = serializedRows.length === 0 ? 0 : 1;
+    if (
+      serializedRows.length > 0
+      && (
+        serializedRows.length >= PRODUCT_INSERT_MAX_ROWS
+        || payloadBytes + separatorBytes + serializedRowBytes
+          > PRODUCT_INSERT_MAX_BIND_BYTES
+      )
+    ) {
+      await insertRows(serializedRows);
+      serializedRows = [];
+      payloadBytes = 2;
+    }
+    if (serializedRowBytes + 2 > PRODUCT_INSERT_MAX_BIND_BYTES) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${record.sourceKey} contains an oversized staged product record.`,
+      );
+    }
+    serializedRows.push(serializedRow);
+    payloadBytes += (serializedRows.length === 1 ? 0 : 1) + serializedRowBytes;
+  }
+  if (serializedRows.length > 0) {
+    await insertRows(serializedRows);
   }
 }
 
