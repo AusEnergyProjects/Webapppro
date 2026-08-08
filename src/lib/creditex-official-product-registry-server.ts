@@ -152,24 +152,6 @@ type StagedOfficialProductRecord = CreditexOfficialProductRecord & {
   registryEffectiveFrom: string;
 };
 
-type CurrentProductVersionRow = {
-  source_key: string;
-  source_record_key: string;
-  product_kind: CreditexOfficialProductKind;
-  manufacturer: string;
-  brand: string;
-  model: string;
-  series: string;
-  registration_number: string;
-  certificate_number: string;
-  approval_status: string;
-  eligible_from: string;
-  eligible_to: string;
-  available_in_australia: number;
-  attributes_json: string;
-  registry_effective_from: string;
-};
-
 type FetchedSourceArtifact = {
   source: CreditexOfficialProductSourceDefinition;
   contentType: string;
@@ -573,86 +555,22 @@ async function resolveEligibilityStarts(
   });
 }
 
-function currentProductVersionMatches(
-  record: CreditexOfficialProductRecord,
-  current: CurrentProductVersionRow,
-) {
-  return record.sourceKey === current.source_key
-    && record.sourceRecordKey === current.source_record_key
-    && record.productKind === current.product_kind
-    && record.manufacturer === current.manufacturer
-    && record.brand === current.brand
-    && record.model === current.model
-    && record.series === current.series
-    && record.registrationNumber === current.registration_number
-    && record.certificateNumber === current.certificate_number
-    && record.approvalStatus === current.approval_status
-    && record.eligibleFrom === current.eligible_from
-    && record.eligibleTo === current.eligible_to
-    && record.availableInAustralia === (current.available_in_australia === 1)
-    && canonicalJson(record.attributes) === current.attributes_json;
-}
-
-async function resolveRegistryEffectiveStarts(
-  db: D1Database,
-  currentSnapshotId: string | null,
+function resolveRegistryEffectiveStarts(
   records: readonly CreditexOfficialProductRecord[],
   activatedOn: string,
-): Promise<readonly StagedOfficialProductRecord[]> {
-  if (!currentSnapshotId) {
-    return records.map((record) => Object.assign(record, {
-      registryEffectiveFrom:
-        record.attributes.creditexEligibleFromBasis === "registry_first_seen"
-          ? activatedOn
-          : record.eligibleFrom || activatedOn,
-    }));
-  }
-  const currentVersions = new Map<string, CurrentProductVersionRow>();
-  for (let offset = 0; offset < records.length; offset += PRODUCT_LOOKUP_CHUNK) {
-    const requested = records
-      .slice(offset, offset + PRODUCT_LOOKUP_CHUNK)
-      .map((record) => ({
-        sourceKey: record.sourceKey,
-        sourceRecordKey: record.sourceRecordKey,
-      }));
-    const rows = await db.prepare(`WITH requested AS (
-        SELECT
-          json_extract(value, '$.sourceKey') AS source_key,
-          json_extract(value, '$.sourceRecordKey') AS source_record_key
-        FROM json_each(?)
-      )
-      SELECT
-        product.source_key, product.source_record_key, product.product_kind,
-        product.manufacturer, product.brand, product.model, product.series,
-        product.registration_number, product.certificate_number,
-        product.approval_status, product.eligible_from, product.eligible_to,
-        product.available_in_australia, product.attributes_json,
-        product.registry_effective_from
-      FROM compliance_official_products product
-      JOIN requested
-        ON requested.source_key = product.source_key
-        AND requested.source_record_key = product.source_record_key
-      WHERE product.snapshot_id = ?`)
-      .bind(JSON.stringify(requested), currentSnapshotId)
-      .all<CurrentProductVersionRow>();
-    for (const row of rows.results || []) {
-      currentVersions.set(
-        eligibilityIdentity(row.source_key, row.source_record_key),
-        row,
-      );
-    }
-  }
-  return records.map((record) => {
-    const current = currentVersions.get(eligibilityIdentity(
-      record.sourceKey,
-      record.sourceRecordKey,
-    ));
-    return Object.assign(record, {
-      registryEffectiveFrom: current && currentProductVersionMatches(record, current)
-        ? current.registry_effective_from
-        : activatedOn,
-    });
-  });
+  hasCurrentSnapshot: boolean,
+): readonly StagedOfficialProductRecord[] {
+  return records.map((record) => Object.assign(record, {
+    // For a changed snapshot, the insert statement carries the prior date
+    // forward only when the indexed current row is byte-for-byte equivalent.
+    // Keeping that comparison in D1 avoids materialising the entire 75k-row
+    // VEU snapshot (including attributes JSON) in Worker memory a second time.
+    registryEffectiveFrom: hasCurrentSnapshot
+      ? activatedOn
+      : record.attributes.creditexEligibleFromBasis === "registry_first_seen"
+        ? activatedOn
+        : record.eligibleFrom || activatedOn,
+  }));
 }
 
 type SourceCountDecrease = Readonly<{
@@ -1145,6 +1063,7 @@ function pruneUnchangedHistoricalProducts(
 async function insertProductChunks(
   db: D1Database,
   snapshotId: string,
+  currentSnapshotId: string | null,
   records: readonly StagedOfficialProductRecord[],
 ) {
   let pendingStatements: D1PreparedStatement[] = [];
@@ -1195,11 +1114,31 @@ async function insertProductChunks(
       json_extract(value, '$.eligibleFrom'),
       json_extract(value, '$.eligibleTo'),
       json_extract(value, '$.availableInAustralia'),
-      json_extract(value, '$.registryEffectiveFrom'),
+      CASE
+        WHEN previous_product.snapshot_id IS NOT NULL
+          AND previous_product.product_kind = json_extract(value, '$.productKind')
+          AND previous_product.manufacturer = json_extract(value, '$.manufacturer')
+          AND previous_product.brand = json_extract(value, '$.brand')
+          AND previous_product.model = json_extract(value, '$.model')
+          AND previous_product.series = json_extract(value, '$.series')
+          AND previous_product.registration_number = json_extract(value, '$.registrationNumber')
+          AND previous_product.certificate_number = json_extract(value, '$.certificateNumber')
+          AND previous_product.approval_status = json_extract(value, '$.approvalStatus')
+          AND previous_product.eligible_from = json_extract(value, '$.eligibleFrom')
+          AND previous_product.eligible_to = json_extract(value, '$.eligibleTo')
+          AND previous_product.available_in_australia = json_extract(value, '$.availableInAustralia')
+          AND previous_product.attributes_json = json_extract(value, '$.attributesJson')
+        THEN previous_product.registry_effective_from
+        ELSE json_extract(value, '$.registryEffectiveFrom')
+      END,
       json_extract(value, '$.searchText'),
       json_extract(value, '$.attributesJson')
-    FROM json_each(?)`)
-      .bind(payload));
+    FROM json_each(?) staged
+    LEFT JOIN compliance_official_products previous_product
+      ON previous_product.snapshot_id = ?
+      AND previous_product.source_key = json_extract(value, '$.sourceKey')
+      AND previous_product.source_record_key = json_extract(value, '$.sourceRecordKey')`)
+      .bind(payload, currentSnapshotId || ""));
     pendingBindBytes += payloadBytes;
   };
   const encoder = new TextEncoder();
@@ -1470,11 +1409,10 @@ export async function syncOfficialProductRegistry(
         current !== null,
       );
       let stagedRecords: readonly StagedOfficialProductRecord[] | null =
-        await resolveRegistryEffectiveStarts(
-          db,
-          current?.id || null,
+        resolveRegistryEffectiveStarts(
           records,
           checkedOn,
+          current !== null,
         );
       records = null;
       await db.prepare(`INSERT INTO compliance_official_product_artifacts (
@@ -1494,7 +1432,12 @@ export async function syncOfficialProductRegistry(
           checkedAt,
         )
         .run();
-      await insertProductChunks(db, stagingSnapshotId, stagedRecords);
+      await insertProductChunks(
+        db,
+        stagingSnapshotId,
+        current?.id || null,
+        stagedRecords,
+      );
       stagedRecords = null;
     }
     const inserted = await db.prepare(`SELECT count(*) AS count

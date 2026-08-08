@@ -665,6 +665,192 @@ test("product staging keeps every D1 JSON binding below the governed byte budget
   );
 });
 
+test("75,492-row VEU refresh carries current versions inside bounded D1 inserts", async (t) => {
+  const recordCount = 75_492;
+  const sourceKey = "fixture-veu-scale";
+  const currentSnapshotId = "seed-veu-current";
+  const encoder = new TextEncoder();
+  let standaloneCurrentVersionLookups = 0;
+  let insertedRows = 0;
+  const insertBatches = [];
+  const { database, d1, artifactStore } = fixture({
+    onBind(sql, values) {
+      if (
+        sql.includes("WITH requested AS")
+        && sql.includes("product.registry_effective_from")
+      ) {
+        standaloneCurrentVersionLookups += 1;
+      }
+      if (
+        sql.includes("INSERT INTO compliance_official_products")
+        && sql.includes("FROM json_each(?)")
+      ) {
+        const payload = String(values[0]);
+        assert.ok(
+          encoder.encode(payload).byteLength <= 1_500_000,
+          "the D1 insert binding budget was exceeded",
+        );
+        insertedRows += JSON.parse(payload).length;
+      }
+    },
+    onBatch(statements) {
+      const inserts = statements.filter((statement) => (
+        statement.sql.includes("INSERT INTO compliance_official_products")
+        && statement.sql.includes("FROM json_each(?)")
+      ));
+      if (inserts.length > 0) {
+        insertBatches.push(inserts);
+      }
+    },
+  });
+  t.after(() => database.close());
+
+  database.prepare(`INSERT INTO compliance_official_product_snapshots (
+    id, registry_code, contract, source_manifest_json, source_sha256,
+    source_count, record_count, status, created_at, activated_at, activated_on,
+    superseded_at, superseded_on
+  ) VALUES (?, 'veu-approved-products', 'creditex-official-products/v1',
+    '{}', ?, 1, ?, 'staging', ?, NULL, NULL, NULL, NULL)`)
+    .run(
+      currentSnapshotId,
+      "0".repeat(64),
+      recordCount,
+      "2026-08-01T00:00:00.000Z",
+    );
+  database.prepare(`WITH RECURSIVE sequence(value) AS (
+      SELECT 0
+      UNION ALL
+      SELECT value + 1 FROM sequence WHERE value + 1 < ?
+    )
+    INSERT INTO compliance_official_products (
+      id, snapshot_id, source_key, source_record_key, product_kind,
+      manufacturer, brand, model, series, registration_number,
+      certificate_number, approval_status, eligible_from, eligible_to,
+      available_in_australia, registry_effective_from, search_text,
+      attributes_json
+    ) SELECT
+      ? || ':' || ? || ':VEU-' || printf('%05d', value),
+      ?, ?, 'VEU-' || printf('%05d', value),
+      'veu_shower_rose', '', 'Scale',
+      'Scale model ' || printf('%05d', value), '',
+      'VEU-' || printf('%05d', value), '', 'approved',
+      '2025-01-01', '', 1, '2025-01-01',
+      'scale scale model ' || printf('%05d', value)
+        || ' veu-' || printf('%05d', value),
+      '{"veuProductCategoryNumber":"17A","watts":400}'
+    FROM sequence`)
+    .run(
+      recordCount,
+      currentSnapshotId,
+      sourceKey,
+      currentSnapshotId,
+      sourceKey,
+    );
+  database.prepare(`INSERT INTO compliance_official_product_artifacts (
+    id, snapshot_id, source_key, source_url, source_sha256, content_type,
+    byte_length, record_count, object_key, created_at
+  ) VALUES (?, ?, ?, ?, ?, 'application/json', 1, ?, ?, ?)`)
+    .run(
+      `${currentSnapshotId}:${sourceKey}`,
+      currentSnapshotId,
+      sourceKey,
+      `https://example.test/${sourceKey}`,
+      "1".repeat(64),
+      recordCount,
+      `creditex/official-products/${"a".repeat(64)}`,
+      "2026-08-01T00:00:00.000Z",
+    );
+  database.prepare(`UPDATE compliance_official_product_snapshots
+    SET status = 'current', activated_at = ?, activated_on = ?
+    WHERE id = ?`)
+    .run("2026-08-01T00:00:00.000Z", "2026-08-01", currentSnapshotId);
+
+  let sourceBytes = encoder.encode(JSON.stringify(Array.from(
+    { length: recordCount },
+    (_, index) => {
+      const suffix = String(index).padStart(5, "0");
+      return {
+        sourceKey,
+        sourceRecordKey: `VEU-${suffix}`,
+        productKind: "veu_shower_rose",
+        manufacturer: "",
+        brand: "Scale",
+        model: `Scale model ${suffix}`,
+        series: "",
+        registrationNumber: `VEU-${suffix}`,
+        certificateNumber: "",
+        approvalStatus: "approved",
+        eligibleFrom: "2025-01-01",
+        eligibleTo: "",
+        availableInAustralia: true,
+        attributes: {
+          veuProductCategoryNumber: "17A",
+          watts: index === recordCount - 1 ? 401 : 400,
+        },
+      };
+    },
+  )));
+  const veuScaleSource = {
+    registryCode: "veu-approved-products",
+    sourceKey,
+    productKinds: ["veu_shower_rose"],
+    url: `https://example.test/${sourceKey}`,
+    minimumRecords: recordCount,
+    maximumBytes: 100_000_000,
+    expectedContentTypes: ["application/json"],
+    accept: "application/json",
+    licence: "fixture official licence",
+    productionMode: "automatic",
+    requiresOfficialEligibleFrom: true,
+    parse(bytes) {
+      return JSON.parse(new TextDecoder().decode(bytes));
+    },
+  };
+  const result = await syncOfficialProductRegistry(d1, {
+    registryCode: "veu-approved-products",
+    title: "75,492-row VEU scale fixture",
+    sources: [veuScaleSource],
+    async fetchSources() {
+      return [{
+        sourceKey,
+        contentType: "application/json",
+        bytes: sourceBytes,
+      }];
+    },
+  }, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-09T00:00:00.000Z"),
+  });
+  sourceBytes = new Uint8Array();
+
+  assert.equal(result.changed, true);
+  assert.equal(result.recordCount, recordCount);
+  assert.equal(standaloneCurrentVersionLookups, 0);
+  assert.equal(insertedRows, recordCount);
+  assert.equal(insertBatches.length, Math.ceil(recordCount / (500 * 4)));
+  assert.ok(insertBatches.every((batch) => batch.length <= 4));
+  assert.ok(insertBatches.every((batch) => (
+    batch.reduce((total, statement) => total
+      + encoder.encode(String(statement.values[0])).byteLength, 0)
+      <= 6_000_000
+  )));
+  const effectiveStarts = database.prepare(`SELECT registry_effective_from, count(*) count
+    FROM compliance_official_products
+    WHERE snapshot_id = ?
+    GROUP BY registry_effective_from
+    ORDER BY registry_effective_from`).all(result.snapshotId);
+  assert.deepEqual(effectiveStarts.map((row) => ({ ...row })), [
+    { registry_effective_from: "2025-01-01", count: recordCount - 1 },
+    { registry_effective_from: "2026-08-09", count: 1 },
+  ]);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_products
+    WHERE snapshot_id = ?`).get(currentSnapshotId).count, 1);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_products`).get().count, recordCount + 1);
+});
+
 test("GEMS exposes only approved status while retaining approved historical versions", async () => {
   const { d1, artifactStore } = fixture();
   const initiallyApproved = rows["fixture-gems-ac"].map((row) => (
