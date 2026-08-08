@@ -32,6 +32,7 @@ import {
   tradeBusinessThemeGradient,
   type TradeBusinessSettingsProfile,
 } from "./TradeBusinessSettingsWorkspace";
+import { resetTradeDashboardStateOnUidChange } from "./trade-rebate-calculator-state";
 
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const InstallerProductMarketplace = dynamic(() => import("./InstallerProductMarketplace").then((module) => module.InstallerProductMarketplace));
@@ -41,6 +42,7 @@ const TradePurchasingWorkspace = dynamic(() => import("./TradePurchasingWorkspac
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
 const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
+const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
@@ -147,13 +149,14 @@ type DashboardOpportunity = {
     customerDecision: string;
   };
 };
-type DashboardWorkspace = "work" | "invoices" | "follow-ups" | "leads" | "products" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
   "invoices",
   "follow-ups",
   "leads",
   "products",
+  "calculator",
   "orders",
   "import",
   "account",
@@ -173,6 +176,24 @@ const opportunityMatchIdPattern =
 function opportunityMatchFromSearch(search: string) {
   const requested = new URLSearchParams(search).get("matchId") || "";
   return opportunityMatchIdPattern.test(requested) ? requested : "";
+}
+
+function protectedIdentityContinuationIsCurrent(
+  capturedUid = "",
+  capturedRevision = -1,
+  currentUid = "",
+  currentRevision = -1,
+) {
+  return Boolean(capturedUid)
+    && capturedUid === currentUid
+    && capturedRevision === currentRevision;
+}
+
+function shouldClearOpportunityDeepLink(
+  previousUid = "",
+  nextUid = "",
+) {
+  return Boolean(previousUid) && previousUid !== nextUid;
 }
 
 function opportunityBroadLocation(opportunity: DashboardOpportunity) {
@@ -528,6 +549,9 @@ export function DirectTradeDashboard() {
   const [installerPlanErrors, setInstallerPlanErrors] = useState<Record<string, string>>({});
   const [installerPlanPreview, setInstallerPlanPreview] = useState<CustomerPlanReportView | null>(null);
   const evidenceObjectUrls = useRef(new Set<string>());
+  const protectedOpportunityRequestControllers = useRef(
+    new Set<AbortController>(),
+  );
   const protectedIdentityUid = useRef<string | null>(null);
   const protectedIdentityRevision = useRef(0);
   const initialOpportunityMatchId = useRef(
@@ -546,8 +570,53 @@ export function DirectTradeDashboard() {
     evidenceObjectUrls.current.clear();
   }, []);
 
+  const abortProtectedOpportunityRequests = useCallback(() => {
+    for (const controller of protectedOpportunityRequestControllers.current) {
+      controller.abort();
+    }
+    protectedOpportunityRequestControllers.current.clear();
+  }, []);
+
+  const scrubProtectedOpportunityNavigation = useCallback(() => {
+    initialOpportunityMatchId.current = "";
+    const nextUrl = new URL(window.location.href);
+    let changed = false;
+    if (nextUrl.searchParams.has("matchId")) {
+      nextUrl.searchParams.delete("matchId");
+      changed = true;
+    }
+    if (nextUrl.searchParams.get("workspace") === "leads") {
+      nextUrl.searchParams.set("workspace", "work");
+      changed = true;
+    }
+    if (nextUrl.hash === "#opportunity-inbox") {
+      nextUrl.hash = "";
+      changed = true;
+    }
+    if (!changed) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
+    );
+  }, []);
+
   const clearProtectedInstallerState = useCallback(() => {
+    abortProtectedOpportunityRequests();
     revokeAllEvidenceObjectUrls();
+    setProfile(null);
+    setError("");
+    setOpportunities([]);
+    setOpportunityBusy("");
+    setOpportunityStatus("");
+    setOpportunityNavigationStatus("");
+    setLeadSearch("");
+    setLeadStatusFilter("");
+    setLeadServiceFilter("");
+    setLeadStateFilter("");
+    setWorkspace("work");
+    setActiveWorkView("today");
+    setCommandTarget(null);
     setInstallerPlanPreview(null);
     setInstallerPlanBusy("");
     setInstallerPlanErrors({});
@@ -557,7 +626,7 @@ export function DirectTradeDashboard() {
     setEvidencePhotoErrors({});
     setExpandedOpportunityMatchIds(new Set());
     setFocusedOpportunityMatchId("");
-  }, [revokeAllEvidenceObjectUrls]);
+  }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -574,19 +643,30 @@ export function DirectTradeDashboard() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  useEffect(
-    () => () => revokeAllEvidenceObjectUrls(),
-    [revokeAllEvidenceObjectUrls],
-  );
+  useEffect(() => () => {
+    abortProtectedOpportunityRequests();
+    revokeAllEvidenceObjectUrls();
+  }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls]);
 
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
         const nextUid = nextUser?.uid || null;
-        if (protectedIdentityUid.current !== nextUid) {
+        const previousUid = protectedIdentityUid.current;
+        if (resetTradeDashboardStateOnUidChange(
+          previousUid,
+          nextUid,
+          clearProtectedInstallerState,
+        )) {
+          if (shouldClearOpportunityDeepLink(
+            previousUid || "",
+            nextUid || "",
+          )) {
+            scrubProtectedOpportunityNavigation();
+          }
           protectedIdentityUid.current = nextUid;
           protectedIdentityRevision.current += 1;
-          clearProtectedInstallerState();
+          setLoading(Boolean(nextUser));
         }
         setUser(nextUser);
         setAuthReady(true);
@@ -595,12 +675,17 @@ export function DirectTradeDashboard() {
           setOpportunities([]);
         }
       }),
-    [clearProtectedInstallerState],
+    [clearProtectedInstallerState, scrubProtectedOpportunityNavigation],
   );
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => (
+      protectedIdentityRevision.current === identityRevision
+      && protectedIdentityUid.current === user.uid
+    );
     async function loadDashboard() {
       setLoading(true);
       setError("");
@@ -613,7 +698,7 @@ export function DirectTradeDashboard() {
         const result = await response.json().catch(() => ({}));
         if (!response.ok)
           throw new Error(result.error || "The dashboard could not be loaded.");
-        if (!cancelled) {
+        if (!cancelled && identityIsCurrent()) {
           const nextProfile = result.profile as DashboardProfile | null;
           setProfile(nextProfile);
           if (nextProfile) {
@@ -621,14 +706,14 @@ export function DirectTradeDashboard() {
           }
         }
       } catch (loadError) {
-        if (!cancelled)
+        if (!cancelled && identityIsCurrent())
           setError(
             loadError instanceof Error
               ? loadError.message
               : "The dashboard could not be loaded.",
           );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && identityIsCurrent()) setLoading(false);
       }
     }
     void loadDashboard();
@@ -638,17 +723,28 @@ export function DirectTradeDashboard() {
   }, [user]);
 
   useEffect(() => {
+    if (profile?.partnerType === "supplier" && workspace === "calculator") {
+      setWorkspace("work");
+    }
+  }, [profile?.partnerType, workspace]);
+
+  useEffect(() => {
     if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads) return;
     const controller = new AbortController();
     let active = true;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => (
+      protectedIdentityRevision.current === identityRevision
+      && protectedIdentityUid.current === user.uid
+    );
     void user.getIdToken().then((token) => fetch("/api/trade-opportunities", {
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
     })).then(async (response) => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
-      if (active) setOpportunities(result.opportunities || []);
+      if (active && identityIsCurrent()) setOpportunities(result.opportunities || []);
     }).catch((loadError) => {
-      if (active && !controller.signal.aborted) setOpportunityStatus(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
+      if (active && identityIsCurrent() && !controller.signal.aborted) setOpportunityStatus(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
     });
     return () => { active = false; controller.abort(); };
   }, [profile, user]);
@@ -680,6 +776,20 @@ export function DirectTradeDashboard() {
   }, [leadSearch, leadServiceFilter, leadStateFilter, leadStatusFilter, opportunities]);
 
   const openOpportunityNotification = useCallback(async (matchId: string) => {
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => protectedIdentityContinuationIsCurrent(
+      identityUid,
+      identityRevision,
+      protectedIdentityUid.current || "",
+      protectedIdentityRevision.current,
+    );
+    const controller = new AbortController();
+    protectedOpportunityRequestControllers.current.add(controller);
+    const requestIsCurrent = () =>
+      identityIsCurrent() && !controller.signal.aborted;
     setLeadSearch("");
     setLeadStatusFilter("");
     setLeadServiceFilter("");
@@ -702,17 +812,20 @@ export function DirectTradeDashboard() {
       `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
     );
     setOpportunityNavigationStatus("Opening lead...");
-    if (!user) return;
     try {
-      const token = await user.getIdToken();
+      const token = await activeUser.getIdToken();
+      if (!requestIsCurrent()) return;
       const response = await fetch(
         `/api/trade-opportunities?matchId=${encodeURIComponent(matchId)}`,
         {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+          signal: controller.signal,
         },
       );
+      if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
+      if (!requestIsCurrent()) return;
       if (!response.ok) {
         throw new Error(result.error || "The lead could not be refreshed.");
       }
@@ -726,11 +839,14 @@ export function DirectTradeDashboard() {
       ]);
       setOpportunityNavigationStatus("");
     } catch (openError) {
+      if (!requestIsCurrent()) return;
       setOpportunityNavigationStatus(
         openError instanceof Error
           ? openError.message
           : "The lead could not be refreshed.",
       );
+    } finally {
+      protectedOpportunityRequestControllers.current.delete(controller);
     }
   }, [user]);
 
@@ -790,7 +906,20 @@ export function DirectTradeDashboard() {
     matchId: string,
     status: "viewed" | "interested" | "declined",
   ) {
-    if (!user) return;
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => protectedIdentityContinuationIsCurrent(
+      identityUid,
+      identityRevision,
+      protectedIdentityUid.current || "",
+      protectedIdentityRevision.current,
+    );
+    const controller = new AbortController();
+    protectedOpportunityRequestControllers.current.add(controller);
+    const requestIsCurrent = () =>
+      identityIsCurrent() && !controller.signal.aborted;
     setOpportunityBusy(matchId);
     setOpportunityStatus(
       status === "interested"
@@ -798,7 +927,8 @@ export function DirectTradeDashboard() {
         : "Updating the opportunity...",
     );
     try {
-      const token = await user.getIdToken();
+      const token = await activeUser.getIdToken();
+      if (!requestIsCurrent()) return;
       const response = await fetch("/api/trade-opportunities", {
         method: "PATCH",
         headers: {
@@ -806,8 +936,11 @@ export function DirectTradeDashboard() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ matchId, status }),
+        signal: controller.signal,
       });
+      if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
+      if (!requestIsCurrent()) return;
       if (!response.ok || !result.ok)
         throw new Error(
           result.error || "The opportunity response could not be saved.",
@@ -831,22 +964,38 @@ export function DirectTradeDashboard() {
             : "Opportunity marked as reviewed.",
       );
     } catch (responseError) {
+      if (!requestIsCurrent()) return;
       setOpportunityStatus(
         responseError instanceof Error
           ? responseError.message
           : "The opportunity response could not be saved.",
       );
     } finally {
-      setOpportunityBusy("");
+      protectedOpportunityRequestControllers.current.delete(controller);
+      if (requestIsCurrent()) setOpportunityBusy("");
     }
   }
 
   async function convertOpportunity(matchId: string) {
-    if (!user) return;
+    const activeUser = user;
+    if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    const identityUid = activeUser.uid;
+    const identityRevision = protectedIdentityRevision.current;
+    const identityIsCurrent = () => protectedIdentityContinuationIsCurrent(
+      identityUid,
+      identityRevision,
+      protectedIdentityUid.current || "",
+      protectedIdentityRevision.current,
+    );
+    const controller = new AbortController();
+    protectedOpportunityRequestControllers.current.add(controller);
+    const requestIsCurrent = () =>
+      identityIsCurrent() && !controller.signal.aborted;
     setOpportunityBusy(matchId);
     setOpportunityStatus("Creating the CRM job...");
     try {
-      const token = await user.getIdToken();
+      const token = await activeUser.getIdToken();
+      if (!requestIsCurrent()) return;
       const workResponse = await fetch("/api/trade-work-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -855,8 +1004,11 @@ export function DirectTradeDashboard() {
           sourceType: "opportunity",
           sourceReference: matchId,
         }),
+        signal: controller.signal,
       });
+      if (!requestIsCurrent()) return;
       const workResult = await workResponse.json().catch(() => ({}));
+      if (!requestIsCurrent()) return;
       if (!workResponse.ok || !workResult.ok) {
         throw new Error(workResult.error || "The marketplace opportunity could not be converted.");
       }
@@ -865,13 +1017,15 @@ export function DirectTradeDashboard() {
         ? `${workResult.workNumber} is ready in Work and the customer-selected window is now an unassigned CRM appointment for dispatch review.`
         : `${workResult.workNumber} is ready in Work.`);
     } catch (conversionError) {
+      if (!requestIsCurrent()) return;
       setOpportunityStatus(
         conversionError instanceof Error
           ? conversionError.message
           : "The marketplace opportunity could not be converted.",
       );
     } finally {
-      setOpportunityBusy("");
+      protectedOpportunityRequestControllers.current.delete(controller);
+      if (requestIsCurrent()) setOpportunityBusy("");
     }
   }
 
@@ -880,9 +1034,12 @@ export function DirectTradeDashboard() {
     if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
     const identityUid = activeUser.uid;
     const identityRevision = protectedIdentityRevision.current;
-    const identityIsCurrent = () =>
-      protectedIdentityUid.current === identityUid &&
-      protectedIdentityRevision.current === identityRevision;
+    const identityIsCurrent = () => protectedIdentityContinuationIsCurrent(
+      identityUid,
+      identityRevision,
+      protectedIdentityUid.current || "",
+      protectedIdentityRevision.current,
+    );
     const photos = opportunity.evidence.filter((item) =>
       item.contentType.startsWith("image/")
     );
@@ -896,6 +1053,10 @@ export function DirectTradeDashboard() {
       return;
     }
 
+    const controller = new AbortController();
+    protectedOpportunityRequestControllers.current.add(controller);
+    const requestIsCurrent = () =>
+      identityIsCurrent() && !controller.signal.aborted;
     setEvidencePhotoBusy(opportunity.matchId);
     setEvidencePhotoErrors((current) => ({
       ...current,
@@ -904,38 +1065,50 @@ export function DirectTradeDashboard() {
     const createdUrls: string[] = [];
     try {
       const token = await activeUser.getIdToken();
+      if (!requestIsCurrent()) return;
       const nextUrls: Record<string, string> = { ...(existing || {}) };
       const missingPhotos = photos.filter((item) => !nextUrls[item.id]);
       const results = await Promise.allSettled(missingPhotos.map(async (item) => {
+        if (!requestIsCurrent()) return null;
         const response = await fetch(
           `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`,
           {
             headers: { Authorization: `Bearer ${token}` },
             cache: "no-store",
+            signal: controller.signal,
           },
         );
+        if (!requestIsCurrent()) return null;
         if (!response.ok) {
           const result = await response.json().catch(() => ({}));
+          if (!requestIsCurrent()) return null;
           throw new Error(
             result.error || "The shared photo could not be opened.",
           );
         }
-        const url = URL.createObjectURL(await response.blob());
+        const blob = await response.blob();
+        if (!requestIsCurrent()) return null;
+        const url = URL.createObjectURL(blob);
+        if (!requestIsCurrent()) {
+          URL.revokeObjectURL(url);
+          return null;
+        }
         evidenceObjectUrls.current.add(url);
+        createdUrls.push(url);
         return { id: item.id, url };
       }));
+      if (!requestIsCurrent()) {
+        for (const url of createdUrls) revokeEvidenceObjectUrl(url);
+        return;
+      }
       let failed = 0;
       for (const result of results) {
         if (result.status === "rejected") {
           failed += 1;
           continue;
         }
-        createdUrls.push(result.value.url);
+        if (!result.value) continue;
         nextUrls[result.value.id] = result.value.url;
-      }
-      if (!identityIsCurrent()) {
-        for (const url of createdUrls) revokeEvidenceObjectUrl(url);
-        return;
       }
       setEvidencePhotoUrls((current) => ({
         ...current,
@@ -954,7 +1127,7 @@ export function DirectTradeDashboard() {
       }
     } catch (previewError) {
       for (const url of createdUrls) revokeEvidenceObjectUrl(url);
-      if (!identityIsCurrent()) return;
+      if (!requestIsCurrent()) return;
       setEvidencePhotoErrors((current) => ({
         ...current,
         [opportunity.matchId]: previewError instanceof Error
@@ -962,7 +1135,8 @@ export function DirectTradeDashboard() {
           : "The shared photos could not be opened.",
       }));
     } finally {
-      if (identityIsCurrent()) setEvidencePhotoBusy("");
+      protectedOpportunityRequestControllers.current.delete(controller);
+      if (requestIsCurrent()) setEvidencePhotoBusy("");
     }
   }
 
@@ -1292,7 +1466,8 @@ export function DirectTradeDashboard() {
                 <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
                 <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">06</b><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">07</b><span>Business</span><small>Settings and verification</small></button>
+                <button type="button" className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">07</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
+                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">08</b><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
@@ -1323,6 +1498,16 @@ export function DirectTradeDashboard() {
               }} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before invoicing is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "follow-ups" && (hasBusinessOperations && hasTeamAccess ? <TradeServiceFollowUpWorkspace user={user} /> : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before service follow-up preparation is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
+
+              {workspace === "calculator" && (hasBusinessOperations ? (
+                <TradeRebateCalculatorWorkspace key={user.uid} user={user} />
+              ) : (
+                <section className="dashboard-panel dashboard-upgrade-callout">
+                  <strong>Verification required</strong>
+                  <p>An active verified installer account is required to use the rebate calculator.</p>
+                  <a href="/direct-trade/dashboard/verification">Open verification centre</a>
+                </section>
+              ))}
 
               {workspace === "account" && (
                 <TradeBusinessSettingsWorkspace

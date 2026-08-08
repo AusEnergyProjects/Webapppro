@@ -1592,13 +1592,71 @@ invoice send, legacy issued PDFs without provable retained bytes, the approved
 Australian address-provider integration, and independently approved complete
 manual VEU, SRES/STC and NSW governed bundles.
 
+## Unreleased working-tree milestone: CREDITEX-NATIONAL-CALCULATOR-47
+
+Status: implemented and validated locally, not committed, pushed, migrated or
+deployed.
+
+This milestone replaces the six-path SRES prototype with one source-controlled
+calculator workspace across 35 Australian program pathways and 216 activity
+templates. The program, activity, scenario, installation date, postcode or
+service inputs and approved-product selectors are driven by typed catalogues.
+Every result is an estimate with deterministic formula and source provenance;
+certificate creation, submission, trade and settlement remain disabled.
+The same governed calculator is available to verified installer accounts from
+the TLink trade dashboard under `Calculator`, so an installer can check an
+estimate while preparing a quote or invoice. That trade surface can search
+current approved products and run estimates, but it cannot refresh registries
+or enable certificate actions.
+
+Official-product foundations now include:
+
+- 16,684 current CER registered solar-water-heater and air-source-heat-pump
+  products plus both current CER postcode-zone documents;
+- 31,418 stable GEMS records from 11 official data.gov.au resources under the
+  automatic daily registry contract;
+- 44,119 stable rows across all 14 live-tested federal feeds, including 12,701
+  CER-hosted CEC module, inverter and battery rows that remain controlled-manual
+  until commercial reuse permission is recorded;
+- 2,024 current Synergy supported-solution rows parsed under a controlled-manual
+  contract, while Horizon Power remains blocked without a supported feed; and
+- effective-dated current snapshots plus retained changed or removed historical
+  deltas, exact R2 source-byte custody, D1 manifests, source-count review,
+  concurrency leases and fail-closed freshness, schema and integrity checks.
+
+The governed formula layer now includes exact rational implementations and
+tests for 15 VEU activity families across 40 scenarios, 20 NSW ESS/PDRS
+scenarios and 30 local Queensland, Western Australian, Tasmanian and Northern
+Territory program activities. The VEU postcode resolver contains all 719
+explicit Version 24 and Version 25 Table A rows. The live VEU registry was
+audited at 64,715 approved and effective records, but it remains an unsupported
+embedded Power BI interface and is not a production connector. NSW TESSA and
+administrator-accepted battery lists likewise remain unavailable as supported
+machine feeds.
+
+The current fail-closed coverage result is 33 executable estimate templates and
+183 blocked or non-executable templates. The executable set is SRES 2, local
+programs 20, VEU 4, NSW ESS 3 and NSW PDRS 4. The remaining states are 9 closed,
+8 not commenced, 105 governed-formula-required, 27 not applicable, 32
+official-registry-required and 2 project-method-required. All 216 templates have
+one deterministic readiness result, the coverage hash is
+`sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1`,
+and certificate actions enabled remain 0.
+
+`npm.cmd run validate` passed type checking, warning-free lint, 31 of 31
+integration tests, 1,636 main tests with 1,629 passed, 7 intentionally skipped
+and 0 failed, all 126 migrations, the customer-plan PDF audit, the Vinext
+production build and the Sites server-bundle audit. Current live-source runs
+passed CER SRES 17 of 17, combined federal parser and registry 23 of 23, and WA
+supported-solution parsing 6 of 6.
+
 ## Next five logical product steps
 
-1. **Controlled Gmail and Outlook delivery proof for both quote and invoice, with provider callback reconciliation.**
-2. **One complete manual non-submitting VEU, SRES/STC and NSW governed job bundle each.**
-3. **Approved Australian production address provider reused across customer/site/job.**
-4. **Immutable planned-intent revision and governed-case supersession.**
-5. **Physical field/Dataforce acceptance: GPS, EXIF, offline evidence, remaining exact import fields.**
+1. **Obtain and record CEC commercial data permission, then activate CEC module, inverter and battery ingestion with suspension, delisting, recall, NETCC and SAA overlays.**
+2. **Obtain a supported VEU machine extract, ingest the 64,715-row audited registry with effective dates and statuses, and unlock the implemented VEU formula families only after oracle reconciliation.**
+3. **Ingest supported NSW TESSA and administrator-accepted product lists, add historical ESS/PDRS rule versions, and unlock D17 to D20 and BESS1 to BESS5 only inside their exact date windows.**
+4. **Obtain Synergy commercial reuse permission and a supported Horizon Power feed, then activate WA battery and managed-device calculators with exact service-territory checks.**
+5. **Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes, then complete the remaining VEU, NSW and project-method calculators.**
 
 ## Global stop conditions
 

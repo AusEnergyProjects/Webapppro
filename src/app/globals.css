@@ -4884,6 +4884,8 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-shell .dashboard-access-summary h2 { color: var(--trade-ink); font-size: 1.22rem; margin-top: 5px; }
 .trade-portal-shell .dashboard-panel-heading p,
 .trade-portal-shell .dashboard-access-summary p { color: var(--trade-muted); font-size: .7rem; line-height: 1.55; }
+.trade-rebate-calculator { overflow: hidden; }
+.trade-rebate-calculator-status { background: var(--trade-accent-soft); border: 1px solid var(--trade-line); border-radius: 10px; color: var(--trade-accent-soft-ink); font-size: .68rem; margin: 0 0 14px; padding: 10px 12px; }
 .trade-portal-shell .dashboard-status-grid { gap: 13px; }
 .trade-portal-shell .dashboard-status-grid article,
 .trade-portal-shell .supplier-status-grid article { border-color: var(--trade-line); border-radius: 15px; box-shadow: 0 6px 18px rgba(12, 55, 56, .04); padding: 18px; }

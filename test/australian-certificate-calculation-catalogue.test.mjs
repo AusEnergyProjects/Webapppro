@@ -47,10 +47,19 @@ test("every controlled government activity has exactly one fail-closed calculati
   }
 });
 
-test("current SRES estimates are available while current VEU and NSW formulas remain governed", () => {
+test("current SRES, VEU and NSW pathways expose only their verified readiness state", () => {
   const sres = governmentActivityCalculationMethods("SRES");
   assert.equal(sres.length, 6);
-  assert.ok(sres.every((method) => method.state === "estimate_available"));
+  assert.equal(
+    sres.filter((method) => method.state === "estimate_available").length,
+    2,
+  );
+  assert.equal(
+    sres.filter(
+      (method) => method.state === "official_registry_required",
+    ).length,
+    4,
+  );
   assert.ok(sres.every((method) => method.unit === "STC"));
   assert.ok(
     sres.every((method) => method.officialReconciliationRequired === true),
@@ -59,13 +68,20 @@ test("current SRES estimates are available while current VEU and NSW formulas re
   for (const code of ["VEU", "NSW-ESS", "NSW-PDRS"]) {
     const methods = governmentActivityCalculationMethods(code);
     assert.ok(methods.length > 0);
+    const current = methods.filter(
+      (method) => method.catalogueState === "current",
+    );
+    assert.ok(current.length > 0);
     assert.ok(
-      methods
-        .filter((method) => method.catalogueState === "current")
-        .every(
-        (method) => method.state === "governed_formula_required",
+      current.every(
+        (method) => [
+          "estimate_available",
+          "official_registry_required",
+          "governed_formula_required",
+        ].includes(method.state),
       ),
     );
+    assert.ok(current.some((method) => method.state === "estimate_available"));
     assert.ok(methods.every((method) => method.certificateActionEnabled === false));
   }
 });
@@ -88,7 +104,7 @@ test("closed and future activities are visibly unavailable rather than formula-p
   }
 });
 
-test("non-certificate programs never represent an administrative outcome as zero certificates", () => {
+test("non-certificate programs expose AUD estimates or an explicit administrative pathway", () => {
   const nonCertificateOutcomes = new Set([
     "rebate",
     "grant",
@@ -111,9 +127,19 @@ test("non-certificate programs never represent an administrative outcome as zero
   assert.ok(
     nonCertificateMethods.every(
       (method) =>
-        method.state === "not_applicable"
-        && method.unit === "none"
-        && method.formulaKey === "no-certificate-calculation",
+        (
+          method.state === "not_applicable"
+          && method.unit === "none"
+          && method.formulaKey === "no-certificate-calculation"
+        )
+        || (
+          ["estimate_available", "official_registry_required"].includes(
+            method.state,
+          )
+          && method.unit === "AUD"
+          && method.formulaKey !== "no-certificate-calculation"
+          && method.officialReconciliationRequired === true
+        ),
     ),
   );
   assert.ok(

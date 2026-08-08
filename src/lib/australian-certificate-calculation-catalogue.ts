@@ -6,6 +6,18 @@ import {
   type GovernmentActivityTemplate,
   type GovernmentProgramTemplate,
 } from "./australian-government-program-catalogue.ts";
+import {
+  CREDITEX_LOCAL_PROGRAM_DEFINITIONS,
+  creditexLocalActivityDefinition,
+  creditexLocalProgramDefinition,
+} from "./creditex-local-program-catalogue.ts";
+import {
+  CREDITEX_NSW_PROGRAM_DEFINITIONS,
+} from "./creditex-nsw-program-catalogue.ts";
+import {
+  CREDITEX_VEU_ACTIVITY_DEFINITIONS,
+} from "./creditex-veu-calculator-catalogue.ts";
+import { officialProductKindsForLocalActivity } from "./creditex-official-product-registry.ts";
 
 export const CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON = "2026-08-02";
 
@@ -44,6 +56,7 @@ export type CertificateCalculationUnit =
   | "ACCU"
   | "MWh"
   | "GJ"
+  | "AUD"
   | "none";
 
 export type GovernmentCalculationSourceWindow = {
@@ -159,6 +172,16 @@ readonly GovernmentCalculationSourceWindow[] = [
       "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-Rule-of-2022-1-July-2026.PDF",
     independentApprovalRequired: true,
   },
+  ...CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => ({
+    programCode: program.programCode,
+    sourceKey: `${program.programCode.toLowerCase()}-${program.effectiveFrom}`,
+    version: program.sourceVersion,
+    effectiveFrom: program.effectiveFrom,
+    effectiveTo: program.effectiveTo,
+    scope: program.activities.map((activity) => activity.activityCode).join(", "),
+    officialSourceUrl: program.officialSourceUrl,
+    independentApprovalRequired: true,
+  })),
 ];
 
 const PROGRAM_BY_CODE = new Map(
@@ -271,6 +294,51 @@ function sresFormulaKey(activity: GovernmentActivityTemplate) {
   return "cer-sres-solar-battery-estimate/v1";
 }
 
+const VEU_FORMULA_READY_ACTIVITY_CODES = new Set([
+  "1", "3", "6", "13", "14", "15", "17", "22", "24", "25", "26",
+  "46", "48",
+]);
+
+const VEU_EXECUTABLE_ACTIVITY_CODES = new Set(["22", "24", "25", "46"]);
+
+const NSW_EXECUTABLE_ACTIVITY_CODES = new Set([
+  "HVAC1", "HVAC2", "RF2", "SYS2",
+  "D5", "D16", "F4",
+]);
+
+const NSW_FORMULA_READY_REGISTRY_REQUIRED_CODES = new Set([
+  "D17", "D18", "D19", "D20",
+]);
+
+const NSW_PDRS_FORMULA_READY_REGISTRY_REQUIRED_CODES = new Set([
+  "BESS1", "BESS2",
+]);
+
+function veuFormulaKey(registryActivityCode: string) {
+  const codes = registryActivityCode === "1"
+    ? new Set(["1C", "1D"])
+    : registryActivityCode === "3"
+      ? new Set(["3C", "3D"])
+      : new Set([registryActivityCode]);
+  return CREDITEX_VEU_ACTIVITY_DEFINITIONS
+    .filter((activity) => codes.has(activity.activityCode))
+    .map((activity) => activity.formulaKey)
+    .join("+");
+}
+
+function nswFormulaKey(programCode: string, registryActivityCode: string) {
+  const estimatorProgramCode = programCode === "NSW-ESS"
+    ? "NSW-ESS-2026"
+    : "NSW-PDRS-2026";
+  const program = CREDITEX_NSW_PROGRAM_DEFINITIONS.find(
+    (candidate) => candidate.programCode === estimatorProgramCode,
+  );
+  return program?.activities
+    .filter((activity) => activity.officialActivityCode === registryActivityCode)
+    .map((activity) => activity.formulaKey)
+    .join("+") || "";
+}
+
 function sourceWindow(
   program: GovernmentProgramTemplate,
   activity: GovernmentActivityTemplate,
@@ -295,6 +363,50 @@ function nonCertificateMethod(
   program: GovernmentProgramTemplate,
   activity: GovernmentActivityTemplate,
 ): GovernmentActivityCalculationMethod {
+  const localProgram = creditexLocalProgramDefinition(program.programCode);
+  const localActivity = creditexLocalActivityDefinition(
+    program.programCode,
+    activity.registryActivityCode,
+  );
+  if (localProgram && localActivity) {
+    const controlledRegistryProductKinds = new Set([
+      "pv_module",
+      "inverter",
+      "battery",
+      "wa_synergy_supported_solution",
+      "wa_horizon_supported_solution",
+    ]);
+    const controlledRegistryRequired = officialProductKindsForLocalActivity(
+      program.programCode,
+      activity.registryActivityCode,
+    ).some((kind) => controlledRegistryProductKinds.has(kind));
+    return {
+      activityTemplateId: activity.templateId,
+      programCode: program.programCode,
+      registryActivityCode: activity.registryActivityCode,
+      activityTitle: activity.title,
+      catalogueState: activity.catalogueState,
+      outcomeClass: program.outcomeClass,
+      unit: "AUD",
+      state: controlledRegistryRequired
+        ? "official_registry_required"
+        : "estimate_available",
+      pathway: controlledRegistryRequired
+        ? "official_registry_or_calculator"
+        : "deterministic_local_estimate",
+      formulaKey: localActivity.formulaKey,
+      officialSourceUrl: localProgram.officialSourceUrl,
+      officialSourceTitle: localProgram.officialSourceTitle,
+      sourceVersion: localProgram.sourceVersion,
+      sourceEffectiveFrom: localProgram.effectiveFrom,
+      sourceEffectiveTo: localProgram.effectiveTo,
+      officialReconciliationRequired: true,
+      certificateActionEnabled: false,
+      operatorMessage: controlledRegistryRequired
+        ? `${localProgram.operatorMessage} Calculation remains fail-closed until every required controlled product source is lawfully ingested and date-locked. CER-hosted CEC data needs recorded reuse permission, and WA activities also need the applicable Synergy or Horizon supported-solution evidence.`
+        : localProgram.operatorMessage,
+    };
+  }
   return {
     activityTemplateId: activity.templateId,
     programCode: program.programCode,
@@ -399,6 +511,9 @@ function methodForActivity(
   };
 
   if (program.programCode === "SRES") {
+    const executable = ["SWH", "ASHP"].includes(
+      activity.registryActivityCode,
+    );
     return {
       activityTemplateId: activity.templateId,
       programCode: program.programCode,
@@ -407,18 +522,51 @@ function methodForActivity(
       catalogueState: activity.catalogueState,
       outcomeClass: program.outcomeClass,
       unit: "STC",
-      state: "estimate_available",
-      pathway: "deterministic_local_estimate",
+      state: executable
+        ? "estimate_available"
+        : "official_registry_required",
+      pathway: executable
+        ? "deterministic_local_estimate"
+        : "official_registry_or_calculator",
       formulaKey: sresFormulaKey(activity),
       ...sourceFields,
       officialReconciliationRequired: true,
       certificateActionEnabled: false,
-      operatorMessage:
-        "A deterministic estimate is available. Product eligibility, postcode or model register values and the final quantity must still reconcile with the current REC Registry calculator before any STC action.",
+      operatorMessage: executable
+        ? "A deterministic estimate is available from the dated CER registered-product snapshot and postcode zone. The final quantity must still reconcile with the current REC Registry calculator before any STC action."
+        : "The governed arithmetic is retained, but calculation stays fail-closed until every required approved component, system-design input, installation-date status and accreditation check is connected to a lawful controlled source. No STC action is enabled.",
     };
   }
 
   if (program.programCode === "VEU") {
+    const formulaKey = veuFormulaKey(activity.registryActivityCode);
+    if (VEU_FORMULA_READY_ACTIVITY_CODES.has(activity.registryActivityCode)) {
+      const executable = VEU_EXECUTABLE_ACTIVITY_CODES.has(
+        activity.registryActivityCode,
+      );
+      return {
+        activityTemplateId: activity.templateId,
+        programCode: program.programCode,
+        registryActivityCode: activity.registryActivityCode,
+        activityTitle: activity.title,
+        catalogueState: activity.catalogueState,
+        outcomeClass: program.outcomeClass,
+        unit: "VEEC",
+        state: executable
+          ? "estimate_available"
+          : "official_registry_required",
+        pathway: executable
+          ? "deterministic_local_estimate"
+          : "official_registry_or_calculator",
+        formulaKey,
+        ...sourceFields,
+        officialReconciliationRequired: true,
+        certificateActionEnabled: false,
+        operatorMessage: executable
+          ? "The governed formula and supported official product feed are connected for an estimate. Reconcile full activity evidence before any VEEC action."
+          : "The governed formula is implemented and tested. Calculation stays fail-closed until the current VEU approved-product registry is captured through a monitored immutable connector.",
+      };
+    }
     return {
       activityTemplateId: activity.templateId,
       programCode: program.programCode,
@@ -439,6 +587,42 @@ function methodForActivity(
   }
 
   if (program.programCode === "NSW-ESS") {
+    const formulaKey = nswFormulaKey(
+      program.programCode,
+      activity.registryActivityCode,
+    );
+    if (
+      NSW_EXECUTABLE_ACTIVITY_CODES.has(activity.registryActivityCode)
+      || NSW_FORMULA_READY_REGISTRY_REQUIRED_CODES.has(
+        activity.registryActivityCode,
+      )
+    ) {
+      const executable = NSW_EXECUTABLE_ACTIVITY_CODES.has(
+        activity.registryActivityCode,
+      );
+      return {
+        activityTemplateId: activity.templateId,
+        programCode: program.programCode,
+        registryActivityCode: activity.registryActivityCode,
+        activityTitle: activity.title,
+        catalogueState: activity.catalogueState,
+        outcomeClass: program.outcomeClass,
+        unit: "ESC",
+        state: executable
+          ? "estimate_available"
+          : "official_registry_required",
+        pathway: executable
+          ? "deterministic_local_estimate"
+          : "official_registry_or_calculator",
+        formulaKey,
+        ...sourceFields,
+        officialReconciliationRequired: true,
+        certificateActionEnabled: false,
+        operatorMessage: executable
+          ? "The 1 July 2026 Rule formula and supported official product feed are connected for an estimate. ACP eligibility and implementation evidence still require reconciliation."
+          : "The governed formula is implemented and tested. Calculation stays source-controlled until the current TESSA accepted-product evidence can be ingested and date-locked.",
+      };
+    }
     return {
       activityTemplateId: activity.templateId,
       programCode: program.programCode,
@@ -459,6 +643,42 @@ function methodForActivity(
   }
 
   if (program.programCode === "NSW-PDRS") {
+    const formulaKey = nswFormulaKey(
+      program.programCode,
+      activity.registryActivityCode,
+    );
+    if (
+      NSW_EXECUTABLE_ACTIVITY_CODES.has(activity.registryActivityCode)
+      || NSW_PDRS_FORMULA_READY_REGISTRY_REQUIRED_CODES.has(
+        activity.registryActivityCode,
+      )
+    ) {
+      const executable = NSW_EXECUTABLE_ACTIVITY_CODES.has(
+        activity.registryActivityCode,
+      );
+      return {
+        activityTemplateId: activity.templateId,
+        programCode: program.programCode,
+        registryActivityCode: activity.registryActivityCode,
+        activityTitle: activity.title,
+        catalogueState: activity.catalogueState,
+        outcomeClass: program.outcomeClass,
+        unit: "PRC",
+        state: executable
+          ? "estimate_available"
+          : "official_registry_required",
+        pathway: executable
+          ? "deterministic_local_estimate"
+          : "official_registry_or_calculator",
+        formulaKey,
+        ...sourceFields,
+        officialReconciliationRequired: true,
+        certificateActionEnabled: false,
+        operatorMessage: executable
+          ? "The 1 July 2026 Rule formula and supported official product feed are connected for an estimate. ACP, network, response and implementation evidence still require reconciliation."
+          : "The governed battery formula is implemented and tested. Calculation stays fail-closed until the current NSW administrator-accepted BESS product evidence is ingested and date-locked; a generic CEC listing is not treated as NSW acceptance.",
+      };
+    }
     return {
       activityTemplateId: activity.templateId,
       programCode: program.programCode,

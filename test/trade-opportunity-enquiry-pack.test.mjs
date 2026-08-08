@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { runInNewContext } from "node:vm";
 import {
   createInstallerEnquiryPack,
   createInstallerPlanReportView,
@@ -19,6 +20,47 @@ const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const opportunityPlanRoute = read("../src/app/api/trade-opportunity-plan/route.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const styles = read("../src/app/globals.css");
+
+function sourceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Missing source marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `Missing source marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
+function plainJavaScriptFunction(source, functionName) {
+  const functionSource = source.match(new RegExp(
+    `function ${functionName}\\([\\s\\S]*?\\n\\}`,
+  ))?.[0];
+  assert.ok(functionSource, `Missing plain JavaScript helper: ${functionName}`);
+  return runInNewContext(`(${functionSource})`);
+}
+
+function assertEveryAwaitIsRequestGuarded(handlerSource) {
+  const successPath = sourceBetween(handlerSource, "try {", "} catch (");
+  const awaits = [...successPath.matchAll(/\bawait\b/g)];
+  assert.ok(awaits.length > 0, "Expected an asynchronous success path");
+
+  for (let index = 0; index < awaits.length; index += 1) {
+    const awaitIndex = awaits[index].index;
+    const guardIndex = successPath.indexOf(
+      "if (!requestIsCurrent()) return;",
+      awaitIndex,
+    );
+    const nextAwaitIndex = awaits[index + 1]?.index ?? Number.POSITIVE_INFINITY;
+    const protectedWrite = /\bset(?:Opportunities|OpportunityStatus|OpportunityBusy|OpportunityNavigationStatus|Workspace)\s*\(/g;
+    protectedWrite.lastIndex = awaitIndex;
+    const nextWriteIndex = protectedWrite.exec(successPath)?.index
+      ?? Number.POSITIVE_INFINITY;
+
+    assert.ok(guardIndex > awaitIndex, "Each await must be followed by a request guard");
+    assert.ok(
+      guardIndex < Math.min(nextAwaitIndex, nextWriteIndex),
+      "The request guard must run before another await or protected state write",
+    );
+  }
+}
 
 const privateProject = {
   id: "private-project-id",
@@ -303,10 +345,14 @@ test("protected installer plan and evidence state is cleared before an auth iden
 
   assert.match(
     authTransition,
-    /if \(protectedIdentityUid\.current !== nextUid\) \{[\s\S]*protectedIdentityRevision\.current \+= 1;[\s\S]*clearProtectedInstallerState\(\);[\s\S]*\}[\s\S]*setUser\(nextUser\)/,
+    /const previousUid = protectedIdentityUid\.current;[\s\S]*if \(resetTradeDashboardStateOnUidChange\([\s\S]*previousUid,[\s\S]*nextUid,[\s\S]*clearProtectedInstallerState,[\s\S]*\)\) \{[\s\S]*protectedIdentityRevision\.current \+= 1;[\s\S]*\}[\s\S]*setUser\(nextUser\)/,
   );
   assert.ok(
-    authTransition.indexOf("clearProtectedInstallerState();") <
+    authTransition.indexOf("resetTradeDashboardStateOnUidChange(") <
+      authTransition.indexOf("setUser(nextUser);"),
+  );
+  assert.ok(
+    authTransition.indexOf("clearProtectedInstallerState,") <
       authTransition.indexOf("setUser(nextUser);"),
   );
   for (const stateReset of [
@@ -336,5 +382,188 @@ test("protected installer plan and evidence state is cleared before an auth iden
   assert.doesNotMatch(
     dashboard,
     /\{installerPlanPreview && \(/,
+  );
+});
+
+test("stale old-UID lead continuations cannot write after an identity switch", async () => {
+  const identityIsCurrent = plainJavaScriptFunction(
+    dashboard,
+    "protectedIdentityContinuationIsCurrent",
+  );
+  let currentIdentity = { uid: "installer-a", revision: 11 };
+  let releaseContinuation = () => {};
+  const pendingAwait = new Promise((resolve) => {
+    releaseContinuation = resolve;
+  });
+  const protectedWrites = [];
+
+  const staleContinuation = (async () => {
+    const capturedIdentity = { ...currentIdentity };
+    await pendingAwait;
+    if (!identityIsCurrent(
+      capturedIdentity.uid,
+      capturedIdentity.revision,
+      currentIdentity.uid,
+      currentIdentity.revision,
+    )) return;
+    protectedWrites.push("old-account-write");
+  })();
+
+  currentIdentity = { uid: "installer-b", revision: 12 };
+  releaseContinuation();
+  await staleContinuation;
+
+  assert.deepEqual(protectedWrites, []);
+  assert.equal(identityIsCurrent("installer-b", 12, "installer-b", 12), true);
+  assert.equal(identityIsCurrent("installer-b", 11, "installer-b", 12), false);
+  assert.equal(identityIsCurrent(), false);
+});
+
+test("opportunity deep links are scrubbed only when leaving an authenticated UID", () => {
+  const shouldClearDeepLink = plainJavaScriptFunction(
+    dashboard,
+    "shouldClearOpportunityDeepLink",
+  );
+  assert.equal(shouldClearDeepLink("", "installer-a"), false);
+  assert.equal(shouldClearDeepLink("installer-a", "installer-a"), false);
+  assert.equal(shouldClearDeepLink("installer-a", "installer-b"), true);
+  assert.equal(shouldClearDeepLink("installer-a", ""), true);
+
+  const navigationScrub = sourceBetween(
+    dashboard,
+    "const scrubProtectedOpportunityNavigation",
+    "const clearProtectedInstallerState",
+  );
+  const protectedClear = sourceBetween(
+    dashboard,
+    "const clearProtectedInstallerState",
+    "useEffect(() => {",
+  );
+  const authTransition = sourceBetween(
+    dashboard,
+    "onAuthStateChanged(firebaseAuth",
+    "  useEffect(() => {",
+  );
+
+  assert.match(navigationScrub, /initialOpportunityMatchId\.current = "";/);
+  assert.match(navigationScrub, /searchParams\.delete\("matchId"\)/);
+  assert.match(
+    navigationScrub,
+    /searchParams\.get\("workspace"\) === "leads"[\s\S]*searchParams\.set\("workspace", "work"\)/,
+  );
+  assert.match(
+    navigationScrub,
+    /nextUrl\.hash === "#opportunity-inbox"[\s\S]*nextUrl\.hash = ""/,
+  );
+  assert.match(navigationScrub, /window\.history\.replaceState\(/);
+  assert.doesNotMatch(protectedClear, /initialOpportunityMatchId\.current/);
+  assert.match(
+    authTransition,
+    /const previousUid = protectedIdentityUid\.current;[\s\S]*shouldClearOpportunityDeepLink\([\s\S]*previousUid \|\| "",[\s\S]*nextUid \|\| ""[\s\S]*scrubProtectedOpportunityNavigation\(\);[\s\S]*protectedIdentityUid\.current = nextUid;/,
+  );
+  assert.ok(
+    authTransition.indexOf("scrubProtectedOpportunityNavigation();")
+      < authTransition.indexOf("setUser(nextUser);"),
+  );
+});
+
+test("lead open, respond and conversion continuations guard every protected write", () => {
+  const openHandler = sourceBetween(
+    dashboard,
+    "const openOpportunityNotification",
+    "useEffect(() => {",
+  );
+  const respondHandler = sourceBetween(
+    dashboard,
+    "async function respondToOpportunity",
+    "async function convertOpportunity",
+  );
+  const convertHandler = sourceBetween(
+    dashboard,
+    "async function convertOpportunity",
+    "async function toggleOpportunityPhotos",
+  );
+
+  for (const handler of [openHandler, respondHandler, convertHandler]) {
+    assert.match(
+      handler,
+      /const activeUser = user;[\s\S]*protectedIdentityUid\.current !== activeUser\.uid[\s\S]*const identityUid = activeUser\.uid;[\s\S]*const identityRevision = protectedIdentityRevision\.current;/,
+    );
+    assert.match(handler, /protectedIdentityContinuationIsCurrent\(/);
+    assert.match(
+      handler,
+      /const controller = new AbortController\(\);[\s\S]*protectedOpportunityRequestControllers\.current\.add\(controller\);/,
+    );
+    assert.match(
+      handler,
+      /const requestIsCurrent = \(\) =>\s*identityIsCurrent\(\) && !controller\.signal\.aborted;/,
+    );
+    assert.match(handler, /signal: controller\.signal/);
+    assert.match(
+      handler,
+      /catch \([^)]*\) \{\s*if \(!requestIsCurrent\(\)\) return;/,
+    );
+    assert.match(
+      handler,
+      /finally \{[\s\S]*protectedOpportunityRequestControllers\.current\.delete\(controller\);/,
+    );
+    assertEveryAwaitIsRequestGuarded(handler);
+  }
+
+  assert.match(
+    dashboard,
+    /const abortProtectedOpportunityRequests = useCallback\([\s\S]*controller\.abort\(\);[\s\S]*protectedOpportunityRequestControllers\.current\.clear\(\)/,
+  );
+  assert.match(
+    dashboard,
+    /const clearProtectedInstallerState = useCallback\(\(\) => \{\s*abortProtectedOpportunityRequests\(\);/,
+  );
+  for (const handler of [respondHandler, convertHandler]) {
+    assert.match(
+      handler,
+      /finally \{[\s\S]*if \(requestIsCurrent\(\)\) setOpportunityBusy\(""\);/,
+    );
+  }
+});
+
+test("stale photo continuations revoke new object URLs before they can persist", () => {
+  const photoHandler = sourceBetween(
+    dashboard,
+    "async function toggleOpportunityPhotos",
+    "async function installerPlanReport",
+  );
+
+  assert.match(
+    photoHandler,
+    /const controller = new AbortController\(\);[\s\S]*protectedOpportunityRequestControllers\.current\.add\(controller\);/,
+  );
+  assert.match(
+    photoHandler,
+    /const requestIsCurrent = \(\) =>\s*identityIsCurrent\(\) && !controller\.signal\.aborted;/,
+  );
+  assert.match(
+    photoHandler,
+    /const token = await activeUser\.getIdToken\(\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(photoHandler, /signal: controller\.signal/);
+  assert.match(
+    photoHandler,
+    /const response = await fetch\([\s\S]*?\);\s*if \(!requestIsCurrent\(\)\) return null;/,
+  );
+  assert.match(
+    photoHandler,
+    /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(!requestIsCurrent\(\)\) return null;/,
+  );
+  assert.match(
+    photoHandler,
+    /const blob = await response\.blob\(\);\s*if \(!requestIsCurrent\(\)\) return null;\s*const url = URL\.createObjectURL\(blob\);\s*if \(!requestIsCurrent\(\)\) \{\s*URL\.revokeObjectURL\(url\);\s*return null;\s*\}\s*evidenceObjectUrls\.current\.add\(url\);/,
+  );
+  assert.match(
+    photoHandler,
+    /const results = await Promise\.allSettled[\s\S]*?if \(!requestIsCurrent\(\)\) \{\s*for \(const url of createdUrls\) revokeEvidenceObjectUrl\(url\);\s*return;/,
+  );
+  assert.match(
+    photoHandler,
+    /finally \{\s*protectedOpportunityRequestControllers\.current\.delete\(controller\);\s*if \(requestIsCurrent\(\)\) setEvidencePhotoBusy\(""\);/,
   );
 });

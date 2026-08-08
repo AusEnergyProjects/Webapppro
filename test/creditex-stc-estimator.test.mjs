@@ -299,12 +299,8 @@ test("the protected estimate route is same-origin, authenticated, bounded and no
   assert.match(routeSource, /"Cache-Control": "private, no-store"/);
   assert.match(routeSource, /readBoundedJsonRequest\(/);
   assert.match(routeSource, /MAXIMUM_CREDITEX_JSON_BYTES/);
-  assert.match(routeSource, /requireComplianceAccess\(request/);
-  assert.match(
-    routeSource,
-    /allowedRoles: \["admin", "case_manager", "reviewer", "auditor"\]/,
-  );
-  assert.match(routeSource, /estimateCreditexStcs\(body\)/);
+  assert.match(routeSource, /requireCreditexCalculatorAccess\(request, database\)/);
+  assert.match(routeSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
   assert.doesNotMatch(routeSource, /export async function (GET|PUT|PATCH|DELETE)/);
   assert.doesNotMatch(
     routeSource,

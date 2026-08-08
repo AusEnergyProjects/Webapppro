@@ -644,11 +644,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(roadmapStepNumbers, [1, 2, 3, 4, 5]);
   assert.deepEqual(handoverStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Controlled Gmail and Outlook delivery proof for both quote and invoice, with provider callback reconciliation\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*One complete manual non-submitting VEU, SRES\/STC and NSW governed job bundle each\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Approved Australian production address provider reused across customer\/site\/job\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Immutable planned-intent revision and governed-case supersession\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Physical field\/Dataforce acceptance: GPS, EXIF, offline evidence, remaining exact import fields\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Obtain and record CEC commercial data permission, then activate CEC module, inverter and battery ingestion with suspension, delisting, recall, NETCC and SAA overlays\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Obtain a supported VEU machine extract, ingest the 64,715-row audited registry with effective dates and statuses, and unlock the implemented VEU formula families only after oracle reconciliation\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Ingest supported NSW TESSA and administrator-accepted product lists, add historical ESS\/PDRS rule versions, and unlock D17 to D20 and BESS1 to BESS5 only inside their exact date windows\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Obtain Synergy commercial reuse permission and a supported Horizon Power feed, then activate WA battery and managed-device calculators with exact service-territory checks\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes, then complete the remaining VEU, NSW and project-method calculators\.\*\*/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

@@ -9,42 +9,61 @@ import {
   GOVERNMENT_ACTIVITY_TEMPLATES,
   GOVERNMENT_PROGRAM_TEMPLATES,
 } from "../src/lib/australian-government-program-catalogue.ts";
+import {
+  CREDITEX_LOCAL_PROGRAM_DEFINITIONS,
+} from "../src/lib/creditex-local-program-catalogue.ts";
 
 test("coverage accounts deterministically for all programs and activities", () => {
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_CONTRACT,
     "creditex-calculation-coverage/v1",
   );
-  assert.equal(GOVERNMENT_PROGRAM_TEMPLATES.length, 32);
-  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 212);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE.length, 212);
+  assert.equal(GOVERNMENT_PROGRAM_TEMPLATES.length, 35);
+  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 216);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE.length, 216);
   assert.equal(
     new Set(
       CREDITEX_CALCULATION_COVERAGE.map(
         (row) => row.activityTemplateId,
       ),
     ).size,
-    212,
+    216,
   );
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.programs, 32);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 212);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.programs, 35);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.coverageSha256,
-    "sha256:13aacf29e36038eaa3900a5716be816496f0f51574912e61cba7a941911a79de",
+    "sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1",
   );
 });
 
-test("only the existing six SRES estimate paths are executable", () => {
+test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
   const executable = CREDITEX_CALCULATION_COVERAGE.filter(
     (row) => row.estimateExecutable,
   );
-  assert.equal(executable.length, 6);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 6);
+  assert.equal(executable.length, 33);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 33);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.blockedOrNonExecutable,
-    206,
+    183,
   );
-  assert.ok(executable.every((row) => row.programCode === "SRES"));
+  const localProgramCodes = new Set(
+    CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => program.programCode),
+  );
+  assert.equal(executable.filter((row) => row.programCode === "SRES").length, 2);
+  assert.equal(
+    executable.filter((row) => localProgramCodes.has(row.programCode)).length,
+    20,
+  );
+  assert.equal(executable.filter((row) => row.programCode === "VEU").length, 4);
+  assert.equal(
+    executable.filter((row) => row.programCode === "NSW-ESS").length,
+    3,
+  );
+  assert.equal(
+    executable.filter((row) => row.programCode === "NSW-PDRS").length,
+    4,
+  );
   assert.ok(
     executable.every(
       (row) =>
@@ -70,10 +89,10 @@ test("coverage never enables certificate action for any activity", () => {
     [
       { state: "activity_closed", count: 9 },
       { state: "activity_not_commenced", count: 8 },
-      { state: "estimate_available", count: 6 },
-      { state: "governed_formula_required", count: 131 },
-      { state: "not_applicable", count: 53 },
-      { state: "official_registry_required", count: 3 },
+      { state: "estimate_available", count: 33 },
+      { state: "governed_formula_required", count: 105 },
+      { state: "not_applicable", count: 27 },
+      { state: "official_registry_required", count: 32 },
       { state: "project_method_required", count: 2 },
     ],
   );

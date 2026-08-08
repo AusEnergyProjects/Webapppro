@@ -1,4 +1,4 @@
-export const GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-01";
+export const GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-08";
 
 export const COMPLIANCE_OUTCOME_CLASSES = [
   "tradable_certificate",
@@ -406,7 +406,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.qld.gov.au/housing/home-energy-savings/supercharged-solar-for-renters",
     officialSourceTitle: "Supercharged Solar for Renters",
     catalogueState: "current",
-    operatingNote: "Conditional approval is required before installation. STCs remain a separate national outcome.",
+    operatingNote: "Indicative rebate is the lesser of eligible installed cost and $2,500, $3,000 or $3,500 for systems from 3 to under 4 kW, 4 to under 5 kW or at least 5 kW. Conditional approval is required before installation. STCs remain separate.",
   },
   {
     templateId: "qld-community-housing-upgrades",
@@ -420,7 +420,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.business.qld.gov.au/industries/housing-accommodation/community/energy-upgrades/provider-owned-properties",
     officialSourceTitle: "Community housing energy upgrades for provider-owned properties",
     catalogueState: "current",
-    operatingNote: "Applications close 30 October 2026 and installations must meet the current milestone and measure rules.",
+    operatingNote: "Generally limited to the lesser of $4,500 per eligible dwelling or eligible cost excluding GST. Applications close 30 October 2026 and work must finish by 30 June 2027. GST conflicts require manual review.",
   },
   {
     templateId: "qld-existing-home-rating",
@@ -437,6 +437,20 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     operatingNote: "Accredited assessment and certificate service, not a rebate or tradeable energy certificate scheme.",
   },
   {
+    templateId: "qld-regional-feed-in-tariff",
+    programCode: "QLD-FIT",
+    name: "Regional Queensland solar feed-in tariffs",
+    jurisdiction: "QLD",
+    outcomeClass: "tariff_only",
+    claimOutputCode: "TARIFF",
+    claimOutputLabel: "Feed-in tariff",
+    administeringBody: "Queensland Competition Authority and Ergon Energy Retail",
+    officialSourceUrl: "https://www.ergon.com.au/retail/business/tariffs-and-prices/solar-feed-in-tariff",
+    officialSourceTitle: "Ergon Energy solar feed-in tariffs",
+    catalogueState: "current",
+    operatingNote: "The 2026 to 2027 regional rate is 6.006 cents per eligible exported kWh. The grandfathered 44 cent Solar Bonus Scheme is a separate continuity-controlled pathway and closes on 1 July 2028.",
+  },
+  {
     templateId: "wa-residential-battery",
     programCode: "WA-RBS",
     name: "WA Residential Battery Scheme",
@@ -448,7 +462,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.wa.gov.au/organisation/energy-policy-wa/wa-residential-battery-scheme-eligibility-requirements",
     officialSourceTitle: "WA Residential Battery Scheme eligibility requirements",
     catalogueState: "current",
-    operatingNote: "State rebate and optional loan are separate from federal battery STCs. Product, VPP and network lists are dynamic.",
+    operatingNote: "Indicative rebate is $130 per usable kWh in the Synergy area, capped at $1,300, or $380 per usable kWh in the Horizon area, capped at $3,800. Minimum usable capacity is 5 kWh. State rebate, loan and federal STCs remain separate; product, VPP, vendor and network lists are dynamic.",
   },
   {
     templateId: "wa-debs",
@@ -462,7 +476,35 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.wa.gov.au/organisation/energy-policy-wa/energy-buyback-schemes",
     officialSourceTitle: "Energy buyback schemes",
     catalogueState: "current",
-    operatingNote: "Tariff and network registration pathway, not a certificate.",
+    operatingNote: "Interval export tariff with retailer, town, time-band and 50 kWh daily purchase-cap rules. Territory cannot be inferred safely from postcode alone. This is not a certificate.",
+  },
+  {
+    templateId: "wa-synergy-battery-rewards",
+    programCode: "WA-BATTERY-REWARDS",
+    name: "Synergy Battery Rewards",
+    jurisdiction: "WA",
+    outcomeClass: "tariff_only",
+    claimOutputCode: "TARIFF",
+    claimOutputLabel: "Virtual power plant activation credit",
+    administeringBody: "Synergy",
+    officialSourceUrl: "https://www.synergy.net.au/-/media/Documents/Terms-and-conditions/DER-Battery-Rewards-Terms-and-conditions.pdf",
+    officialSourceTitle: "Synergy Battery Rewards terms and conditions",
+    catalogueState: "current",
+    operatingNote: "Current activation credits are 70 cents per eligible exported kWh and are capped at installed battery capacity per event. This is a retailer VPP credit, not a certificate.",
+  },
+  {
+    templateId: "wa-horizon-buyback-bonus",
+    programCode: "WA-HORIZON-BUYBACK",
+    name: "Horizon Power Buyback Bonus",
+    jurisdiction: "WA",
+    outcomeClass: "tariff_only",
+    claimOutputCode: "TARIFF",
+    claimOutputLabel: "Time-varying export credit",
+    administeringBody: "Horizon Power",
+    officialSourceUrl: "https://www.horizonpower.com.au/utilities/pricing/",
+    officialSourceTitle: "Horizon Power electricity fees and charges",
+    catalogueState: "current",
+    operatingNote: "Community Wave export rates vary by service town, season and time band. Postcode alone is not a safe town or tariff determinant.",
   },
   {
     templateId: "tas-nils-energy-saver",
@@ -490,7 +532,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.recfit.tas.gov.au/grants_programs/energy-efficiency/powersmart_for_small_business",
     officialSourceTitle: "PowerSmart for Small Business",
     catalogueState: "current",
-    operatingNote: "Reimburses an independent energy audit, not installation works or certificates.",
+    operatingNote: "Reimburses the lesser of the eligible paid independent audit cost and $1,000 through 30 June 2028 or earlier funding exhaustion. It does not fund installation works or create certificates.",
   },
   {
     templateId: "tas-feed-in-tariff",
@@ -504,7 +546,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.economicregulator.tas.gov.au/electricity/pricing/feed-in-tariffs",
     officialSourceTitle: "Tasmanian feed-in tariffs",
     catalogueState: "current",
-    operatingNote: "Tariff, connection and DER registration pathway, not a certificate.",
+    operatingNote: "The regulated 2026 to 2027 rate is 9.276 cents per eligible net exported kWh for qualifying mainland Tasmania and Bruny Island systems. Network and location classification are required. This is not a certificate.",
   },
   {
     templateId: "nt-solar-multi-dwellings",
@@ -518,7 +560,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://nt.gov.au/industry/business-grants-funding/solar-for-multi-dwellings-grant-scheme",
     officialSourceTitle: "Solar for Multi Dwellings Grant Scheme",
     catalogueState: "current",
-    operatingNote: "Conditional approval and an executed funding agreement are required before work. STCs remain a separate national outcome.",
+    operatingNote: "Indicative maximum is the lesser of $7,500 per eligible residential dwelling and 50% of GST-exclusive eligible works cost. Conditional approval and an executed funding agreement are required before work. STCs remain separate.",
   },
   {
     templateId: "nt-feed-in-tariff",
@@ -532,7 +574,7 @@ export const GOVERNMENT_PROGRAM_TEMPLATES: readonly GovernmentProgramTemplate[] 
     officialSourceUrl: "https://www.jacanaenergy.com.au/index.php/residential/pricing",
     officialSourceTitle: "Jacana Energy residential pricing",
     catalogueState: "current",
-    operatingNote: "Retail tariff pathway, not a certificate.",
+    operatingNote: "For regulated customers in 2026 to 2027, eligible exports receive 18.66 cents per kWh from 3 pm to 9 pm with a qualifying smart meter and 9.33 cents otherwise. Retailer, meter and network eligibility are required. This is not a certificate.",
   },
 ];
 
@@ -818,9 +860,13 @@ const ADMINISTRATIVE_ACTIVITIES = [
   activity("QLD-QCHEU", "FANS", "DC fans as a supplementary measure", "electrical"),
   activity("QLD-QCHEU", "LED", "LED lighting as a supplementary measure", "electrical"),
   activity("QLD-HER", "ASSESSMENT", "Existing-home energy rating", "assessment"),
+  activity("QLD-FIT", "REGIONAL", "Regional Queensland feed-in tariff", "solar"),
+  activity("QLD-FIT", "SBS-44C", "Grandfathered 44 cent Solar Bonus Scheme", "solar", { catalogueState: "limited" }),
   activity("WA-RBS", "SYNERGY-BATTERY", "Residential battery in the Synergy service area", "battery"),
   activity("WA-RBS", "HORIZON-BATTERY", "Residential battery in the Horizon Power service area", "battery"),
   activity("WA-DEBS", "BUYBACK", "Distributed energy buyback tariff", "solar"),
+  activity("WA-BATTERY-REWARDS", "ACTIVATION-EVENT", "Battery Rewards activation event", "battery"),
+  activity("WA-HORIZON-BUYBACK", "EXPORT", "Community Wave Buyback Bonus exports", "solar"),
   activity("TAS-NILS-ES", "APPLIANCE", "Approved energy-efficient appliance support", "other", { catalogueState: "limited" }),
   activity("TAS-NILS-ES", "HEAT-PUMP", "Heat-pump support", "heating-cooling", { catalogueState: "limited" }),
   activity("TAS-POWERSMART", "AUDIT", "Independent small-business energy audit", "assessment"),

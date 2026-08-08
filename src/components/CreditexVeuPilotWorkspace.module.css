@@ -1596,6 +1596,89 @@
   margin-top: 1rem;
 }
 
+.tradeCalculatorSurface {
+  --pilot-canvas: #020b18;
+  --pilot-surface: #071b2a;
+  --pilot-surface-raised: #0b2635;
+  --pilot-surface-soft: #0d3140;
+  --pilot-line: rgba(108, 207, 192, 0.2);
+  --pilot-line-strong: rgba(108, 220, 199, 0.36);
+  --pilot-ink: #f4fbff;
+  --pilot-text: #d7e7eb;
+  --pilot-muted: #94acb5;
+  --pilot-teal: #20cbb8;
+  --pilot-green: #18b889;
+  --pilot-gold: #d6b46d;
+  min-width: 0;
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(18, 126, 167, 0.2), transparent 30rem),
+    radial-gradient(circle at 92% 20%, rgba(18, 166, 106, 0.11), transparent 26rem),
+    var(--pilot-canvas);
+  color: var(--pilot-text);
+  padding: 1rem;
+}
+
+.allProgramCalculator {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.allProgramCalculator > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.8fr);
+  gap: 0.8rem;
+  align-items: end;
+  border: 1px solid var(--pilot-line);
+  border-radius: 0.8rem;
+  background: var(--pilot-surface-raised);
+  padding: 0.9rem;
+}
+
+.allProgramCalculator > header span {
+  color: var(--pilot-teal);
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.allProgramCalculator > header h4 {
+  margin: 0.15rem 0 0;
+  color: var(--pilot-ink);
+  font-size: 1rem;
+}
+
+.allProgramCalculator > header p {
+  margin: 0.25rem 0 0;
+  color: var(--pilot-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.allProgramCalculator > header label {
+  display: grid;
+  gap: 0.28rem;
+  color: var(--pilot-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.allProgramCalculator > header select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--pilot-line-strong);
+  border-radius: 0.45rem;
+  background: #061724;
+  color: var(--pilot-ink);
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 0.72rem;
+  color-scheme: dark;
+}
+
 .stcEstimator,
 .methodBrowser {
   min-width: 0;
@@ -1648,6 +1731,59 @@
   font-size: 0.65rem;
 }
 
+.registryStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: 0.75rem;
+  border: 1px solid rgba(32, 203, 184, 0.28);
+  border-radius: 0.6rem;
+  background: rgba(5, 37, 49, 0.76);
+  padding: 0.58rem 0.65rem;
+}
+
+.registryStatus[data-status="stale"],
+.registryStatus[data-status="unavailable"] {
+  border-color: rgba(235, 164, 76, 0.42);
+  background: rgba(78, 48, 12, 0.3);
+}
+
+.registryStatus > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.registryStatus span,
+.registryStatus small {
+  color: var(--pilot-muted);
+  font-size: 0.64rem;
+}
+
+.registryStatus strong {
+  color: var(--pilot-ink);
+  font-size: 0.76rem;
+  text-transform: capitalize;
+}
+
+.registryStatus button {
+  flex: 0 0 auto;
+  border: 1px solid var(--pilot-line-strong);
+  border-radius: 0.45rem;
+  background: #0a2634;
+  color: var(--pilot-ink);
+  padding: 0.38rem 0.55rem;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.registryStatus button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .estimatorForm {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1689,6 +1825,37 @@
   font-size: 0.64rem;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.officialProductPicker {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 0.45rem 0.55rem;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid rgba(32, 203, 184, 0.26);
+  border-radius: 0.58rem;
+  background: rgba(5, 37, 49, 0.54);
+  padding: 0.55rem;
+}
+
+.officialProductPicker legend {
+  color: var(--pilot-teal);
+  padding: 0 0.25rem;
+  font-size: 0.67rem;
+  font-weight: 850;
+}
+
+.officialProductPicker > small {
+  grid-column: 1 / -1;
+  color: var(--pilot-muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.officialProductPicker > .productRegistryError {
+  color: #ffd0d0;
 }
 
 .estimatorForm button {
@@ -1739,6 +1906,20 @@
   color: #f0cf82;
   padding: 0.26rem 0.48rem;
   font-size: 0.64rem;
+}
+
+.estimateResolution {
+  display: grid;
+  gap: 0.18rem;
+  margin-top: 0.65rem;
+  border-top: 1px solid var(--pilot-line);
+  padding-top: 0.55rem;
+  color: var(--pilot-muted);
+  font-size: 0.68rem;
+}
+
+.estimateResolution strong {
+  color: var(--pilot-ink);
 }
 
 .estimateResult ol {
@@ -2213,6 +2394,10 @@
 }
 
 @media (max-width: 720px) {
+  .allProgramCalculator > header {
+    grid-template-columns: 1fr;
+  }
+
   .header,
   .safety {
     grid-template-columns: 1fr;
@@ -2330,6 +2515,10 @@
   }
 
   .estimatorForm {
+    grid-template-columns: 1fr;
+  }
+
+  .officialProductPicker {
     grid-template-columns: 1fr;
   }
 

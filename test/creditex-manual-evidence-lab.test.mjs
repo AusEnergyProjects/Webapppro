@@ -289,8 +289,8 @@ function completedResponses(form) {
 }
 
 test("every catalogued activity produces a bounded editable starter form", () => {
-  assert.equal(GOVERNMENT_PROGRAM_TEMPLATES.length, 32);
-  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 212);
+  assert.equal(GOVERNMENT_PROGRAM_TEMPLATES.length, 35);
+  assert.equal(GOVERNMENT_ACTIVITY_TEMPLATES.length, 216);
   for (const activity of GOVERNMENT_ACTIVITY_TEMPLATES) {
     const form = starterManualEvidenceForm(activity);
     assert.equal(form.contract, CREDITEX_MANUAL_EVIDENCE_FORM_CONTRACT);

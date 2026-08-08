@@ -70,12 +70,12 @@ test("interchange readiness exposes five blocked adapters and no send path", () 
 });
 
 test("calculation readiness accounts for every activity without enabling certificates", () => {
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.programs, 32);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 212);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 6);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.programs, 35);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 33);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.blockedOrNonExecutable,
-    206,
+    183,
   );
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.certificateActionsEnabled,

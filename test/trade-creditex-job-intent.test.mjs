@@ -175,9 +175,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 124);
+  assert.equal(completeMigrationChain.length, 126);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0123_/);
+  assert.match(completeMigrationChain.at(-1), /^0125_/);
   applyMigrationChain(database, completeMigrationChain);
 }
 
@@ -555,7 +555,7 @@ test("planned intent snapshot is deterministic and remains setup-required", () =
 
   const expected = {
     contract: "tlink-creditex-job-intent-v1",
-    catalogueReviewedOn: "2026-08-01",
+    catalogueReviewedOn: "2026-08-08",
     plannedStart: PLANNED_START,
     siteJurisdiction: "VIC",
     program: {

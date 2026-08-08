@@ -755,7 +755,7 @@ test("operations UI is activity-agnostic with program tabs and Dataforce-parity 
 
 test("government catalogue distinguishes national outcomes and remains discovery-only", () => {
   for (const contract of [
-    /GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-01"/,
+    /GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-08"/,
     /"tradable_certificate"/,
     /"retailer_obligation_credit"/,
     /"rebate"/,

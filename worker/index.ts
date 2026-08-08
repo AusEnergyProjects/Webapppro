@@ -11,6 +11,16 @@ import {
   drainCustomerProjectActivityDeliveries,
 } from "../src/lib/customer-project-activity-notification-server";
 import { drainOpportunityNotificationDeliveries } from "../src/lib/opportunity-notification-server";
+import {
+  syncCerSresProductRegistry,
+  type CreditexSresArtifactStore,
+} from "../src/lib/creditex-sres-registry-server";
+import { CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES } from "../src/lib/creditex-official-product-registry-definitions";
+import {
+  syncOfficialProductRegistry,
+  type CreditexOfficialProductArtifactStore,
+} from "../src/lib/creditex-official-product-registry-server";
+import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
@@ -19,6 +29,8 @@ const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
 const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
 const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
+const SRES_REGISTRY_CRON = "45 20 * * *";
+const OFFICIAL_PRODUCT_REGISTRY_CRON = "5 21 * * *";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
@@ -164,7 +176,7 @@ const worker = {
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
     return cacheable;
   },
-  async scheduled(controller: ScheduledController, _env: unknown, ctx: ExecutionContext) {
+  async scheduled(controller: ScheduledController, workerEnv: unknown, ctx: ExecutionContext) {
     const tasks: Promise<unknown>[] = [];
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
       tasks.push(
@@ -190,6 +202,41 @@ const worker = {
         }),
         syncCertificatePriceHistory(db).catch((error) => {
           console.error("Certificate price refresh failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+      );
+    }
+    if (controller.cron === SRES_REGISTRY_CRON) {
+      const db = getD1();
+      const artifactStore = (workerEnv as {
+        EVIDENCE?: CreditexSresArtifactStore;
+      }).EVIDENCE;
+      tasks.push(
+        (async () => {
+          await ensureCreditexProductRegistrySchemaGuards(db);
+          await syncCerSresProductRegistry(db, { artifactStore });
+        })().catch((error) => {
+          console.error("CER SRES product registry refresh failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+      );
+    }
+    if (controller.cron === OFFICIAL_PRODUCT_REGISTRY_CRON) {
+      const db = getD1();
+      const artifactStore = (workerEnv as {
+        EVIDENCE?: CreditexOfficialProductArtifactStore;
+      }).EVIDENCE;
+      tasks.push(
+        (async () => {
+          await ensureCreditexProductRegistrySchemaGuards(db);
+          for (const definition of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
+            await syncOfficialProductRegistry(db, definition, {
+              artifactStore,
+            });
+          }
+        })().catch((error) => {
+          console.error(
+            "Official product registry refresh failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
         }),
       );
     }

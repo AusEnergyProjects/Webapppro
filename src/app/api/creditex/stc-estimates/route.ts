@@ -1,12 +1,20 @@
 import { getD1 } from "../../../../../db";
 import {
-  ComplianceAccessError,
-  requireComplianceAccess,
-} from "@/lib/compliance-access-server";
+  CreditexCalculatorAccessError,
+  requireCreditexCalculatorAccess,
+} from "@/lib/creditex-calculator-access-server";
+import {
+  describeCreditexCalculatorRouteError,
+} from "@/lib/creditex-calculator-route-response";
 import {
   CreditexStcEstimateError,
-  estimateCreditexStcs,
 } from "@/lib/creditex-stc-estimator";
+import { CreditexSresRegistryError } from "@/lib/creditex-sres-registry";
+import { estimateCreditexStcsFromRegistry } from "@/lib/creditex-sres-registry-server";
+import {
+  creditexSresCalculationBlocker,
+  CreditexOfficialProductError,
+} from "@/lib/creditex-official-product-registry";
 import {
   BoundedJsonRequestError,
   MAXIMUM_CREDITEX_JSON_BYTES,
@@ -21,20 +29,31 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-function json(body: object, status = 200) {
+function json(body: object, status = 200, headers: HeadersInit = {}) {
   return Response.json(body, {
     status,
     headers: {
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      ...headers,
     },
   });
 }
 
 function errorResponse(error: unknown) {
+  const descriptor = describeCreditexCalculatorRouteError(error);
+  if (descriptor) {
+    return json({
+      ok: false,
+      code: descriptor.code,
+      error: descriptor.error,
+    }, descriptor.status, descriptor.headers);
+  }
   if (
-    error instanceof ComplianceAccessError
+    error instanceof CreditexCalculatorAccessError
     || error instanceof CreditexStcEstimateError
+    || error instanceof CreditexSresRegistryError
+    || error instanceof CreditexOfficialProductError
     || error instanceof BoundedJsonRequestError
   ) {
     const code = error instanceof BoundedJsonRequestError
@@ -47,13 +66,6 @@ function errorResponse(error: unknown) {
       code,
       error: error.message,
     }, error.status);
-  }
-  if (error instanceof Error && error.message === "AUTH_REQUIRED") {
-    return json({
-      ok: false,
-      code: "AUTH_REQUIRED",
-      error: "Sign in to continue.",
-    }, 401);
   }
   console.error("Creditex STC estimate failed", error);
   return json({
@@ -92,14 +104,23 @@ export async function POST(request: Request) {
 
   try {
     const database = getD1();
-    await requireComplianceAccess(request, {
-      allowedRoles: ["admin", "case_manager", "reviewer", "auditor"],
-    }, database);
+    await requireCreditexCalculatorAccess(request, database);
     const body = await readBoundedJsonRequest(
       request,
       MAXIMUM_CREDITEX_JSON_BYTES,
     );
-    const estimate = estimateCreditexStcs(body);
+    const technology = body && typeof body === "object" && !Array.isArray(body)
+      ? String((body as Record<string, unknown>).technology || "")
+      : "";
+    const productBlocker = creditexSresCalculationBlocker(technology);
+    if (productBlocker) {
+      throw new CreditexOfficialProductError(
+        "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
+        409,
+        `${productBlocker} This activity remains disabled instead of accepting caller-controlled product values.`,
+      );
+    }
+    const estimate = await estimateCreditexStcsFromRegistry(database, body);
     return json({ ok: true, estimate });
   } catch (error) {
     return errorResponse(error);

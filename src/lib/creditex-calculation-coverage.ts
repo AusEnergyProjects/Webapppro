@@ -11,7 +11,7 @@ import {
 
 export const CREDITEX_CALCULATION_COVERAGE_CONTRACT =
   "creditex-calculation-coverage/v1";
-export const CREDITEX_CALCULATION_COVERAGE_REVIEWED_ON = "2026-08-03";
+export const CREDITEX_CALCULATION_COVERAGE_REVIEWED_ON = "2026-08-08";
 
 function compareText(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -44,8 +44,7 @@ export const CREDITEX_CALCULATION_COVERAGE = Object.freeze(
         );
       }
       const estimateExecutable =
-        method.programCode === "SRES"
-        && method.state === "estimate_available"
+        method.state === "estimate_available"
         && method.pathway === "deterministic_local_estimate";
       return Object.freeze({
         activityTemplateId: activity.templateId,

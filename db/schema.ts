@@ -5191,3 +5191,300 @@ export const complianceParallelReferenceBindings = sqliteTable("compliance_paral
   check("compliance_parallel_reference_bindings_reference_check", sql`json_valid(${table.referenceSnapshot}) AND json_type(${table.referenceSnapshot}, '$.certificateQuantity') IN ('integer', 'real') AND length(${table.referenceSha256}) = 64 AND lower(${table.referenceSha256}) NOT GLOB '*[^0-9a-f]*'`),
   check("compliance_parallel_reference_bindings_boundary_check", sql`${table.evidenceUse} = 'non_evidentiary' AND ${table.externalSubmissionEnabled} = 0 AND ${table.certificateCreationEnabled} = 0 AND trim(${table.createdByUid}) <> '' AND datetime(${table.createdAt}) IS NOT NULL`),
 ]);
+
+export const complianceProductRegistrySnapshots = sqliteTable("compliance_product_registry_snapshots", {
+  id: text("id").primaryKey(),
+  registryCode: text("registry_code").notNull(),
+  contract: text("contract").notNull(),
+  sourceManifestJson: text("source_manifest_json").notNull(),
+  sourceSha256: text("source_sha256").notNull(),
+  recordCount: integer("record_count").notNull(),
+  status: text("status").notNull().default("staging"),
+  createdAt: text("created_at").notNull(),
+  activatedAt: text("activated_at"),
+  activatedOn: text("activated_on"),
+  supersededAt: text("superseded_at"),
+  supersededOn: text("superseded_on"),
+}, (table) => [
+  uniqueIndex("compliance_product_registry_snapshots_current_idx")
+    .on(table.registryCode)
+    .where(sql`${table.status} = 'current'`),
+  index("compliance_product_registry_snapshots_registry_history_idx")
+    .on(table.registryCode, table.createdAt, table.id),
+  index("compliance_product_registry_snapshots_status_idx")
+    .on(table.status, table.createdAt, table.id),
+  check("compliance_product_registry_snapshots_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 160`),
+  check("compliance_product_registry_snapshots_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_product_registry_snapshots_contract_check", sql`${table.contract} = 'creditex-sres-official-registry/v1'`),
+  check("compliance_product_registry_snapshots_manifest_check", sql`json_valid(${table.sourceManifestJson}) AND json_type(${table.sourceManifestJson}) = 'object' AND length(${table.sourceManifestJson}) BETWEEN 2 AND 32768`),
+  check("compliance_product_registry_snapshots_hash_check", sql`length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_product_registry_snapshots_count_check", sql`${table.recordCount} > 0 AND ${table.recordCount} <= 50000`),
+  check("compliance_product_registry_snapshots_status_check", sql`${table.status} IN ('staging', 'current', 'superseded')`),
+  check("compliance_product_registry_snapshots_timestamps_check", sql`datetime(${table.createdAt}) IS NOT NULL AND (${table.activatedAt} IS NULL OR datetime(${table.activatedAt}) IS NOT NULL) AND (${table.supersededAt} IS NULL OR datetime(${table.supersededAt}) IS NOT NULL) AND (${table.activatedOn} IS NULL OR (length(${table.activatedOn}) = 10 AND date(${table.activatedOn}) = ${table.activatedOn})) AND (${table.supersededOn} IS NULL OR (length(${table.supersededOn}) = 10 AND date(${table.supersededOn}) = ${table.supersededOn}))`),
+  check("compliance_product_registry_snapshots_lifecycle_check", sql`(${table.status} = 'staging' AND ${table.activatedAt} IS NULL AND ${table.activatedOn} IS NULL AND ${table.supersededAt} IS NULL AND ${table.supersededOn} IS NULL) OR (${table.status} = 'current' AND ${table.activatedAt} IS NOT NULL AND ${table.activatedOn} IS NOT NULL AND datetime(${table.activatedAt}) >= datetime(${table.createdAt}) AND ${table.supersededAt} IS NULL AND ${table.supersededOn} IS NULL) OR (${table.status} = 'superseded' AND ${table.activatedAt} IS NOT NULL AND ${table.activatedOn} IS NOT NULL AND ${table.supersededAt} IS NOT NULL AND ${table.supersededOn} IS NOT NULL AND datetime(${table.activatedAt}) >= datetime(${table.createdAt}) AND datetime(${table.supersededAt}) >= datetime(${table.activatedAt}) AND ${table.supersededOn} >= ${table.activatedOn})`),
+]);
+
+export const complianceProductRegistryProducts = sqliteTable("compliance_product_registry_products", {
+  id: text("id").primaryKey(),
+  snapshotId: text("snapshot_id").notNull().references(
+    () => complianceProductRegistrySnapshots.id,
+    { onDelete: "cascade" },
+  ),
+  sourceRecordKey: text("source_record_key").notNull(),
+  sourceItem: text("source_item").notNull(),
+  technology: text("technology").notNull(),
+  category: text("category").notNull(),
+  brand: text("brand").notNull(),
+  model: text("model").notNull(),
+  searchText: text("search_text").notNull(),
+  eligibleFrom: text("eligible_from").notNull(),
+  eligibleTo: text("eligible_to").notNull(),
+  zone1Stcs: integer("zone_1_stcs"),
+  zone2Stcs: integer("zone_2_stcs"),
+  zone3Stcs: integer("zone_3_stcs"),
+  zone4Stcs: integer("zone_4_stcs"),
+  zone5Stcs: integer("zone_5_stcs"),
+}, (table) => [
+  uniqueIndex("compliance_product_registry_products_snapshot_source_idx")
+    .on(table.snapshotId, table.sourceRecordKey),
+  index("compliance_product_registry_products_selection_idx")
+    .on(table.snapshotId, table.technology, table.category, table.eligibleFrom, table.eligibleTo),
+  index("compliance_product_registry_products_search_idx")
+    .on(table.snapshotId, table.technology, table.searchText, table.id),
+  index("compliance_product_registry_products_model_idx")
+    .on(table.snapshotId, table.technology, table.brand, table.model, table.id),
+  check("compliance_product_registry_products_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 200`),
+  check("compliance_product_registry_products_source_key_check", sql`trim(${table.sourceRecordKey}) = ${table.sourceRecordKey} AND length(${table.sourceRecordKey}) BETWEEN 3 AND 240`),
+  check("compliance_product_registry_products_source_item_check", sql`length(${table.sourceItem}) BETWEEN 1 AND 32 AND ${table.sourceItem} GLOB '[0-9]*' AND ${table.sourceItem} NOT GLOB '*[^0-9]*'`),
+  check("compliance_product_registry_products_technology_check", sql`${table.technology} IN ('air_source_heat_pump', 'solar_water_heater')`),
+  check("compliance_product_registry_products_category_check", sql`${table.category} IN ('capacity_at_most_425l', 'capacity_less_than_700l', 'capacity_at_least_700l')`),
+  check("compliance_product_registry_products_brand_check", sql`trim(${table.brand}) = ${table.brand} AND length(${table.brand}) BETWEEN 1 AND 200`),
+  check("compliance_product_registry_products_model_check", sql`trim(${table.model}) = ${table.model} AND length(${table.model}) BETWEEN 1 AND 200`),
+  check("compliance_product_registry_products_search_check", sql`trim(${table.searchText}) = ${table.searchText} AND ${table.searchText} = lower(${table.searchText}) AND length(${table.searchText}) BETWEEN 1 AND 600`),
+  check("compliance_product_registry_products_dates_check", sql`date(${table.eligibleFrom}) = ${table.eligibleFrom} AND date(${table.eligibleTo}) = ${table.eligibleTo} AND ${table.eligibleTo} >= ${table.eligibleFrom}`),
+  check("compliance_product_registry_products_zone_values_check", sql`(${table.zone1Stcs} IS NULL OR ${table.zone1Stcs} BETWEEN 0 AND 1000000) AND (${table.zone2Stcs} IS NULL OR ${table.zone2Stcs} BETWEEN 0 AND 1000000) AND (${table.zone3Stcs} IS NULL OR ${table.zone3Stcs} BETWEEN 0 AND 1000000) AND (${table.zone4Stcs} IS NULL OR ${table.zone4Stcs} BETWEEN 0 AND 1000000) AND (${table.zone5Stcs} IS NULL OR ${table.zone5Stcs} BETWEEN 0 AND 1000000) AND coalesce(${table.zone1Stcs}, 0) + coalesce(${table.zone2Stcs}, 0) + coalesce(${table.zone3Stcs}, 0) + coalesce(${table.zone4Stcs}, 0) + coalesce(${table.zone5Stcs}, 0) > 0`),
+  check("compliance_product_registry_products_source_shape_check", sql`(${table.technology} = 'air_source_heat_pump' AND ${table.category} = 'capacity_at_most_425l' AND ${table.sourceRecordKey} = 'cer-ashp:' || ${table.sourceItem}) OR (${table.technology} = 'solar_water_heater' AND ${table.category} = 'capacity_less_than_700l' AND ${table.sourceRecordKey} = 'cer-swh-lt-700l:' || ${table.sourceItem} AND ${table.zone5Stcs} IS NULL) OR (${table.technology} = 'solar_water_heater' AND ${table.category} = 'capacity_at_least_700l' AND ${table.sourceRecordKey} = 'cer-swh-ge-700l:' || ${table.sourceItem} AND ${table.zone5Stcs} IS NULL)`),
+]);
+
+export const complianceProductRegistrySourceArtifacts = sqliteTable("compliance_product_registry_source_artifacts", {
+  id: text("id").primaryKey(),
+  snapshotId: text("snapshot_id").notNull().references(
+    () => complianceProductRegistrySnapshots.id,
+    { onDelete: "cascade" },
+  ),
+  sourceKey: text("source_key").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  sourceSha256: text("source_sha256").notNull(),
+  contentType: text("content_type").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  recordCount: integer("record_count").notNull(),
+  objectKey: text("object_key").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_product_registry_source_artifacts_source_idx")
+    .on(table.snapshotId, table.sourceKey),
+  index("compliance_product_registry_source_artifacts_hash_idx")
+    .on(table.sourceSha256, table.createdAt, table.id),
+  check("compliance_product_registry_source_artifacts_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 200`),
+  check("compliance_product_registry_source_artifacts_key_check", sql`${table.sourceKey} IN ('cer-ashp', 'cer-swh-lt-700l', 'cer-swh-ge-700l', 'cer-swh-ashp-postcode-zones', 'cer-pv-postcode-zones')`),
+  check("compliance_product_registry_source_artifacts_url_check", sql`trim(${table.sourceUrl}) = ${table.sourceUrl} AND length(${table.sourceUrl}) BETWEEN 20 AND 1000 AND ${table.sourceUrl} GLOB 'https://cer.gov.au/*'`),
+  check("compliance_product_registry_source_artifacts_hash_check", sql`length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_product_registry_source_artifacts_content_type_check", sql`trim(${table.contentType}) = ${table.contentType} AND length(${table.contentType}) BETWEEN 3 AND 120`),
+  check("compliance_product_registry_source_artifacts_size_check", sql`${table.byteLength} BETWEEN 1 AND 1900000 AND trim(${table.objectKey}) = ${table.objectKey} AND length(${table.objectKey}) BETWEEN 80 AND 1000 AND ${table.objectKey} GLOB 'creditex/official-sources/cer_sres_swh/*'`),
+  check("compliance_product_registry_source_artifacts_count_check", sql`${table.recordCount} BETWEEN 0 AND 12000`),
+  check("compliance_product_registry_source_artifacts_created_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
+export const complianceProductRegistrySyncRuns = sqliteTable("compliance_product_registry_sync_runs", {
+  id: text("id").primaryKey(),
+  registryCode: text("registry_code").notNull(),
+  status: text("status").notNull(),
+  snapshotId: text("snapshot_id").references(
+    () => complianceProductRegistrySnapshots.id,
+    { onDelete: "set null" },
+  ),
+  sourceManifestJson: text("source_manifest_json"),
+  sourceSha256: text("source_sha256"),
+  recordCount: integer("record_count").notNull(),
+  checkedAt: text("checked_at").notNull(),
+  message: text("message").notNull().default(""),
+}, (table) => [
+  index("compliance_product_registry_sync_runs_registry_time_idx")
+    .on(table.registryCode, table.checkedAt, table.id),
+  index("compliance_product_registry_sync_runs_health_idx")
+    .on(table.status, table.checkedAt, table.id),
+  index("compliance_product_registry_sync_runs_snapshot_idx")
+    .on(table.snapshotId, table.checkedAt, table.id),
+  check("compliance_product_registry_sync_runs_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 200`),
+  check("compliance_product_registry_sync_runs_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_product_registry_sync_runs_status_check", sql`${table.status} IN ('success', 'unchanged', 'failed')`),
+  check("compliance_product_registry_sync_runs_manifest_check", sql`${table.sourceManifestJson} IS NULL OR (json_valid(${table.sourceManifestJson}) AND json_type(${table.sourceManifestJson}) = 'object' AND length(${table.sourceManifestJson}) BETWEEN 2 AND 32768)`),
+  check("compliance_product_registry_sync_runs_hash_check", sql`${table.sourceSha256} IS NULL OR (length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*')`),
+  check("compliance_product_registry_sync_runs_count_check", sql`${table.recordCount} BETWEEN 0 AND 50000`),
+  check("compliance_product_registry_sync_runs_checked_check", sql`datetime(${table.checkedAt}) IS NOT NULL`),
+  check("compliance_product_registry_sync_runs_message_check", sql`length(${table.message}) <= 2000`),
+  check("compliance_product_registry_sync_runs_state_check", sql`(${table.status} IN ('success', 'unchanged') AND ${table.snapshotId} IS NOT NULL AND ${table.sourceManifestJson} IS NOT NULL AND ${table.sourceSha256} IS NOT NULL AND ${table.recordCount} > 0) OR (${table.status} = 'failed' AND trim(${table.message}) <> '')`),
+]);
+
+export const complianceProductRegistrySyncLeases = sqliteTable("compliance_product_registry_sync_leases", {
+  registryCode: text("registry_code").primaryKey(),
+  leaseId: text("lease_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  index("compliance_product_registry_sync_leases_expiry_idx")
+    .on(table.expiresAt, table.registryCode),
+  check("compliance_product_registry_sync_leases_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_product_registry_sync_leases_id_check", sql`trim(${table.leaseId}) = ${table.leaseId} AND length(${table.leaseId}) BETWEEN 8 AND 160`),
+  check("compliance_product_registry_sync_leases_time_check", sql`datetime(${table.startedAt}) IS NOT NULL AND datetime(${table.expiresAt}) IS NOT NULL AND datetime(${table.expiresAt}) > datetime(${table.startedAt})`),
+]);
+
+export const complianceOfficialProductSnapshots = sqliteTable("compliance_official_product_snapshots", {
+  id: text("id").primaryKey(),
+  registryCode: text("registry_code").notNull(),
+  contract: text("contract").notNull(),
+  sourceManifestJson: text("source_manifest_json").notNull(),
+  sourceSha256: text("source_sha256").notNull(),
+  sourceCount: integer("source_count").notNull(),
+  recordCount: integer("record_count").notNull(),
+  status: text("status").notNull().default("staging"),
+  createdAt: text("created_at").notNull(),
+  activatedAt: text("activated_at"),
+  activatedOn: text("activated_on"),
+  supersededAt: text("superseded_at"),
+  supersededOn: text("superseded_on"),
+}, (table) => [
+  uniqueIndex("compliance_official_product_snapshots_current_idx")
+    .on(table.registryCode).where(sql`${table.status} = 'current'`),
+  index("compliance_official_product_snapshots_history_idx")
+    .on(table.registryCode, table.createdAt, table.id),
+  check("compliance_official_product_snapshots_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 160`),
+  check("compliance_official_product_snapshots_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_official_product_snapshots_contract_check", sql`${table.contract} = 'creditex-official-products/v1'`),
+  check("compliance_official_product_snapshots_manifest_check", sql`json_valid(${table.sourceManifestJson}) AND json_type(${table.sourceManifestJson}) = 'object' AND length(${table.sourceManifestJson}) BETWEEN 2 AND 131072`),
+  check("compliance_official_product_snapshots_hash_check", sql`length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_official_product_snapshots_source_count_check", sql`${table.sourceCount} BETWEEN 1 AND 100`),
+  check("compliance_official_product_snapshots_record_count_check", sql`${table.recordCount} > 0 AND ${table.recordCount} <= 500000`),
+  check("compliance_official_product_snapshots_status_check", sql`${table.status} IN ('staging', 'current', 'superseded')`),
+  check("compliance_official_product_snapshots_created_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("compliance_official_product_snapshots_dates_check", sql`(${table.activatedOn} IS NULL OR (length(${table.activatedOn}) = 10 AND date(${table.activatedOn}) = ${table.activatedOn})) AND (${table.supersededOn} IS NULL OR (length(${table.supersededOn}) = 10 AND date(${table.supersededOn}) = ${table.supersededOn}))`),
+  check("compliance_official_product_snapshots_state_check", sql`(${table.status} = 'staging' AND ${table.activatedAt} IS NULL AND ${table.activatedOn} IS NULL AND ${table.supersededAt} IS NULL AND ${table.supersededOn} IS NULL) OR (${table.status} = 'current' AND ${table.activatedAt} IS NOT NULL AND ${table.activatedOn} IS NOT NULL AND datetime(${table.activatedAt}) >= datetime(${table.createdAt}) AND ${table.supersededAt} IS NULL AND ${table.supersededOn} IS NULL) OR (${table.status} = 'superseded' AND ${table.activatedAt} IS NOT NULL AND ${table.activatedOn} IS NOT NULL AND ${table.supersededAt} IS NOT NULL AND ${table.supersededOn} IS NOT NULL AND datetime(${table.activatedAt}) >= datetime(${table.createdAt}) AND datetime(${table.supersededAt}) >= datetime(${table.activatedAt}) AND ${table.supersededOn} >= ${table.activatedOn})`),
+]);
+
+export const complianceOfficialProducts = sqliteTable("compliance_official_products", {
+  id: text("id").primaryKey(),
+  snapshotId: text("snapshot_id").notNull().references(
+    () => complianceOfficialProductSnapshots.id,
+    { onDelete: "cascade" },
+  ),
+  sourceKey: text("source_key").notNull(),
+  sourceRecordKey: text("source_record_key").notNull(),
+  productKind: text("product_kind").notNull(),
+  manufacturer: text("manufacturer").notNull().default(""),
+  brand: text("brand").notNull().default(""),
+  model: text("model").notNull(),
+  series: text("series").notNull().default(""),
+  registrationNumber: text("registration_number").notNull().default(""),
+  certificateNumber: text("certificate_number").notNull().default(""),
+  approvalStatus: text("approval_status").notNull(),
+  eligibleFrom: text("eligible_from").notNull().default(""),
+  eligibleTo: text("eligible_to").notNull().default(""),
+  registryEffectiveFrom: text("registry_effective_from").notNull(),
+  availableInAustralia: integer("available_in_australia", { mode: "boolean" }).notNull().default(true),
+  searchText: text("search_text").notNull(),
+  attributesJson: text("attributes_json").notNull().default("{}"),
+}, (table) => [
+  uniqueIndex("compliance_official_products_source_record_idx")
+    .on(table.snapshotId, table.sourceKey, table.sourceRecordKey),
+  index("compliance_official_products_selection_idx")
+    .on(table.snapshotId, table.productKind, table.registryEffectiveFrom, table.eligibleFrom, table.eligibleTo, table.id),
+  index("compliance_official_products_search_idx")
+    .on(table.snapshotId, table.productKind, table.searchText, table.id),
+  index("compliance_official_products_model_idx")
+    .on(table.snapshotId, table.productKind, table.brand, table.model, table.id),
+  index("compliance_official_products_registration_idx")
+    .on(table.snapshotId, table.registrationNumber, table.certificateNumber, table.id),
+  check("compliance_official_products_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 640`),
+  check("compliance_official_products_source_check", sql`trim(${table.sourceKey}) = ${table.sourceKey} AND ${table.sourceKey} = lower(${table.sourceKey}) AND length(${table.sourceKey}) BETWEEN 3 AND 80 AND ${table.sourceKey} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_official_products_source_record_check", sql`trim(${table.sourceRecordKey}) = ${table.sourceRecordKey} AND length(${table.sourceRecordKey}) BETWEEN 1 AND 500`),
+  check("compliance_official_products_kind_check", sql`trim(${table.productKind}) = ${table.productKind} AND ${table.productKind} = lower(${table.productKind}) AND length(${table.productKind}) BETWEEN 3 AND 80 AND ${table.productKind} NOT GLOB '*[^a-z0-9_:-]*'`),
+  check("compliance_official_products_identity_check", sql`trim(${table.manufacturer}) = ${table.manufacturer} AND length(${table.manufacturer}) <= 300 AND trim(${table.brand}) = ${table.brand} AND length(${table.brand}) <= 300 AND trim(${table.model}) = ${table.model} AND length(${table.model}) BETWEEN 1 AND 500 AND trim(${table.series}) = ${table.series} AND length(${table.series}) <= 300`),
+  check("compliance_official_products_numbers_check", sql`trim(${table.registrationNumber}) = ${table.registrationNumber} AND length(${table.registrationNumber}) <= 200 AND trim(${table.certificateNumber}) = ${table.certificateNumber} AND length(${table.certificateNumber}) <= 200`),
+  check("compliance_official_products_status_check", sql`trim(${table.approvalStatus}) = ${table.approvalStatus} AND ${table.approvalStatus} = lower(${table.approvalStatus}) AND length(${table.approvalStatus}) BETWEEN 1 AND 80 AND ${table.approvalStatus} NOT GLOB '*[^a-z0-9_:-]*'`),
+  check("compliance_official_products_dates_check", sql`(${table.eligibleFrom} = '' OR date(${table.eligibleFrom}) = ${table.eligibleFrom}) AND (${table.eligibleTo} = '' OR date(${table.eligibleTo}) = ${table.eligibleTo}) AND length(${table.registryEffectiveFrom}) = 10 AND date(${table.registryEffectiveFrom}) = ${table.registryEffectiveFrom} AND (${table.eligibleFrom} = '' OR ${table.eligibleTo} = '' OR ${table.eligibleTo} >= ${table.eligibleFrom})`),
+  check("compliance_official_products_available_check", sql`${table.availableInAustralia} IN (0, 1)`),
+  check("compliance_official_products_search_check", sql`trim(${table.searchText}) = ${table.searchText} AND ${table.searchText} = lower(${table.searchText}) AND length(${table.searchText}) BETWEEN 1 AND 2000`),
+  check("compliance_official_products_attributes_check", sql`json_valid(${table.attributesJson}) AND json_type(${table.attributesJson}) = 'object' AND length(${table.attributesJson}) BETWEEN 2 AND 65536`),
+]);
+
+export const complianceOfficialProductArtifacts = sqliteTable("compliance_official_product_artifacts", {
+  id: text("id").primaryKey(),
+  snapshotId: text("snapshot_id").notNull().references(
+    () => complianceOfficialProductSnapshots.id,
+    { onDelete: "cascade" },
+  ),
+  sourceKey: text("source_key").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  sourceSha256: text("source_sha256").notNull(),
+  contentType: text("content_type").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  recordCount: integer("record_count").notNull(),
+  objectKey: text("object_key").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("compliance_official_product_artifacts_source_idx")
+    .on(table.snapshotId, table.sourceKey),
+  index("compliance_official_product_artifacts_hash_idx")
+    .on(table.sourceSha256, table.createdAt, table.id),
+  check("compliance_official_product_artifacts_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 260`),
+  check("compliance_official_product_artifacts_source_check", sql`trim(${table.sourceKey}) = ${table.sourceKey} AND ${table.sourceKey} = lower(${table.sourceKey}) AND length(${table.sourceKey}) BETWEEN 3 AND 80 AND ${table.sourceKey} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_official_product_artifacts_url_check", sql`trim(${table.sourceUrl}) = ${table.sourceUrl} AND length(${table.sourceUrl}) BETWEEN 12 AND 2000 AND ${table.sourceUrl} GLOB 'https://*'`),
+  check("compliance_official_product_artifacts_hash_check", sql`length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("compliance_official_product_artifacts_type_check", sql`trim(${table.contentType}) = ${table.contentType} AND length(${table.contentType}) BETWEEN 3 AND 160`),
+  check("compliance_official_product_artifacts_size_check", sql`${table.byteLength} BETWEEN 1 AND 100000000`),
+  check("compliance_official_product_artifacts_count_check", sql`${table.recordCount} BETWEEN 0 AND 500000`),
+  check("compliance_official_product_artifacts_object_check", sql`trim(${table.objectKey}) = ${table.objectKey} AND length(${table.objectKey}) BETWEEN 60 AND 2000 AND ${table.objectKey} GLOB 'creditex/official-products/*'`),
+  check("compliance_official_product_artifacts_created_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
+export const complianceOfficialProductSyncRuns = sqliteTable("compliance_official_product_sync_runs", {
+  id: text("id").primaryKey(),
+  registryCode: text("registry_code").notNull(),
+  status: text("status").notNull(),
+  snapshotId: text("snapshot_id").references(
+    () => complianceOfficialProductSnapshots.id,
+    { onDelete: "set null" },
+  ),
+  sourceManifestJson: text("source_manifest_json"),
+  sourceSha256: text("source_sha256"),
+  recordCount: integer("record_count").notNull(),
+  checkedAt: text("checked_at").notNull(),
+  message: text("message").notNull().default(""),
+}, (table) => [
+  index("compliance_official_product_sync_runs_registry_idx")
+    .on(table.registryCode, table.checkedAt, table.id),
+  index("compliance_official_product_sync_runs_snapshot_idx")
+    .on(table.snapshotId, table.checkedAt, table.id),
+  check("compliance_official_product_sync_runs_id_check", sql`trim(${table.id}) = ${table.id} AND length(${table.id}) BETWEEN 8 AND 200`),
+  check("compliance_official_product_sync_runs_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_official_product_sync_runs_status_check", sql`${table.status} IN ('success', 'unchanged', 'failed')`),
+  check("compliance_official_product_sync_runs_manifest_check", sql`${table.sourceManifestJson} IS NULL OR (json_valid(${table.sourceManifestJson}) AND json_type(${table.sourceManifestJson}) = 'object' AND length(${table.sourceManifestJson}) BETWEEN 2 AND 131072)`),
+  check("compliance_official_product_sync_runs_hash_check", sql`${table.sourceSha256} IS NULL OR (length(${table.sourceSha256}) = 64 AND ${table.sourceSha256} = lower(${table.sourceSha256}) AND ${table.sourceSha256} NOT GLOB '*[^0-9a-f]*')`),
+  check("compliance_official_product_sync_runs_count_check", sql`${table.recordCount} BETWEEN 0 AND 500000`),
+  check("compliance_official_product_sync_runs_checked_check", sql`datetime(${table.checkedAt}) IS NOT NULL`),
+  check("compliance_official_product_sync_runs_message_check", sql`length(${table.message}) <= 2000`),
+  check("compliance_official_product_sync_runs_state_check", sql`(${table.status} IN ('success', 'unchanged') AND ${table.snapshotId} IS NOT NULL AND ${table.sourceManifestJson} IS NOT NULL AND ${table.sourceSha256} IS NOT NULL AND ${table.recordCount} > 0) OR (${table.status} = 'failed' AND trim(${table.message}) <> '')`),
+]);
+
+export const complianceOfficialProductSyncLeases = sqliteTable("compliance_official_product_sync_leases", {
+  registryCode: text("registry_code").primaryKey(),
+  leaseId: text("lease_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  index("compliance_official_product_sync_leases_expiry_idx")
+    .on(table.expiresAt, table.registryCode),
+  check("compliance_official_product_sync_leases_registry_check", sql`trim(${table.registryCode}) = ${table.registryCode} AND ${table.registryCode} = lower(${table.registryCode}) AND length(${table.registryCode}) BETWEEN 3 AND 80 AND ${table.registryCode} NOT GLOB '*[^a-z0-9:_-]*'`),
+  check("compliance_official_product_sync_leases_id_check", sql`trim(${table.leaseId}) = ${table.leaseId} AND length(${table.leaseId}) BETWEEN 8 AND 160`),
+  check("compliance_official_product_sync_leases_time_check", sql`datetime(${table.startedAt}) IS NOT NULL AND datetime(${table.expiresAt}) IS NOT NULL AND datetime(${table.expiresAt}) > datetime(${table.startedAt})`),
+]);

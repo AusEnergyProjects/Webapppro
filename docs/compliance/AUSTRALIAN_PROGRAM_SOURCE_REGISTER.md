@@ -2,7 +2,7 @@
 
 Status: controlled discovery baseline, not an eligibility or calculation authority
 
-Reviewed: 1 August 2026
+Reviewed: 8 August 2026
 
 Owner: TLink compliance domain with independent source verification and Creditex operational review required before publication
 
@@ -28,7 +28,7 @@ TLink must never expose one generic `certificates_created` field across these pr
 
 ## Creditex public program position
 
-Creditex states that its trading business creates and trades certificates and manages compliance nationwide for hot-water heat pumps, air conditioners, solar batteries and other energy-saving solutions. Its public accreditation claims reviewed on 1 August 2026 are:
+Creditex states that its trading business creates and trades certificates and manages compliance nationwide for hot-water heat pumps, air conditioners, solar batteries and other energy-saving solutions. Its public accreditation claims reviewed on 8 August 2026 are:
 
 - VEU Accredited Person A1107;
 - NSW ESS Accredited Certificate Provider ACC0000107;
@@ -38,7 +38,42 @@ Creditex states that its trading business creates and trades certificates and ma
 
 Sources: [Creditex Trading](https://trading.creditex.com.au/), [Creditex certificate services](https://trading.creditex.com.au/certificates/) and [ESCOSA REPS activity providers](https://www.escosa.sa.gov.au/industry/reps/obliged-retailers-activity-providers/technical-activity-providers).
 
-The NSW Government also names Creditex as the delivery partner for the coming Home Energy Saver household discounts. The discount rules, evidence payload and operating interface were not public on 1 August 2026, so that program must remain future and disabled. Sources: [Home Energy Saver](https://www.energy.nsw.gov.au/households/grants-rebates/home-energy-saver) and [NSW announcement naming Creditex](https://www.energy.nsw.gov.au/news/energy-savings-nsw-households-loans-and-discounts-help-families-lower-their-bills).
+The NSW Government also names Creditex as the delivery partner for the coming Home Energy Saver household discounts. The discount rules, evidence payload and operating interface were not public on 8 August 2026, so that program must remain future and disabled. Sources: [Home Energy Saver](https://www.energy.nsw.gov.au/households/grants-rebates/home-energy-saver) and [NSW announcement naming Creditex](https://www.energy.nsw.gov.au/news/energy-savings-nsw-households-loans-and-discounts-help-families-lower-their-bills).
+
+## Working-tree calculator and registry status
+
+The current unreleased implementation covers 35 program pathways and 216
+activity templates. Exactly 33 templates expose a deterministic estimate and
+183 remain closed, future, not applicable, project-method-only, governed-formula
+or official-registry blocked. Certificate actions enabled remain 0. The sealed
+coverage hash is
+`sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1`.
+Active verified installers can open the same source-pinned estimate engine from
+the TLink trade dashboard for quote and invoice preparation. This grants no
+registry-refresh, certificate-creation, submission, trading or settlement
+authority.
+
+Current product evidence is deliberately split by authority and permission:
+
+- 16,684 CER registered solar-water-heater and air-source-heat-pump rows are in
+  the dedicated SRES registry;
+- 31,418 stable GEMS rows from 11 official data.gov.au resources are approved
+  for the automatic registry;
+- all 14 live-tested federal feeds parse 44,119 stable rows, but 12,701
+  CER-hosted CEC module, inverter and battery rows remain controlled-manual
+  until commercial reuse permission is recorded;
+- the current Synergy supported-solutions page parses 2,024 rows under a
+  controlled-manual contract, while Horizon Power has no supported unattended
+  feed; and
+- the VEU public registry was audited at 64,715 approved and effective rows, but
+  its unsupported embedded Power BI interface is not treated as a production
+  API.
+
+Both product registries retain exact source bytes, immutable manifests, one
+current snapshot and changed or removed historical deltas. Failed, stale,
+drifted, incomplete, overlapping or custody-invalid refreshes fail closed.
+Product-controlled formula values are derived server-side and cannot be
+replaced by caller-entered values.
 
 ## Federal program register
 
@@ -60,6 +95,29 @@ The system, product-register entry, recall state, installer and designer credent
 Cheaper Home Batteries operates through SRES rather than creating a separate certificate type. Tiered battery incentives commenced 1 May 2026. The federal battery evidence path requires original geotagged and timestamped images across installation stages, including battery and inverter serial evidence. Those official requirements must be transcribed into an effective-dated battery policy and must not be copied onto unrelated SRES activities.
 
 Sources: [CER eligible small-scale systems](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems), [CER certificate creation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates), [CER registered-agent obligations](https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/registered-agents), [CER entitlement calculation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements), [CER solar batteries](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries) and [CER 1 May 2026 battery changes](https://cer.gov.au/news-and-media/media/2026/march/battery-rebates-are-changing-1-may-2026).
+
+Working-tree calculator coverage reviewed 8 August 2026:
+
+- the CER air-source-heat-pump and both solar-water-heater CSV exports ingest
+  16,684 current products into one effective-dated selector;
+- the official water-heater/heat-pump and solar-PV postcode documents are
+  transcribed with their exact current SHA-256 values and re-fetched for hash
+  comparison on every registry refresh;
+- every changed refresh retains exact source bytes in content-addressed R2
+  objects, immutable D1 manifests, a full current projection and only changed or
+  removed historical product deltas;
+- a failed, changed, incomplete, stale, overlapping or custody-unverified
+  refresh blocks affected product and postcode calculations instead of silently
+  using a previous result; and
+- registered solar-water-heater and air-source-heat-pump estimates pin the
+  product, installation date, postcode, source snapshot and deterministic
+  receipt, while certificate creation remains disabled.
+
+Solar PV, solar battery, small wind and small hydro arithmetic is implemented
+but not executable. Current controlled sources do not yet establish every
+required component, installed-system value and accreditation fact, and the CEC
+data cannot be automated commercially without recorded permission. No claim
+creation or REC Registry submission connector exists.
 
 ### Large-scale Renewable Energy Target, LGCs
 
@@ -150,11 +208,13 @@ at the registered rated capacity of the installed outdoor unit. From
 The scenario-specific 2.4 kW and 15 kW limits for scenarios (i) to (iv) still
 apply.
 
-These are source-register facts, not active TLink rules. This register does
-not establish which approved case event selects the effective-date branch,
-retain any exact source bytes or hashes, approve a clause transcription, or
-activate a calculator. Those controls remain fail-closed pending exact-byte
-retention and independent approval.
+The working tree implements and tests 15 VEU activity families across 40
+scenarios, including both Version 25 Part 6 date branches, and resolves all 719
+explicit Version 24 and Version 25 Table A postcode rows. Only Parts 22, 24 and
+25 using supported GEMS product evidence, plus Part 46 with no product registry,
+are currently exposed as estimates. Every VEU-registry-backed family remains
+fail-closed pending a supported, immutable machine extract and independent
+formula reconciliation.
 
 Current deemed-activity inventory:
 
@@ -303,7 +363,7 @@ Sources: [current ESS Rule](https://www.energysustainabilityschemes.nsw.gov.au/s
 
 ### Peak Demand Reduction Scheme, PRCs
 
-Status: current certificate scheme. An Accredited Certificate Provider nominated as Capacity Holder creates PRCs. The current public rule page states a 1 July 2026 rule; the research source set also contains a 1 April 2026 PDF. The exact July rule PDF and installation-date version must be resolved before publication.
+Status: current certificate scheme. An Accredited Certificate Provider nominated as Capacity Holder creates PRCs. The current Energy Security Safeguard Rule of 2022 dated 1 July 2026 is the governing working-tree source for implementations from that date. Earlier installation dates require their own archived rule versions.
 
 Current activity inventory:
 
@@ -318,6 +378,13 @@ Current activity inventory:
 - V2G1, commencement to be advised and therefore inactive.
 
 Sources: [PDRS overview](https://www.energy.nsw.gov.au/nsw-plans-and-progress/regulation-and-policy/energy-security-safeguard/peak-demand-reduction-scheme), [rule and changes](https://www.energysustainabilityschemes.nsw.gov.au/pdrs-rule-and-changes), [legislation](https://www.energysustainabilityschemes.nsw.gov.au/pdrs-legislation), [peak saving](https://www.energysustainabilityschemes.nsw.gov.au/peak-saving), [peak shifting](https://www.energysustainabilityschemes.nsw.gov.au/peak-shifting), [peak response](https://www.energysustainabilityschemes.nsw.gov.au/peak-response) and [PDRS Method Guide Version 2.5](https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/documents/2025-09/PDRS-Method-Guide-V2.5-September-2025.pdf).
+
+The working tree implements 20 typed NSW ESS/PDRS estimator scenarios. Current
+GEMS-backed D5, D16, F4, HVAC1, HVAC2, RF2 and SYS2 activity templates expose
+estimates with server-derived product values. D17 to D20 and BESS1 to BESS5
+remain blocked until exact TESSA or administrator-accepted product evidence is
+available; generic CEC battery and inverter entries do not satisfy NSW
+acceptance. BESS3 to BESS5 also reject dates before 1 September 2026.
 
 ### NSW Home Energy Saver
 
@@ -390,40 +457,79 @@ Sources: [REPS overview](https://energymining.sa.gov.au/industry/energy-efficien
 
 ## Queensland
 
-No current state certificate or retailer-obligation scheme was found.
+No current Queensland tradable certificate or mandatory retailer-efficiency obligation was found. Queensland's former statutory renewable targets were repealed with operative provisions commencing 12 March 2026. The current infrastructure legislation creates planning powers, not certificate units, liable entities or approved-product certificate methods. Sources: [Energy Roadmap Amendment Act 2025](https://www.legislation.qld.gov.au/view/whole/html/asmade/act-2025-030) and [Energy Infrastructure Facilitation Act](https://www.legislation.qld.gov.au/view/whole/html/inforce/2026-04-27/act-2024-015).
 
-- Supercharged Solar for Renters: current grant, open from 12 December 2025, with capacity-banded rebates and approval required before installation. Source: [program page](https://www.qld.gov.au/housing/home-energy-savings/supercharged-solar-for-renters).
-- Queensland Community Housing Energy Upgrades: current grant open 2 February to 30 October 2026, with approved primary measures for draught sealing, cooking, insulation, solar, air conditioning, water heating, shading and glazing and limited supplementary fan or LED work. Source: [provider-owned properties program](https://www.business.qld.gov.au/industries/housing-accommodation/community/energy-upgrades/provider-owned-properties).
-- Home Energy Rating for existing homes: current accreditation and certificate service from 1 July 2026, not a rebate. Source: [rating program](https://www.chde.qld.gov.au/initiatives/modern-homes/home-energy-rating-existing-homes).
-- PeakSmart new incentives, QBEST and Battery Booster are closed. Existing demand-response operation or legacy claims must remain historical only. Source: [PeakSmart](https://www.energex.com.au/manage-your-energy/peaksmart-air-conditioning) and [Battery Booster closed-program fact sheet](https://www.energyandclimate.qld.gov.au/__data/assets/pdf_file/0026/52964/retailer-fact-sheet-battery-booster.pdf).
+Current or retained local modules are:
+
+| Module | Current rule and output | Required control |
+| --- | --- | --- |
+| Supercharged Solar for Renters | `system_capacity = min(inverter_kW, panel_kW)`. Indicative rebate is the lesser of eligible installed cost and $2,500 for 3 to under 4 kW, $3,000 for 4 to under 5 kW, or $3,500 for at least 5 kW. | Live funding status, individual ownership, tenancy and lease, property class, individual meter, no existing solar, minimum 3 kW, approved seller, product and installer checks, and conditional approval before installation. Battery cost is excluded. |
+| Queensland Community Housing Energy Upgrades | Generally `min($4,500 per eligible dwelling, eligible GST-exclusive cost)`. Conditional part-payment is the lesser of $2,250 or 50% of quoted cost. Common hot-water cost is allocated across dwellings served. | At least one primary measure, eligible community-housing provider and dwelling, activity-specific product and licence checks, close 30 October 2026 and completion by 30 June 2027. Conflicting GST presentation requires manual review. |
+| Regional regulated feed-in tariff | From 1 July 2026 to 30 June 2027, `eligible_export_kWh * $0.06006`. | Confirm Ergon retail territory and current contract. South East Queensland uses retailer offers. The legacy 44 cent Solar Bonus is closed to new entrants and requires a grandfathered-account preservation check through 1 July 2028. |
+| Ergon large-business demand response | Contract settlement uses verified curtailed MWh, a pre-event baseline, AEMO prices and private minimum-price, pool-share and trigger terms. | Enrolled Ergon business customer, about 1,000 kVA response capacity, interval data and executed contract. No public fixed reward can be calculated. |
+| Home Energy Rating for existing homes | Accredited assessment and rating certificate service from 1 July 2026. | Procurement and assessor-accreditation workflow only. It is not an incentive or energy certificate. |
+
+Sources: [Solar for Renters program](https://www.qld.gov.au/housing/home-energy-savings/supercharged-solar-for-renters), [eligibility](https://www.qld.gov.au/housing/home-energy-savings/supercharged-solar-for-renters/eligibility), [application process](https://www.qld.gov.au/housing/home-energy-savings/supercharged-solar-for-renters/how-to-apply), [enacted rebate regulation](https://www.legislation.qld.gov.au/view/whole/html/asmade/sl-2025-0156), [community-housing upgrades](https://www.business.qld.gov.au/industries/housing-accommodation/community/energy-upgrades/provider-owned-properties), [QCHEU regulation](https://www.legislation.qld.gov.au/view/whole/html/asmade/sl-2026-0003), [regional feed-in tariff](https://www.ergon.com.au/retail/business/tariffs-and-prices/solar-feed-in-tariff), [legacy Solar Bonus](https://www.qld.gov.au/housing/buying-owning-home/energy-water-home/solar/feed-in-tariffs/solar-bonus-scheme-44c), [Ergon demand response](https://www.ergon.com.au/retail/business/tariffs-and-prices/demand-response) and [rating program](https://www.chde.qld.gov.au/initiatives/modern-homes/home-energy-rating-existing-homes).
+
+PeakSmart is closed to new participants. Battery Booster, Climate Smart Energy Savers, QBEST, PowerSavvy and the 2025 to 2026 aggregated demand-response pilot are closed or historical. They must not appear as current claim paths.
 
 ## Western Australia
 
-No current state certificate scheme was found.
+No current WA tradable energy-efficiency or renewable-certificate scheme was found. Regulation 6 of the Electricity Industry (Licence Conditions) Regulations requires an eligible distributed-energy purchase contract, not a certificate market. Source: [WA legislation](https://www.legislation.wa.gov.au/legislation/statutes.nsf/RedirectURL?OpenAgent=&query=mrdoc_44887.htm).
 
-- WA Residential Battery Scheme: current rebate and optional zero-percent loan. The state rebate differs between Synergy and Horizon areas; approved-vendor, VPP, product, installer, network and settlement controls apply. Federal battery STCs may stack where independently eligible. Sources: [scheme](https://www.wa.gov.au/organisation/energy-policy-wa/wa-residential-battery-scheme), [eligibility](https://www.wa.gov.au/organisation/energy-policy-wa/wa-residential-battery-scheme-eligibility-requirements) and [applicant information](https://www.wa.gov.au/government/wa-residential-battery-scheme-information-applicants).
-- Small solar and battery connection requirements: current from 1 May 2026 for new or upgraded systems at or below 30 kVA. Source: [connection requirements](https://www.wa.gov.au/organisation/energy-policy-wa/new-requirements-small-scale-solar-and-battery-systems).
-- Distributed Energy Buyback Scheme: current tariff or buyback program, not a certificate. Source: [buyback schemes](https://www.wa.gov.au/organisation/energy-policy-wa/energy-buyback-schemes).
-- Energy Ahead: current hardship and household-assistance program, not an open tradie claim channel. Source: [program announcement](https://www.wa.gov.au/government/announcements/energy-ahead-formerly-the-household-energy-efficiency-scheme).
-- Charge Up EV Round 3 and Clean Energy Future Fund Round 4 are closed to applications, although approved milestone claims may remain in flight. Source: [Charge Up EV FAQ](https://www.wa.gov.au/organisation/energy-policy-wa/faq-charge-grants).
+| Module | Current rule and output | Required control |
+| --- | --- | --- |
+| WA Residential Battery Scheme | Synergy: `min(usable_kWh, 10) * $130`, maximum $1,300. Horizon: `min(usable_kWh, 10) * $380`, maximum $3,800. Minimum usable capacity is 5 kWh. Optional no-interest loan is $2,001 to $10,000 for an eligible household below $210,000 gross income. | One rebate per property, install date from 1 July 2025, funding and conditional approval, retailer, VPP, CEC battery and inverter, supported combination, gateway, Plenti vendor, NETCC/SAA/licence and network checks. Postcode alone cannot decide retailer territory. |
+| DEBS | Synergy pays 10 cents per kWh from 3 pm to 9 pm and 2 cents otherwise. Horizon uses effective-dated town rows. Retailer need not buy more than 50 kWh per premises per day. | Interval exports, daily cap, retailer, exact Horizon town, current tariff version, eligible customer/system, meter and network approval. REBS is grandfathered only. |
+| Synergy Battery Rewards | Activation credit is `$0.70 * metered event export kWh`, capped at installed battery capacity per event, plus separately calculated energy-offset and DEBS credits where applicable. | Executed versioned VPP terms, interval data and actual events. Forecasts must disclose that event timing and count are discretionary. |
+| Horizon Community Wave and Buyback Bonus | `sum(interval export kWh * current town/season/time-band rate)`. | Exact town table, summer/winter window, compatible managed equipment and Secure Gateway Device. Keep separate from DEBS. |
+| Small DER and Emergency Solar Management | From 1 May 2026, relevant new or upgraded SWIS systems at or below 30 kVA need remote disconnection/reconnection or the controlled 1.5 kW export-limit exception and Region B settings. | Connection-compliance gate only. The exception may affect DEBS eligibility and creates no credit. |
+
+Sources: [battery scheme](https://www.wa.gov.au/organisation/energy-policy-wa/wa-residential-battery-scheme), [battery eligibility](https://www.wa.gov.au/organisation/energy-policy-wa/wa-residential-battery-scheme-eligibility-requirements), [industry rules](https://www.wa.gov.au/government/wa-residential-battery-scheme-information-industry), [Synergy supported solutions](https://www.synergy.net.au/Global/SSL), [DEBS](https://www.wa.gov.au/organisation/energy-policy-wa/energy-buyback-schemes), [Horizon pricing](https://www.horizonpower.com.au/pricing), [Battery Rewards](https://www.synergy.net.au/Your-home/Solar-battery-and-EV/Battery-Rewards), [Battery Rewards payment rules](https://www.synergy.net.au/Your-home/Solar-battery-and-EV/Battery-Rewards/Battery-Rewards-payments-and-rewards-FAQs), [Community Wave](https://www.horizonpower.com.au/for-home/solar-battery/community-wave/) and [small DER rules](https://www.wa.gov.au/organisation/energy-policy-wa/new-requirements-small-scale-solar-and-battery-systems).
+
+Sunshine Saver is an eligibility and bill-estimate module. Energy Ahead is referral/status only because no public per-product formula exists. WEM capacity credits require a separate registered wholesale-market participant workbench. Clean Energy Future Fund Round 4, Charge Up EV Round 3 and the Synergy Solar Rewards pilot are closed. The Made in WA Energy Affordability Investment Program remains design-only and must not have a calculator yet.
 
 ## Tasmania
 
-No current state certificate scheme was found.
+No current Tasmanian certificate scheme was found. Tasmania's legislated 2030 and 2040 renewable-generation targets create no certificate unit, surrender obligation, liable retailer, approved-product registry or deemed-upgrade method. Sources: [Energy Co-ordination and Planning Act](https://www.legislation.tas.gov.au/view/whole/html/inforce/current/act-1995-047), [Electricity Supply Industry Act](https://www.legislation.tas.gov.au/view/whole/html/current/act-1995-058) and [Tasmanian Renewable Energy Target](https://www.recfit.tas.gov.au/what_is_recfit/energy_vision/200_renewable_energy_target).
 
-- PowerSmart for Small Business: current energy-audit reimbursement program through 30 June 2028 or exhaustion of funding. Source: [program page](https://www.recfit.tas.gov.au/grants_programs/energy-efficiency/powersmart_for_small_business).
-- No Interest Loan Scheme Energy Saver subsidy: current low-income appliance and heat-pump support through 2027 to 2028, with the exact product list and caps controlled by the delivery provider and therefore unresolved. Source: [energy bill relief](https://www.recfit.tas.gov.au/grants_programs/energy/energy_bill_relief).
-- Feed-in tariff: current regulated tariff, 9.276 cents per kWh from 1 July 2026 to 30 June 2027, with network and DER registration requirements. Sources: [Tasmanian Economic Regulator tariff](https://www.economicregulator.tas.gov.au/electricity/pricing/feed-in-tariffs), [TasNetworks solar connections](https://www.tasnetworks.com.au/solar-connections) and [DER Register](https://www.tasnetworks.com.au/Connections/Distributed-Energy-Resource-Register).
-- Energy Saver Loan Scheme closed 1 September 2025. Business Energy Efficiency Scheme, ChargeSmart, Deliver-e and earlier EV rebates are closed or require confirmation of legacy settlement only. Source: [closed loan scheme](https://www.recfit.tas.gov.au/grants_programs/energy-efficiency/energy_saver_loan_scheme).
+| Module | Current rule and output | Required control |
+| --- | --- | --- |
+| PowerSmart for Small Business | `min(actual eligible paid independent audit cost, $1,000)`, open through 30 June 2028 or earlier funding exhaustion. | Active ABN since at least 1 March 2024, 1 to 19 FTE, primary Tasmanian operation, independent competent audit after 11 April 2024, compliant report and one grant per ABN/business. No upgrade-product registry. |
+| NILS Energy Saver support | Current public material indicates a no-interest loan up to $2,000 and historic/current partner material describes appliance and heat-pump subsidies, but the amount and income rules conflict. | Configurable pre-screen only with current delivery-provider confirmation and GEMS/star lookup. Return `manual review`, never definitive approval or amount. |
+| Regulated feed-in tariff | From 1 July 2026 to 30 June 2027, `eligible net export kWh * $0.09276`. | Qualifying mainland Tasmania or Bruny Island small system, current rate, compliant meter and network/DER registration. Bass Strait Islands require separate treatment; postcode alone is not authoritative. |
+
+Sources: [PowerSmart](https://www.recfit.tas.gov.au/grants_programs/energy-efficiency/powersmart_for_small_business), [PowerSmart guidelines](https://www.recfit.tas.gov.au/__data/assets/pdf_file/0008/547487/Guidelines_PowerSmart_for_Small_Business.pdf), [NILS referral](https://www.recfit.tas.gov.au/grants_programs/energy/energy_bill_relief), [NILS current program](https://nilstasmania.org.au/Website/Essentials), [regulated feed-in tariff](https://www.economicregulator.tas.gov.au/electricity/pricing/feed-in-tariffs), [Aurora solar rate](https://auroraenergy.com.au/residential/products/solar/solar-rates) and [TasNetworks DER Register](https://www.tasnetworks.com.au/Connections/Distributed-Energy-Resource-Register).
+
+Energy Saver Loan Scheme closed 1 September 2025. Business Energy Efficiency Scheme has no confirmed open application path after its scheduled April 2026 conclusion. ChargeSmart, Deliver-e and earlier EV rebates are closed. Aurora Power Hours is a discretionary retailer offer and requires an accepted event plus interval data, not a deemed demand-response credit.
 
 ## Northern Territory
 
-No current state certificate scheme was found.
+No current NT tradable certificate or mandatory retailer-efficiency scheme was found. Current electricity-market reform remains under development and cannot be represented as a customer credit. Source: [Territory Electricity Reform](https://dme.nt.gov.au/renewables-energy-systems/reform-territory-electricity-market).
 
-- Solar for Multi Dwellings: current grant closing 31 December 2027 or earlier if funding is exhausted. It covers shared PV, sharing technology, smart meters and batteries only when installed with the shared system, subject to title, body-corporate, network, design, quote, resolution, completion and audit evidence. Sources: [program](https://nt.gov.au/industry/business-grants-funding/solar-for-multi-dwellings-grant-scheme) and [terms](https://nt.gov.au/_media/docs/business-and-industry/grants/solar-for-multi-dwellings-grants-scheme-terms-and-conditions.pdf).
-- Jacana feed-in tariffs: current tariff products for 1 July 2026 to 30 June 2027, not installer certificates. Source: [Jacana pricing](https://www.jacanaenergy.com.au/index.php/residential/pricing).
-- Home and Business Battery Scheme and EV charger grants are closed. Sources: [battery scheme](https://nt.gov.au/industry/business-grants-funding/home-and-business-battery-scheme) and [EV charger grants](https://nt.gov.au/industry/business-grants-funding/electric-vehicle-charger-residential-and-business-grants-scheme).
-- Time-of-use tariffs are customer tariff choices, and Remote Renewable Power Rollout is infrastructure procurement. Neither is an ordinary trade claim.
+| Module | Current rule and output | Required control |
+| --- | --- | --- |
+| Solar for Multi Dwellings | `min($7,500 * eligible residential dwellings, 50% * GST-exclusive eligible works cost)`, available through 31 December 2027 or earlier closure/exhaustion. | At least two dwellings, qualifying shared-property applicant, existing occupied residential building, common-property equipment behind dwelling meters, equitable allocation, no embedded network, no excluded prior shared solar, Power and Water approval, conditional approval and executed agreement before work. Battery qualifies only with new shared PV. Final amount remains departmental. |
+| Regulated solar feed-in tariff | From 1 July 2026 to 30 June 2027, `$0.1866 * eligible smart-meter exports from 3 pm to 9 pm + $0.0933 * other eligible exports`. | Regulated contract, qualifying rooftop solar, electronic interval meter, retailer and network classification. Remote arrangements may use a different purchase agreement. |
+| Solar, battery and electrical compliance | No financial output. | Current NT electrical licence, solar/battery accreditation, CEC-approved equipment, Power and Water pre-approval, size/location connection class, protection/commissioning and retained Electrical Certificate of Compliance. |
+| Home and Business Battery Scheme | Closed. Historic formula was `$400 * usable kWh`, capped at $12,000. | Show `closed, no funding available` for new work. Retain only already-approved voucher support. |
+
+Sources: [multi-dwelling program](https://nt.gov.au/industry/business-grants-funding/solar-for-multi-dwellings-grant-scheme), [terms current 30 June 2026](https://nt.gov.au/_media/docs/business-and-industry/grants/solar-for-multi-dwellings-grants-scheme-terms-and-conditions.pdf), [Jacana pricing](https://www.jacanaenergy.com.au/residential/pricing), [Utilities Commission pricing](https://utilicom.nt.gov.au/electricity/price-regulation/electricity-retail-pricing), [Power and Water PV classes](https://www.powerwater.com.au/customers/power/solar-power-systems/pv-class-requirements), [Power and Water connection rules](https://www.powerwater.com.au/customers/power/solar-power-systems), [NT electrical compliance](https://worksafe.nt.gov.au/electrical-safety/information-for-electrical-industry/certificate-of-compliance) and [closed battery scheme](https://nt.gov.au/industry/business-grants-funding/home-and-business-battery-scheme).
+
+EV charger grants and 2025 energy-bill relief are closed. Community Solar Share and the Remote Renewable Power Rollout are government delivery or procurement programs without an open installer formula. No active public customer demand-response credit was identified.
+
+## Four-jurisdiction module boundary
+
+The federal SRES and LRET engines apply independently in QLD, WA, TAS and NT. Local rebates and grants may stack only where their current terms allow it. No local formula reviewed above uses an ABCB climate zone. Address still matters through authoritative service territory, network, town, meter, embedded-network, property and connection classifications. A postcode may assist a verified resolver, but must never be the final source of truth for those fields.
+
+Every local result must be typed as dollars, finance, tariff credit, eligibility, compliance, closed or manual review. It must not return STC, LGC, VEEC, ESC or PRC unless the separate federal or applicable certificate engine actually produced that unit.
+
+The working tree contains 30 typed local activity estimators across 11 QLD, WA,
+TAS and NT programs. Twenty catalogue templates expose estimates where the
+published formula and evidence source are complete. Product-controlled PV and
+battery paths, Synergy Battery Rewards and Horizon managed-device paths remain
+official-registry blocked until the applicable CEC and WA permissions or feeds
+are in place.
 
 ## Minimum activity-version contract
 
@@ -480,8 +586,8 @@ The inspected tenant exposed only a limited configured subset of activities, so 
 
 1. NSW Home Energy Saver discount guidelines, activity specification, evidence payload and Creditex operating interface are unpublished.
 2. Creditex, Dataforce and Runabout provider-owned field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification, and a connector specification is not a scheme rule.
-3. The final NSW July 2026 evidence and method-guide consultation outcome is not published. Consultation text is not effective law.
-4. The exact July 2026 PDRS rule source must supersede or reconcile the public April 2026 PDF before an activity version is published.
+3. VEU and NSW TESSA do not expose supported public bulk product APIs. Production calculation needs supported immutable extracts with effective dates, statuses, schema controls and exact-byte custody.
+4. CEC commercial data reuse permission and supported suspension, delisting, recall, NETCC and SAA data boundaries are unresolved. CER-hosted CEC files remain controlled-manual until permission is recorded.
 5. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
 6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
 7. The public SA provider register lists Creditex only for WH1, HC2A and HC2B. Other REPS activity codes remain disabled without an obliged retailer's authorised current scope. Plenti, Brighte, QRIDA, GrantsNT, SmartyGrants, NILS, REPS-R and TESSA do not expose a verified public claim API contract in the reviewed sources.

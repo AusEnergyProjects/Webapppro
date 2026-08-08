@@ -19,6 +19,23 @@ const contractSource = read("../src/lib/creditex-veu-pilot-contract.ts");
 const server = read("../src/lib/creditex-veu-pilot-server.ts");
 const route = read("../src/app/api/creditex/pilot/route.ts");
 const workspace = read("../src/components/CreditexVeuPilotWorkspace.tsx");
+const sresCalculator = read("../src/components/CreditexSresCalculator.tsx");
+const allProgramCalculator = read(
+  "../src/components/CreditexAllProgramCalculator.tsx",
+);
+const governedCalculator = read(
+  "../src/components/CreditexGovernedProgramCalculator.tsx",
+);
+const officialProductPicker = read(
+  "../src/components/CreditexOfficialProductPicker.tsx",
+);
+const calculationWorkspace = [
+  workspace,
+  sresCalculator,
+  allProgramCalculator,
+  governedCalculator,
+  officialProductPicker,
+].join("\n");
 const workspaceStyles = read(
   "../src/components/CreditexVeuPilotWorkspace.module.css",
 );
@@ -178,9 +195,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 124);
+  assert.equal(completeMigrationChain.length, 126);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0123_/);
+  assert.match(completeMigrationChain.at(-1), /^0125_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -2604,13 +2621,21 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(manualEvidenceWorkspace, /Manual jobs/);
   assert.match(manualEvidenceWorkspace, /Installer preview/);
   assert.match(manualEvidenceWorkspace, /Submit for Creditex audit/);
-  assert.match(workspace, /National certificate calculation workspace/);
-  assert.match(workspace, /Estimate STCs/);
-  assert.match(workspace, /Activity calculation readiness/);
-  assert.match(workspace, /\/api\/creditex\/stc-estimates/);
-  assert.match(workspace, /REC Registry check required/);
-  assert.match(workspace, /Safety certification date/);
-  assert.match(workspace, /Site-assessed hours \| audit required/);
+  assert.match(calculationWorkspace, /National certificate calculation workspace/);
+  assert.match(calculationWorkspace, /Estimate STCs/);
+  assert.match(calculationWorkspace, /ALL-IN-ONE CALCULATOR/);
+  assert.match(calculationWorkspace, /NSW-PDRS-2026/);
+  assert.match(calculationWorkspace, /NSW-ESS-2026/);
+  assert.match(calculationWorkspace, /Victorian Energy Upgrades/);
+  assert.match(calculationWorkspace, /Select approved products/);
+  assert.match(calculationWorkspace, /\/api\/creditex\/official-products/);
+  assert.match(calculationWorkspace, /\/api\/creditex\/program-estimates/);
+  assert.match(calculationWorkspace, /No product eligibility is guessed/);
+  assert.match(calculationWorkspace, /Activity calculation readiness/);
+  assert.match(calculationWorkspace, /\/api\/creditex\/stc-estimates/);
+  assert.match(calculationWorkspace, /Certificate creation disabled/);
+  assert.match(calculationWorkspace, /Safety certification date/);
+  assert.match(calculationWorkspace, /Site-assessed hours \| audit required/);
   assert.match(workspace, /Controlled submission boundary/);
   assert.match(workspace, /External submission blocked/);
   assert.match(workspace, /No public national calculation API exists/);

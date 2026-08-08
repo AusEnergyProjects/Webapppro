@@ -17,6 +17,7 @@ export type ComplianceRole = typeof COMPLIANCE_ROLES[number];
 export type ComplianceAccessOptions = {
   allowedRoles?: readonly ComplianceRole[];
   organisationId?: string;
+  claimPendingInvitation?: boolean;
 };
 
 export type ComplianceMembershipRecord = {
@@ -341,7 +342,10 @@ export async function requireComplianceIdentity(
       "Choose the compliance organisation for this operation.",
     );
   }
-  if (rows.results.length === 0) {
+  if (
+    rows.results.length === 0
+    && options.claimPendingInvitation !== false
+  ) {
     await claimPendingComplianceInvitation(identity, db, organisationId);
     rows = await memberships();
   }
