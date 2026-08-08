@@ -703,7 +703,7 @@ async function fetchSourceBytes(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
-      redirect: "error",
+      redirect: "manual",
       headers: { Accept: source.accept },
     });
   } catch (error) {
@@ -717,6 +717,13 @@ async function fetchSourceBytes(
       "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
       502,
       `Official source ${source.sourceKey} could not be fetched.`,
+    );
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+      502,
+      `Official source ${source.sourceKey} returned an HTTP redirect.`,
     );
   }
   if (!response.ok) {

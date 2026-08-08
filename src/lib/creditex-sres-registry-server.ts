@@ -344,7 +344,7 @@ async function fetchSource(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
-      redirect: "error",
+      redirect: "manual",
       headers: { Accept: "text/csv" },
     });
   } catch (error) {
@@ -357,6 +357,13 @@ async function fetchSource(
       "SRES_PRODUCT_SOURCE_UNAVAILABLE",
       502,
       `The official ${source.sourceKey} source could not be fetched.`,
+    );
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return fail(
+      "SRES_PRODUCT_SOURCE_UNAVAILABLE",
+      502,
+      `The official ${source.sourceKey} source returned an HTTP redirect.`,
     );
   }
   if (!response.ok) {
@@ -420,7 +427,7 @@ async function fetchReference(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
-      redirect: "error",
+      redirect: "manual",
       headers: { Accept: source.expectedContentType },
     });
   } catch (error) {
@@ -433,6 +440,13 @@ async function fetchReference(
       "SRES_POSTCODE_SOURCE_UNAVAILABLE",
       502,
       `The official ${source.sourceKey} source could not be fetched.`,
+    );
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return fail(
+      "SRES_POSTCODE_SOURCE_UNAVAILABLE",
+      502,
+      `The official ${source.sourceKey} source returned an HTTP redirect.`,
     );
   }
   if (!response.ok) {

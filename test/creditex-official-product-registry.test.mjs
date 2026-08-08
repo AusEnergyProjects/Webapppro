@@ -298,7 +298,7 @@ test("generic registry uses Worker-compatible no-store source requests", async (
     assert.equal(request.input, definition.sources[index].url);
     assert.equal(request.init.cache, "no-store");
     assert.equal(request.init.method, undefined);
-    assert.equal(request.init.redirect, "error");
+    assert.equal(request.init.redirect, "manual");
     assert.equal(
       new Headers(request.init.headers).get("accept"),
       definition.sources[index].accept,
@@ -308,6 +308,22 @@ test("generic registry uses Worker-compatible no-store source requests", async (
       false,
     );
   }
+});
+
+test("generic registry rejects official source redirects without following them", async () => {
+  const { d1, artifactStore } = fixture();
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, definition, {
+      fetchImpl: async () => new Response(null, {
+        status: 307,
+        headers: { location: "https://untrusted.example/products.json" },
+      }),
+      artifactStore,
+      now: new Date("2026-08-08T00:00:00.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE"),
+  );
 });
 
 function fetchFixture(overrides = {}) {

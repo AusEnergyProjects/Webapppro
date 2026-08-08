@@ -378,7 +378,7 @@ test("registry sync uses bounded Worker-compatible official source requests", as
   for (const [index, request] of requests.entries()) {
     assert.equal(request.init.cache, "no-store");
     assert.equal(request.init.method, undefined);
-    assert.equal(request.init.redirect, "error");
+    assert.equal(request.init.redirect, "manual");
     assert.equal(
       new Headers(request.init.headers).has("user-agent"),
       false,
@@ -390,6 +390,45 @@ test("registry sync uses bounded Worker-compatible official source requests", as
         : REFERENCES[index - SOURCES.length].expectedContentType,
     );
   }
+});
+
+test("registry sync rejects official source redirects without following them", async () => {
+  const { d1, artifactStore } = fixture();
+
+  await assert.rejects(
+    syncCerSresProductRegistry(d1, {
+      fetchImpl: async () => new Response(null, {
+        status: 302,
+        headers: { location: "https://untrusted.example/products.csv" },
+      }),
+      artifactStore,
+      now: new Date("2026-08-08T00:00:00.000Z"),
+      references: REFERENCES,
+      sources: SOURCES,
+    }),
+    expectedRegistryError("SRES_PRODUCT_SOURCE_UNAVAILABLE"),
+  );
+});
+
+test("registry sync rejects official reference redirects without following them", async () => {
+  const { d1, artifactStore } = fixture();
+  const fixtureFetch = fetchFixture();
+
+  await assert.rejects(
+    syncCerSresProductRegistry(d1, {
+      fetchImpl: async (input, init) => REFERENCES.some(({ url }) => url === input)
+        ? new Response(null, {
+            status: 301,
+            headers: { location: "https://untrusted.example/zones.pdf" },
+          })
+        : fixtureFetch(input, init),
+      artifactStore,
+      now: new Date("2026-08-08T00:00:00.000Z"),
+      references: REFERENCES,
+      sources: SOURCES,
+    }),
+    expectedRegistryError("SRES_POSTCODE_SOURCE_UNAVAILABLE"),
+  );
 });
 
 test("daily sync keeps exact source custody and atomically activates one snapshot", async () => {
