@@ -422,6 +422,13 @@ export async function POST(request: Request) {
         raw.effectiveDate,
       );
       if (activity.productRegistry !== "none") {
+        if (["VEU", "VEU_AND_GEMS"].includes(activity.productRegistry)) {
+          throw new CreditexVeuEstimateError(
+            "VEU_PRODUCT_EVIDENCE_INVALID",
+            `Activity ${activityCode} requires an effective-dated VEU approved-product record. GEMS registration alone does not establish VEU approval, and the monitored VEU public-registry connector is not yet active.`,
+            503,
+          );
+        }
         if (requiredKinds.length === 0) {
           throw new CreditexVeuEstimateError(
             "VEU_PRODUCT_EVIDENCE_INVALID",

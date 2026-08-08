@@ -16,6 +16,9 @@ import {
 import {
   estimateCreditexNswProgram,
 } from "../src/lib/creditex-nsw-program-estimator.ts";
+import {
+  CREDITEX_VEU_ACTIVITY_DEFINITIONS,
+} from "../src/lib/creditex-veu-calculator-catalogue.ts";
 
 function product(productKind, attributes, overrides = {}) {
   return {
@@ -256,6 +259,14 @@ test("NSW HVAC class, capacity, input, efficiencies and annual energy are offici
 });
 
 test("VEU 22, 24 and 25 derive the scenario and enforce every published product threshold", () => {
+  for (const activityCode of ["22", "24", "25"]) {
+    assert.equal(
+      CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
+        (activity) => activity.activityCode === activityCode,
+      )?.productRegistry,
+      "VEU_AND_GEMS",
+    );
+  }
   const refrigerator = product("refrigerator_freezer", {
     refrigeratorGroup: "6C",
     refrigeratorDesignation: "Freezer",
@@ -338,6 +349,10 @@ test("product-backed estimates require a defensible approval start and the API u
   assert.match(route, /activity\.calculationStatus === "official_registry_required"/);
   assert.match(route, /deriveCreditexNswOfficialProductInputs\(/);
   assert.match(route, /deriveCreditexVeuOfficialProductInputs\(/);
+  assert.match(
+    route,
+    /\["VEU", "VEU_AND_GEMS"\]\.includes\(activity\.productRegistry\)/,
+  );
   const nswBranch = route.slice(
     route.indexOf('if (programCode === "NSW-PDRS-2026"'),
     route.indexOf("const requiredProductKinds = officialProductKindsForLocalActivity"),

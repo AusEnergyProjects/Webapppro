@@ -60,7 +60,7 @@ export type CreditexVeuActivityDefinition = {
   scenarios: readonly string[];
   formulaKey: string;
   sourcePages: string;
-  productRegistry: "VEU" | "GEMS" | "none";
+  productRegistry: "VEU" | "GEMS" | "VEU_AND_GEMS" | "none";
   productPerformanceInputs: readonly string[];
   inputDefinitions: readonly CreditexVeuInputDefinition[];
 };
@@ -403,7 +403,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["22A", "22B", "22C", "22D"],
     formulaKey: "veu-part-22-fixed-reduction/v1",
     sourcePages: "Version 25 pages 55-57, Tables 22.3-22.6",
-    productRegistry: "GEMS",
+    productRegistry: "VEU_AND_GEMS",
     productPerformanceInputs: [
       "GEMS registration start/end",
       "AS/NZS 4474 product group",
@@ -422,7 +422,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["24A"],
     formulaKey: "veu-part-24-fixed-reduction/v1",
     sourcePages: "Version 25 pages 58-59, Table 24.3",
-    productRegistry: "GEMS",
+    productRegistry: "VEU_AND_GEMS",
     productPerformanceInputs: [
       "GEMS registration start/end",
       "star rating",
@@ -438,7 +438,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["25A"],
     formulaKey: "veu-part-25-fixed-reduction/v1",
     sourcePages: "Version 25 pages 60-61, Table 25.3",
-    productRegistry: "GEMS",
+    productRegistry: "VEU_AND_GEMS",
     productPerformanceInputs: [
       "GEMS registration start/end",
       "star rating",

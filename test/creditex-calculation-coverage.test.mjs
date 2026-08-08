@@ -33,7 +33,7 @@ test("coverage accounts deterministically for all programs and activities", () =
   assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.coverageSha256,
-    "sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1",
+    "sha256:1159b37a73bfcacead4fc2a0645b30798e27f66387a99394362ad223f690635b",
   );
 });
 
@@ -41,11 +41,11 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
   const executable = CREDITEX_CALCULATION_COVERAGE.filter(
     (row) => row.estimateExecutable,
   );
-  assert.equal(executable.length, 33);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 33);
+  assert.equal(executable.length, 30);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 30);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.blockedOrNonExecutable,
-    183,
+    186,
   );
   const localProgramCodes = new Set(
     CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => program.programCode),
@@ -55,7 +55,7 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
     executable.filter((row) => localProgramCodes.has(row.programCode)).length,
     20,
   );
-  assert.equal(executable.filter((row) => row.programCode === "VEU").length, 4);
+  assert.equal(executable.filter((row) => row.programCode === "VEU").length, 1);
   assert.equal(
     executable.filter((row) => row.programCode === "NSW-ESS").length,
     3,
@@ -89,10 +89,10 @@ test("coverage never enables certificate action for any activity", () => {
     [
       { state: "activity_closed", count: 9 },
       { state: "activity_not_commenced", count: 8 },
-      { state: "estimate_available", count: 33 },
+      { state: "estimate_available", count: 30 },
       { state: "governed_formula_required", count: 105 },
       { state: "not_applicable", count: 27 },
-      { state: "official_registry_required", count: 32 },
+      { state: "official_registry_required", count: 35 },
       { state: "project_method_required", count: 2 },
     ],
   );

@@ -513,7 +513,8 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     )) || firstActivity,
     [activityCode, firstActivity],
   );
-  const registryBlocked = activity.productRegistry === "VEU";
+  const registryBlocked = activity.productRegistry === "VEU"
+    || activity.productRegistry === "VEU_AND_GEMS";
   const requiredKinds = useMemo(
     () => officialProductKindsForVeuActivity(activity.activityCode),
     [activity.activityCode],
@@ -583,11 +584,16 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         <div className={styles.registryStatus} data-status="stale">
           <div>
             <span>Formula implemented | registry connector required</span>
-            <strong>{activity.productRegistry} approved-product evidence</strong>
+            <strong>
+              {activity.productRegistry === "VEU_AND_GEMS"
+                ? "VEU and GEMS approved-product evidence"
+                : `${activity.productRegistry} approved-product evidence`}
+            </strong>
             <small>
-              The public VEU register is an unsupported embedded report. This
-              activity stays fail-closed until a monitored immutable registry
-              snapshot is connected. No product eligibility is guessed.
+              The exact model must be approved for this VEU activity on the
+              installation date. GEMS registration alone is not VEU approval;
+              this activity stays fail-closed until the monitored VEU registry
+              snapshot is connected.
             </small>
           </div>
         </div>
