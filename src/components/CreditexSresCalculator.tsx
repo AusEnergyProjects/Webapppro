@@ -14,6 +14,7 @@ import styles from "./CreditexVeuPilotWorkspace.module.css";
 type Api = (
   path: string,
   init?: RequestInit,
+  options?: { requestTimeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
 
 type Technology =
@@ -275,7 +276,7 @@ export function CreditexSresCalculator({
       const result = await api("/api/creditex/stc-products", {
         method: "POST",
         body: JSON.stringify({ action: "refresh" }),
-      });
+      }, { requestTimeoutMs: 90_000 });
       setRegistry((result.registry || null) as RegistryStatus | null);
       setLookupVersion((current) => current + 1);
     } catch (error) {

@@ -29,6 +29,7 @@ import styles from "./CreditexVeuPilotWorkspace.module.css";
 type Api = (
   path: string,
   init?: RequestInit,
+  options?: { requestTimeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
 
 type LocalEstimate = {
@@ -417,7 +418,7 @@ export function CreditexAllProgramCalculator({
       const result = await api("/api/creditex/official-products", {
         method: "POST",
         body: JSON.stringify({ action: "refresh", registryCode: "all" }),
-      });
+      }, { requestTimeoutMs: 90_000 });
       const registries = Array.isArray(result.registries)
         ? result.registries as Array<Record<string, unknown>>
         : [];

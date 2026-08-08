@@ -2634,6 +2634,11 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(calculationWorkspace, /Activity calculation readiness/);
   assert.match(calculationWorkspace, /\/api\/creditex\/stc-estimates/);
   assert.match(calculationWorkspace, /Certificate creation disabled/);
+  assert.match(portal, /options: \{ requestTimeoutMs\?: number \} = \{\}/);
+  assert.match(portal, /options\.requestTimeoutMs \?\? 20_000/);
+  assert.match(portal, /requestTimeoutMs \/ 1_000/);
+  assert.match(sresCalculator, /requestTimeoutMs: 90_000/);
+  assert.match(allProgramCalculator, /requestTimeoutMs: 90_000/);
   assert.match(calculationWorkspace, /Safety certification date/);
   assert.match(calculationWorkspace, /Site-assessed hours \| audit required/);
   assert.match(workspace, /Controlled submission boundary/);

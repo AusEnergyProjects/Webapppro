@@ -336,10 +336,18 @@ export function CreditexCompliancePortal() {
   const [governanceActivityId, setGovernanceActivityId] = useState("");
   const canRequestPublication = canControlPublication(session);
 
-  const api = useCallback(async (path: string, init: RequestInit = {}) => {
+  const api = useCallback(async (
+    path: string,
+    init: RequestInit = {},
+    options: { requestTimeoutMs?: number } = {},
+  ) => {
     const activeUser = firebaseAuth.currentUser;
     if (!activeUser) throw new Error("Sign in to continue.");
     const activeUid = activeUser.uid;
+    const requestTimeoutMs = Math.min(
+      Math.max(options.requestTimeoutMs ?? 20_000, 1_000),
+      120_000,
+    );
     const headers = new Headers(init.headers);
     if (
       init.body
@@ -359,7 +367,7 @@ export function CreditexCompliancePortal() {
             const controller = new AbortController();
             const requestTimeout = window.setTimeout(
               () => controller.abort(),
-              20_000,
+              requestTimeoutMs,
             );
             let response: Response;
             try {
@@ -372,7 +380,9 @@ export function CreditexCompliancePortal() {
             } catch (error) {
               if (error instanceof DOMException && error.name === "AbortError") {
                 throw new Error(
-                  "The compliance service did not respond within 20 seconds. Retry the workspace.",
+                  `The compliance service did not respond within ${Math.ceil(
+                    requestTimeoutMs / 1_000,
+                  )} seconds. Retry the workspace.`,
                 );
               }
               throw error;
