@@ -217,7 +217,7 @@ test("authenticated Resend events update the ledger and suppress hashes without 
 });
 
 test("minute delivery drain is separate from the existing daily maintenance cron", () => {
-  assert.match(vite, /\["\* \* \* \* \*", "15 20 \* \* \*", "5 13,14 \* \* \*", "25 13,14 \* \* \*"\]/);
+  assert.match(vite, /\["\* \* \* \* \*", "15 20 \* \* \*", "5 13,14 \* \* \*", "25 13,14 \* \* \*", "25 20,21 \* \* \*"\]/);
   assert.match(worker, /drainOpportunityNotificationDeliveries\(\)/);
   assert.match(worker, /dispatchAdminNotificationDeliveries\(\)/);
   assert.match(worker, /drainCustomerOpportunityDispatchJobs\(\)/);

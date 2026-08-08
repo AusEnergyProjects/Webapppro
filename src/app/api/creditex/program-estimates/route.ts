@@ -22,6 +22,8 @@ import {
 } from "@/lib/creditex-veu-calculator-catalogue";
 import {
   CreditexVeuEstimateError,
+  estimateCreditexVeu,
+  type CreditexVeuProductEvidence,
 } from "@/lib/creditex-veu-calculator-estimator";
 import {
   CreditexVeuPostcodeError,
@@ -30,6 +32,7 @@ import {
 import {
   CreditexOfficialProductError,
   deriveCreditexNswOfficialProductInputs,
+  deriveCreditexVeuOfficialProductInputs,
   officialProductKindsForLocalActivity,
   officialProductKindsForNswProductKinds,
   officialProductKindsForVeuActivity,
@@ -45,6 +48,18 @@ import {
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
+
+const CREDITEX_VEU_SOURCE_COMPLETE_ACTIVITY_CODES = new Set([
+  "17",
+  "22",
+  "24",
+  "25",
+  "46",
+  "48",
+]);
+
+const EXACT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -324,6 +339,104 @@ async function attachRegistryReceipt(
   };
 }
 
+function veuEvidenceFailure(activityCode: string, detail: string): never {
+  throw new CreditexVeuEstimateError(
+    "VEU_PRODUCT_EVIDENCE_INVALID",
+    `Activity ${activityCode} cannot calculate because its VEU Public Registry evidence ${detail}.`,
+    503,
+  );
+}
+
+function exactVeuEvidenceText(
+  value: unknown,
+  activityCode: string,
+  label: string,
+) {
+  if (
+    typeof value !== "string"
+    || !value
+    || value.trim() !== value
+    || value.length > 200
+  ) {
+    return veuEvidenceFailure(activityCode, `has no exact ${label}`);
+  }
+  return value;
+}
+
+function deriveVeuProductEvidence(
+  activityCode: string,
+  selections: readonly CreditexOfficialProductSelection[],
+): CreditexVeuProductEvidence {
+  if (selections.length !== 1) {
+    return veuEvidenceFailure(
+      activityCode,
+      "does not resolve to exactly one activity-specific product approved on the installation date",
+    );
+  }
+  const selection = selections[0];
+  if (selection.registryCode !== "veu-approved-products") {
+    return veuEvidenceFailure(
+      activityCode,
+      "did not come from the VEU Public Registry",
+    );
+  }
+  if (
+    selection.approvalStatus !== "approved"
+    && selection.approvalStatus !== "legacy"
+  ) {
+    return veuEvidenceFailure(
+      activityCode,
+      "does not prove approval on the installation date",
+    );
+  }
+  const productId = exactVeuEvidenceText(
+    selection.attributes.veuProductId,
+    activityCode,
+    "VEU product ID",
+  );
+  const activityCategory = exactVeuEvidenceText(
+    selection.attributes.veuProductCategoryNumber,
+    activityCode,
+    "VEU product category",
+  );
+  if (!EXACT_DATE_PATTERN.test(selection.eligibleFrom)) {
+    return veuEvidenceFailure(
+      activityCode,
+      "has no exact official effective-from date",
+    );
+  }
+  if (
+    selection.eligibleTo
+    && !EXACT_DATE_PATTERN.test(selection.eligibleTo)
+  ) {
+    return veuEvidenceFailure(
+      activityCode,
+      "has an invalid official effective-to date",
+    );
+  }
+  if (selection.approvalStatus === "legacy" && !selection.eligibleTo) {
+    return veuEvidenceFailure(
+      activityCode,
+      "is Legacy without an exact official effective-to date",
+    );
+  }
+  if (!SHA256_PATTERN.test(selection.sourceSha256)) {
+    return veuEvidenceFailure(
+      activityCode,
+      "has no exact source snapshot SHA-256",
+    );
+  }
+  return {
+    registry: "VEU",
+    activityCategory,
+    productId,
+    status: selection.approvalStatus === "legacy" ? "Legacy" : "Approved",
+    effectiveFrom: selection.eligibleFrom,
+    effectiveTo: selection.eligibleTo,
+    sourceSnapshotHash: `sha256:${selection.sourceSha256}`,
+  };
+}
+
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
     return json({
@@ -376,6 +489,13 @@ export async function POST(request: Request) {
           404,
         );
       }
+      if (!CREDITEX_VEU_SOURCE_COMPLETE_ACTIVITY_CODES.has(activityCode)) {
+        throw new CreditexVeuEstimateError(
+          "VEU_PRODUCT_EVIDENCE_INVALID",
+          `Activity ${activityCode} remains unavailable because every formula-critical approved-product attribute has not yet been normalized from the VEU Public Registry.`,
+          503,
+        );
+      }
       const postcodeRequired = activity.inputDefinitions.some(
         (definition) => definition.source === "postcode_lookup",
       );
@@ -393,17 +513,47 @@ export async function POST(request: Request) {
         requestKeys,
         "The VEU estimate request contains unexpected fields.",
       );
-      deriveVeuPostcodeInputs(
+      const postcodeDerivedInputs = deriveVeuPostcodeInputs(
         activity,
         inputRecord(raw.inputs),
         raw.postcode,
         raw.effectiveDate,
       );
-      throw new CreditexVeuEstimateError(
-        "VEU_PRODUCT_EVIDENCE_INVALID",
-        `Activity ${activityCode} requires an effective-dated Approved product from the VEU Public Registry. The monitored VEU connector is not yet active, so the estimate remains fail-closed.`,
-        503,
+      if (requiredKinds.length !== 1) {
+        return veuEvidenceFailure(
+          activityCode,
+          "does not have one source-complete activity product contract",
+        );
+      }
+      const productValidation = await validateOfficialProductSelections(
+        database,
+        {
+          installationDate: raw.effectiveDate,
+          requiredKinds,
+          selectedProductIds: raw.selectedProductIds,
+        },
       );
+      const derivedInputs = deriveCreditexVeuOfficialProductInputs(
+        activityCode,
+        postcodeDerivedInputs,
+        productValidation.selections,
+      );
+      const estimate = estimateCreditexVeu({
+        activityCode,
+        installationDate: raw.effectiveDate,
+        inputs: derivedInputs,
+        product: deriveVeuProductEvidence(
+          activityCode,
+          productValidation.selections,
+        ),
+      });
+      return json({
+        ok: true,
+        estimate: await attachRegistryReceipt(
+          estimate as unknown as Record<string, unknown> & { receiptHash: string },
+          productValidation,
+        ),
+      });
     }
 
     if (programCode === "NSW-PDRS-2026" || programCode === "NSW-ESS-2026") {

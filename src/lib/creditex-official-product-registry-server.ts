@@ -32,16 +32,24 @@ const INELIGIBLE_STATUSES = new Set([
 ]);
 
 const GEMS_CURRENT_STATUS = "approved";
+const VEU_CURRENT_STATUS = "approved";
 
-type FetchLike = (
+export type CreditexOfficialProductFetch = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>;
 
+export type CreditexFetchedOfficialProductSource = Readonly<{
+  sourceKey: string;
+  contentType: string;
+  bytes: Uint8Array;
+}>;
+
 export type CreditexOfficialProductSourceDefinition = {
   registryCode: string;
   sourceKey: string;
-  productKind: CreditexOfficialProductKind;
+  productKind?: CreditexOfficialProductKind;
+  productKinds?: readonly CreditexOfficialProductKind[];
   url: string;
   minimumRecords: number;
   maximumBytes: number;
@@ -49,6 +57,7 @@ export type CreditexOfficialProductSourceDefinition = {
   accept: string;
   licence: string;
   productionMode: "automatic" | "licence_required" | "controlled_manual";
+  requiresOfficialEligibleFrom?: boolean;
   parse: (
     bytes: Uint8Array,
     contentType: string,
@@ -59,6 +68,9 @@ export type CreditexOfficialProductRegistryDefinition = {
   registryCode: string;
   title: string;
   sources: readonly CreditexOfficialProductSourceDefinition[];
+  fetchSources?: (
+    fetchImpl: CreditexOfficialProductFetch,
+  ) => Promise<readonly CreditexFetchedOfficialProductSource[]>;
 };
 
 export type CreditexOfficialProductArtifactStore = {
@@ -293,15 +305,32 @@ function optionalDate(value: unknown, label: string) {
   return clean;
 }
 
+function sourceProductKinds(source: CreditexOfficialProductSourceDefinition) {
+  const kinds = source.productKinds
+    ? [...source.productKinds]
+    : source.productKind
+      ? [source.productKind]
+      : [];
+  return kinds;
+}
+
 function validateSourceDefinition(
   definition: CreditexOfficialProductRegistryDefinition,
   source: CreditexOfficialProductSourceDefinition,
 ) {
+  const kinds = sourceProductKinds(source);
   if (
     source.registryCode !== definition.registryCode
     || !TOKEN_PATTERN.test(source.registryCode)
     || !TOKEN_PATTERN.test(source.sourceKey)
-    || CREDITEX_PRODUCT_KIND_REGISTRY[source.productKind] !== source.registryCode
+    || kinds.length < 1
+    || kinds.length > CREDITEX_OFFICIAL_PRODUCT_KINDS.length
+    || new Set(kinds).size !== kinds.length
+    || kinds.some((kind) => (
+      !CREDITEX_OFFICIAL_PRODUCT_KINDS.includes(kind)
+      || CREDITEX_PRODUCT_KIND_REGISTRY[kind] !== source.registryCode
+    ))
+    || (source.productKind !== undefined) === (source.productKinds !== undefined)
     || !source.url.startsWith("https://")
     || !Number.isInteger(source.minimumRecords)
     || source.minimumRecords < 1
@@ -330,6 +359,7 @@ function validateRecords(
       `Official source ${source.sourceKey} returned ${rawRecords.length} records; at least ${source.minimumRecords} reviewed records are required.`,
     );
   }
+  const acceptedKinds = new Set(sourceProductKinds(source));
   const seen = new Set<string>();
   return rawRecords.map((raw, index): CreditexOfficialProductRecord => {
     const sourceKey = cleanText(raw.sourceKey, `record ${index + 1} sourceKey`, 80, true).toLowerCase();
@@ -343,7 +373,7 @@ function validateRecords(
     }
     seen.add(sourceRecordKey);
     if (
-      raw.productKind !== source.productKind
+      !acceptedKinds.has(raw.productKind)
       || !CREDITEX_OFFICIAL_PRODUCT_KINDS.includes(raw.productKind)
     ) {
       return fail(
@@ -354,13 +384,6 @@ function validateRecords(
     }
     const eligibleFrom = optionalDate(raw.eligibleFrom, `record ${index + 1} eligibleFrom`);
     const eligibleTo = optionalDate(raw.eligibleTo, `record ${index + 1} eligibleTo`);
-    if (eligibleFrom && eligibleTo && eligibleTo < eligibleFrom) {
-      return fail(
-        "OFFICIAL_PRODUCT_SOURCE_INVALID",
-        502,
-        `Official source ${source.sourceKey} contains an inverted approval window.`,
-      );
-    }
     const approvalStatus = cleanText(
       raw.approvalStatus,
       `record ${index + 1} approvalStatus`,
@@ -374,7 +397,51 @@ function validateRecords(
         `Official source ${source.sourceKey} contains an invalid approval status.`,
       );
     }
-    const attributesJson = canonicalJson(raw.attributes);
+    if (
+      source.registryCode === "veu-approved-products"
+      && (
+        ![VEU_CURRENT_STATUS, "legacy"].includes(approvalStatus)
+        || (approvalStatus === "legacy" && !eligibleTo)
+      )
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${source.sourceKey} record ${index + 1} has invalid VEU approval status dates.`,
+      );
+    }
+    const invertedOfficialWindow = Boolean(
+      eligibleFrom && eligibleTo && eligibleTo < eligibleFrom,
+    );
+    if (
+      invertedOfficialWindow
+      && !(
+        source.registryCode === "veu-approved-products"
+        && approvalStatus === "legacy"
+      )
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${source.sourceKey} contains an inverted approval window.`,
+      );
+    }
+    if (source.requiresOfficialEligibleFrom && !eligibleFrom) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${source.sourceKey} record ${index + 1} has no official approval start date.`,
+      );
+    }
+    const attributes = invertedOfficialWindow
+      ? {
+          ...raw.attributes,
+          veuOfficialEligibilityWindow: "empty_inverted",
+          veuOfficialEffectiveFrom: eligibleFrom,
+          veuOfficialEffectiveTo: eligibleTo,
+        }
+      : raw.attributes;
+    const attributesJson = canonicalJson(attributes);
     if (attributesJson.length > 65_536) {
       return fail(
         "OFFICIAL_PRODUCT_SOURCE_INVALID",
@@ -394,15 +461,20 @@ function validateRecords(
       certificateNumber: cleanText(raw.certificateNumber, `record ${index + 1} certificateNumber`, 200),
       approvalStatus,
       eligibleFrom,
-      eligibleTo,
-      availableInAustralia: raw.availableInAustralia === true,
-      attributes: raw.attributes,
+      eligibleTo: invertedOfficialWindow ? eligibleFrom : eligibleTo,
+      availableInAustralia: invertedOfficialWindow
+        ? false
+        : raw.availableInAustralia === true,
+      attributes,
     };
   });
 }
 
 function approvalStatusIsEligible(registryCode: string, status: string) {
   if (registryCode === "gems-products") return status === GEMS_CURRENT_STATUS;
+  if (registryCode === "veu-approved-products") {
+    return status === VEU_CURRENT_STATUS || status === "legacy";
+  }
   return !INELIGIBLE_STATUSES.has(status);
 }
 
@@ -705,9 +777,34 @@ async function boundedResponseBytes(
 async function fetchSourceBytes(
   definition: CreditexOfficialProductRegistryDefinition,
   source: CreditexOfficialProductSourceDefinition,
-  fetchImpl: FetchLike,
+  fetchImpl: CreditexOfficialProductFetch,
+  supplied?: CreditexFetchedOfficialProductSource,
 ): Promise<FetchedSourceArtifact> {
   validateSourceDefinition(definition, source);
+  if (supplied) {
+    const contentType = supplied.contentType.split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    if (
+      supplied.sourceKey !== source.sourceKey
+      || !(supplied.bytes instanceof Uint8Array)
+      || supplied.bytes.byteLength < 1
+      || supplied.bytes.byteLength > source.maximumBytes
+      || !source.expectedContentTypes.includes(contentType)
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${source.sourceKey} returned an invalid acquired artifact.`,
+      );
+    }
+    return {
+      source,
+      contentType,
+      bytes: supplied.bytes,
+      sha256: await sha256Hex(supplied.bytes),
+    };
+  }
   let response: Response;
   try {
     response = await fetchImpl(source.url, {
@@ -867,10 +964,16 @@ async function retainArtifact(
 async function fetchInspectAndRetainSource(
   definition: CreditexOfficialProductRegistryDefinition,
   source: CreditexOfficialProductSourceDefinition,
-  fetchImpl: FetchLike,
+  fetchImpl: CreditexOfficialProductFetch,
   store: CreditexOfficialProductArtifactStore,
+  supplied?: CreditexFetchedOfficialProductSource,
 ): Promise<RetainedSourceArtifact> {
-  const artifact = await fetchSourceBytes(definition, source, fetchImpl);
+  const artifact = await fetchSourceBytes(
+    definition,
+    source,
+    fetchImpl,
+    supplied,
+  );
   let inspectedRecords: readonly CreditexOfficialProductRecord[] | null = parseSourceRecords(
     artifact.source,
     artifact.bytes,
@@ -887,6 +990,52 @@ async function fetchInspectAndRetainSource(
     recordCount,
     objectKey,
   };
+}
+
+async function acquireRegistrySourceArtifacts(
+  definition: CreditexOfficialProductRegistryDefinition,
+  fetchImpl: CreditexOfficialProductFetch,
+) {
+  if (!definition.fetchSources) return null;
+  let acquired: readonly CreditexFetchedOfficialProductSource[];
+  try {
+    acquired = await definition.fetchSources(fetchImpl);
+  } catch (error) {
+    if (error instanceof CreditexOfficialProductError) throw error;
+    console.error("Official product registry acquisition failed.", {
+      registryCode: definition.registryCode,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+      502,
+      `Official registry ${definition.registryCode} could not be acquired.`,
+    );
+  }
+  if (
+    acquired.length !== definition.sources.length
+    || new Set(acquired.map(({ sourceKey }) => sourceKey)).size
+      !== acquired.length
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      502,
+      `Official registry ${definition.registryCode} returned an incomplete artifact set.`,
+    );
+  }
+  const bySource = new Map(acquired.map((artifact) => [
+    artifact.sourceKey,
+    artifact,
+  ]));
+  if (definition.sources.some((source) => !bySource.has(source.sourceKey))) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      502,
+      `Official registry ${definition.registryCode} returned an unexpected artifact set.`,
+    );
+  }
+  return bySource;
 }
 
 async function loadRetainedSourceRecords(
@@ -1115,7 +1264,7 @@ export async function syncOfficialProductRegistry(
   definition: CreditexOfficialProductRegistryDefinition,
   options: {
     artifactStore?: CreditexOfficialProductArtifactStore;
-    fetchImpl?: FetchLike;
+    fetchImpl?: CreditexOfficialProductFetch;
     now?: Date;
     reviewedCountDecrease?: CreditexReviewedProductCountDecrease;
   } = {},
@@ -1152,13 +1301,20 @@ export async function syncOfficialProductRegistry(
     // Phase one keeps only compact, custody-verified receipts. Parsed records and
     // source bytes leave scope before the next official source is requested.
     const artifacts: RetainedSourceArtifact[] = [];
+    const acquiredSources = await acquireRegistrySourceArtifacts(
+      definition,
+      fetchImpl,
+    );
     for (const source of definition.sources) {
+      const acquiredSource = acquiredSources?.get(source.sourceKey);
       artifacts.push(await fetchInspectAndRetainSource(
         definition,
         source,
         fetchImpl,
         options.artifactStore,
+        acquiredSource,
       ));
+      acquiredSources?.delete(source.sourceKey);
     }
     const recordCount = artifacts.reduce(
       (total, artifact) => total + artifact.recordCount,
@@ -1217,7 +1373,9 @@ export async function syncOfficialProductRegistry(
       title: definition.title,
       sources: artifacts.map((artifact) => ({
         sourceKey: artifact.source.sourceKey,
-        productKind: artifact.source.productKind,
+        ...(artifact.source.productKind
+          ? { productKind: artifact.source.productKind }
+          : { productKinds: artifact.source.productKinds }),
         url: artifact.source.url,
         contentType: artifact.contentType,
         byteLength: artifact.byteLength,
@@ -1587,6 +1745,10 @@ export async function searchOfficialProducts(
       ON snapshot.id = product.snapshot_id
     WHERE snapshot.registry_code = ?
       AND snapshot.status IN ('current', 'superseded')
+      AND (
+        snapshot.registry_code <> 'veu-approved-products'
+        OR snapshot.status = 'current'
+      )
       AND product.product_kind = ?
       AND product.available_in_australia = 1
       AND product.approval_status NOT IN (
@@ -1603,9 +1765,13 @@ export async function searchOfficialProducts(
         )
       )
       AND (product.eligible_to = '' OR product.eligible_to >= ?)
-      AND product.registry_effective_from <= ?
       AND (
-        snapshot.status = 'current'
+        snapshot.registry_code = 'veu-approved-products'
+        OR product.registry_effective_from <= ?
+      )
+      AND (
+        snapshot.registry_code = 'veu-approved-products'
+        OR snapshot.status = 'current'
         OR snapshot.superseded_on > ?
       )
       AND (? = '' OR instr(product.search_text, ?) > 0)
@@ -1720,6 +1886,10 @@ export async function validateOfficialProductSelections(
         AND product.source_record_key = ?
         AND snapshot.registry_code = ?
         AND snapshot.status IN ('current', 'superseded')
+        AND (
+          snapshot.registry_code <> 'veu-approved-products'
+          OR snapshot.status = 'current'
+        )
         AND product.product_kind = ? AND product.available_in_australia = 1
         AND (
           (product.eligible_from <> '' AND product.eligible_from <= ?)
@@ -1729,9 +1899,13 @@ export async function validateOfficialProductSelections(
           )
         )
         AND (product.eligible_to = '' OR product.eligible_to >= ?)
-        AND product.registry_effective_from <= ?
         AND (
-          snapshot.status = 'current'
+          snapshot.registry_code = 'veu-approved-products'
+          OR product.registry_effective_from <= ?
+        )
+        AND (
+          snapshot.registry_code = 'veu-approved-products'
+          OR snapshot.status = 'current'
           OR snapshot.superseded_on > ?
         )
       LIMIT 1`)

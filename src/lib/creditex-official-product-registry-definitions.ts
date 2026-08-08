@@ -16,6 +16,10 @@ import type {
   CreditexOfficialProductRegistryDefinition,
   CreditexOfficialProductSourceDefinition,
 } from "./creditex-official-product-registry-server.ts";
+import {
+  CREDITEX_VEU_PRODUCT_REGISTRY_FETCH,
+  CREDITEX_VEU_PRODUCT_SOURCE,
+} from "./creditex-veu-product-sources.ts";
 
 const PRODUCT_KIND_MAP = {
   solar_pv_module: "pv_module",
@@ -97,8 +101,17 @@ CreditexOfficialProductRegistryDefinition = {
   sources: GEMS_PRODUCT_SOURCES.map(source),
 };
 
+export const CREDITEX_VEU_PRODUCT_REGISTRY:
+CreditexOfficialProductRegistryDefinition = {
+  registryCode: "veu-approved-products",
+  title: "Victorian Energy Upgrades public product register",
+  sources: [CREDITEX_VEU_PRODUCT_SOURCE],
+  fetchSources: CREDITEX_VEU_PRODUCT_REGISTRY_FETCH,
+};
+
 export const CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES = [
   CREDITEX_GEMS_PRODUCT_REGISTRY,
+  CREDITEX_VEU_PRODUCT_REGISTRY,
 ] as const;
 
 export const CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES = [

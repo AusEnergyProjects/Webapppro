@@ -2638,7 +2638,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(portal, /options\.requestTimeoutMs \?\? 20_000/);
   assert.match(portal, /requestTimeoutMs \/ 1_000/);
   assert.match(sresCalculator, /requestTimeoutMs: 90_000/);
-  assert.match(allProgramCalculator, /requestTimeoutMs: 90_000/);
+  assert.match(allProgramCalculator, /requestTimeoutMs: 300_000/);
   assert.match(calculationWorkspace, /Safety certification date/);
   assert.match(calculationWorkspace, /Site-assessed hours \| audit required/);
   assert.match(workspace, /Controlled submission boundary/);

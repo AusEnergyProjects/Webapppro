@@ -32,6 +32,8 @@ const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 const SRES_REGISTRY_CRON = "5 13,14 * * *";
 const OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 * * *";
+const VEU_PRODUCT_REGISTRY_CRON = "25 20,21 * * *";
+const VEU_PRODUCT_REGISTRY_CODE = "veu-approved-products";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
@@ -236,6 +238,7 @@ const worker = {
         (async () => {
           await ensureCreditexProductRegistrySchemaGuards(db);
           for (const definition of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
+            if (definition.registryCode === VEU_PRODUCT_REGISTRY_CODE) continue;
             await syncOfficialProductRegistry(db, definition, {
               artifactStore,
             });
@@ -243,6 +246,35 @@ const worker = {
         })().catch((error) => {
           console.error(
             "Official product registry refresh failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+          throw error;
+        }),
+      );
+    }
+    if (
+      controller.cron === VEU_PRODUCT_REGISTRY_CRON
+      && matchesAustralianRegulatorClock(controller.scheduledTime, 7, 25)
+    ) {
+      const db = getD1();
+      const artifactStore = (workerEnv as {
+        EVIDENCE?: CreditexOfficialProductArtifactStore;
+      }).EVIDENCE;
+      tasks.push(
+        (async () => {
+          await ensureCreditexProductRegistrySchemaGuards(db);
+          const definition = CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.find(
+            (candidate) => candidate.registryCode === VEU_PRODUCT_REGISTRY_CODE,
+          );
+          if (!definition) {
+            throw new Error("VEU product registry definition is unavailable.");
+          }
+          await syncOfficialProductRegistry(db, definition, {
+            artifactStore,
+          });
+        })().catch((error) => {
+          console.error(
+            "VEU product registry refresh failed.",
             error instanceof Error ? error.message : "Unknown error",
           );
           throw error;

@@ -40,6 +40,10 @@ test("nightly registry candidates resolve once at Sydney midnight across DST", (
     ["2026-10-04T13:05:00.000Z", 0, 5, true],
     ["2026-01-08T13:25:00.000Z", 0, 25, true],
     ["2026-07-08T14:25:00.000Z", 0, 25, true],
+    ["2026-01-08T20:25:00.000Z", 7, 25, true],
+    ["2026-01-08T21:25:00.000Z", 7, 25, false],
+    ["2026-07-08T20:25:00.000Z", 7, 25, false],
+    ["2026-07-08T21:25:00.000Z", 7, 25, true],
   ];
   for (const [instant, hour, minute, expected] of cases) {
     assert.equal(
@@ -59,6 +63,7 @@ test("the Worker gates both UTC candidates against the Sydney regulator clock", 
   );
   assert.match(worker, /SRES_REGISTRY_CRON = "5 13,14 \* \* \*"/);
   assert.match(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 \* \* \*"/);
+  assert.match(worker, /VEU_PRODUCT_REGISTRY_CRON = "25 20,21 \* \* \*"/);
   assert.match(
     worker,
     /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 5\)/,
@@ -66,5 +71,17 @@ test("the Worker gates both UTC candidates against the Sydney regulator clock", 
   assert.match(
     worker,
     /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 25\)/,
+  );
+  assert.match(
+    worker,
+    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 7, 25\)/,
+  );
+  assert.match(
+    worker,
+    /definition\.registryCode === VEU_PRODUCT_REGISTRY_CODE\) continue/,
+  );
+  assert.match(
+    worker,
+    /CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES\.find\([\s\S]*candidate\.registryCode === VEU_PRODUCT_REGISTRY_CODE/,
   );
 });

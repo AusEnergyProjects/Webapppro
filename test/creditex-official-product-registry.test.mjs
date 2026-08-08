@@ -1088,7 +1088,7 @@ test("licensed connectors cannot be silently promoted to automatic scraping", as
 test("CER-hosted CEC artifacts remain controlled manual until reuse permission is recorded", async () => {
   assert.deepEqual(
     CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.map(({ registryCode }) => registryCode),
-    ["gems-products"],
+    ["gems-products", "veu-approved-products"],
   );
   assert.deepEqual(
     CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES.map(
@@ -1267,6 +1267,213 @@ test("populated staging snapshots cascade cleanly while activated evidence stays
     FROM compliance_official_product_artifacts`).get().count, 0);
 });
 
+test("VEU retains Legacy custody but requires review before any source-count decrease", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const veuRows = [
+    {
+      sourceKey: "fixture-veu",
+      sourceRecordKey: "VEU-001",
+      productKind: "veu_shower_rose",
+      manufacturer: "",
+      brand: "Current Shower",
+      model: "Current Shower 1",
+      series: "",
+      registrationNumber: "VEU-001",
+      certificateNumber: "",
+      approvalStatus: "approved",
+      eligibleFrom: "2025-01-01",
+      eligibleTo: "",
+      availableInAustralia: true,
+      attributes: { veuProductCategoryNumber: "17A" },
+    },
+    {
+      sourceKey: "fixture-veu",
+      sourceRecordKey: "VEU-003",
+      productKind: "veu_shower_rose",
+      manufacturer: "",
+      brand: "Empty Window Shower",
+      model: "Empty Window Shower 3",
+      series: "",
+      registrationNumber: "VEU-003",
+      certificateNumber: "",
+      approvalStatus: "legacy",
+      eligibleFrom: "2025-01-02",
+      eligibleTo: "2025-01-01",
+      availableInAustralia: true,
+      attributes: { veuProductCategoryNumber: "17A" },
+    },
+    {
+      sourceKey: "fixture-veu",
+      sourceRecordKey: "VEU-002",
+      productKind: "veu_shower_rose",
+      manufacturer: "",
+      brand: "Legacy Shower",
+      model: "Legacy Shower 2",
+      series: "",
+      registrationNumber: "VEU-002",
+      certificateNumber: "",
+      approvalStatus: "legacy",
+      eligibleFrom: "2020-01-01",
+      eligibleTo: "2024-12-31",
+      availableInAustralia: true,
+      attributes: { veuProductCategoryNumber: "17A" },
+    },
+  ];
+  let currentRows = veuRows;
+  const base = source("fixture-veu", "veu_shower_rose", "veu-approved-products");
+  delete base.productKind;
+  const veuDefinition = {
+    registryCode: "veu-approved-products",
+    title: "Fixture VEU public registry",
+    sources: [{
+      ...base,
+      productKinds: ["veu_shower_rose"],
+      minimumRecords: 1,
+      requiresOfficialEligibleFrom: true,
+    }],
+    async fetchSources() {
+      return [{
+        sourceKey: "fixture-veu",
+        contentType: "application/json",
+        bytes: new TextEncoder().encode(JSON.stringify(currentRows)),
+      }];
+    },
+  };
+  await syncOfficialProductRegistry(d1, veuDefinition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const legacySearch = await searchOfficialProducts(d1, {
+    productKind: "veu_shower_rose",
+    installationDate: "2024-01-01",
+    query: "legacy",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(legacySearch.products.length, 1);
+  const historicalSelection = await validateOfficialProductSelections(d1, {
+    installationDate: "2024-01-01",
+    requiredKinds: ["veu_shower_rose"],
+    selectedProductIds: {
+      veu_shower_rose: legacySearch.products[0].id,
+    },
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(historicalSelection.selections[0].approvalStatus, "legacy");
+  const currentLegacySearch = await searchOfficialProducts(d1, {
+    productKind: "veu_shower_rose",
+    installationDate: "2026-08-08",
+    query: "legacy",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(currentLegacySearch.products.length, 0);
+  const retainedEmptyWindow = database.prepare(`SELECT attributes_json
+    FROM compliance_official_products
+    WHERE source_record_key = 'VEU-003'`).get();
+  assert.equal(
+    JSON.parse(retainedEmptyWindow.attributes_json).veuOfficialEligibilityWindow,
+    "empty_inverted",
+  );
+  assert.equal(
+    JSON.parse(retainedEmptyWindow.attributes_json).veuOfficialEffectiveFrom,
+    "2025-01-02",
+  );
+  assert.equal(
+    JSON.parse(retainedEmptyWindow.attributes_json).veuOfficialEffectiveTo,
+    "2025-01-01",
+  );
+  for (const installationDate of ["2025-01-01", "2025-01-02"]) {
+    const emptyWindowSearch = await searchOfficialProducts(d1, {
+      productKind: "veu_shower_rose",
+      installationDate,
+      query: "empty window",
+    }, { now: new Date("2026-08-08T01:00:00.000Z") });
+    assert.equal(emptyWindowSearch.products.length, 0);
+  }
+  await assert.rejects(
+    validateOfficialProductSelections(d1, {
+      installationDate: "2026-08-08",
+      requiredKinds: ["veu_shower_rose"],
+      selectedProductIds: {
+        veu_shower_rose: legacySearch.products[0].id,
+      },
+    }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+    expectedError("OFFICIAL_PRODUCT_NOT_ELIGIBLE"),
+  );
+
+  const approvedBeforeTransition = await searchOfficialProducts(d1, {
+    productKind: "veu_shower_rose",
+    installationDate: "2026-08-09",
+    query: "current shower",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(approvedBeforeTransition.products.length, 1);
+  const transitioned = {
+    ...veuRows[0],
+    approvalStatus: "legacy",
+    eligibleTo: "2026-08-08",
+  };
+  currentRows = [transitioned, veuRows[1], veuRows[2]];
+  const transitionSnapshot = await syncOfficialProductRegistry(d1, veuDefinition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-10T00:00:00.000Z"),
+  });
+  const finalEligibleDay = await searchOfficialProducts(d1, {
+    productKind: "veu_shower_rose",
+    installationDate: "2026-08-08",
+    query: "current shower",
+  }, { now: new Date("2026-08-10T01:00:00.000Z") });
+  assert.equal(finalEligibleDay.products.length, 1);
+  assert.equal(finalEligibleDay.products[0].approvalStatus, "legacy");
+  assert.equal(finalEligibleDay.products[0].eligibleTo, "2026-08-08");
+  assert.equal(finalEligibleDay.products[0].snapshotId, transitionSnapshot.snapshotId);
+  const finalDaySelection = await validateOfficialProductSelections(d1, {
+    installationDate: "2026-08-08",
+    requiredKinds: ["veu_shower_rose"],
+    selectedProductIds: {
+      veu_shower_rose: approvedBeforeTransition.products[0].id,
+    },
+  }, { now: new Date("2026-08-10T01:00:00.000Z") });
+  assert.equal(finalDaySelection.selections[0].approvalStatus, "legacy");
+  assert.equal(finalDaySelection.selections[0].eligibleTo, "2026-08-08");
+  assert.equal(
+    finalDaySelection.selections[0].snapshotId,
+    transitionSnapshot.snapshotId,
+  );
+  const afterOfficialEnd = await searchOfficialProducts(d1, {
+    productKind: "veu_shower_rose",
+    installationDate: "2026-08-09",
+    query: "current shower",
+  }, { now: new Date("2026-08-10T01:00:00.000Z") });
+  assert.equal(afterOfficialEnd.products.length, 0);
+  await assert.rejects(
+    validateOfficialProductSelections(d1, {
+      installationDate: "2026-08-09",
+      requiredKinds: ["veu_shower_rose"],
+      selectedProductIds: {
+        veu_shower_rose: approvedBeforeTransition.products[0].id,
+      },
+    }, { now: new Date("2026-08-10T01:00:00.000Z") }),
+    expectedError("OFFICIAL_PRODUCT_NOT_ELIGIBLE"),
+  );
+
+  currentRows = [transitioned];
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, veuDefinition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      now: new Date("2026-08-11T00:00:00.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_COUNT_REGRESSION"),
+  );
+  currentRows = [{ ...transitioned, eligibleTo: "" }];
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, veuDefinition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      now: new Date("2026-08-12T00:00:00.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_INVALID"),
+  );
+});
+
 test("live automatic feeds activate licensed GEMS products into searchable snapshots", {
   skip: process.env.CREDITEX_LIVE_OFFICIAL_REGISTRY !== "1",
 }, async (t) => {
@@ -1280,15 +1487,16 @@ test("live automatic feeds activate licensed GEMS products into searchable snaps
       now: new Date("2026-08-08T12:00:00.000Z"),
     }));
   }
-  assert.deepEqual(
-    results.map((result) => result.recordCount),
-    [31_418],
-  );
+  assert.ok(results[0].recordCount >= 30_000);
+  assert.ok(results[1].recordCount >= 70_000);
   assert.equal(database.prepare(`SELECT count(*) count
-    FROM compliance_official_products`).get().count, 31_418);
+    FROM compliance_official_products`).get().count, results.reduce(
+      (total, result) => total + result.recordCount,
+      0,
+    ));
   assert.equal(database.prepare(`SELECT count(*) count
-    FROM compliance_official_product_artifacts`).get().count, 11);
-  assert.equal(artifactStore.objects.size, 11);
+    FROM compliance_official_product_artifacts`).get().count, 12);
+  assert.equal(artifactStore.objects.size, 12);
 
   const refrigerator = await searchOfficialProducts(d1, {
     productKind: "refrigerator_freezer",

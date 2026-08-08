@@ -14,6 +14,10 @@ type Api = (
 
 export type CreditexOfficialProductOption = {
   id: string;
+  registryCode: string;
+  snapshotId: string;
+  approvalStatus: string;
+  sourceSha256: string;
   productKind: CreditexOfficialProductKind;
   brand: string;
   manufacturer: string;

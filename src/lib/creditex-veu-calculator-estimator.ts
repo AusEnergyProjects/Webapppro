@@ -30,7 +30,7 @@ export type CreditexVeuProductEvidence = {
   registry: CreditexVeuRegistry;
   activityCategory: string;
   productId: string;
-  status: "Approved" | "Registered";
+  status: "Approved" | "Legacy" | "Registered";
   effectiveFrom: string;
   effectiveTo: string;
   sourceSnapshotHash: string;
@@ -433,18 +433,36 @@ function validateProductEvidence(
       `Product activity category must be ${activityCategories.join(" or ")}.`,
     );
   }
-  const expectedStatus = registry === "VEU" ? "Approved" : "Registered";
-  if (product.status !== expectedStatus) {
-    fail(
-      "VEU_PRODUCT_EVIDENCE_INVALID",
-      `Product status must be ${expectedStatus} for this estimate.`,
-    );
+  const productStatus = requiredString(product.status, "Product status");
+  let status: CreditexVeuProductEvidence["status"];
+  if (registry === "VEU") {
+    if (productStatus !== "Approved" && productStatus !== "Legacy") {
+      fail(
+        "VEU_PRODUCT_EVIDENCE_INVALID",
+        "Product status must be Approved or Legacy for this estimate.",
+      );
+    }
+    status = productStatus;
+  } else {
+    if (productStatus !== "Registered") {
+      fail(
+        "VEU_PRODUCT_EVIDENCE_INVALID",
+        "Product status must be Registered for this estimate.",
+      );
+    }
+    status = productStatus;
   }
   const productId = requiredString(product.productId, "Product ID");
   const effectiveFrom = parseDate(product.effectiveFrom, "Product effective-from date");
   const effectiveTo = product.effectiveTo === ""
     ? null
     : parseDate(product.effectiveTo, "Product effective-to date");
+  if (status === "Legacy" && !effectiveTo) {
+    fail(
+      "VEU_PRODUCT_EVIDENCE_INVALID",
+      "Legacy product evidence requires an exact official effective-to date.",
+    );
+  }
   const install = parseDate(installationDate, "Installation date");
   if (
     install.time < effectiveFrom.time
@@ -469,7 +487,7 @@ function validateProductEvidence(
     registry,
     activityCategory: category,
     productId,
-    status: expectedStatus,
+    status,
     effectiveFrom: effectiveFrom.text,
     effectiveTo: effectiveTo?.text ?? "",
     sourceSnapshotHash: product.sourceSnapshotHash,
@@ -831,7 +849,7 @@ function calculatePart13(
     multiply(multiply(ghgSavings, decimalConstant("25")), decimalConstant(PART_13_REGIONAL_FACTORS[location])),
     area,
   );
-  const evidence = validateProductEvidence(product, installationDate, "VEU", ["13"]);
+  const evidence = validateProductEvidence(product, installationDate, "VEU", ["13A"]);
   ensurePositiveResult(result);
   return {
     scenario: "13A",
@@ -862,7 +880,12 @@ function calculatePart14(
     multiply(multiply(ghgSavings, lifetime), decimalConstant(PART_13_REGIONAL_FACTORS[location])),
     area,
   );
-  const evidence = validateProductEvidence(product, installationDate, "VEU", ["14"]);
+  const evidence = validateProductEvidence(
+    product,
+    installationDate,
+    "VEU",
+    [productType === "film" ? "14B" : "14A"],
+  );
   ensurePositiveResult(result);
   return {
     scenario: productType === "film" ? "14B" : "14A",
@@ -971,7 +994,7 @@ function calculatePart17(
     multiply(multiply(subtract(baseline, upgrade), decimalConstant("15")), decimalConstant(regionalFactor)),
     count,
   );
-  const evidence = validateProductEvidence(product, installationDate, "VEU", ["17"]);
+  const evidence = validateProductEvidence(product, installationDate, "VEU", ["17A"]);
   ensurePositiveResult(result);
   return {
     scenario: "17A",
@@ -999,7 +1022,7 @@ function calculateFixedProduct(
   const quantity = activityCode === "22"
     ? decimalConstant(scenario === "22A" || scenario === "22B" ? "0.62" : "0.71")
     : decimalConstant(activityCode === "24" ? "0.8" : "0.54");
-  const evidence = validateProductEvidence(product, installationDate, "GEMS", [scenario]);
+  const evidence = validateProductEvidence(product, installationDate, "VEU", [scenario]);
   return {
     scenario,
     result: quantity,
@@ -1027,7 +1050,7 @@ function calculatePart26(
     multiply(multiply(annualSavings, EEF), decimalConstant("7")),
     decimalConstant(regionalFactor),
   );
-  const evidence = validateProductEvidence(product, installationDate, "VEU", ["26"]);
+  const evidence = validateProductEvidence(product, installationDate, "VEU", ["26A"]);
   return {
     scenario: "26A",
     result,
@@ -1039,17 +1062,24 @@ function calculatePart26(
   };
 }
 
-function calculatePart46(inputs: UnknownRecord, product: unknown): Execution {
+function calculatePart46(
+  inputs: UnknownRecord,
+  product: unknown,
+  installationDate: string,
+): Execution {
   exactKeys(inputs, ["scenario"], "Part 46 input");
-  if (product !== undefined) {
-    fail("VEU_REQUEST_INVALID", "Part 46 no longer uses the Secretary product list; remove product registry evidence.");
-  }
   const scenario = selectInput(inputs, "scenario", "Part 46 scenario", ["46A", "46B"] as const);
+  const evidence = validateProductEvidence(
+    product,
+    installationDate,
+    "VEU",
+    [scenario],
+  );
   const result = multiply(subtract(decimalConstant("0.1"), decimalConstant("0.04")), decimalConstant("25"));
   return {
     scenario,
     result,
-    inputSnapshot: { scenario },
+    inputSnapshot: { scenario, product: evidence },
     trace: [traceEntry("ghg_reduction", "Lifetime GHG equivalent reduction", "baseline 0.10; upgrade 0.04", "(baseline - upgrade) x 25 years", result)],
   };
 }
@@ -1072,8 +1102,7 @@ function calculatePart48(
     multiply(multiply(savings, area), decimalConstant("25")),
     decimalConstant(regionalFactor),
   );
-  const category = scenario.startsWith("48A") ? "48A" : "48B";
-  const evidence = validateProductEvidence(product, installationDate, "VEU", [category]);
+  const evidence = validateProductEvidence(product, installationDate, "VEU", ["48A"]);
   ensurePositiveResult(result);
   return {
     scenario,
@@ -1116,7 +1145,7 @@ function execute(
     case "26":
       return calculatePart26(inputs, product, installationDate);
     case "46":
-      return calculatePart46(inputs, product);
+      return calculatePart46(inputs, product, installationDate);
     case "48":
       return calculatePart48(inputs, product, installationDate);
     default:
@@ -1205,6 +1234,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     sourcePages: activity.sourcePages,
     sourceReviewedOn: CREDITEX_VEU_CATALOGUE_REVIEWED_ON,
     productRegistryUrl: activity.productRegistry === "VEU"
+      || activity.productRegistry === "VEU_AND_GEMS"
       ? CREDITEX_VEU_PUBLIC_REGISTRY_URL
       : "",
     inputSnapshot,

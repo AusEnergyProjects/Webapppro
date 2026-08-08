@@ -403,17 +403,17 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["22A", "22B", "22C", "22D"],
     formulaKey: "veu-part-22-fixed-reduction/v1",
     sourcePages: "Version 25 pages 55-57, Tables 22.3-22.6",
-    productRegistry: "VEU_AND_GEMS",
+    productRegistry: "VEU",
     productPerformanceInputs: [
-      "GEMS registration start/end",
-      "AS/NZS 4474 product group",
-      "appliance designation",
-      "compartment designations",
+      "VEU approval start/end",
+      "VEU-approved 22A to 22D category",
       "total storage volume",
       "star rating",
+      "comparative energy consumption",
+      "GEMS determination version",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Appliance scenario", type: "select", unit: "scenario", help: "Use the prescribed scenario matching the selected GEMS-registered refrigerator or freezer class.", defaultValue: "22A", source: "approved_product", required: true, options: ["22A", "22B", "22C", "22D"].map((value) => ({ value, label: `Scenario ${value}` })) },
+      { key: "scenario", label: "Appliance scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry listing determines the prescribed 22A to 22D scenario.", defaultValue: "22A", source: "approved_product", required: true, options: ["22A", "22B", "22C", "22D"].map((value) => ({ value, label: `Scenario ${value}` })) },
     ],
   },
   {
@@ -422,14 +422,15 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["24A"],
     formulaKey: "veu-part-24-fixed-reduction/v1",
     sourcePages: "Version 25 pages 58-59, Table 24.3",
-    productRegistry: "VEU_AND_GEMS",
+    productRegistry: "VEU",
     productPerformanceInputs: [
-      "GEMS registration start/end",
+      "VEU approval start/end",
+      "VEU-approved category",
       "star rating",
       "screen area",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Television scenario", type: "select", unit: "scenario", help: "The selected eligible GEMS-registered television uses prescribed scenario 24A.", defaultValue: "24A", source: "approved_product", required: true, options: [{ value: "24A", label: "Scenario 24A" }] },
+      { key: "scenario", label: "Television scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry television listing determines prescribed scenario 24A.", defaultValue: "24A", source: "approved_product", required: true, options: [{ value: "24A", label: "Scenario 24A" }] },
     ],
   },
   {
@@ -438,15 +439,15 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["25A"],
     formulaKey: "veu-part-25-fixed-reduction/v1",
     sourcePages: "Version 25 pages 60-61, Table 25.3",
-    productRegistry: "VEU_AND_GEMS",
+    productRegistry: "VEU",
     productPerformanceInputs: [
-      "GEMS registration start/end",
+      "VEU approval start/end",
+      "VEU-approved category",
       "star rating",
       "drying capacity",
-      "standalone/combination status",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Clothes-dryer scenario", type: "select", unit: "scenario", help: "The selected eligible GEMS-registered clothes dryer uses prescribed scenario 25A.", defaultValue: "25A", source: "approved_product", required: true, options: [{ value: "25A", label: "Scenario 25A" }] },
+      { key: "scenario", label: "Clothes-dryer scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry clothes-dryer listing determines prescribed scenario 25A.", defaultValue: "25A", source: "approved_product", required: true, options: [{ value: "25A", label: "Scenario 25A" }] },
     ],
   },
   {

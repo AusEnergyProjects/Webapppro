@@ -88,12 +88,12 @@ const DEFAULT_VECTORS = [
     location_class: "metro_mild",
     area_m2: "5",
     wers_heating_stars: "4",
-  }, product("VEU", "13")],
+  }, product("VEU", "13A")],
   ["14", {
     location_class: "metro_mild",
     area_m2: "5",
     product_type: "glass",
-  }, product("VEU", "14")],
+  }, product("VEU", "14A")],
   ["15", {
     scenario: "15A",
     location_class: "metro_mild",
@@ -103,15 +103,15 @@ const DEFAULT_VECTORS = [
   ["17", {
     geography: "metropolitan",
     installation_count: "1",
-  }, product("VEU", "17")],
-  ["22", { scenario: "22A" }, product("GEMS", "22A")],
-  ["24", { scenario: "24A" }, product("GEMS", "24A")],
-  ["25", { scenario: "25A" }, product("GEMS", "25A")],
+  }, product("VEU", "17A")],
+  ["22", { scenario: "22A" }, product("VEU", "22A")],
+  ["24", { scenario: "24A" }, product("VEU", "24A")],
+  ["25", { scenario: "25A" }, product("VEU", "25A")],
   ["26", {
     geography: "metropolitan",
     paec_kwh_per_year: "500",
-  }, product("VEU", "26")],
-  ["46", { scenario: "46A" }, undefined],
+  }, product("VEU", "26A")],
+  ["46", { scenario: "46A" }, product("VEU", "46A")],
   ["48", {
     scenario: "48A(i)",
     geography: "metropolitan",
@@ -246,6 +246,12 @@ test("Parts 13, 14, 17, 26 and 48 preserve governed tables and exact arithmetic"
   const part48 = estimate("48", DEFAULT_VECTORS[14][1], DEFAULT_VECTORS[14][2]);
   assert.equal(part48.output.exactFraction, "1764/125");
   assert.equal(part48.output.wholeCertificates, "14");
+  const part48Replacement = estimate("48", {
+    ...DEFAULT_VECTORS[14][1],
+    scenario: "48B(i)",
+  }, product("VEU", "48A"));
+  assert.equal(part48Replacement.scenario, "48B(i)");
+  assert.equal(part48Replacement.inputSnapshot.product.activityCategory, "48A");
 });
 
 test("every Part 15 scenario executes only with its governed measure and lifetime inputs", () => {
@@ -262,18 +268,28 @@ test("every Part 15 scenario executes only with its governed measure and lifetim
   }
 });
 
-test("fixed GEMS products remain separate prescribed activities", () => {
+test("fixed-product activities require exact Approved VEU Public Registry evidence", () => {
   for (const [scenario, expected] of [["22A", "0.62"], ["22B", "0.62"], ["22C", "0.71"], ["22D", "0.71"]]) {
-    const result = estimate("22", { scenario }, product("GEMS", scenario));
+    const result = estimate("22", { scenario }, product("VEU", scenario));
     assert.equal(result.output.unroundedTonnes, expected);
     assert.equal(result.output.wholeCertificates, "1");
+    assert.match(result.productRegistryUrl, /veu\.esc\.vic\.gov\.au/);
   }
-  assert.equal(estimate("24", { scenario: "24A" }, product("GEMS", "24A")).output.unroundedTonnes, "0.8");
-  assert.equal(estimate("25", { scenario: "25A" }, product("GEMS", "25A")).output.unroundedTonnes, "0.54");
+  assert.equal(estimate("24", { scenario: "24A" }, product("VEU", "24A")).output.unroundedTonnes, "0.8");
+  assert.equal(estimate("25", { scenario: "25A" }, product("VEU", "25A")).output.unroundedTonnes, "0.54");
+  assert.throws(
+    () => estimate("24", { scenario: "24A" }, product("GEMS", "24A")),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_PRODUCT_EVIDENCE_INVALID",
+  );
 });
 
 test("an exact one-half VEEC tie is exposed unrounded and never guessed", () => {
-  const result = estimate("46", { scenario: "46A" });
+  const result = estimate(
+    "46",
+    { scenario: "46A" },
+    product("VEU", "46A"),
+  );
   assert.equal(result.output.exactFraction, "3/2");
   assert.equal(result.output.unroundedTonnes, "1.5");
   assert.equal(result.output.wholeCertificates, null);
@@ -282,12 +298,23 @@ test("an exact one-half VEEC tie is exposed unrounded and never guessed", () => 
   assert.equal(result.certificateActionEnabled, false);
 });
 
-test("product status, effective dates and source snapshot custody fail closed", () => {
+test("product status, historical Legacy dates and source snapshot custody fail closed", () => {
+  const historical = estimate("17", {
+    geography: "metropolitan",
+    installation_count: "1",
+  }, product("VEU", "17A", {
+    status: "Legacy",
+    effectiveFrom: "2024-01-01",
+    effectiveTo: "2026-07-20",
+  }), "2026-07-01");
+  assert.equal(historical.inputSnapshot.product.status, "Legacy");
+  assert.equal(historical.inputSnapshot.product.effectiveTo, "2026-07-20");
+
   assert.throws(
     () => estimate("17", {
       geography: "metropolitan",
       installation_count: "1",
-    }, product("VEU", "17", { status: "Legacy" })),
+    }, product("VEU", "17A", { status: "Legacy" })),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_PRODUCT_EVIDENCE_INVALID",
   );
@@ -295,7 +322,7 @@ test("product status, effective dates and source snapshot custody fail closed", 
     () => estimate("17", {
       geography: "metropolitan",
       installation_count: "1",
-    }, product("VEU", "17", { effectiveTo: "2026-08-07" })),
+    }, product("VEU", "17A", { effectiveTo: "2026-08-07" })),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_PRODUCT_NOT_EFFECTIVE",
   );
@@ -303,7 +330,7 @@ test("product status, effective dates and source snapshot custody fail closed", 
     () => estimate("17", {
       geography: "metropolitan",
       installation_count: "1",
-    }, product("VEU", "17", { sourceSnapshotHash: "unverified" })),
+    }, product("VEU", "17A", { sourceSnapshotHash: "unverified" })),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_PRODUCT_EVIDENCE_INVALID",
   );
@@ -343,7 +370,7 @@ test("activity eligibility and numeric boundaries reject unsafe estimates", () =
     () => estimate("26", {
       geography: "metropolitan",
       paec_kwh_per_year: "1e2",
-    }, product("VEU", "26")),
+    }, product("VEU", "26A")),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_INPUT_INVALID",
   );
@@ -354,7 +381,7 @@ test("unsupported dates, activities and extra fields fail closed", () => {
     () => estimate("17", {
       geography: "metropolitan",
       installation_count: "1",
-    }, product("VEU", "17"), "2026-06-29"),
+    }, product("VEU", "17A"), "2026-06-29"),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_DATE_UNSUPPORTED",
   );
@@ -372,7 +399,7 @@ test("unsupported dates, activities and extra fields fail closed", () => {
       geography: "metropolitan",
       installation_count: "1",
       invented_factor: "99",
-    }, product("VEU", "17")),
+    }, product("VEU", "17A")),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_REQUEST_INVALID",
   );

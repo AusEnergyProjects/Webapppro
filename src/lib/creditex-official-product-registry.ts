@@ -17,6 +17,28 @@ export const CREDITEX_OFFICIAL_PRODUCT_KINDS = [
   "electric_motor",
   "commercial_refrigerator",
   "chiller",
+  "veu_water_heater",
+  "veu_air_conditioner",
+  "veu_double_glazing",
+  "veu_secondary_glazing",
+  "veu_weather_sealing",
+  "veu_shower_rose",
+  "veu_refrigerator_freezer_listing",
+  "veu_television_listing",
+  "veu_clothes_dryer_listing",
+  "veu_pool_pump",
+  "veu_ceiling_insulation",
+  "veu_activity_27_product",
+  "veu_in_home_display",
+  "veu_refrigerated_display_cabinet",
+  "veu_activity_33_product",
+  "veu_commercial_lighting",
+  "veu_activity_35_product",
+  "veu_activity_36_product",
+  "veu_commercial_water_heater",
+  "veu_induction_cooktop",
+  "veu_project_based_lighting_product",
+  "veu_unclassified_product",
   "wa_synergy_supported_solution",
   "wa_horizon_supported_solution",
 ] as const;
@@ -39,6 +61,28 @@ export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   electric_motor: "gems-products",
   commercial_refrigerator: "gems-products",
   chiller: "gems-products",
+  veu_water_heater: "veu-approved-products",
+  veu_air_conditioner: "veu-approved-products",
+  veu_double_glazing: "veu-approved-products",
+  veu_secondary_glazing: "veu-approved-products",
+  veu_weather_sealing: "veu-approved-products",
+  veu_shower_rose: "veu-approved-products",
+  veu_refrigerator_freezer_listing: "veu-approved-products",
+  veu_television_listing: "veu-approved-products",
+  veu_clothes_dryer_listing: "veu-approved-products",
+  veu_pool_pump: "veu-approved-products",
+  veu_ceiling_insulation: "veu-approved-products",
+  veu_activity_27_product: "veu-approved-products",
+  veu_in_home_display: "veu-approved-products",
+  veu_refrigerated_display_cabinet: "veu-approved-products",
+  veu_activity_33_product: "veu-approved-products",
+  veu_commercial_lighting: "veu-approved-products",
+  veu_activity_35_product: "veu-approved-products",
+  veu_activity_36_product: "veu-approved-products",
+  veu_commercial_water_heater: "veu-approved-products",
+  veu_induction_cooktop: "veu-approved-products",
+  veu_project_based_lighting_product: "veu-approved-products",
+  veu_unclassified_product: "veu-approved-products",
   wa_synergy_supported_solution: "wa-synergy-supported-solutions",
   wa_horizon_supported_solution: "wa-horizon-supported-solutions",
 } as const satisfies Record<CreditexOfficialProductKind, string>;
@@ -613,45 +657,11 @@ export function deriveCreditexNswOfficialProductInputs(
 }
 
 function derivedVeu22Scenario(selection: CreditexFormulaProductSelection) {
-  const group = officialText(
+  const scenario = officialText(
     selection,
-    "refrigeratorGroup",
-    "an AS/NZS 4474:2018 product group",
-  ).toUpperCase();
-  const scenario = group === "1"
-    ? "22A"
-    : ["4", "5B", "5S", "5T"].includes(group)
-      ? "22B"
-      : group === "6C"
-        ? "22C"
-        : ["6U", "7"].includes(group)
-          ? "22D"
-          : null;
-  if (!scenario) {
-    return officialProductFailure(
-      `GEMS group ${JSON.stringify(group)} is not eligible for VEU activity 22.`,
-    );
-  }
-  const designation = officialText(
-    selection,
-    "refrigeratorDesignation",
-    "the appliance designation",
+    "veuProductCategoryNumber",
+    "an exact VEU product category number",
   );
-  if (designation.toLowerCase() === "cooled appliance") {
-    officialProductFailure(
-      "VEU activity 22 excludes products designated as a cooled appliance.",
-    );
-  }
-  const compartments = officialText(
-    selection,
-    "compartmentTypes",
-    "the compartment designations",
-  );
-  if (/(?:wine\s*storage|cellar|pantry)/i.test(compartments)) {
-    officialProductFailure(
-      "The selected refrigerator has a wine-storage, cellar or pantry compartment and is not eligible for VEU activity 22.",
-    );
-  }
   const totalVolume = officialNumber(
     selection,
     "totalVolumeLitres",
@@ -679,12 +689,17 @@ export function deriveCreditexVeuOfficialProductInputs(
 ) {
   const inputs = { ...callerInputs };
   if (activityCode === "22") {
-    const selection = selectedProduct(selections, "refrigerator_freezer");
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(
+      selections,
+      "veu_refrigerator_freezer_listing",
+    );
     inputs.scenario = derivedVeu22Scenario(selection);
     return inputs;
   }
   if (activityCode === "24") {
-    const selection = selectedProduct(selections, "television");
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_television_listing");
     const starRating = officialNumber(selection, "starRating", "star rating");
     const screenArea = officialNumber(selection, "screenAreaCm2", "screen area");
     if (starRating < 6 || screenArea < 4_000) {
@@ -696,14 +711,10 @@ export function deriveCreditexVeuOfficialProductInputs(
     return inputs;
   }
   if (activityCode === "25") {
-    const selection = selectedProduct(selections, "clothes_dryer");
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_clothes_dryer_listing");
     const starRating = officialNumber(selection, "starRating", "star rating");
     const capacity = officialNumber(selection, "capacityKg", "drying capacity");
-    if (selection.attributes.isStandaloneClothesDryer !== true) {
-      officialProductFailure(
-        "VEU activity 25 requires a standalone clothes dryer and excludes combination washer/dryers.",
-      );
-    }
     if (starRating < 7 || capacity < 5) {
       officialProductFailure(
         `VEU activity 25 requires at least 7 stars and 5 kg capacity; the selected dryer records ${starRating} stars and ${capacity} kg.`,
@@ -712,16 +723,173 @@ export function deriveCreditexVeuOfficialProductInputs(
     inputs.scenario = "25A";
     return inputs;
   }
+  if (activityCode === "46") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_induction_cooktop");
+    inputs.scenario = officialText(
+      selection,
+      "veuProductCategoryNumber",
+      "an exact VEU product category number",
+    );
+    return inputs;
+  }
   return inputs;
+}
+
+type CreditexVeuActivityProductContract = {
+  productKinds: readonly CreditexOfficialProductKind[];
+  veuProductCategoryNumbers: readonly string[];
+};
+
+export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
+  "1C": {
+    productKinds: ["veu_water_heater"],
+    veuProductCategoryNumbers: ["1C"],
+  },
+  "1D": {
+    productKinds: ["veu_water_heater"],
+    veuProductCategoryNumbers: ["1D"],
+  },
+  "3C": {
+    productKinds: ["veu_water_heater"],
+    veuProductCategoryNumbers: ["3C"],
+  },
+  "3D": {
+    productKinds: ["veu_water_heater"],
+    veuProductCategoryNumbers: ["3D"],
+  },
+  "6": {
+    productKinds: ["veu_air_conditioner"],
+    veuProductCategoryNumbers: [
+      "6A",
+      "6B(i)",
+      "6B(ii)",
+      "6C",
+      "6D",
+      "6E(i)",
+      "6E(ii)",
+      "6F",
+      "6G",
+    ],
+  },
+  "13": {
+    productKinds: ["veu_double_glazing"],
+    veuProductCategoryNumbers: ["13A"],
+  },
+  "14": {
+    productKinds: ["veu_secondary_glazing"],
+    veuProductCategoryNumbers: ["14A", "14B"],
+  },
+  "15": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: [
+      "15A",
+      "15B",
+      "15C",
+      "15D",
+      "15E",
+      "15F",
+      "15G",
+      "15H",
+    ],
+  },
+  "17": {
+    productKinds: ["veu_shower_rose"],
+    veuProductCategoryNumbers: ["17A"],
+  },
+  "22": {
+    productKinds: ["veu_refrigerator_freezer_listing"],
+    veuProductCategoryNumbers: ["22A", "22B", "22C", "22D"],
+  },
+  "24": {
+    productKinds: ["veu_television_listing"],
+    veuProductCategoryNumbers: ["24A"],
+  },
+  "25": {
+    productKinds: ["veu_clothes_dryer_listing"],
+    veuProductCategoryNumbers: ["25A"],
+  },
+  "26": {
+    productKinds: ["veu_pool_pump"],
+    veuProductCategoryNumbers: ["26A"],
+  },
+  "46": {
+    productKinds: ["veu_induction_cooktop"],
+    veuProductCategoryNumbers: ["46A", "46B"],
+  },
+  "48": {
+    productKinds: ["veu_ceiling_insulation"],
+    veuProductCategoryNumbers: ["48A"],
+  },
+} as const satisfies Record<string, CreditexVeuActivityProductContract>;
+
+function veuActivityProductContract(activityCode: string) {
+  return (
+    CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS as Readonly<
+      Record<string, CreditexVeuActivityProductContract | undefined>
+    >
+  )[activityCode];
 }
 
 export function officialProductKindsForVeuActivity(
   activityCode: string,
 ): readonly CreditexOfficialProductKind[] {
-  if (activityCode === "22") return ["refrigerator_freezer"];
-  if (activityCode === "24") return ["television"];
-  if (activityCode === "25") return ["clothes_dryer"];
-  return [];
+  return veuActivityProductContract(activityCode)?.productKinds || [];
+}
+
+export function officialVeuProductCategoryNumbersForActivity(
+  activityCode: string,
+): readonly string[] {
+  return veuActivityProductContract(activityCode)?.veuProductCategoryNumbers || [];
+}
+
+export function assertCreditexVeuOfficialProductSelections(
+  activityCode: string,
+  selections: readonly CreditexFormulaProductSelection[],
+) {
+  const contract = veuActivityProductContract(activityCode);
+  if (!contract) {
+    return officialProductFailure(
+      `Activity ${activityCode} has no governed VEU approved-product selection contract.`,
+    );
+  }
+  const expectedKinds = new Set(contract.productKinds);
+  const unexpected = selections.find(
+    (selection) => !expectedKinds.has(selection.productKind),
+  );
+  if (unexpected) {
+    return officialProductFailure(
+      `The selected ${officialProductKindLabel(unexpected.productKind)} is not compatible with VEU activity ${activityCode}.`,
+    );
+  }
+  for (const productKind of contract.productKinds) {
+    const matching = selections.filter(
+      (selection) => selection.productKind === productKind,
+    );
+    if (matching.length !== 1) {
+      return officialProductFailure(
+        `VEU activity ${activityCode} requires exactly one current official ${officialProductKindLabel(productKind)} selection.`,
+      );
+    }
+    selectedProduct(selections, productKind);
+  }
+  const veuSelections = selections.filter(
+    (selection) => CREDITEX_PRODUCT_KIND_REGISTRY[selection.productKind]
+      === "veu-approved-products",
+  );
+  for (const selection of veuSelections) {
+    const categoryNumber = officialText(
+      selection,
+      "veuProductCategoryNumber",
+      "an exact VEU product category number",
+    );
+    if (!contract.veuProductCategoryNumbers.includes(categoryNumber)) {
+      return officialProductFailure(
+        `VEU product category ${JSON.stringify(categoryNumber)} is not compatible with activity ${activityCode}.`,
+      );
+    }
+  }
+  return selections;
 }
 
 export function officialProductKindLabel(kind: CreditexOfficialProductKind) {
@@ -740,6 +908,28 @@ export function officialProductKindLabel(kind: CreditexOfficialProductKind) {
     electric_motor: "electric motor",
     commercial_refrigerator: "commercial refrigerator",
     chiller: "chiller",
+    veu_water_heater: "VEU-approved water heater",
+    veu_air_conditioner: "VEU-approved air conditioner",
+    veu_double_glazing: "VEU-approved double-glazing product",
+    veu_secondary_glazing: "VEU-approved secondary-glazing product",
+    veu_weather_sealing: "VEU-approved weather-sealing product",
+    veu_shower_rose: "VEU-approved shower rose",
+    veu_refrigerator_freezer_listing: "VEU refrigerator or freezer listing",
+    veu_television_listing: "VEU television listing",
+    veu_clothes_dryer_listing: "VEU clothes-dryer listing",
+    veu_pool_pump: "VEU-approved pool pump",
+    veu_ceiling_insulation: "VEU-approved ceiling-insulation product",
+    veu_activity_27_product: "VEU activity 27 product",
+    veu_in_home_display: "VEU-approved in-home display",
+    veu_refrigerated_display_cabinet: "VEU refrigerated display cabinet listing",
+    veu_activity_33_product: "VEU activity 33 product",
+    veu_commercial_lighting: "VEU-approved commercial-lighting product",
+    veu_activity_35_product: "VEU activity 35 product",
+    veu_activity_36_product: "VEU activity 36 product",
+    veu_commercial_water_heater: "VEU-approved commercial water heater",
+    veu_induction_cooktop: "VEU induction cooktop listing",
+    veu_project_based_lighting_product: "VEU project-based lighting product",
+    veu_unclassified_product: "unclassified VEU product record",
     wa_synergy_supported_solution: "Synergy supported solution",
     wa_horizon_supported_solution: "Horizon Power supported solution",
   };

@@ -8,6 +8,7 @@ import {
   deriveCreditexNswOfficialProductInputs,
   deriveCreditexVeuOfficialProductInputs,
   officialProductKindsForNswProductKinds,
+  officialProductKindsForVeuActivity,
   unresolvedNswProductKinds,
 } from "../src/lib/creditex-official-product-registry.ts";
 import {
@@ -264,13 +265,23 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
       CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
         (activity) => activity.activityCode === activityCode,
       )?.productRegistry,
-      "VEU_AND_GEMS",
+      "VEU",
     );
   }
-  const refrigerator = product("refrigerator_freezer", {
-    refrigeratorGroup: "6C",
-    refrigeratorDesignation: "Freezer",
-    compartmentTypes: "Freezer",
+  assert.deepEqual(
+    officialProductKindsForVeuActivity("22"),
+    ["veu_refrigerator_freezer_listing"],
+  );
+  assert.deepEqual(
+    officialProductKindsForVeuActivity("24"),
+    ["veu_television_listing"],
+  );
+  assert.deepEqual(
+    officialProductKindsForVeuActivity("25"),
+    ["veu_clothes_dryer_listing"],
+  );
+  const refrigerator = product("veu_refrigerator_freezer_listing", {
+    veuProductCategoryNumber: "22C",
     totalVolumeLitres: 300,
     starRating: 4.5,
   });
@@ -286,9 +297,9 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
     () => deriveCreditexVeuOfficialProductInputs(
       "22",
       { scenario: "22A" },
-      [product("refrigerator_freezer", {
+      [product("veu_refrigerator_freezer_listing", {
         ...refrigerator.attributes,
-        refrigeratorDesignation: "Cooled appliance",
+        veuProductCategoryNumber: "24A",
       })],
     ),
     officialError,
@@ -298,7 +309,11 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
     deriveCreditexVeuOfficialProductInputs(
       "24",
       { scenario: "tampered" },
-      [product("television", { starRating: 6.5, screenAreaCm2: 4_500 })],
+      [product("veu_television_listing", {
+        veuProductCategoryNumber: "24A",
+        starRating: 6.5,
+        screenAreaCm2: 4_500,
+      })],
     ).scenario,
     "24A",
   );
@@ -306,10 +321,10 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
     deriveCreditexVeuOfficialProductInputs(
       "25",
       { scenario: "tampered" },
-      [product("clothes_dryer", {
+      [product("veu_clothes_dryer_listing", {
+        veuProductCategoryNumber: "25A",
         starRating: 8,
         capacityKg: 8,
-        isStandaloneClothesDryer: true,
       })],
     ).scenario,
     "25A",
@@ -318,10 +333,10 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
     () => deriveCreditexVeuOfficialProductInputs(
       "25",
       { scenario: "25A" },
-      [product("clothes_dryer", {
+      [product("veu_clothes_dryer_listing", {
+        veuProductCategoryNumber: "25A",
         starRating: 8,
-        capacityKg: 8,
-        isStandaloneClothesDryer: false,
+        capacityKg: 0,
       })],
     ),
     officialError,
@@ -334,8 +349,12 @@ test("product-backed estimates require a defensible approval start and the API u
       "24",
       { scenario: "24A" },
       [product(
-        "television",
-        { starRating: 7, screenAreaCm2: 5_000 },
+        "veu_television_listing",
+        {
+          veuProductCategoryNumber: "24A",
+          starRating: 7,
+          screenAreaCm2: 5_000,
+        },
         { eligibleFrom: "" },
       )],
     ),
@@ -349,10 +368,16 @@ test("product-backed estimates require a defensible approval start and the API u
   assert.match(route, /activity\.calculationStatus === "official_registry_required"/);
   assert.match(route, /deriveCreditexNswOfficialProductInputs\(/);
   assert.match(route, /deriveCreditexVeuOfficialProductInputs\(/);
-  assert.match(
-    route,
-    /\["VEU", "VEU_AND_GEMS"\]\.includes\(activity\.productRegistry\)/,
-  );
+  assert.match(route, /CREDITEX_VEU_SOURCE_COMPLETE_ACTIVITY_CODES/);
+  assert.match(route, /validateOfficialProductSelections\(/);
+  assert.match(route, /deriveVeuProductEvidence\(/);
+  assert.match(route, /selection\.registryCode !== "veu-approved-products"/);
+  assert.match(route, /selection\.approvalStatus !== "approved"/);
+  assert.ok(route.includes(
+    'sourceSnapshotHash: `sha256:${selection.sourceSha256}`',
+  ));
+  assert.match(route, /estimateCreditexVeu\(/);
+  assert.match(route, /attachRegistryReceipt\(/);
   const nswBranch = route.slice(
     route.indexOf('if (programCode === "NSW-PDRS-2026"'),
     route.indexOf("const requiredProductKinds = officialProductKindsForLocalActivity"),

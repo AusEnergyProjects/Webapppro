@@ -102,6 +102,33 @@ function localProgram(
   );
 }
 
+export function creditexAutomaticRegistryRefreshContract(programCode: string) {
+  if (programCode === "VEU") {
+    return {
+      registryCode: "veu-approved-products",
+      sourceLabel: "VEU Public Registry",
+      sourceDescription: "Automatic VEU-approved product source",
+      buttonLabel: "Refresh VEU-approved products",
+      currentLabel: "VEU Public Registry rows are current.",
+      requestTimeoutMs: 300_000,
+    } as const;
+  }
+  if (
+    programCode === "NSW-ESS-2026"
+    || programCode === "NSW-PDRS-2026"
+  ) {
+    return {
+      registryCode: "gems-products",
+      sourceLabel: "GEMS controlled registry",
+      sourceDescription: "Automatic official product source",
+      buttonLabel: "Refresh GEMS products",
+      currentLabel: "GEMS official product rows are current.",
+      requestTimeoutMs: 300_000,
+    } as const;
+  }
+  return null;
+}
+
 function CreditexLocalProgramCalculator({
   api,
   program,
@@ -394,11 +421,13 @@ function CreditexLocalProgramCalculator({
 export function CreditexAllProgramCalculator({
   api,
   role,
+  initialProgramCode = "SRES",
 }: {
   api: Api;
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade";
+  initialProgramCode?: string;
 }) {
-  const [programCode, setProgramCode] = useState("SRES");
+  const [programCode, setProgramCode] = useState(initialProgramCode);
   const [registryRefreshVersion, setRegistryRefreshVersion] = useState(0);
   const [registryRefreshBusy, setRegistryRefreshBusy] = useState(false);
   const [registryRefreshNotice, setRegistryRefreshNotice] = useState("");
@@ -409,16 +438,23 @@ export function CreditexAllProgramCalculator({
     || programCode === "NSW-ESS-2026"
     ? programCode
     : null;
+  const registryRefreshContract = creditexAutomaticRegistryRefreshContract(
+    programCode,
+  );
 
-  async function refreshAutomaticProductRegistries() {
+  async function refreshAutomaticProductRegistry() {
+    if (!registryRefreshContract) return;
     setRegistryRefreshBusy(true);
     setRegistryRefreshNotice("");
     setRegistryRefreshError("");
     try {
       const result = await api("/api/creditex/official-products", {
         method: "POST",
-        body: JSON.stringify({ action: "refresh", registryCode: "all" }),
-      }, { requestTimeoutMs: 90_000 });
+        body: JSON.stringify({
+          action: "refresh",
+          registryCode: registryRefreshContract.registryCode,
+        }),
+      }, { requestTimeoutMs: registryRefreshContract.requestTimeoutMs });
       const registries = Array.isArray(result.registries)
         ? result.registries as Array<Record<string, unknown>>
         : [];
@@ -428,8 +464,8 @@ export function CreditexAllProgramCalculator({
       );
       setRegistryRefreshNotice(
         recordCount > 0
-          ? `${recordCount.toLocaleString("en-AU")} automatic official rows are current.`
-          : "The automatic official product registry is current.",
+          ? `${recordCount.toLocaleString("en-AU")} ${registryRefreshContract.currentLabel}`
+          : registryRefreshContract.currentLabel,
       );
       setRegistryRefreshVersion((current) => current + 1);
     } catch (caught) {
@@ -458,7 +494,12 @@ export function CreditexAllProgramCalculator({
           Program
           <select
             value={programCode}
-            onChange={(event) => setProgramCode(event.target.value)}
+            disabled={registryRefreshBusy}
+            onChange={(event) => {
+              setProgramCode(event.target.value);
+              setRegistryRefreshNotice("");
+              setRegistryRefreshError("");
+            }}
           >
             <option value="SRES">AU | SRES | Small-scale Renewable Energy Scheme</option>
             <option value="VEU">VIC | VEU | Victorian Energy Upgrades</option>
@@ -475,7 +516,7 @@ export function CreditexAllProgramCalculator({
           </select>
         </label>
       </header>
-      {role === "admin" && programCode !== "SRES" && (
+      {role === "admin" && registryRefreshContract && (
         <div
           className={styles.registryStatus}
           data-status={registryRefreshError
@@ -487,20 +528,22 @@ export function CreditexAllProgramCalculator({
           aria-busy={registryRefreshBusy}
         >
           <div>
-            <span>Automatic official product sources</span>
-            <strong>GEMS controlled registry</strong>
+            <span>{registryRefreshContract.sourceDescription}</span>
+            <strong>{registryRefreshContract.sourceLabel}</strong>
             <small>
               {registryRefreshError
                 || registryRefreshNotice
-                || "Run the controlled refresh before testing product-backed estimates."}
+                || `Run the controlled ${registryRefreshContract.sourceLabel} refresh before testing product-backed estimates.`}
             </small>
           </div>
           <button
             type="button"
             disabled={registryRefreshBusy}
-            onClick={() => void refreshAutomaticProductRegistries()}
+            onClick={() => void refreshAutomaticProductRegistry()}
           >
-            {registryRefreshBusy ? "Refreshing..." : "Refresh GEMS products"}
+            {registryRefreshBusy
+              ? "Refreshing..."
+              : registryRefreshContract.buttonLabel}
           </button>
         </div>
       )}
