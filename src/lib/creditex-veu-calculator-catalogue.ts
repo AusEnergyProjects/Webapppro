@@ -468,10 +468,13 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     scenarios: ["46A", "46B"],
     formulaKey: "veu-part-46-equation-46.1/v1",
     sourcePages: "Version 25 pages 134-135, Equation 46.1 and Table 46.3",
-    productRegistry: "none",
-    productPerformanceInputs: [],
+    productRegistry: "VEU",
+    productPerformanceInputs: [
+      "VEU approval category",
+      "VEU approval start/end",
+    ],
     inputDefinitions: [
-      { key: "scenario", label: "Induction-cooking scenario", type: "select", unit: "scenario", help: "Select the prescribed new-installation or replacement scenario in Part 46.", defaultValue: "46A", source: "operator", required: true, options: [{ value: "46A", label: "Scenario 46A" }, { value: "46B", label: "Scenario 46B" }] },
+      { key: "scenario", label: "Induction-cooking scenario", type: "select", unit: "scenario", help: "The selected VEU-approved product determines the prescribed 46A or 46B scenario.", defaultValue: "46A", source: "approved_product", required: true, options: [{ value: "46A", label: "Scenario 46A" }, { value: "46B", label: "Scenario 46B" }] },
     ],
   },
   {

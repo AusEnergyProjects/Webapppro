@@ -22,7 +22,6 @@ import {
 } from "@/lib/creditex-veu-calculator-catalogue";
 import {
   CreditexVeuEstimateError,
-  estimateCreditexVeu,
 } from "@/lib/creditex-veu-calculator-estimator";
 import {
   CreditexVeuPostcodeError,
@@ -31,7 +30,6 @@ import {
 import {
   CreditexOfficialProductError,
   deriveCreditexNswOfficialProductInputs,
-  deriveCreditexVeuOfficialProductInputs,
   officialProductKindsForLocalActivity,
   officialProductKindsForNswProductKinds,
   officialProductKindsForVeuActivity,
@@ -262,26 +260,6 @@ function deriveProductBackedInputs(
   return derived;
 }
 
-function veuActivityCategory(
-  activityCode: string,
-  inputs: Record<string, unknown>,
-) {
-  if (activityCode === "22" || activityCode === "24" || activityCode === "25") {
-    return typeof inputs.scenario === "string" ? inputs.scenario : "";
-  }
-  if (activityCode === "6") {
-    return typeof inputs.category === "string" ? inputs.category : "";
-  }
-  if (activityCode === "15") {
-    return typeof inputs.scenario === "string" ? inputs.scenario : "";
-  }
-  if (activityCode === "48") {
-    const scenario = typeof inputs.scenario === "string" ? inputs.scenario : "";
-    return scenario.startsWith("48A") ? "48A" : "48B";
-  }
-  return activityCode;
-}
-
 function deriveVeuPostcodeInputs(
   activity: (typeof CREDITEX_VEU_ACTIVITY_DEFINITIONS)[number],
   inputs: Record<string, unknown>,
@@ -415,77 +393,17 @@ export async function POST(request: Request) {
         requestKeys,
         "The VEU estimate request contains unexpected fields.",
       );
-      let inputs = deriveVeuPostcodeInputs(
+      deriveVeuPostcodeInputs(
         activity,
         inputRecord(raw.inputs),
         raw.postcode,
         raw.effectiveDate,
       );
-      if (activity.productRegistry !== "none") {
-        if (["VEU", "VEU_AND_GEMS"].includes(activity.productRegistry)) {
-          throw new CreditexVeuEstimateError(
-            "VEU_PRODUCT_EVIDENCE_INVALID",
-            `Activity ${activityCode} requires an effective-dated VEU approved-product record. GEMS registration alone does not establish VEU approval, and the monitored VEU public-registry connector is not yet active.`,
-            503,
-          );
-        }
-        if (requiredKinds.length === 0) {
-          throw new CreditexVeuEstimateError(
-            "VEU_PRODUCT_EVIDENCE_INVALID",
-            `Activity ${activityCode} requires a current immutable ${activity.productRegistry} approved-product snapshot. The public VEU register connector is not yet safe for production calculation.`,
-            503,
-          );
-        }
-        const productValidation = await validateOfficialProductSelections(
-          database,
-          {
-            installationDate: raw.effectiveDate,
-            requiredKinds,
-            selectedProductIds: raw.selectedProductIds,
-          },
-        );
-        const selected = productValidation.selections[0];
-        inputs = deriveCreditexVeuOfficialProductInputs(
-          activityCode,
-          inputs,
-          productValidation.selections,
-        );
-        if (!selected) {
-          throw new CreditexOfficialProductError(
-            "OFFICIAL_PRODUCT_SELECTION_REQUIRED",
-            409,
-            "Select the required current official product before calculating.",
-          );
-        }
-        const estimate = estimateCreditexVeu({
-          activityCode: raw.activityCode,
-          installationDate: raw.effectiveDate,
-          inputs,
-          product: {
-            registry: "GEMS",
-            activityCategory: veuActivityCategory(activityCode, inputs),
-            productId: selected.id,
-            status: "Registered",
-            effectiveFrom: selected.eligibleFrom,
-            effectiveTo: selected.eligibleTo,
-            sourceSnapshotHash: `sha256:${selected.sourceSha256}`,
-          },
-        });
-        return json({
-          ok: true,
-          estimate: await attachRegistryReceipt(
-            estimate as unknown as Record<string, unknown> & { receiptHash: string },
-            productValidation,
-          ),
-        });
-      }
-      const estimate = estimateCreditexVeu({
-        activityCode: raw.activityCode,
-        installationDate: raw.effectiveDate,
-        inputs,
-        product: undefined,
-      });
-      return json({ ok: true, estimate });
+      throw new CreditexVeuEstimateError(
+        "VEU_PRODUCT_EVIDENCE_INVALID",
+        `Activity ${activityCode} requires an effective-dated Approved product from the VEU Public Registry. The monitored VEU connector is not yet active, so the estimate remains fail-closed.`,
+        503,
+      );
     }
 
     if (programCode === "NSW-PDRS-2026" || programCode === "NSW-ESS-2026") {

@@ -81,7 +81,17 @@ test("current SRES, VEU and NSW pathways expose only their verified readiness st
         ].includes(method.state),
       ),
     );
-    assert.ok(current.some((method) => method.state === "estimate_available"));
+    if (code === "VEU") {
+      assert.ok(current.some(
+        (method) => method.state === "official_registry_required",
+      ));
+      assert.equal(
+        current.some((method) => method.state === "estimate_available"),
+        false,
+      );
+    } else {
+      assert.ok(current.some((method) => method.state === "estimate_available"));
+    }
     assert.ok(methods.every((method) => method.certificateActionEnabled === false));
   }
 });

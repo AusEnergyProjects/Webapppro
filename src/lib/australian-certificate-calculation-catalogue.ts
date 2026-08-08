@@ -299,7 +299,7 @@ const VEU_FORMULA_READY_ACTIVITY_CODES = new Set([
   "46", "48",
 ]);
 
-const VEU_EXECUTABLE_ACTIVITY_CODES = new Set(["46"]);
+const VEU_EXECUTABLE_ACTIVITY_CODES = new Set<string>();
 
 const NSW_EXECUTABLE_ACTIVITY_CODES = new Set([
   "HVAC1", "HVAC2", "RF2", "SYS2",
