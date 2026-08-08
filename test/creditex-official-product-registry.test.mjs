@@ -280,6 +280,36 @@ const gemsDefinition = {
   sources: [source("fixture-gems-ac", "air_conditioner", "gems-products")],
 };
 
+test("generic registry uses Worker-compatible no-store source requests", async () => {
+  const { d1, artifactStore } = fixture();
+  const requests = [];
+  const fixtureFetch = fetchFixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: async (input, init) => {
+      requests.push({ input: String(input), init });
+      return fixtureFetch(input, init);
+    },
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  assert.equal(requests.length, definition.sources.length);
+  for (const [index, request] of requests.entries()) {
+    assert.equal(request.input, definition.sources[index].url);
+    assert.equal(request.init.cache, "no-store");
+    assert.equal(request.init.method, undefined);
+    assert.equal(request.init.redirect, undefined);
+    assert.equal(
+      new Headers(request.init.headers).get("accept"),
+      definition.sources[index].accept,
+    );
+    assert.equal(
+      new Headers(request.init.headers).has("user-agent"),
+      false,
+    );
+  }
+});
+
 function fetchFixture(overrides = {}) {
   return async (input) => {
     const sourceKey = String(input).split("/").at(-1);

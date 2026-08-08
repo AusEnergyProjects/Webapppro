@@ -699,14 +699,25 @@ async function fetchSourceBytes(
   fetchImpl: FetchLike,
 ): Promise<FetchedSourceArtifact> {
   validateSourceDefinition(definition, source);
-  const response = await fetchImpl(source.url, {
-    method: "GET",
-    redirect: "follow",
-    headers: {
-      Accept: source.accept,
-      "User-Agent": "Australian Energy Assessments official product synchroniser",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(source.url, {
+      cache: "no-store",
+      headers: { Accept: source.accept },
+    });
+  } catch (error) {
+    console.error("Official product source fetch failed.", {
+      registryCode: definition.registryCode,
+      sourceKey: source.sourceKey,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+      502,
+      `Official source ${source.sourceKey} could not be fetched.`,
+    );
+  }
   if (!response.ok) {
     return fail(
       "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",

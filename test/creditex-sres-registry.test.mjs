@@ -356,6 +356,42 @@ test("scheduled UTC refresh instants resolve to the next Sydney regulator day", 
   );
 });
 
+test("registry sync uses bounded Worker-compatible official source requests", async () => {
+  const { d1, artifactStore } = fixture();
+  const requests = [];
+  const fixtureFetch = fetchFixture();
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: async (input, init) => {
+      requests.push({ input: String(input), init });
+      return fixtureFetch(input, init);
+    },
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+
+  assert.deepEqual(
+    requests.map(({ input }) => input),
+    [...SOURCES, ...REFERENCES].map(({ url }) => url),
+  );
+  for (const [index, request] of requests.entries()) {
+    assert.equal(request.init.cache, "no-store");
+    assert.equal(request.init.method, undefined);
+    assert.equal(request.init.redirect, undefined);
+    assert.equal(
+      new Headers(request.init.headers).has("user-agent"),
+      false,
+    );
+    assert.equal(
+      new Headers(request.init.headers).get("accept"),
+      index < SOURCES.length
+        ? "text/csv"
+        : REFERENCES[index - SOURCES.length].expectedContentType,
+    );
+  }
+});
+
 test("daily sync keeps exact source custody and atomically activates one snapshot", async () => {
   const { database, d1, artifactStore } = fixture();
   const now = new Date("2026-08-08T00:00:00.000Z");

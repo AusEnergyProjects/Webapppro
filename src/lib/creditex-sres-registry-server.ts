@@ -340,14 +340,24 @@ async function fetchSource(
   source: CerSresProductSource,
   fetchImpl: FetchLike,
 ): Promise<SourceArtifact> {
-  const response = await fetchImpl(source.url, {
-    method: "GET",
-    redirect: "error",
-    headers: {
-      Accept: "text/csv",
-      "User-Agent": "Australian Energy Assessments SRES registry synchroniser",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(source.url, {
+      cache: "no-store",
+      headers: { Accept: "text/csv" },
+    });
+  } catch (error) {
+    console.error("CER SRES product source fetch failed.", {
+      sourceKey: source.sourceKey,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return fail(
+      "SRES_PRODUCT_SOURCE_UNAVAILABLE",
+      502,
+      `The official ${source.sourceKey} source could not be fetched.`,
+    );
+  }
   if (!response.ok) {
     return fail(
       "SRES_PRODUCT_SOURCE_UNAVAILABLE",
@@ -405,14 +415,24 @@ async function fetchReference(
   source: CerSresReferenceSource,
   fetchImpl: FetchLike,
 ): Promise<ReferenceArtifact> {
-  const response = await fetchImpl(source.url, {
-    method: "GET",
-    redirect: "error",
-    headers: {
-      Accept: source.expectedContentType,
-      "User-Agent": "Australian Energy Assessments SRES registry synchroniser",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(source.url, {
+      cache: "no-store",
+      headers: { Accept: source.expectedContentType },
+    });
+  } catch (error) {
+    console.error("CER SRES reference source fetch failed.", {
+      sourceKey: source.sourceKey,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return fail(
+      "SRES_POSTCODE_SOURCE_UNAVAILABLE",
+      502,
+      `The official ${source.sourceKey} source could not be fetched.`,
+    );
+  }
   if (!response.ok) {
     return fail(
       "SRES_POSTCODE_SOURCE_UNAVAILABLE",
@@ -690,14 +710,14 @@ export async function syncCerSresProductRegistry(
         "Immutable official source storage is unavailable.",
       );
     }
-    const [productArtifacts, referenceArtifacts] = await Promise.all([
-      Promise.all(
-      sources.map((source) => fetchSource(source, fetchImpl)),
-      ),
-      Promise.all(
-        references.map((source) => fetchReference(source, fetchImpl)),
-      ),
-    ]);
+    const productArtifacts: SourceArtifact[] = [];
+    for (const source of sources) {
+      productArtifacts.push(await fetchSource(source, fetchImpl));
+    }
+    const referenceArtifacts: ReferenceArtifact[] = [];
+    for (const source of references) {
+      referenceArtifacts.push(await fetchReference(source, fetchImpl));
+    }
     const artifacts: RegistryArtifact[] = [
       ...productArtifacts,
       ...referenceArtifacts,

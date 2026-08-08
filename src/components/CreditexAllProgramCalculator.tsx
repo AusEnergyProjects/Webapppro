@@ -398,12 +398,49 @@ export function CreditexAllProgramCalculator({
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade";
 }) {
   const [programCode, setProgramCode] = useState("SRES");
+  const [registryRefreshVersion, setRegistryRefreshVersion] = useState(0);
+  const [registryRefreshBusy, setRegistryRefreshBusy] = useState(false);
+  const [registryRefreshNotice, setRegistryRefreshNotice] = useState("");
+  const [registryRefreshError, setRegistryRefreshError] = useState("");
   const program = localProgram(programCode);
   const governedProgram = programCode === "VEU"
     || programCode === "NSW-PDRS-2026"
     || programCode === "NSW-ESS-2026"
     ? programCode
     : null;
+
+  async function refreshAutomaticProductRegistries() {
+    setRegistryRefreshBusy(true);
+    setRegistryRefreshNotice("");
+    setRegistryRefreshError("");
+    try {
+      const result = await api("/api/creditex/official-products", {
+        method: "POST",
+        body: JSON.stringify({ action: "refresh", registryCode: "all" }),
+      });
+      const registries = Array.isArray(result.registries)
+        ? result.registries as Array<Record<string, unknown>>
+        : [];
+      const recordCount = registries.reduce(
+        (total, registry) => total + Number(registry.recordCount || 0),
+        0,
+      );
+      setRegistryRefreshNotice(
+        recordCount > 0
+          ? `${recordCount.toLocaleString("en-AU")} automatic official rows are current.`
+          : "The automatic official product registry is current.",
+      );
+      setRegistryRefreshVersion((current) => current + 1);
+    } catch (caught) {
+      setRegistryRefreshError(
+        caught instanceof Error
+          ? caught.message
+          : "The official product registry refresh failed safely.",
+      );
+    } finally {
+      setRegistryRefreshBusy(false);
+    }
+  }
 
   return (
     <section className={styles.allProgramCalculator}>
@@ -437,17 +474,46 @@ export function CreditexAllProgramCalculator({
           </select>
         </label>
       </header>
+      {role === "admin" && programCode !== "SRES" && (
+        <div
+          className={styles.registryStatus}
+          data-status={registryRefreshError
+            ? "unavailable"
+            : registryRefreshNotice
+              ? "current"
+              : "stale"}
+          aria-live="polite"
+          aria-busy={registryRefreshBusy}
+        >
+          <div>
+            <span>Automatic official product sources</span>
+            <strong>GEMS controlled registry</strong>
+            <small>
+              {registryRefreshError
+                || registryRefreshNotice
+                || "Run the controlled refresh before testing product-backed estimates."}
+            </small>
+          </div>
+          <button
+            type="button"
+            disabled={registryRefreshBusy}
+            onClick={() => void refreshAutomaticProductRegistries()}
+          >
+            {registryRefreshBusy ? "Refreshing..." : "Refresh GEMS products"}
+          </button>
+        </div>
+      )}
       {programCode === "SRES" ? (
         <CreditexSresCalculator api={api} role={role} />
       ) : governedProgram ? (
         <CreditexGovernedProgramCalculator
-          key={governedProgram}
+          key={`${governedProgram}:${registryRefreshVersion}`}
           api={api}
           programCode={governedProgram}
         />
       ) : program ? (
         <CreditexLocalProgramCalculator
-          key={program.programCode}
+          key={`${program.programCode}:${registryRefreshVersion}`}
           api={api}
           program={program}
         />

@@ -95,6 +95,9 @@ test("calculator APIs accept compliance users or verified installers and nothing
 
 test("trade access remains estimate-only and cannot refresh an official registry", () => {
   assert.match(calculator, /role: "admin" \| "case_manager" \| "reviewer" \| "auditor" \| "trade"/);
+  assert.match(calculator, /role === "admin" && programCode !== "SRES"/);
+  assert.match(calculator, /Refresh GEMS products/);
+  assert.match(calculator, /registryCode: "all"/);
   assert.match(sresCalculator, /role === "admin" && !productBlocker/);
   assert.match(workspace, /do not create,[\s\S]*register or trade certificates/);
   assert.match(officialProductsRoute, /allowedRoles: \["admin"\]/);
