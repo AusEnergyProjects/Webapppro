@@ -298,7 +298,7 @@ test("generic registry uses Worker-compatible no-store source requests", async (
     assert.equal(request.input, definition.sources[index].url);
     assert.equal(request.init.cache, "no-store");
     assert.equal(request.init.method, undefined);
-    assert.equal(request.init.redirect, undefined);
+    assert.equal(request.init.redirect, "error");
     assert.equal(
       new Headers(request.init.headers).get("accept"),
       definition.sources[index].accept,

@@ -344,6 +344,7 @@ async function fetchSource(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
+      redirect: "error",
       headers: { Accept: "text/csv" },
     });
   } catch (error) {
@@ -419,6 +420,7 @@ async function fetchReference(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
+      redirect: "error",
       headers: { Accept: source.expectedContentType },
     });
   } catch (error) {

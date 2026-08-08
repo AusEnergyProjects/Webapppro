@@ -378,7 +378,7 @@ test("registry sync uses bounded Worker-compatible official source requests", as
   for (const [index, request] of requests.entries()) {
     assert.equal(request.init.cache, "no-store");
     assert.equal(request.init.method, undefined);
-    assert.equal(request.init.redirect, undefined);
+    assert.equal(request.init.redirect, "error");
     assert.equal(
       new Headers(request.init.headers).has("user-agent"),
       false,

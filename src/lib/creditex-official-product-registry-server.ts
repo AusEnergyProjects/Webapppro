@@ -703,6 +703,7 @@ async function fetchSourceBytes(
   try {
     response = await fetchImpl(source.url, {
       cache: "no-store",
+      redirect: "error",
       headers: { Accept: source.accept },
     });
   } catch (error) {
