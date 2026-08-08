@@ -24,6 +24,7 @@ import {
 import {
   deriveCreditexNswOfficialProductInputs,
   deriveCreditexVeuOfficialProductInputs,
+  CREDITEX_PRODUCT_KIND_REGISTRY,
   officialProductKindsForNswProductKinds,
   officialProductKindsForVeuActivity,
   officialProductInputKeysForNswActivity,
@@ -491,6 +492,11 @@ function applyVeuPostcode(
   for (const definition of activity.inputDefinitions) {
     if (definition.source !== "postcode_lookup") continue;
     if (definition.key === "geography") next[definition.key] = resolution.geography;
+    if (definition.key === "gas_reticulation") {
+      next[definition.key] = resolution.gasReticulated
+        ? "reticulated"
+        : "not_reticulated";
+    }
     if (definition.key === "climate_zone") next[definition.key] = resolution.climateZone;
     if (definition.key === "climatic_region") next[definition.key] = resolution.climateRegion;
     if (definition.key === "location_class") next[definition.key] = resolution.locationClass;
@@ -511,7 +517,7 @@ type CreditexVeuProductUiState = {
 type CreditexVeuProductUiAction =
   | {
       type: "identity_changed";
-      reason: "activity" | "installation_date" | "postcode" | "registry_snapshot";
+      reason: "activity" | "installation_date" | "postcode" | "registry_snapshot" | "scenario";
       issue?: string;
     }
   | {
@@ -561,10 +567,33 @@ function exactRegistryDate(value: string) {
 }
 
 export const CREDITEX_VEU_UI_SOURCE_COMPLETE_ACTIVITY_CODES = [
+  "1C",
+  "1D",
+  "3C",
+  "3D",
+  "6",
+  "13",
+  "15",
   "17",
   "22",
   "24",
   "25",
+  "26",
+  "27",
+  "30",
+  "31",
+  "33",
+  "34",
+  "35",
+  "36",
+  "37",
+  "38",
+  "39",
+  "40",
+  "41",
+  "42",
+  "43",
+  "44",
   "46",
   "48",
 ] as const;
@@ -581,19 +610,33 @@ export function creditexVeuShouldApplyProductResponse(
   return requestGeneration === currentGeneration;
 }
 
+export function creditexVeuRegistryCodeForProductKind(productKind: string) {
+  const registryCode = CREDITEX_PRODUCT_KIND_REGISTRY[
+    productKind as CreditexOfficialProductKind
+  ];
+  return registryCode === "veu-approved-products" || registryCode === "gems-products"
+    ? registryCode
+    : "";
+}
+
 export function creditexVeuProductEvidenceState(
   activityCode: string,
   installationDate: string,
   selectedProducts: Readonly<SelectedVeuProducts>,
   registryIssue = "",
+  scenario?: string,
 ) {
-  const requiredKinds = officialProductKindsForVeuActivity(activityCode);
+  const requiredKinds = officialProductKindsForVeuActivity(
+    activityCode,
+    scenario,
+  );
   const selectedProductIds: Record<string, string> = {};
   const completeSelections: CreditexOfficialProductOption[] = [];
   let issue = registryIssue;
   let missingProduct = false;
   const permittedCategories = officialVeuProductCategoryNumbersForActivity(
     activityCode,
+    scenario,
   );
 
   if (!issue && !exactRegistryDate(installationDate)) {
@@ -608,6 +651,7 @@ export function creditexVeuProductEvidenceState(
     }
     selectedProductIds[kind] = product.id;
     completeSelections.push(product);
+    const gemsMotor = activityCode === "31" && kind === "electric_motor";
     if (issue) continue;
     if (
       !product.id
@@ -619,15 +663,22 @@ export function creditexVeuProductEvidenceState(
       continue;
     }
     if (
-      product.registryCode !== "veu-approved-products"
-      || (
-        product.approvalStatus !== "approved"
-        && product.approvalStatus !== "legacy"
+      (
+        gemsMotor
+          ? product.registryCode !== "gems-products"
+            || product.approvalStatus !== "approved"
+          : product.registryCode !== "veu-approved-products"
+            || (
+              product.approvalStatus !== "approved"
+              && product.approvalStatus !== "legacy"
+            )
       )
       || !product.snapshotId
       || !/^[a-f0-9]{64}$/.test(product.sourceSha256)
     ) {
-      issue = "The selected model is not pinned to a VEU Public Registry approval record. Refresh the VEU registry and select it again.";
+      issue = gemsMotor
+        ? "The selected motor is not pinned to a current GEMS registration. Refresh GEMS and select it again."
+        : "The selected model is not pinned to a VEU Public Registry approval record. Refresh the VEU registry and select it again.";
       continue;
     }
     if (!exactRegistryDate(product.eligibleFrom)) {
@@ -649,12 +700,14 @@ export function creditexVeuProductEvidenceState(
       issue = "The selected VEU Public Registry model is outside its installation-date approval window.";
       continue;
     }
-    const category = product.attributes.veuProductCategoryNumber;
-    if (
-      typeof category !== "string"
-      || !permittedCategories.includes(category)
-    ) {
-      issue = `The selected VEU product category does not match activity ${activityCode}.`;
+    if (!gemsMotor) {
+      const category = product.attributes.veuProductCategoryNumber;
+      if (
+        typeof category !== "string"
+        || !permittedCategories.includes(category)
+      ) {
+        issue = `The selected VEU product category does not match activity ${activityCode}.`;
+      }
     }
   }
 
@@ -724,6 +777,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       date,
       selectedProducts,
       productRegistryIssue || activitySourceIssue,
+      inputs.scenario,
     ),
     [
       activity.activityCode,
@@ -731,9 +785,11 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       date,
       productRegistryIssue,
       selectedProducts,
+      inputs.scenario,
     ],
   );
   const requiredKinds = productEvidence.requiredKinds;
+  const productSelectionRequired = requiredKinds.length > 0;
   const postcodeRequired = veuNeedsPostcode(activity);
 
   const invalidate = useCallback(() => {
@@ -760,6 +816,12 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     init?: RequestInit,
   ) => {
     const requestGeneration = productIdentityGenerationRef.current;
+    const kind = new URL(path, "https://creditex.invalid")
+      .searchParams.get("productKind") || "";
+    const expectedRegistryCode = creditexVeuRegistryCodeForProductKind(kind);
+    const registryLabel = expectedRegistryCode === "gems-products"
+      ? "GEMS product register"
+      : "VEU Public Registry";
     try {
       const result = await api(path, init);
       if (!creditexVeuShouldApplyProductResponse(
@@ -773,21 +835,20 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       const registryStatus = String(registry?.status || "");
       const snapshotId = String(registry?.snapshotId || "");
       if (
-        registryCode !== "veu-approved-products"
+        !expectedRegistryCode
+        || registryCode !== expectedRegistryCode
         || registryStatus !== "current"
         || !snapshotId
       ) {
         throw new Error(
-          "The current VEU Public Registry snapshot is stale or unavailable.",
+          `The current ${registryLabel} snapshot is stale or unavailable.`,
         );
       }
-      const kind = new URL(path, "https://creditex.invalid")
-        .searchParams.get("productKind") || "";
       const previousSnapshotId = registrySnapshotIdsRef.current[kind];
       registrySnapshotIdsRef.current[kind] = snapshotId;
       if (previousSnapshotId && previousSnapshotId !== snapshotId) {
         clearProductEvidence(
-          "The VEU Public Registry snapshot changed. Select the exact installation-date-eligible model again.",
+          `The ${registryLabel} snapshot changed. Select the exact installation-date-eligible model again.`,
         );
       } else {
         dispatchProductUi({ type: "registry_current" });
@@ -802,7 +863,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       }
       const message = caught instanceof Error
         ? caught.message
-        : "The current VEU Public Registry snapshot is unavailable.";
+        : `The current ${registryLabel} snapshot is unavailable.`;
       clearProductEvidence(message);
       throw caught;
     }
@@ -867,11 +928,20 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             : "stale"}
       >
         <div>
-          <span>VEU Public Registry eligibility evidence</span>
-          <strong>Exact model approved on the installation date</strong>
+          <span>
+            {productSelectionRequired
+              ? "VEU Public Registry eligibility evidence"
+              : "Governed activity evidence"}
+          </span>
+          <strong>
+            {productSelectionRequired
+              ? "Exact model approved on the installation date"
+              : "No approved-product registry applies to this selected scenario"}
+          </strong>
           <small>
-            Select the exact VEU Public Registry model approved on the installation date. Its Effective
-            From and Effective To window must include the installation date. No product eligibility is guessed.
+            {productSelectionRequired
+              ? "Select the exact VEU Public Registry model approved on the installation date. Its Effective From and Effective To window must include the installation date. No product eligibility is guessed."
+              : "Enter the governed site, incumbent-equipment and installation evidence required by the applicable VEU specification. The calculator does not invent a product approval requirement."}
           </small>
         </div>
       </div>
@@ -1011,6 +1081,8 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
                 activity.activityCode,
                 date,
                 nextProducts,
+                "",
+                inputs.scenario,
               );
               if (nextEvidence.issue || nextEvidence.missingProduct) {
                 return;
@@ -1050,6 +1122,24 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
                   value={inputs[definition.key] || ""}
                   onChange={(event) => {
                     invalidate();
+                    if (
+                      definition.key === "scenario"
+                      && ["27", "34", "35"].includes(activity.activityCode)
+                    ) {
+                      productIdentityGenerationRef.current += 1;
+                      selectedProductsRef.current = {};
+                      registrySnapshotIdsRef.current = {};
+                      dispatchProductUi({
+                        type: "identity_changed",
+                        reason: "scenario",
+                      });
+                      const scenario = event.target.value;
+                      setInputs((current) => ({
+                        ...resetVeuApprovedProductInputs(activity, current),
+                        scenario,
+                      }));
+                      return;
+                    }
                     setInputs((current) => ({
                       ...current,
                       [definition.key]: event.target.value,

@@ -361,7 +361,10 @@ function validateRecords(
   }
   const acceptedKinds = new Set(sourceProductKinds(source));
   const seen = new Set<string>();
-  return rawRecords.map((raw, index): CreditexOfficialProductRecord => {
+  const validateRecord = (
+    raw: CreditexOfficialProductRecord,
+    index: number,
+  ): CreditexOfficialProductRecord => {
     const sourceKey = cleanText(raw.sourceKey, `record ${index + 1} sourceKey`, 80, true).toLowerCase();
     const sourceRecordKey = cleanText(raw.sourceRecordKey, `record ${index + 1} sourceRecordKey`, 500, true);
     if (sourceKey !== source.sourceKey || seen.has(sourceRecordKey)) {
@@ -467,7 +470,20 @@ function validateRecords(
         : raw.availableInAustralia === true,
       attributes,
     };
-  });
+  };
+  if (source.registryCode === "veu-approved-products") {
+    // The VEU parser returns a fresh, isolated graph replayed from the retained
+    // R2 artifact. Normalise that graph in place after applying every generic
+    // trust-boundary check above; copying 75k records would exceed the Worker
+    // memory envelope. Other registries retain the established copy path.
+    rawRecords.forEach((raw, index) => {
+      Object.assign(raw, validateRecord(raw, index));
+    });
+    seen.clear();
+    acceptedKinds.clear();
+    return rawRecords;
+  }
+  return rawRecords.map(validateRecord);
 }
 
 function approvalStatusIsEligible(registryCode: string, status: string) {
@@ -490,6 +506,9 @@ async function resolveEligibilityStarts(
   hasAcceptedSnapshot: boolean,
 ) {
   const missing = records.filter((record) => !record.eligibleFrom);
+  if (missing.length === 0) {
+    return records;
+  }
   const carriedStarts = new Map<string, string>();
   for (
     let offset = 0;
@@ -535,19 +554,22 @@ async function resolveEligibilityStarts(
       }
     }
   }
+  // These records are an isolated graph freshly parsed from the retained R2
+  // artifact for this staging pass. Enrich that graph in place instead of
+  // retaining another full registry copy in the Worker isolate.
   return records.map((record): CreditexOfficialProductRecord => {
     const officialStart = record.eligibleFrom;
+    if (officialStart) return record;
     const eligibleFrom = officialStart || carriedStarts.get(
       eligibilityIdentity(record.sourceKey, record.sourceRecordKey),
     ) || activatedOn;
-    return {
-      ...record,
+    return Object.assign(record, {
       eligibleFrom,
-      attributes: officialStart ? record.attributes : {
+      attributes: {
         ...record.attributes,
         creditexEligibleFromBasis: "registry_first_seen",
       },
-    };
+    });
   });
 }
 
@@ -578,8 +600,7 @@ async function resolveRegistryEffectiveStarts(
   activatedOn: string,
 ): Promise<readonly StagedOfficialProductRecord[]> {
   if (!currentSnapshotId) {
-    return records.map((record) => ({
-      ...record,
+    return records.map((record) => Object.assign(record, {
       registryEffectiveFrom:
         record.attributes.creditexEligibleFromBasis === "registry_first_seen"
           ? activatedOn
@@ -626,12 +647,11 @@ async function resolveRegistryEffectiveStarts(
       record.sourceKey,
       record.sourceRecordKey,
     ));
-    return {
-      ...record,
+    return Object.assign(record, {
       registryEffectiveFrom: current && currentProductVersionMatches(record, current)
         ? current.registry_effective_from
         : activatedOn,
-    };
+    });
   });
 }
 

@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 5 August 2026
+Last reconciled locally: 9 August 2026
 
-Deployment evidence last verified: 5 August 2026
+Deployment evidence last verified: 9 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -125,37 +125,115 @@ This is the only current implementation and release-status document. The [dated 
 | Historical trade-workspace delivery-recovery application source | `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c` | Exact validated milestone-44 source containing `b7e40751e2556ffc64e37704c641a6e917046bb6` plus the worker-safe legacy fallback correction; historical Sites version 282 |
 | Historical Sites version 282 release archive | `.openai/site-release-9c278bb.tar.gz` | 7,829,193 bytes; SHA-256 `EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2`; 375 entries, all 121 migrations and zero CSV entries |
 | Historical Sites version 282 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_fd653b2ad83c81918fd23a3366735271` | Exact Sites version 282 built from `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`; 361 stored files; 31,907,840 stored bytes; content hash `sha256:86f36c8d918da0ae1b634db811ed645a27d4a50a1a35acc0eba79d5e20488d96`; deployment `appgdep_6a71e7f3af3c81918f0f89a3e0354d36` |
-| Current trade document controls and Jobs application source | `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` | Exact validated milestone-45 source; the working branch and Sites managed `main` contain this commit |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae` | Exact Sites version 283 built from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`; 364 stored files; 31,682,560 stored bytes; content hash `sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7` |
-| Current executable application identity | Sites version 283 from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7221a403808191a44c354d51922058` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Historical trade document controls and Jobs application source | `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` | Exact validated milestone-45 source; deployed as historical Sites version 283 |
+| Historical Sites version 283 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae` | Exact Sites version 283 built from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`; 364 stored files; 31,682,560 stored bytes; content hash `sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7` |
+| Historical Sites version 283 executable identity | Sites version 283 from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` | Deployment `appgdep_6a7221a403808191a44c354d51922058` succeeded; environment revision 19 |
+| Current VEU registry foundation application source | `1d77ab222638d3d43d9a49cac0b486173ce88e18` on `codex/sites-custom-domain-migration` | Exact committed and deployed source for the guarded VEU Public Registry importer and indexed product projection |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_3ea0067666848191816b9e9b51293599` | Exact Sites version 293 built from `1d77ab222638d3d43d9a49cac0b486173ce88e18` |
+| Current executable application identity | Sites version 293 from `1d77ab222638d3d43d9a49cac0b486173ce88e18` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a77783225d08191b4fcf8cf98888f06` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Expanded VEU formula and shared calculator release candidate | Uncommitted working tree on `codex/sites-custom-domain-migration` | Validated release candidate only; final commit, saved Sites version, deployment identity and signed-in production QA do not yet exist |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
 cleanup, customer, installer and trade releases, protected-trade locality,
 authorised compliance operations, evidence-policy governance, national
-government-activity workflow and isolated VEU synthetic pilot are deployed to
-production. Sites version 283 from exact application commit
-`bfd472359dd8ec2457379bc3694dc3c9503ac7dd` is the current executable
-application source. Milestone 45 preserves the complete milestone-44 trade
-shell and adds exact 23-cell Jobs rows, customer-document business and payment
-identity, an explicit 5:1 full-width banner crop, quote/invoice live previews,
-invoice subtotal, discount, GST and total, immutable exact-byte issued PDFs and
-conflict-safe invoice reconciliation. Signed-in and public custom-domain QA
-passed without saving settings, issuing or sending a quote or invoice, or
-changing customer, business, document-version or commercial content. Controlled
-Gmail and Outlook delivery proof, a production invoice send, an approved
-Australian address provider and complete approved manual VEU, SRES/STC and NSW
-governed bundles remain outstanding. Account recovery and physical record
-erasure remain intentionally absent. The controlled 10-installer,
-30-technician, 300-job VEU pilot and every unverified calculator or external
-execution path remain isolated and disabled.
+government-activity workflow, VEU pilot and guarded VEU registry foundation are
+deployed to production. Sites version 293 from exact application commit
+`1d77ab222638d3d43d9a49cac0b486173ce88e18` is the current executable source.
+Its active VEU snapshot contains 75,492 Public Visible rows. The expanded VEU
+formula and shared calculator working tree is not the deployed production
+source: it has no final commit, Sites version or deployment identity and has not
+received signed-in production QA. Certificate creation, submission, trading and
+settlement remain disabled.
 
-## Current trade document controls and Jobs release
+## Current VEU registry release and expanded calculator release candidate
 
-`TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` is the current release. Exact application
+The registry foundation is released in exact application source
+`1d77ab222638d3d43d9a49cac0b486173ce88e18`, Sites version 293. Its production
+snapshot is active with exactly 75,492 Public Visible rows: 64,715 with source
+status `Approved` and 10,777 with source status `Legacy`. A live 64 MB
+acquisition, exact-byte R2 replay, validation and D1 activation completed with
+all 75,492 rows.
+
+The importer retains exact received source bytes, hashes and custody metadata in
+content-addressed R2 objects. D1 stores the indexed normalized current and
+historical rows, source manifest, snapshot identity, registry category, status
+and effective dates needed for fast picker search and server-side validation.
+Calculations query D1 only. They never download or parse the Public Registry.
+
+The expanded working-tree candidate contains 32 VEU catalogue definitions.
+Thirty aggregate activity codes are formula-ready. Twenty-seven expose an
+executable estimate path: 21 fully available aggregate families plus six
+enforced partial subsets. The fully available set is `3`, `13`, `15`, `17`,
+`22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`,
+`41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` are additionally
+formula-ready but remain source-gated.
+
+The exact `partial_estimate_available` messages are:
+
+- `1`: Exact estimates are available for 1C small systems and supported 1D
+  systems. The 1C medium-system Bs/Be conflict between official sources remains
+  fail-closed.
+- `6`: Exact estimates are available for supported single-split systems.
+  Multi-split and packaged systems remain fail-closed until the installed
+  indoor/outdoor quantities and same-manufacturer evidence are represented
+  exactly.
+- `31`: Exact estimates are available for 31A motors selected from the
+  installation-date GEMS register. Activity 31B remains fail-closed until an
+  exact VEU-approved product contract is available.
+- `33`: Exact estimates are available for 33A products selected from the
+  installation-date VEU Public Registry. Activity 33B remains fail-closed
+  because the governed registry connector has no exact 33B product contract.
+- `34`: Exact estimates are available only for sites that are not required to
+  comply with Building Code Part J6. The Part J6 baseline branch remains
+  fail-closed.
+- `46`: Exact historical estimates require an installation-date-eligible Legacy
+  VEU product. The current Public Registry has no Approved activity 46 product
+  for a current installation.
+
+National coverage is 50 `estimate_available` plus 6
+`partial_estimate_available`, for 56 of 216 executable templates and 160 blocked
+or non-executable templates. The sealed coverage hash is
+`sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
+Certificate actions enabled remain 0.
+
+Every formula-dependent product must match the exact official VEU category,
+status and installation-date window. A current `Approved` row can qualify only
+inside its declared inclusive window. A historical `Legacy` row can qualify
+only inside its exact closed inclusive window. GEMS-only, fuzzy, current
+`Legacy` and out-of-window matches fail closed.
+
+The shared calculator is available to Creditex administrators and active
+verified installers. The trade-dashboard surface is estimate-only for quote and
+invoice preparation and cannot refresh the registry. The expanded working-tree
+formula set is not claimed live until the coordinator commits and deploys its
+exact source and completes signed-in administrator and trade QA.
+
+Remaining governed boundaries are exact:
+
+- Activity 14 has no matching registry rows;
+- Activity 28 has no governed connector or rows;
+- Activity 32 has no stable exact VEU-to-GEMS crosslink and must never use fuzzy
+  matching;
+- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 45 is closed;
+- Activity 47 is blocked pending lawful CEC, distribution-network and
+  installed-system evidence;
+- Activity 27's AEMO load-table alternative is not enabled;
+- the Part 34 J6 refurbishment branch fails closed; and
+- project-based activities remain project methods, not deemed calculators.
+
+The registry refresh has schema, row-count, source-status, effective-date,
+source-custody, freshness and reviewed count-decrease gates. The registry
+milestone and active production snapshot are deployed; this record does not
+claim that the next automatic scheduled production run has completed.
+
+## Prior trade document controls and Jobs release
+
+`TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` is a prior release. Exact application
 commit `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` preserves milestone 44 and
-completes the owner-scoped Jobs register and customer quote/invoice document
-contract. Additive migrations bring the packaged schema total to 124.
+completed the owner-scoped Jobs register and customer quote/invoice document
+contract. Additive migrations brought the packaged schema total to 124.
 
 The Jobs register uses one authoritative 23-column declaration for the visible
 headings, one direct cell per declared value, the column selector, all-field
@@ -1380,7 +1458,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 283 is:
+The current verified deployed topology for Sites version 293 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

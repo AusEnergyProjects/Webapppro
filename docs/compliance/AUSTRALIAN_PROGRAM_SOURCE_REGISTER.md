@@ -2,7 +2,7 @@
 
 Status: controlled discovery baseline, not an eligibility or calculation authority
 
-Reviewed: 8 August 2026
+Reviewed: 9 August 2026
 
 Owner: TLink compliance domain with independent source verification and Creditex operational review required before publication
 
@@ -40,18 +40,32 @@ Sources: [Creditex Trading](https://trading.creditex.com.au/), [Creditex certifi
 
 The NSW Government also names Creditex as the delivery partner for the coming Home Energy Saver household discounts. The discount rules, evidence payload and operating interface were not public on 8 August 2026, so that program must remain future and disabled. Sources: [Home Energy Saver](https://www.energy.nsw.gov.au/households/grants-rebates/home-energy-saver) and [NSW announcement naming Creditex](https://www.energy.nsw.gov.au/news/energy-savings-nsw-households-loans-and-discounts-help-families-lower-their-bills).
 
-## Working-tree calculator and registry status
+## Current calculator and registry status
 
-The current unreleased implementation covers 35 program pathways and 216
-activity templates. Exactly 33 templates expose a deterministic estimate and
-183 remain closed, future, not applicable, project-method-only, governed-formula
-or official-registry blocked. Certificate actions enabled remain 0. The sealed
-coverage hash is
-`sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1`.
-Active verified installers can open the same source-pinned estimate engine from
-the TLink trade dashboard for quote and invoice preparation. This grants no
-registry-refresh, certificate-creation, submission, trading or settlement
-authority.
+The controlled national catalogue covers 35 program pathways and 216 activity
+templates. The validated working-tree release candidate exposes 50
+`estimate_available` plus 6 `partial_estimate_available`, for 56 of 216
+executable templates, and keeps 160 blocked or non-executable. Certificate
+actions enabled remain 0. The sealed coverage hash is
+`sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
+
+Creditex administrators and active verified installers can use the same
+source-pinned calculator contract. The TLink trade dashboard surface is
+estimate-only for quote and invoice preparation and grants no registry-refresh,
+certificate-creation, submission, trading or settlement authority. The expanded
+VEU formula candidate is not claimed live until its exact source is committed,
+deployed and verified through signed-in production QA.
+
+The guarded VEU Public Registry foundation is released from exact commit
+`1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The active
+production snapshot contains exactly 75,492 Public Visible rows: 64,715
+`Approved` and 10,777 `Legacy`. The expanded working-tree catalogue contains 32
+VEU definitions, with 30 aggregate codes formula-ready. Twenty-seven expose an
+executable estimate path: 21 fully available aggregate families plus six
+enforced partial subsets. The fully available codes are `3`, `13`, `15`, `17`,
+`22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`, `41`,
+`42`, `43`, `44` and `48`. The partial codes are `1`, `6`, `31`, `33`, `34` and
+`46`. Codes `14`, `28` and `32` have governed formulas but remain source-gated.
 
 Current product evidence is deliberately split by authority and permission:
 
@@ -65,15 +79,19 @@ Current product evidence is deliberately split by authority and permission:
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and
-- the VEU public registry was audited at 64,715 approved and effective rows, but
-  its unsupported embedded Power BI interface is not treated as a production
+- the active VEU Public Registry projection contains exactly 75,492 Public
+  Visible rows: 64,715 `Approved` and 10,777 `Legacy`. Its embedded interface is
+  treated as a monitored official source, not represented as a supported public
   API.
 
-Both product registries retain exact source bytes, immutable manifests, one
-current snapshot and changed or removed historical deltas. Failed, stale,
-drifted, incomplete, overlapping or custody-invalid refreshes fail closed.
-Product-controlled formula values are derived server-side and cannot be
-replaced by caller-entered values.
+Automatic registry paths retain exact source bytes in content-addressed R2
+objects with immutable manifests. D1 stores indexed normalized projections,
+snapshot identity, source status, category and effective dates for fast search
+and server-side validation. Calculations query D1 and never download or parse a
+registry. A live 64 MB VEU acquisition, exact-byte R2 replay, validation and D1
+activation completed with all 75,492 rows. Failed, stale, drifted, incomplete,
+overlapping or custody-invalid refreshes fail closed. Product-controlled formula
+values are derived server-side and cannot be replaced by caller-entered values.
 
 ## Federal program register
 
@@ -208,13 +226,55 @@ at the registered rated capacity of the installed outdoor unit. From
 The scenario-specific 2.4 kW and 15 kW limits for scenarios (i) to (iv) still
 apply.
 
-The working tree implements and tests 15 VEU activity families across 40
-scenarios, including both Version 25 Part 6 date branches, and resolves all 719
-explicit Version 24 and Version 25 Table A postcode rows. Only Parts 22, 24 and
-25 using supported GEMS product evidence, plus Part 46 with no product registry,
-are currently exposed as estimates. Every VEU-registry-backed family remains
-fail-closed pending a supported, immutable machine extract and independent
-formula reconciliation.
+The working-tree release candidate contains 32 VEU catalogue definitions and
+resolves all 719 explicit Version 24 and Version 25 Table A postcode rows.
+Thirty aggregate activity codes are formula-ready. Twenty-seven expose an
+executable estimate path: 21 fully available aggregate families plus six
+enforced partial subsets. The fully available set is `3`, `13`, `15`, `17`,
+`22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`,
+`41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` have formulas but
+remain source-gated. These counts describe the validated release candidate, not
+a signed-in production-QA claim for the expanded formula release.
+
+The exact `partial_estimate_available` messages are:
+
+- `1`: Exact estimates are available for 1C small systems and supported 1D
+  systems. The 1C medium-system Bs/Be conflict between official sources remains
+  fail-closed.
+- `6`: Exact estimates are available for supported single-split systems.
+  Multi-split and packaged systems remain fail-closed until the installed
+  indoor/outdoor quantities and same-manufacturer evidence are represented
+  exactly.
+- `31`: Exact estimates are available for 31A motors selected from the
+  installation-date GEMS register. Activity 31B remains fail-closed until an
+  exact VEU-approved product contract is available.
+- `33`: Exact estimates are available for 33A products selected from the
+  installation-date VEU Public Registry. Activity 33B remains fail-closed
+  because the governed registry connector has no exact 33B product contract.
+- `34`: Exact estimates are available only for sites that are not required to
+  comply with Building Code Part J6. The Part J6 baseline branch remains
+  fail-closed.
+- `46`: Exact historical estimates require an installation-date-eligible Legacy
+  VEU product. The current Public Registry has no Approved activity 46 product
+  for a current installation.
+
+Every formula-dependent product must match the exact official VEU category,
+source status and effective installation-date window. A current `Approved` row
+can qualify only inside its declared inclusive window. A historical `Legacy`
+row can qualify only inside its exact closed inclusive window. GEMS-only, fuzzy,
+current `Legacy` and out-of-window matches fail closed.
+
+The remaining VEU boundaries are explicit:
+
+- Activity 14 has no matching registry rows, Activity 28 has no governed
+  connector or rows, and Activity 32 has no stable exact VEU-to-GEMS crosslink;
+  Activity 32 must never use fuzzy matching;
+- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 45 is closed, while Activity 47 is blocked pending lawful CEC,
+  distribution-network and installed-system evidence;
+- Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
+  refurbishment branch fails closed, and project-based activities remain project
+  methods rather than deemed calculators.
 
 Current deemed-activity inventory:
 
@@ -260,7 +320,7 @@ VEU also has current project-based Measurement and Verification and Benchmark Ra
 #### VEU source classes and retention status
 
 The source pack below was reviewed against official Victorian Government and
-Essential Services Commission sources on 2 August 2026. A URL, title or
+Essential Services Commission sources through 9 August 2026. A URL, title or
 effective date in this register is not evidence that TLink has retained or
 independently approved the exact bytes.
 
@@ -308,6 +368,25 @@ Dynamic official sources:
 These live sources require effective-dated snapshots or exports with source
 timestamps and fail-closed rechecks. A saved landing-page URL is not an
 authoritative participant, accreditation, suspension or product record.
+
+The public product source observed on 9 August 2026 contained exactly 75,492
+rows: 64,715 `Approved` and 10,777 `Legacy`. Product eligibility is determined
+for the installation date, not from a current-status label alone. A
+category-matched `Approved` row is eligible inside its inclusive declared
+effective window, with an open end accepted only while the row is current
+`Approved`. A historical `Legacy` row requires an exact nonblank end date and is
+eligible only inside its inclusive start and end dates. GEMS-only matches and
+out-of-window rows cannot establish VEU approval.
+
+The released importer retains exact official response bytes and custody metadata
+under content-addressed R2 keys, then writes indexed normalized current and
+historical projections to D1 for product search and server-side validation.
+Calculations query D1 only and never download or parse the Public Registry. A
+live 64 MB acquisition, exact-byte R2 replay, validation and D1 activation
+completed with all 75,492 rows. The guarded refresh uses schema, count,
+source-status, effective-date, custody, freshness and reviewed count-decrease
+checks before any replacement snapshot can activate. This register does not
+claim that the next automatic scheduled production run has completed.
 
 Unavailable provider-portal artefacts:
 
@@ -586,7 +665,7 @@ The inspected tenant exposed only a limited configured subset of activities, so 
 
 1. NSW Home Energy Saver discount guidelines, activity specification, evidence payload and Creditex operating interface are unpublished.
 2. Creditex, Dataforce and Runabout provider-owned field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification, and a connector specification is not a scheme rule.
-3. VEU and NSW TESSA do not expose supported public bulk product APIs. Production calculation needs supported immutable extracts with effective dates, statuses, schema controls and exact-byte custody.
+3. VEU and NSW TESSA do not expose supported public bulk product APIs. The released VEU importer treats the official embedded source as a monitored input with effective dates, statuses, schema and count guards, D1 indexed projections and exact-byte R2 custody; its 75,492-row production snapshot is active. NSW TESSA remains blocked pending a supported immutable extract and historical-rule contract.
 4. CEC commercial data reuse permission and supported suspension, delisting, recall, NETCC and SAA data boundaries are unresolved. CER-hosted CEC files remain controlled-manual until permission is recorded.
 5. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
 6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.

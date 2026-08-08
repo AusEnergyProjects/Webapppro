@@ -33,7 +33,7 @@ test("coverage accounts deterministically for all programs and activities", () =
   assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.activities, 216);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.coverageSha256,
-    "sha256:7b72a3203fac97b405210500edb541d79560e4aa1176f40eefa37de1f7945a7e",
+    "sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347",
   );
 });
 
@@ -41,11 +41,11 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
   const executable = CREDITEX_CALCULATION_COVERAGE.filter(
     (row) => row.estimateExecutable,
   );
-  assert.equal(executable.length, 29);
-  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 29);
+  assert.equal(executable.length, 56);
+  assert.equal(CREDITEX_CALCULATION_COVERAGE_SUMMARY.estimateExecutable, 56);
   assert.equal(
     CREDITEX_CALCULATION_COVERAGE_SUMMARY.blockedOrNonExecutable,
-    187,
+    160,
   );
   const localProgramCodes = new Set(
     CREDITEX_LOCAL_PROGRAM_DEFINITIONS.map((program) => program.programCode),
@@ -55,7 +55,7 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
     executable.filter((row) => localProgramCodes.has(row.programCode)).length,
     20,
   );
-  assert.equal(executable.filter((row) => row.programCode === "VEU").length, 0);
+  assert.equal(executable.filter((row) => row.programCode === "VEU").length, 27);
   assert.equal(
     executable.filter((row) => row.programCode === "NSW-ESS").length,
     3,
@@ -67,7 +67,9 @@ test("source-complete SRES, local, VEU and NSW formulas are executable", () => {
   assert.ok(
     executable.every(
       (row) =>
-        row.calculationState === "estimate_available"
+        ["estimate_available", "partial_estimate_available"].includes(
+          row.calculationState,
+        )
         && row.calculationPathway === "deterministic_local_estimate"
         && row.officialReconciliationRequired,
     ),
@@ -89,10 +91,11 @@ test("coverage never enables certificate action for any activity", () => {
     [
       { state: "activity_closed", count: 9 },
       { state: "activity_not_commenced", count: 8 },
-      { state: "estimate_available", count: 29 },
-      { state: "governed_formula_required", count: 105 },
+      { state: "estimate_available", count: 50 },
+      { state: "governed_formula_required", count: 88 },
       { state: "not_applicable", count: 27 },
-      { state: "official_registry_required", count: 36 },
+      { state: "official_registry_required", count: 26 },
+      { state: "partial_estimate_available", count: 6 },
       { state: "project_method_required", count: 2 },
     ],
   );

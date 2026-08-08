@@ -19,10 +19,11 @@ import {
 } from "./creditex-veu-calculator-catalogue.ts";
 import { officialProductKindsForLocalActivity } from "./creditex-official-product-registry.ts";
 
-export const CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON = "2026-08-02";
+export const CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON = "2026-08-09";
 
 export const CERTIFICATE_CALCULATION_STATES = [
   "estimate_available",
+  "partial_estimate_available",
   "governed_formula_required",
   "official_registry_required",
   "project_method_required",
@@ -296,10 +297,25 @@ function sresFormulaKey(activity: GovernmentActivityTemplate) {
 
 const VEU_FORMULA_READY_ACTIVITY_CODES = new Set([
   "1", "3", "6", "13", "14", "15", "17", "22", "24", "25", "26",
-  "46", "48",
+  "27", "28", "30", "31", "32", "33", "34", "35", "36",
+  "37", "38", "39", "40", "41", "42", "43", "44", "46", "48",
 ]);
 
-const VEU_EXECUTABLE_ACTIVITY_CODES = new Set<string>();
+const VEU_EXECUTABLE_ACTIVITY_CODES = new Set([
+  "1", "3", "6", "13", "15", "17", "22", "24", "25", "26",
+  "27", "30", "31", "33", "34", "35", "36",
+  "37", "38", "39", "40", "41", "42", "43",
+  "44", "46", "48",
+]);
+
+const VEU_PARTIAL_ESTIMATE_ACTIVITY_MESSAGES: Readonly<Record<string, string>> = {
+  "1": "Exact estimates are available for 1C small systems and supported 1D systems. The 1C medium-system Bs/Be conflict between official sources remains fail-closed.",
+  "6": "Exact estimates are available for supported single-split systems. Multi-split and packaged systems remain fail-closed until the installed indoor/outdoor quantities and same-manufacturer evidence are represented exactly.",
+  "31": "Exact estimates are available for 31A motors selected from the installation-date GEMS register. Activity 31B remains fail-closed until an exact VEU-approved product contract is available.",
+  "33": "Exact estimates are available for 33A products selected from the installation-date VEU Public Registry. Activity 33B remains fail-closed because the governed registry connector has no exact 33B product contract.",
+  "34": "Exact estimates are available only for sites that are not required to comply with Building Code Part J6. The Part J6 baseline branch remains fail-closed.",
+  "46": "Exact historical estimates require an installation-date-eligible Legacy VEU product. The current Public Registry has no Approved activity 46 product for a current installation.",
+};
 
 const NSW_EXECUTABLE_ACTIVITY_CODES = new Set([
   "HVAC1", "HVAC2", "RF2", "SYS2",
@@ -544,6 +560,9 @@ function methodForActivity(
       const executable = VEU_EXECUTABLE_ACTIVITY_CODES.has(
         activity.registryActivityCode,
       );
+      const partialMessage = VEU_PARTIAL_ESTIMATE_ACTIVITY_MESSAGES[
+        activity.registryActivityCode
+      ];
       return {
         activityTemplateId: activity.templateId,
         programCode: program.programCode,
@@ -553,7 +572,9 @@ function methodForActivity(
         outcomeClass: program.outcomeClass,
         unit: "VEEC",
         state: executable
-          ? "estimate_available"
+          ? partialMessage
+            ? "partial_estimate_available"
+            : "estimate_available"
           : "official_registry_required",
         pathway: executable
           ? "deterministic_local_estimate"
@@ -563,8 +584,10 @@ function methodForActivity(
         officialReconciliationRequired: true,
         certificateActionEnabled: false,
         operatorMessage: executable
-          ? "The governed formula and supported official product feed are connected for an estimate. Reconcile full activity evidence before any VEEC action."
-          : "The governed formula is implemented and tested. Calculation stays fail-closed until the current VEU approved-product registry is captured through a monitored immutable connector.",
+          ? partialMessage
+            ? `${partialMessage} Every supported estimate still requires full activity, installation and product evidence reconciliation before any VEEC action.`
+            : "The governed formula and every required official source are connected for an estimate. Reconcile full activity, installation and product evidence before any VEEC action."
+          : "The governed formula is implemented and tested. Calculation stays fail-closed until every formula-critical official source is captured through a monitored immutable connector.",
       };
     }
     return {

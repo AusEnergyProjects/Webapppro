@@ -50,10 +50,33 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 const CREDITEX_VEU_SOURCE_COMPLETE_ACTIVITY_CODES = new Set([
+  "1C",
+  "1D",
+  "3C",
+  "3D",
+  "6",
+  "13",
+  "15",
   "17",
   "22",
   "24",
   "25",
+  "26",
+  "27",
+  "30",
+  "31",
+  "33",
+  "34",
+  "35",
+  "36",
+  "37",
+  "38",
+  "39",
+  "40",
+  "41",
+  "42",
+  "43",
+  "44",
   "46",
   "48",
 ]);
@@ -297,6 +320,11 @@ function deriveVeuPostcodeInputs(
     for (const definition of activity.inputDefinitions) {
       if (definition.source !== "postcode_lookup") continue;
       if (definition.key === "geography") derived[definition.key] = resolution.geography;
+      if (definition.key === "gas_reticulation") {
+        derived[definition.key] = resolution.gasReticulated
+          ? "reticulated"
+          : "not_reticulated";
+      }
       if (definition.key === "climate_zone") derived[definition.key] = resolution.climateZone;
       if (definition.key === "climatic_region") derived[definition.key] = resolution.climateRegion;
       if (definition.key === "location_class") derived[definition.key] = resolution.locationClass;
@@ -374,6 +402,49 @@ function deriveVeuProductEvidence(
     );
   }
   const selection = selections[0];
+  if (
+    activityCode === "31"
+    && selection.registryCode === "gems-products"
+    && selection.productKind === "electric_motor"
+  ) {
+    if (selection.approvalStatus !== "approved") {
+      return veuEvidenceFailure(
+        activityCode,
+        "does not prove a current GEMS motor registration on the installation date",
+      );
+    }
+    if (!EXACT_DATE_PATTERN.test(selection.eligibleFrom)) {
+      return veuEvidenceFailure(
+        activityCode,
+        "has no exact GEMS registration effective-from date",
+      );
+    }
+    if (selection.eligibleTo && !EXACT_DATE_PATTERN.test(selection.eligibleTo)) {
+      return veuEvidenceFailure(
+        activityCode,
+        "has an invalid GEMS registration effective-to date",
+      );
+    }
+    if (!SHA256_PATTERN.test(selection.sourceSha256)) {
+      return veuEvidenceFailure(
+        activityCode,
+        "has no exact GEMS source snapshot SHA-256",
+      );
+    }
+    return {
+      registry: "GEMS",
+      activityCategory: "electric_motor",
+      productId: exactVeuEvidenceText(
+        selection.registrationNumber || selection.sourceRecordKey,
+        activityCode,
+        "GEMS registration number",
+      ),
+      status: "Registered",
+      effectiveFrom: selection.eligibleFrom,
+      effectiveTo: selection.eligibleTo,
+      sourceSnapshotHash: `sha256:${selection.sourceSha256}`,
+    };
+  }
   if (selection.registryCode !== "veu-approved-products") {
     return veuEvidenceFailure(
       activityCode,
@@ -499,7 +570,27 @@ export async function POST(request: Request) {
       const postcodeRequired = activity.inputDefinitions.some(
         (definition) => definition.source === "postcode_lookup",
       );
-      const requiredKinds = officialProductKindsForVeuActivity(activityCode);
+      const requestInputs = inputRecord(raw.inputs);
+      const selectedScenario = typeof requestInputs.scenario === "string"
+        ? requestInputs.scenario
+        : undefined;
+      if (
+        selectedScenario
+        && "internalExecutableScenarios" in activity
+        && (
+          activity.internalExecutableScenarios as readonly string[]
+        ).includes(selectedScenario)
+      ) {
+        throw new CreditexVeuEstimateError(
+          "VEU_INPUT_INVALID",
+          `Scenario ${selectedScenario} is not available for VEU activity ${activityCode} in the released source contract.`,
+          400,
+        );
+      }
+      const requiredKinds = officialProductKindsForVeuActivity(
+        activityCode,
+        selectedScenario,
+      );
       const requestKeys = [
         "programCode",
         "activityCode",
@@ -515,15 +606,24 @@ export async function POST(request: Request) {
       );
       const postcodeDerivedInputs = deriveVeuPostcodeInputs(
         activity,
-        inputRecord(raw.inputs),
+        requestInputs,
         raw.postcode,
         raw.effectiveDate,
       );
-      if (requiredKinds.length !== 1) {
+      if (requiredKinds.length > 1) {
         return veuEvidenceFailure(
           activityCode,
-          "does not have one source-complete activity product contract",
+          "does not yet have a source-complete multi-product contract",
         );
+      }
+      if (requiredKinds.length === 0) {
+        const estimate = estimateCreditexVeu({
+          activityCode,
+          installationDate: raw.effectiveDate,
+          inputs: postcodeDerivedInputs,
+          product: undefined,
+        });
+        return json({ ok: true, estimate });
       }
       const productValidation = await validateOfficialProductSelections(
         database,

@@ -3514,9 +3514,10 @@ export function CreditexVeuPilotWorkspace({
               Every controlled activity has one explicit calculation path.
               Source-pinned estimates are available for supported SRES,
               Queensland, Western Australian, Tasmanian and Northern Territory
-              pathways. VEU, NSW and other governed schemes stay blocked
-              wherever an effective rule, lookup or independently approved
-              formula remains unresolved.
+              pathways and for the exact supported VEU and NSW scenarios.
+              Partially supported families are labelled separately, and every
+              unresolved rule, product source or installation branch stays
+              fail-closed.
             </p>
           </div>
           <section className={styles.calculatorSummary}>
@@ -3538,10 +3539,14 @@ export function CreditexVeuPilotWorkspace({
               <span>Executable estimates</span>
               <strong>
                 {calculationReadiness?.coverage.estimateExecutable
-                  ?? GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
-                    (summary) => summary.state === "estimate_available",
-                  )?.count
-                  ?? 0}
+                  ?? (
+                    (GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
+                      (summary) => summary.state === "estimate_available",
+                    )?.count || 0)
+                    + (GOVERNMENT_CALCULATION_METHOD_SUMMARY.find(
+                      (summary) => summary.state === "partial_estimate_available",
+                    )?.count || 0)
+                  )}
               </strong>
             </article>
             <article>

@@ -2089,6 +2089,11 @@
   color: #8af0d8;
 }
 
+.methodRows article > b[data-state="partial_estimate_available"] {
+  background: rgba(214, 180, 109, 0.2);
+  color: #f3d28a;
+}
+
 .methodRows article > b[data-state="not_applicable"] {
   background: rgba(148, 172, 181, 0.13);
   color: #b9cdd3;

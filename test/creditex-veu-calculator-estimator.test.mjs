@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   CREDITEX_VEU_ACTIVITY_DEFINITIONS,
-  CREDITEX_VEU_DEFERRED_ACTIVITIES,
 } from "../src/lib/creditex-veu-calculator-catalogue.ts";
 import {
   CreditexVeuEstimateError,
@@ -39,9 +38,30 @@ function estimate(activityCode, inputs, productEvidence, installationDate = "202
   return estimateCreditexVeu(request);
 }
 
-function part6Inputs(overrides = {}) {
+function waterHeaterEligibility(heatPump, overrides = {}) {
   return {
-    scenario: "xi",
+    premises: "residential",
+    incumbent_scenario_requirements_confirmed: "yes",
+    residential_consumer_fact_sheet_provided: "yes",
+    residential_suitability_and_sizing_advice_confirmed: "yes",
+    no_additional_inline_storage_or_system_confirmed: "yes",
+    decommissioning_and_disposal_confirmed: "yes",
+    co_payment_per_installed_product_aud: "200",
+    ...(heatPump
+      ? {
+          refrigerant_gwp: "675",
+          warranty_years: "5",
+          warranty_requirements_confirmed: "yes",
+        }
+      : {}),
+    ...overrides,
+  };
+}
+
+function part6Inputs(overrides = {}) {
+  const scenario = overrides.scenario ?? "xi";
+  return {
+    scenario,
     category: "6D",
     premises: "residential",
     location_class: "metro_mild",
@@ -54,6 +74,17 @@ function part6Inputs(overrides = {}) {
     tcspf_cold_eligibility: "5.4",
     refrigerant_gwp: "675",
     performance_basis: "gems",
+    ...(scenario === "xi"
+      ? {}
+      : {
+          incumbent_scenario_requirements_confirmed: "yes",
+          decommissioning_and_disposal_confirmed: "yes",
+        }),
+    residential_consumer_fact_sheet_provided: "yes",
+    residential_suitability_and_sizing_advice_confirmed: "yes",
+    warranty_years: "5",
+    warranty_requirements_confirmed: "yes",
+    co_payment_per_installed_product_aud: "3000",
     ...overrides,
   };
 }
@@ -65,6 +96,7 @@ const DEFAULT_VECTORS = [
     climate_zone: "4",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(false),
   }, product("VEU", "1C")],
   ["1D", {
     geography: "metropolitan",
@@ -72,16 +104,19 @@ const DEFAULT_VECTORS = [
     climate_zone: "5",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(true),
   }, product("VEU", "1D")],
   ["3C", {
     climate_zone: "5",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(true),
   }, product("VEU", "3C")],
   ["3D", {
     climate_zone: "4",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(false),
   }, product("VEU", "3D")],
   ["6", part6Inputs(), product("VEU", "6D")],
   ["13", {
@@ -134,18 +169,60 @@ function defaultsFromCatalogue(activity) {
   return defaults;
 }
 
-test("the bounded catalogue declares one executable default vector per activity", () => {
-  assert.equal(CREDITEX_VEU_ACTIVITY_DEFINITIONS.length, DEFAULT_VECTORS.length);
+function defaultEvidenceFromCatalogue(activityCode, inputs) {
+  if (["37", "38", "39", "40", "41", "42", "43"].includes(activityCode)) {
+    return undefined;
+  }
+  if (activityCode === "31") return product("GEMS", "electric_motor");
+  if (activityCode === "32") return product("GEMS", "commercial_refrigerator");
+  if (activityCode === "6") return product("VEU", inputs.category);
+  if (["15", "22", "24", "25", "27", "28", "30", "33", "34", "35", "46"].includes(activityCode)) {
+    return product("VEU", inputs.scenario);
+  }
+  const category = {
+    "13": "13A",
+    "14": "14A",
+    "17": "17A",
+    "26": "26A",
+    "36": "36A",
+    "44": "44A",
+    "48": "48A",
+  }[activityCode] || activityCode;
+  return product("VEU", category);
+}
+
+function governedEligibleInputs(activityCode, defaultInputs) {
+  if (["1C", "1D", "3C", "3D"].includes(activityCode)) {
+    return {
+      ...defaultInputs,
+      ...waterHeaterEligibility(activityCode === "1D" || activityCode === "3C"),
+    };
+  }
+  if (activityCode === "6") {
+    return {
+      ...defaultInputs,
+      residential_consumer_fact_sheet_provided: "yes",
+      residential_suitability_and_sizing_advice_confirmed: "yes",
+      warranty_years: "5",
+      warranty_requirements_confirmed: "yes",
+      co_payment_per_installed_product_aud: "3000",
+    };
+  }
+  return defaultInputs;
+}
+
+test("the bounded catalogue declares one governed executable vector per activity and keeps eligibility confirmations fail-closed by default", () => {
   assert.equal(
     new Set(CREDITEX_VEU_ACTIVITY_DEFINITIONS.map((activity) => activity.activityCode)).size,
     CREDITEX_VEU_ACTIVITY_DEFINITIONS.length,
   );
-  assert.ok(CREDITEX_VEU_DEFERRED_ACTIVITIES.some((activity) => activity.activityCode === "44"));
 
-  for (const [activityCode, inputs, evidence] of DEFAULT_VECTORS) {
-    const activity = CREDITEX_VEU_ACTIVITY_DEFINITIONS.find((candidate) => candidate.activityCode === activityCode);
-    assert.ok(activity);
-    assert.deepEqual(defaultsFromCatalogue(activity), inputs);
+  for (const activity of CREDITEX_VEU_ACTIVITY_DEFINITIONS) {
+    const activityCode = activity.activityCode;
+    const defaultInputs = defaultsFromCatalogue(activity);
+    const inputs = governedEligibleInputs(activityCode, defaultInputs);
+    const evidence = defaultEvidenceFromCatalogue(activityCode, inputs);
+    assert.deepEqual(defaultsFromCatalogue(activity), defaultInputs);
     assert.ok(activity.inputDefinitions.length > 0);
     for (const definition of activity.inputDefinitions) {
       assert.ok(definition.help.length > 20);
@@ -158,12 +235,29 @@ test("the bounded catalogue declares one executable default vector per activity"
         assert.ok(definition.step);
       }
     }
+    if (["1C", "1D", "3C", "3D", "6"].includes(activityCode)) {
+      assert.throws(
+        () => estimate(activityCode, defaultInputs, evidence),
+        (error) => error instanceof CreditexVeuEstimateError
+          && error.code === "VEU_SYSTEM_INELIGIBLE",
+      );
+    }
     const result = estimate(activityCode, inputs, evidence);
     assert.equal(result.activityCode, activityCode);
     assert.equal(result.certificateActionEnabled, false);
     assert.ok(result.trace.length > 0);
     assert.match(result.receiptHash, /^sha256:[a-f0-9]{64}$/);
   }
+});
+
+test("the released Part 31 catalogue exposes only the exact GEMS-backed 31A pathway", () => {
+  const part31 = CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(({ activityCode }) => activityCode === "31");
+  assert.ok(part31);
+  assert.deepEqual(part31.scenarios, ["31A"]);
+  assert.equal(part31.productRegistry, "GEMS");
+  const scenario = part31.inputDefinitions.find(({ key }) => key === "scenario");
+  assert.deepEqual(scenario.options.map(({ value }) => value), ["31A"]);
+  assert.match(scenario.help, /31B VEU pathway remains hidden/i);
 });
 
 test("Parts 1 and 3 use the official factors with exact product Bs and Be inputs", () => {
@@ -182,6 +276,40 @@ test("Parts 1 and 3 use the official factors with exact product Bs and Be inputs
     assert.equal(result.output.unroundedTonnes, "9.95238");
     assert.equal(result.output.wholeCertificates, "10");
   }
+});
+
+test("Parts 1 and 3 fail closed on every supported quote and installation eligibility gate", () => {
+  const part1dInputs = DEFAULT_VECTORS[1][1];
+  const evidence = DEFAULT_VECTORS[1][2];
+  const ineligible = [
+    [{ incumbent_scenario_requirements_confirmed: "no" }, /incumbent water heater/i],
+    [{ residential_consumer_fact_sheet_provided: "no" }, /consumer fact sheet/i],
+    [{ residential_suitability_and_sizing_advice_confirmed: "no" }, /fit-for-purpose information/i],
+    [{ no_additional_inline_storage_or_system_confirmed: "no" }, /manifold system/i],
+    [{ decommissioning_and_disposal_confirmed: "no" }, /incapable of reuse/i],
+    [{ co_payment_per_installed_product_aud: "199.99" }, /minimum co-payment of \$200/i],
+    [{ refrigerant_gwp: "700" }, /refrigerant GWP below 700/i],
+    [{ warranty_years: "4.99" }, /at least five years/i],
+    [{ warranty_requirements_confirmed: "no" }, /Australian warranty contact/i],
+  ];
+  for (const [override, pattern] of ineligible) {
+    assert.throws(
+      () => estimate("1D", { ...part1dInputs, ...override }, evidence),
+      (error) => error instanceof CreditexVeuEstimateError
+        && error.code === "VEU_SYSTEM_INELIGIBLE"
+        && pattern.test(error.message),
+    );
+  }
+
+  const business = estimate("3D", {
+    ...DEFAULT_VECTORS[3][1],
+    premises: "business",
+    residential_consumer_fact_sheet_provided: undefined,
+    residential_suitability_and_sizing_advice_confirmed: undefined,
+  }, DEFAULT_VECTORS[3][2]);
+  assert.equal(business.inputSnapshot.premises, "business");
+  assert.equal(business.inputSnapshot.residentialConsumerFactSheetProvided, null);
+  assert.equal(business.inputSnapshot.residentialSuitabilityAndSizingAdviceConfirmed, null);
 });
 
 test("Part 6 executes every incumbent scenario from exact approved-product performance inputs", () => {
@@ -223,10 +351,58 @@ test("Part 6 selects v24, the v25 transition, and the 30 September revision by i
   assert.equal(transition.specificationVersion, "25.0");
   assert.equal(transition.formulaProfile, "veu-v25-part6-transition-pre-2026-09-30");
   assert.equal(beforeRevision.inputSnapshot.governedCoolingCapacityKw, "24/1");
+  assert.equal(beforeRevision.inputSnapshot.minimumCoPaymentAud, "1000/1");
+  assert.equal(beforeRevision.inputSnapshot.coPaymentRule, "v24-and-v25-through-2026-09-29");
   assert.equal(revised.formulaProfile, "veu-v25-part6-from-2026-09-30");
   assert.equal(revised.inputSnapshot.governedHeatingCapacityKw, "20/1");
   assert.equal(revised.inputSnapshot.governedCoolingCapacityKw, "20/1");
+  assert.equal(revised.inputSnapshot.minimumCoPaymentAud, "3000/1");
+  assert.equal(revised.inputSnapshot.coPaymentRule, "v25-multi-split-from-2026-09-30");
   assert.notEqual(beforeRevision.output.exactFraction, revised.output.exactFraction);
+});
+
+test("Part 6 enforces site evidence, residential duties and exact dated co-payment categories", () => {
+  const incumbent = part6Inputs({ scenario: "i" });
+  const gates = [
+    [{ incumbent_scenario_requirements_confirmed: "no" }, /Table 6\.1 incumbent-equipment/i],
+    [{ decommissioning_and_disposal_confirmed: "no" }, /refrigerant to be lawfully disposed/i],
+    [{ residential_consumer_fact_sheet_provided: "no" }, /Consumer Fact Sheet/i],
+    [{ residential_suitability_and_sizing_advice_confirmed: "no" }, /fit-for-purpose information/i],
+    [{ warranty_years: "4.99" }, /at least five years/i],
+    [{ warranty_requirements_confirmed: "no" }, /Australian warranty contact/i],
+    [{ refrigerant_gwp: "700" }, /GWP below 700/i],
+  ];
+  for (const [override, pattern] of gates) {
+    assert.throws(
+      () => estimate("6", { ...incumbent, ...override }, product("VEU", "6D")),
+      (error) => error instanceof CreditexVeuEstimateError
+        && error.code === "VEU_SYSTEM_INELIGIBLE"
+        && pattern.test(error.message),
+    );
+  }
+
+  assert.throws(
+    () => estimate("6", part6Inputs({ co_payment_per_installed_product_aud: "199.99" }), product("VEU", "6D"), "2026-09-29"),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE"
+      && /minimum co-payment of \$200/i.test(error.message),
+  );
+
+  const ductedAfterRevision = estimate("6", part6Inputs({
+    category: "6A",
+    co_payment_per_installed_product_aud: "3000",
+  }), product("VEU", "6A"), "2026-09-30");
+  assert.equal(ductedAfterRevision.inputSnapshot.minimumCoPaymentAud, "3000/1");
+  assert.equal(ductedAfterRevision.inputSnapshot.coPaymentRule, "v25-ducted-from-2026-09-30");
+
+  const nonDuctedAfterRevision = estimate("6", part6Inputs({
+    category: "6F",
+    rated_heating_capacity_kw: "10",
+    rated_cooling_capacity_kw: "10",
+    co_payment_per_installed_product_aud: "1000",
+  }), product("VEU", "6F"), "2026-09-30");
+  assert.equal(nonDuctedAfterRevision.inputSnapshot.minimumCoPaymentAud, "1000/1");
+  assert.equal(nonDuctedAfterRevision.inputSnapshot.coPaymentRule, "v25-other-non-ducted-from-2026-09-30");
 });
 
 test("Parts 13, 14, 17, 26 and 48 preserve governed tables and exact arithmetic", () => {
@@ -387,7 +563,7 @@ test("unsupported dates, activities and extra fields fail closed", () => {
   );
   assert.throws(
     () => estimateCreditexVeu({
-      activityCode: "44",
+      activityCode: "47",
       installationDate: "2026-08-08",
       inputs: {},
     }),

@@ -420,6 +420,66 @@ function officialText(
   return value.trim();
 }
 
+function officialBoolean(
+  selection: CreditexFormulaProductSelection,
+  key: string,
+  label: string,
+) {
+  const value = selection.attributes[key];
+  if (typeof value !== "boolean") {
+    return officialProductFailure(
+      `The selected ${officialProductKindLabel(selection.productKind)} does not publish ${label}. Choose another current product or refresh the official source.`,
+    );
+  }
+  return value;
+}
+
+const SIMPLE_LIGHTING_CONTROL_PROFILES = new Set([
+  "none",
+  "occupancy_1_to_2",
+  "occupancy_3_to_6",
+  "occupancy_more_than_6",
+  "programmable_dimmer",
+  "occupancy_1_to_2_and_programmable_dimmer",
+  "occupancy_3_to_6_and_programmable_dimmer",
+  "occupancy_more_than_6_and_programmable_dimmer",
+]);
+
+function exactSimpleLightingControlProfile(
+  selection: CreditexFormulaProductSelection,
+  callerValue: unknown,
+) {
+  if (
+    typeof callerValue !== "string"
+    || !SIMPLE_LIGHTING_CONTROL_PROFILES.has(callerValue)
+  ) {
+    return officialProductFailure(
+      "Select the exact installed occupancy-sensor coverage and programmable-dimmer configuration for the approved lighting product.",
+    );
+  }
+  const sourceOccupancy = officialBoolean(
+    selection,
+    "occupancySensor",
+    "an exact occupancy-sensor flag",
+  );
+  const sourceProgrammable = officialBoolean(
+    selection,
+    "programmableDimmer",
+    "an exact programmable-dimmer flag",
+  );
+  const selectedOccupancy = callerValue.startsWith("occupancy_");
+  const selectedProgrammable = callerValue.includes("programmable_dimmer");
+  if (
+    sourceOccupancy !== selectedOccupancy
+    || sourceProgrammable !== selectedProgrammable
+  ) {
+    return officialProductFailure(
+      `The selected lighting control profile does not match the approved product flags (occupancy sensor ${sourceOccupancy ? "yes" : "no"}; programmable dimmer ${sourceProgrammable ? "yes" : "no"}). Select the exact installed occupancy coverage without changing the approved control capabilities.`,
+    );
+  }
+  return callerValue;
+}
+
 function officialClass(selection: CreditexFormulaProductSelection) {
   const value = officialText(selection, "sourceProductClass", "a GEMS product class");
   const match = /^Class\s+(\d+)$/.exec(value);
@@ -688,6 +748,521 @@ export function deriveCreditexVeuOfficialProductInputs(
   selections: readonly CreditexFormulaProductSelection[],
 ) {
   const inputs = { ...callerInputs };
+  if (["1C", "1D", "3C", "3D"].includes(activityCode)) {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_water_heater");
+    const sourceSize = officialText(
+      selection,
+      "veuSystemSize",
+      "an exact VEU system size",
+    );
+    const systemSize = sourceSize === "Small"
+      ? "small"
+      : sourceSize === "Medium"
+        ? "medium"
+        : officialProductFailure(
+          `The selected VEU-approved water heater publishes unsupported system size ${JSON.stringify(sourceSize)}.`,
+        );
+    const climateZone = inputs.climate_zone;
+    if (climateZone !== "4" && climateZone !== "5") {
+      return officialProductFailure(
+        "Resolve the exact VEU climate zone from the installation postcode before selecting water-heater model data.",
+      );
+    }
+    if ((activityCode === "1C" || activityCode === "3D") && climateZone !== "4") {
+      return officialProductFailure(
+        `VEU activity ${activityCode} uses only the approved model's climate-zone 4 values.`,
+      );
+    }
+    if (activityCode === "1C" && systemSize === "medium") {
+      return officialProductFailure(
+        "VEU activity 1C medium is disabled because Specification v25 Table 1.4 and the ESC product application guide conflict on the required Be2021 load. Small 1C systems remain available.",
+      );
+    }
+    if ((activityCode === "3C" || activityCode === "3D") && systemSize !== "medium") {
+      return officialProductFailure(
+        `VEU activity ${activityCode} is defined only for a medium system; the selected product is ${sourceSize}.`,
+      );
+    }
+    const annualEnergySavings = officialNumber(
+      selection,
+      `zone${climateZone}AnnualEnergySavings`,
+      `zone ${climateZone} annual energy savings`,
+      { allowZero: true },
+    );
+    if (annualEnergySavings < 60) {
+      return officialProductFailure(
+        `The selected water heater records ${annualEnergySavings}% annual energy savings in climate zone ${climateZone}; VEU activity ${activityCode} requires at least 60%.`,
+      );
+    }
+    const prefix = `bs2021Zone${climateZone}StepDownLoadGjPerYear`;
+    const bePrefix = `be2021Zone${climateZone}StepDownLoadGjPerYear`;
+    setOfficialNumber(
+      inputs,
+      "bs2021_gj_per_year",
+      officialNumber(selection, prefix, `zone ${climateZone} step-down Bs2021`, {
+        allowZero: true,
+      }),
+    );
+    setOfficialNumber(
+      inputs,
+      "be2021_gj_per_year",
+      officialNumber(selection, bePrefix, `zone ${climateZone} step-down Be2021`, {
+        allowZero: true,
+      }),
+    );
+    if (activityCode === "1C" || activityCode === "1D") {
+      inputs.system_size = systemSize;
+    }
+    return inputs;
+  }
+  if (activityCode === "6") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_air_conditioner");
+    const category = officialText(
+      selection,
+      "veuProductCategoryNumber",
+      "an exact VEU product category number",
+    );
+    const sourceConfiguration = officialText(
+      selection,
+      "veuProductConfiguration",
+      "an exact VEU product configuration",
+    );
+    const configurationClass = officialText(
+      selection,
+      "veuProductConfigurationClass",
+      "a governed VEU product configuration class",
+    );
+    if (configurationClass !== "single") {
+      return officialProductFailure(
+        `The selected VEU air conditioner is ${sourceConfiguration}. Multi-split and packaged systems require a governed indoor/outdoor unit selection contract; choose an approved Single system.`,
+      );
+    }
+    const premises = inputs.premises;
+    if (premises !== "residential" && premises !== "business") {
+      return officialProductFailure(
+        "Select the governed residential or business premises type before resolving approved seasonal-performance data.",
+      );
+    }
+    const locationClass = inputs.location_class;
+    if (
+      typeof locationClass !== "string"
+      || ![
+        "metro_mild",
+        "metro_cold",
+        "regional_mild",
+        "regional_cold",
+        "regional_hot",
+      ].includes(locationClass)
+    ) {
+      return officialProductFailure(
+        "Resolve the exact VEU climatic location from the installation postcode before selecting seasonal-performance data.",
+      );
+    }
+    const premisesSuffix = premises === "residential" ? "Residential" : "Commercial";
+    const metric = (
+      measure: "Hspf" | "Tcspf",
+      climate: "Cold" | "Mixed",
+    ) => {
+      const gems = optionalPositiveNumber(
+        selection,
+        `gems${measure}${climate}${premisesSuffix}`,
+      );
+      if (gems !== null) return { value: gems, basis: "gems" as const };
+      const calculated = optionalPositiveNumber(
+        selection,
+        `calculated${measure}${climate}${premisesSuffix}`,
+      );
+      if (calculated !== null) {
+        return { value: calculated, basis: "calculated" as const };
+      }
+      return officialProductFailure(
+        `The selected VEU-approved air conditioner publishes neither a positive GEMS nor calculated ${measure.toUpperCase()} for ${climate.toLowerCase()} ${premises} use.`,
+      );
+    };
+    const applicableClimate = locationClass === "regional_hot" ? "Mixed" : "Cold";
+    const applicableHspf = metric("Hspf", applicableClimate);
+    const applicableTcspf = metric("Tcspf", applicableClimate);
+    const coldHspf = metric("Hspf", "Cold");
+    const coldTcspf = metric("Tcspf", "Cold");
+    const bases = new Set([
+      applicableHspf.basis,
+      applicableTcspf.basis,
+      coldHspf.basis,
+      coldTcspf.basis,
+    ]);
+    const refrigerant = officialText(
+      selection,
+      "refrigerantType",
+      "an exact refrigerant type",
+    );
+    const refrigerantGwp = refrigerant === "R-32"
+      ? 675
+      : refrigerant === "R-410A"
+        ? 2088
+        : officialProductFailure(
+          `The selected VEU-approved air conditioner uses unsupported refrigerant ${JSON.stringify(refrigerant)}.`,
+        );
+    inputs.category = category;
+    inputs.configuration = "single";
+    setOfficialNumber(
+      inputs,
+      "rated_heating_capacity_kw",
+      officialNumber(selection, "ratedHeatingCapacityKw", "rated heating capacity"),
+    );
+    setOfficialNumber(
+      inputs,
+      "rated_cooling_capacity_kw",
+      officialNumber(selection, "ratedCoolingCapacityKw", "rated cooling capacity"),
+    );
+    setOfficialNumber(inputs, "hspf_upgrade", applicableHspf.value);
+    setOfficialNumber(inputs, "tcspf_upgrade", applicableTcspf.value);
+    setOfficialNumber(inputs, "hspf_cold_eligibility", coldHspf.value);
+    setOfficialNumber(inputs, "tcspf_cold_eligibility", coldTcspf.value);
+    setOfficialNumber(inputs, "refrigerant_gwp", refrigerantGwp);
+    inputs.performance_basis = bases.size === 1
+      ? bases.has("gems") ? "gems" : "calculated_from_acop_aeer"
+      : "mixed_gems_and_calculated";
+    delete inputs.outdoor_heating_capacity_kw;
+    delete inputs.outdoor_cooling_capacity_kw;
+    delete inputs.same_oem_confirmed;
+    return inputs;
+  }
+  if (activityCode === "13") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_double_glazing");
+    setOfficialNumber(
+      inputs,
+      "wers_heating_stars",
+      officialNumber(selection, "wersHeatingStars", "WERS heating star rating"),
+    );
+    return inputs;
+  }
+  if (activityCode === "14") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    return officialProductFailure(
+      "No current or Legacy Part 14 row exists in the reviewed VEU Public Registry, so its product-type vocabulary cannot yet be normalized safely.",
+    );
+  }
+  if (activityCode === "15") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_weather_sealing");
+    const scenario = officialText(
+      selection,
+      "veuProductCategoryNumber",
+      "an exact VEU product category number",
+    );
+    inputs.scenario = scenario;
+    if (scenario === "15F" || scenario === "15G") {
+      delete inputs.warranty_years;
+    } else {
+      setOfficialNumber(
+        inputs,
+        "warranty_years",
+        officialNumber(selection, "warrantyYears", "product warranty period"),
+      );
+    }
+    return inputs;
+  }
+  if (activityCode === "26") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_pool_pump");
+    setOfficialNumber(
+      inputs,
+      "paec_kwh_per_year",
+      officialNumber(
+        selection,
+        "paecKwhPerYear",
+        "projected annual energy consumption",
+      ),
+    );
+    return inputs;
+  }
+  if (activityCode === "27" || activityCode === "35") {
+    const scenario = inputs.scenario;
+    if (typeof scenario !== "string" || !scenario.startsWith(activityCode)) {
+      return officialProductFailure(
+        `Select the exact VEU Part ${activityCode} scenario before resolving approved-product evidence.`,
+      );
+    }
+    assertCreditexVeuOfficialProductSelections(activityCode, selections, scenario);
+    if (
+      (activityCode === "27" && scenario === "27C")
+      || (activityCode === "35" && (scenario === "35C" || scenario === "35D"))
+    ) {
+      return inputs;
+    }
+    const selection = selectedProduct(
+      selections,
+      activityCode === "27"
+        ? "veu_activity_27_product"
+        : "veu_activity_35_product",
+    );
+    inputs.approved_upgrade_control_profile = exactSimpleLightingControlProfile(
+      selection,
+      inputs.approved_upgrade_control_profile,
+    );
+    if (scenario === "27B") {
+      setOfficialNumber(
+        inputs,
+        "approved_upgrade_lcp_w",
+        officialNumber(
+          selection,
+          "victorianLampCircuitPowerW",
+          "Victorian-load lamp circuit power",
+        ),
+      );
+    }
+    if (scenario === "35B") {
+      setOfficialNumber(
+        inputs,
+        "approved_upgrade_lcp_w",
+        officialNumber(selection, "lampCircuitPowerW", "lamp circuit power"),
+      );
+      const ratedLifetime = optionalPositiveNumber(
+        selection,
+        "reportedLifetimeL70Hours",
+      );
+      if (ratedLifetime !== null) {
+        setOfficialNumber(inputs, "upgrade_rated_lifetime_hours", ratedLifetime);
+      } else if (inputs.replacement_method === "retrofit") {
+        return officialProductFailure(
+          "The selected VEU Part 35 retrofit product does not publish a positive L70 lifetime.",
+        );
+      }
+    }
+    return inputs;
+  }
+  if (activityCode === "34") {
+    const scenario = inputs.scenario;
+    if (typeof scenario !== "string" || !scenario.startsWith("34")) {
+      return officialProductFailure(
+        "Select the exact VEU Part 34 scenario before resolving approved-product evidence.",
+      );
+    }
+    assertCreditexVeuOfficialProductSelections(activityCode, selections, scenario);
+    if (scenario === "34D" || scenario === "34E") return inputs;
+    const selection = selectedProduct(selections, "veu_commercial_lighting");
+    const occupancy = officialBoolean(
+      selection,
+      "occupancySensor",
+      "an exact occupancy-sensor flag",
+    );
+    const occupancyScope = inputs.approved_upgrade_occupancy_sensor_scope;
+    if (occupancy) {
+      if (
+        occupancyScope !== "one_to_two_luminaires"
+        && occupancyScope !== "three_to_six_luminaires"
+        && occupancyScope !== "more_than_six_luminaires"
+      ) {
+        return officialProductFailure(
+          "The approved Part 34 product includes an occupancy sensor. Select the evidenced number of luminaires controlled by each installed sensor.",
+        );
+      }
+    } else {
+      inputs.approved_upgrade_occupancy_sensor_scope = "none";
+    }
+    for (const [inputKey, attributeKey, label] of [
+      ["approved_upgrade_daylight_linked_control", "daylightLinkedControl", "daylight-linked control"],
+      ["approved_upgrade_programmable_dimmer", "programmableDimmer", "programmable dimmer"],
+      ["approved_upgrade_manual_dimmer", "manualDimmer", "manual dimmer"],
+      ["approved_upgrade_voltage_reduction_unit", "voltageReductionUnit", "voltage reduction unit"],
+    ] as const) {
+      inputs[inputKey] = officialBoolean(selection, attributeKey, `an exact ${label} flag`)
+        ? "yes"
+        : "no";
+    }
+    if (scenario === "34B") {
+      setOfficialNumber(
+        inputs,
+        "approved_upgrade_voltage_reduction_unit_output_v",
+        officialNumber(
+          selection,
+          "voltageReductionUnitOutputV",
+          "voltage-reduction-unit output voltage",
+        ),
+      );
+    } else {
+      delete inputs.approved_upgrade_voltage_reduction_unit_output_v;
+    }
+    if (scenario === "34C") {
+      const approvedLcp = optionalPositiveNumber(selection, "lampCircuitPowerW")
+        ?? optionalPositiveNumber(selection, "nominalLampPowerW");
+      if (approvedLcp === null) {
+        return officialProductFailure(
+          "The selected VEU Part 34C product publishes neither a positive lamp circuit power nor nominal lamp power.",
+        );
+      }
+      setOfficialNumber(inputs, "approved_upgrade_lcp_w", approvedLcp);
+      const ratedLifetime = optionalPositiveNumber(
+        selection,
+        "reportedLifetimeL70Hours",
+      );
+      if (ratedLifetime !== null) {
+        setOfficialNumber(inputs, "upgrade_rated_lifetime_hours", ratedLifetime);
+      } else if (inputs.replacement_method === "retrofit") {
+        return officialProductFailure(
+          "The selected VEU Part 34C retrofit product does not publish a positive L70 lifetime.",
+        );
+      }
+    }
+    return inputs;
+  }
+  if (activityCode === "30") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_in_home_display");
+    inputs.scenario = officialText(
+      selection,
+      "veuProductCategoryNumber",
+      "an exact VEU product category number",
+    );
+    return inputs;
+  }
+  if (activityCode === "31") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "electric_motor");
+    inputs.scenario = "31A";
+    setOfficialNumber(
+      inputs,
+      "rated_output_kw",
+      officialNumber(selection, "ratedOutputKw", "GEMS rated motor output"),
+    );
+    return inputs;
+  }
+  if (activityCode === "33") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_activity_33_product");
+    const rotor = officialText(
+      selection,
+      "rotorMotorType",
+      "an exact rotor motor type",
+    );
+    inputs.scenario = "33A";
+    inputs.rotor_motor_type = rotor === "Internal"
+      ? "internal"
+      : rotor === "External"
+        ? "external"
+        : officialProductFailure(
+          `The selected VEU activity 33 product publishes unsupported rotor type ${JSON.stringify(rotor)}.`,
+        );
+    setOfficialNumber(
+      inputs,
+      "input_power_w",
+      officialNumber(selection, "inputPowerW", "nameplate fan input power"),
+    );
+    setOfficialNumber(
+      inputs,
+      "output_power_w",
+      officialNumber(selection, "outputPowerW", "rated motor output power"),
+    );
+    return inputs;
+  }
+  if (activityCode === "36") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    selectedProduct(selections, "veu_activity_36_product");
+    return inputs;
+  }
+  if (activityCode === "44") {
+    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const selection = selectedProduct(selections, "veu_commercial_water_heater");
+    const climateZone = inputs.climate_zone;
+    if (climateZone !== "4" && climateZone !== "5") {
+      return officialProductFailure(
+        "Resolve climate zone 4 or 5 from the installation postcode before selecting Part 44 model outputs.",
+      );
+    }
+    const prefix = `zone${climateZone}`;
+    setOfficialNumber(
+      inputs,
+      "number_of_heat_pumps",
+      officialNumber(selection, "numberOfHeatPumps", "number of heat pumps"),
+    );
+    setOfficialNumber(
+      inputs,
+      "number_of_tanks",
+      officialNumber(selection, "numberOfTanks", "number of tanks"),
+    );
+    setOfficialNumber(
+      inputs,
+      "total_heat_pump_thermal_capacity_kw",
+      officialNumber(
+        selection,
+        "totalHeatPumpThermalCapacityKw",
+        "total heat-pump thermal capacity",
+      ),
+    );
+    setOfficialNumber(
+      inputs,
+      "total_storage_volume_litres",
+      officialNumber(
+        selection,
+        "totalSystemTankVolumeLitres",
+        "total system tank volume",
+      ),
+    );
+    setOfficialNumber(
+      inputs,
+      "annual_energy_savings_percent",
+      officialNumber(
+        selection,
+        `${prefix}AnnualEnergySavings`,
+        `zone ${climateZone} annual energy savings`,
+      ),
+    );
+    setOfficialNumber(
+      inputs,
+      "commercial_peak_load_mj_per_day",
+      officialNumber(
+        selection,
+        `${prefix}CommercialPeakLoadMjPerDay`,
+        `zone ${climateZone} commercial peak load`,
+      ),
+    );
+    setOfficialNumber(
+      inputs,
+      "hp_electricity_gj_per_year",
+      officialNumber(
+        selection,
+        `${prefix}HpElectricityGjPerYear`,
+        `zone ${climateZone} heat-pump electricity`,
+        { allowZero: true },
+      ),
+    );
+    setOfficialNumber(
+      inputs,
+      "hp_gas_gj_per_year",
+      officialNumber(
+        selection,
+        `${prefix}HpGasGjPerYear`,
+        `zone ${climateZone} heat-pump gas`,
+        { allowZero: true },
+      ),
+    );
+    const refrigerant = officialText(
+      selection,
+      "refrigerantType",
+      "an exact refrigerant type",
+    );
+    const refrigerantGwp = ({
+      "R-744": 1,
+      "R-513A": 629,
+      "R-1234yf": 5,
+      "R-290": 3,
+    } as const)[refrigerant as "R-744" | "R-513A" | "R-1234yf" | "R-290"];
+    if (!refrigerantGwp) {
+      return officialProductFailure(
+        `The selected VEU Part 44 product uses refrigerant ${JSON.stringify(refrigerant)}, which is not in the reviewed ESC Application Guide v2.2 GWP table.`,
+      );
+    }
+    setOfficialNumber(inputs, "refrigerant_gwp", refrigerantGwp);
+    setOfficialNumber(
+      inputs,
+      "refrigerant_charge_kg",
+      officialNumber(selection, "refrigerantChargeKg", "refrigerant charge"),
+    );
+    return inputs;
+  }
   if (activityCode === "22") {
     assertCreditexVeuOfficialProductSelections(activityCode, selections);
     const selection = selectedProduct(
@@ -741,6 +1316,42 @@ type CreditexVeuActivityProductContract = {
   veuProductCategoryNumbers: readonly string[];
 };
 
+const CREDITEX_VEU_SCENARIO_PRODUCT_CONTRACTS = {
+  "27A": {
+    productKinds: ["veu_activity_27_product"],
+    veuProductCategoryNumbers: ["27A"],
+  },
+  "27B": {
+    productKinds: ["veu_activity_27_product"],
+    veuProductCategoryNumbers: ["27B"],
+  },
+  "27C": { productKinds: [], veuProductCategoryNumbers: [] },
+  "34A": {
+    productKinds: ["veu_commercial_lighting"],
+    veuProductCategoryNumbers: ["34A"],
+  },
+  "34B": {
+    productKinds: ["veu_commercial_lighting"],
+    veuProductCategoryNumbers: ["34B"],
+  },
+  "34C": {
+    productKinds: ["veu_commercial_lighting"],
+    veuProductCategoryNumbers: ["34C"],
+  },
+  "34D": { productKinds: [], veuProductCategoryNumbers: [] },
+  "34E": { productKinds: [], veuProductCategoryNumbers: [] },
+  "35A": {
+    productKinds: ["veu_activity_35_product"],
+    veuProductCategoryNumbers: ["35A"],
+  },
+  "35B": {
+    productKinds: ["veu_activity_35_product"],
+    veuProductCategoryNumbers: ["35B"],
+  },
+  "35C": { productKinds: [], veuProductCategoryNumbers: [] },
+  "35D": { productKinds: [], veuProductCategoryNumbers: [] },
+} as const satisfies Record<string, CreditexVeuActivityProductContract>;
+
 export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
   "1C": {
     productKinds: ["veu_water_heater"],
@@ -778,7 +1389,7 @@ export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
   },
   "14": {
     productKinds: ["veu_secondary_glazing"],
-    veuProductCategoryNumbers: ["14A", "14B"],
+    veuProductCategoryNumbers: ["14A"],
   },
   "15": {
     productKinds: ["veu_weather_sealing"],
@@ -813,6 +1424,26 @@ export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
     productKinds: ["veu_pool_pump"],
     veuProductCategoryNumbers: ["26A"],
   },
+  "30": {
+    productKinds: ["veu_in_home_display"],
+    veuProductCategoryNumbers: ["30A", "30B"],
+  },
+  "31": {
+    productKinds: ["electric_motor"],
+    veuProductCategoryNumbers: [],
+  },
+  "33": {
+    productKinds: ["veu_activity_33_product"],
+    veuProductCategoryNumbers: ["33A"],
+  },
+  "36": {
+    productKinds: ["veu_activity_36_product"],
+    veuProductCategoryNumbers: ["36A"],
+  },
+  "44": {
+    productKinds: ["veu_commercial_water_heater"],
+    veuProductCategoryNumbers: ["44A"],
+  },
   "46": {
     productKinds: ["veu_induction_cooktop"],
     veuProductCategoryNumbers: ["46A", "46B"],
@@ -823,7 +1454,20 @@ export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
   },
 } as const satisfies Record<string, CreditexVeuActivityProductContract>;
 
-function veuActivityProductContract(activityCode: string) {
+function veuActivityProductContract(activityCode: string, scenario?: string) {
+  if (
+    (activityCode === "27" || activityCode === "34" || activityCode === "35")
+    && scenario
+  ) {
+    const scenarioContract = (
+      CREDITEX_VEU_SCENARIO_PRODUCT_CONTRACTS as Readonly<
+        Record<string, CreditexVeuActivityProductContract | undefined>
+      >
+    )[scenario];
+    if (scenarioContract && scenario.startsWith(activityCode)) {
+      return scenarioContract;
+    }
+  }
   return (
     CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS as Readonly<
       Record<string, CreditexVeuActivityProductContract | undefined>
@@ -833,21 +1477,27 @@ function veuActivityProductContract(activityCode: string) {
 
 export function officialProductKindsForVeuActivity(
   activityCode: string,
+  scenario?: string,
 ): readonly CreditexOfficialProductKind[] {
-  return veuActivityProductContract(activityCode)?.productKinds || [];
+  return veuActivityProductContract(activityCode, scenario)?.productKinds || [];
 }
 
 export function officialVeuProductCategoryNumbersForActivity(
   activityCode: string,
+  scenario?: string,
 ): readonly string[] {
-  return veuActivityProductContract(activityCode)?.veuProductCategoryNumbers || [];
+  return veuActivityProductContract(
+    activityCode,
+    scenario,
+  )?.veuProductCategoryNumbers || [];
 }
 
 export function assertCreditexVeuOfficialProductSelections(
   activityCode: string,
   selections: readonly CreditexFormulaProductSelection[],
+  scenario?: string,
 ) {
-  const contract = veuActivityProductContract(activityCode);
+  const contract = veuActivityProductContract(activityCode, scenario);
   if (!contract) {
     return officialProductFailure(
       `Activity ${activityCode} has no governed VEU approved-product selection contract.`,

@@ -81,7 +81,12 @@ test("VEU activity 46 stays disabled without one exact dated approved product", 
 test("UI source-complete activities stay synchronized with the estimate API", () => {
   assert.deepEqual(
     governedModule.CREDITEX_VEU_UI_SOURCE_COMPLETE_ACTIVITY_CODES,
-    ["17", "22", "24", "25", "46", "48"],
+    [
+      "1C", "1D", "3C", "3D", "6", "13", "15", "17",
+      "22", "24", "25", "26", "27", "30", "31", "33", "34", "35", "36",
+      "37", "38", "39", "40", "41", "42", "43",
+      "44", "46", "48",
+    ],
   );
   const route = fs.readFileSync(
     new URL(
@@ -101,8 +106,22 @@ test("UI source-complete activities stay synchronized with the estimate API", ()
     governedModule.CREDITEX_VEU_UI_SOURCE_COMPLETE_ACTIVITY_CODES,
     routeCodes,
   );
-  for (const code of ["1C", "1D", "3C", "3D", "6", "13", "14", "15", "26"]) {
+  for (const code of ["14", "28", "32"]) {
     assert.equal(governedModule.creditexVeuActivitySourceComplete(code), false);
+  }
+});
+
+test("product-free governed VEU activities do not invent a registry selection", () => {
+  for (const activityCode of ["37", "38", "39", "40", "41", "42", "43"]) {
+    const state = governedModule.creditexVeuProductEvidenceState(
+      activityCode,
+      "2026-08-09",
+      {},
+    );
+    assert.deepEqual(state.requiredKinds, []);
+    assert.deepEqual(state.selectedProductIds, {});
+    assert.equal(state.missingProduct, false);
+    assert.equal(state.blocked, false);
   }
 });
 
@@ -223,7 +242,7 @@ test("shared admin and trade VEU rendering requires the exact Public Registry mo
       html,
       /Read from the exact VEU Public Registry model approved on the installation date/,
     );
-    assert.match(html, /VEU formula inputs unavailable/);
+    assert.doesNotMatch(html, /VEU formula inputs unavailable/);
     assert.match(
       html,
       /AS\/NZS 4234 system size<select required="" disabled=""/,
@@ -254,5 +273,20 @@ test("admin refresh selects only the program-specific governed registry", () => 
   assert.equal(
     allProgramModule.creditexAutomaticRegistryRefreshContract("QLD-GRANT"),
     null,
+  );
+});
+
+test("VEU product lookups use the registry governed by each exact product kind", () => {
+  assert.equal(
+    governedModule.creditexVeuRegistryCodeForProductKind("veu_water_heater"),
+    "veu-approved-products",
+  );
+  assert.equal(
+    governedModule.creditexVeuRegistryCodeForProductKind("electric_motor"),
+    "gems-products",
+  );
+  assert.equal(
+    governedModule.creditexVeuRegistryCodeForProductKind("unknown"),
+    "",
   );
 });

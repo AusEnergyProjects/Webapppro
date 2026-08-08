@@ -16,7 +16,7 @@ import {
 } from "../src/lib/australian-government-program-catalogue.ts";
 
 test("every controlled government activity has exactly one fail-closed calculation method", () => {
-  assert.equal(CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON, "2026-08-02");
+  assert.equal(CERTIFICATE_CALCULATION_CATALOGUE_REVIEWED_ON, "2026-08-09");
   assert.equal(
     GOVERNMENT_ACTIVITY_CALCULATION_METHODS.length,
     GOVERNMENT_ACTIVITY_TEMPLATES.length,
@@ -76,6 +76,7 @@ test("current SRES, VEU and NSW pathways expose only their verified readiness st
       current.every(
         (method) => [
           "estimate_available",
+          "partial_estimate_available",
           "official_registry_required",
           "governed_formula_required",
         ].includes(method.state),
@@ -86,8 +87,18 @@ test("current SRES, VEU and NSW pathways expose only their verified readiness st
         (method) => method.state === "official_registry_required",
       ));
       assert.equal(
-        current.some((method) => method.state === "estimate_available"),
-        false,
+        current.filter((method) => [
+          "estimate_available",
+          "partial_estimate_available",
+        ].includes(method.state)).length,
+        27,
+      );
+      assert.deepEqual(
+        current
+          .filter((method) => method.state === "partial_estimate_available")
+          .map((method) => method.registryActivityCode)
+          .sort(),
+        ["1", "31", "33", "34", "46", "6"],
       );
     } else {
       assert.ok(current.some((method) => method.state === "estimate_available"));

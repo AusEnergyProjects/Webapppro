@@ -58,7 +58,8 @@ function loadRoute(validateOfficialProductSelections) {
       CreditexVeuPostcodeError: PostcodeError,
       resolveCreditexVeuPostcode: () => ({
         geography: "metropolitan",
-        climateZone: "6",
+        gasReticulated: true,
+        climateZone: "4",
         climateRegion: "mild",
         locationClass: "metro_mild",
       }),
@@ -254,7 +255,7 @@ test("VEU route keeps formula-attribute-incomplete activities unavailable", asyn
     return validationResult(televisionSelection());
   });
   const response = await route.POST(request(
-    "13",
+    "14",
     {},
     undefined,
   ));
@@ -264,4 +265,191 @@ test("VEU route keeps formula-attribute-incomplete activities unavailable", asyn
   assert.equal(body.code, "VEU_PRODUCT_EVIDENCE_INVALID");
   assert.match(body.error, /formula-critical approved-product attribute/);
   assert.equal(validationCalls, 0);
+});
+
+test("VEU route calculates product-free governed activities without inventing a registry record", async () => {
+  let validationCalls = 0;
+  const route = loadRoute(async () => {
+    validationCalls += 1;
+    throw new Error("Product validation must not run for activity 43");
+  });
+  const response = await route.POST(request(
+    "43",
+    {
+      scenario: "43A",
+      geography: "regional",
+      operating_temperature_band: "at_or_above_zero_c",
+      internal_floor_area_m2: "10",
+      system_count: "1",
+      eligible_parts_configuration_confirmed: "yes",
+    },
+    undefined,
+    "3000",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(validationCalls, 0);
+  assert.equal(body.estimate.activityCode, "43");
+  assert.equal(body.estimate.scenario, "43A");
+  assert.equal(body.estimate.output.wholeCertificates, "8");
+  assert.equal(body.estimate.inputSnapshot.geography, "metropolitan");
+  assert.equal(body.estimate.inputSnapshot.product, null);
+  assert.equal(body.estimate.registryReceipt, undefined);
+});
+
+test("VEU route derives Activity 30 category and postcode gas class server-side", async () => {
+  const selection = televisionSelection({
+    productKind: "veu_in_home_display",
+    registrationNumber: "VEU-000030",
+    sourceRecordKey: "VEU-000030",
+    attributes: {
+      veuProductId: "VEU-000030",
+      veuProductCategoryNumber: "30A",
+    },
+  });
+  const route = loadRoute(async () => validationResult(selection));
+  const response = await route.POST(request(
+    "30",
+    {
+      scenario: "30B",
+      geography: "regional",
+      gas_reticulation: "not_reticulated",
+      installation_count: "1",
+    },
+    { veu_in_home_display: "veu-public-product-register:VEU-000030" },
+    "3000",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.estimate.scenario, "30A");
+  assert.equal(body.estimate.inputSnapshot.geography, "metropolitan");
+  assert.equal(body.estimate.inputSnapshot.gasReticulation, "reticulated");
+  assert.equal(body.estimate.inputSnapshot.product.registry, "VEU");
+});
+
+test("VEU Activity 31A accepts only the exact dated GEMS motor and derives rated output", async () => {
+  const selection = televisionSelection({
+    registryCode: "gems-products",
+    productKind: "electric_motor",
+    registrationNumber: "GEMS-MOTOR-31",
+    sourceRecordKey: "GEMS-MOTOR-31",
+    approvalStatus: "approved",
+    attributes: { ratedOutputKw: 7.5 },
+  });
+  const route = loadRoute(async () => validationResult(selection));
+  const response = await route.POST(request(
+    "31",
+    {
+      scenario: "31A",
+      geography: "regional",
+      rated_output_kw: "185",
+      installation_count: "1",
+      co_payment_per_motor_aud: "200",
+    },
+    { electric_motor: "gems-motor:GEMS-MOTOR-31" },
+    "3000",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.estimate.scenario, "31A");
+  assert.equal(body.estimate.inputSnapshot.ratedOutputKw, "7.5");
+  assert.equal(body.estimate.inputSnapshot.product.registry, "GEMS");
+  assert.equal(body.estimate.inputSnapshot.product.status, "Registered");
+  assert.equal(body.estimate.inputSnapshot.product.productId, "GEMS-MOTOR-31");
+});
+
+test("VEU route rejects unreleased product scenarios before official derivation", async () => {
+  let validationCalls = 0;
+  const route = loadRoute(async () => {
+    validationCalls += 1;
+    throw new Error("Unsupported scenarios must not reach product validation");
+  });
+  for (const [activityCode, scenario] of [["31", "31B"], ["33", "33B"]]) {
+    const response = await route.POST(request(
+      activityCode,
+      { scenario },
+      undefined,
+      "3000",
+    ));
+    const body = await response.json();
+    assert.equal(response.status, 400);
+    assert.equal(body.code, "VEU_INPUT_INVALID");
+    assert.match(body.error, /not available/i);
+  }
+  assert.equal(validationCalls, 0);
+});
+
+test("VEU Part 27 uses the selected registry product for power and validates installed controls", async () => {
+  const selection = televisionSelection({
+    productKind: "veu_activity_27_product",
+    registrationNumber: "VEU-000027",
+    sourceRecordKey: "VEU-000027",
+    attributes: {
+      veuProductId: "VEU-000027",
+      veuProductCategoryNumber: "27B",
+      victorianLampCircuitPowerW: 20,
+      occupancySensor: false,
+      programmableDimmer: true,
+    },
+  });
+  let validationInput;
+  const route = loadRoute(async (_database, input) => {
+    validationInput = input;
+    return validationResult(selection);
+  });
+  const response = await route.POST(request(
+    "27",
+    {
+      scenario: "27B",
+      geography: "regional",
+      baseline_lcp_w: "100",
+      baseline_control_profile: "none",
+      approved_upgrade_lcp_w: "999",
+      approved_upgrade_control_profile: "programmable_dimmer",
+      incumbent_source_count: "1",
+      upgrade_source_count: "1",
+    },
+    { veu_activity_27_product: "veu-public-product-register:VEU-000027" },
+    "3000",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(validationInput.requiredKinds, ["veu_activity_27_product"]);
+  assert.equal(body.estimate.scenario, "27B");
+  assert.equal(body.estimate.inputSnapshot.upgradeLcpW, "20/1");
+  assert.equal(body.estimate.inputSnapshot.upgradeControlProfile, "programmable_dimmer");
+  assert.equal(body.estimate.inputSnapshot.product.productId, "VEU-000027");
+});
+
+test("VEU product-free lighting scenarios skip registry validation and invent no selection", async () => {
+  let validationCalls = 0;
+  const route = loadRoute(async () => {
+    validationCalls += 1;
+    throw new Error("Product validation must not run for Part 27C");
+  });
+  const response = await route.POST(request(
+    "27",
+    {
+      scenario: "27C",
+      geography: "regional",
+      baseline_lcp_w: "100",
+      baseline_control_profile: "none",
+      incumbent_source_count: "1",
+      removal_requirements_confirmed: "yes",
+    },
+    undefined,
+    "3000",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(validationCalls, 0);
+  assert.equal(body.estimate.scenario, "27C");
+  assert.equal(body.estimate.inputSnapshot.product, null);
+  assert.equal(body.estimate.registryReceipt, undefined);
 });

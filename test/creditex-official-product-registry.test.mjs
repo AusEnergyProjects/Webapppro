@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
@@ -13,6 +15,7 @@ import {
   CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
   CREDITEX_CER_CEC_PRODUCT_REGISTRY,
   CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES,
+  CREDITEX_VEU_PRODUCT_REGISTRY,
 } from "../src/lib/creditex-official-product-registry-definitions.ts";
 import {
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS,
@@ -111,6 +114,46 @@ function memoryArtifactStore() {
     async put(key, value, options) {
       objects.set(key, {
         bytes: Uint8Array.from(value),
+        customMetadata: { ...options.customMetadata },
+      });
+    },
+  };
+}
+
+function fileArtifactStore() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "creditex-veu-r2-"));
+  const objects = new Map();
+  return {
+    directory,
+    objects,
+    async head(key) {
+      const value = objects.get(key);
+      return value
+        ? {
+            size: fs.statSync(value.path).size,
+            customMetadata: value.customMetadata,
+          }
+        : null;
+    },
+    async get(key) {
+      const value = objects.get(key);
+      return value
+        ? {
+            async arrayBuffer() {
+              const bytes = fs.readFileSync(value.path);
+              return bytes.buffer.slice(
+                bytes.byteOffset,
+                bytes.byteOffset + bytes.byteLength,
+              );
+            },
+          }
+        : null;
+    },
+    async put(key, value, options) {
+      const objectPath = path.join(directory, String(objects.size));
+      fs.writeFileSync(objectPath, value);
+      objects.set(key, {
+        path: objectPath,
         customMetadata: { ...options.customMetadata },
       });
     },
@@ -1276,7 +1319,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
       productKind: "veu_shower_rose",
       manufacturer: "",
       brand: "Current Shower",
-      model: "Current Shower 1",
+      model: "  Current Shower 1  ",
       series: "",
       registrationNumber: "VEU-001",
       certificateNumber: "",
@@ -1322,6 +1365,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   let currentRows = veuRows;
   const base = source("fixture-veu", "veu_shower_rose", "veu-approved-products");
   delete base.productKind;
+  const veuParseGraphs = [];
   const veuDefinition = {
     registryCode: "veu-approved-products",
     title: "Fixture VEU public registry",
@@ -1330,6 +1374,11 @@ test("VEU retains Legacy custody but requires review before any source-count dec
       productKinds: ["veu_shower_rose"],
       minimumRecords: 1,
       requiresOfficialEligibleFrom: true,
+      parse(bytes, contentType) {
+        const parsed = base.parse(bytes, contentType);
+        veuParseGraphs.push(parsed);
+        return parsed;
+      },
     }],
     async fetchSources() {
       return [{
@@ -1344,6 +1393,10 @@ test("VEU retains Legacy custody but requires review before any source-count dec
     artifactStore,
     now: new Date("2026-08-08T00:00:00.000Z"),
   });
+  assert.equal(veuParseGraphs.length, 2);
+  assert.ok(veuParseGraphs.every(
+    (records) => records[0].model === "Current Shower 1",
+  ));
   const legacySearch = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2024-01-01",
@@ -1505,4 +1558,35 @@ test("live automatic feeds activate licensed GEMS products into searchable snaps
     limit: 1,
   }, { now: new Date("2026-08-08T13:00:00.000Z") });
   assert.equal(refrigerator.products.length, 1);
+});
+
+test("live VEU feed retains its exact artifact and activates every row", {
+  skip: process.env.CREDITEX_LIVE_VEU_REGISTRY_SYNC !== "1",
+}, async (t) => {
+  const { database, d1 } = fixture();
+  const artifactStore = fileArtifactStore();
+  t.after(() => database.close());
+  t.after(() => fs.rmSync(artifactStore.directory, { recursive: true }));
+  const result = await syncOfficialProductRegistry(
+    d1,
+    CREDITEX_VEU_PRODUCT_REGISTRY,
+    {
+      fetchImpl: fetch,
+      artifactStore,
+      now: new Date(),
+    },
+  );
+  assert.ok(result.recordCount >= 70_000);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_products`).get().count, result.recordCount);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_artifacts`).get().count, 1);
+  assert.equal(artifactStore.objects.size, 1);
+  const statuses = database.prepare(`SELECT approval_status status, count(*) count
+    FROM compliance_official_products GROUP BY approval_status ORDER BY status`).all();
+  assert.deepEqual(statuses.map(({ status }) => status), ["approved", "legacy"]);
+  assert.equal(
+    statuses.reduce((sum, { count }) => sum + Number(count), 0),
+    result.recordCount,
+  );
 });

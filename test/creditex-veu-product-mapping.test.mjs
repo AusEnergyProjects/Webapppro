@@ -92,6 +92,11 @@ test("VEU activity mapping distinguishes every approved-product family", () => {
     "24": ["veu_television_listing"],
     "25": ["veu_clothes_dryer_listing"],
     "26": ["veu_pool_pump"],
+    "30": ["veu_in_home_display"],
+    "31": ["electric_motor"],
+    "33": ["veu_activity_33_product"],
+    "36": ["veu_activity_36_product"],
+    "44": ["veu_commercial_water_heater"],
     "46": ["veu_induction_cooktop"],
     "48": ["veu_ceiling_insulation"],
   };

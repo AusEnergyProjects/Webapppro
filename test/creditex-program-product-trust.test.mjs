@@ -343,6 +343,322 @@ test("VEU 22, 24 and 25 derive the scenario and enforce every published product 
   );
 });
 
+test("VEU water-heater model values are installation-zone controlled and ambiguous branches fail closed", () => {
+  const mediumHeatPump = product("veu_water_heater", {
+    veuProductCategoryNumber: "1D",
+    veuSystemSize: "Medium",
+    bs2021Zone4StepDownLoadGjPerYear: 5.1,
+    be2021Zone4StepDownLoadGjPerYear: 2.2,
+    zone4AnnualEnergySavings: 65,
+    bs2021Zone5StepDownLoadGjPerYear: 6.3,
+    be2021Zone5StepDownLoadGjPerYear: 2.9,
+    zone5AnnualEnergySavings: 64,
+  });
+  const derived = deriveCreditexVeuOfficialProductInputs(
+    "1D",
+    {
+      climate_zone: "5",
+      system_size: "small",
+      bs2021_gj_per_year: "999",
+      be2021_gj_per_year: "999",
+    },
+    [mediumHeatPump],
+  );
+  assert.equal(derived.system_size, "medium");
+  assert.equal(derived.bs2021_gj_per_year, "6.3");
+  assert.equal(derived.be2021_gj_per_year, "2.9");
+
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "1C",
+      { climate_zone: "4" },
+      [product("veu_water_heater", {
+        ...mediumHeatPump.attributes,
+        veuProductCategoryNumber: "1C",
+      })],
+    ),
+    officialError,
+  );
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "3C",
+      { climate_zone: "5" },
+      [product("veu_water_heater", {
+        ...mediumHeatPump.attributes,
+        veuProductCategoryNumber: "3C",
+        veuSystemSize: "Small",
+      })],
+    ),
+    officialError,
+  );
+});
+
+test("VEU Part 6 derives the exact single-system category, capacities, seasonal metrics and refrigerant", () => {
+  const selection = product("veu_air_conditioner", {
+    veuProductCategoryNumber: "6D",
+    veuProductConfiguration: "Single split system",
+    veuProductConfigurationClass: "single",
+    ratedHeatingCapacityKw: 3.8,
+    ratedCoolingCapacityKw: 3.5,
+    refrigerantType: "R-32",
+    gemsHspfColdResidential: 4.8,
+    gemsTcspfColdResidential: 5.9,
+    gemsHspfMixedResidential: 0,
+    calculatedHspfMixedResidential: 5.1,
+    gemsTcspfMixedResidential: 6.2,
+  });
+  const derived = deriveCreditexVeuOfficialProductInputs(
+    "6",
+    {
+      premises: "residential",
+      location_class: "regional_hot",
+      category: "6A",
+      configuration: "multi",
+      rated_heating_capacity_kw: "99",
+      rated_cooling_capacity_kw: "99",
+      outdoor_heating_capacity_kw: "99",
+      outdoor_cooling_capacity_kw: "99",
+      same_oem_confirmed: "yes",
+    },
+    [selection],
+  );
+  assert.equal(derived.category, "6D");
+  assert.equal(derived.configuration, "single");
+  assert.equal(derived.rated_heating_capacity_kw, "3.8");
+  assert.equal(derived.rated_cooling_capacity_kw, "3.5");
+  assert.equal(derived.hspf_upgrade, "5.1");
+  assert.equal(derived.tcspf_upgrade, "6.2");
+  assert.equal(derived.hspf_cold_eligibility, "4.8");
+  assert.equal(derived.tcspf_cold_eligibility, "5.9");
+  assert.equal(derived.refrigerant_gwp, "675");
+  assert.equal(derived.performance_basis, "mixed_gems_and_calculated");
+  assert.equal(derived.outdoor_heating_capacity_kw, undefined);
+  assert.equal(derived.same_oem_confirmed, undefined);
+
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "6",
+      { premises: "residential", location_class: "metro_mild" },
+      [product("veu_air_conditioner", {
+        ...selection.attributes,
+        veuProductConfiguration: "Fixed head multi split system",
+        veuProductConfigurationClass: "multi",
+      })],
+    ),
+    officialError,
+  );
+});
+
+test("VEU Parts 27, 34 and 35 cross-check exact lighting product power and controls", () => {
+  const part27 = deriveCreditexVeuOfficialProductInputs(
+    "27",
+    {
+      scenario: "27B",
+      approved_upgrade_lcp_w: "999",
+      approved_upgrade_control_profile:
+        "occupancy_1_to_2_and_programmable_dimmer",
+    },
+    [product("veu_activity_27_product", {
+      veuProductCategoryNumber: "27B",
+      victorianLampCircuitPowerW: 23.6,
+      occupancySensor: true,
+      programmableDimmer: true,
+    })],
+  );
+  assert.equal(part27.approved_upgrade_lcp_w, "23.6");
+  assert.equal(
+    part27.approved_upgrade_control_profile,
+    "occupancy_1_to_2_and_programmable_dimmer",
+  );
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "27",
+      {
+        scenario: "27B",
+        approved_upgrade_control_profile: "programmable_dimmer",
+      },
+      [product("veu_activity_27_product", {
+        veuProductCategoryNumber: "27B",
+        victorianLampCircuitPowerW: 23.6,
+        occupancySensor: true,
+        programmableDimmer: true,
+      })],
+    ),
+    officialError,
+  );
+
+  const part34 = deriveCreditexVeuOfficialProductInputs(
+    "34",
+    {
+      scenario: "34C",
+      approved_upgrade_lcp_w: "999",
+      approved_upgrade_occupancy_sensor_scope: "three_to_six_luminaires",
+      approved_upgrade_daylight_linked_control: "no",
+      approved_upgrade_programmable_dimmer: "no",
+      approved_upgrade_manual_dimmer: "no",
+      approved_upgrade_voltage_reduction_unit: "yes",
+      replacement_method: "retrofit",
+      upgrade_rated_lifetime_hours: "1",
+    },
+    [product("veu_commercial_lighting", {
+      veuProductCategoryNumber: "34C",
+      lampCircuitPowerW: null,
+      nominalLampPowerW: 42,
+      reportedLifetimeL70Hours: 60_000,
+      occupancySensor: true,
+      daylightLinkedControl: true,
+      programmableDimmer: false,
+      manualDimmer: true,
+      voltageReductionUnit: false,
+    })],
+  );
+  assert.equal(part34.approved_upgrade_lcp_w, "42");
+  assert.equal(part34.upgrade_rated_lifetime_hours, "60000");
+  assert.equal(part34.approved_upgrade_daylight_linked_control, "yes");
+  assert.equal(part34.approved_upgrade_manual_dimmer, "yes");
+  assert.equal(part34.approved_upgrade_voltage_reduction_unit, "no");
+  assert.equal(
+    part34.approved_upgrade_occupancy_sensor_scope,
+    "three_to_six_luminaires",
+  );
+
+  const part35 = deriveCreditexVeuOfficialProductInputs(
+    "35",
+    {
+      scenario: "35B",
+      approved_upgrade_lcp_w: "999",
+      approved_upgrade_control_profile: "programmable_dimmer",
+      replacement_method: "retrofit",
+      upgrade_rated_lifetime_hours: "1",
+    },
+    [product("veu_activity_35_product", {
+      veuProductCategoryNumber: "35B",
+      lampCircuitPowerW: 16.4,
+      reportedLifetimeL70Hours: 50_000,
+      occupancySensor: false,
+      programmableDimmer: true,
+    })],
+  );
+  assert.equal(part35.approved_upgrade_lcp_w, "16.4");
+  assert.equal(part35.upgrade_rated_lifetime_hours, "50000");
+});
+
+test("VEU product-backed fields for 13, 15, 26, 30, 31, 33 and 36 discard caller tampering", () => {
+  assert.equal(
+    deriveCreditexVeuOfficialProductInputs(
+      "13",
+      { wers_heating_stars: "99" },
+      [product("veu_double_glazing", {
+        veuProductCategoryNumber: "13A",
+        wersHeatingStars: 5.5,
+      })],
+    ).wers_heating_stars,
+    "5.5",
+  );
+  const sealing = deriveCreditexVeuOfficialProductInputs(
+    "15",
+    { scenario: "15H", warranty_years: "99" },
+    [product("veu_weather_sealing", {
+      veuProductCategoryNumber: "15C",
+      warrantyYears: 4,
+    })],
+  );
+  assert.equal(sealing.scenario, "15C");
+  assert.equal(sealing.warranty_years, "4");
+  assert.equal(
+    deriveCreditexVeuOfficialProductInputs(
+      "26",
+      { paec_kwh_per_year: "1" },
+      [product("veu_pool_pump", {
+        veuProductCategoryNumber: "26A",
+        paecKwhPerYear: 640,
+      })],
+    ).paec_kwh_per_year,
+    "640",
+  );
+  assert.equal(
+    deriveCreditexVeuOfficialProductInputs(
+      "30",
+      { scenario: "30B" },
+      [product("veu_in_home_display", {
+        veuProductCategoryNumber: "30A",
+      })],
+    ).scenario,
+    "30A",
+  );
+  const motor = deriveCreditexVeuOfficialProductInputs(
+    "31",
+    { scenario: "31B", rated_output_kw: "185" },
+    [product("electric_motor", { ratedOutputKw: 7.5 })],
+  );
+  assert.equal(motor.scenario, "31A");
+  assert.equal(motor.rated_output_kw, "7.5");
+  const fan = deriveCreditexVeuOfficialProductInputs(
+    "33",
+    { scenario: "33B", rotor_motor_type: "external", input_power_w: "1", output_power_w: "1" },
+    [product("veu_activity_33_product", {
+      veuProductCategoryNumber: "33A",
+      rotorMotorType: "Internal",
+      inputPowerW: 24,
+      outputPowerW: 15,
+    })],
+  );
+  assert.equal(fan.scenario, "33A");
+  assert.equal(fan.rotor_motor_type, "internal");
+  assert.equal(fan.input_power_w, "24");
+  assert.equal(fan.output_power_w, "15");
+  assert.equal(
+    deriveCreditexVeuOfficialProductInputs(
+      "36",
+      { scenario: "36A(ii)" },
+      [product("veu_activity_36_product", {
+        veuProductCategoryNumber: "36A",
+      })],
+    ).scenario,
+    "36A(ii)",
+  );
+});
+
+test("VEU Part 44 derives zone-specific guide outputs and exact ESC refrigerant GWP", () => {
+  const derived = deriveCreditexVeuOfficialProductInputs(
+    "44",
+    {
+      climate_zone: "5",
+      number_of_heat_pumps: "99",
+      number_of_tanks: "99",
+      annual_energy_savings_percent: "1",
+      commercial_peak_load_mj_per_day: "1",
+      hp_electricity_gj_per_year: "1",
+      hp_gas_gj_per_year: "99",
+      refrigerant_gwp: "9999",
+      refrigerant_charge_kg: "99",
+    },
+    [product("veu_commercial_water_heater", {
+      veuProductCategoryNumber: "44A",
+      numberOfHeatPumps: 2,
+      numberOfTanks: 3,
+      totalHeatPumpThermalCapacityKw: 30,
+      totalSystemTankVolumeLitres: 1_500,
+      zone5AnnualEnergySavings: 67,
+      zone5CommercialPeakLoadMjPerDay: 1_250,
+      zone5HpElectricityGjPerYear: 120,
+      zone5HpGasGjPerYear: 0,
+      refrigerantType: "R-513A",
+      refrigerantChargeKg: 4.2,
+    })],
+  );
+  assert.equal(derived.number_of_heat_pumps, "2");
+  assert.equal(derived.number_of_tanks, "3");
+  assert.equal(derived.total_heat_pump_thermal_capacity_kw, "30");
+  assert.equal(derived.total_storage_volume_litres, "1500");
+  assert.equal(derived.annual_energy_savings_percent, "67");
+  assert.equal(derived.commercial_peak_load_mj_per_day, "1250");
+  assert.equal(derived.hp_electricity_gj_per_year, "120");
+  assert.equal(derived.hp_gas_gj_per_year, "0");
+  assert.equal(derived.refrigerant_gwp, "629");
+  assert.equal(derived.refrigerant_charge_kg, "4.2");
+});
+
 test("product-backed estimates require a defensible approval start and the API uses strict derivation", () => {
   assert.throws(
     () => deriveCreditexVeuOfficialProductInputs(

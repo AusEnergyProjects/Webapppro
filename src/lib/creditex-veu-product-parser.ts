@@ -4,7 +4,7 @@ import type {
 } from "./creditex-official-product-registry.ts";
 
 export const CREDITEX_VEU_PRODUCT_ARTIFACT_CONTRACT =
-  "creditex-veu-public-registry-powerbi/v1" as const;
+  "creditex-veu-public-registry-powerbi/v2" as const;
 export const CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY =
   "veu-public-product-register" as const;
 export const CREDITEX_VEU_REPORT_ID =
@@ -30,10 +30,12 @@ export const CREDITEX_VEU_QUERY_FIELDS = [
   "Screen_Area_cm2__c",
   "Rated_Capacity_kg__c",
   "GEMS_Determination_Version__c",
+  "WERS_Star_Rating_heating__c",
 ] as const;
 
 export const CREDITEX_VEU_QUERY_FIELD_TYPES = [
   1, 1, 1, 1, 1, 1, 1, 1, 7, 7, 3, 3, 3, 3, 3, 1,
+  3,
 ] as const;
 
 export const CREDITEX_VEU_DIM_PRODUCT_SCHEMA = {
@@ -53,7 +55,490 @@ export const CREDITEX_VEU_DIM_PRODUCT_SCHEMA = {
   Screen_Area_cm2__c: [3, "cce5fc68-3017-4c5f-be63-61f9107eadde"],
   Rated_Capacity_kg__c: [3, "53190516-dbbb-4214-8032-fcdfde4b3ad6"],
   GEMS_Determination_Version__c: [1, "2b026ecc-7b76-4cc1-9041-c993ca0208ea"],
+  System_Size__c: [1, "b08f76f6-5d54-4a17-9307-3675583abe31"],
+  Zone_4_Bs_GJyear_system_load_size__c: [3, "2c7c67be-b031-49f1-b293-1a469508b835"],
+  Zone_4_Be_GJyear_system_load_size__c: [3, "4012ff62-80df-4217-87a0-71496caa19f3"],
+  Zone_5_Bs_GJyear_system_load_size__c: [3, "4f9b18f0-8c04-4b7a-896b-88d39064d0df"],
+  Zone_5_Be_GJyear_system_load_size__c: [3, "1977d390-4ad6-4508-b177-19f3ee387a09"],
+  Zone_4_Bs_GJyear_step_down_load_size__c: [3, "71a98d92-5469-4aad-acbb-a0c90d8f2b01"],
+  Zone_4_Be_GJyear_step_down_load_size__c: [3, "d7293c8d-cf5b-4518-921c-f8bac8e09974"],
+  Zone_5_Bs_GJyear_step_down_load_size__c: [3, "fdf6747f-6f64-44e2-b325-86b0794c2bb6"],
+  Zone_5_Be_GJyear_step_down_load_size__c: [3, "8dfa528b-3f05-4fca-91d5-ee10578350e6"],
+  Zone_4_Annual_Energy_Savings_system_l__c: [3, "d1483d38-74ea-4603-a276-346be86400c1"],
+  Zone_5_Annual_Energy_Savings_system_l__c: [3, "c2e266c0-7bcd-4ddc-a1ad-807949e73392"],
+  Product_Configuration__c: [1, "cfeb1e77-d3b7-483e-8d9c-eefd5430859b"],
+  Heating_Capacity_kW__c: [3, "a439cd20-43b5-4293-8a88-fbf3abbf4046"],
+  Cooling_Capacity_kW__c: [3, "843792b4-44e6-401f-902a-3adfb1e25f5b"],
+  ACOP__c: [3, "b29e5ce6-e9bc-4fb1-9ec8-c73704e765ac"],
+  AEER__c: [3, "c45ceacd-a95c-4dce-a6c5-0b9677e32fe3"],
+  GEMS_HSPF_Cold_res__c: [3, "47d5791b-1536-4580-9fa5-ca68502e7e23"],
+  GEMS_TCSPF_Cold_res__c: [3, "d6af83ae-d6af-415f-842f-838c2d4c28b6"],
+  GEMS_HSPF_Mixed_res__c: [3, "a31c588a-524c-44f7-a6f5-d353d397a8e4"],
+  GEMS_TCSPF_Mixed_res__c: [3, "c660a34a-77a2-44ae-8ab1-d161a172ac55"],
+  GEMS_HSPF_Cold_com__c: [3, "f1705bbd-c80d-4fec-8241-053caa78bbc5"],
+  GEMS_TCSPF_Cold_com__c: [3, "7206b62d-85af-4b1d-925a-6d9c7938e1a4"],
+  GEMS_HSPF_Mixed_com__c: [3, "abdb02d3-8534-4b5c-9753-0c1584d9be05"],
+  GEMS_TCSPF_Mixed_com__c: [3, "ea92befc-6d12-4240-b188-34d5b3e6fc49"],
+  GEMS_Class__c: [1, "3878c08d-2115-4cef-b067-83203ebc5b0b"],
+  GEMS_Registered_Before_2_August_2024__c: [5, "24c300a6-3974-4d5f-9435-76eb9cb6d108"],
+  Calculated_HSPF_Cold_res__c: [3, "0281f9f0-b982-4f51-988e-7e29e90c261b"],
+  Calculated_TCSPF_Cold_res__c: [3, "adeb3e94-27c9-46e1-9b33-0894143d1148"],
+  Calculated_HSPF_Mixed_res__c: [3, "e45350f1-9929-47bf-8983-862e74c3fb93"],
+  Calculated_TCSPF_Mixed_res__c: [3, "649a3158-526b-436b-92ec-e9740b634c8a"],
+  Calculated_HSPF_Cold_com__c: [3, "1d6e49d5-3d79-427c-9538-2cb90aae9716"],
+  Calculated_TCSPF_Cold_com__c: [3, "9fe88fe4-42e2-4c15-a37a-cc1692e9fa65"],
+  Calculated_HSPF_Mixed_com__c: [3, "9222ae30-972e-4435-8281-27e8286304cd"],
+  Calculated_TCSPF_Mixed_com__c: [3, "6e9a4ca8-2c26-413d-9256-a02400c19092"],
+  Refrigerant_Type_GWP__c: [1, "18505e89-36de-428b-b95b-db7bd3686738"],
+  Refrigerant_Charge_kg__c: [3, "58977f22-d210-4c61-b790-22293448139d"],
+  WERS_Star_Rating_heating__c: [3, "3f9f29c5-5ccf-4e15-8dc3-8ed84a1bda7b"],
+  Product_Type__c: [1, "ecc73565-6b4b-4345-b895-6d7caf0a5f95"],
+  Warranty_Period_Years__c: [3, "54d4f2a7-7b61-48f1-a6a5-b61a23a0aa0a"],
+  PAEC_kWhy__c: [3, "a149c6f7-8755-4a93-b7c3-1925c92c83d3"],
+  Type__c: [1, "6c27a201-6df1-4346-b2ce-d74b1d0aade0"],
+  LCP_W__c: [3, "ddbb263b-f309-4cd4-83e1-997830413e03"],
+  LCPVictorian_Load_W__c: [3, "4884efc2-7a93-45ec-b730-0b0bb07c77fb"],
+  Total_LCP_W__c: [3, "375f2c4b-3d4a-4545-be85-e1aaf1a199b2"],
+  NLP_W__c: [3, "e94f34f0-1ffc-47e8-aec8-25c0600ed437"],
+  Nominal_Device_Rating_W__c: [3, "23f94647-3405-4931-b491-3eecda7bcf7b"],
+  RatedLifetime__c: [1, "0d561c71-6509-4f8b-bfe6-d808d7c1a335"],
+  VRU_Voltage__c: [3, "e876b127-5281-42bc-997a-c6d3fbde8550"],
+  Occupancy_Sensor__c: [5, "4a30b2f7-e37b-4095-936f-dd2608289596"],
+  Programmable_Dimmer__c: [5, "bf93372f-77dc-42d1-9779-81a7627c826c"],
+  Manual_Dimmer__c: [5, "51e77db8-a627-40cf-a1ef-a957f28a4671"],
+  DayLight_Linked_Control__c: [5, "0ff07682-9dd4-47f6-9b9b-65169907e269"],
+  Voltage_Reduction_Unit__c: [5, "af49749b-8a15-4742-9abe-c9459730619e"],
+  Power_Factor__c: [3, "da3bb27e-c4d0-4d3d-a938-e61735dbcf75"],
+  Input_Power_W__c: [3, "739c57a7-8d75-4ba8-a784-e72f340750a3"],
+  Output_Power_W__c: [3, "b2a1d192-58ff-44fb-abfd-44a221622a96"],
+  Reported_Lifetime_L70__c: [3, "a4038372-15d9-4cc2-bb11-ef23ade5e45f"],
+  No_of_Lamps__c: [3, "36aefab7-09cb-496d-8371-7fa52da5f38e"],
+  Efficacy__c: [1, "1bbccdc1-5154-4085-963f-6ed50c68d0e3"],
+  Product_Class__c: [1, "0eb64265-0a28-4e1b-8211-c234126737e7"],
+  Characteristic_Code__c: [1, "bd113437-3966-4292-823d-1156c5d67324"],
+  Energy_Efficiency_Index__c: [3, "26bec47b-dcf2-4ad6-b9d4-4bbe0149f999"],
+  Total_Display_Area_m2__c: [3, "0abc87f4-28c3-4df7-bcb0-6ab2cff1e883"],
+  Total_Energy_Consumption_kWh24h__c: [3, "d87854d2-c7e8-49fb-809d-792867009a4a"],
+  Net_Volume_L__c: [3, "0cd3b63f-0d05-4958-a69a-3928d83940ca"],
+  Duty_Type__c: [1, "6f0d3441-316d-4bfd-833f-96f1d1f56130"],
+  Rotor_Motor_Type__c: [1, "76a4568b-3c45-4b7f-89ea-e701f18892c4"],
+  Product_Application__c: [1, "2b637ea1-b3f0-43bf-8833-b397e27f9df9"],
+  Number_of_Heat_Pumps__c: [3, "69a6a888-eb37-4a8a-a6b2-0e3774d6de28"],
+  Number_of_Tanks__c: [3, "fdf6449f-2398-4a9e-aa26-4e9db23b4abd"],
+  Total_Heat_Pump_Thermal_Capacity_kW__c: [3, "4b4f3c0c-17aa-4456-b464-cdbeb43896ed"],
+  Total_Thermal_Capacity_kW__c: [3, "1cb20e80-c5c3-47be-b3ba-229d059abb23"],
+  Thermal_Capacity_kW__c: [3, "b419fec6-3a08-43e8-a4e8-200b0b7bdd27"],
+  Total_System_Tank_Volume_L__c: [3, "b9a278dc-0504-4655-9bc6-7c2eab3b82e9"],
+  Storage_Capacity_L__c: [3, "10863a6f-cdd7-4aca-9bbf-ee6304994c04"],
+  Zone_4_Annual_Energy_Savings__c: [3, "5a54bb7c-66d9-46e7-a04c-e20577cb9c23"],
+  Zone_4_HPelec_GLyear__c: [3, "24909217-f9b4-4bb9-8bdc-24a0f131b9d2"],
+  Zone_4_HPgas_GJyear__c: [3, "423a2c11-17af-4722-b194-1c3a34bb4a77"],
+  Zone_4_Peak_Load_MJday__c: [3, "fd76b7ee-973a-4081-bf1e-42879036c5ea"],
+  Zone_5_Annual_Energy_Savings__c: [3, "7ef298db-eca9-404e-b3ef-e651445e95b0"],
+  Zone_5_HPelec_GLyear__c: [3, "441b3b31-cdaa-4e94-b87f-db7b20dd8d32"],
+  Zone_5_HPgas_GJyear__c: [3, "283a2b07-f979-4785-8cc0-9dfe2addebad"],
+  Zone_5_Peak_Load_MJday__c: [3, "4ddbce1f-0cea-46d2-b7a7-22d223460ff7"],
+  R_Value__c: [3, "fdcb16c4-b63b-494b-b89a-126475d39f5e"],
+  Winter_R_Value__c: [1, "d1091a8c-ee2d-4906-ae08-15b7fa57b760"],
+  Area_sqm__c: [3, "bfb26364-5238-4af2-919e-6cea31d5532f"],
+  Width_mm__c: [3, "2e482bc2-445f-45ef-b054-8dd4d96c7edc"],
+  Depth_mm__c: [3, "8e3dd825-0a80-4d14-b62d-46ee06ca18b3"],
 } as const;
+
+/**
+ * Power BI's numeric transport is binary floating point, while the VEU
+ * semantic model declares the regulator-facing decimal format.  Keep the
+ * format contract separate from the identity contract above so a format
+ * change is reviewed instead of silently changing certificate arithmetic.
+ * A null value means the semantic model deliberately exposes no decimal
+ * format. Those fields use the separate, live-audited source-decimal bound
+ * below: the official value is retained without rounding, and a wider future
+ * precision fails closed for contract review.
+ */
+export const CREDITEX_VEU_NUMERIC_FORMATS = {
+  Total_Volume_L__c: null,
+  Star_Rating__c: "0.0",
+  CEC_kWhy__c: "0",
+  Screen_Area_cm2__c: null,
+  Rated_Capacity_kg__c: null,
+  Zone_4_Bs_GJyear_system_load_size__c: "0.0000",
+  Zone_4_Be_GJyear_system_load_size__c: "0.0000",
+  Zone_5_Bs_GJyear_system_load_size__c: "0.0000",
+  Zone_5_Be_GJyear_system_load_size__c: "0.0000",
+  Zone_4_Bs_GJyear_step_down_load_size__c: "0.0000",
+  Zone_4_Be_GJyear_step_down_load_size__c: "0.0000",
+  Zone_5_Bs_GJyear_step_down_load_size__c: "0.0000",
+  Zone_5_Be_GJyear_step_down_load_size__c: "0.0000",
+  Zone_4_Annual_Energy_Savings_system_l__c: "0.0000",
+  Zone_5_Annual_Energy_Savings_system_l__c: "0.0000",
+  Heating_Capacity_kW__c: "0.0000",
+  Cooling_Capacity_kW__c: "0.0000",
+  ACOP__c: "0.0000",
+  AEER__c: "0.0000",
+  GEMS_HSPF_Cold_res__c: "0.0000",
+  GEMS_TCSPF_Cold_res__c: "0.0000",
+  GEMS_HSPF_Mixed_res__c: "0.0000",
+  GEMS_TCSPF_Mixed_res__c: "0.0000",
+  GEMS_HSPF_Cold_com__c: "0.0000",
+  GEMS_TCSPF_Cold_com__c: "0.0000",
+  GEMS_HSPF_Mixed_com__c: "0.0000",
+  GEMS_TCSPF_Mixed_com__c: "0.0000",
+  Calculated_HSPF_Cold_res__c: "0.0000",
+  Calculated_TCSPF_Cold_res__c: "0.0000",
+  Calculated_HSPF_Mixed_res__c: "0.0000",
+  Calculated_TCSPF_Mixed_res__c: "0.0000",
+  Calculated_HSPF_Cold_com__c: "0.0000",
+  Calculated_TCSPF_Cold_com__c: "0.0000",
+  Calculated_HSPF_Mixed_com__c: "0.0000",
+  Calculated_TCSPF_Mixed_com__c: "0.0000",
+  Refrigerant_Charge_kg__c: "0.0000",
+  WERS_Star_Rating_heating__c: "0.0000",
+  Warranty_Period_Years__c: null,
+  PAEC_kWhy__c: "0.0000",
+  LCP_W__c: "0.0000",
+  LCPVictorian_Load_W__c: "0.0000",
+  Total_LCP_W__c: "0.0000",
+  NLP_W__c: "0.0000",
+  Nominal_Device_Rating_W__c: "0.0000",
+  VRU_Voltage__c: null,
+  Power_Factor__c: "0.0000",
+  Input_Power_W__c: "0.0000",
+  Output_Power_W__c: "0.0000",
+  Reported_Lifetime_L70__c: null,
+  No_of_Lamps__c: "0",
+  Energy_Efficiency_Index__c: "0.0000",
+  Total_Display_Area_m2__c: "0.0000",
+  Total_Energy_Consumption_kWh24h__c: "0.0000",
+  Net_Volume_L__c: "0.0000",
+  Number_of_Heat_Pumps__c: "0",
+  Number_of_Tanks__c: "0",
+  Total_Heat_Pump_Thermal_Capacity_kW__c: "0.0000",
+  Total_Thermal_Capacity_kW__c: "0.0000",
+  Thermal_Capacity_kW__c: "0.0000",
+  Total_System_Tank_Volume_L__c: "0.0000",
+  Storage_Capacity_L__c: "0.0000",
+  Zone_4_Annual_Energy_Savings__c: "0.0000",
+  Zone_4_HPelec_GLyear__c: "0.0000",
+  Zone_4_HPgas_GJyear__c: "0.0000",
+  Zone_4_Peak_Load_MJday__c: "0.0000",
+  Zone_5_Annual_Energy_Savings__c: "0.0000",
+  Zone_5_HPelec_GLyear__c: "0.0000",
+  Zone_5_HPgas_GJyear__c: "0.0000",
+  Zone_5_Peak_Load_MJday__c: "0.0000",
+  R_Value__c: "0.0000",
+  Area_sqm__c: "0.0000",
+  Width_mm__c: "0.0000",
+  Depth_mm__c: "0.0000",
+} as const satisfies Readonly<Record<string, string | null>>;
+
+const CREDITEX_VEU_UNFORMATTED_DECIMAL_PLACES = {
+  Total_Volume_L__c: 0,
+  Screen_Area_cm2__c: 2,
+  Rated_Capacity_kg__c: 0,
+  Warranty_Period_Years__c: 0,
+  VRU_Voltage__c: 0,
+  Reported_Lifetime_L70__c: 0,
+} as const satisfies Readonly<Record<string, number>>;
+
+const CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS = [
+  "Id",
+  "Product_ID__c",
+  "Product_Category_Number__c",
+  "Product_Status__c",
+] as const;
+
+export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = [
+  {
+    key: "water-heater-model",
+    categories: ["1C", "1D", "3C", "3D"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "System_Size__c",
+      "Zone_4_Bs_GJyear_system_load_size__c",
+      "Zone_4_Be_GJyear_system_load_size__c",
+      "Zone_5_Bs_GJyear_system_load_size__c",
+      "Zone_5_Be_GJyear_system_load_size__c",
+      "Zone_4_Bs_GJyear_step_down_load_size__c",
+      "Zone_4_Be_GJyear_step_down_load_size__c",
+      "Zone_5_Bs_GJyear_step_down_load_size__c",
+      "Zone_5_Be_GJyear_step_down_load_size__c",
+      "Zone_4_Annual_Energy_Savings_system_l__c",
+      "Zone_5_Annual_Energy_Savings_system_l__c",
+    ],
+  },
+  {
+    key: "air-conditioner-performance",
+    categories: [
+      "6A", "6B(i)", "6B(ii)", "6C", "6D", "6E(i)", "6E(ii)",
+      "6F", "6G",
+    ],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Product_Configuration__c",
+      "Product_Type__c",
+      "Heating_Capacity_kW__c",
+      "Cooling_Capacity_kW__c",
+      "ACOP__c",
+      "AEER__c",
+      "GEMS_HSPF_Cold_res__c",
+      "GEMS_TCSPF_Cold_res__c",
+      "GEMS_HSPF_Mixed_res__c",
+      "GEMS_TCSPF_Mixed_res__c",
+      "GEMS_HSPF_Cold_com__c",
+      "GEMS_TCSPF_Cold_com__c",
+      "GEMS_HSPF_Mixed_com__c",
+      "GEMS_TCSPF_Mixed_com__c",
+      "GEMS_Class__c",
+      "GEMS_Registered_Before_2_August_2024__c",
+      "Calculated_HSPF_Cold_res__c",
+      "Calculated_TCSPF_Cold_res__c",
+      "Calculated_HSPF_Mixed_res__c",
+      "Calculated_TCSPF_Mixed_res__c",
+      "Calculated_HSPF_Cold_com__c",
+      "Calculated_TCSPF_Cold_com__c",
+      "Calculated_HSPF_Mixed_com__c",
+      "Calculated_TCSPF_Mixed_com__c",
+      "Refrigerant_Type_GWP__c",
+      "Refrigerant_Charge_kg__c",
+    ],
+  },
+  {
+    key: "envelope-weather-pool",
+    categories: [
+      "14A", "14B", "15A", "15B", "15C", "15D", "15E", "15F",
+      "15G", "15H", "26A",
+    ],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Product_Type__c",
+      "Warranty_Period_Years__c",
+      "PAEC_kWhy__c",
+    ],
+  },
+  {
+    key: "lighting",
+    categories: ["27A", "27B", "34A", "34B", "34C", "35B"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Type__c",
+      "Product_Type__c",
+      "LCP_W__c",
+      "LCPVictorian_Load_W__c",
+      "Total_LCP_W__c",
+      "NLP_W__c",
+      "Nominal_Device_Rating_W__c",
+      "RatedLifetime__c",
+      "VRU_Voltage__c",
+      "Occupancy_Sensor__c",
+      "Programmable_Dimmer__c",
+      "Manual_Dimmer__c",
+      "DayLight_Linked_Control__c",
+      "Voltage_Reduction_Unit__c",
+      "Power_Factor__c",
+      "Input_Power_W__c",
+      "Output_Power_W__c",
+      "Reported_Lifetime_L70__c",
+      "No_of_Lamps__c",
+      "Efficacy__c",
+    ],
+  },
+  {
+    key: "project-based-lighting",
+    productIds: [
+      "000029304", "000029305", "000029306", "000029307", "000029308",
+      "000029309", "000029310", "000029311", "000029312", "000029313",
+      "000029314", "000029315", "000029316",
+    ],
+    categories: [""],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Type__c",
+      "Product_Type__c",
+      "LCP_W__c",
+      "LCPVictorian_Load_W__c",
+      "Total_LCP_W__c",
+      "NLP_W__c",
+      "Nominal_Device_Rating_W__c",
+      "RatedLifetime__c",
+      "VRU_Voltage__c",
+      "Occupancy_Sensor__c",
+      "Programmable_Dimmer__c",
+      "Manual_Dimmer__c",
+      "DayLight_Linked_Control__c",
+      "Voltage_Reduction_Unit__c",
+      "Power_Factor__c",
+      "Input_Power_W__c",
+      "Output_Power_W__c",
+      "Reported_Lifetime_L70__c",
+      "No_of_Lamps__c",
+      "Efficacy__c",
+    ],
+  },
+  {
+    key: "refrigerated-cabinet",
+    categories: ["32A"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Product_Class__c",
+      "Characteristic_Code__c",
+      "Energy_Efficiency_Index__c",
+      "Total_Display_Area_m2__c",
+      "Total_Energy_Consumption_kWh24h__c",
+      "Net_Volume_L__c",
+      "Duty_Type__c",
+      "GEMS_Class__c",
+      "GEMS_Registered_Before_2_August_2024__c",
+    ],
+  },
+  {
+    key: "fan-motor",
+    categories: ["33A"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Input_Power_W__c",
+      "Output_Power_W__c",
+      "Rotor_Motor_Type__c",
+      "Product_Application__c",
+    ],
+  },
+  {
+    key: "commercial-water-heater",
+    categories: ["44A"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Number_of_Heat_Pumps__c",
+      "Number_of_Tanks__c",
+      "Total_Heat_Pump_Thermal_Capacity_kW__c",
+      "Total_Thermal_Capacity_kW__c",
+      "Thermal_Capacity_kW__c",
+      "Total_System_Tank_Volume_L__c",
+      "Storage_Capacity_L__c",
+      "Zone_4_Annual_Energy_Savings__c",
+      "Zone_4_HPelec_GLyear__c",
+      "Zone_4_HPgas_GJyear__c",
+      "Zone_4_Peak_Load_MJday__c",
+      "Zone_5_Annual_Energy_Savings__c",
+      "Zone_5_HPelec_GLyear__c",
+      "Zone_5_HPgas_GJyear__c",
+      "Zone_5_Peak_Load_MJday__c",
+      "Refrigerant_Type_GWP__c",
+      "Refrigerant_Charge_kg__c",
+    ],
+  },
+  {
+    key: "insulation",
+    categories: ["12A", "48A"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "R_Value__c",
+      "Winter_R_Value__c",
+      "Area_sqm__c",
+      "Product_Type__c",
+    ],
+  },
+  {
+    key: "induction-cooktop",
+    categories: ["46A", "46B"],
+    fields: [
+      ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
+      "Width_mm__c",
+      "Depth_mm__c",
+      "Warranty_Period_Years__c",
+      "Product_Type__c",
+    ],
+  },
+] as const;
+
+const CREDITEX_VEU_SUPPLEMENT_ATTRIBUTE_KEYS: Readonly<Record<string, string>> = {
+  System_Size__c: "veuSystemSize",
+  Zone_4_Bs_GJyear_system_load_size__c: "bs2021Zone4SystemLoadGjPerYear",
+  Zone_4_Be_GJyear_system_load_size__c: "be2021Zone4SystemLoadGjPerYear",
+  Zone_5_Bs_GJyear_system_load_size__c: "bs2021Zone5SystemLoadGjPerYear",
+  Zone_5_Be_GJyear_system_load_size__c: "be2021Zone5SystemLoadGjPerYear",
+  Zone_4_Bs_GJyear_step_down_load_size__c: "bs2021Zone4StepDownLoadGjPerYear",
+  Zone_4_Be_GJyear_step_down_load_size__c: "be2021Zone4StepDownLoadGjPerYear",
+  Zone_5_Bs_GJyear_step_down_load_size__c: "bs2021Zone5StepDownLoadGjPerYear",
+  Zone_5_Be_GJyear_step_down_load_size__c: "be2021Zone5StepDownLoadGjPerYear",
+  Zone_4_Annual_Energy_Savings_system_l__c: "zone4AnnualEnergySavings",
+  Zone_5_Annual_Energy_Savings_system_l__c: "zone5AnnualEnergySavings",
+  Product_Configuration__c: "veuProductConfiguration",
+  Product_Type__c: "veuProductType",
+  Heating_Capacity_kW__c: "ratedHeatingCapacityKw",
+  Cooling_Capacity_kW__c: "ratedCoolingCapacityKw",
+  ACOP__c: "acop",
+  AEER__c: "aeer",
+  GEMS_HSPF_Cold_res__c: "gemsHspfColdResidential",
+  GEMS_TCSPF_Cold_res__c: "gemsTcspfColdResidential",
+  GEMS_HSPF_Mixed_res__c: "gemsHspfMixedResidential",
+  GEMS_TCSPF_Mixed_res__c: "gemsTcspfMixedResidential",
+  GEMS_HSPF_Cold_com__c: "gemsHspfColdCommercial",
+  GEMS_TCSPF_Cold_com__c: "gemsTcspfColdCommercial",
+  GEMS_HSPF_Mixed_com__c: "gemsHspfMixedCommercial",
+  GEMS_TCSPF_Mixed_com__c: "gemsTcspfMixedCommercial",
+  GEMS_Class__c: "gemsClass",
+  GEMS_Registered_Before_2_August_2024__c:
+    "gemsRegisteredBefore2August2024",
+  Calculated_HSPF_Cold_res__c: "calculatedHspfColdResidential",
+  Calculated_TCSPF_Cold_res__c: "calculatedTcspfColdResidential",
+  Calculated_HSPF_Mixed_res__c: "calculatedHspfMixedResidential",
+  Calculated_TCSPF_Mixed_res__c: "calculatedTcspfMixedResidential",
+  Calculated_HSPF_Cold_com__c: "calculatedHspfColdCommercial",
+  Calculated_TCSPF_Cold_com__c: "calculatedTcspfColdCommercial",
+  Calculated_HSPF_Mixed_com__c: "calculatedHspfMixedCommercial",
+  Calculated_TCSPF_Mixed_com__c: "calculatedTcspfMixedCommercial",
+  Refrigerant_Type_GWP__c: "refrigerantType",
+  Refrigerant_Charge_kg__c: "refrigerantChargeKg",
+  Warranty_Period_Years__c: "warrantyYears",
+  PAEC_kWhy__c: "paecKwhPerYear",
+  Type__c: "veuType",
+  LCP_W__c: "lampCircuitPowerW",
+  LCPVictorian_Load_W__c: "victorianLampCircuitPowerW",
+  Total_LCP_W__c: "totalLampCircuitPowerW",
+  NLP_W__c: "nominalLampPowerW",
+  Nominal_Device_Rating_W__c: "nominalDeviceRatingW",
+  RatedLifetime__c: "ratedLifetime",
+  VRU_Voltage__c: "voltageReductionUnitOutputV",
+  Occupancy_Sensor__c: "occupancySensor",
+  Programmable_Dimmer__c: "programmableDimmer",
+  Manual_Dimmer__c: "manualDimmer",
+  DayLight_Linked_Control__c: "daylightLinkedControl",
+  Voltage_Reduction_Unit__c: "voltageReductionUnit",
+  Power_Factor__c: "powerFactor",
+  Input_Power_W__c: "inputPowerW",
+  Output_Power_W__c: "outputPowerW",
+  Reported_Lifetime_L70__c: "reportedLifetimeL70Hours",
+  No_of_Lamps__c: "numberOfLamps",
+  Efficacy__c: "efficacy",
+  Product_Class__c: "productClass",
+  Characteristic_Code__c: "characteristicCode",
+  Energy_Efficiency_Index__c: "energyEfficiencyIndex",
+  Total_Display_Area_m2__c: "totalDisplayAreaM2",
+  Total_Energy_Consumption_kWh24h__c: "totalEnergyConsumptionKwhPer24h",
+  Net_Volume_L__c: "netVolumeLitres",
+  Duty_Type__c: "dutyType",
+  Rotor_Motor_Type__c: "rotorMotorType",
+  Product_Application__c: "productApplication",
+  Number_of_Heat_Pumps__c: "numberOfHeatPumps",
+  Number_of_Tanks__c: "numberOfTanks",
+  Total_Heat_Pump_Thermal_Capacity_kW__c: "totalHeatPumpThermalCapacityKw",
+  Total_Thermal_Capacity_kW__c: "totalThermalCapacityKw",
+  Thermal_Capacity_kW__c: "thermalCapacityKw",
+  Total_System_Tank_Volume_L__c: "totalSystemTankVolumeLitres",
+  Storage_Capacity_L__c: "storageCapacityLitres",
+  Zone_4_Annual_Energy_Savings__c: "zone4AnnualEnergySavings",
+  Zone_4_HPelec_GLyear__c: "zone4HpElectricityGjPerYear",
+  Zone_4_HPgas_GJyear__c: "zone4HpGasGjPerYear",
+  Zone_4_Peak_Load_MJday__c: "zone4CommercialPeakLoadMjPerDay",
+  Zone_5_Annual_Energy_Savings__c: "zone5AnnualEnergySavings",
+  Zone_5_HPelec_GLyear__c: "zone5HpElectricityGjPerYear",
+  Zone_5_HPgas_GJyear__c: "zone5HpGasGjPerYear",
+  Zone_5_Peak_Load_MJday__c: "zone5CommercialPeakLoadMjPerDay",
+  R_Value__c: "rValue",
+  Winter_R_Value__c: "winterRValue",
+  Area_sqm__c: "areaSquareMetres",
+  Width_mm__c: "widthMm",
+  Depth_mm__c: "depthMm",
+};
 
 export const CREDITEX_VEU_REFRESH_SCHEMA = {
   entity: "LastRefreshedDateTime",
@@ -142,7 +627,7 @@ const CREDITEX_VEU_PROJECT_BASED_LIGHTING_LEGACY_SUFFIX =
   "PBA lighting products";
 
 type JsonObject = Record<string, unknown>;
-type VeuQueryValue = string | number | null;
+type VeuQueryValue = string | number | boolean | null;
 type VeuDecodedPage = Readonly<{
   rows: readonly (readonly VeuQueryValue[])[];
   continuation: boolean;
@@ -171,6 +656,15 @@ export type CreditexVeuProductArtifact = Readonly<{
   pages: readonly Readonly<{
     afterId: string | null;
     response: string;
+  }>[];
+  supplements: readonly Readonly<{
+    key: string;
+    queryFields: readonly string[];
+    expectedCount: number;
+    pages: readonly Readonly<{
+      afterId: string | null;
+      response: string;
+    }>[];
   }>[];
 }>;
 
@@ -283,6 +777,28 @@ export function validateCreditexVeuPowerBiModelAndSchema(
     productEntity.Properties,
     "Dim_Product properties",
   );
+  const numericSchemaFields = Object.entries(CREDITEX_VEU_DIM_PRODUCT_SCHEMA)
+    .filter(([, [dataType]]) => dataType === 3)
+    .map(([name]) => name)
+    .sort();
+  if (
+    JSON.stringify(numericSchemaFields)
+    !== JSON.stringify(Object.keys(CREDITEX_VEU_NUMERIC_FORMATS).sort())
+  ) {
+    return sourceError("controlled numeric-format schema is incomplete");
+  }
+  const unformattedNumericFields = Object.entries(CREDITEX_VEU_NUMERIC_FORMATS)
+    .filter(([, format]) => format === null)
+    .map(([name]) => name)
+    .sort();
+  if (
+    JSON.stringify(unformattedNumericFields)
+    !== JSON.stringify(
+      Object.keys(CREDITEX_VEU_UNFORMATTED_DECIMAL_PLACES).sort(),
+    )
+  ) {
+    return sourceError("controlled source-decimal schema is incomplete");
+  }
   for (const [name, [dataType, stableName]] of Object.entries(
     CREDITEX_VEU_DIM_PRODUCT_SCHEMA,
   )) {
@@ -294,7 +810,22 @@ export function validateCreditexVeuPowerBiModelAndSchema(
     }
     const property = requiredObject(matches[0], `Dim_Product property ${name}`);
     if (property.DataType !== dataType || property.StableName !== stableName) {
-      return sourceError(`Dim_Product property ${name} schema changed`);
+      return sourceError(
+        `Dim_Product property ${name} schema changed `
+        + `(type ${String(property.DataType)}, stable name ${String(property.StableName)})`,
+      );
+    }
+    if (dataType === 3) {
+      const expectedFormat = CREDITEX_VEU_NUMERIC_FORMATS[
+        name as keyof typeof CREDITEX_VEU_NUMERIC_FORMATS
+      ];
+      const actualFormat = property.FormatString ?? null;
+      if (actualFormat !== expectedFormat) {
+        return sourceError(
+          `Dim_Product property ${name} numeric format changed `
+          + `(expected ${String(expectedFormat)}, received ${String(actualFormat)})`,
+        );
+      }
     }
   }
   const refreshEntities = entities.filter((entity) => (
@@ -349,10 +880,10 @@ function responseDataset(
   return requiredObject(datasets[0], "query dataset");
 }
 
-function responseDsr(rawResponse: string) {
+function responseDsr(rawResponse: string, queryFields: readonly string[]) {
   return responseDataset(
     rawResponse,
-    CREDITEX_VEU_QUERY_FIELDS.map((field) => `Dim_Product.${field}`),
+    queryFields.map((field) => `Dim_Product.${field}`),
   );
 }
 
@@ -384,10 +915,57 @@ function normalizedDate(value: unknown, label: string): string {
   return iso.slice(0, 10);
 }
 
+function positiveZero(value: number) {
+  return Object.is(value, -0) ? 0 : value;
+}
+
+function canonicalSemanticNumber(
+  value: number,
+  fieldName: string,
+  label: string,
+) {
+  if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
+    return sourceError(`${label} is outside the exact numeric range`);
+  }
+  if (!Object.hasOwn(CREDITEX_VEU_NUMERIC_FORMATS, fieldName)) {
+    return sourceError(`${label} has no controlled numeric format`);
+  }
+  const format = CREDITEX_VEU_NUMERIC_FORMATS[
+    fieldName as keyof typeof CREDITEX_VEU_NUMERIC_FORMATS
+  ];
+  if (format === null) {
+    const decimalPlaces = CREDITEX_VEU_UNFORMATTED_DECIMAL_PLACES[
+      fieldName as keyof typeof CREDITEX_VEU_UNFORMATTED_DECIMAL_PLACES
+    ];
+    if (decimalPlaces === undefined) {
+      return sourceError(`${label} has no controlled source-decimal contract`);
+    }
+    const sourceDecimal = String(value);
+    const match = /^-?\d+(?:\.(\d+))?$/.exec(sourceDecimal);
+    if (!match || (match[1]?.length || 0) > decimalPlaces) {
+      return sourceError(
+        `${label} exceeds its reviewed unformatted decimal precision `
+        + `(${JSON.stringify(value)})`,
+      );
+    }
+    return positiveZero(value);
+  }
+  const decimalMatch = /^0(?:\.(0+))?$/.exec(format);
+  if (!decimalMatch) {
+    return sourceError(`${label} has an unsupported regulator numeric format`);
+  }
+  const decimalPlaces = decimalMatch[1]?.length || 0;
+  if (Math.abs(value) >= 1e21) {
+    return sourceError(`${label} is outside the controlled decimal range`);
+  }
+  return positiveZero(Number(value.toFixed(decimalPlaces)));
+}
+
 function normalizedCell(
   value: unknown,
   type: number,
   label: string,
+  fieldName: string,
 ): VeuQueryValue {
   if (value === null) return null;
   if (type === 1) {
@@ -395,10 +973,24 @@ function normalizedCell(
     return value;
   }
   if (type === 3) {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      return sourceError(`${label} is not a finite number`);
+    const numeric = typeof value === "number"
+      ? value
+      : typeof value === "string"
+        && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)
+        ? Number(value)
+        : Number.NaN;
+    if (!Number.isFinite(numeric)) {
+      return sourceError(
+        `${label} is not a finite number (${JSON.stringify(value)})`,
+      );
     }
-    return value;
+    return canonicalSemanticNumber(numeric, fieldName, label);
+  }
+  if (type === 5) {
+    if (typeof value === "boolean") return value;
+    if (value === 0 || value === "0") return false;
+    if (value === 1 || value === "1") return true;
+    return sourceError(`${label} is not a boolean (${JSON.stringify(value)})`);
   }
   if (type === 7) return normalizedDate(value, label);
   return sourceError(`${label} has an unsupported Power BI type`);
@@ -423,8 +1015,15 @@ function dictionaryValue(
   return resolved;
 }
 
-function parsePowerBiLiteral(value: unknown, type: number, label: string) {
+function parsePowerBiLiteral(
+  value: unknown,
+  type: number,
+  label: string,
+  fieldName: string,
+) {
   if (value === null) return null;
+  if (type === 5 && (value === true || value === 1)) return true;
+  if (type === 5 && (value === false || value === 0)) return false;
   if (typeof value !== "string") {
     return sourceError(`${label} is not a Power BI literal`);
   }
@@ -441,7 +1040,12 @@ function parsePowerBiLiteral(value: unknown, type: number, label: string) {
     if (!Number.isFinite(numeric)) {
       return sourceError(`${label} is not a numeric literal`);
     }
-    return numeric;
+    return canonicalSemanticNumber(numeric, fieldName, label);
+  }
+  if (type === 5) {
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return sourceError(`${label} is not a boolean literal`);
   }
   if (type === 7) {
     const match = /^datetime'(.*)'$/.exec(value);
@@ -453,8 +1057,17 @@ function parsePowerBiLiteral(value: unknown, type: number, label: string) {
 
 export function decodeCreditexVeuPowerBiProductPage(
   rawResponse: string,
+  queryFields: readonly string[] = CREDITEX_VEU_QUERY_FIELDS,
+  queryFieldTypes: readonly number[] = CREDITEX_VEU_QUERY_FIELD_TYPES,
 ): VeuDecodedPage {
-  const dataset = responseDsr(rawResponse);
+  if (
+    queryFields.length < 1
+    || queryFields.length > 53
+    || queryFieldTypes.length !== queryFields.length
+  ) {
+    return sourceError("product query definition is outside the safe mask width");
+  }
+  const dataset = responseDsr(rawResponse, queryFields);
   const phases = requiredArray(dataset.PH, "query phases");
   if (phases.length !== 1) return sourceError("product query phase count changed");
   const phase = requiredObject(phases[0], "product query phase");
@@ -469,14 +1082,14 @@ export function decodeCreditexVeuPowerBiProductPage(
     const row = requiredObject(rawRow, `product row ${rowIndex + 1}`);
     if (rowIndex === 0) {
       const schema = requiredArray(row.S, "product row schema");
-      if (schema.length !== CREDITEX_VEU_QUERY_FIELDS.length) {
+      if (schema.length !== queryFields.length) {
         return sourceError("product row schema width changed");
       }
       metadata = schema.map((item, columnIndex) => {
         const field = requiredObject(item, `product field ${columnIndex + 1}`);
         if (
           field.N !== `G${columnIndex}`
-          || field.T !== CREDITEX_VEU_QUERY_FIELD_TYPES[columnIndex]
+          || field.T !== queryFieldTypes[columnIndex]
           || (
             field.DN !== undefined
             && (typeof field.DN !== "string" || !/^D\d+$/.test(field.DN))
@@ -531,6 +1144,7 @@ export function decodeCreditexVeuPowerBiProductPage(
         rawValue,
         Number(field.T),
         `product row ${rowIndex + 1} column ${columnIndex + 1}`,
+        queryFields[columnIndex],
       ));
     });
     if (consumed !== cells.length) {
@@ -550,14 +1164,15 @@ export function decodeCreditexVeuPowerBiProductPage(
       return sourceError("product query restart token count changed");
     }
     const restart = requiredArray(restartRows[0], "product query restart row");
-    if (restart.length !== CREDITEX_VEU_QUERY_FIELDS.length) {
+    if (restart.length !== queryFields.length) {
       return sourceError("product query restart width changed");
     }
     const normalizedRestart = restart.map((literal, index) => (
       parsePowerBiLiteral(
         literal,
-        CREDITEX_VEU_QUERY_FIELD_TYPES[index],
+        queryFieldTypes[index],
         `product restart column ${index + 1}`,
+        queryFields[index],
       )
     ));
     if (
@@ -875,9 +1490,578 @@ function positiveFormulaNumber(value: number | null, label: string) {
   return value;
 }
 
+function requiredFormulaNumber(value: number | null, label: string) {
+  if (value === null) return sourceError(`${label} is missing`);
+  return value;
+}
+
+type VeuSupplementalRecord = Readonly<{
+  productId: string;
+  category: string;
+  sourceStatus: string;
+  definitionIndex: number;
+  values: readonly VeuQueryValue[];
+}>;
+
+function supplementalQueryForCategory(category: string) {
+  return CREDITEX_VEU_SUPPLEMENTAL_QUERIES.find(
+    (definition) => (definition.categories as readonly string[]).includes(category),
+  );
+}
+
+function parseSupplementalEvidence(
+  value: unknown,
+  categoryCounts: Readonly<Record<string, number>>,
+) {
+  const supplements = requiredArray(value, "artifact supplements");
+  if (supplements.length !== CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length) {
+    return sourceError("artifact supplement count changed");
+  }
+  const records = new Map<string, VeuSupplementalRecord>();
+  supplements.forEach((rawSupplement, supplementIndex) => {
+    const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[supplementIndex];
+    const supplement = requiredObject(
+      rawSupplement,
+      `artifact supplement ${supplementIndex + 1}`,
+    );
+    exactKeys(
+      supplement,
+      ["key", "queryFields", "expectedCount", "pages"],
+      `artifact supplement ${supplementIndex + 1}`,
+    );
+    const expectedCount = definition.categories.reduce(
+      (sum, category) => sum + (categoryCounts[category] || 0),
+      0,
+    );
+    if (
+      supplement.key !== definition.key
+      || JSON.stringify(supplement.queryFields) !== JSON.stringify(definition.fields)
+      || supplement.expectedCount !== expectedCount
+    ) {
+      return sourceError(`artifact supplement ${definition.key} control changed`);
+    }
+    const fieldTypes = definition.fields.map((field) => (
+      CREDITEX_VEU_DIM_PRODUCT_SCHEMA[
+        field as keyof typeof CREDITEX_VEU_DIM_PRODUCT_SCHEMA
+      ][0]
+    ));
+    const pages = requiredArray(
+      supplement.pages,
+      `artifact supplement ${definition.key} pages`,
+    );
+    if (
+      pages.length > 10
+      || (expectedCount === 0 ? pages.length !== 0 : pages.length < 1)
+    ) {
+      return sourceError(`artifact supplement ${definition.key} page count changed`);
+    }
+    const allowedCategories = new Set<string>(definition.categories);
+    let expectedAfterId: string | null = null;
+    let terminalSeen = false;
+    let decodedCount = 0;
+    pages.forEach((rawPage, pageIndex) => {
+      const page = requiredObject(
+        rawPage,
+        `artifact supplement ${definition.key} page ${pageIndex + 1}`,
+      );
+      exactKeys(
+        page,
+        ["afterId", "response"],
+        `artifact supplement ${definition.key} page ${pageIndex + 1}`,
+      );
+      if (page.afterId !== expectedAfterId || terminalSeen) {
+        return sourceError(`artifact supplement ${definition.key} cursor changed`);
+      }
+      const decoded = decodeCreditexVeuPowerBiProductPage(
+        requiredText(
+          page.response,
+          `artifact supplement ${definition.key} response`,
+          30_000_000,
+        ),
+        definition.fields,
+        fieldTypes,
+      );
+      for (const row of decoded.rows) {
+        const id = requiredRowText(row[0], `supplement ${definition.key} Id`);
+        const productId = requiredRowText(
+          row[1],
+          `supplement ${definition.key} Product ID`,
+        );
+        const category = optionalRowText(
+          row[2],
+          `supplement ${definition.key} category`,
+        );
+        const sourceStatus = requiredRowText(
+          row[3],
+          `supplement ${definition.key} status`,
+        );
+        if (
+          (expectedAfterId && id.toLowerCase() <= expectedAfterId.toLowerCase())
+          || !allowedCategories.has(category)
+          || (sourceStatus !== "Approved" && sourceStatus !== "Legacy")
+          || records.has(id)
+          || (
+            "productIds" in definition
+            && !(definition.productIds as readonly string[]).includes(productId)
+          )
+        ) {
+          return sourceError(`supplement ${definition.key} identity changed`);
+        }
+        expectedAfterId = id;
+        records.set(id, {
+          productId,
+          category,
+          sourceStatus,
+          definitionIndex: supplementIndex,
+          values: row.slice(4),
+        });
+        decodedCount += 1;
+      }
+      delete page.response;
+      terminalSeen = !decoded.continuation;
+      if (pageIndex < pages.length - 1 && terminalSeen) {
+        return sourceError(`artifact supplement ${definition.key} ended early`);
+      }
+    });
+    if ((expectedCount > 0 && !terminalSeen) || decodedCount !== expectedCount) {
+      return sourceError(`artifact supplement ${definition.key} did not reconcile`);
+    }
+    delete supplement.pages;
+  });
+  return records;
+}
+
+function supplementalValue(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+) {
+  if (!supplement) return null;
+  const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[
+    supplement.definitionIndex
+  ];
+  const fieldIndex = (definition.fields as readonly string[]).indexOf(field);
+  if (fieldIndex < 4) return null;
+  return supplement.values[fieldIndex - 4] ?? null;
+}
+
+function supplementalNumber(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+) {
+  return optionalRowNumber(supplementalValue(supplement, field), label);
+}
+
+function supplementalText(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+) {
+  return optionalRowText(supplementalValue(supplement, field), label);
+}
+
+function supplementalBoolean(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+) {
+  const value = supplementalValue(supplement, field);
+  if (value === null) return null;
+  if (typeof value !== "boolean") return sourceError(`${label} is not boolean`);
+  return value;
+}
+
+function requiredSupplementalNumber(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+  positive = false,
+) {
+  const value = requiredFormulaNumber(
+    supplementalNumber(supplement, field, label),
+    label,
+  );
+  if (positive && value <= 0) return sourceError(`${label} is not positive`);
+  return value;
+}
+
+function requiredSupplementalText(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+) {
+  const value = supplementalText(supplement, field, label);
+  if (!value) return sourceError(`${label} is missing`);
+  return value;
+}
+
+function requiredSupplementalBoolean(
+  supplement: VeuSupplementalRecord | undefined,
+  field: string,
+  label: string,
+) {
+  const value = supplementalBoolean(supplement, field, label);
+  if (value === null) return sourceError(`${label} is missing`);
+  return value;
+}
+
+function roundedSignificant(value: number, digits: number, label: string) {
+  if (!Number.isFinite(value) || digits < 1 || digits > 15) {
+    return sourceError(`${label} cannot be rounded to governed precision`);
+  }
+  return positiveZero(Number(value.toPrecision(digits)));
+}
+
+function governedSupplementalAttribute(
+  category: string,
+  field: string,
+  value: VeuQueryValue,
+  label: string,
+): VeuQueryValue {
+  if (category !== "44A" || typeof value !== "number") return value;
+  if (field === "Total_Heat_Pump_Thermal_Capacity_kW__c") {
+    return positiveZero(Number(value.toFixed(1)));
+  }
+  if (
+    field === "Zone_4_Annual_Energy_Savings__c"
+    || field === "Zone_5_Annual_Energy_Savings__c"
+  ) {
+    return roundedSignificant(value, 2, label);
+  }
+  if (
+    field === "Zone_4_HPelec_GLyear__c"
+    || field === "Zone_4_HPgas_GJyear__c"
+    || field === "Zone_4_Peak_Load_MJday__c"
+    || field === "Zone_5_HPelec_GLyear__c"
+    || field === "Zone_5_HPgas_GJyear__c"
+    || field === "Zone_5_Peak_Load_MJday__c"
+  ) {
+    return roundedSignificant(value, 4, label);
+  }
+  return value;
+}
+
+function validateApprovedFormulaFields(
+  index: number,
+  category: string,
+  sourceStatus: string,
+  supplement: VeuSupplementalRecord | undefined,
+  attributes: Record<string, string | number | boolean | null>,
+  wersHeatingStars: number | null,
+) {
+  if (sourceStatus !== "Approved") return;
+  const label = `record ${index}`;
+  if (["1C", "1D", "3C", "3D"].includes(category)) {
+    const systemSize = supplementalText(
+      supplement,
+      "System_Size__c",
+      `${label} system size`,
+    );
+    const systemSizeRecognized = systemSize === "Small" || systemSize === "Medium";
+    attributes.veuWaterHeaterSystemSizeRecognized = systemSizeRecognized;
+    const zone4Fields = [
+      "Zone_4_Bs_GJyear_system_load_size__c",
+      "Zone_4_Be_GJyear_system_load_size__c",
+      "Zone_4_Bs_GJyear_step_down_load_size__c",
+      "Zone_4_Be_GJyear_step_down_load_size__c",
+    ];
+    const zone4Values = zone4Fields.map((field) => (
+      supplementalNumber(supplement, field, `${label} ${field}`)
+    ));
+    const zone4AnnualSavings = supplementalNumber(
+      supplement,
+      "Zone_4_Annual_Energy_Savings_system_l__c",
+      `${label} zone 4 annual energy savings`,
+    );
+    attributes.veuZone4ModelDataAvailable = Boolean(
+      systemSizeRecognized
+      && zone4Values.every((value) => value !== null)
+      && zone4AnnualSavings !== null
+      && zone4AnnualSavings >= 60,
+    );
+    const zone5Fields = [
+      "Zone_5_Bs_GJyear_system_load_size__c",
+      "Zone_5_Be_GJyear_system_load_size__c",
+      "Zone_5_Bs_GJyear_step_down_load_size__c",
+      "Zone_5_Be_GJyear_step_down_load_size__c",
+    ];
+    const zone5Values = zone5Fields.map((field) => (
+      supplementalNumber(supplement, field, `${label} ${field}`)
+    ));
+    const zone5AnnualSavings = supplementalNumber(
+      supplement,
+      "Zone_5_Annual_Energy_Savings_system_l__c",
+      `${label} zone 5 annual energy savings`,
+    );
+    attributes.veuZone5ModelDataAvailable = Boolean(
+      systemSizeRecognized
+      && zone5Values.every((value) => value !== null)
+      && zone5AnnualSavings !== null
+      && zone5AnnualSavings >= 60,
+    );
+  }
+  if (category.startsWith("6")) {
+    const configuration = requiredSupplementalText(
+      supplement,
+      "Product_Configuration__c",
+      `${label} air-conditioner configuration`,
+    );
+    const configurationClass = {
+      "Single split system": "single",
+      "Multiple split - variable refrigerant flow": "multi",
+      "Multiple split - fixed head": "multi",
+      Packaged: "packaged",
+    }[configuration];
+    if (!configurationClass) {
+      return sourceError(`${label} air-conditioner configuration changed`);
+    }
+    attributes.veuProductConfigurationClass = configurationClass;
+    const productType = requiredSupplementalText(
+      supplement,
+      "Product_Type__c",
+      `${label} air-conditioner product type`,
+    );
+    const productTypeClass = {
+      Ducted: "ducted",
+      "Non-Ducted": "non_ducted",
+    }[productType];
+    if (!productTypeClass) {
+      return sourceError(`${label} air-conditioner product type changed`);
+    }
+    attributes.veuProductTypeClass = productTypeClass;
+    for (const field of [
+      "Heating_Capacity_kW__c",
+      "Cooling_Capacity_kW__c",
+      "ACOP__c",
+      "AEER__c",
+    ]) {
+      requiredSupplementalNumber(supplement, field, `${label} ${field}`, true);
+    }
+    for (const field of [
+      "GEMS_HSPF_Cold_res__c",
+      "GEMS_TCSPF_Cold_res__c",
+      "GEMS_HSPF_Mixed_res__c",
+      "GEMS_TCSPF_Mixed_res__c",
+      "GEMS_HSPF_Cold_com__c",
+      "GEMS_TCSPF_Cold_com__c",
+      "GEMS_HSPF_Mixed_com__c",
+      "GEMS_TCSPF_Mixed_com__c",
+    ]) {
+      requiredSupplementalNumber(supplement, field, `${label} ${field}`);
+    }
+    requiredSupplementalText(
+      supplement,
+      "Refrigerant_Type_GWP__c",
+      `${label} refrigerant type`,
+    );
+    requiredSupplementalText(
+      supplement,
+      "GEMS_Class__c",
+      `${label} GEMS class`,
+    );
+    requiredSupplementalBoolean(
+      supplement,
+      "GEMS_Registered_Before_2_August_2024__c",
+      `${label} GEMS registration-date flag`,
+    );
+  }
+  if (category === "13A") {
+    positiveFormulaNumber(wersHeatingStars, `${label} WERS heating stars`);
+  }
+  if (category === "14A" || category === "14B") {
+    requiredSupplementalText(
+      supplement,
+      "Product_Type__c",
+      `${label} secondary-glazing product type`,
+    );
+  }
+  if (["15A", "15B", "15C", "15D", "15E", "15H"].includes(category)) {
+    requiredSupplementalNumber(
+      supplement,
+      "Warranty_Period_Years__c",
+      `${label} warranty years`,
+      true,
+    );
+  }
+  if (category === "26A") {
+    const paec = requiredSupplementalNumber(
+      supplement,
+      "PAEC_kWhy__c",
+      `${label} PAEC`,
+    );
+    if (paec < 0) return sourceError(`${label} PAEC is negative`);
+  }
+  if (category === "27A" || category === "27B") {
+    requiredSupplementalNumber(
+      supplement,
+      "LCPVictorian_Load_W__c",
+      `${label} Victorian-load LCP`,
+      true,
+    );
+  }
+  if (category === "32A") {
+    requiredSupplementalText(
+      supplement,
+      "Product_Class__c",
+      `${label} refrigerated-cabinet product class`,
+    );
+    requiredSupplementalText(
+      supplement,
+      "Characteristic_Code__c",
+      `${label} refrigerated-cabinet characteristic code`,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "Energy_Efficiency_Index__c",
+      `${label} energy-efficiency index`,
+      true,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "Total_Energy_Consumption_kWh24h__c",
+      `${label} total energy consumption`,
+      true,
+    );
+    const displayArea = requiredSupplementalNumber(
+      supplement,
+      "Total_Display_Area_m2__c",
+      `${label} total display area`,
+    );
+    const netVolume = requiredSupplementalNumber(
+      supplement,
+      "Net_Volume_L__c",
+      `${label} net volume`,
+    );
+    if (displayArea <= 0 && netVolume <= 0) {
+      return sourceError(`${label} has no positive display area or net volume`);
+    }
+  }
+  if (category === "33A") {
+    requiredSupplementalNumber(
+      supplement,
+      "Input_Power_W__c",
+      `${label} nameplate fan input power`,
+      true,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "Output_Power_W__c",
+      `${label} rated motor output power`,
+      true,
+    );
+    requiredSupplementalText(
+      supplement,
+      "Rotor_Motor_Type__c",
+      `${label} rotor motor type`,
+    );
+  }
+  if (category === "34C") {
+    requiredSupplementalText(
+      supplement,
+      "Product_Type__c",
+      `${label} lighting product type`,
+    );
+    const lcp = supplementalNumber(
+      supplement,
+      "LCP_W__c",
+      `${label} lamp circuit power`,
+    );
+    const nominalLampPower = supplementalNumber(
+      supplement,
+      "NLP_W__c",
+      `${label} nominal lamp power`,
+    );
+    if ((lcp ?? 0) <= 0 && (nominalLampPower ?? 0) <= 0) {
+      return sourceError(`${label} has no governed lighting power value`);
+    }
+  }
+  if (category === "35B") {
+    requiredSupplementalNumber(
+      supplement,
+      "LCP_W__c",
+      `${label} lamp circuit power`,
+      true,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "NLP_W__c",
+      `${label} nominal lamp power`,
+      true,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "Reported_Lifetime_L70__c",
+      `${label} reported L70 lifetime`,
+      true,
+    );
+  }
+  if (category === "44A") {
+    for (const field of [
+      "Number_of_Heat_Pumps__c",
+      "Number_of_Tanks__c",
+      "Total_Heat_Pump_Thermal_Capacity_kW__c",
+      "Total_Thermal_Capacity_kW__c",
+      "Total_System_Tank_Volume_L__c",
+      "Zone_4_Annual_Energy_Savings__c",
+      "Zone_4_HPelec_GLyear__c",
+      "Zone_4_Peak_Load_MJday__c",
+      "Refrigerant_Charge_kg__c",
+    ]) {
+      requiredSupplementalNumber(supplement, field, `${label} ${field}`, true);
+    }
+    for (const field of [
+      "Zone_4_HPgas_GJyear__c",
+      "Zone_5_Annual_Energy_Savings__c",
+      "Zone_5_HPelec_GLyear__c",
+      "Zone_5_HPgas_GJyear__c",
+      "Zone_5_Peak_Load_MJday__c",
+    ]) {
+      requiredSupplementalNumber(supplement, field, `${label} ${field}`);
+    }
+    requiredSupplementalText(
+      supplement,
+      "Refrigerant_Type_GWP__c",
+      `${label} refrigerant type`,
+    );
+  }
+  if (category === "46A" || category === "46B") {
+    requiredSupplementalNumber(
+      supplement,
+      "Width_mm__c",
+      `${label} cooktop width`,
+      true,
+    );
+    requiredSupplementalNumber(
+      supplement,
+      "Depth_mm__c",
+      `${label} cooktop depth`,
+      true,
+    );
+    requiredSupplementalText(
+      supplement,
+      "Product_Type__c",
+      `${label} cooktop product type`,
+    );
+  }
+  if (category === "48A") {
+    requiredSupplementalNumber(
+      supplement,
+      "R_Value__c",
+      `${label} insulation R-value`,
+      true,
+    );
+    requiredSupplementalText(
+      supplement,
+      "Product_Type__c",
+      `${label} insulation product type`,
+    );
+  }
+}
+
 function productRecord(
   row: readonly VeuQueryValue[],
   index: number,
+  supplement: VeuSupplementalRecord | undefined,
 ): CreditexOfficialProductRecord {
   const salesforceId = requiredRowText(row[0], `record ${index} Salesforce Id`);
   const productId = requiredRowText(row[1], `record ${index} Product ID`);
@@ -889,6 +2073,20 @@ function productRecord(
   const sourceStatus = requiredRowText(row[7], `record ${index} status`);
   if (sourceStatus !== "Approved" && sourceStatus !== "Legacy") {
     return sourceError(`record ${index} has unsupported status ${sourceStatus}`);
+  }
+  const supplementalQuery = supplementalQueryForCategory(category);
+  if (
+    Boolean(supplementalQuery) !== Boolean(supplement)
+    || (
+      supplement
+      && (
+        supplement.productId !== productId
+        || supplement.category !== category
+        || supplement.sourceStatus !== sourceStatus
+      )
+    )
+  ) {
+    return sourceError(`record ${index} supplemental evidence does not match`);
   }
   const eligibleFrom = requiredRowText(row[8], `record ${index} effective from`);
   const eligibleTo = optionalRowText(row[9], `record ${index} effective to`);
@@ -923,6 +2121,10 @@ function productRecord(
     row[15],
     `record ${index} GEMS determination version`,
   );
+  const wersHeatingStars = optionalRowNumber(
+    row[16],
+    `record ${index} WERS heating stars`,
+  );
   const attributes: Record<string, string | number | boolean | null> = {
     veuProductId: productId,
     veuSalesforceRecordId: salesforceId,
@@ -941,6 +2143,37 @@ function productRecord(
   if (gemsDeterminationVersion) {
     attributes.gemsDeterminationVersion = gemsDeterminationVersion;
   }
+  if (wersHeatingStars !== null) {
+    attributes.wersHeatingStars = wersHeatingStars;
+  }
+  if (supplement) {
+    const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[
+      supplement.definitionIndex
+    ];
+    definition.fields.slice(4).forEach((field, fieldIndex) => {
+      const attributeKey = CREDITEX_VEU_SUPPLEMENT_ATTRIBUTE_KEYS[field];
+      if (!attributeKey) {
+        return sourceError(
+          `record ${index} has unmapped supplemental field ${field}`,
+        );
+      }
+      const value = governedSupplementalAttribute(
+        category,
+        field,
+        supplement.values[fieldIndex],
+        `record ${index} ${field}`,
+      );
+      if (value !== null) attributes[attributeKey] = value;
+    });
+  }
+  validateApprovedFormulaFields(
+    index,
+    category,
+    sourceStatus,
+    supplement,
+    attributes,
+    wersHeatingStars,
+  );
   if (sourceStatus === "Approved" && category.startsWith("22")) {
     positiveFormulaNumber(totalVolumeLitres, `record ${index} total volume`);
     positiveFormulaNumber(starRating, `record ${index} star rating`);
@@ -1000,6 +2233,7 @@ export function parseCreditexVeuProductArtifact(
     "queryFields",
     "controls",
     "pages",
+    "supplements",
   ], "artifact");
   if (
     artifact.contract !== CREDITEX_VEU_PRODUCT_ARTIFACT_CONTRACT
@@ -1097,6 +2331,22 @@ export function parseCreditexVeuProductArtifact(
   ) {
     return sourceError("official aggregate controls do not reconcile");
   }
+  for (const evidenceField of [
+    "modelResponse",
+    "conceptualSchemaResponse",
+    "totalResponse",
+    "statusResponse",
+    "categoryResponse",
+    "refreshResponse",
+  ]) {
+    delete controls[evidenceField];
+  }
+  delete artifact.controls;
+  const supplementalRecords = parseSupplementalEvidence(
+    artifact.supplements,
+    categories,
+  );
+  delete artifact.supplements;
   const pages = requiredArray(artifact.pages, "artifact pages");
   if (pages.length < 1 || pages.length > 10) {
     return sourceError("artifact page count is outside the controlled bound");
@@ -1118,6 +2368,7 @@ export function parseCreditexVeuProductArtifact(
     const decoded = decodeCreditexVeuPowerBiProductPage(
       requiredText(page.response, `artifact page ${pageIndex + 1} response`, 30_000_000),
     );
+    delete page.response;
     for (const row of decoded.rows) {
       const id = requiredRowText(row[0], "page Salesforce Id");
       if (
@@ -1127,7 +2378,9 @@ export function parseCreditexVeuProductArtifact(
         return sourceError("product pagination is not strictly monotonic");
       }
       expectedAfterId = id;
-      const record = productRecord(row, records.length + 1);
+      const supplement = supplementalRecords.get(id);
+      const record = productRecord(row, records.length + 1, supplement);
+      if (supplement) supplementalRecords.delete(id);
       const category = String(
         record.attributes.veuProductCategoryNumber || "",
       );
@@ -1144,11 +2397,15 @@ export function parseCreditexVeuProductArtifact(
   if (records.length !== total) {
     return sourceError(`product rows ${records.length} do not match total ${total}`);
   }
+  if (supplementalRecords.size !== 0) {
+    return sourceError("supplemental rows do not match base product identities");
+  }
   if (
     JSON.stringify(derivedStatuses) !== JSON.stringify(statuses)
     || JSON.stringify(derivedCategories) !== JSON.stringify(categories)
   ) {
     return sourceError("decoded rows do not match official aggregate controls");
   }
+  delete artifact.pages;
   return Object.freeze(records);
 }

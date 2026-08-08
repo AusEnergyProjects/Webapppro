@@ -1,24 +1,24 @@
 # Next task handover
 
-Status: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45` released
+Status: `CREDITEX-NATIONAL-CALCULATOR-47` validated release candidate
 
-Prepared: 5 August 2026
+Prepared: 9 August 2026
 
-Milestone ID: `TRADE-DOCUMENT-CONTROLS-AND-JOBS-45`
+Milestone ID: `CREDITEX-NATIONAL-CALCULATOR-47`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`
+Previous production application source: `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
 
 Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
 
-Released application source: `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
+Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
-Current production: Sites version 283 from application commit `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
+Current production: Sites version 293 from application commit `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3ea0067666848191816b9e9b51293599`
 
-Deployment: `appgdep_6a7221a403808191a44c354d51922058`
+Deployment: `appgdep_6a77783225d08191b4fcf8cf98888f06`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -28,77 +28,108 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Environment revision: 19
 
-## Unreleased working-tree milestone: CREDITEX-NATIONAL-CALCULATOR-47
+## Validated working-tree release candidate: CREDITEX-NATIONAL-CALCULATOR-47
 
-Status: implemented and validated locally, not committed, pushed, migrated or
-deployed
+Status: the registry foundation is released and active; the expanded VEU
+formula and shared calculator integration is validated in the working tree but
+is not yet committed, deployed or signed-in production-QA verified.
 
-Prepared: 8 August 2026
-
-Working source: `4c92ce965315f43be66c04a4474f02e373b48fef` plus the
-uncommitted milestone diff
+Baseline release: exact commit
+`1d77ab222638d3d43d9a49cac0b486173ce88e18`, Sites version 293. The production
+VEU snapshot contains exactly 75,492 Public Visible rows: 64,715 `Approved` and
+10,777 `Legacy`.
 
 Outcome: provide one governed calculator workspace across every controlled
 Australian program while enabling an estimate only when the formula, effective
 date, location lookup and required official-product evidence are all connected.
-The catalogue now contains 35 program pathways and 216 activity templates.
-The same calculator is also available to active verified installer accounts
-from the trade dashboard `Calculator` workspace for quote and invoice preparation.
+The controlled national catalogue contains 35 program pathways and 216 activity
+templates. Creditex administrators and active verified installers use the same
+calculator contract. The trade dashboard `Calculator` remains estimate-only for
+quote and invoice preparation and cannot refresh a registry or perform a
+certificate action.
 
-Implemented calculator and product boundary:
+Validated formula and coverage boundary:
 
-- 33 activity templates now expose deterministic estimates: SRES 2, local QLD,
-  WA, TAS and NT programs 20, VEU 4, NSW ESS 3 and NSW PDRS 4;
-- 183 templates remain explicitly blocked, closed, future, not applicable or
-  project-method-only, and all certificate actions remain disabled;
-- the SRES registry retains 16,684 current registered water-heater products,
-  both CER postcode-zone sources and changed or removed historical deltas;
-- the automatic official-product registry retains 31,418 GEMS records from 11
-  official data.gov.au resources, with first-seen dates for otherwise undated
-  rows and effective-dated historical selection;
-- all 14 live-tested federal feeds parse 44,119 stable rows, but the 12,701
-  CER-hosted CEC component rows remain controlled-manual until commercial reuse
-  permission is recorded;
-- the live Synergy supported-solutions page parses 2,024 rows under a
-  controlled-manual contract; Horizon Power remains blocked without a supported
-  feed;
-- 15 VEU activity families across 40 scenarios, all 719 Version 24 and 25
-  postcode rows, 20 NSW scenarios and 30 local-program activities have typed,
-  effective-dated estimators and regression vectors; and
-- product-controlled values are derived server-side, caller tampering is
-  discarded or rejected, stale results invalidate when inputs change, and every
-  result carries deterministic formula and source provenance; and
-- calculator reads and estimates accept either an active Creditex membership or
-  a verified installer identity, while registry refresh remains restricted to
-  Creditex administrators and every certificate action remains disabled.
+- the VEU catalogue contains 32 definitions;
+- 30 aggregate VEU activity codes are formula-ready;
+- 27 VEU aggregate codes expose executable estimate paths: 21 fully available
+  families plus six enforced partial subsets;
+- the 21 fully available codes are `3`, `13`, `15`, `17`, `22`, `24`, `25`,
+  `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`, `41`, `42`,
+  `43`, `44` and `48`;
+- codes `14`, `28` and `32` are additionally formula-ready but remain
+  source-gated;
+- national coverage is 50 `estimate_available` plus 6
+  `partial_estimate_available`, for 56 of 216 executable templates and 160
+  blocked or non-executable templates;
+- the sealed coverage hash is
+  `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`;
+  and
+- certificate actions enabled remain 0.
 
-Safety boundary:
+Exact `partial_estimate_available` messages:
 
-- SRES solar PV, batteries, wind and hydro remain disabled until controlled
-  component, system-design and accreditation evidence is complete; only
-  registered solar-water-heater and air-source-heat-pump paths are executable;
-- VEU product-registry activities remain disabled unless a supported GEMS feed
-  supplies every required value; the audited 64,715-row VEU public registry is
-  an unsupported embedded report and is not ingested automatically;
-- NSW D17 to D20 and BESS1 to BESS5 remain disabled without TESSA or the exact
-  administrator-accepted product list; generic CEC products cannot satisfy this
-  gate;
-- schema guards are installed through prepared runtime statements because the
-  Sites migration parser cannot safely carry multi-statement trigger bodies;
-- exact source bytes are held under content-addressed R2 keys, while D1 stores
-  immutable manifests, current projections, changed historical deltas, refresh
-  history, reviewed source-count decreases and concurrency leases; and
-- certificate creation, submission, trade and settlement remain out of scope.
+- `1`: Exact estimates are available for 1C small systems and supported 1D
+  systems. The 1C medium-system Bs/Be conflict between official sources remains
+  fail-closed.
+- `6`: Exact estimates are available for supported single-split systems.
+  Multi-split and packaged systems remain fail-closed until the installed
+  indoor/outdoor quantities and same-manufacturer evidence are represented
+  exactly.
+- `31`: Exact estimates are available for 31A motors selected from the
+  installation-date GEMS register. Activity 31B remains fail-closed until an
+  exact VEU-approved product contract is available.
+- `33`: Exact estimates are available for 33A products selected from the
+  installation-date VEU Public Registry. Activity 33B remains fail-closed
+  because the governed registry connector has no exact 33B product contract.
+- `34`: Exact estimates are available only for sites that are not required to
+  comply with Building Code Part J6. The Part J6 baseline branch remains
+  fail-closed.
+- `46`: Exact historical estimates require an installation-date-eligible Legacy
+  VEU product. The current Public Registry has no Approved activity 46 product
+  for a current installation.
 
-Validation: `npm.cmd run validate` passed type checking, warning-free lint, 31
-of 31 integration tests, 1,636 main tests with 1,629 passed, 7 intentionally
-skipped and 0 failed, all 126 migrations, the customer-plan PDF audit, the
-Vinext production build and the Sites server-bundle audit. Live-source runs
-passed CER SRES 17 of 17, combined federal parser and registry 23 of 23, and WA
-supported-solution parsing 6 of 6. Coverage is sealed as
-`sha256:aee22d627843b09cd32522ce3e934e9ed43be9281961e47707ef9ec252bc15e1`.
+Registry and calculation boundary:
 
-## Active milestone contract
+- exact official VEU response bytes and custody metadata are retained in
+  content-addressed R2 objects;
+- D1 stores indexed current and historical projections for fast product search
+  and calculation-time validation;
+- calculations query D1 and never download or parse the Public Registry;
+- a live 64 MB acquisition, exact-byte R2 replay, validation and D1 activation
+  completed with all 75,492 rows; and
+- every formula-dependent product must match the exact official category,
+  source status and installation-date window. A current `Approved` row is
+  accepted only inside its declared inclusive window. A historical `Legacy`
+  row is accepted only inside its exact closed inclusive window. GEMS-only,
+  fuzzy, current `Legacy` and out-of-window matches fail closed.
+
+Explicit remaining VEU boundaries:
+
+- Activity 14 has no matching registry rows;
+- Activity 28 has no governed product connector or rows;
+- Activity 32 has no stable exact VEU-to-GEMS crosslink and must never use fuzzy
+  matching;
+- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 45 is closed;
+- Activity 47 is blocked pending lawful CEC, distribution-network and installed
+  system evidence;
+- Activity 27's AEMO load-table alternative is not enabled;
+- the Part 34 J6 refurbishment branch fails closed; and
+- project-based activities remain project methods, not deemed calculators.
+
+Release coordinator completion gate:
+
+- run the complete repository validation and review the final diff without
+  weakening the exact-product gates;
+- commit only the calculator milestone and preserve unrelated working-tree
+  changes;
+- deploy the exact clean release source through Sites; and
+- verify the signed-in Creditex administrator and verified-trade product picker,
+  postcode, installation-date and calculation paths before calling the expanded
+  formula coverage live.
+
+## Previous released milestone 45 contract
 
 Outcome: restore one job per row with each value in its Dataforce-aligned
 column, then make customer quote and invoice documents use an explicit saved
@@ -167,12 +198,12 @@ customer-document settings can cross tenant boundaries, the job export order no
 longer matches the register, or verification would send a message or mutate
 production business, quote or invoice data.
 
-## Release result
+## Previous milestone 45 release result
 
-Application source `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` is live as
-Sites version 283. It preserves milestone 44 and completes the customer-document
-controls and Jobs register contract. Additive migrations bring the packaged
-schema total to 124.
+Application source `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` was deployed as
+historical Sites version 283. It preserves milestone 44 and completed the
+customer-document controls and Jobs register contract. Additive migrations
+bring the packaged schema total to 124.
 
 The installer Jobs register now renders one company-scoped job per row with 23
 separate Dataforce-aligned headings and 23 corresponding cells. The visible
@@ -248,10 +279,10 @@ Remaining controlled limitations:
 ## Next five logical product steps
 
 1. **Obtain and record CEC commercial data permission, then activate CEC module, inverter and battery ingestion with suspension, delisting, recall, NETCC and SAA overlays.**
-2. **Obtain a supported VEU machine extract, ingest the 64,715-row audited registry with effective dates and statuses, and unlock the implemented VEU formula families only after oracle reconciliation.**
-3. **Ingest supported NSW TESSA and administrator-accepted product lists, add historical ESS/PDRS rule versions, and unlock D17 to D20 and BESS1 to BESS5 only inside their exact date windows.**
-4. **Obtain Synergy commercial reuse permission and a supported Horizon Power feed, then activate WA battery and managed-device calculators with exact service-territory checks.**
-5. **Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes, then complete the remaining VEU, NSW and project-method calculators.**
+2. **Ingest supported NSW TESSA and administrator-accepted product lists, preserve historical ESS/PDRS rules and unlock each activity only inside its exact date window.**
+3. **Obtain WA commercial-reuse permission and a supported Horizon Power feed, then activate battery and managed-device calculations with exact service-territory checks.**
+4. **Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes.**
+5. **Close the remaining regulator-owned calculation boundaries: resolve VEU 1C-medium guidance, add exact Part 6 multi-unit and Activity 32 cross-registry evidence, and complete governed project and facility methods.**
 
 ## Previous released milestone
 
