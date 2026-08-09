@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { PointerEvent } from "react";
 
 const journeyStages = [
@@ -48,14 +49,15 @@ export function CustomerJourneyScene() {
         <span className="customer-scene-particle customer-scene-particle-five" />
         <span className="customer-scene-particle customer-scene-particle-six" />
         <div className="customer-scene-home">
-          <span className="customer-scene-roof" />
-          <span className="customer-scene-solar" />
-          <span className="customer-scene-wall">
-            <i className="customer-scene-window customer-scene-window-one" />
-            <i className="customer-scene-window customer-scene-window-two" />
-            <i className="customer-scene-door" />
-          </span>
-          <span className="customer-scene-platform" />
+          <Image
+            className="customer-scene-render"
+            src="/aea-immersive-home-journey.png"
+            alt=""
+            width="2048"
+            height="1146"
+            sizes="(max-width: 720px) 100vw, 55vw"
+            priority
+          />
         </div>
         <span className="customer-scene-signal customer-scene-signal-comfort">Comfort</span>
         <span className="customer-scene-signal customer-scene-signal-energy">Energy</span>

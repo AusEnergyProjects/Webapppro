@@ -148,7 +148,8 @@ const VENTILATION_QUESTION_TARGETS = [
   {
     targetAnchor: "customer-home-feature-ventilation-features",
     answered: new Set([
-      "open-wall-vents",
+      "open-fixed-wall-vents",
+      "open-unused-chimney",
       "evaporative-ducts",
       "mechanical-ventilation",
       "ventilation-none-known",

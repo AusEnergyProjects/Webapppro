@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-08-09-guided-home-systems-v6";
+export const CUSTOMER_PLAN_VERSION = "2026-08-10-quick-wins-home-systems-v7";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -26,6 +26,7 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-29-adviser-print-comfort-v3",
   "2026-07-30-roadmap-context-v4",
   "2026-07-31-trade-enquiry-home-systems-v5",
+  "2026-08-09-guided-home-systems-v6",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -162,12 +163,13 @@ export const customerHomeFeatureSections = [
       {
         id: "ventilation-features",
         label: "Which other fixed openings or ventilation systems are present?",
-        help: "Choose all that apply. Never block a fixed vent without confirming why it is there.",
+        help: "Choose all that apply. Never block or seal a vent, chimney or flue until its purpose and any combustion-safety need are confirmed.",
         mode: "multiple",
         noneValue: "ventilation-none-known",
         unknownValue: "ventilation-unknown",
         options: [
-          ["open-wall-vents", "Open wall vents or an unused chimney"],
+          ["open-fixed-wall-vents", "Open wall vents"],
+          ["open-unused-chimney", "Open or unused chimney or flue"],
           ["evaporative-ducts", "Evaporative-cooling ceiling outlets"],
           ["mechanical-ventilation", "Purpose-designed mechanical ventilation"],
           ["ventilation-none-known", "None of these other systems that I know of"],
@@ -204,7 +206,6 @@ export const customerHomeFeatureSections = [
         unknownValue: "heating-cooling-unknown",
         options: [
           ["reverse-cycle", "Air-con, including reverse-cycle air-con"],
-          ["heat-pump-space-heating", "Heat-pump space heating"],
           ["gas-heating", "Gas space or ducted heating"],
           ["hydronic-heating", "Hydronic heating"],
           ["wood-heating", "Wood fire or wood heater"],
@@ -334,6 +335,8 @@ const legacyHomeFeatureValues = new Set([
   "exhaust-damper-known",
   "exhaust-damper-none-known",
   "exhaust-damper-unknown",
+  "heat-pump-space-heating",
+  "open-wall-vents",
 ]);
 
 function questionHasSelection(question, selected) {
@@ -374,6 +377,16 @@ function migrateLegacyHomeFeatures(value) {
   }
   if (selected.has("gas-hot-water")) {
     addWhenUnanswered("hot-water", "gas-hot-water-type-unknown");
+  }
+  if (
+    selected.has("heat-pump-space-heating")
+    && !selected.has("heating-cooling-none")
+    && !selected.has("heating-cooling-unknown")
+  ) {
+    selected.add("reverse-cycle");
+  }
+  if (selected.has("open-wall-vents")) {
+    addWhenUnanswered("ventilation-features", "ventilation-unknown");
   }
   if (
     [
@@ -755,7 +768,8 @@ const homeFeatureFactRules = new Map([
   }],
   ["ventilation", {
     answered: new Set([
-      "open-wall-vents",
+      "open-fixed-wall-vents",
+      "open-unused-chimney",
       "evaporative-ducts",
       "mechanical-ventilation",
       "ventilation-none-known",
@@ -770,7 +784,8 @@ const homeFeatureFactRules = new Map([
     requiredGroups: [
       {
         answered: new Set([
-          "open-wall-vents",
+          "open-fixed-wall-vents",
+          "open-unused-chimney",
           "evaporative-ducts",
           "mechanical-ventilation",
           "ventilation-none-known",
@@ -790,7 +805,6 @@ const homeFeatureFactRules = new Map([
   ["heating-cooling", {
     answered: new Set([
       "reverse-cycle",
-      "heat-pump-space-heating",
       "gas-heating",
       "hydronic-heating",
       "wood-heating",
@@ -1575,7 +1589,7 @@ const advisorRecommendations = {
     id: "draught-proofing",
     stage: "Reduce unwanted air leakage",
     title: "Map draughts without blocking required ventilation",
-    text: "Check external doors, operable windows, exhaust fans, unused chimneys, wall vents and evaporative cooling outlets. Separate removable measures from work needing owner, strata or trade approval.",
+    text: "Check external doors, operable windows and uncontrolled gaps separately from exhaust fans, chimneys, flues, wall vents and evaporative-cooling outlets. Never seal an active chimney or flue, or block required ventilation. Confirm uncertain openings with an assessor or suitably qualified trade before changing them.",
     href: "/guides/insulation-draught-proofing",
     action: "Review draught-proofing guidance",
   },
@@ -1608,14 +1622,6 @@ const advisorRecommendations = {
     stage: "Use what is already installed",
     title: "Check the reverse-cycle system before replacing or adding equipment",
     text: "Record which rooms it serves, comfort gaps, controls, filters, outdoor-unit condition and recent servicing. Improve operation and the building shell first, then size any extra capacity only for the remaining need.",
-    href: "/guides/heating",
-    action: "Review heating and cooling guidance",
-  },
-  heatPumpSpaceHeating: {
-    id: "existing-heat-pump-space-heating",
-    stage: "Use what is already installed",
-    title: "Review the existing heat-pump space-heating system",
-    text: "Record which rooms or zones it serves, its controls, comfort gaps, outdoor-unit condition and recent servicing. Improve the building shell first, then size any extra capacity for the remaining need.",
     href: "/guides/heating",
     action: "Review heating and cooling guidance",
   },
@@ -1720,6 +1726,80 @@ const advisorRecommendations = {
 export const CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY =
   "Optional general actions based on the answers in this plan. They are not upgrade steps, a site assessment, product endorsements or savings promises. Skip anything unsafe, unsuitable or inconsistent with product instructions.";
 
+const heatingCoolingQuickWinFeatures = new Set([
+  "reverse-cycle",
+  "gas-heating",
+  "hydronic-heating",
+  "wood-heating",
+  "electric-resistance-heating",
+  "evaporative-cooling",
+  "fans-only",
+]);
+
+const filterAndAirflowQuickWinFeatures = new Set([
+  "reverse-cycle",
+  "gas-heating",
+  "evaporative-cooling",
+  "fans-only",
+]);
+
+const hotWaterQuickWinFeatures = new Set([
+  "gas-storage-hot-water",
+  "gas-continuous-flow-hot-water",
+  "gas-hot-water-type-unknown",
+  "heat-pump-hot-water",
+  "electric-storage-hot-water",
+  "electric-instant-hot-water",
+  "solar-hot-water",
+  "electric-gas-boosted-hot-water",
+]);
+
+const cookingQuickWinFeatures = new Set([
+  "gas-cooking",
+  "electric-resistance-cooking",
+  "induction-cooking",
+  "mixed-cooking",
+]);
+
+function existingEquipmentQuickWinText({ features, selectedGoals }) {
+  const sentences = [];
+  if (features.some((item) => heatingCoolingQuickWinFeatures.has(item))) {
+    sentences.push("Follow the manufacturer instructions to clean or replace accessible user-serviceable filters safely, and use supported schedules, timers, fan speeds, zones, economy modes and app or remote controls. Use the least intensive comfortable setting and condition occupied rooms, while accounting for health needs.");
+  }
+  if (features.some((item) => hotWaterQuickWinFeatures.has(item))) {
+    sentences.push("Use shorter showers where suitable and review any supported hot-water timer or tariff settings. Do not disable hot-water safety cycles or bypass safety controls.");
+  }
+  if (features.some((item) => cookingQuickWinFeatures.has(item))) {
+    sentences.push("Match cookware to the burner or cooking zone, use lids when suitable, heat only the water needed and switch equipment off when finished. Keep required kitchen ventilation operating and follow the appliance instructions.");
+  }
+  if (selectedGoals.includes("lower-bills")) {
+    sentences.push("Run full laundry and dishwasher loads where practical, use cold washes and air drying when suitable, check fridge and freezer settings and door seals, and switch off genuinely unused standby loads when safe.");
+  }
+  if (features.includes("solar")) {
+    sentences.push("Move flexible loads into solar hours when the equipment, tariff and household routine make that practical.");
+  }
+  if (features.includes("ev")) {
+    sentences.push("Schedule electric vehicle charging around the applicable tariff, network limits and the vehicle and charger instructions.");
+  }
+  return sentences.join(" ");
+}
+
+function existingEquipmentQuickWinTitle({ features }) {
+  if (features.some((item) => filterAndAirflowQuickWinFeatures.has(item))) {
+    return "Clean filters and tune the controls you already have";
+  }
+  if (features.some((item) => heatingCoolingQuickWinFeatures.has(item))) {
+    return "Tune the heating and cooling controls you already have";
+  }
+  if (features.some((item) => hotWaterQuickWinFeatures.has(item))) {
+    return "Tune hot-water controls and everyday routines";
+  }
+  if (features.some((item) => cookingQuickWinFeatures.has(item))) {
+    return "Use cooking equipment efficiently and keep ventilation working";
+  }
+  return "Tighten everyday appliance routines";
+}
+
 const everydayActionCatalogue = [
   {
     id: "moisture-safe-routine",
@@ -1729,7 +1809,8 @@ const everydayActionCatalogue = [
     matches: ({ features, selectedGoals }) => (
       features.some((item) => [
         "condensation-moisture",
-        "open-wall-vents",
+        "open-fixed-wall-vents",
+        "open-unused-chimney",
         "evaporative-ducts",
         "kitchen-exhaust-fan",
         "bathroom-exhaust-fan",
@@ -1752,13 +1833,12 @@ const everydayActionCatalogue = [
   {
     id: "use-existing-controls",
     category: "Equipment settings",
-    title: "Use the controls and timers your existing equipment already supports",
-    text: "Check the manufacturer instructions for schedules, timers, fan speeds, economy modes, filter cleaning and hot-water tariff or timer settings that the installed equipment actually supports. Match operation to occupied rooms and routines. Do not disable hot-water safety cycles, bypass safety controls or assume one generic setting suits every appliance.",
+    title: existingEquipmentQuickWinTitle,
+    text: existingEquipmentQuickWinText,
     matches: ({ features, selectedGoals }) => (
       selectedGoals.includes("lower-bills")
       || features.some((item) => [
         "reverse-cycle",
-        "heat-pump-space-heating",
         "gas-heating",
         "hydronic-heating",
         "wood-heating",
@@ -1783,8 +1863,8 @@ const everydayActionCatalogue = [
   {
     id: "safe-seasonal-airflow",
     category: "Cooling habits",
-    title: "Use fans and seasonal airflow only when outdoor conditions help",
-    text: "Fans can improve comfort in occupied rooms. Cross-flow ventilation can help when outdoor temperature, humidity, smoke, weather, noise and security are suitable, then windows and coverings can be managed as conditions change. Avoid a rule that windows should always stay open or always stay closed.",
+    title: "Try fans before or alongside air-con when conditions suit",
+    text: "Fans can improve comfort in occupied rooms before or alongside air-con, but they do not cool an empty room. Cross-flow ventilation can help when outdoor temperature, humidity, smoke, weather, noise and security are suitable. Close openings and manage coverings when outdoor conditions become less helpful. Avoid a rule that windows should always stay open or always stay closed.",
     matches: ({ features, advisorProfile }) => (
       features.some((item) => [
         "comfort-too-hot",
@@ -1848,8 +1928,8 @@ function createEverydayActions({
     .map((item) => ({
       id: item.id,
       category: item.category,
-      title: item.title,
-      text: item.text,
+      title: typeof item.title === "function" ? item.title(context) : item.title,
+      text: typeof item.text === "function" ? item.text(context) : item.text,
     }));
 }
 
@@ -2395,7 +2475,8 @@ function createAdvisorPlan({
     selectedGoals.includes("improve-comfort")
     || features.some((item) => [
       "draughty",
-      "open-wall-vents",
+      "open-fixed-wall-vents",
+      "open-unused-chimney",
       "evaporative-ducts",
       "ventilation-unknown",
     ].includes(item))
@@ -2406,10 +2487,6 @@ function createAdvisorPlan({
   if (features.includes("reverse-cycle")) {
     pull("heating");
     addContext(advisorRecommendations.reverseCycle);
-  }
-  if (features.includes("heat-pump-space-heating")) {
-    pull("heating");
-    addContext(advisorRecommendations.heatPumpSpaceHeating);
   }
   if (features.includes("hydronic-heating")) {
     pull("heating");

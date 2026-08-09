@@ -6,7 +6,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const page = read("../src/app/direct-trade/partners/page.tsx");
 const form = read("../src/components/DirectTradePartnerForm.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
-const route = read("../src/app/api/leads/route.js");
+const route = `${read("../src/app/api/leads/route.js")}\n${read("../src/lib/lead-route-handler.mjs")}`;
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
 const firebaseClient = read("../src/lib/firebase-client.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");

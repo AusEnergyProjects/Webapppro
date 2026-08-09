@@ -514,7 +514,7 @@ function sendFollowUpEmail_(payload, unsubscribeToken) {
 
 function sendCustomerAcknowledgement_(payload) {
   const content = acknowledgementContent_(payload);
-  const title = acknowledgementTitle_(payload.eventType);
+  const title = acknowledgementTitle_(payload);
   const subject = acknowledgementSubject_(payload);
   sendMail_({
     to: payload.email,
@@ -790,24 +790,27 @@ function sendMail_(message) {
 function internalAction_(payload) {
   if (payload.eventType === "electricity.upgrade") return "Review the electricity comparison and scenario assumptions, then respond using the preferred contact details.";
   if (payload.eventType === "gas.upgrade") return "Review the gas usage and electrification estimate, then confirm site, product, rebate and trade requirements.";
+  if (payload.sourceJourney === "public-home-energy-plan") return "Review the selected upgrade and basic contact details, then respond before making any trade connection.";
   if (payload.eventType === "direct_trade.project") return "Qualify the scope, authority, location, timing and trade capability before making a connection.";
   return "Review business credentials, coverage, capability, insurance and product support before discussing participation.";
 }
 
-function acknowledgementTitle_(eventType) {
-  if (eventType === "electricity.upgrade") return "We received your electricity upgrade enquiry";
-  if (eventType === "gas.upgrade") return "We received your gas upgrade enquiry";
-  if (eventType === "direct_trade.project") return "Your Direct Trade project brief is in";
+function acknowledgementTitle_(payload) {
+  if (payload.eventType === "electricity.upgrade") return "We received your electricity upgrade enquiry";
+  if (payload.eventType === "gas.upgrade") return "We received your gas upgrade enquiry";
+  if (payload.sourceJourney === "public-home-energy-plan") return "We received your home energy upgrade enquiry";
+  if (payload.eventType === "direct_trade.project") return "Your Direct Trade project brief is in";
   return "Your participation enquiry is in";
 }
 
 function acknowledgementSubject_(payload) {
-  return "[" + payload.reference + "] " + acknowledgementTitle_(payload.eventType) + " | " + BRAND;
+  return "[" + payload.reference + "] " + acknowledgementTitle_(payload) + " | " + BRAND;
 }
 
 function eventLabel_(payload) {
   if (payload.eventType === "electricity.upgrade") return upgradeLabel_(payload.enquiry);
   if (payload.eventType === "gas.upgrade") return payload.enquiry === "gas-hot-water" ? "Heat pump hot water enquiry" : "Reverse cycle heating enquiry";
+  if (payload.sourceJourney === "public-home-energy-plan") return "Home energy plan upgrade enquiry";
   if (payload.eventType === "direct_trade.project") return "Direct Trade household project brief";
   return payload.partnerType === "supplier" ? "Direct Trade supplier expression of interest" : "Direct Trade installer expression of interest";
 }
@@ -825,7 +828,7 @@ function setupLabel_(value) {
 }
 
 function categoryLabel_(value) {
-  const labels = { assessment: "Independent energy assessment", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
+  const labels = { assessment: "Independent energy assessment", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Windows and glazing", "window-coverings": "Blinds, shutters or external shading", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
   return labels[value] || value;
 }
 

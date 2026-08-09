@@ -16,7 +16,7 @@ const schema = read("../db/schema.ts");
 const accountRoute = read("../src/app/api/customer-account/route.ts");
 const projectsRoute = read("../src/app/api/customer-projects/route.ts");
 const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispatch-server.ts");
-const publicLeadRoute = read("../src/app/api/leads/route.js");
+const publicLeadRoute = `${read("../src/app/api/leads/route.js")}\n${read("../src/lib/lead-route-handler.mjs")}`;
 const tradeRoute = read("../src/app/api/trade-opportunities/route.ts");
 const accountPanel = read("../src/components/FirebaseAccountPanel.tsx");
 const dashboard = read("../src/components/CustomerDashboard.tsx");
@@ -158,7 +158,7 @@ test("state and postcode integrity is checked before records or opportunities ar
   assert.match(projectsRoute, /buildAnonymizedOpportunity/);
 });
 
-test("customer enquiries bypass the public lead relay and use explicit consent receipts", () => {
+test("account projects bypass the bounded public plan contact relay and use explicit consent receipts", () => {
   assert.match(projectsRoute, /requireFirebaseIdentity/);
   assert.match(projectsRoute, /if \(!sameOrigin\(request\)\)/);
   assert.match(projectsRoute, /customer-project-submit:\$\{id\}/);
@@ -168,8 +168,9 @@ test("customer enquiries bypass the public lead relay and use explicit consent r
   assert.doesNotMatch(projectsRoute, /await allocateNearestInstallers/);
   assert.match(customerOpportunityDispatch, /await allocateNearestInstallers/);
   assert.doesNotMatch(projectsRoute, /\/api\/leads|LEAD_WEBHOOK|script\.google\.com/);
-  assert.match(publicLeadRoute, /raw\?\.submissionType !== "comparison"/);
-  assert.match(publicLeadRoute, /Upgrade projects must be created inside a free private customer account/);
+  assert.match(publicLeadRoute, /isPublicPlanEnquiry/);
+  assert.match(publicLeadRoute, /raw\?\.submissionType !== "comparison" && !publicPlanEnquiry/);
+  assert.match(publicLeadRoute, /This type of upgrade project must be created inside a free private customer account/);
   assert.doesNotMatch(publicLeadRoute, /createOpportunityFromLead/);
 });
 

@@ -9,6 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
+const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
@@ -31,6 +32,7 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
+const immersiveHomeAsset = path.resolve(directory, "../public/aea-immersive-home-journey.png");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
   assert.match(
@@ -101,6 +103,14 @@ test("shared navigation never clips its first destination and explains mobile ov
   assert.match(styles, /\.comparator-nav \{[^}]*padding: 2px 34px 5px 2px;/);
   assert.match(styles, /scroll-snap-type: x proximity/);
   assert.match(styles, /\.comparator-nav a \{ scroll-snap-align: start; \}/);
+  assert.match(
+    styles,
+    /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; \}/,
+  );
+  assert.match(
+    styles,
+    /\.site-header \.site-nav-shell \{ grid-column: 1 \/ -1; grid-row: 2;[^}]*width: 100%; \}/,
+  );
 });
 
 test("direct trade proposition presents the free verified operating model honestly", () => {
@@ -189,6 +199,35 @@ test("homepage uses an accessible lightweight spatial journey with a reduced-mot
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.customer-scene-home/);
 });
 
+test("the generated whole-home scene is visible and drives the planner room journey", () => {
+  assert.match(customerScene, /src="\/aea-immersive-home-journey\.png"/);
+  assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, 55vw"/);
+  assert.match(plannerJourney, /export function PlannerHomeJourney/);
+  assert.match(plannerJourney, /stage: PlannerJourneyStage/);
+  assert.match(plannerJourney, /focusKey\?: string/);
+  assert.match(plannerJourney, /data-focus=\{activeFocus\}/);
+  assert.match(plannerJourney, /sizes="\(max-width: 720px\) 100vw, 64vw"/);
+  assert.match(plannerJourney, /ceiling-insulation|insulation/);
+  assert.match(plannerJourney, /heating-cooling/);
+  assert.match(plannerJourney, /hot-water/);
+  assert.match(plannerJourney, /battery/);
+  assert.match(plannerJourney, /aria-label="Home planning journey"/);
+  assert.doesNotMatch(plannerJourney, /<canvas|WebGL|from ["']three["']/);
+  assert.match(styles, /\.planner-home-journey\[data-focus="insulation"\]/);
+  assert.match(styles, /\.planner-home-journey\[data-focus="windows"\]/);
+  assert.match(styles, /\.planner-home-journey\[data-focus="ventilation"\]/);
+  assert.match(styles, /\.planner-home-journey\[data-focus="heating-cooling"\]/);
+  assert.match(styles, /\.planner-home-journey\[data-focus="solar"\]/);
+  assert.match(styles, /prefers-reduced-motion: reduce\)[\s\S]*\.planner-home-journey-depth/);
+  assert.equal(fs.existsSync(immersiveHomeAsset), true);
+  assert.ok(fs.statSync(immersiveHomeAsset).size > 100_000);
+  assert.ok(fs.statSync(immersiveHomeAsset).size < 3_000_000);
+  const immersiveImage = fs.readFileSync(immersiveHomeAsset);
+  assert.equal(immersiveImage.toString("ascii", 1, 4), "PNG");
+  assert.ok(immersiveImage.readUInt32BE(16) >= 1600);
+  assert.ok(immersiveImage.readUInt32BE(20) >= 900);
+});
+
 test("social sharing metadata uses one launch-ready AEA energy card", () => {
   assert.match(layout, /openGraph:/);
   assert.match(layout, /twitter:/);
@@ -269,10 +308,11 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
   assert.match(planner, /Skip remaining home details/);
   assert.match(planner, /role="progressbar"/);
-  assert.match(planner, /className="planner-stage-nav" aria-label="Planning stages"/);
+  assert.match(planner, /<PlannerHomeJourney/);
+  assert.match(plannerJourney, /aria-label="Home planning journey"/);
   assert.match(planner, /className="planner-next-move"/);
   assert.match(planner, /Start here/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-stage-nav \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); min-width: 0; \}/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ display: grid; grid-template-columns: 1fr;/);
   assert.match(planner, /initialPlannerStep\(initialSelection\)/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
@@ -314,4 +354,9 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.doesNotMatch(styles, /background-attachment: fixed/);
   assert.match(styles, /@media print \{/);
   assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
+  assert.match(styles, /\.planner-page \{ max-width: 1560px;/);
+  assert.match(styles, /\.planner-layout \{[^}]*max-width: 1380px;/);
+  assert.match(styles, /@media \(min-width: 980px\) \{[\s\S]*\.planner-results \.planner-roadmap-list \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  assert.match(styles, /\.planner-result-decision \{[^}]*grid-template-columns:/);
+  assert.match(styles, /\.planner-quick-wins-grid \{[^}]*grid-template-columns:/);
 });

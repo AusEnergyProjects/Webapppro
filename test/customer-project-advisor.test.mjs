@@ -343,6 +343,7 @@ test("everyday actions have controlled triggers, safety boundaries and no produc
       "comfort-too-cold",
       "comfort-too-hot",
       "reverse-cycle",
+      "heat-pump-hot-water",
       "single-glazing",
       "window-coverings-basic",
     ],

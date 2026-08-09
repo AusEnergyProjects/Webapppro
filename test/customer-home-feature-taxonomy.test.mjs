@@ -87,6 +87,20 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
       ([value, label]) => value === "wood-heating" && /wood fire/i.test(label),
     ),
   );
+  assert.equal(
+    question("heating-cooling-systems").options.some(
+      ([value]) => value === "heat-pump-space-heating",
+    ),
+    false,
+  );
+  assert.deepEqual(
+    question("ventilation-features").options.slice(0, 2),
+    [
+      ["open-fixed-wall-vents", "Open wall vents"],
+      ["open-unused-chimney", "Open or unused chimney or flue"],
+    ],
+  );
+  assert.match(question("ventilation-features").help, /combustion-safety/i);
   assert.ok(
     question("hot-water").options.some(
       ([value, label]) => value === "electric-gas-boosted-hot-water" && /gas booster/i.test(label),
@@ -285,6 +299,42 @@ test("legacy home features map deterministically without inventing insulation qu
     ["bathroom-exhaust-fan"],
   );
   assert.deepEqual(
+    normalizeHomeFeatureSelections(["heat-pump-space-heating"]),
+    ["reverse-cycle"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "heat-pump-space-heating",
+      "gas-heating",
+    ]),
+    ["reverse-cycle", "gas-heating"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "heat-pump-space-heating",
+      "heating-cooling-unknown",
+    ]),
+    ["heating-cooling-unknown"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "open-wall-vents",
+      "open-unused-chimney",
+    ]),
+    ["open-unused-chimney"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections(["open-wall-vents"]),
+    ["ventilation-unknown"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "open-fixed-wall-vents",
+      "open-unused-chimney",
+    ]),
+    ["open-fixed-wall-vents", "open-unused-chimney"],
+  );
+  assert.deepEqual(
     updateHomeFeatureSelection(
       ["gas-hot-water"],
       "hot-water",
@@ -397,6 +447,91 @@ test("plain exhaust fan answers provide useful advice without asking technical f
     plan.everydayActions.find((item) => item.id === "moisture-safe-routine").text,
     /do not enter a roof or ceiling cavity/i,
   );
+});
+
+test("quick wins are conditional, practical and bounded by equipment and ventilation safety", () => {
+  const plan = createCustomerProjectPlan({
+    goals: ["lower-bills", "improve-comfort", "healthier-home"],
+    situation: "owner",
+    features: [
+      "comfort-too-cold",
+      "comfort-too-hot",
+      "draughty",
+      "condensation-moisture",
+      "open-fixed-wall-vents",
+      "open-unused-chimney",
+      "reverse-cycle",
+      "heat-pump-hot-water",
+      "solar",
+      "ev",
+    ],
+  });
+  const quickWins = new Map(
+    plan.everydayActions.map((action) => [action.id, action]),
+  );
+  assert.match(quickWins.get("personal-warmth-first").text, /layers/i);
+  assert.match(quickWins.get("personal-warmth-first").text, /electric throw/i);
+  assert.match(quickWins.get("use-existing-controls").title, /clean filters/i);
+  assert.match(quickWins.get("use-existing-controls").text, /app or remote controls/i);
+  assert.match(quickWins.get("use-existing-controls").text, /shorter showers/i);
+  assert.match(quickWins.get("use-existing-controls").text, /laundry and dishwasher/i);
+  assert.match(quickWins.get("use-existing-controls").text, /fridge and freezer/i);
+  assert.match(quickWins.get("use-existing-controls").text, /standby loads/i);
+  assert.match(quickWins.get("use-existing-controls").text, /solar hours/i);
+  assert.match(quickWins.get("use-existing-controls").text, /electric vehicle charging/i);
+  assert.match(quickWins.get("safe-seasonal-airflow").title, /fans before or alongside air-con/i);
+  assert.match(quickWins.get("seasonal-window-and-landscape").text, /coverings/i);
+  assert.match(
+    plan.items.find((item) => item.id === "draught-proofing").text,
+    /Never seal an active chimney or flue/i,
+  );
+
+  const unrelated = createCustomerProjectPlan({
+    goals: ["replace-now"],
+    situation: "owner",
+    features: ["heating-cooling-none", "ventilation-none-known"],
+  });
+  assert.equal(
+    unrelated.everydayActions.some((action) =>
+      ["personal-warmth-first", "safe-seasonal-airflow"].includes(action.id)),
+    false,
+  );
+
+  const lowerBillsWithoutEquipment = createCustomerProjectPlan({
+    goals: ["lower-bills"],
+    situation: "owner",
+    features: ["heating-cooling-none", "ventilation-none-known"],
+  });
+  const unrelatedControls = lowerBillsWithoutEquipment.everydayActions.find(
+    (action) => action.id === "use-existing-controls",
+  );
+  assert.ok(unrelatedControls);
+  assert.doesNotMatch(unrelatedControls.text, /solar hours|electric vehicle|hot-water/i);
+  assert.doesNotMatch(unrelatedControls.title, /clean filters/i);
+
+  const cookingOnly = createCustomerProjectPlan({
+    goals: ["replace-now"],
+    situation: "owner",
+    features: ["induction-cooking"],
+  });
+  const cookingControls = cookingOnly.everydayActions.find(
+    (action) => action.id === "use-existing-controls",
+  );
+  assert.ok(cookingControls);
+  assert.match(cookingControls.title, /cooking equipment/i);
+  assert.match(cookingControls.text, /cookware|ventilation/i);
+
+  const hydronicOnly = createCustomerProjectPlan({
+    goals: ["replace-now"],
+    situation: "owner",
+    features: ["hydronic-heating"],
+  });
+  const hydronicControls = hydronicOnly.everydayActions.find(
+    (action) => action.id === "use-existing-controls",
+  );
+  assert.ok(hydronicControls);
+  assert.match(hydronicControls.title, /heating and cooling controls/i);
+  assert.doesNotMatch(hydronicControls.title, /filters/i);
 });
 
 test("answered canonical facts become customer reported without weakening stronger sources", () => {
@@ -656,14 +791,14 @@ test("the public planner uses the accessible shared intake and bounded query han
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-09-guided-home-systems-v6");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-quick-wins-home-systems-v7");
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
     "2026-07-31-advisor-profile-v5",
   );
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
-      "2026-07-31-trade-enquiry-home-systems-v5",
+      "2026-08-09-guided-home-systems-v6",
     ),
     true,
   );

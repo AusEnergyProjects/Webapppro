@@ -131,13 +131,12 @@ test("storage is not recommended without existing solar evidence", () => {
   assert.equal(withSolar.items.some((item) => item.id === "battery"), true);
 });
 
-test("common heating, boosted hot-water and two-phase answers stay distinct and self-reported", () => {
+test("legacy space-heat-pump answers normalize to reverse-cycle while other systems stay distinct", () => {
   const plan = createCustomerProjectPlan({
     goals: ["improve-comfort", "lower-bills"],
     situation: "owner",
     approvalContext: "none",
     features: [
-      "reverse-cycle",
       "heat-pump-space-heating",
       "hydronic-heating",
       "wood-heating",
@@ -145,8 +144,13 @@ test("common heating, boosted hot-water and two-phase answers stay distinct and 
       "electrical-supply-two-phase",
     ],
   });
+  assert.equal(plan.features.includes("heat-pump-space-heating"), false);
+  assert.equal(plan.features.includes("reverse-cycle"), true);
   assert.ok(plan.items.some((item) => item.id === "existing-reverse-cycle"));
-  assert.ok(plan.items.some((item) => item.id === "existing-heat-pump-space-heating"));
+  assert.equal(
+    plan.items.some((item) => item.id === "existing-heat-pump-space-heating"),
+    false,
+  );
   assert.ok(plan.items.some((item) => item.id === "existing-hydronic-heating"));
   assert.ok(plan.items.some((item) => item.id === "existing-wood-heating"));
   assert.match(plan.items.find((item) => item.id === "hot-water").title, /gas booster/i);

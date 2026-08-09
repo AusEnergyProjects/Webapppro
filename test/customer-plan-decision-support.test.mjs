@@ -207,6 +207,13 @@ test("ventilation follow-ups target the first unresolved related question", () =
   );
   assert.equal(
     targetFor([
+      "open-unused-chimney",
+      "exhaust-fans-unknown",
+    ]),
+    "customer-home-feature-exhaust-fans",
+  );
+  assert.equal(
+    targetFor([
       "ventilation-none-known",
       "kitchen-exhaust-fan",
       "bathroom-exhaust-fan",

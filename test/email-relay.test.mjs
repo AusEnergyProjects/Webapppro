@@ -251,6 +251,41 @@ test("all untrusted email values are escaped and retailer buttons require HTTPS"
   assert.match(html, /&lt;script&gt;/);
 });
 
+test("public plan enquiries use customer-friendly titles and category labels", () => {
+  const { context, sent } = relay();
+  const payload = {
+    ...comparison,
+    eventType: "direct_trade.project",
+    enquiry: "home-plan-upgrade",
+    sourceJourney: "public-home-energy-plan",
+    projectCategories: [
+      "draught-proofing",
+      "insulation",
+      "glazing",
+      "window-coverings",
+    ],
+    directTradeTriage: {
+      status: "hold_for_authority_review",
+      priority: "standard_allocation",
+      autoSend: false,
+      reviewFlags: ["property_authority_unconfirmed"],
+    },
+  };
+
+  context.sendCustomerAcknowledgement_(payload);
+  context.sendInternalEnquiry_(payload);
+
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, /home energy upgrade enquiry/i);
+  assert.doesNotMatch(sent[0].subject, /Direct Trade project brief/i);
+  assert.match(sent[1].subject, /Home energy plan upgrade enquiry/);
+  assert.match(
+    sent[1].htmlBody,
+    /Draught proofing, Insulation, Windows and glazing, Blinds, shutters or external shading/,
+  );
+  assert.match(sent[1].htmlBody, /Held for authority review/);
+});
+
 test("the relay source avoids customer contact details in generated URLs", () => {
   assert.doesNotMatch(source, /unsubUrl_\(email\)|\?action=unsub&email=/);
   assert.match(source, /\?action=unsub&t=/);

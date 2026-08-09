@@ -10,7 +10,7 @@
     "audit:sites-server-bundle": "node scripts/audit-sites-server-bundle.mjs",
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "start": "vinext start",
-    "lint": "eslint",
+    "lint": "eslint --concurrency 4",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "node --experimental-strip-types --test",
     "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test",

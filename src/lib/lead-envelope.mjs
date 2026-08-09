@@ -1,6 +1,7 @@
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import { buildDirectTradeTriage } from "./direct-trade-matching.mjs";
 import { buildParticipantApplicationReview } from "./direct-trade-participants.mjs";
+import { isPublicPlanEnquiry } from "./public-plan-enquiry.mjs";
 
 const EVENT_TYPES = new Set([
   "comparison.results",
@@ -23,6 +24,7 @@ const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
 
 export function leadEventType(payload) {
   if (payload?.submissionType === "comparison") return "comparison.results";
+  if (isPublicPlanEnquiry(payload?.enquiry)) return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-project")
     return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-partner")
@@ -52,8 +54,31 @@ export function createLeadEnvelope(payload, options = {}) {
     .toUpperCase();
   const reference = `AEA-${referenceDate(submittedAt)}-${suffix}`;
   const inferredState = residentialStateFromPostcode(payload.postcode);
+  const publicPlanEnquiry = isPublicPlanEnquiry(payload.enquiry);
   const directTradeTriage =
-    eventType === "direct_trade.project"
+    publicPlanEnquiry
+      ? {
+          version: "public-home-plan-contact-1",
+          status: "hold_for_authority_review",
+          priority: "standard_allocation",
+          autoSend: false,
+          reviewFlags: ["property_authority_unconfirmed"],
+          contactConsentReceipt: {
+            accepted: true,
+            purpose: payload.consent?.purpose || "",
+            noticeVersion: payload.consent?.noticeVersion || "",
+            grantedAt: payload.consent?.grantedAt || "",
+          },
+          matchCriteria: {
+            state: payload.state || inferredState || "",
+            postcode: payload.postcode || "",
+            capabilities: [],
+            participantStatus: "manual_review_required",
+            credentials: "manual_review_required",
+          },
+          quoteEvidence: [],
+        }
+      : eventType === "direct_trade.project"
       ? buildDirectTradeTriage({
           ...payload,
           state: payload.state || inferredState || "",
@@ -72,6 +97,7 @@ export function createLeadEnvelope(payload, options = {}) {
     submittedAt,
     state: payload.state || inferredState || "",
     source: "aea-energy-web",
+    ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
     ...(directTradeTriage ? { directTradeTriage } : {}),
     ...(participantReview ? { participantReview } : {}),
   };

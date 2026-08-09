@@ -1,6 +1,12 @@
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
+import {
+  isPublicPlanEnquiry,
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "./public-plan-enquiry.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const PUBLIC_PLAN_PHONE_RE = /^[+\d()\s.-]+$/;
 const DIRECT_TRADE_CATEGORIES = new Set([
   "assessment",
   "solar",
@@ -99,6 +105,8 @@ export function validateLeadPayload(raw) {
   const name = cleanText(raw.name, 120);
   const email = cleanText(raw.email, 254).toLowerCase();
   const phone = cleanText(raw.phone, 40);
+  const enquiry = cleanText(raw.enquiry, 80);
+  const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
   if (!name) return { ok: false, error: "Please enter your name." };
   if (email && !EMAIL_RE.test(email)) return { ok: false, error: "Please enter a valid email address." };
   if (submissionType === 'comparison' && !email) return { ok: false, error: "An email address is required for comparison results." };
@@ -111,12 +119,17 @@ export function validateLeadPayload(raw) {
   if (!consent || consent.accepted !== true || !consentPurpose || !consentVersion || !Number.isFinite(Date.parse(consentGrantedAt))) {
     return { ok: false, error: "Please confirm that we may use your details for this request." };
   }
+  if (publicPlanEnquiry && (
+    consentPurpose !== PUBLIC_PLAN_CONSENT_PURPOSE
+    || consentVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
+  )) {
+    return { ok: false, error: "Please confirm the current contact notice for this upgrade enquiry." };
+  }
 
   const annualKwh = cleanNumber(raw.annualKwh, 0, 100000000);
   const annualMj = cleanNumber(raw.annualMj, 0, 100000000);
   const postcode = cleanText(raw.postcode, 4);
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
-  const enquiry = cleanText(raw.enquiry, 80);
   const projectCategories = cleanDirectTradeCategories(raw.projectCategories);
   const state = canonicalAustralianState(raw.state) || "";
   const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);
@@ -130,6 +143,18 @@ export function validateLeadPayload(raw) {
   const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
     ? raw.serviceStates.map(canonicalAustralianState).filter(Boolean)
     : [])].slice(0, 8);
+  if (publicPlanEnquiry) {
+    if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    if (!postcode) return { ok: false, error: "Please enter the property's postcode." };
+    if (!residentialStateFromPostcode(postcode)) return { ok: false, error: "Please enter a valid Australian postcode." };
+    if (projectCategories.length !== 1) return { ok: false, error: "Please choose one upgrade to discuss first." };
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phone && (
+      !PUBLIC_PLAN_PHONE_RE.test(phone)
+      || phoneDigits.length < 8
+      || phoneDigits.length > 15
+    )) return { ok: false, error: "Please enter a valid phone number." };
+  }
   if (enquiry === "direct-trade-project") {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
     if (!postcode || !state) return { ok: false, error: "Please enter a postcode and choose a state or territory." };
@@ -150,10 +175,37 @@ export function validateLeadPayload(raw) {
     if (!postcode || !annualKwh || annualKwh <= 0) return { ok: false, error: "Complete the comparison before emailing results." };
     if (!cleanTopPlans(raw.top3).length) return { ok: false, error: "No complete plan results were available to email." };
   }
-  if (submissionType === "upgrade" && !["direct-trade-project", "direct-trade-partner"].includes(enquiry)) {
+  if (submissionType === "upgrade" && !publicPlanEnquiry && !["direct-trade-project", "direct-trade-partner"].includes(enquiry)) {
     if (!ELECTRICITY_ENQUIRIES.has(enquiry) && !GAS_ENQUIRIES.has(enquiry)) return { ok: false, error: "Unknown upgrade enquiry." };
     if (ELECTRICITY_ENQUIRIES.has(enquiry) && (!postcode || !annualKwh || annualKwh <= 0)) return { ok: false, error: "Complete the electricity scenario before sending an enquiry." };
     if (GAS_ENQUIRIES.has(enquiry) && (!annualMj || annualMj <= 0)) return { ok: false, error: "Enter annual gas usage before sending an enquiry." };
+  }
+
+  if (publicPlanEnquiry) {
+    return {
+      ok: true,
+      value: {
+        submissionType,
+        submittedAt: new Date().toISOString(),
+        name,
+        email,
+        phone,
+        website: cleanText(raw.website, 200),
+        clientStartedAt: cleanNumber(raw.clientStartedAt, 0, Number.MAX_SAFE_INTEGER),
+        consent: {
+          accepted: true,
+          purpose: consentPurpose,
+          noticeVersion: consentVersion,
+          grantedAt: consentGrantedAt,
+        },
+        upgrades: true,
+        enquiry,
+        postcode,
+        projectCategories,
+        preferredContact: email && phone ? "either" : email ? "email" : "phone",
+        projectNotes: cleanText(raw.projectNotes, 500),
+      },
+    };
   }
 
   return {

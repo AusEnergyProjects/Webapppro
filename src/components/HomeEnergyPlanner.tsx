@@ -7,6 +7,11 @@ import {
   customerProjectOptions as rawCustomerProjectOptions,
 } from "@/lib/customer-projects.mjs";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
+import { PlannerHomeJourney } from "@/components/PlannerHomeJourney";
+import {
+  PublicPlanEnquiryForm,
+  type PublicPlanUpgradeInterest,
+} from "@/components/PublicPlanEnquiryForm";
 
 type Option = [string, string];
 type CustomerPlanItem = {
@@ -104,34 +109,40 @@ const plannerSteps: PlannerStep[] = [
 const firstPostFeatureStepIndex =
   plannerStepsBeforeFeatures.length + plannerFeatureSteps.length;
 
-const plannerStages = [
-  { id: "understand", label: "Understand", text: "Your home and priorities" },
-  { id: "home", label: "Home", text: "The systems you already have" },
-  { id: "direction", label: "Direction", text: "Investment, timing and location" },
-  { id: "plan", label: "Your plan", text: "Your ordered next moves" },
-] as const;
+const plannerStages = ["understand", "home", "direction", "plan"] as const;
 
 function appendValues(params: URLSearchParams, name: string, values: string[]) {
   values.forEach((value) => params.append(name, value));
 }
 
-function PlannerTradeEnquiry({ href }: { href: string }) {
-  return (
-    <section className="planner-boundary planner-trade-enquiry" aria-labelledby="planner-trade-enquiry-title">
-      <span className="planner-trade-enquiry-eyebrow">Optional next step</span>
-      <h3 id="planner-trade-enquiry-title">Want help turning the plan into quotes?</h3>
-      <p>
-        Enquire with verified trades only when you are ready. Creating a free private
-        account saves this plan and carries every current answer across.
-      </p>
-      <p className="planner-trade-enquiry-privacy">
-        This is not required to view your plan. Your name, phone number
-        and exact address stay hidden during matching. Contact details are released
-        only to the one business you choose.
-      </p>
-      <a className="planner-optional-link" href={href}>Save or enquire with verified trades</a>
-    </section>
-  );
+const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
+  ["assessment", "assessment"],
+  ["moisture-ventilation", "assessment"],
+  ["electrical-supply-check", "assessment"],
+  ["solar", "solar"],
+  ["battery", "battery"],
+  ["heating", "heating-cooling"],
+  ["existing-reverse-cycle", "heating-cooling"],
+  ["existing-hydronic-heating", "heating-cooling"],
+  ["existing-wood-heating", "heating-cooling"],
+  ["electric-resistance-heating-review", "heating-cooling"],
+  ["hot-water", "hot-water"],
+  ["existing-heat-pump-hot-water", "hot-water"],
+  ["electric-hot-water-review", "hot-water"],
+  ["draught-proofing", "draught-proofing"],
+  ["insulation-review", "insulation"],
+  ["windows-glazing", "glazing"],
+  ["window-shading", "window-coverings"],
+  ["ev", "ev-charging"],
+]);
+
+function suggestedPlanInterests(items: CustomerPlanItem[]) {
+  const interests: PublicPlanUpgradeInterest[] = [];
+  for (const item of items) {
+    const interest = planInterestByItemId.get(item.id);
+    if (interest && !interests.includes(interest)) interests.push(interest);
+  }
+  return interests.length ? interests : ["assessment"];
 }
 
 function initialPlannerStep(selection: InitialPlannerSelection) {
@@ -206,8 +217,9 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     if (addressState) params.set("addressState", addressState);
     return params;
   }, [goals, pace, situation, approvalContext, budgetRange, addressState, features]);
-  const tradeEnquiryHref = `/account/projects/new?${selectionParams.toString()}`;
+  const accountProjectHref = `/account/projects/new?${selectionParams.toString()}`;
   const firstActionItem = plan.items.find((item) => Boolean(item.href));
+  const enquiryInterests = suggestedPlanInterests(plan.items);
 
   const apartmentAnswer = approvalContext === "strata"
     ? "yes"
@@ -251,21 +263,13 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
   return (
     <section className="planner-layout" aria-label="Home energy planning tool">
-      <section className="planner-stage-shell" aria-labelledby="planner-stage-title">
-        <h2 id="planner-stage-title">Your planning journey</h2>
-        <ol className="planner-stage-nav" aria-label="Planning stages">
-          {plannerStages.map((stage, index) => (
-            <li
-              className={index < stageIndex ? "complete" : index === stageIndex ? "current" : "upcoming"}
-              aria-current={index === stageIndex ? "step" : undefined}
-              key={stage.id}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <div><strong>{stage.label}</strong><small>{stage.text}</small></div>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <PlannerHomeJourney
+        stage={plannerStages[stageIndex]}
+        progress={progressValue}
+        focusLabel={currentStep.label}
+        focusKey={currentStep.id === "features" ? currentStep.featureQuestion : currentStep.id}
+        selectedFeatureCount={features.length}
+      />
       <header className="planner-progress-shell">
         <div className="planner-progress-copy">
           <span>{isResult ? "Plan ready" : `Question ${stepIndex + 1} of ${questionCount}`}</span>
@@ -287,7 +291,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
       {!isResult ? (
         <form className="planner-controls planner-guided-controls" onSubmit={(event) => event.preventDefault()}>
           <section className="planner-step-card" aria-labelledby={`planner-step-${stepIndex}`}>
-            <span className={`planner-stage-emblem planner-stage-emblem-${plannerStages[stageIndex].id}`} aria-hidden="true" />
+            <span className={`planner-stage-emblem planner-stage-emblem-${plannerStages[stageIndex]}`} aria-hidden="true" />
             {currentStep.id === "situation" ? (
               <>
                 <span className="planner-step-eyebrow">First, the permission boundary</span>
@@ -428,11 +432,40 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               <a href={firstActionItem.href}>{firstActionItem.action}</a>
             </section>
           ) : null}
+          <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
+            <PublicPlanEnquiryForm suggestedInterests={enquiryInterests} />
+            <div className="planner-result-account-option">
+              <div>
+                <strong>Want to save the full plan first?</strong>
+                <p>Create a free private account to keep these answers and continue later. An account is not required to enquire.</p>
+              </div>
+              <a href={accountProjectHref}>Create a free account</a>
+            </div>
+          </section>
           <div className="planner-result-actions">
             <a className="planner-primary-result" href={`/plan/print?${selectionParams.toString()}`}>Open my printable plan</a>
             <button type="button" className="planner-reset" onClick={() => goToStep(0)}>Edit my answers</button>
             <button type="button" className="planner-reset" onClick={resetPlan}>Start over</button>
           </div>
+
+          {plan.everydayActions.length > 0 ? (
+            <section className="planner-quick-wins" aria-labelledby="planner-quick-wins-title">
+              <div className="planner-quick-wins-heading">
+                <span>Do these first</span>
+                <h3 id="planner-quick-wins-title">Quick wins for your home</h3>
+                <p>{plan.everydayActionsBoundary}</p>
+              </div>
+              <div className="planner-quick-wins-grid">
+                {plan.everydayActions.map((action) => (
+                  <article key={action.id}>
+                    <small>{action.category}</small>
+                    <h4>{action.title}</h4>
+                    <p>{action.text}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <ol className="planner-roadmap-list">
             {plan.items.map((item, index) => (
@@ -461,22 +494,13 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
             ))}
           </ol>
 
-          {(plan.nextQuestions.length > 0 || plan.everydayActions.length > 0) ? (
+          {plan.nextQuestions.length > 0 ? (
             <details className="planner-more-detail">
-              <summary>Optional ways to refine or use this plan</summary>
-              {plan.nextQuestions.length > 0 ? (
-                <section className="planner-next-questions">
-                  <h3>Questions that could change the order</h3>
-                  <ol>{plan.nextQuestions.map((question) => <li key={question.id}><strong>{question.prompt}</strong><p>{question.whyItMatters}</p><small>Not sure is allowed</small></li>)}</ol>
-                </section>
-              ) : null}
-              {plan.everydayActions.length > 0 ? (
-                <section className="planner-everyday-actions">
-                  <h3>Helpful things you can try now</h3>
-                  <p>{plan.everydayActionsBoundary}</p>
-                  <div>{plan.everydayActions.map((action) => <article key={action.id}><small>{action.category}</small><h4>{action.title}</h4><p>{action.text}</p></article>)}</div>
-                </section>
-              ) : null}
+              <summary>Questions that could refine this plan</summary>
+              <section className="planner-next-questions">
+                <h3>Questions that could change the order</h3>
+                <ol>{plan.nextQuestions.map((question) => <li key={question.id}><strong>{question.prompt}</strong><p>{question.whyItMatters}</p><small>Not sure is allowed</small></li>)}</ol>
+              </section>
             </details>
           ) : null}
 
@@ -484,7 +508,6 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
             <strong>Before committing</strong>
             <p>Replace indicative assumptions with current written quotes, confirm official incentives and approvals, and use licensed professionals for regulated work.</p>
           </div>
-          <PlannerTradeEnquiry href={tradeEnquiryHref} />
         </section>
       )}
     </section>
