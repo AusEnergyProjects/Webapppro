@@ -295,21 +295,100 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
 
 test("admin refresh selects only the program-specific governed registry", () => {
   const veu = allProgramModule.creditexAutomaticRegistryRefreshContract("VEU");
-  assert.equal(veu.registryCode, "veu-approved-products");
+  assert.deepEqual(veu.registryCodes, ["veu-approved-products"]);
   assert.equal(veu.requestTimeoutMs, 300_000);
   assert.match(veu.sourceLabel, /VEU Public Registry/);
+  assert.equal(veu.buttonLabel, "Refresh VEU-approved products");
 
   for (const programCode of ["NSW-ESS-2026", "NSW-PDRS-2026"] ) {
     const other = allProgramModule.creditexAutomaticRegistryRefreshContract(
       programCode,
     );
-    assert.equal(other.registryCode, "gems-products");
+    assert.deepEqual(
+      other.registryCodes,
+      ["gems-products", "nsw-tessa-products"],
+    );
     assert.equal(other.requestTimeoutMs, 300_000);
+    assert.equal(other.buttonLabel, "Refresh NSW official products");
+    assert.match(other.currentLabel, /NSW official product rows are current/);
   }
   assert.equal(
     allProgramModule.creditexAutomaticRegistryRefreshContract("QLD-GRANT"),
     null,
   );
+});
+
+test("NSW admin refresh updates GEMS then TESSA and combines their current row counts", async () => {
+  const contract = allProgramModule.creditexAutomaticRegistryRefreshContract(
+    "NSW-PDRS-2026",
+  );
+  const calls = [];
+  const recordCount = await allProgramModule.creditexRefreshAutomaticProductRegistries(
+    async (path, init, options) => {
+      const body = JSON.parse(init.body);
+      calls.push({ path, body, options });
+      return {
+        ok: true,
+        registries: [{
+          registryCode: body.registryCode,
+          recordCount: body.registryCode === "gems-products" ? 31_418 : 746,
+        }],
+      };
+    },
+    contract,
+  );
+
+  assert.equal(recordCount, 32_164);
+  assert.deepEqual(
+    calls.map((call) => call.body.registryCode),
+    ["gems-products", "nsw-tessa-products"],
+  );
+  for (const call of calls) {
+    assert.equal(call.path, "/api/creditex/official-products");
+    assert.equal(call.body.action, "refresh");
+    assert.equal(call.options.requestTimeoutMs, 300_000);
+  }
+});
+
+test("NSW admin refresh fails closed when either governed source cannot refresh", async () => {
+  const contract = allProgramModule.creditexAutomaticRegistryRefreshContract(
+    "NSW-ESS-2026",
+  );
+  const registryCodes = [];
+
+  await assert.rejects(
+    allProgramModule.creditexRefreshAutomaticProductRegistries(
+      async (_path, init) => {
+        const { registryCode } = JSON.parse(init.body);
+        registryCodes.push(registryCode);
+        if (registryCode === "nsw-tessa-products") {
+          throw new Error("TESSA refresh unavailable");
+        }
+        return { registries: [{ recordCount: 31_418 }] };
+      },
+      contract,
+    ),
+    /TESSA refresh unavailable/,
+  );
+  assert.deepEqual(registryCodes, ["gems-products", "nsw-tessa-products"]);
+});
+
+test("NSW official-product refresh remains admin-only", () => {
+  const api = async () => ({ ok: true });
+  const adminHtml = renderToStaticMarkup(React.createElement(
+    allProgramModule.CreditexAllProgramCalculator,
+    { api, role: "admin", initialProgramCode: "NSW-PDRS-2026" },
+  ));
+  const tradeHtml = renderToStaticMarkup(React.createElement(
+    allProgramModule.CreditexAllProgramCalculator,
+    { api, role: "trade", initialProgramCode: "NSW-PDRS-2026" },
+  ));
+
+  assert.match(adminHtml, /Refresh NSW official products/);
+  assert.match(adminHtml, /NSW official product data/);
+  assert.doesNotMatch(adminHtml, /GEMS controlled registry|TESSA/);
+  assert.doesNotMatch(tradeHtml, /Refresh NSW official products/);
+  assert.doesNotMatch(tradeHtml, /Official data status/);
 });
 
 test("VEU product lookups use the registry governed by each exact product kind", () => {

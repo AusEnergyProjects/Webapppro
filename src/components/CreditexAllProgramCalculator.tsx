@@ -134,7 +134,7 @@ function localProgram(
 export function creditexAutomaticRegistryRefreshContract(programCode: string) {
   if (programCode === "VEU") {
     return {
-      registryCode: "veu-approved-products",
+      registryCodes: ["veu-approved-products"],
       sourceLabel: "VEU Public Registry",
       sourceDescription: "Automatic VEU-approved product source",
       buttonLabel: "Refresh VEU-approved products",
@@ -147,15 +147,42 @@ export function creditexAutomaticRegistryRefreshContract(programCode: string) {
     || programCode === "NSW-PDRS-2026"
   ) {
     return {
-      registryCode: "gems-products",
-      sourceLabel: "GEMS controlled registry",
-      sourceDescription: "Automatic official product source",
-      buttonLabel: "Refresh GEMS products",
-      currentLabel: "GEMS official product rows are current.",
+      registryCodes: ["gems-products", "nsw-tessa-products"],
+      sourceLabel: "NSW official product data",
+      sourceDescription: "Automatic NSW official product data",
+      buttonLabel: "Refresh NSW official products",
+      currentLabel: "NSW official product rows are current.",
       requestTimeoutMs: 300_000,
     } as const;
   }
   return null;
+}
+
+export async function creditexRefreshAutomaticProductRegistries(
+  api: Api,
+  contract: {
+    readonly registryCodes: readonly string[];
+    readonly requestTimeoutMs: number;
+  },
+) {
+  let recordCount = 0;
+  for (const registryCode of contract.registryCodes) {
+    const result = await api("/api/creditex/official-products", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "refresh",
+        registryCode,
+      }),
+    }, { requestTimeoutMs: contract.requestTimeoutMs });
+    const registries = Array.isArray(result.registries)
+      ? result.registries as Array<Record<string, unknown>>
+      : [];
+    recordCount += registries.reduce(
+      (total, registry) => total + Number(registry.recordCount || 0),
+      0,
+    );
+  }
+  return recordCount;
 }
 
 function CreditexLocalProgramCalculator({
@@ -533,19 +560,9 @@ export function CreditexAllProgramCalculator({
     setRegistryRefreshNotice("");
     setRegistryRefreshError("");
     try {
-      const result = await api("/api/creditex/official-products", {
-        method: "POST",
-        body: JSON.stringify({
-          action: "refresh",
-          registryCode: registryRefreshContract.registryCode,
-        }),
-      }, { requestTimeoutMs: registryRefreshContract.requestTimeoutMs });
-      const registries = Array.isArray(result.registries)
-        ? result.registries as Array<Record<string, unknown>>
-        : [];
-      const recordCount = registries.reduce(
-        (total, registry) => total + Number(registry.recordCount || 0),
-        0,
+      const recordCount = await creditexRefreshAutomaticProductRegistries(
+        api,
+        registryRefreshContract,
       );
       setRegistryRefreshNotice(
         recordCount > 0

@@ -95,9 +95,13 @@ test("calculator APIs keep trade access verified while public reads are quote-on
 test("trade access remains estimate-only and cannot refresh an official registry", () => {
   assert.match(calculator, /role: "admin" \| "case_manager" \| "reviewer" \| "auditor" \| "trade"/);
   assert.match(calculator, /role === "admin" && registryRefreshContract/);
-  assert.match(calculator, /Refresh GEMS products/);
-  assert.match(calculator, /registryCode: "veu-approved-products"/);
-  assert.match(calculator, /registryCode: "gems-products"/);
+  assert.match(calculator, /Refresh NSW official products/);
+  assert.match(calculator, /registryCodes: \["veu-approved-products"\]/);
+  assert.match(
+    calculator,
+    /registryCodes: \["gems-products", "nsw-tessa-products"\]/,
+  );
+  assert.match(calculator, /for \(const registryCode of contract\.registryCodes\)/);
   assert.match(calculator, /requestTimeoutMs: 300_000/);
   assert.doesNotMatch(calculator, /registryCode: "all"/);
   assert.match(sresCalculator, /role === "admin" && !productBlocker/);
