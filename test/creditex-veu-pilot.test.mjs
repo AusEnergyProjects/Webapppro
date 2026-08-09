@@ -2623,24 +2623,28 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(manualEvidenceWorkspace, /Submit for Creditex audit/);
   assert.match(calculationWorkspace, /National certificate calculation workspace/);
   assert.match(calculationWorkspace, /Estimate STCs/);
-  assert.match(calculationWorkspace, /ALL-IN-ONE CALCULATOR/);
+  assert.match(calculationWorkspace, /REBATE CALCULATOR/);
   assert.match(calculationWorkspace, /NSW-PDRS-2026/);
   assert.match(calculationWorkspace, /NSW-ESS-2026/);
   assert.match(calculationWorkspace, /Victorian Energy Upgrades/);
-  assert.match(calculationWorkspace, /Select approved products/);
+  assert.match(calculationWorkspace, /Choose brand/);
+  assert.match(calculationWorkspace, /Choose model/);
   assert.match(calculationWorkspace, /\/api\/creditex\/official-products/);
   assert.match(calculationWorkspace, /\/api\/creditex\/program-estimates/);
-  assert.match(calculationWorkspace, /No product eligibility is guessed/);
+  assert.match(
+    calculationWorkspace,
+    /Final eligibility is checked before certificate creation/,
+  );
   assert.match(calculationWorkspace, /Activity calculation readiness/);
   assert.match(calculationWorkspace, /\/api\/creditex\/stc-estimates/);
-  assert.match(calculationWorkspace, /Certificate creation disabled/);
+  assert.match(calculationWorkspace, /Estimate only/);
   assert.match(portal, /options: \{ requestTimeoutMs\?: number \} = \{\}/);
   assert.match(portal, /options\.requestTimeoutMs \?\? 20_000/);
   assert.match(portal, /requestTimeoutMs \/ 1_000/);
   assert.match(sresCalculator, /requestTimeoutMs: 90_000/);
   assert.match(allProgramCalculator, /requestTimeoutMs: 300_000/);
   assert.match(calculationWorkspace, /Safety certification date/);
-  assert.match(calculationWorkspace, /Site-assessed hours \| audit required/);
+  assert.doesNotMatch(calculationWorkspace, /Site-assessed hours \| audit required/);
   assert.match(workspace, /Controlled submission boundary/);
   assert.match(workspace, /External submission blocked/);
   assert.match(workspace, /No public national calculation API exists/);

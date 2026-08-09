@@ -51,6 +51,7 @@ export type CreditexVeuInputDefinition = {
   help: string;
   defaultValue: string;
   source: "operator" | "approved_product" | "postcode_lookup";
+  quoteSource?: "operator";
   required: boolean;
   min?: string;
   max?: string;
@@ -61,6 +62,90 @@ export type CreditexVeuInputDefinition = {
   showWhen?: CreditexVeuInputCondition;
   omitWhenHidden?: boolean;
 };
+
+export type CreditexVeuQuoteEvidenceAssumption = {
+  key: string;
+  assumedValue: string;
+};
+
+/**
+ * Explicitly identifies non-arithmetic activity evidence that quote mode may
+ * leave unconfirmed. The estimator substitutes only these values, records the
+ * substitution in its sealed receipt and never uses this contract for strict
+ * compliance estimates.
+ */
+export const CREDITEX_VEU_QUOTE_EVIDENCE_ASSUMPTIONS = {
+  "1C": [
+    { key: "incumbent_scenario_requirements_confirmed", assumedValue: "yes" },
+    { key: "residential_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "residential_suitability_and_sizing_advice_confirmed", assumedValue: "yes" },
+    { key: "no_additional_inline_storage_or_system_confirmed", assumedValue: "yes" },
+    { key: "decommissioning_and_disposal_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "1D": [
+    { key: "incumbent_scenario_requirements_confirmed", assumedValue: "yes" },
+    { key: "residential_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "residential_suitability_and_sizing_advice_confirmed", assumedValue: "yes" },
+    { key: "no_additional_inline_storage_or_system_confirmed", assumedValue: "yes" },
+    { key: "decommissioning_and_disposal_confirmed", assumedValue: "yes" },
+    { key: "warranty_years", assumedValue: "5" },
+    { key: "warranty_requirements_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "3C": [
+    { key: "incumbent_scenario_requirements_confirmed", assumedValue: "yes" },
+    { key: "residential_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "residential_suitability_and_sizing_advice_confirmed", assumedValue: "yes" },
+    { key: "no_additional_inline_storage_or_system_confirmed", assumedValue: "yes" },
+    { key: "decommissioning_and_disposal_confirmed", assumedValue: "yes" },
+    { key: "warranty_years", assumedValue: "5" },
+    { key: "warranty_requirements_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "3D": [
+    { key: "incumbent_scenario_requirements_confirmed", assumedValue: "yes" },
+    { key: "residential_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "residential_suitability_and_sizing_advice_confirmed", assumedValue: "yes" },
+    { key: "no_additional_inline_storage_or_system_confirmed", assumedValue: "yes" },
+    { key: "decommissioning_and_disposal_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "6": [
+    { key: "same_oem_confirmed", assumedValue: "yes" },
+    { key: "incumbent_scenario_requirements_confirmed", assumedValue: "yes" },
+    { key: "decommissioning_and_disposal_confirmed", assumedValue: "yes" },
+    { key: "residential_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "residential_suitability_and_sizing_advice_confirmed", assumedValue: "yes" },
+    { key: "warranty_years", assumedValue: "5" },
+    { key: "warranty_requirements_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "27": [{ key: "removal_requirements_confirmed", assumedValue: "yes" }],
+  "31": [{ key: "co_payment_per_motor_aud", assumedValue: "200" }],
+  "34": [
+    { key: "vru_compatibility_confirmed", assumedValue: "yes" },
+    { key: "removal_requirements_confirmed", assumedValue: "yes" },
+  ],
+  "35": [{ key: "removal_requirements_confirmed", assumedValue: "yes" }],
+  "39": [{ key: "eligibility_requirements_confirmed", assumedValue: "yes" }],
+  "40": [{ key: "eligibility_requirements_confirmed", assumedValue: "yes" }],
+  "42": [{ key: "eligibility_requirements_confirmed", assumedValue: "yes" }],
+  "43": [
+    { key: "eligible_parts_configuration_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_cold_room_aud", assumedValue: "500" },
+  ],
+  "44": [
+    { key: "warranty_years", assumedValue: "5" },
+    { key: "incumbent_decommissioning_evidence_confirmed", assumedValue: "yes" },
+    { key: "existing_storage_requirements_confirmed", assumedValue: "yes" },
+    { key: "installation_and_model_evidence_confirmed", assumedValue: "yes" },
+    { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+} as const satisfies Partial<Record<
+  string,
+  readonly CreditexVeuQuoteEvidenceAssumption[]
+>>;
 
 export type CreditexVeuActivityDefinition = {
   activityCode: string;
@@ -468,8 +553,8 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
       { key: "premises", label: "Premises type", type: "select", unit: "premises", help: "Choose the premises class used by the applicable Part 6 category and building thermal-load table.", defaultValue: "residential", source: "operator", required: true, options: [{ value: "residential", label: "Residential" }, { value: "business", label: "Business or non-residential" }] },
       { key: "location_class", label: "VEU climatic location", type: "select", unit: "location", help: "Resolve the official metropolitan/regional and mild/cold/hot class from the installation postcode.", defaultValue: "metro_mild", source: "postcode_lookup", required: true, options: LOCATION_CLASS_OPTIONS },
       { key: "configuration", label: "System configuration", type: "select", unit: "configuration", help: "Populate the selected approved system's single-split or multi-split configuration.", defaultValue: "single", source: "approved_product", required: true, options: [{ value: "single", label: "Single system" }, { value: "multi", label: "Multi-split system" }] },
-      { key: "rated_heating_capacity_kw", label: "Rated heating capacity", type: "decimal", unit: "kW", help: "For a single system use its approved rated heating capacity; for a multi-split use the sum of selected indoor-unit ratings.", defaultValue: "3.5", source: "approved_product", required: true, min: "0", minExclusive: true, step: "any" },
-      { key: "rated_cooling_capacity_kw", label: "Rated cooling capacity", type: "decimal", unit: "kW", help: "For a single system use its approved rated cooling capacity; for a multi-split use the sum of selected indoor-unit ratings.", defaultValue: "3.5", source: "approved_product", required: true, min: "0", minExclusive: true, step: "any" },
+      { key: "rated_heating_capacity_kw", label: "Total installed indoor heating capacity", type: "decimal", unit: "kW", help: "For a single system this is replaced by the approved product rating. For a multi-split or VRF system, enter the total rated heating capacity of all connected indoor units.", defaultValue: "3.5", source: "approved_product", quoteSource: "operator", required: true, min: "0", minExclusive: true, step: "any" },
+      { key: "rated_cooling_capacity_kw", label: "Total installed indoor cooling capacity", type: "decimal", unit: "kW", help: "For a single system this is replaced by the approved product rating. For a multi-split or VRF system, enter the total rated cooling capacity of all connected indoor units.", defaultValue: "3.5", source: "approved_product", quoteSource: "operator", required: true, min: "0", minExclusive: true, step: "any" },
       { key: "outdoor_heating_capacity_kw", label: "Outdoor-unit heating capacity", type: "decimal", unit: "kW", help: "For multi-split systems use the selected approved outdoor unit's exact rated heating capacity.", defaultValue: "3.5", source: "approved_product", required: true, min: "0", minExclusive: true, step: "any", showWhen: { key: "configuration", oneOf: ["multi"] }, omitWhenHidden: true },
       { key: "outdoor_cooling_capacity_kw", label: "Outdoor-unit cooling capacity", type: "decimal", unit: "kW", help: "For multi-split systems use the selected approved outdoor unit's exact rated cooling capacity.", defaultValue: "3.5", source: "approved_product", required: true, min: "0", minExclusive: true, step: "any", showWhen: { key: "configuration", oneOf: ["multi"] }, omitWhenHidden: true },
       { key: "hspf_upgrade", label: "Applicable HSPF", type: "decimal", unit: "W/W", help: "Use the selected product's applicable GEMS or calculated HSPF for the governed location and premises class.", defaultValue: "6", source: "approved_product", required: true, min: "0", minExclusive: true, step: "any" },

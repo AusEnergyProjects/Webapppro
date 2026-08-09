@@ -205,16 +205,12 @@ export function CreditexOfficialProductPicker({
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [productType, setProductType] = useState("");
-  const [modelQuery, setModelQuery] = useState("");
   const [products, setProducts] = useState<CreditexOfficialProductOption[]>([]);
   const [facets, setFacets] = useState<CreditexOfficialProductFacets>({
     brands: [],
     models: [],
     productTypes: [],
   });
-  const [recordCount, setRecordCount] = useState(0);
-  const [matchCount, setMatchCount] = useState(0);
-  const [snapshotId, setSnapshotId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [retryNonce, setRetryNonce] = useState(0);
@@ -246,20 +242,13 @@ export function CreditexOfficialProductPicker({
       if (productType) parameters.set("productType", productType);
       if (veuActivityCode) parameters.set("veuActivityCode", veuActivityCode);
       if (veuScenario) parameters.set("veuScenario", veuScenario);
-      if (brand && !model && modelQuery.trim()) {
-        parameters.set("q", modelQuery.trim());
-      }
       void api(`/api/creditex/official-products?${parameters.toString()}`)
         .then((result) => {
           if (requestRef.current !== requestVersion) return;
-          const registry = result.registry as Record<string, unknown> | undefined;
           const nextProducts = (result.products || []) as CreditexOfficialProductOption[];
           const nextFacets = productFacets(result.facets);
           setProducts(nextProducts);
           setFacets(nextFacets);
-          setRecordCount(Number(registry?.recordCount || 0));
-          setMatchCount(Number(result.matchCount || nextProducts.length));
-          setSnapshotId(String(registry?.snapshotId || ""));
           if (
             model
             && !productType
@@ -285,9 +274,6 @@ export function CreditexOfficialProductPicker({
           if (requestWasSuperseded(caught)) return;
           setProducts([]);
           setFacets({ brands: [], models: [], productTypes: [] });
-          setRecordCount(0);
-          setMatchCount(0);
-          setSnapshotId("");
           setError(
             caught instanceof Error
               ? caught.message
@@ -297,7 +283,7 @@ export function CreditexOfficialProductPicker({
         .finally(() => {
           if (requestRef.current === requestVersion) setBusy(false);
         });
-    }, 250);
+    }, 0);
     return () => {
       window.clearTimeout(timer);
       requestRef.current += 1;
@@ -308,7 +294,6 @@ export function CreditexOfficialProductPicker({
     installationDate,
     kind,
     model,
-    modelQuery,
     productType,
     retryNonce,
     veuActivityCode,
@@ -321,9 +306,9 @@ export function CreditexOfficialProductPicker({
       aria-busy={busy}
       className={styles.officialProductPicker}
     >
-      <legend>Approved {officialProductKindLabel(kind)}</legend>
+      <legend>{officialProductKindLabel(kind)}</legend>
       <label>
-        1. Product brand
+        Brand
         <select
           required
           value={brand}
@@ -333,8 +318,12 @@ export function CreditexOfficialProductPicker({
             setBrand(nextBrand);
             setModel("");
             setProductType("");
-            setModelQuery("");
             setProducts([]);
+            setFacets((current) => ({
+              brands: current.brands,
+              models: [],
+              productTypes: [],
+            }));
             onSelect("", null);
           }}
         >
@@ -343,29 +332,13 @@ export function CreditexOfficialProductPicker({
           </option>
           {facets.brands.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}{option.count ? ` (${option.count})` : ""}
+              {option.label}
             </option>
           ))}
         </select>
       </label>
       <label>
-        Find model within this brand
-        <input
-          type="search"
-          value={modelQuery}
-          disabled={!brand || busy || Boolean(error)}
-          placeholder={brand ? "Type part of the model number" : "Choose a brand first"}
-          onChange={(event) => {
-            setModelQuery(event.target.value);
-            setModel("");
-            setProductType("");
-            setProducts([]);
-            onSelect("", null);
-          }}
-        />
-      </label>
-      <label>
-        2. Product model
+        Model
         <select
           required
           value={model}
@@ -374,6 +347,7 @@ export function CreditexOfficialProductPicker({
             setModel(event.target.value);
             setProductType("");
             setProducts([]);
+            setFacets((current) => ({ ...current, productTypes: [] }));
             onSelect("", null);
           }}
         >
@@ -386,72 +360,58 @@ export function CreditexOfficialProductPicker({
           </option>
           {facets.models.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}{option.count > 1 ? ` (${option.count} approvals)` : ""}
+              {option.label}
             </option>
           ))}
         </select>
       </label>
-      <label>
-        3. Product type or configuration
-        <select
-          value={productType}
-          disabled={!model || busy || Boolean(error) || facets.productTypes.length <= 1}
-          onChange={(event) => {
-            setProductType(event.target.value);
-            setProducts([]);
-            onSelect("", null);
-          }}
-        >
-          <option value="">
-            {!model
-              ? "Choose a model first"
-              : facets.productTypes.length === 0
-                ? "Not separately classified"
-                : "Choose product type"}
-          </option>
-          {facets.productTypes.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}{option.count > 1 ? ` (${option.count})` : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        4. Exact approval record
-        <select
-          required
-          value={selectedId}
-          disabled={
-            !brand
-            || !model
-            || busy
-            || Boolean(error)
-            || (
-              facets.productTypes.length > 1
-              && !productType
-            )
-          }
-          onChange={(event) => {
-            const id = event.target.value;
-            const product = options.find((candidate) => candidate.id === id)
-              || null;
-            onSelect(id, product);
-          }}
-        >
-          <option value="">
-            {busy
-              ? "Checking official registry..."
-              : products.length === 1
-                ? "Exact approved record selected automatically"
-                : `Select exact ${officialProductKindLabel(kind)} approval`}
-          </option>
-          {options.map((product) => (
-            <option key={product.id} value={product.id}>
-              {creditexProductOptionLabel(product)}
-            </option>
-          ))}
-        </select>
-      </label>
+      {facets.productTypes.length > 1 && (
+        <label>
+          Product type
+          <select
+            required
+            value={productType}
+            disabled={!model || busy || Boolean(error)}
+            onChange={(event) => {
+              setProductType(event.target.value);
+              setProducts([]);
+              onSelect("", null);
+            }}
+          >
+            <option value="">Choose product type</option>
+            {facets.productTypes.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {model
+        && products.length > 1
+        && (facets.productTypes.length <= 1 || Boolean(productType)) && (
+        <label>
+          Approval
+          <select
+            required
+            value={selectedId}
+            disabled={busy || Boolean(error)}
+            onChange={(event) => {
+              const id = event.target.value;
+              const product = options.find((candidate) => candidate.id === id)
+                || null;
+              onSelect(id, product);
+            }}
+          >
+            <option value="">Choose approval</option>
+            {options.map((product) => (
+              <option key={product.id} value={product.id}>
+                {creditexProductOptionLabel(product)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {error ? (
         <div>
           <small className={styles.productRegistryError} role="alert">
@@ -466,30 +426,12 @@ export function CreditexOfficialProductPicker({
           >
             Retry official registry
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setBrand("");
-              setModel("");
-              setProductType("");
-              setModelQuery("");
-              setProducts([]);
-              setFacets({ brands: [], models: [], productTypes: [] });
-              setError("");
-              onSelect("", null);
-              setRetryNonce((current) => current + 1);
-            }}
-          >
-            Start product selection again
-          </button>
         </div>
-      ) : (
-        <small aria-live="polite">
-          {snapshotId
-            ? `${recordCount.toLocaleString("en-AU")} official rows | ${matchCount.toLocaleString("en-AU")} match the current choices | snapshot ${snapshotId.slice(0, 12)}...`
-            : "Waiting for the current official snapshot."}
-        </small>
-      )}
+      ) : busy ? (
+        <small aria-live="polite">Checking approved products...</small>
+      ) : selectedId ? (
+        <small aria-live="polite">Approved for the selected date.</small>
+      ) : null}
     </fieldset>
   );
 }

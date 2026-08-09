@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import fs from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 
 let server;
@@ -129,4 +132,54 @@ test("one exact registration is automatic but duplicates require a choice", () =
     productKeys: ["cer-ashp:103", "cer-ashp:104"],
   });
   assert.equal(state.productKey, "");
+});
+
+test("SRES starts as a short future-date quote form with an enabled CTA", () => {
+  const html = renderToStaticMarkup(React.createElement(
+    calculatorModule.CreditexSresCalculator,
+    { api: async () => ({ ok: true }), role: "trade" },
+  ));
+  const order = [
+    ">Activity<",
+    ">Installation date<",
+    ">Scenario:<",
+    ">Postcode<",
+    ">Rated capacity (kW)<",
+    ">Calculate rebate estimate<",
+  ];
+  let previous = -1;
+  for (const marker of order) {
+    const index = html.indexOf(marker);
+    assert.ok(index > previous, `${marker} must follow the prior quote field`);
+    previous = index;
+  }
+  assert.match(
+    html,
+    /type="date" min="2026-01-01" max="2030-12-31" required=""/,
+  );
+  assert.match(html, /<button type="submit">Calculate rebate estimate<\/button>/);
+  assert.doesNotMatch(
+    html,
+    /Certificate creation disabled|Calculation disabled|Official product evidence incomplete|official rows|snapshot/i,
+  );
+  assert.doesNotMatch(html, /Refresh official products/);
+
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexSresCalculator.tsx"),
+    "utf8",
+  );
+  assert.match(source, /estimatePurpose: "quote"/);
+  assert.match(source, /installationDate: form\.effectiveDate/);
+  assert.doesNotMatch(source, /max=\{todayIso\(\)\}/);
+  assert.match(source, /<summary>Calculation details<\/summary>/);
+  const calculateSource = source.slice(
+    source.indexOf("async function calculate"),
+    source.indexOf("function updateTechnology"),
+  );
+  assert.doesNotMatch(
+    calculateSource,
+    /claimScope|resourceAvailability|resourceHoursPerYear|deemingYears/,
+  );
+  assert.match(calculateSource, /ratedCapacityKw: form\.ratedCapacityKw/);
+  assert.match(calculateSource, /postcode: form\.postcode/);
 });

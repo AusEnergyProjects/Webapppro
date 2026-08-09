@@ -13,6 +13,7 @@ import {
   CREDITEX_VEU_PART_6_CATEGORY_FACTORS,
   CREDITEX_VEU_PART_6_SCENARIOS,
   CREDITEX_VEU_PUBLIC_REGISTRY_URL,
+  CREDITEX_VEU_QUOTE_EVIDENCE_ASSUMPTIONS,
   CREDITEX_VEU_REGIONAL_FACTOR,
   CREDITEX_VEU_SPECIFICATION_SOURCES,
   type CreditexVeuActivityDefinition,
@@ -51,6 +52,15 @@ export type CreditexVeuTraceEntry = {
   input: string;
   operation: string;
   output: CreditexVeuTraceValue;
+};
+
+export type CreditexVeuQuoteEligibilityWarning = {
+  inputKey: string;
+  label: string;
+  suppliedValue: string;
+  assumedValue: string;
+  assumptionApplied: boolean;
+  message: string;
 };
 
 export type CreditexVeuEstimate = {
@@ -97,6 +107,9 @@ export type CreditexVeuEstimate = {
   traceHash: string;
   outputHash: string;
   receiptHash: string;
+  estimatePurpose?: "quote";
+  eligibilityConfirmed?: false;
+  eligibilityWarnings?: CreditexVeuQuoteEligibilityWarning[];
 };
 
 export type CreditexVeuEstimateErrorCode =
@@ -556,6 +569,70 @@ function rejectNotApplicableInputs(
       `Remove ${context} input${provided.length === 1 ? "" : "s"}: ${provided.join(", ")}.`,
     );
   }
+}
+
+function quoteInputDefinitionApplies(
+  definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
+  inputs: UnknownRecord,
+) {
+  const condition = definition.showWhen;
+  if (!condition) return true;
+  const current = inputs[condition.key];
+  if (condition.oneOf && !condition.oneOf.includes(String(current))) return false;
+  if (condition.notOneOf && condition.notOneOf.includes(String(current))) return false;
+  return true;
+}
+
+function quoteAssumptionSatisfied(value: unknown, assumedValue: string) {
+  if (assumedValue === "yes") return value === "yes";
+  if (
+    (typeof value !== "string" && typeof value !== "number")
+    || !DECIMAL_PATTERN.test(String(value))
+  ) {
+    return false;
+  }
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue >= Number(assumedValue);
+}
+
+function prepareQuoteInputs(
+  activity: CreditexVeuActivityDefinition,
+  inputs: UnknownRecord,
+) {
+  const normalizedInputs = { ...inputs };
+  const warnings: CreditexVeuQuoteEligibilityWarning[] = [];
+  const assumptions = CREDITEX_VEU_QUOTE_EVIDENCE_ASSUMPTIONS[
+    activity.activityCode as keyof typeof CREDITEX_VEU_QUOTE_EVIDENCE_ASSUMPTIONS
+  ] || [];
+  for (const assumption of assumptions) {
+    const definition = activity.inputDefinitions.find(
+      (candidate) => candidate.key === assumption.key,
+    );
+    if (!definition || !quoteInputDefinitionApplies(definition, normalizedInputs)) {
+      continue;
+    }
+    const suppliedValue = normalizedInputs[assumption.key];
+    const assumptionApplied = !quoteAssumptionSatisfied(
+      suppliedValue,
+      assumption.assumedValue,
+    );
+    if (assumptionApplied) {
+      normalizedInputs[assumption.key] = assumption.assumedValue;
+    }
+    warnings.push({
+      inputKey: assumption.key,
+      label: definition.label,
+      suppliedValue: typeof suppliedValue === "string" || typeof suppliedValue === "number"
+        ? String(suppliedValue)
+        : "not_provided",
+      assumedValue: assumption.assumedValue,
+      assumptionApplied,
+      message: assumptionApplied
+        ? `${definition.label} is not yet confirmed. Quote mode assumed a qualifying value only to calculate potential VEECs.`
+        : `${definition.label} was supplied, but quote mode does not independently confirm the supporting compliance evidence.`,
+    });
+  }
+  return { normalizedInputs, warnings };
 }
 
 function ensureAtLeast(value: Fraction, minimumValue: string, message: string) {
@@ -3706,7 +3783,15 @@ function nearestWholeCertificates(value: Fraction) {
 
 export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   const request = record(value, "VEU estimate request");
-  exactKeys(request, ["activityCode", "installationDate", "inputs", "product"], "VEU estimate request");
+  exactKeys(request, ["activityCode", "installationDate", "inputs", "product", "estimatePurpose"], "VEU estimate request");
+  const estimatePurpose = request.estimatePurpose === undefined
+    ? "compliance"
+    : selectInput(
+      request,
+      "estimatePurpose",
+      "estimate purpose",
+      ["compliance", "quote"] as const,
+    );
   const activityCode = requiredString(request.activityCode, "Activity code");
   const activity = CREDITEX_VEU_ACTIVITY_DEFINITIONS.find((candidate) => candidate.activityCode === activityCode);
   if (!activity) {
@@ -3714,7 +3799,11 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   }
   const installationDate = parseDate(request.installationDate, "Installation date").text;
   const specification = resolveSpecification(installationDate, activityCode);
-  const inputs = record(request.inputs, "Activity inputs");
+  const suppliedInputs = record(request.inputs, "Activity inputs");
+  const quotePreparation = estimatePurpose === "quote"
+    ? prepareQuoteInputs(activity, suppliedInputs)
+    : { normalizedInputs: suppliedInputs, warnings: [] };
+  const inputs = quotePreparation.normalizedInputs;
   const execution = execute(
     activityCode,
     inputs,
@@ -3747,7 +3836,17 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   const inputSnapshot = {
     installationDate,
     ...execution.inputSnapshot,
+    ...(estimatePurpose === "quote"
+      ? { quoteEligibilityEvidence: quotePreparation.warnings }
+      : {}),
   };
+  const quoteMetadata = estimatePurpose === "quote"
+    ? {
+        estimatePurpose: "quote" as const,
+        eligibilityConfirmed: false as const,
+        eligibilityWarnings: quotePreparation.warnings,
+      }
+    : {};
   const receiptBase = {
     schemaVersion: CREDITEX_VEU_ESTIMATE_SCHEMA,
     estimatorVersion: CREDITEX_VEU_ESTIMATOR_VERSION,
@@ -3759,6 +3858,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     inputSnapshot,
     trace: execution.trace,
     output,
+    ...quoteMetadata,
   };
   return {
     schemaVersion: CREDITEX_VEU_ESTIMATE_SCHEMA,
@@ -3786,12 +3886,15 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
       ? "estimate_only_rounding_tie_unresolved"
       : "estimate_only_compliance_reconciliation_required",
     certificateActionEnabled: false,
-    operatorMessage: rounded.tie
-      ? "The official guide requires nearest-whole VEEC rounding but does not state the exact 0.5 tie rule. The unrounded exact quantity is retained and no whole certificate value is asserted."
-      : "Estimate only. Reconcile the installation, postcode classification, approved product record, effective dates and all activity evidence against the official VEU systems before certificate creation.",
+    operatorMessage: estimatePurpose === "quote"
+      ? "Potential rebate estimate only. Where required, the approved product was checked. The effective date and governed formula values were checked, but quote-mode evidence assumptions must be confirmed before relying on eligibility."
+      : rounded.tie
+        ? "The official guide requires nearest-whole VEEC rounding but does not state the exact 0.5 tie rule. The unrounded exact quantity is retained and no whole certificate value is asserted."
+        : "Estimate only. Reconcile the installation, postcode classification, approved product record, effective dates and all activity evidence against the official VEU systems before certificate creation.",
     inputHash: sha256(inputSnapshot),
     traceHash: sha256(execution.trace),
     outputHash: sha256(output),
     receiptHash: sha256(receiptBase),
+    ...quoteMetadata,
   };
 }

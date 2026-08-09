@@ -17,6 +17,9 @@ import {
   syncCerSresProductRegistry,
 } from "../src/lib/creditex-sres-registry-server.ts";
 import {
+  estimateCreditexSresQuote,
+} from "../src/lib/creditex-sres-calculator-estimator.ts";
+import {
   CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS,
 } from "../src/lib/creditex-product-registry-schema-guards.ts";
 import {
@@ -1251,6 +1254,18 @@ test("product search and calculation pin product, date, postcode and source snap
   assert.match(estimate.resolvedReceiptHash, /^sha256:[a-f0-9]{64}$/);
   assert.equal(estimate.certificateActionEnabled, false);
 
+  const waterHeaterQuote = await estimateCreditexSresQuote(d1, {
+    estimatePurpose: "quote",
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-08",
+    postcode: "3000",
+    productKey: "cer-ashp:1",
+  });
+  assert.deepEqual(waterHeaterQuote.output, { quantity: "16", unit: "STC" });
+  assert.equal(waterHeaterQuote.resolution.sourceRecordKey, "cer-ashp:1");
+  assert.equal(waterHeaterQuote.eligibilityConfirmed, false);
+  assert.equal(waterHeaterQuote.certificateActionEnabled, false);
+
   const pv = await estimateCreditexStcsFromRegistry(d1, {
     technology: "solar_pv",
     installationDate: "2026-08-08",
@@ -1496,16 +1511,19 @@ test("protected APIs, daily Worker and UI enforce server-derived registry values
   assert.match(estimateRouteSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
   assert.match(workerSource, /SRES_REGISTRY_CRON/);
   assert.match(workerSource, /syncCerSresProductRegistry\(db, \{ artifactStore \}\)/);
-  assert.match(calculatorSource, /Product type or capacity/);
-  assert.match(calculatorSource, /Exact CER registration/);
+  assert.match(calculatorSource, /Product type/);
+  assert.match(calculatorSource, /Brand/);
+  assert.match(calculatorSource, /Model/);
+  assert.match(calculatorSource, /Approval/);
   assert.match(calculatorSource, /productCascade\.productKey/);
   assert.doesNotMatch(calculatorSource, /Find approved product/);
   assert.doesNotMatch(calculatorSource, /productQuery/);
-  assert.match(calculatorSource, /Installation postcode/);
+  assert.match(calculatorSource, /function renderPostcode/);
+  assert.match(calculatorSource, />\s*Postcode\s*</);
   assert.match(calculatorSource, /estimateRequestRef\.current === requestVersion/);
   assert.match(calculatorSource, /function updateForm/);
   assert.match(calculatorSource, /const markRegistryUnverified = useCallback/);
-  assert.match(calculatorSource, /requiresCurrentRegistry\(form\.technology\)/);
+  assert.match(calculatorSource, /registeredTechnology\(form\.technology\)/);
   assert.match(calculatorSource, /aria-live="polite"/);
   assert.match(calculatorSource, /role="alert"/);
   assert.doesNotMatch(calculatorSource, /registeredTenYearStcs:/);

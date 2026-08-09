@@ -239,7 +239,7 @@ test("a settled current registry does not schedule another parent render", () =>
   );
 });
 
-test("shared admin and trade VEU rendering requires the exact Public Registry model and locks product inputs", () => {
+test("shared admin and trade VEU rendering leads with a short quote flow", () => {
   const api = async () => ({ ok: true });
   const adminHtml = renderToStaticMarkup(React.createElement(
     allProgramModule.CreditexAllProgramCalculator,
@@ -251,22 +251,40 @@ test("shared admin and trade VEU rendering requires the exact Public Registry mo
   ));
 
   for (const html of [adminHtml, tradeHtml]) {
-    assert.match(html, /VEU Public Registry eligibility evidence/);
-    assert.match(html, /exact VEU Public Registry model approved on the installation date/i);
-    assert.match(html, /Effective From and Effective To window/);
+    const visibleOrder = [
+      ">Activity<",
+      ">Installation date<",
+      ">Brand<",
+      ">Model<",
+      ">Postcode<",
+      ">Premises type<",
+      ">Eligibility and evidence<",
+      ">Calculate rebate estimate<",
+    ];
+    let previous = -1;
+    for (const marker of visibleOrder) {
+      const index = html.indexOf(marker);
+      assert.ok(index > previous, `${marker} must follow the prior quote field`);
+      previous = index;
+    }
     assert.match(
       html,
-      /Read from the exact VEU Public Registry model approved on the installation date/,
+      /<input type="date" min="2026-06-30" required="" value="[^"]+"/,
     );
-    assert.doesNotMatch(html, /VEU formula inputs unavailable/);
-    assert.match(
+    assert.doesNotMatch(html, /type="date"[^>]*max=/);
+    assert.match(html, /<button type="submit">Calculate rebate estimate<\/button>/);
+    assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
+    assert.doesNotMatch(
       html,
-      /AS\/NZS 4234 system size<select required="" disabled=""/,
+      /VEU consumer fact sheet provided|Decommissioning and lawful disposal|Warranty obligations evidence/,
     );
-    assert.match(
+    assert.doesNotMatch(
       html,
-      /Bs2021<input inputMode="decimal" required="" disabled=""/,
+      /Certificate actions disabled|official rows|snapshot [a-z0-9]/i,
     );
+    const evidence = /<details><summary>Eligibility and evidence<\/summary>([\s\S]*?)<\/details>/
+      .exec(html)?.[1] || "";
+    assert.doesNotMatch(evidence, /<(?:input|select)\b/);
   }
 
   assert.match(adminHtml, /Refresh VEU-approved products/);
@@ -307,7 +325,7 @@ test("VEU product lookups use the registry governed by each exact product kind",
   );
 });
 
-test("the shared approved-product picker guides brand, model, type and exact approval in order", () => {
+test("the shared approved-product picker shows only choices that remain necessary", () => {
   const html = renderToStaticMarkup(React.createElement(
     officialPickerModule.CreditexOfficialProductPicker,
     {
@@ -318,20 +336,17 @@ test("the shared approved-product picker guides brand, model, type and exact app
       onSelect: () => undefined,
     },
   ));
-  const labels = [
-    "1. Product brand",
-    "Find model within this brand",
-    "2. Product model",
-    "3. Product type or configuration",
-    "4. Exact approval record",
-  ];
+  const labels = ["Brand", "Model"];
   let previous = -1;
   for (const label of labels) {
     const index = html.indexOf(label);
     assert.ok(index > previous, `${label} must follow the prior guided step`);
     previous = index;
   }
-  assert.doesNotMatch(html, /Search official registry/);
+  assert.doesNotMatch(
+    html,
+    /Find model within this brand|Product type|Exact approval|official rows|snapshot/i,
+  );
   const pickerSource = fs.readFileSync(
     path.resolve("src/components/CreditexOfficialProductPicker.tsx"),
     "utf8",
@@ -341,9 +356,12 @@ test("the shared approved-product picker guides brand, model, type and exact app
     /nextFacets\.productTypes\[0\]\.count === Number\([\s\S]*result\.matchCount/,
     "a sole type is selected only when it represents every matching approval",
   );
+  assert.match(pickerSource, /facets\.productTypes\.length > 1 &&/);
+  assert.match(pickerSource, /products\.length > 1/);
   assert.doesNotMatch(pickerSource, /hasUnclassifiedProducts/);
   assert.match(pickerSource, /Retry official registry/);
-  assert.match(pickerSource, /Start product selection again/);
+  assert.doesNotMatch(pickerSource, /Start product selection again/);
+  assert.doesNotMatch(pickerSource, /modelQuery|official rows|snapshot \$\{/);
   assert.match(pickerSource, /aria-busy=\{busy\}/);
   assert.match(pickerSource, /aria-live="polite"/);
   assert.doesNotMatch(
@@ -356,6 +374,70 @@ test("the shared approved-product picker guides brand, model, type and exact app
     /\bonSelect,\s*\n/,
     "a fresh inline parent callback must not restart the registry fetch effect",
   );
+});
+
+test("quote requests allow future installation dates without exposing evidence controls", () => {
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /max=\{todayIso\(\)\}/);
+  assert.match(source, /estimatePurpose: "quote"/);
+  assert.match(source, /effectiveDate: date/);
+  assert.match(source, /creditexVeuQuoteInputVisible\(definition, inputs\)/);
+  assert.match(source, /creditexQuoteEvidenceInput\(definition\.key\)/);
+  assert.match(source, /<summary>Calculation details<\/summary>/);
+  const veuUiSource = source.slice(source.indexOf("function CreditexVeuCalculator"));
+  assert.ok(
+    veuUiSource.indexOf("{scenarioInputs.map(renderVeuInput)}")
+      < veuUiSource.indexOf("Installation date"),
+    "plain-English scenario must precede installation date",
+  );
+  assert.ok(
+    veuUiSource.indexOf("{requiredKinds.map((kind) => (")
+      < veuUiSource.indexOf("{postcodeRequired && ("),
+    "approved product must precede postcode in the quote flow",
+  );
+
+  const part6 = veuCatalogueModule.CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
+    (activity) => activity.activityCode === "6",
+  );
+  const indoorHeating = part6.inputDefinitions.find(
+    (definition) => definition.key === "rated_heating_capacity_kw",
+  );
+  const outdoorHeating = part6.inputDefinitions.find(
+    (definition) => definition.key === "outdoor_heating_capacity_kw",
+  );
+  assert.equal(
+    governedModule.creditexVeuQuoteInputVisible(
+      indoorHeating,
+      { configuration: "single" },
+    ),
+    false,
+  );
+  assert.equal(
+    governedModule.creditexVeuQuoteInputVisible(
+      indoorHeating,
+      { configuration: "multi" },
+    ),
+    true,
+  );
+  assert.equal(
+    governedModule.creditexVeuQuoteInputVisible(
+      outdoorHeating,
+      { configuration: "multi" },
+    ),
+    false,
+  );
+
+  const allProgramSource = fs.readFileSync(
+    path.resolve("src/components/CreditexAllProgramCalculator.tsx"),
+    "utf8",
+  );
+  assert.match(allProgramSource, /max=\{program\.effectiveTo \|\| undefined\}/);
+  assert.doesNotMatch(allProgramSource, /program\.effectiveTo \|\| todayIso\(\)/);
+  assert.match(allProgramSource, /estimatePurpose: "quote"/);
+  assert.match(allProgramSource, /effectiveDate: date/);
 });
 
 test("VEU Part 6 preserves governed codes behind plain-English scenario labels", () => {

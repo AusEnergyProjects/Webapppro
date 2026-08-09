@@ -405,6 +405,140 @@ test("Part 6 enforces site evidence, residential duties and exact dated co-payme
   assert.equal(nonDuctedAfterRevision.inputSnapshot.coPaymentRule, "v25-other-non-ducted-from-2026-09-30");
 });
 
+test("future-dated Part 6 quote estimates relax only non-arithmetic evidence", () => {
+  const installationDate = "2026-10-15";
+  const evidence = product("VEU", "6D", {
+    effectiveFrom: "2026-07-21",
+    effectiveTo: "2026-12-31",
+  });
+  const unconfirmed = part6Inputs({
+    scenario: "vii",
+    incumbent_scenario_requirements_confirmed: "no",
+    decommissioning_and_disposal_confirmed: "no",
+    residential_consumer_fact_sheet_provided: "no",
+    residential_suitability_and_sizing_advice_confirmed: "no",
+    warranty_years: "0",
+    warranty_requirements_confirmed: "no",
+    co_payment_per_installed_product_aud: "0",
+  });
+
+  const quote = estimateCreditexVeu({
+    activityCode: "6",
+    installationDate,
+    estimatePurpose: "quote",
+    inputs: unconfirmed,
+    product: evidence,
+  });
+  assert.equal(quote.estimatePurpose, "quote");
+  assert.equal(quote.eligibilityConfirmed, false);
+  assert.equal(quote.specificationVersion, "25.0");
+  assert.equal(quote.formulaProfile, "veu-v25-part6-from-2026-09-30");
+  assert.equal(quote.inputSnapshot.product.productId, "TEST-6D");
+  assert.ok(quote.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "co_payment_per_installed_product_aud" && assumptionApplied,
+  ));
+  assert.match(quote.receiptHash, /^sha256:[a-f0-9]{64}$/);
+
+  assert.throws(
+    () => estimate("6", unconfirmed, evidence, installationDate),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE",
+  );
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "6",
+      installationDate,
+      estimatePurpose: "compliance",
+      inputs: unconfirmed,
+      product: evidence,
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE",
+  );
+});
+
+test("future-dated Part 6 multi and VRF quotes use indoor sums capped by the approved outdoor row", () => {
+  const quote = estimateCreditexVeu({
+    activityCode: "6",
+    installationDate: "2026-10-15",
+    estimatePurpose: "quote",
+    inputs: part6Inputs({
+      scenario: "vii",
+      category: "6B(i)",
+      configuration: "multi",
+      rated_heating_capacity_kw: "18",
+      rated_cooling_capacity_kw: "16",
+      outdoor_heating_capacity_kw: "12",
+      outdoor_cooling_capacity_kw: "10",
+      hspf_upgrade: "5",
+      tcspf_upgrade: "5",
+      hspf_cold_eligibility: "3.4",
+      tcspf_cold_eligibility: "4.2",
+      same_oem_confirmed: "no",
+      incumbent_scenario_requirements_confirmed: "no",
+      decommissioning_and_disposal_confirmed: "no",
+      residential_consumer_fact_sheet_provided: "no",
+      residential_suitability_and_sizing_advice_confirmed: "no",
+      warranty_years: "0",
+      warranty_requirements_confirmed: "no",
+      co_payment_per_installed_product_aud: "0",
+    }),
+    product: product("VEU", "6B(i)", {
+      effectiveFrom: "2026-07-21",
+      effectiveTo: "2026-12-31",
+    }),
+  });
+
+  assert.equal(quote.scenario, "vii");
+  assert.equal(quote.inputSnapshot.configuration, "multi");
+  assert.equal(quote.inputSnapshot.ratedHeatingCapacityKw, "18/1");
+  assert.equal(quote.inputSnapshot.ratedCoolingCapacityKw, "16/1");
+  assert.equal(quote.inputSnapshot.outdoorHeatingCapacityKw, "12/1");
+  assert.equal(quote.inputSnapshot.outdoorCoolingCapacityKw, "10/1");
+  assert.equal(quote.inputSnapshot.governedHeatingCapacityKw, "12/1");
+  assert.equal(quote.inputSnapshot.governedCoolingCapacityKw, "10/1");
+  assert.ok(quote.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "same_oem_confirmed" && assumptionApplied,
+  ));
+});
+
+test("quote mode still rejects formula-critical performance, category and product dates", () => {
+  const request = {
+    activityCode: "6",
+    installationDate: "2026-10-15",
+    estimatePurpose: "quote",
+    inputs: part6Inputs({
+      refrigerant_gwp: "700",
+      residential_consumer_fact_sheet_provided: "no",
+    }),
+    product: product("VEU", "6D"),
+  };
+  assert.throws(
+    () => estimateCreditexVeu(request),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE"
+      && /GWP below 700/.test(error.message),
+  );
+  assert.throws(
+    () => estimateCreditexVeu({
+      ...request,
+      inputs: part6Inputs(),
+      product: product("VEU", "6A"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_PRODUCT_EVIDENCE_INVALID",
+  );
+  assert.throws(
+    () => estimateCreditexVeu({
+      ...request,
+      inputs: part6Inputs(),
+      product: product("VEU", "6D", { effectiveTo: "2026-10-14" }),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_PRODUCT_NOT_EFFECTIVE",
+  );
+});
+
 test("Parts 13, 14, 17, 26 and 48 preserve governed tables and exact arithmetic", () => {
   const part13 = estimate("13", DEFAULT_VECTORS[5][1], DEFAULT_VECTORS[5][2]);
   assert.equal(part13.output.wholeCertificates, "2");

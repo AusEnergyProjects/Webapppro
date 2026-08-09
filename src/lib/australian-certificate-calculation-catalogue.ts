@@ -310,7 +310,7 @@ const VEU_EXECUTABLE_ACTIVITY_CODES = new Set([
 
 const VEU_PARTIAL_ESTIMATE_ACTIVITY_MESSAGES: Readonly<Record<string, string>> = {
   "1": "Exact estimates are available for 1C small systems and supported 1D systems. The 1C medium-system Bs/Be conflict between official sources remains fail-closed.",
-  "6": "Exact estimates are available for supported single-split systems. Multi-split and packaged systems remain fail-closed until the installed indoor/outdoor quantities and same-manufacturer evidence are represented exactly.",
+  "6": "Exact estimates are available for supported single-split and multi-split systems. Multi-split estimates use the approved outdoor unit plus the total connected indoor-unit capacities; packaged systems remain fail-closed.",
   "31": "Exact estimates are available for 31A motors selected from the installation-date GEMS register. Activity 31B remains fail-closed until an exact VEU-approved product contract is available.",
   "33": "Exact estimates are available for 33A products selected from the installation-date VEU Public Registry. Activity 33B remains fail-closed because the governed registry connector has no exact 33B product contract.",
   "34": "Exact estimates are available only for sites that are not required to comply with Building Code Part J6. The Part J6 baseline branch remains fail-closed.",

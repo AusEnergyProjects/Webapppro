@@ -11,6 +11,9 @@ import {
   estimateCreditexLocalProgram,
 } from "@/lib/creditex-local-program-estimator";
 import {
+  creditexLocalActivityDefinition,
+} from "@/lib/creditex-local-program-catalogue";
+import {
   creditexNswActivityDefinition,
 } from "@/lib/creditex-nsw-program-catalogue";
 import {
@@ -196,6 +199,158 @@ function inputRecord(value: unknown) {
     );
   }
   return { ...(value as Record<string, unknown>) };
+}
+
+type EstimatePurpose = "compliance" | "quote";
+
+type QuoteEligibilityWarning = {
+  inputKey: string;
+  label: string;
+  suppliedValue: string;
+  assumedValue: string;
+  assumptionApplied: boolean;
+  message: string;
+};
+
+function requestEstimatePurpose(raw: Record<string, unknown>): EstimatePurpose {
+  if (raw.estimatePurpose === undefined) return "compliance";
+  if (raw.estimatePurpose === "compliance" || raw.estimatePurpose === "quote") {
+    return raw.estimatePurpose;
+  }
+  throw new CreditexLocalEstimateError(
+    "LOCAL_ESTIMATE_INVALID",
+    "estimatePurpose must be compliance or quote.",
+  );
+}
+
+function quoteAssumptionSatisfied(value: unknown, assumedValue: string) {
+  if (assumedValue === "yes") return value === "yes";
+  if (assumedValue === "government_site") {
+    return value === "government_site"
+      || value === "exempt_energy_program"
+      || value === "both";
+  }
+  const valueText = typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : "";
+  if (!/^\d+(?:\.\d+)?$/.test(valueText)) return false;
+  return Number(valueText) >= Number(assumedValue);
+}
+
+function nswQuotePaymentAssumption(activityCode: string) {
+  if (["BESS1", "D5", "D17", "D18", "D19", "D20"].includes(activityCode)) {
+    return "200";
+  }
+  if (activityCode === "BESS3") return "1000";
+  if (activityCode === "BESS4") return "5000";
+  if (activityCode === "D16-SINGLE") return "3000";
+  if (activityCode === "D16-MULTI") return "3000";
+  if (activityCode === "F4-SINGLE") return "3000";
+  if (activityCode === "F4-MULTI") return "3000";
+  return null;
+}
+
+function prepareNswQuoteInputs(
+  activity: NonNullable<ReturnType<typeof creditexNswActivityDefinition>>,
+  suppliedInputs: Record<string, unknown>,
+) {
+  const normalizedInputs = { ...suppliedInputs };
+  const assumptions = new Map<string, string>([
+    ["nsw_site_confirmed", "yes"],
+    ["all_non_formula_requirements_confirmed", "yes"],
+    ["manufacturer_warranty_years", "3"],
+    ["administrator_recording_confirmed", "yes"],
+    ["post_2025_exception", "government_site"],
+  ]);
+  const paymentAssumption = nswQuotePaymentAssumption(activity.activityCode);
+  if (paymentAssumption) {
+    assumptions.set("net_payment_ex_gst_aud", paymentAssumption);
+  }
+  const definitions = new Map(
+    activity.inputDefinitions.map((definition) => [definition.key, definition]),
+  );
+  const warnings: QuoteEligibilityWarning[] = [];
+  for (const [inputKey, assumedValue] of assumptions) {
+    const definition = definitions.get(inputKey);
+    if (!definition) continue;
+    const suppliedValue = normalizedInputs[inputKey];
+    const assumptionApplied = !quoteAssumptionSatisfied(
+      suppliedValue,
+      assumedValue,
+    );
+    if (assumptionApplied) normalizedInputs[inputKey] = assumedValue;
+    warnings.push({
+      inputKey,
+      label: definition.label,
+      suppliedValue: typeof suppliedValue === "string" || typeof suppliedValue === "number"
+        ? String(suppliedValue)
+        : "not_provided",
+      assumedValue,
+      assumptionApplied,
+      message: assumptionApplied
+        ? `${definition.label} is not yet confirmed. Quote mode assumed a qualifying value only to calculate potential certificates.`
+        : `${definition.label} was supplied, but quote mode does not independently confirm the supporting compliance evidence.`,
+    });
+  }
+  return { normalizedInputs, warnings };
+}
+
+function prepareLocalQuoteInputs(
+  activity: NonNullable<ReturnType<typeof creditexLocalActivityDefinition>>,
+  suppliedInputs: Record<string, unknown>,
+) {
+  const normalizedInputs = { ...suppliedInputs };
+  const assumptions = new Map<string, string>([
+    ["legacy_eligibility_confirmed", "yes"],
+    ["primary_upgrade_included", "yes"],
+  ]);
+  const definitions = new Map(
+    activity.inputDefinitions.map((definition) => [definition.key, definition]),
+  );
+  const warnings: QuoteEligibilityWarning[] = [];
+  for (const [inputKey, assumedValue] of assumptions) {
+    const definition = definitions.get(inputKey);
+    if (!definition) continue;
+    const suppliedValue = normalizedInputs[inputKey];
+    const assumptionApplied = suppliedValue !== assumedValue;
+    if (assumptionApplied) normalizedInputs[inputKey] = assumedValue;
+    warnings.push({
+      inputKey,
+      label: definition.label,
+      suppliedValue: typeof suppliedValue === "string" || typeof suppliedValue === "number"
+        ? String(suppliedValue)
+        : "not_provided",
+      assumedValue,
+      assumptionApplied,
+      message: assumptionApplied
+        ? `${definition.label} is not yet confirmed. Quote mode assumed the qualifying evidence only to calculate the potential amount.`
+        : `${definition.label} was supplied, but quote mode does not independently confirm the supporting eligibility evidence.`,
+    });
+  }
+  return { normalizedInputs, warnings };
+}
+
+async function attachQuoteMetadata(
+  estimate: Record<string, unknown> & { receiptHash: string },
+  eligibilityWarnings: QuoteEligibilityWarning[],
+) {
+  const governedCalculationReceiptHash = estimate.receiptHash;
+  const quoteMetadata = {
+    estimatePurpose: "quote" as const,
+    eligibilityConfirmed: false as const,
+    eligibilityWarnings,
+    governedCalculationReceiptHash,
+  };
+  return {
+    ...estimate,
+    ...quoteMetadata,
+    operatorMessage:
+      "Potential rebate estimate only. Where required, the official product was checked. The effective date and governed formula values were checked, but quote-mode evidence assumptions must still be confirmed before relying on eligibility.",
+    receiptHash: await sha256({
+      governedCalculationReceiptHash,
+      quoteMetadata,
+    }),
+  };
 }
 
 function numericAttribute(
@@ -550,6 +705,7 @@ export async function POST(request: Request) {
       ? raw.activityCode
       : "";
     if (programCode === "VEU") {
+      const estimatePurpose = requestEstimatePurpose(raw);
       const activity = CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
         (candidate) => candidate.activityCode === activityCode,
       );
@@ -596,6 +752,7 @@ export async function POST(request: Request) {
         "activityCode",
         "effectiveDate",
         "inputs",
+        ...(raw.estimatePurpose === undefined ? [] : ["estimatePurpose"]),
         ...(postcodeRequired ? ["postcode"] : []),
         ...(requiredKinds.length > 0 ? ["selectedProductIds"] : []),
       ];
@@ -622,6 +779,7 @@ export async function POST(request: Request) {
           installationDate: raw.effectiveDate,
           inputs: postcodeDerivedInputs,
           product: undefined,
+          ...(estimatePurpose === "quote" ? { estimatePurpose } : {}),
         });
         return json({ ok: true, estimate });
       }
@@ -646,6 +804,7 @@ export async function POST(request: Request) {
           activityCode,
           productValidation.selections,
         ),
+        ...(estimatePurpose === "quote" ? { estimatePurpose } : {}),
       });
       return json({
         ok: true,
@@ -657,6 +816,7 @@ export async function POST(request: Request) {
     }
 
     if (programCode === "NSW-PDRS-2026" || programCode === "NSW-ESS-2026") {
+      const estimatePurpose = requestEstimatePurpose(raw);
       const activity = creditexNswActivityDefinition(programCode, activityCode);
       if (!activity) {
         throw new CreditexNswEstimateError(
@@ -685,22 +845,38 @@ export async function POST(request: Request) {
           `Activity ${activityCode} cannot calculate without its required official product registry.`,
         );
       }
-      const requestKeys = requiredProductKinds.length > 0
-        ? ["programCode", "activityCode", "effectiveDate", "inputs", "selectedProductIds"]
-        : ["programCode", "activityCode", "effectiveDate", "inputs"];
+      const requestKeys = [
+        "programCode",
+        "activityCode",
+        "effectiveDate",
+        "inputs",
+        ...(raw.estimatePurpose === undefined ? [] : ["estimatePurpose"]),
+        ...(requiredProductKinds.length > 0 ? ["selectedProductIds"] : []),
+      ];
       exactRequestKeys(
         raw,
         requestKeys,
         "The NSW estimate request contains unexpected fields.",
       );
       if (requiredProductKinds.length === 0) {
+        const quotePreparation = estimatePurpose === "quote"
+          ? prepareNswQuoteInputs(activity, inputRecord(raw.inputs))
+          : null;
         const estimate = estimateCreditexNswProgram({
           programCode: raw.programCode,
           activityCode: raw.activityCode,
           effectiveDate: raw.effectiveDate,
-          inputs: raw.inputs,
+          inputs: quotePreparation?.normalizedInputs ?? raw.inputs,
         });
-        return json({ ok: true, estimate });
+        return json({
+          ok: true,
+          estimate: quotePreparation
+            ? await attachQuoteMetadata(
+              estimate as unknown as Record<string, unknown> & { receiptHash: string },
+              quotePreparation.warnings,
+            )
+            : estimate,
+        });
       }
       const productValidation = await validateOfficialProductSelections(
         database,
@@ -716,41 +892,71 @@ export async function POST(request: Request) {
         inputRecord(raw.inputs),
         productValidation.selections,
       );
+      const quotePreparation = estimatePurpose === "quote"
+        ? prepareNswQuoteInputs(activity, derivedInputs)
+        : null;
       const estimate = estimateCreditexNswProgram({
         programCode: raw.programCode,
         activityCode: raw.activityCode,
         effectiveDate: raw.effectiveDate,
-        inputs: derivedInputs,
+        inputs: quotePreparation?.normalizedInputs ?? derivedInputs,
       });
+      const purposeEstimate = quotePreparation
+        ? await attachQuoteMetadata(
+          estimate as unknown as Record<string, unknown> & { receiptHash: string },
+          quotePreparation.warnings,
+        )
+        : estimate;
       return json({
         ok: true,
         estimate: await attachRegistryReceipt(
-          estimate as unknown as Record<string, unknown> & { receiptHash: string },
+          purposeEstimate as unknown as Record<string, unknown> & { receiptHash: string },
           productValidation,
         ),
       });
     }
 
+    const estimatePurpose = requestEstimatePurpose(raw);
+    const localActivity = creditexLocalActivityDefinition(
+      programCode,
+      activityCode,
+    );
     const requiredProductKinds = officialProductKindsForLocalActivity(
       programCode,
       activityCode,
     );
-    const requestKeys = requiredProductKinds.length > 0
-      ? ["programCode", "activityCode", "effectiveDate", "inputs", "selectedProductIds"]
-      : ["programCode", "activityCode", "effectiveDate", "inputs"];
+    const requestKeys = [
+      "programCode",
+      "activityCode",
+      "effectiveDate",
+      "inputs",
+      ...(raw.estimatePurpose === undefined ? [] : ["estimatePurpose"]),
+      ...(requiredProductKinds.length > 0 ? ["selectedProductIds"] : []),
+    ];
     exactRequestKeys(
       raw,
       requestKeys,
       "The local program estimate request contains unexpected fields.",
     );
     if (requiredProductKinds.length === 0) {
+      const quotePreparation = estimatePurpose === "quote" && localActivity
+        ? prepareLocalQuoteInputs(localActivity, inputRecord(raw.inputs))
+        : null;
       const estimate = estimateCreditexLocalProgram({
         programCode: raw.programCode,
         activityCode: raw.activityCode,
         effectiveDate: raw.effectiveDate,
-        inputs: raw.inputs,
+        inputs: quotePreparation?.normalizedInputs ?? raw.inputs,
       });
-      return json({ ok: true, estimate });
+      return json({
+        ok: true,
+        estimate: quotePreparation
+          ? await attachQuoteMetadata(
+            estimate as unknown as Record<string, unknown> & { receiptHash: string },
+            quotePreparation.warnings,
+          )
+          : estimate,
+      });
     }
     const productValidation = await validateOfficialProductSelections(
       database,
@@ -764,16 +970,25 @@ export async function POST(request: Request) {
       inputRecord(raw.inputs),
       productValidation.selections,
     );
+    const quotePreparation = estimatePurpose === "quote" && localActivity
+      ? prepareLocalQuoteInputs(localActivity, derivedInputs)
+      : null;
     const estimate = estimateCreditexLocalProgram({
       programCode: raw.programCode,
       activityCode: raw.activityCode,
       effectiveDate: raw.effectiveDate,
-      inputs: derivedInputs,
+      inputs: quotePreparation?.normalizedInputs ?? derivedInputs,
     });
+    const purposeEstimate = quotePreparation
+      ? await attachQuoteMetadata(
+        estimate as unknown as Record<string, unknown> & { receiptHash: string },
+        quotePreparation.warnings,
+      )
+      : estimate;
     return json({
       ok: true,
       estimate: await attachRegistryReceipt(
-        estimate as unknown as Record<string, unknown> & { receiptHash: string },
+        purposeEstimate as unknown as Record<string, unknown> & { receiptHash: string },
         productValidation,
       ),
     });

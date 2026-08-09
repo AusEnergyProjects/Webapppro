@@ -4,7 +4,11 @@ import test from "node:test";
 import ts from "typescript";
 
 import * as boundedJson from "../src/lib/bounded-json-request.ts";
+import * as localCatalogue from "../src/lib/creditex-local-program-catalogue.ts";
+import * as localEstimator from "../src/lib/creditex-local-program-estimator.ts";
 import * as officialRegistry from "../src/lib/creditex-official-product-registry.ts";
+import * as nswCatalogue from "../src/lib/creditex-nsw-program-catalogue.ts";
+import * as nswEstimator from "../src/lib/creditex-nsw-program-estimator.ts";
 import * as veuCatalogue from "../src/lib/creditex-veu-calculator-catalogue.ts";
 import * as veuEstimator from "../src/lib/creditex-veu-calculator-estimator.ts";
 
@@ -37,21 +41,12 @@ function loadRoute(validateOfficialProductSelections) {
     "@/lib/creditex-calculator-route-response": {
       describeCreditexCalculatorRouteError: () => null,
     },
-    "@/lib/creditex-local-program-estimator": {
-      CreditexLocalEstimateError: TypedError,
-      estimateCreditexLocalProgram: () => {
-        throw new Error("Local estimator must not run in a VEU route test");
-      },
-    },
+    "@/lib/creditex-local-program-estimator": localEstimator,
+    "@/lib/creditex-local-program-catalogue": localCatalogue,
     "@/lib/creditex-nsw-program-catalogue": {
-      creditexNswActivityDefinition: () => null,
+      ...nswCatalogue,
     },
-    "@/lib/creditex-nsw-program-estimator": {
-      CreditexNswEstimateError: TypedError,
-      estimateCreditexNswProgram: () => {
-        throw new Error("NSW estimator must not run in a VEU route test");
-      },
-    },
+    "@/lib/creditex-nsw-program-estimator": nswEstimator,
     "@/lib/creditex-veu-calculator-catalogue": veuCatalogue,
     "@/lib/creditex-veu-calculator-estimator": veuEstimator,
     "@/lib/creditex-veu-postcode-resolver": {
@@ -131,6 +126,7 @@ function request(
   selectedProductIds,
   postcode,
   effectiveDate = "2026-08-08",
+  estimatePurpose,
 ) {
   return new Request(
     "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
@@ -146,10 +142,63 @@ function request(
         effectiveDate,
         inputs,
         ...(postcode ? { postcode } : {}),
+        ...(estimatePurpose ? { estimatePurpose } : {}),
         selectedProductIds,
       }),
     },
   );
+}
+
+function airConditionerSelection(configurationClass = "single") {
+  return televisionSelection({
+    productKind: "veu_air_conditioner",
+    registrationNumber: "VEU-000006",
+    sourceRecordKey: "VEU-000006",
+    eligibleFrom: "2026-07-21",
+    eligibleTo: "2026-12-31",
+    attributes: {
+      veuProductId: "VEU-000006",
+      veuProductCategoryNumber: "6D",
+      veuProductConfiguration: configurationClass === "multi"
+        ? "Multiple split - variable refrigerant flow"
+        : "Single split system",
+      veuProductConfigurationClass: configurationClass,
+      ratedHeatingCapacityKw: 3.8,
+      ratedCoolingCapacityKw: 3.5,
+      refrigerantType: "R-32",
+      gemsHspfColdResidential: 4.8,
+      gemsTcspfColdResidential: 5.9,
+      gemsHspfMixedResidential: 5.1,
+      gemsTcspfMixedResidential: 6.2,
+    },
+  });
+}
+
+function part6QuoteInputs(overrides = {}) {
+  return {
+    scenario: "vii",
+    category: "caller-value",
+    premises: "residential",
+    location_class: "caller-value",
+    configuration: "single",
+    rated_heating_capacity_kw: "12.5",
+    rated_cooling_capacity_kw: "11.25",
+    hspf_upgrade: "99",
+    tcspf_upgrade: "99",
+    hspf_cold_eligibility: "99",
+    tcspf_cold_eligibility: "99",
+    refrigerant_gwp: "1",
+    performance_basis: "gems",
+    same_oem_confirmed: "no",
+    incumbent_scenario_requirements_confirmed: "no",
+    decommissioning_and_disposal_confirmed: "no",
+    residential_consumer_fact_sheet_provided: "no",
+    residential_suitability_and_sizing_advice_confirmed: "no",
+    warranty_years: "0",
+    warranty_requirements_confirmed: "no",
+    co_payment_per_installed_product_aud: "0",
+    ...overrides,
+  };
 }
 
 test("VEU route derives formula inputs and seals exact Public Registry evidence", async () => {
@@ -452,4 +501,243 @@ test("VEU product-free lighting scenarios skip registry validation and invent no
   assert.equal(body.estimate.scenario, "27C");
   assert.equal(body.estimate.inputSnapshot.product, null);
   assert.equal(body.estimate.registryReceipt, undefined);
+});
+
+test("VEU route produces a future-dated single-system quote without treating evidence assumptions as eligibility", async () => {
+  const selection = airConditionerSelection("single");
+  let validationInput;
+  const route = loadRoute(async (_database, input) => {
+    validationInput = input;
+    return validationResult(selection);
+  });
+  const response = await route.POST(request(
+    "6",
+    part6QuoteInputs(),
+    { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
+    "3000",
+    "2026-10-15",
+    "quote",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(validationInput.installationDate, "2026-10-15");
+  assert.equal(body.estimate.estimatePurpose, "quote");
+  assert.equal(body.estimate.eligibilityConfirmed, false);
+  assert.equal(body.estimate.inputSnapshot.configuration, "single");
+  assert.equal(body.estimate.inputSnapshot.ratedHeatingCapacityKw, "19/5");
+  assert.equal(body.estimate.inputSnapshot.ratedCoolingCapacityKw, "7/2");
+  assert.equal(body.estimate.inputSnapshot.product.productId, "VEU-000006");
+  assert.equal(body.estimate.inputSnapshot.product.effectiveTo, "2026-12-31");
+  assert.ok(body.estimate.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "co_payment_per_installed_product_aud" && assumptionApplied,
+  ));
+});
+
+test("VEU route produces a future-dated scenario vii multi and VRF quote from official outdoor metrics and operator indoor sums", async () => {
+  const selection = airConditionerSelection("multi");
+  const route = loadRoute(async () => validationResult(selection));
+  const response = await route.POST(request(
+    "6",
+    part6QuoteInputs({ configuration: "multi" }),
+    { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
+    "3000",
+    "2026-10-15",
+    "quote",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.estimate.scenario, "vii");
+  assert.equal(body.estimate.inputSnapshot.configuration, "multi");
+  assert.equal(body.estimate.inputSnapshot.ratedHeatingCapacityKw, "25/2");
+  assert.equal(body.estimate.inputSnapshot.ratedCoolingCapacityKw, "45/4");
+  assert.equal(body.estimate.inputSnapshot.outdoorHeatingCapacityKw, "19/5");
+  assert.equal(body.estimate.inputSnapshot.outdoorCoolingCapacityKw, "7/2");
+  assert.equal(body.estimate.inputSnapshot.governedHeatingCapacityKw, "19/5");
+  assert.equal(body.estimate.inputSnapshot.governedCoolingCapacityKw, "7/2");
+  assert.equal(body.estimate.inputSnapshot.hspfUpgrade, "24/5");
+  assert.equal(body.estimate.inputSnapshot.tcspfUpgrade, "59/10");
+  assert.equal(body.estimate.eligibilityConfirmed, false);
+  assert.ok(body.estimate.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "same_oem_confirmed" && assumptionApplied,
+  ));
+});
+
+test("VEU route keeps the same Part 6 evidence gates strict outside quote mode", async () => {
+  const selection = airConditionerSelection("single");
+  const route = loadRoute(async () => validationResult(selection));
+  const response = await route.POST(request(
+    "6",
+    part6QuoteInputs(),
+    { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
+    "3000",
+    "2026-10-15",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.code, "VEU_SYSTEM_INELIGIBLE");
+});
+
+test("NSW quote mode keeps official product and future date controls while warning on documentary gates", async () => {
+  const selection = televisionSelection({
+    registryCode: "gems-products",
+    productKind: "pool_pump",
+    registrationNumber: "GEMS-POOL-1",
+    sourceRecordKey: "GEMS-POOL-1",
+    eligibleFrom: "2026-07-01",
+    eligibleTo: "2026-12-31",
+    attributes: {
+      starRating: 5,
+      maximumTestedInputW: 900,
+      projectedAnnualEnergyConsumptionKwh: 700,
+    },
+  });
+  const route = loadRoute(async () => validationResult(selection));
+  const requestBody = {
+    programCode: "NSW-ESS-2026",
+    activityCode: "D5",
+    effectiveDate: "2026-10-15",
+    estimatePurpose: "quote",
+    inputs: {
+      maximum_tested_input_w: "99999",
+      paec_kwh_per_year: "99999",
+      manufacturer_warranty_years: "0",
+      net_payment_ex_gst_aud: "0",
+      payment_exemption: "none",
+      site_postcode: "2000",
+      nsw_site_confirmed: "no",
+      product_registry_eligibility_confirmed: "no",
+      all_non_formula_requirements_confirmed: "no",
+    },
+    selectedProductIds: { pool_pump: "gems-products:GEMS-POOL-1" },
+  };
+  const quoteResponse = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://compare.ausenergyassessments.com",
+      },
+      body: JSON.stringify(requestBody),
+    },
+  ));
+  const quoteBody = await quoteResponse.json();
+
+  assert.equal(quoteResponse.status, 200);
+  assert.equal(quoteBody.estimate.estimatePurpose, "quote");
+  assert.equal(quoteBody.estimate.eligibilityConfirmed, false);
+  assert.equal(quoteBody.estimate.effectiveDate, "2026-10-15");
+  assert.ok(quoteBody.estimate.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "manufacturer_warranty_years" && assumptionApplied,
+  ));
+  assert.equal(quoteBody.estimate.approvedProducts[0].sourceRecordKey, "GEMS-POOL-1");
+
+  const strictResponse = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://compare.ausenergyassessments.com",
+      },
+      body: JSON.stringify({
+        ...requestBody,
+        estimatePurpose: "compliance",
+      }),
+    },
+  ));
+  const strictBody = await strictResponse.json();
+  assert.equal(strictResponse.status, 400);
+  assert.equal(strictBody.code, "NSW_INPUT_INVALID");
+});
+
+test("local product-free quote mode warns instead of blocking on an explicit eligibility confirmation", async () => {
+  const route = loadRoute(async () => {
+    throw new Error("Product validation must not run for QLD-FIT");
+  });
+  const base = {
+    programCode: "QLD-FIT",
+    activityCode: "SBS-44C",
+    effectiveDate: "2026-10-15",
+    inputs: {
+      eligible_export_kwh: "100",
+      legacy_eligibility_confirmed: "no",
+    },
+  };
+  const quoteResponse = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...base, estimatePurpose: "quote" }),
+    },
+  ));
+  const quoteBody = await quoteResponse.json();
+  assert.equal(quoteResponse.status, 200);
+  assert.equal(quoteBody.estimate.output.quantity, "44");
+  assert.equal(quoteBody.estimate.estimatePurpose, "quote");
+  assert.equal(quoteBody.estimate.eligibilityConfirmed, false);
+  assert.ok(quoteBody.estimate.eligibilityWarnings.some(
+    ({ inputKey, assumptionApplied }) => inputKey === "legacy_eligibility_confirmed" && assumptionApplied,
+  ));
+
+  const strictResponse = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(base),
+    },
+  ));
+  const strictBody = await strictResponse.json();
+  assert.equal(strictResponse.status, 409);
+  assert.equal(strictBody.code, "LOCAL_ELIGIBILITY_NOT_CONFIRMED");
+});
+
+test("local product-backed quote mode retains installation-date registry validation", async () => {
+  const selection = televisionSelection({
+    registryCode: "gems-products",
+    productKind: "air_conditioner",
+    registrationNumber: "GEMS-AC-LOCAL",
+    sourceRecordKey: "GEMS-AC-LOCAL",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "2027-06-30",
+    attributes: {},
+  });
+  let validationInput;
+  const route = loadRoute(async (_database, input) => {
+    validationInput = input;
+    return validationResult(selection);
+  });
+  const response = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        programCode: "QLD-QCHEU",
+        activityCode: "HVAC",
+        effectiveDate: "2026-10-15",
+        estimatePurpose: "quote",
+        inputs: {
+          eligible_dwellings: "2",
+          eligible_cost_ex_gst_aud: "10000",
+        },
+        selectedProductIds: {
+          air_conditioner: "gems-products:GEMS-AC-LOCAL",
+        },
+      }),
+    },
+  ));
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(validationInput.installationDate, "2026-10-15");
+  assert.deepEqual(validationInput.requiredKinds, ["air_conditioner"]);
+  assert.equal(body.estimate.estimatePurpose, "quote");
+  assert.equal(body.estimate.eligibilityConfirmed, false);
+  assert.equal(body.estimate.approvedProducts[0].sourceRecordKey, "GEMS-AC-LOCAL");
+  assert.notEqual(body.estimate.receiptHash, body.estimate.arithmeticReceiptHash);
 });

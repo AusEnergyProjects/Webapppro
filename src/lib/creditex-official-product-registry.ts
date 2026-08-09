@@ -891,9 +891,9 @@ export function deriveCreditexVeuOfficialProductInputs(
       "veuProductConfigurationClass",
       "a governed VEU product configuration class",
     );
-    if (configurationClass !== "single") {
+    if (configurationClass !== "single" && configurationClass !== "multi") {
       return officialProductFailure(
-        `The selected VEU air conditioner is ${sourceConfiguration}. Multi-split and packaged systems require a governed indoor/outdoor unit selection contract; choose an approved Single system.`,
+        `The selected VEU air conditioner is ${sourceConfiguration}. Packaged systems do not yet have a governed quote-calculation contract; choose an approved single-split or multi-split system.`,
       );
     }
     const premises = inputs.premises;
@@ -961,18 +961,44 @@ export function deriveCreditexVeuOfficialProductInputs(
         : officialProductFailure(
           `The selected VEU-approved air conditioner uses unsupported refrigerant ${JSON.stringify(refrigerant)}.`,
         );
+    const approvedHeatingCapacity = officialNumber(
+      selection,
+      "ratedHeatingCapacityKw",
+      "rated heating capacity",
+    );
+    const approvedCoolingCapacity = officialNumber(
+      selection,
+      "ratedCoolingCapacityKw",
+      "rated cooling capacity",
+    );
     inputs.category = category;
-    inputs.configuration = "single";
-    setOfficialNumber(
-      inputs,
-      "rated_heating_capacity_kw",
-      officialNumber(selection, "ratedHeatingCapacityKw", "rated heating capacity"),
-    );
-    setOfficialNumber(
-      inputs,
-      "rated_cooling_capacity_kw",
-      officialNumber(selection, "ratedCoolingCapacityKw", "rated cooling capacity"),
-    );
+    inputs.configuration = configurationClass;
+    if (configurationClass === "single") {
+      setOfficialNumber(
+        inputs,
+        "rated_heating_capacity_kw",
+        approvedHeatingCapacity,
+      );
+      setOfficialNumber(
+        inputs,
+        "rated_cooling_capacity_kw",
+        approvedCoolingCapacity,
+      );
+      delete inputs.outdoor_heating_capacity_kw;
+      delete inputs.outdoor_cooling_capacity_kw;
+      delete inputs.same_oem_confirmed;
+    } else {
+      setOfficialNumber(
+        inputs,
+        "outdoor_heating_capacity_kw",
+        approvedHeatingCapacity,
+      );
+      setOfficialNumber(
+        inputs,
+        "outdoor_cooling_capacity_kw",
+        approvedCoolingCapacity,
+      );
+    }
     setOfficialNumber(inputs, "hspf_upgrade", applicableHspf.value);
     setOfficialNumber(inputs, "tcspf_upgrade", applicableTcspf.value);
     setOfficialNumber(inputs, "hspf_cold_eligibility", coldHspf.value);
@@ -981,9 +1007,6 @@ export function deriveCreditexVeuOfficialProductInputs(
     inputs.performance_basis = bases.size === 1
       ? bases.has("gems") ? "gems" : "calculated_from_acop_aeer"
       : "mixed_gems_and_calculated";
-    delete inputs.outdoor_heating_capacity_kw;
-    delete inputs.outdoor_cooling_capacity_kw;
-    delete inputs.same_oem_confirmed;
     return inputs;
   }
   if (activityCode === "13") {

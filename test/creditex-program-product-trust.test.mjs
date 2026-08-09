@@ -175,7 +175,7 @@ test("BESS3 and BESS4 reject caller inverter values when the licensed CEC row ha
   }
 });
 
-test("SRES paths with incomplete controlled component evidence fail closed", () => {
+test("strict SRES paths fail closed while quote mode uses the bounded quote estimator", () => {
   for (const technology of [
     "solar_pv",
     "solar_battery",
@@ -197,8 +197,12 @@ test("SRES paths with incomplete controlled component evidence fail closed", () 
   );
   assert.match(route, /creditexSresCalculationBlocker\(technology\)/);
   assert.match(route, /OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE/);
-  assert.match(ui, /Boolean\(productBlocker\)/);
-  assert.match(ui, /Official product evidence required/);
+  assert.match(route, /estimatePurpose !== "quote"/);
+  assert.match(route, /estimateCreditexSresQuote\(database, body\)/);
+  assert.match(ui, /estimatePurpose: "quote"/);
+  assert.match(ui, /productKey: productCascade\.productKey/);
+  assert.match(ui, /disabled=\{estimateBusy\}/);
+  assert.doesNotMatch(ui, /Official product evidence required/);
 });
 
 test("NSW RF2 and pool-pump formula values are derived and caller tampering is discarded", () => {
@@ -552,18 +556,30 @@ test("VEU Part 6 derives the exact single-system category, capacities, seasonal 
   assert.equal(derived.outdoor_heating_capacity_kw, undefined);
   assert.equal(derived.same_oem_confirmed, undefined);
 
-  assert.throws(
-    () => deriveCreditexVeuOfficialProductInputs(
-      "6",
-      { premises: "residential", location_class: "metro_mild" },
-      [product("veu_air_conditioner", {
-        ...selection.attributes,
-        veuProductConfiguration: "Fixed head multi split system",
-        veuProductConfigurationClass: "multi",
-      })],
-    ),
-    officialError,
+  const multi = deriveCreditexVeuOfficialProductInputs(
+    "6",
+    {
+      premises: "residential",
+      location_class: "metro_mild",
+      rated_heating_capacity_kw: "12.5",
+      rated_cooling_capacity_kw: "11.25",
+      same_oem_confirmed: "no",
+    },
+    [product("veu_air_conditioner", {
+      ...selection.attributes,
+      veuProductConfiguration: "Multiple split - variable refrigerant flow",
+      veuProductConfigurationClass: "multi",
+    })],
   );
+  assert.equal(multi.configuration, "multi");
+  assert.equal(multi.rated_heating_capacity_kw, "12.5");
+  assert.equal(multi.rated_cooling_capacity_kw, "11.25");
+  assert.equal(multi.outdoor_heating_capacity_kw, "3.8");
+  assert.equal(multi.outdoor_cooling_capacity_kw, "3.5");
+  assert.equal(multi.hspf_upgrade, "4.8");
+  assert.equal(multi.tcspf_upgrade, "5.9");
+  assert.equal(multi.refrigerant_gwp, "675");
+  assert.equal(multi.same_oem_confirmed, "no");
 });
 
 test("VEU Parts 27, 34 and 35 cross-check exact lighting product power and controls", () => {
@@ -810,7 +826,9 @@ test("product-backed estimates require a defensible approval start and the API u
     /registryBlocked = activity\.calculationStatus/,
     "a mapped official registry must become usable as soon as its platform snapshot is current",
   );
-  assert.match(governedCalculator, /registryBlocked = unresolvedKinds\.length > 0/);
+  assert.doesNotMatch(governedCalculator, /const registryBlocked/);
+  assert.match(governedCalculator, /estimatePurpose: "quote"/);
+  assert.match(governedCalculator, /disabled=\{busy\}/);
   assert.doesNotMatch(
     route,
     /activity\.calculationStatus === "official_registry_required"/,

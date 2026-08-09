@@ -9,6 +9,9 @@ import {
   estimateCreditexStcs,
 } from "../src/lib/creditex-stc-estimator.ts";
 import {
+  estimateCreditexSresQuote,
+} from "../src/lib/creditex-sres-calculator-estimator.ts";
+import {
   MAXIMUM_CREDITEX_JSON_BYTES,
   BoundedJsonRequestError,
   readBoundedJsonRequest,
@@ -257,6 +260,96 @@ test("STC estimates reject unsupported dates, free-form factors, invalid eligibi
   );
 });
 
+test("quote estimates calculate PV, wind and hydro from date, postcode and capacity", async () => {
+  const databaseIsNotUsedForArithmeticOnlyQuotes = {};
+  const pv = await estimateCreditexSresQuote(
+    databaseIsNotUsedForArithmeticOnlyQuotes,
+    {
+      estimatePurpose: "quote",
+      technology: "solar_pv",
+      installationDate: "2026-08-17",
+      postcode: "3000",
+      ratedCapacityKw: "6.6",
+    },
+  );
+  assert.deepEqual(pv.output, { quantity: "39", unit: "STC" });
+  assert.equal(pv.resolution.zoneRating, "1.185");
+  assert.equal(pv.inputSnapshot.zoneRating, "1.185");
+  assert.equal(pv.estimatePurpose, "quote");
+  assert.equal(pv.eligibilityConfirmed, false);
+  assert.equal(pv.certificateActionEnabled, false);
+  assert.match(pv.eligibilityWarning, /Quote estimate only/);
+
+  const wind = await estimateCreditexSresQuote(
+    databaseIsNotUsedForArithmeticOnlyQuotes,
+    {
+      estimatePurpose: "quote",
+      technology: "small_wind",
+      installationDate: "2027-03-10",
+      postcode: "3000",
+      ratedCapacityKw: "6",
+    },
+  );
+  assert.deepEqual(wind.output, { quantity: "45", unit: "STC" });
+  assert.equal(wind.inputSnapshot.deemingYears, "4");
+  assert.equal(wind.inputSnapshot.resourceHoursPerYear, "2000");
+  assert.equal(wind.resolution.postcodeUsedInArithmetic, false);
+
+  const hydro = await estimateCreditexSresQuote(
+    databaseIsNotUsedForArithmeticOnlyQuotes,
+    {
+      estimatePurpose: "quote",
+      technology: "small_hydro",
+      installationDate: "2030-12-31",
+      postcode: "3000",
+      ratedCapacityKw: "6.4",
+    },
+  );
+  assert.deepEqual(hydro.output, { quantity: "24", unit: "STC" });
+  assert.equal(hydro.inputSnapshot.deemingYears, "1");
+  assert.equal(hydro.inputSnapshot.resourceHoursPerYear, "4000");
+});
+
+test("quote estimates reject malformed and out-of-horizon dates without consulting product data", async () => {
+  for (const installationDate of ["17-08-2026", "2025-12-31", "2031-01-01"]) {
+    await assert.rejects(
+      estimateCreditexSresQuote({}, {
+        estimatePurpose: "quote",
+        technology: "solar_pv",
+        installationDate,
+        postcode: "3000",
+        ratedCapacityKw: "6.6",
+      }),
+      expectedError("STC_DATE_UNSUPPORTED"),
+    );
+  }
+});
+
+test("battery quote estimates use published inputs and identify missing minimum inputs", async () => {
+  const estimate = await estimateCreditexSresQuote({}, {
+    estimatePurpose: "quote",
+    technology: "solar_battery",
+    certificationDate: "2027-07-01",
+    nominalCapacityKwh: "20",
+    usableCapacityKwh: "18",
+  });
+  assert.deepEqual(estimate.output, { quantity: "85", unit: "STC" });
+  assert.equal(estimate.eligibilityConfirmed, false);
+  assert.equal(estimate.certificateActionEnabled, false);
+
+  await assert.rejects(
+    estimateCreditexSresQuote({}, {
+      estimatePurpose: "quote",
+      technology: "solar_battery",
+      certificationDate: "2027-07-01",
+      nominalCapacityKwh: "20",
+      usableCapacityKwh: "",
+    }),
+    (error) => expectedError("STC_REQUEST_INVALID")(error)
+      && /nominal capacity and usable capacity/.test(error.message),
+  );
+});
+
 test("bounded JSON reading rejects oversized bodies even when Content-Length is missing or false", async () => {
   const oversizedBody = JSON.stringify({
     value: "x".repeat(MAXIMUM_CREDITEX_JSON_BYTES),
@@ -301,6 +394,8 @@ test("the protected estimate route is same-origin, authenticated, bounded and no
   assert.match(routeSource, /MAXIMUM_CREDITEX_JSON_BYTES/);
   assert.match(routeSource, /requireCreditexCalculatorAccess\(request, database\)/);
   assert.match(routeSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
+  assert.match(routeSource, /estimatePurpose === "quote"/);
+  assert.match(routeSource, /estimateCreditexSresQuote\(database, body\)/);
   assert.doesNotMatch(routeSource, /export async function (GET|PUT|PATCH|DELETE)/);
   assert.doesNotMatch(
     routeSource,

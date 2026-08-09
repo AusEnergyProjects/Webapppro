@@ -22,7 +22,10 @@ import {
   creditexInputsFromOfficialProduct,
   creditexProductOptionLabel,
 } from "./CreditexOfficialProductPicker";
-import { CreditexGovernedProgramCalculator } from "./CreditexGovernedProgramCalculator";
+import {
+  CreditexGovernedProgramCalculator,
+  creditexQuoteEvidenceInput,
+} from "./CreditexGovernedProgramCalculator";
 import { CreditexSresCalculator } from "./CreditexSresCalculator";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
@@ -94,6 +97,24 @@ function defaultInputs(activity: CreditexLocalActivityDefinition) {
   );
 }
 
+const CREDITEX_LOCAL_PRODUCT_DERIVED_INPUTS = new Set([
+  "nominal_battery_capacity_kwh",
+  "usable_capacity_kwh",
+  "battery_inverter_output_kw",
+  "inverter_capacity_kw",
+  "rated_cooling_capacity_kw",
+  "outdoor_cooling_capacity_kw",
+  "cooling_capacity_kw",
+  "outdoor_heating_capacity_kw",
+  "heating_capacity_kw",
+  "maximum_tested_input_w",
+  "paec_kwh_per_year",
+  "daily_run_time_hours",
+  "product_class",
+  "tec_kwh_per_24h",
+  "product_eei",
+]);
+
 function localProgram(
   programCode: string,
 ): CreditexLocalProgramDefinition | undefined {
@@ -161,10 +182,6 @@ function CreditexLocalProgramCalculator({
     ),
     [activity.activityCode, program.programCode],
   );
-  const missingApprovedProduct = requiredProductKinds.some(
-    (kind) => !selectedProductIds[kind],
-  );
-
   function invalidate() {
     requestRef.current += 1;
     setEstimate(null);
@@ -199,6 +216,7 @@ function CreditexLocalProgramCalculator({
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
         body: JSON.stringify({
+          estimatePurpose: "quote",
           programCode: program.programCode,
           activityCode: activity.activityCode,
           effectiveDate: date,
@@ -222,7 +240,63 @@ function CreditexLocalProgramCalculator({
     }
   }
 
-  const maximumDate = program.effectiveTo || todayIso();
+  function renderInput(
+    definition: CreditexLocalActivityDefinition["inputDefinitions"][number],
+  ) {
+    if (
+      definition.key === "horizon_town"
+      && program.programCode === "WA-DEBS"
+      && inputs.service_area !== "horizon"
+    ) return null;
+    return (
+      <label key={definition.key}>
+        {definition.label}
+        {definition.type === "select" ? (
+          <select
+            required
+            value={inputs[definition.key] || ""}
+            onChange={(event) => updateInput(
+              definition.key,
+              event.target.value,
+            )}
+          >
+            {definition.options?.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            inputMode={definition.type === "integer" ? "numeric" : "decimal"}
+            required
+            value={inputs[definition.key] || ""}
+            onChange={(event) => updateInput(
+              definition.key,
+              event.target.value,
+            )}
+          />
+        )}
+        {!/(?:postcode|premises|sector)/.test(definition.key) && (
+          <small>{definition.help}</small>
+        )}
+      </label>
+    );
+  }
+
+  const quoteInputs = activity.inputDefinitions.filter(
+    (definition) => !CREDITEX_LOCAL_PRODUCT_DERIVED_INPUTS.has(definition.key),
+  );
+  const contextInputs = quoteInputs.filter(
+    (definition) => /(?:postcode|premises|sector)/.test(definition.key),
+  );
+  const evidenceInputs = quoteInputs.filter(
+    (definition) => creditexQuoteEvidenceInput(definition.key),
+  );
+  const formulaInputs = quoteInputs.filter((definition) => (
+    !/(?:postcode|premises|sector)/.test(definition.key)
+    && !creditexQuoteEvidenceInput(definition.key)
+  ));
 
   return (
     <section
@@ -231,24 +305,11 @@ function CreditexLocalProgramCalculator({
     >
       <header>
         <div>
-          <span>{program.jurisdiction} | SOURCE-PINNED ESTIMATE</span>
+          <span>{program.jurisdiction} REBATE ESTIMATE</span>
           <h4 id="local-program-estimator-title">{program.name}</h4>
-          <p>{program.sourceVersion}</p>
+          <small>Estimate only. Final eligibility is checked before any claim.</small>
         </div>
-        <strong>External claim actions disabled</strong>
       </header>
-
-      {activity.productRegistryRequirements.length > 0 && (
-        <div className={styles.registryStatus} data-status="stale">
-          <div>
-            <span>Approved-product controls required</span>
-            <strong>Eligibility reconciliation</strong>
-            <small>
-              {activity.productRegistryRequirements.join(" | ")}
-            </small>
-          </div>
-        </div>
-      )}
 
       <form className={styles.estimatorForm} onSubmit={calculate}>
         <label>
@@ -268,17 +329,11 @@ function CreditexLocalProgramCalculator({
           </select>
         </label>
         <label>
-          Installation scenario
-          <select value={activity.scenario} disabled>
-            <option value={activity.scenario}>{activity.scenario}</option>
-          </select>
-        </label>
-        <label>
-          Effective date
+          Installation date
           <input
             type="date"
             min={program.effectiveFrom}
-            max={maximumDate}
+            max={program.effectiveTo || undefined}
             required
             value={date}
             onChange={(event) => {
@@ -288,6 +343,10 @@ function CreditexLocalProgramCalculator({
             }}
           />
         </label>
+
+        <p><strong>Scenario:</strong> {activity.scenario}</p>
+
+        {contextInputs.map(renderInput)}
 
         {requiredProductKinds.map((kind) => (
           <CreditexOfficialProductPicker
@@ -309,54 +368,20 @@ function CreditexLocalProgramCalculator({
           />
         ))}
 
-        {activity.inputDefinitions.map((definition) => {
-          if (
-            definition.key === "horizon_town"
-            && program.programCode === "WA-DEBS"
-            && inputs.service_area !== "horizon"
-          ) {
-            return null;
-          }
-          return (
-            <label key={definition.key}>
-              {definition.label}
-              {definition.type === "select" ? (
-                <select
-                  required
-                  value={inputs[definition.key] || ""}
-                  onChange={(event) => updateInput(
-                    definition.key,
-                    event.target.value,
-                  )}
-                >
-                  {definition.options?.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  inputMode={definition.type === "integer" ? "numeric" : "decimal"}
-                  required
-                  value={inputs[definition.key] || ""}
-                  onChange={(event) => updateInput(
-                    definition.key,
-                    event.target.value,
-                  )}
-                />
-              )}
-              <small>{definition.help}</small>
-            </label>
-          );
-        })}
+        {formulaInputs.map(renderInput)}
+        {(evidenceInputs.length > 0
+          || activity.productRegistryRequirements.length > 0) && (
+          <details>
+            <summary>Eligibility and evidence</summary>
+            <p>
+              Keep the product, invoice and installation records for the final
+              eligibility check. These checks are not needed to calculate a quote.
+            </p>
+          </details>
+        )}
 
-        <button type="submit" disabled={busy || missingApprovedProduct}>
-          {busy
-            ? "Calculating..."
-            : missingApprovedProduct
-              ? "Select approved products"
-              : "Calculate estimate"}
+        <button type="submit" disabled={busy}>
+          {busy ? "Calculating..." : "Calculate rebate estimate"}
         </button>
       </form>
 
@@ -370,48 +395,56 @@ function CreditexLocalProgramCalculator({
             </div>
             <b>Estimate only</b>
           </header>
-          <ol>
-            {estimate.trace.map((step) => (
-              <li key={step.key}>
-                <div>
-                  <strong>{step.label}</strong>
-                  <span>{step.operation}</span>
-                </div>
-                <b>{step.output} {step.unit}</b>
-              </li>
-            ))}
-          </ol>
-          {estimate.productRegistryRequirements.length > 0 && (
-            <p>
-              Product eligibility required: {estimate.productRegistryRequirements.join("; ")}.
-            </p>
-          )}
           {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
             <div className={styles.estimateResolution}>
-              <strong>Official products pinned to this result</strong>
               {estimate.approvedProducts.map((product) => (
-                <span key={product.id}>
-                  {officialProductKindLabel(product.productKind)}: {creditexProductOptionLabel(product)}
-                </span>
+                <strong key={product.id}>
+                  {[product.brand || product.manufacturer, product.model]
+                    .filter(Boolean)
+                    .join(" ")}
+                </strong>
               ))}
-              {estimate.registryReceiptHash && (
-                <span>Registry receipt {estimate.registryReceiptHash.slice(0, 24)}...</span>
-              )}
             </div>
           )}
-          <p>{estimate.operatorMessage}</p>
-          <footer>
-            <a
-              href={estimate.officialSourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open official source
-            </a>
-            <code title={estimate.receiptHash}>
-              Receipt {estimate.receiptHash.slice(0, 22)}...
-            </code>
-          </footer>
+          <details>
+            <summary>Calculation details</summary>
+            <ol>
+              {estimate.trace.map((step) => (
+                <li key={step.key}>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <span>{step.operation}</span>
+                  </div>
+                  <b>{step.output} {step.unit}</b>
+                </li>
+              ))}
+            </ol>
+            {estimate.productRegistryRequirements.length > 0 && (
+              <p>
+                Product eligibility required: {estimate.productRegistryRequirements.join("; ")}.
+              </p>
+            )}
+            {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
+              <p>
+                {estimate.approvedProducts.map((product) => (
+                  `${officialProductKindLabel(product.productKind)}: ${creditexProductOptionLabel(product)}`
+                )).join("; ")}
+              </p>
+            )}
+            <p>{estimate.operatorMessage}</p>
+            <footer>
+              <a
+                href={estimate.officialSourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open official source
+              </a>
+              <code title={estimate.registryReceiptHash || estimate.receiptHash}>
+                Receipt {(estimate.registryReceiptHash || estimate.receiptHash).slice(0, 22)}...
+              </code>
+            </footer>
+          </details>
         </section>
       )}
     </section>
@@ -483,12 +516,9 @@ export function CreditexAllProgramCalculator({
     <section className={styles.allProgramCalculator}>
       <header>
         <div>
-          <span>ALL-IN-ONE CALCULATOR</span>
-          <h4>Choose an Australian program</h4>
-          <p>
-            Each result is tied to an official source window and returns a
-            deterministic audit receipt.
-          </p>
+          <span>REBATE CALCULATOR</span>
+          <h4>Choose a program</h4>
+          <small>Fast quote estimate using official scheme data.</small>
         </div>
         <label>
           Program
@@ -517,25 +547,13 @@ export function CreditexAllProgramCalculator({
         </label>
       </header>
       {role === "admin" && registryRefreshContract && (
-        <div
-          className={styles.registryStatus}
-          data-status={registryRefreshError
-            ? "unavailable"
-            : registryRefreshNotice
-              ? "current"
-              : "stale"}
-          aria-live="polite"
-          aria-busy={registryRefreshBusy}
-        >
-          <div>
-            <span>{registryRefreshContract.sourceDescription}</span>
-            <strong>{registryRefreshContract.sourceLabel}</strong>
-            <small>
-              {registryRefreshError
-                || registryRefreshNotice
-                || `Run the controlled ${registryRefreshContract.sourceLabel} refresh before testing product-backed estimates.`}
-            </small>
-          </div>
+        <details>
+          <summary>Official data status</summary>
+          <p aria-live="polite">
+            {registryRefreshError
+              || registryRefreshNotice
+              || registryRefreshContract.sourceLabel}
+          </p>
           <button
             type="button"
             disabled={registryRefreshBusy}
@@ -545,7 +563,7 @@ export function CreditexAllProgramCalculator({
               ? "Refreshing..."
               : registryRefreshContract.buttonLabel}
           </button>
-        </div>
+        </details>
       )}
       {programCode === "SRES" ? (
         <CreditexSresCalculator api={api} role={role} />

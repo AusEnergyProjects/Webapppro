@@ -200,6 +200,12 @@ function parseDate(value: unknown) {
   };
 }
 
+export function creditexStcMaximumDeemingYears(
+  installationDate: unknown,
+) {
+  return String(2031 - parseDate(installationDate).year);
+}
+
 function powerOfTen(scale: number) {
   return BigInt(10) ** BigInt(scale);
 }

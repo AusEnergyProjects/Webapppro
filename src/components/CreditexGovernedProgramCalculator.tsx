@@ -113,6 +113,16 @@ function stringInputs(inputs: Record<string, unknown>) {
   ]));
 }
 
+const CREDITEX_QUOTE_EVIDENCE_KEYS = /(?:^nsw_site_confirmed$|^payment_exemption$|all_non_formula|_confirmed$|_evidence(?:_|$)|fact_sheet|suitability|warranty|co_payment|decommission|disposal|eligibility_requirements|removal_requirements|as_nzs_2712_status)/;
+
+export function creditexQuoteEvidenceInput(key: string) {
+  return CREDITEX_QUOTE_EVIDENCE_KEYS.test(key);
+}
+
+function creditexQuoteContextInput(key: string) {
+  return /(?:postcode|premises|sector|distribution_network)/.test(key);
+}
+
 function outputQuantity(estimate: GovernedEstimate) {
   if (estimate.output.quantity !== undefined) return estimate.output.quantity;
   return estimate.output.wholeCertificates ?? estimate.output.unroundedTonnes ?? "";
@@ -136,37 +146,45 @@ function GovernedResult({ estimate }: { estimate: GovernedEstimate }) {
         </div>
         <b>Estimate only</b>
       </header>
-      <ol>
-        {estimate.trace.map((step) => (
-          <li key={step.key}>
-            <div>
-              <strong>{step.label}</strong>
-              <span>{step.operation}</span>
-            </div>
-            <b>{traceOutput(step.output, step.unit)}</b>
-          </li>
-        ))}
-      </ol>
       {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
         <div className={styles.estimateResolution}>
-          <strong>Official products pinned to this result</strong>
           {estimate.approvedProducts.map((product) => (
-            <span key={product.id}>{creditexProductOptionLabel(product)}</span>
+            <strong key={product.id}>
+              {[product.brand || product.manufacturer, product.model]
+                .filter(Boolean)
+                .join(" ")}
+            </strong>
           ))}
-          {estimate.registryReceiptHash && (
-            <span>Registry receipt {estimate.registryReceiptHash.slice(0, 24)}...</span>
-          )}
         </div>
       )}
-      <p>{estimate.operatorMessage}</p>
-      <footer>
-        <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
-          Open official source
-        </a>
-        <code title={estimate.receiptHash}>
-          Receipt {estimate.receiptHash.slice(0, 22)}...
-        </code>
-      </footer>
+      <details>
+        <summary>Calculation details</summary>
+        <ol>
+          {estimate.trace.map((step) => (
+            <li key={step.key}>
+              <div>
+                <strong>{step.label}</strong>
+                <span>{step.operation}</span>
+              </div>
+              <b>{traceOutput(step.output, step.unit)}</b>
+            </li>
+          ))}
+        </ol>
+        {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
+          <p>
+            {estimate.approvedProducts.map(creditexProductOptionLabel).join("; ")}
+          </p>
+        )}
+        <p>{estimate.operatorMessage}</p>
+        <footer>
+          <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
+            Open official source
+          </a>
+          <code title={estimate.registryReceiptHash || estimate.receiptHash}>
+            Receipt {(estimate.registryReceiptHash || estimate.receiptHash).slice(0, 22)}...
+          </code>
+        </footer>
+      </details>
     </section>
   );
 }
@@ -212,8 +230,6 @@ function CreditexNswCalculator({
     () => unresolvedNswProductKinds(activity.productKinds),
     [activity.productKinds],
   );
-  const missingProduct = requiredKinds.some((kind) => !selectedProductIds[kind]);
-  const registryBlocked = unresolvedKinds.length > 0;
   const missingEligibilityStart = requiredKinds.some((kind) => (
     Boolean(selectedProductIds[kind]) && !selectedProductEligibleFrom[kind]
   ));
@@ -254,6 +270,7 @@ function CreditexNswCalculator({
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
         body: JSON.stringify({
+          estimatePurpose: "quote",
           programCode: program.programCode,
           activityCode: activity.activityCode,
           effectiveDate: date,
@@ -275,15 +292,81 @@ function CreditexNswCalculator({
     }
   }
 
+  function renderNswInput(
+    definition: CreditexNswActivityDefinition["inputDefinitions"][number],
+  ) {
+    return (
+      <label key={definition.key}>
+        {definition.label}
+        {definition.type === "select" ? (
+          <select
+            required
+            value={inputs[definition.key] || ""}
+            onChange={(event) => {
+              invalidate();
+              if (definition.key === "site_postcode") {
+                setSelectedProductIds({});
+                setSelectedProductEligibleFrom({});
+                setProductEvidenceError("");
+              }
+              setInputs((current) => ({
+                ...current,
+                [definition.key]: event.target.value,
+              }));
+            }}
+          >
+            {definition.options?.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            inputMode={definition.type === "integer" ? "numeric" : "decimal"}
+            required
+            value={inputs[definition.key] || ""}
+            onChange={(event) => {
+              invalidate();
+              if (definition.key === "site_postcode") {
+                setSelectedProductIds({});
+                setSelectedProductEligibleFrom({});
+                setProductEvidenceError("");
+              }
+              setInputs((current) => ({
+                ...current,
+                [definition.key]: event.target.value,
+              }));
+            }}
+          />
+        )}
+        {!creditexQuoteContextInput(definition.key) && (
+          <small>{definition.help}</small>
+        )}
+      </label>
+    );
+  }
+
+  const quoteInputs = activity.inputDefinitions.filter(
+    (definition) => !officialProductInputKeys.has(definition.key),
+  );
+  const contextInputs = quoteInputs.filter(
+    (definition) => creditexQuoteContextInput(definition.key),
+  );
+  const formulaInputs = quoteInputs.filter((definition) => (
+    !creditexQuoteContextInput(definition.key)
+    && !creditexQuoteEvidenceInput(definition.key)
+  ));
+  const evidenceInputs = quoteInputs.filter(
+    (definition) => creditexQuoteEvidenceInput(definition.key),
+  );
+
   return (
     <section className={styles.stcEstimator} aria-labelledby="nsw-estimator-title">
       <header>
         <div>
-          <span>NSW | RULE-PINNED CERTIFICATE ESTIMATE</span>
+          <span>NSW REBATE ESTIMATE</span>
           <h4 id="nsw-estimator-title">{program.name}</h4>
-          <p>{program.sourceVersion}</p>
+          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
         </div>
-        <strong>Certificate actions disabled</strong>
       </header>
       <form className={styles.estimatorForm} onSubmit={calculate}>
         <label>
@@ -297,13 +380,7 @@ function CreditexNswCalculator({
           </select>
         </label>
         <label>
-          Installation scenario
-          <select value={activity.supportedScenario} disabled>
-            <option value={activity.supportedScenario}>{activity.supportedScenario}</option>
-          </select>
-        </label>
-        <label>
-          Implementation date
+          Installation date
           <input
             type="date"
             min={activity.effectiveFrom}
@@ -319,6 +396,10 @@ function CreditexNswCalculator({
             }}
           />
         </label>
+
+        <p><strong>Scenario:</strong> {activity.supportedScenario}</p>
+
+        {contextInputs.map(renderNswInput)}
 
         {requiredKinds.map((kind) => (
           <CreditexOfficialProductPicker
@@ -352,68 +433,16 @@ function CreditexNswCalculator({
           />
         ))}
 
-        {unresolvedKinds.length > 0 && (
-          <div className={styles.registryStatus} data-status="stale">
-            <div>
-              <span>Controlled product evidence required</span>
-              <strong>{unresolvedKinds.join(", ").replaceAll("_", " ")}</strong>
-              <small>
-                No complete current NSW administrator or TESSA machine feed is
-                mapped for this product class. Calculation and submission stay
-                disabled; generic CER or CEC products are not accepted as a substitute.
-              </small>
-            </div>
-          </div>
+        {formulaInputs.map(renderNswInput)}
+        {(evidenceInputs.length > 0 || unresolvedKinds.length > 0) && (
+          <details>
+            <summary>Eligibility and evidence</summary>
+            <p>
+              Keep the product, invoice and installation records for the final
+              eligibility check. These checks are not needed to calculate a quote.
+            </p>
+          </details>
         )}
-
-        {activity.inputDefinitions.map((definition) => (
-          <label key={definition.key}>
-            {definition.label}
-            {definition.type === "select" ? (
-              <select
-                required
-                disabled={officialProductInputKeys.has(definition.key)}
-                value={inputs[definition.key] || ""}
-                onChange={(event) => {
-                  invalidate();
-                  if (definition.key === "site_postcode") {
-                    setSelectedProductIds({});
-                    setSelectedProductEligibleFrom({});
-                    setProductEvidenceError("");
-                  }
-                  setInputs((current) => ({
-                    ...current,
-                    [definition.key]: event.target.value,
-                  }));
-                }}
-              >
-                {definition.options?.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                inputMode={definition.type === "integer" ? "numeric" : "decimal"}
-                required
-                disabled={officialProductInputKeys.has(definition.key)}
-                value={inputs[definition.key] || ""}
-                onChange={(event) => {
-                  invalidate();
-                  if (definition.key === "site_postcode") {
-                    setSelectedProductIds({});
-                    setSelectedProductEligibleFrom({});
-                    setProductEvidenceError("");
-                  }
-                  setInputs((current) => ({
-                    ...current,
-                    [definition.key]: event.target.value,
-                  }));
-                }}
-              />
-            )}
-            <small>{definition.help}</small>
-          </label>
-        ))}
         {missingEligibilityStart && (
           <div className={styles.registryStatus} data-status="stale">
             <div>
@@ -431,25 +460,9 @@ function CreditexNswCalculator({
         )}
         <button
           type="submit"
-          disabled={
-            busy
-            || registryBlocked
-            || missingProduct
-            || missingEligibilityStart
-            || Boolean(productEvidenceError)
-          }
+          disabled={busy}
         >
-          {busy
-            ? "Calculating..."
-            : registryBlocked
-              ? "Official NSW registry required"
-              : missingEligibilityStart
-                ? "Refresh official product registry"
-                : productEvidenceError
-                  ? "Choose an eligible official product"
-                : missingProduct
-              ? "Select approved products"
-              : `Calculate ${activity.outputUnit} estimate`}
+          {busy ? "Calculating..." : "Calculate rebate estimate"}
         </button>
       </form>
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -471,6 +484,16 @@ function veuVisibleInput(
     return !definition.showWhen.notOneOf.includes(selected);
   }
   return true;
+}
+
+export function creditexVeuQuoteInputVisible(
+  definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
+  inputs: Record<string, string>,
+) {
+  if (!veuVisibleInput(definition, inputs)) return false;
+  if (definition.source === "operator") return true;
+  return definition.quoteSource === "operator"
+    && inputs.configuration === "multi";
 }
 
 function veuNeedsPostcode(activity: CreditexVeuActivityDefinition) {
@@ -800,7 +823,6 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   )
     ? operatorScenario
     : "";
-  const productSelectionRequired = requiredKinds.length > 0;
   const postcodeRequired = veuNeedsPostcode(activity);
 
   const invalidate = useCallback(() => {
@@ -899,6 +921,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
         body: JSON.stringify({
+          estimatePurpose: "quote",
           programCode: "VEU",
           activityCode: activity.activityCode,
           effectiveDate: date,
@@ -926,7 +949,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   function renderVeuInput(
     definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
   ) {
-    if (!veuVisibleInput(definition, inputs)) return null;
+    if (!creditexVeuQuoteInputVisible(definition, inputs)) return null;
     return (
       <label key={definition.key}>
         {definition.key === "scenario"
@@ -935,13 +958,6 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         {definition.type === "select" ? (
           <select
             required={definition.required}
-            disabled={
-              definition.source === "postcode_lookup"
-              || (
-                definition.source === "approved_product"
-                && requiredKinds.length > 0
-              )
-            }
             value={inputs[definition.key] || ""}
             onChange={(event) => {
               invalidate();
@@ -963,6 +979,27 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
                 }));
                 return;
               }
+              if (
+                definition.key === "premises"
+                && !productEvidence.blocked
+                && productEvidence.completeSelections.length > 0
+              ) {
+                try {
+                  setInputs(stringInputs(deriveCreditexVeuOfficialProductInputs(
+                    activity.activityCode,
+                    { ...inputs, premises: event.target.value },
+                    productEvidence.completeSelections,
+                  )));
+                  return;
+                } catch (caught) {
+                  dispatchProductUi({
+                    type: "evidence_invalid",
+                    issue: caught instanceof Error
+                      ? caught.message
+                      : "The approved product could not be resolved for this premises type.",
+                  });
+                }
+              }
               setInputs((current) => ({
                 ...current,
                 [definition.key]: event.target.value,
@@ -977,10 +1014,6 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
           <input
             inputMode="decimal"
             required={definition.required}
-            disabled={
-              definition.source === "approved_product"
-              && requiredKinds.length > 0
-            }
             value={inputs[definition.key] || ""}
             onChange={(event) => {
               invalidate();
@@ -991,54 +1024,42 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             }}
           />
         )}
-        <small>
-          {definition.source === "approved_product"
-            && requiredKinds.length > 0
-            ? definition.key === "scenario"
-              ? "Determined by the exact approved product selected below."
-              : "Read from the exact VEU Public Registry model approved on the installation date."
-            : definition.help}
-        </small>
+        {definition.key !== "scenario"
+          && !creditexQuoteContextInput(definition.key) && (
+          <small>{definition.help}</small>
+        )}
       </label>
     );
   }
+
+  const operatorInputs = activity.inputDefinitions.filter((definition) => (
+    creditexVeuQuoteInputVisible(definition, inputs)
+  ));
+  const scenarioInputs = operatorInputs.filter(
+    (definition) => definition.key === "scenario",
+  );
+  const contextInputs = operatorInputs.filter((definition) => (
+    definition.key !== "scenario"
+    && creditexQuoteContextInput(definition.key)
+  ));
+  const formulaInputs = operatorInputs.filter((definition) => (
+    definition.key !== "scenario"
+    && !creditexQuoteContextInput(definition.key)
+    && !creditexQuoteEvidenceInput(definition.key)
+  ));
+  const evidenceInputs = operatorInputs.filter(
+    (definition) => creditexQuoteEvidenceInput(definition.key),
+  );
 
   return (
     <section className={styles.stcEstimator} aria-labelledby="veu-estimator-title">
       <header>
         <div>
-          <span>VIC | V24/V25 GOVERNED FORMULA ENGINE</span>
+          <span>VICTORIAN REBATE ESTIMATE</span>
           <h4 id="veu-estimator-title">Victorian Energy Upgrades</h4>
-          <p>{activity.sourcePages}</p>
+          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
         </div>
-        <strong>Certificate actions disabled</strong>
       </header>
-      <div
-        className={styles.registryStatus}
-        data-status={productRegistryIssue
-          ? "unavailable"
-          : activitySourceComplete
-            ? "current"
-            : "stale"}
-      >
-        <div>
-          <span>
-            {productSelectionRequired
-              ? "VEU Public Registry eligibility evidence"
-              : "Governed activity evidence"}
-          </span>
-          <strong>
-            {productSelectionRequired
-              ? "Exact model approved on the installation date"
-              : "No approved-product registry applies to this selected scenario"}
-          </strong>
-          <small>
-            {productSelectionRequired
-              ? "Select the exact VEU Public Registry model approved on the installation date. Its Effective From and Effective To window must include the installation date. No product eligibility is guessed."
-              : "Enter the governed site, incumbent-equipment and installation evidence required by the applicable VEU specification. The calculator does not invent a product approval requirement."}
-          </small>
-        </div>
-      </div>
       <form className={styles.estimatorForm} onSubmit={calculate}>
         <label>
           Activity
@@ -1074,15 +1095,12 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             ))}
           </select>
         </label>
-        {activity.inputDefinitions
-          .filter((definition) => definition.key === "scenario")
-          .map(renderVeuInput)}
+        {scenarioInputs.map(renderVeuInput)}
         <label>
           Installation date
           <input
             type="date"
             min="2026-06-30"
-            max={todayIso()}
             required
             value={date}
             onChange={(event) => {
@@ -1176,15 +1194,18 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         ))}
         {postcodeRequired && (
           <label>
-            Site postcode
+            Postcode
             <input
               inputMode="numeric"
+              pattern="[0-9]{4}"
               maxLength={4}
               required
               value={postcode}
               onChange={(event) => {
                 invalidate();
-                const nextPostcode = event.target.value;
+                const nextPostcode = event.target.value
+                  .replace(/\D/g, "")
+                  .slice(0, 4);
                 setPostcode(nextPostcode);
                 try {
                   let nextInputs = applyVeuPostcode(
@@ -1214,55 +1235,31 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
                 }
               }}
             />
-            <small>Resolves the exact v24/v25 Table A geography, climate region and climate zone.</small>
             {postcodeError && <small className={styles.productRegistryError}>{postcodeError}</small>}
           </label>
         )}
-        {activity.inputDefinitions
-          .filter((definition) => definition.key !== "scenario")
-          .map(renderVeuInput)}
+        {contextInputs.map(renderVeuInput)}
+        {formulaInputs.map(renderVeuInput)}
+        {evidenceInputs.length > 0 && (
+          <details>
+            <summary>Eligibility and evidence</summary>
+            <p>
+              Keep the product, invoice and installation records for the final
+              eligibility check. These checks are not needed to calculate a quote.
+            </p>
+          </details>
+        )}
         {productEvidence.issue && (
-          <div className={styles.registryStatus} data-status="stale">
-            <div>
-              <span>
-                {activitySourceComplete
-                  ? "VEU product eligibility unavailable"
-                  : "VEU formula attributes incomplete"}
-              </span>
-              <strong>
-                {activitySourceComplete
-                  ? "Exact dated approval required"
-                  : "Calculator remains disabled"}
-              </strong>
-              <small>{productEvidence.issue}</small>
-            </div>
-          </div>
+          <p className={styles.error} role="alert">{productEvidence.issue}</p>
         )}
         {productEvidenceError && (
           <p className={styles.error} role="alert">{productEvidenceError}</p>
         )}
         <button
           type="submit"
-          disabled={
-            busy
-            || productEvidence.blocked
-            || Boolean(productEvidenceError)
-            || Boolean(postcodeError)
-          }
+          disabled={busy}
         >
-          {busy
-            ? "Calculating..."
-            : productRegistryIssue
-              ? "VEU Public Registry unavailable"
-              : !activitySourceComplete
-                ? "VEU formula inputs unavailable"
-              : productEvidence.issue
-                ? "Choose VEU model eligible on date"
-                : productEvidenceError
-                  ? "Choose an eligible official product"
-              : productEvidence.missingProduct
-                ? "Select VEU model approved on date"
-                : "Calculate VEEC estimate"}
+          {busy ? "Calculating..." : "Calculate rebate estimate"}
         </button>
       </form>
       {error && <p className={styles.error} role="alert">{error}</p>}

@@ -11,6 +11,7 @@ import {
 } from "@/lib/creditex-stc-estimator";
 import { CreditexSresRegistryError } from "@/lib/creditex-sres-registry";
 import { estimateCreditexStcsFromRegistry } from "@/lib/creditex-sres-registry-server";
+import { estimateCreditexSresQuote } from "@/lib/creditex-sres-calculator-estimator";
 import {
   creditexSresCalculationBlocker,
   CreditexOfficialProductError,
@@ -112,15 +113,29 @@ export async function POST(request: Request) {
     const technology = body && typeof body === "object" && !Array.isArray(body)
       ? String((body as Record<string, unknown>).technology || "")
       : "";
-    const productBlocker = creditexSresCalculationBlocker(technology);
-    if (productBlocker) {
-      throw new CreditexOfficialProductError(
-        "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
-        409,
-        `${productBlocker} This activity remains disabled instead of accepting caller-controlled product values.`,
+    const estimatePurpose = body && typeof body === "object" && !Array.isArray(body)
+      ? String((body as Record<string, unknown>).estimatePurpose || "")
+      : "";
+    if (estimatePurpose && estimatePurpose !== "quote") {
+      throw new CreditexStcEstimateError(
+        "STC_REQUEST_INVALID",
+        400,
+        "Choose a supported STC estimate purpose.",
       );
     }
-    const estimate = await estimateCreditexStcsFromRegistry(database, body);
+    if (estimatePurpose !== "quote") {
+      const productBlocker = creditexSresCalculationBlocker(technology);
+      if (productBlocker) {
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
+          409,
+          `${productBlocker} This activity remains disabled instead of accepting caller-controlled product values.`,
+        );
+      }
+    }
+    const estimate = estimatePurpose === "quote"
+      ? await estimateCreditexSresQuote(database, body)
+      : await estimateCreditexStcsFromRegistry(database, body);
     return json({ ok: true, estimate });
   } catch (error) {
     return errorResponse(error);

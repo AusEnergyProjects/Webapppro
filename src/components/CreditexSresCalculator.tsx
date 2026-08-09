@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useReducer,
   useRef,
   useState,
@@ -109,9 +108,6 @@ type FormState = {
   effectiveDate: string;
   postcode: string;
   ratedCapacityKw: string;
-  resourceAvailability: "default" | "site_assessed";
-  resourceHoursPerYear: string;
-  deemingYears: string;
   nominalCapacityKwh: string;
   usableCapacityKwh: string;
 };
@@ -191,9 +187,6 @@ const INITIAL_FORM: FormState = {
   effectiveDate: initialDate(),
   postcode: "3000",
   ratedCapacityKw: "6.6",
-  resourceAvailability: "default",
-  resourceHoursPerYear: "2001",
-  deemingYears: "5",
   nominalCapacityKwh: "20",
   usableCapacityKwh: "18",
 };
@@ -224,10 +217,6 @@ function registeredTechnology(
 ): technology is RegisteredTechnology {
   return technology === "solar_water_heater"
     || technology === "air_source_heat_pump";
-}
-
-function requiresCurrentRegistry(technology: Technology) {
-  return technology === "solar_pv" || registeredTechnology(technology);
 }
 
 function dateTimeLabel(value: string | null | undefined) {
@@ -268,13 +257,6 @@ export function CreditexSresCalculator({
   const estimateRequestRef = useRef(0);
   const registrySnapshotRef = useRef("");
 
-  const maximumDeemingYears = useMemo(
-    () => String(Math.min(
-      5,
-      Math.max(1, 2031 - Number(form.effectiveDate.slice(0, 4) || 2030)),
-    )),
-    [form.effectiveDate],
-  );
   const productBlocker = creditexSresCalculationBlocker(form.technology);
 
   const invalidateEstimate = useCallback(() => {
@@ -522,17 +504,18 @@ export function CreditexSresCalculator({
     estimateRequestRef.current = requestVersion;
     const common = form.technology === "solar_battery"
       ? {
+          estimatePurpose: "quote",
           technology: form.technology,
           certificationDate: form.effectiveDate,
         }
       : {
+          estimatePurpose: "quote",
           technology: form.technology,
           installationDate: form.effectiveDate,
         };
     const payload = form.technology === "solar_battery"
       ? {
           ...common,
-          claimScope: "new_system",
           nominalCapacityKwh: form.nominalCapacityKwh,
           usableCapacityKwh: form.usableCapacityKwh,
         }
@@ -547,11 +530,7 @@ export function CreditexSresCalculator({
           ? {
               ...common,
               ratedCapacityKw: form.ratedCapacityKw,
-              resourceAvailability: form.resourceAvailability,
-              ...(form.resourceAvailability === "site_assessed"
-                ? { resourceHoursPerYear: form.resourceHoursPerYear }
-                : {}),
-              deemingYears: form.deemingYears,
+              postcode: form.postcode,
             }
           : {
               ...common,
@@ -588,10 +567,26 @@ export function CreditexSresCalculator({
     updateForm((current) => ({
       ...current,
       technology,
-      resourceAvailability: "default",
-      resourceHoursPerYear: technology === "small_hydro" ? "4001" : "2001",
-      deemingYears: maximumDeemingYears,
     }));
+  }
+
+  function renderPostcode() {
+    return (
+      <label>
+        Postcode
+        <input
+          inputMode="numeric"
+          pattern="[0-9]{4}"
+          maxLength={4}
+          required
+          value={form.postcode}
+          onChange={(event) => updateForm((current) => ({
+            ...current,
+            postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
+          }))}
+        />
+      </label>
+    );
   }
 
   const resolvedReceipt = estimate
@@ -605,64 +600,13 @@ export function CreditexSresCalculator({
     >
       <header>
         <div>
-          <span>SRES | OFFICIAL DATA ESTIMATE</span>
+          <span>FEDERAL REBATE ESTIMATE</span>
           <h4 id="stc-estimator-title">Estimate STCs</h4>
-          <p>
-            Postcode zones and registered water-heater product values are
-            resolved server-side from source-pinned official data.
-          </p>
+          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
         </div>
-        <strong>Certificate creation disabled</strong>
       </header>
 
-      <div
-        className={styles.registryStatus}
-        data-status={productBlocker ? "unavailable" : registry?.status || "unavailable"}
-        aria-live="polite"
-        aria-busy={lookupBusy || refreshBusy}
-      >
-        <div>
-          <span>
-            {productBlocker
-              ? "Controlled official product source"
-              : "Official CER product registry"}
-          </span>
-          <strong>{productBlocker ? "unavailable" : registry?.status || "checking"}</strong>
-          <small>
-            {productBlocker
-              ? productBlocker
-              : registry?.snapshot
-              ? `${registry.snapshot.recordCount.toLocaleString("en-AU")} records | checked ${dateTimeLabel(registry.lastCheckedAt)}`
-              : "No active snapshot. An administrator must run the first controlled refresh."}
-          </small>
-        </div>
-        {role === "admin" && !productBlocker && (
-          <button
-            type="button"
-            disabled={refreshBusy}
-            onClick={refreshRegistry}
-          >
-            {refreshBusy ? "Refreshing..." : "Refresh now"}
-          </button>
-        )}
-      </div>
-
       <form className={styles.estimatorForm} onSubmit={calculate}>
-        {productBlocker && (
-          <div className={styles.registryStatus} data-status="stale">
-            <div>
-              <span>Official product evidence incomplete</span>
-              <strong>Calculation disabled</strong>
-              <small>{productBlocker}</small>
-            </div>
-          </div>
-        )}
-        <label>
-          Program
-          <select value="SRES" disabled>
-            <option value="SRES">Federal | SRES | STCs</option>
-          </select>
-        </label>
         <label>
           Activity
           <select
@@ -678,14 +622,6 @@ export function CreditexSresCalculator({
           </select>
         </label>
         <label>
-          Installation scenario
-          <select value={SCENARIOS[form.technology]} disabled>
-            <option value={SCENARIOS[form.technology]}>
-              {SCENARIOS[form.technology]}
-            </option>
-          </select>
-        </label>
-        <label>
           {form.technology === "solar_battery"
             ? "Safety certification date"
             : "Installation date"}
@@ -697,14 +633,9 @@ export function CreditexSresCalculator({
             value={form.effectiveDate}
             onChange={(event) => {
               const effectiveDate = event.target.value;
-              const maximum = String(Math.min(
-                5,
-                Math.max(1, 2031 - Number(effectiveDate.slice(0, 4) || 2030)),
-              ));
               updateForm((current) => ({
                 ...current,
                 effectiveDate,
-                deemingYears: maximum,
               }));
               dispatchProductCascade({
                 type: "reset",
@@ -715,53 +646,36 @@ export function CreditexSresCalculator({
             }}
           />
         </label>
+        <p><strong>Scenario:</strong> {SCENARIOS[form.technology]}</p>
 
-        {form.technology === "solar_pv" && (
-          <label>
-            Installation postcode
-            <input
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              required
-              value={form.postcode}
-              onChange={(event) => updateForm((current) => ({
-                ...current,
-                postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
-              }))}
-            />
-            <small>The official zone and factor are derived automatically.</small>
-          </label>
-        )}
+        {form.technology !== "solar_battery"
+          && !registeredTechnology(form.technology)
+          && renderPostcode()}
 
         {registeredTechnology(form.technology) ? (
           <fieldset className={styles.officialProductPicker}>
-            <legend>Registered product</legend>
-            <label>
-              Product type or capacity
-              <select
-                required
-                disabled={lookupBusy || registry?.status !== "current"}
-                value={productCascade.category}
-                onChange={(event) => updateProductCascade({
-                  type: "category",
-                  value: event.target.value,
-                })}
-              >
-                <option value="">Choose a product type</option>
-                {productFacets.categories.map((facet) => (
-                  <option key={facet.value} value={facet.value}>
-                    {PRODUCT_CATEGORY_LABELS[facet.value] || facet.value}
-                    {` (${facet.recordCount.toLocaleString("en-AU")})`}
-                  </option>
-                ))}
-              </select>
-              <small>
-                {lookupBusy
-                  ? "Checking products eligible on the installation date..."
-                  : "Capacity categories come from the current CER registry snapshot."}
-              </small>
-            </label>
+            <legend>Approved product</legend>
+            {productFacets.categories.length > 1 && (
+              <label>
+                Product type
+                <select
+                  required
+                  disabled={lookupBusy || registry?.status !== "current"}
+                  value={productCascade.category}
+                  onChange={(event) => updateProductCascade({
+                    type: "category",
+                    value: event.target.value,
+                  })}
+                >
+                  <option value="">Choose product type</option>
+                  {productFacets.categories.map((facet) => (
+                    <option key={facet.value} value={facet.value}>
+                      {PRODUCT_CATEGORY_LABELS[facet.value] || facet.value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Brand
               <select
@@ -781,7 +695,7 @@ export function CreditexSresCalculator({
                 <option value="">Choose a brand</option>
                 {productFacets.brands.map((facet) => (
                   <option key={facet.value} value={facet.value}>
-                    {facet.value} ({facet.recordCount.toLocaleString("en-AU")})
+                    {facet.value}
                   </option>
                 ))}
               </select>
@@ -805,14 +719,14 @@ export function CreditexSresCalculator({
                 <option value="">Choose a model</option>
                 {productFacets.models.map((facet) => (
                   <option key={facet.value} value={facet.value}>
-                    {facet.value} ({facet.recordCount.toLocaleString("en-AU")})
+                    {facet.value}
                   </option>
                 ))}
               </select>
             </label>
             {productCascade.model && products.length > 1 && (
               <label>
-                Exact CER registration
+                Approval
                 <select
                   required
                   disabled={lookupBusy || registry?.status !== "current"}
@@ -822,26 +736,17 @@ export function CreditexSresCalculator({
                     value: event.target.value,
                   })}
                 >
-                  <option value="">Choose the exact registration</option>
+                  <option value="">Choose approval</option>
                   {products.map((product) => (
                     <option
                       key={product.sourceRecordKey}
                       value={product.sourceRecordKey}
                     >
-                      CER item {product.sourceItem} | eligible {product.eligibleFrom} to {product.eligibleTo}
+                      {product.brand} {product.model} | {product.sourceItem}
                     </option>
                   ))}
                 </select>
-                <small>
-                  This brand and model has more than one eligible CER record.
-                </small>
               </label>
-            )}
-            {productCascade.model && products.length === 1 && (
-              <small>
-                Exact CER registration: item {products[0].sourceItem}, eligible
-                {` ${products[0].eligibleFrom} to ${products[0].eligibleTo}`}.
-              </small>
             )}
             {productCascade.model && !lookupBusy && products.length === 0 && (
               <small>
@@ -852,17 +757,10 @@ export function CreditexSresCalculator({
         ) : form.technology === "solar_battery" ? (
           <>
             <label>
-              Claim scope
-              <select value="new_system" disabled>
-                <option value="new_system">New eligible battery system</option>
-              </select>
-            </label>
-            <label>
               Nominal capacity (kWh)
               <input
                 inputMode="decimal"
                 required
-                disabled
                 value={form.nominalCapacityKwh}
                 onChange={(event) => updateForm((current) => ({
                   ...current,
@@ -875,7 +773,6 @@ export function CreditexSresCalculator({
               <input
                 inputMode="decimal"
                 required
-                disabled
                 value={form.usableCapacityKwh}
                 onChange={(event) => updateForm((current) => ({
                   ...current,
@@ -886,73 +783,24 @@ export function CreditexSresCalculator({
           </>
         ) : form.technology === "small_wind"
             || form.technology === "small_hydro" ? (
-          <>
-            <label>
-              Rated capacity (kW)
-              <input
-                inputMode="decimal"
-                required
-                value={form.ratedCapacityKw}
-                onChange={(event) => updateForm((current) => ({
-                  ...current,
-                  ratedCapacityKw: event.target.value,
-                }))}
-              />
-            </label>
-            <label>
-              Resource availability
-              <select
-                value={form.resourceAvailability}
-                onChange={(event) => updateForm((current) => ({
-                  ...current,
-                  resourceAvailability: event.target.value as FormState["resourceAvailability"],
-                }))}
-              >
-                <option value="default">
-                  Government default | {form.technology === "small_wind" ? "2,000" : "4,000"} hours
-                </option>
-                <option value="site_assessed">Site-assessed hours | audit required</option>
-              </select>
-            </label>
-            {form.resourceAvailability === "site_assessed" && (
-              <label>
-                Assessed hours per year
-                <input
-                  inputMode="numeric"
-                  required
-                  value={form.resourceHoursPerYear}
-                  onChange={(event) => updateForm((current) => ({
-                    ...current,
-                    resourceHoursPerYear: event.target.value,
-                  }))}
-                />
-              </label>
-            )}
-            <label>
-              Certificate period
-              <select
-                value={form.deemingYears}
-                onChange={(event) => updateForm((current) => ({
-                  ...current,
-                  deemingYears: event.target.value,
-                }))}
-              >
-                <option value="1">1 year</option>
-                {maximumDeemingYears !== "1" && (
-                  <option value={maximumDeemingYears}>
-                    {maximumDeemingYears} years | maximum
-                  </option>
-                )}
-              </select>
-            </label>
-          </>
+          <label>
+            Rated capacity (kW)
+            <input
+              inputMode="decimal"
+              required
+              value={form.ratedCapacityKw}
+              onChange={(event) => updateForm((current) => ({
+                ...current,
+                ratedCapacityKw: event.target.value,
+              }))}
+            />
+          </label>
         ) : (
           <label>
             Rated capacity (kW)
             <input
               inputMode="decimal"
               required
-              disabled={Boolean(productBlocker)}
               value={form.ratedCapacityKw}
               onChange={(event) => updateForm((current) => ({
                 ...current,
@@ -961,47 +809,34 @@ export function CreditexSresCalculator({
             />
           </label>
         )}
-
-        {registeredTechnology(form.technology) && (
-          <label>
-            Installation postcode
-            <input
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              required
-              value={form.postcode}
-              onChange={(event) => updateForm((current) => ({
-                ...current,
-                postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
-              }))}
-            />
-            <small>The official zone and factor are derived automatically.</small>
-          </label>
-        )}
+        {registeredTechnology(form.technology) && renderPostcode()}
 
         <button
           type="submit"
-          disabled={
-            estimateBusy
-            || Boolean(productBlocker)
-            || (requiresCurrentRegistry(form.technology)
-              && (
-                registry?.status !== "current"
-                || (
-                  registeredTechnology(form.technology)
-                  && !productCascade.productKey
-                )
-              ))
-          }
+          disabled={estimateBusy}
         >
-          {estimateBusy
-            ? "Calculating..."
-            : productBlocker
-              ? "Official product evidence required"
-              : "Calculate estimate"}
+          {estimateBusy ? "Calculating..." : "Calculate rebate estimate"}
         </button>
       </form>
+
+      {role === "admin" && !productBlocker && (
+        <details>
+          <summary>Official data status</summary>
+          <p>
+            {registry?.status || "Checking"}
+            {registry?.lastCheckedAt
+              ? ` | checked ${dateTimeLabel(registry.lastCheckedAt)}`
+              : ""}
+          </p>
+          <button
+            type="button"
+            disabled={refreshBusy}
+            onClick={refreshRegistry}
+          >
+            {refreshBusy ? "Refreshing..." : "Refresh official products"}
+          </button>
+        </details>
+      )}
 
       {lookupError && <p className={styles.error} role="alert">{lookupError}</p>}
       {estimateError && <p className={styles.error} role="alert">{estimateError}</p>}
@@ -1018,10 +853,15 @@ export function CreditexSresCalculator({
             <div className={styles.estimateResolution}>
               <strong>
                 {estimate.resolution.brand && estimate.resolution.model
-                  ? `${estimate.resolution.brand} | ${estimate.resolution.model}`
+                  ? `${estimate.resolution.brand} ${estimate.resolution.model}`
                   : `Postcode ${estimate.resolution.postcode}`}
               </strong>
-              <span>
+            </div>
+          )}
+          <details>
+            <summary>Calculation details</summary>
+            {estimate.resolution && (
+              <p>
                 Zone {estimate.resolution.zone}
                 {estimate.resolution.zoneRating
                   ? ` | rating ${estimate.resolution.zoneRating}`
@@ -1029,29 +869,29 @@ export function CreditexSresCalculator({
                 {estimate.resolution.registeredTenYearStcs
                   ? ` | registered ${estimate.resolution.registeredTenYearStcs} ten-year STCs`
                   : ""}
-              </span>
-            </div>
-          )}
-          <ol>
-            {estimate.trace.map((step) => (
-              <li key={step.key}>
-                <div>
-                  <strong>{step.label}</strong>
-                  <span>{step.operation}</span>
-                </div>
-                <b>{step.output} {step.unit}</b>
-              </li>
-            ))}
-          </ol>
-          <p>{estimate.operatorMessage}</p>
-          <footer>
-            <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
-              Open official source
-            </a>
-            <code title={resolvedReceipt}>
-              Receipt {resolvedReceipt.slice(0, 22)}...
-            </code>
-          </footer>
+              </p>
+            )}
+            <ol>
+              {estimate.trace.map((step) => (
+                <li key={step.key}>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <span>{step.operation}</span>
+                  </div>
+                  <b>{step.output} {step.unit}</b>
+                </li>
+              ))}
+            </ol>
+            <p>{estimate.operatorMessage}</p>
+            <footer>
+              <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
+                Open official source
+              </a>
+              <code title={resolvedReceipt}>
+                Receipt {resolvedReceipt.slice(0, 22)}...
+              </code>
+            </footer>
+          </details>
         </section>
       )}
     </section>
