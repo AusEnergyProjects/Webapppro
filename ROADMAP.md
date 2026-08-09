@@ -1742,13 +1742,73 @@ daily schedule, certificate creation, certificate submission, certificate trade
 or settlement has occurred. NSW TESSA and administrator-accepted battery lists
 remain unavailable as supported machine feeds.
 
+## Validated candidate milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
+
+Status: validated candidate awaiting an exact application commit, GitHub source
+reconciliation, a Sites saved version, deployment and live QA. Current
+production remains Sites version 297 from
+`11f4721b678425a4294e95c631e0d37d3fab0ffd`.
+
+### Outcome
+
+Make the customer and trade paths materially easier to understand and make the
+estimate-only calculator useful without a login, while retaining exact product,
+effective-date and compliance boundaries.
+
+### Validated candidate scope
+
+- Add a public anonymous quote-only calculator that uses the governed estimate
+  contract without granting registry refresh, compliance or certificate access.
+- Lead the customer landing page with one obvious home-plan action, use a
+  one-question-at-a-time planner, plain household taxonomy and a direct TLink
+  login beside Account. The taxonomy separates hydronic heating, wood heating,
+  air conditioning and heat pumps and includes electric hot water with a gas
+  booster and two-phase electrical supply.
+- Make VEU Activity 15 weather-sealing scenarios explicit so doors, windows,
+  exhaust fans, wall vents, temporary and permanent chimney or flue sealing and
+  evaporative-cooler outlets are not hidden behind one ambiguous form.
+- Allow future installation dates inside each program and product's official
+  effective window.
+- Support 1 to 10 identical-model heat-pump or solar-water-heater units in one
+  estimate. Mixed-model multi-unit jobs remain forward work.
+- Support repeatable indoor-unit selection for VEU Part 6 multi-split and
+  variable-refrigerant-flow quotes and a packaged-system quote-only estimate.
+  Packaged-system compliance and other strict multi-product compliance bundles
+  remain blocked until their exact governed contract is complete.
+- Add the official TESSA D17 to D20 automatic registry. The live official source
+  used for candidate validation contained 746 rows, comprising 663 `Active` and
+  83 `Cancelled`, with source SHA-256
+  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+- Let a trade enter the customer discount once and apply that exact amount to
+  the next quote or invoice. Certificate counts are not converted to dollars
+  automatically because certificate prices and provider fees are not fixed by
+  the scheme formula.
+- Do not add a customer-shareable rebate receipt. The product owner rejected it
+  as unnecessary; the retained workflow ends at the practical quote or invoice
+  discount handoff.
+
+### Controlled limits before release
+
+- Sites does not contain `CREDITEX_CEC_BATTERY_API_USERNAME`,
+  `CREDITEX_CEC_BATTERY_API_PASSWORD` or
+  `CREDITEX_CEC_BATTERY_LICENCE_REFERENCE`.
+- BESS1 and BESS2 remain pending until those licensed platform credentials
+  create and activate an accepted snapshot.
+- BESS3 and BESS4 remain blocked because the current licensed CEC contract does
+  not supply the exact Rule-required maximum rated AC inverter output.
+- Repeated water-heater units must use one identical approved model, and
+  packaged-system calculations remain quote-only.
+- No candidate source, commit, Sites version, deployment or live result is
+  represented as released until exact provenance and runtime evidence are
+  recorded.
+
 ## Next five logical product steps
 
-1. **Public quote calculator surface using the same estimate-only contract without trade login.**
-2. **Activate licensed CEC battery data in production and live-QA PDRS BESS1-4 once platform credentials are installed.**
-3. **Add governed packaged-system and multi-indoor-unit bundle selection for VEU Part 6.**
-4. **Connect remaining lawful product authorities, including TESSA families, to unblock product-backed pathways.**
-5. **Add quote/invoice rebate lines and customer-shareable estimate receipts.**
+1. **Install licensed CEC platform credentials and activate/live-QA BESS1/2, then obtain exact AC inverter-output authority for BESS3/4.**
+2. **Support mixed-model multi-unit water-heater jobs and complete strict packaged/multi compliance bundles.**
+3. **Close remaining lawful product-authority and formula gaps across every surfaced calculator.**
+4. **Connect each home-plan recommendation to one preselected obvious next action (rebate estimate, plan comparison, assessment, or trade brief).**
+5. **Run representative mobile/customer/trade usability and accessibility acceptance, measure abandonment, and simplify any remaining friction.**
 
 ## Global stop conditions
 

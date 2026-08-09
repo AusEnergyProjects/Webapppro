@@ -20,11 +20,25 @@ export function GettingStarted() {
   return <main className="wrap start-page">
     <SiteHeader active="start" />
     <header className="start-hero start-hero-planner">
-      <div className="start-hero-copy"><span className="start-eyebrow">Independent home energy planning</span><h1>One clear plan for a more comfortable, lower-cost home</h1><p>Work out what to do first, compare the energy plans you already pay for, understand upgrade options and prepare a clear scope for licensed trades.</p><div className="start-actions"><a className="btn" href="/plan">Build my home energy plan</a><a className="btn ghost" href="#compare-energy-plans">Compare energy plans</a></div><aside aria-label="Home energy planning principles"><strong>Everything in one ordered journey</strong><ul><li>Private, no-account roadmap</li><li>Electricity and gas comparison</li><li>Comfort and electrification guides</li><li>Project-ready trade brief</li></ul></aside></div>
-      <div className="start-hero-visual" role="img" aria-label="Home energy platform showing solar, a battery, heating and hot water" />
+      <div className="start-hero-copy">
+        <span className="start-eyebrow">Independent home energy planning</span>
+        <h1>One clear plan for a more comfortable, lower-cost home</h1>
+        <p>Not sure what comes first? Start here. We will ask one simple question at a time, then give you an ordered plan before you need an account or speak to anyone.</p>
+        <div className="start-actions"><a className="btn start-primary-action" href="/plan">Build my home energy plan</a></div>
+        <p className="start-hero-secondary">Already know what you need? <a href="#compare-energy-plans">Compare an electricity or gas plan</a> or <a href="/calculator">estimate a rebate</a>. An <a href="/account">account is optional</a> and only needed when you want to save a project or ask verified trades.</p>
+        <aside aria-label="What the guided plan includes"><strong>About three minutes</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
+      </div>
+      <div className="start-hero-visual start-spatial-home" role="img" aria-label="A layered home energy plan connecting comfort, hot water, solar and energy use">
+        <span className="start-orbit start-orbit-one" aria-hidden="true" />
+        <span className="start-orbit start-orbit-two" aria-hidden="true" />
+        <div className="start-home-model" aria-hidden="true"><span className="start-home-roof" /><span className="start-home-body"><i>HOME</i></span><span className="start-home-base" /></div>
+        <span className="start-scene-card start-scene-card-comfort" aria-hidden="true"><b>01</b> Comfort first</span>
+        <span className="start-scene-card start-scene-card-energy" aria-hidden="true"><b>02</b> Energy use</span>
+        <span className="start-scene-card start-scene-card-upgrades" aria-hidden="true"><b>03</b> Smart sequence</span>
+      </div>
     </header>
 
-    <section className="home-entry" aria-labelledby="home-entry-title"><div className="start-heading"><span>Start where you are</span><h2 id="home-entry-title">What do you need today?</h2><p>You do not need to understand every technology before beginning.</p></div><div className="home-entry-grid"><article className="home-entry-featured"><span>Not sure what comes first</span><h3>Build an ordered home energy roadmap</h3><p>Choose your goal, property situation and existing equipment. Get a private sequence of comparisons, guides, assessments and project steps.</p><a href="/plan">Build my roadmap</a></article><article><span>I want a quick bill check</span><h3>Compare current energy offers</h3><p>Use household evidence to compare published electricity or mains gas plans with the material assumptions visible.</p><a href="#compare-energy-plans">Choose electricity or gas</a></article><article><span>I know the work needed</span><h3>Prepare a project brief</h3><p>Describe the location, services, priorities and timing for manual review before any suitable trade connection.</p><a href="/direct-trade">Start a project brief</a></article></div></section>
+    <section className="home-entry home-entry-guided" aria-labelledby="home-entry-title"><div className="start-heading"><span>Start where you are</span><h2 id="home-entry-title">What do you need today?</h2><p>If you are not certain, build the plan. It will tell you where comparison, upgrades, assessments or trade help fit.</p></div><div className="home-entry-explainers"><article><span>Recommended starting point</span><h3>Build the plan</h3><p>Choose this when you want guidance on the whole home or do not know what should come first.</p></article><article><span>Separate bill check</span><h3>Compare energy plans</h3><p>Choose comparison only when you specifically want to check the electricity or mains gas plan you pay for now.</p></article><article><span>Optional later step</span><h3>Save or ask trades</h3><p>Create an account after seeing your roadmap if you want to keep it or turn it into a private project brief.</p></article></div><a className="btn home-entry-primary" href="/plan">Start my guided home plan</a></section>
 
     <section className="start-section start-prepare" aria-labelledby="prepare-title"><div className="start-heading"><span>A simpler process</span><h2 id="prepare-title">From household evidence to a decision</h2></div><div className="start-step-grid">{preparation.map((item) => <article key={item.number}><span>{item.number}</span><div><h3>{item.title}</h3><p>{item.text}</p></div></article>)}</div></section>
 

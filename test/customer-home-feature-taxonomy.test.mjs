@@ -72,9 +72,25 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
     question("electrical-supply").options.map(([value]) => value),
     [
       "electrical-supply-single-phase",
+      "electrical-supply-two-phase",
       "electrical-supply-three-phase",
       "electrical-supply-unknown",
     ],
+  );
+  assert.ok(
+    question("heating-cooling-systems").options.some(
+      ([value, label]) => value === "hydronic-heating" && /hydronic heating/i.test(label),
+    ),
+  );
+  assert.ok(
+    question("heating-cooling-systems").options.some(
+      ([value, label]) => value === "wood-heating" && /wood fire/i.test(label),
+    ),
+  );
+  assert.ok(
+    question("hot-water").options.some(
+      ([value, label]) => value === "electric-gas-boosted-hot-water" && /gas booster/i.test(label),
+    ),
   );
   assert.deepEqual(
     question("exhaust-fans").options.map(([value]) => value),
@@ -621,7 +637,15 @@ test("evidence readiness is not an ordered roadmap action", () => {
 test("the public planner uses the accessible shared intake and bounded query handoff", () => {
   assert.match(publicPlanner, /HomeFeatureIntake/);
   assert.match(publicPlanner, /idPrefix="public-home-feature"/);
+  assert.match(publicPlanner, /questionId=\{currentStep\.featureQuestion\}/);
+  assert.match(publicPlanner, /plannerFeatureSteps = customerHomeFeatureSections\.flatMap/);
+  assert.match(publicPlanner, /featureQuestion: question\.id/);
+  assert.match(publicPlanner, /Question \$\{stepIndex \+ 1\} of \$\{questionCount\}/);
+  assert.match(publicPlanner, /Skip remaining home details/);
+  assert.match(publicPlanner, /Skip this question/);
   assert.match(sharedIntake, /<fieldset/);
+  assert.match(sharedIntake, /questionId\?: string/);
+  assert.match(sharedIntake, /!questionId \|\| question\.id === questionId/);
   assert.match(sharedIntake, /id=\{`\$\{idPrefix\}-\$\{question\.id\}`\}/);
   assert.match(sharedIntake, /<legend>\{question\.label\}<\/legend>/);
   assert.match(sharedIntake, /question\.mode === "single" \? "radio" : "checkbox"/);
@@ -632,14 +656,14 @@ test("the public planner uses the accessible shared intake and bounded query han
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-07-31-trade-enquiry-home-systems-v5");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-09-guided-home-systems-v6");
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
     "2026-07-31-advisor-profile-v5",
   );
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
-      "2026-07-30-roadmap-context-v4",
+      "2026-07-31-trade-enquiry-home-systems-v5",
     ),
     true,
   );

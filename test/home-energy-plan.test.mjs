@@ -130,3 +130,27 @@ test("storage is not recommended without existing solar evidence", () => {
   );
   assert.equal(withSolar.items.some((item) => item.id === "battery"), true);
 });
+
+test("common heating, boosted hot-water and two-phase answers stay distinct and self-reported", () => {
+  const plan = createCustomerProjectPlan({
+    goals: ["improve-comfort", "lower-bills"],
+    situation: "owner",
+    approvalContext: "none",
+    features: [
+      "reverse-cycle",
+      "heat-pump-space-heating",
+      "hydronic-heating",
+      "wood-heating",
+      "electric-gas-boosted-hot-water",
+      "electrical-supply-two-phase",
+    ],
+  });
+  assert.ok(plan.items.some((item) => item.id === "existing-reverse-cycle"));
+  assert.ok(plan.items.some((item) => item.id === "existing-heat-pump-space-heating"));
+  assert.ok(plan.items.some((item) => item.id === "existing-hydronic-heating"));
+  assert.ok(plan.items.some((item) => item.id === "existing-wood-heating"));
+  assert.match(plan.items.find((item) => item.id === "hot-water").title, /gas booster/i);
+  const supply = plan.items.find((item) => item.id === "electrical-supply-check");
+  assert.match(supply.title, /reported two-phase/i);
+  assert.match(supply.text, /has not been verified/i);
+});

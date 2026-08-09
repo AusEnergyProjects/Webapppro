@@ -136,6 +136,7 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 295 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd` | Exact Sites version 295 built from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`; content hash `sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`; deployment `appgdep_6a77b30bab008191bd61b6476525b4f2` |
 | Historical guided calculator and PDRS licensed-runtime source | `1d3abe172e4eb2fa006fab639233cda49a6d37d4` on `codex/sites-custom-domain-migration` | Exact validated source for the shared guided flow, server-side central CEC credential boundary, PDRS definitions and licensed snapshot runtime; deployed as Sites version 296 |
 | Historical Sites version 296 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134` | Exact Sites version 296 built from `1d3abe172e4eb2fa006fab639233cda49a6d37d4`; content hash `sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186`; deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment revision 19 |
+| Calculator usability and product-authority candidate | Exact application commit pending | Validated working-tree candidate for milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48`; not committed, saved, deployed or live |
 | Current simplified quote-calculator source | `11f4721b678425a4294e95c631e0d37d3fab0ffd` on `codex/sites-custom-domain-migration` | Exact source for the short estimate-only quote flow, future-date rule windows, frictionless SRES quote calculations and VEU single-split and multi-split quote calculations |
 | Current release archive identity | Removed locally after Sites accepted the package and recorded custody | 8,158,365 bytes; SHA-256 `FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563` |
 | Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df` | Exact Sites version 297 built from `11f4721b678425a4294e95c631e0d37d3fab0ffd`; 378 stored files; 33,105,920 stored bytes; content hash `sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5` |
@@ -156,7 +157,63 @@ Its active VEU snapshot contains 75,492 Public Visible rows and the signed-in
 administrator and verified-installer quote paths passed live QA. Certificate
 creation, submission, trading and settlement remain disabled.
 
-## Current simplified quote calculator, VEU registry and PDRS runtime release
+## Validated calculator usability and product-authority candidate
+
+Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is a validated working-tree
+candidate awaiting an exact application commit, GitHub source reconciliation, a
+Sites saved version, deployment and live QA. Current production remains Sites
+version 297 from `11f4721b678425a4294e95c631e0d37d3fab0ffd`. No candidate Sites
+version, deployment identity or live result is claimed.
+
+The candidate adds an anonymous quote-only `/calculator` route using the same
+governed estimate contract without granting registry refresh, compliance or
+certificate authority. The signed-out customer landing page has one dominant
+home-plan start, a one-question-at-a-time planner, plain household taxonomy and
+a direct TLink login beside Account. The planner separates hydronic heating,
+wood heating, air conditioning and heat pumps and includes electric hot water
+with a gas booster and two-phase electrical supply.
+
+Calculator usability and flexibility are bounded as follows:
+
+- Activity 15 exposes named weather-sealing scenarios for doors, windows,
+  exhaust fans, wall vents, temporary and permanent chimney or flue sealing and
+  evaporative-cooler outlets;
+- future installation dates remain selectable only inside the applicable
+  program and selected-product effective windows;
+- VEU and SRES heat-pump or solar-water-heater estimates accept 1 to 10 units of
+  one identical approved model, while mixed-model multi-unit jobs remain
+  unsupported;
+- VEU Part 6 accepts a repeatable indoor-unit list for multi-split and
+  variable-refrigerant-flow quote estimates and supports packaged-system
+  quote-only estimates; packaged-system compliance and other strict
+  multi-product compliance bundles remain blocked; and
+- a verified trade can enter one exact customer discount and apply it to the
+  next quote or invoice. Certificate counts are not automatically converted to
+  dollars because certificate prices and provider fees are not scheme formula
+  inputs.
+
+The candidate official TESSA D17 to D20 automatic registry retained exact
+source bytes and effective-dated product state. The live official source used
+for candidate validation contained 746 rows, comprising 663 `Active` and 83
+`Cancelled`, with source SHA-256
+`3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+
+No customer-shareable rebate receipt is included. The product owner rejected
+that artifact as unnecessary; the candidate stops at the practical quote or
+invoice discount handoff.
+
+The three required licensed CEC keys are absent from Sites:
+
+- `CREDITEX_CEC_BATTERY_API_USERNAME`;
+- `CREDITEX_CEC_BATTERY_API_PASSWORD`; and
+- `CREDITEX_CEC_BATTERY_LICENCE_REFERENCE`.
+
+BESS1 and BESS2 therefore remain pending credentials and an accepted activated
+snapshot. BESS3 and BESS4 remain blocked because the current licensed CEC
+contract does not supply the exact Rule-required maximum rated AC inverter
+output. These are source-authority limits, not user-role or licence locks.
+
+## Current deployed simplified quote calculator, VEU registry and PDRS runtime release
 
 The guarded registry foundation was released in exact application source
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete

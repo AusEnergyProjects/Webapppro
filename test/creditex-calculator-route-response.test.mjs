@@ -190,6 +190,34 @@ test("installer official-product responses redact every registry status and reta
   );
 });
 
+test("public quote registry responses use the same redacted projection as installers", () => {
+  const response = {
+    ok: true,
+    registry: {
+      registryCode: "veu-approved-products",
+      status: "current",
+      snapshotId: "snapshot-public",
+      sourceSha256: "c".repeat(64),
+      recordCount: 75_492,
+      lastAttempt: {
+        status: "failed",
+        message: "private operational diagnostic",
+      },
+      sourceManifest: [{ objectKey: "private/r2/key" }],
+    },
+    products: [{ id: "approved-product" }],
+  };
+  const projected = projectCreditexCalculatorReadResponse(
+    "public_quote",
+    response,
+  );
+  assert.deepEqual(projected.products, response.products);
+  assert.doesNotMatch(
+    JSON.stringify(projected),
+    /private operational diagnostic|private\/r2\/key/,
+  );
+});
+
 test("all calculator routes share safe descriptors and registry refresh remains admin-only", () => {
   for (const route of [
     programEstimateRoute,
@@ -206,7 +234,10 @@ test("all calculator routes share safe descriptors and registry refresh remains 
       route.indexOf("export async function POST"),
     );
     const postSource = route.slice(route.indexOf("export async function POST"));
-    assert.match(getSource, /requireCreditexCalculatorAccess\(request, database\)/);
+    assert.match(
+      getSource,
+      /requireCreditexCalculatorAccess\(request, database, \{\s*allowPublicQuote: true/,
+    );
     assert.match(getSource, /projectCreditexCalculatorReadResponse\(access\.accessType/);
     assert.match(postSource, /requireComplianceAccess\(request/);
     assert.match(postSource, /allowedRoles: \["admin"\]/);

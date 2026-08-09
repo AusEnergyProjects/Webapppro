@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { CreditexStcEstimate } from "./creditex-stc-estimator.ts";
 import {
   CreditexStcEstimateError,
@@ -13,6 +15,8 @@ export type CreditexSresQuoteEstimate = CreditexStcEstimate & {
   eligibilityWarning: string;
   resolution?: Record<string, unknown>;
   resolvedReceiptHash?: string;
+  unitQuantity?: string;
+  perUnitOutput?: CreditexStcEstimate["output"];
 };
 
 const QUOTE_WARNING =
@@ -37,6 +41,105 @@ function exactKeys(
       `Remove unsupported quote estimate field${unexpected.length === 1 ? "" : "s"}: ${unexpected.join(", ")}.`,
     );
   }
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+    .join(",")}}`;
+}
+
+function sha256(value: unknown) {
+  return `sha256:${createHash("sha256")
+    .update(canonicalJson(value), "utf8")
+    .digest("hex")}`;
+}
+
+function registeredUnitQuantity(value: unknown) {
+  if (value === undefined) return 1;
+  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+    requestError("Number of identical systems must be a whole number from 1 to 10.");
+  }
+  const quantity = Number(value);
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
+    requestError("Number of identical systems must be a whole number from 1 to 10.");
+  }
+  return quantity;
+}
+
+type ResolvedStcEstimate = CreditexStcEstimate & {
+  resolution?: Record<string, unknown>;
+  resolvedReceiptHash?: string;
+};
+
+export function creditexRepeatRegisteredWaterHeaterQuote(
+  estimate: ResolvedStcEstimate,
+  rawUnitQuantity: unknown,
+): ResolvedStcEstimate & {
+  unitQuantity: string;
+  perUnitOutput: CreditexStcEstimate["output"];
+} {
+  const quantity = registeredUnitQuantity(rawUnitQuantity);
+  const unitQuantity = String(quantity);
+  const perUnitQuantity = BigInt(estimate.output.quantity);
+  const totalQuantity = String(perUnitQuantity * BigInt(quantity));
+  const inputSnapshot = {
+    ...estimate.inputSnapshot,
+    unitQuantity,
+    repeatedIdenticalRegisteredProduct: String(quantity > 1),
+  };
+  const trace = [
+    ...estimate.trace,
+    {
+      key: "unit_quantity",
+      label: "Identical systems",
+      input: unitQuantity,
+      operation: "calculate the selected registered system once per installed unit",
+      output: unitQuantity,
+      unit: "systems",
+    },
+    {
+      key: "multi_unit_total",
+      label: "Total whole STCs",
+      input: `${estimate.output.quantity} STC per system`,
+      operation: `multiply the per-system whole STCs by ${unitQuantity} identical systems`,
+      output: totalQuantity,
+      unit: "STC",
+    },
+  ];
+  const output = { quantity: totalQuantity, unit: "STC" as const };
+  const resolution = {
+    ...(estimate.resolution || {}),
+    unitQuantity,
+    perUnitStcs: estimate.output.quantity,
+    totalStcs: totalQuantity,
+  };
+  const repetitionReceipt = {
+    contract: "creditex-sres-repeated-identical-water-heater-quote/v1",
+    perUnitReceiptHash: estimate.receiptHash,
+    perUnitResolvedReceiptHash: estimate.resolvedReceiptHash || "",
+    unitQuantity,
+    perUnitQuantity: estimate.output.quantity,
+    totalQuantity,
+  };
+  return {
+    ...estimate,
+    inputSnapshot,
+    trace,
+    output,
+    resolution,
+    unitQuantity,
+    perUnitOutput: estimate.output,
+    inputHash: sha256(inputSnapshot),
+    traceHash: sha256(trace),
+    outputHash: sha256(output),
+    receiptHash: sha256(repetitionReceipt),
+    resolvedReceiptHash: sha256({ repetitionReceipt, resolution }),
+  };
 }
 
 function quoteEstimate(
@@ -135,11 +238,21 @@ export async function estimateCreditexSresQuote(
       "installationDate",
       "postcode",
       "productKey",
+      "unitQuantity",
     ]);
     const registryRequest = Object.fromEntries(
-      Object.entries(requestValue).filter(([key]) => key !== "estimatePurpose"),
+      Object.entries(requestValue).filter(
+        ([key]) => key !== "estimatePurpose" && key !== "unitQuantity",
+      ),
     );
-    const estimate = await estimateCreditexStcsFromRegistry(db, registryRequest);
+    const perUnitEstimate = await estimateCreditexStcsFromRegistry(
+      db,
+      registryRequest,
+    );
+    const estimate = creditexRepeatRegisteredWaterHeaterQuote(
+      perUnitEstimate,
+      requestValue.unitQuantity,
+    );
     return {
       ...quoteEstimate(estimate, estimate.resolution),
       ...(estimate.resolvedReceiptHash

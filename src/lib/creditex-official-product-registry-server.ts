@@ -498,7 +498,10 @@ async function resolveEligibilityStarts(
   activatedOn: string,
   hasAcceptedSnapshot: boolean,
 ) {
-  const missing = records.filter((record) => !record.eligibleFrom);
+  const missing = records.filter((record) => (
+    !record.eligibleFrom
+    && approvalStatusIsEligible(registryCode, record.approvalStatus)
+  ));
   if (missing.length === 0) {
     return records;
   }
@@ -552,7 +555,12 @@ async function resolveEligibilityStarts(
   // retaining another full registry copy in the Worker isolate.
   return records.map((record): CreditexOfficialProductRecord => {
     const officialStart = record.eligibleFrom;
-    if (officialStart) return record;
+    if (
+      officialStart
+      || !approvalStatusIsEligible(registryCode, record.approvalStatus)
+    ) {
+      return record;
+    }
     const eligibleFrom = officialStart || carriedStarts.get(
       eligibilityIdentity(record.sourceKey, record.sourceRecordKey),
     ) || activatedOn;

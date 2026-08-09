@@ -24,9 +24,17 @@ import {
 } from "./CreditexOfficialProductPicker";
 import {
   CreditexGovernedProgramCalculator,
+  type CreditexGovernedEstimate,
   creditexQuoteEvidenceInput,
 } from "./CreditexGovernedProgramCalculator";
-import { CreditexSresCalculator } from "./CreditexSresCalculator";
+import {
+  CreditexSresCalculator,
+  type CreditexSresEstimateResult,
+} from "./CreditexSresCalculator";
+import {
+  TradeRebateEstimateAction,
+  type TradeRebateEstimateSummary,
+} from "./TradeRebateEstimateAction";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
 type Api = (
@@ -153,9 +161,11 @@ export function creditexAutomaticRegistryRefreshContract(programCode: string) {
 function CreditexLocalProgramCalculator({
   api,
   program,
+  onEstimate,
 }: {
   api: Api;
   program: CreditexLocalProgramDefinition;
+  onEstimate?: (estimate: LocalEstimate) => void;
 }) {
   const firstActivity = program.activities[0];
   const [activityCode, setActivityCode] = useState(firstActivity.activityCode);
@@ -225,7 +235,9 @@ function CreditexLocalProgramCalculator({
         }),
       });
       if (requestRef.current === requestVersion) {
-        setEstimate(result.estimate as LocalEstimate);
+        const nextEstimate = result.estimate as LocalEstimate;
+        setEstimate(nextEstimate);
+        onEstimate?.(nextEstimate);
       }
     } catch (caught) {
       if (requestRef.current === requestVersion) {
@@ -455,16 +467,21 @@ export function CreditexAllProgramCalculator({
   api,
   role,
   initialProgramCode = "SRES",
+  documentDraftOwnerUid = "",
 }: {
   api: Api;
-  role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade";
+  role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade" | "public";
   initialProgramCode?: string;
+  documentDraftOwnerUid?: string;
 }) {
   const [programCode, setProgramCode] = useState(initialProgramCode);
   const [registryRefreshVersion, setRegistryRefreshVersion] = useState(0);
   const [registryRefreshBusy, setRegistryRefreshBusy] = useState(false);
   const [registryRefreshNotice, setRegistryRefreshNotice] = useState("");
   const [registryRefreshError, setRegistryRefreshError] = useState("");
+  const [latestEstimate, setLatestEstimate] = useState<
+    TradeRebateEstimateSummary | null
+  >(null);
   const program = localProgram(programCode);
   const governedProgram = programCode === "VEU"
     || programCode === "NSW-PDRS-2026"
@@ -474,6 +491,41 @@ export function CreditexAllProgramCalculator({
   const registryRefreshContract = creditexAutomaticRegistryRefreshContract(
     programCode,
   );
+
+  function acceptSresEstimate(estimate: CreditexSresEstimateResult) {
+    setLatestEstimate({
+      programCode: "SRES",
+      activityCode: estimate.technology,
+      activityTitle: estimate.officialSourceTitle || "SRES upgrade",
+      quantity: estimate.output.quantity,
+      unit: estimate.output.unit,
+    });
+  }
+
+  function acceptGovernedEstimate(estimate: CreditexGovernedEstimate) {
+    const quantity = estimate.output.quantity
+      ?? estimate.output.wholeCertificates
+      ?? estimate.output.unroundedTonnes
+      ?? "";
+    if (!quantity) return;
+    setLatestEstimate({
+      programCode,
+      activityCode: estimate.activityCode,
+      activityTitle: estimate.activityTitle,
+      quantity,
+      unit: estimate.output.unit,
+    });
+  }
+
+  function acceptLocalEstimate(estimate: LocalEstimate) {
+    setLatestEstimate({
+      programCode: estimate.programCode,
+      activityCode: estimate.activityCode,
+      activityTitle: estimate.activityTitle,
+      quantity: estimate.output.quantity,
+      unit: estimate.output.unit,
+    });
+  }
 
   async function refreshAutomaticProductRegistry() {
     if (!registryRefreshContract) return;
@@ -527,6 +579,7 @@ export function CreditexAllProgramCalculator({
             disabled={registryRefreshBusy}
             onChange={(event) => {
               setProgramCode(event.target.value);
+              setLatestEstimate(null);
               setRegistryRefreshNotice("");
               setRegistryRefreshError("");
             }}
@@ -566,20 +619,33 @@ export function CreditexAllProgramCalculator({
         </details>
       )}
       {programCode === "SRES" ? (
-        <CreditexSresCalculator api={api} role={role} />
+        <CreditexSresCalculator
+          api={api}
+          role={role}
+          onEstimate={acceptSresEstimate}
+        />
       ) : governedProgram ? (
         <CreditexGovernedProgramCalculator
           key={`${governedProgram}:${registryRefreshVersion}`}
           api={api}
           programCode={governedProgram}
+          onEstimate={acceptGovernedEstimate}
         />
       ) : program ? (
         <CreditexLocalProgramCalculator
           key={`${program.programCode}:${registryRefreshVersion}`}
           api={api}
           program={program}
+          onEstimate={acceptLocalEstimate}
         />
       ) : null}
+      {role === "trade" && documentDraftOwnerUid && latestEstimate && (
+        <TradeRebateEstimateAction
+          key={`${latestEstimate.programCode}:${latestEstimate.activityCode}:${latestEstimate.quantity}:${latestEstimate.unit}`}
+          estimate={latestEstimate}
+          ownerUid={documentDraftOwnerUid}
+        />
+      )}
     </section>
   );
 }

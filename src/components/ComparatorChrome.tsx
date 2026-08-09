@@ -3,7 +3,6 @@
 import { ReactNode } from "react";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 
-
 export function BrandBar() {
   return (
     <a href="/" className="brandbar" aria-label="Australian Energy Assessments home">
@@ -16,12 +15,13 @@ export function BrandBar() {
   );
 }
 
-export type SiteActive = "start" | "plan" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies";
+export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
     { key: "start", href: "/", label: "Start" },
     { key: "plan", href: "/plan", label: "My energy plan" },
+    { key: "calculator", href: "/calculator", label: "Rebate calculator" },
     { key: "electricity", href: "/compare", label: "Electricity compare" },
     { key: "gas", href: "/gas-compare", label: "Gas compare" },
     { key: "certificates", href: "/guides/certificate-prices", label: "Certificates" },
@@ -51,7 +51,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
-  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">●</span> Account</a></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
+  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions"><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">●</span> Account</a><a className="site-tlink-link" href="/direct-trade/dashboard"><span aria-hidden="true">↗</span> TLink login</a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {

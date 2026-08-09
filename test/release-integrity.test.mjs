@@ -490,8 +490,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /`9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`[\s\S]{0,500}Sites version 282/i);
   assert.match(roadmap, /## Released milestone: TRADE-DOCUMENT-CONTROLS-AND-JOBS-45/);
   assert.match(roadmap, /`bfd472359dd8ec2457379bc3694dc3c9503ac7dd`[\s\S]{0,500}Sites version 283/i);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `CREDITEX-NATIONAL-CALCULATOR-47` released and live/);
-  assert.match(handover, /Milestone ID: `CREDITEX-NATIONAL-CALCULATOR-47`/);
+  assert.match(roadmap, /## Validated candidate milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48/);
+  assert.match(roadmap, /validated candidate awaiting an exact application commit[\s\S]{0,250}Current\s+production remains Sites version 297/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `AEA-CALCULATOR-USABILITY-AUTHORITY-48` validated candidate awaiting commit and deployment/);
+  assert.match(handover, /Milestone ID: `AEA-CALCULATOR-USABILITY-AUTHORITY-48`/);
+  assert.match(handover, /Candidate application source: pending exact commit identity/);
+  assert.match(handover, /## Current validated candidate: AEA-CALCULATOR-USABILITY-AUTHORITY-48/);
   assert.match(handover, /Previous production application source: `1d3abe172e4eb2fa006fab639233cda49a6d37d4`/);
   assert.match(handover, /Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`/);
   assert.match(handover, /Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`/);
@@ -508,11 +512,24 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7/);
   assert.match(handover, /1,494 main tests with 1,492\s+passed, 2 intentionally skipped and 0 failed/);
   assert.match(handover, /all 124 migrations/);
+  assert.match(releaseTruth, /## Validated calculator usability and product-authority candidate/);
+  assert.match(releaseTruth, /No candidate Sites\s+version, deployment identity or live result is claimed/);
+  assert.match(releaseTruth, /anonymous quote-only `\/calculator` route/);
+  assert.match(releaseTruth, /1 to 10 units of\s+one identical approved model/);
+  assert.match(releaseTruth, /packaged-system\s+quote-only estimates[\s\S]{0,120}compliance[\s\S]{0,120}remain blocked/);
+  assert.match(releaseTruth, /746 rows, comprising 663 `Active` and 83\s+`Cancelled`/);
+  assert.match(releaseTruth, /3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0/);
+  assert.match(releaseTruth, /No customer-shareable rebate receipt is included/);
+  assert.match(releaseTruth, /CREDITEX_CEC_BATTERY_API_USERNAME/);
+  assert.match(releaseTruth, /BESS3 and BESS4 remain blocked[\s\S]{0,180}maximum rated AC inverter\s+output/);
   assert.match(sourceRegister, /current Sites version 297/);
   assert.match(sourceRegister, /11f4721b678425a4294e95c631e0d37d3fab0ffd/);
   assert.match(sourceRegister, /SRES accepts dates through 2030/);
-  assert.match(sourceRegister, /packaged Part 6 systems remain unavailable/);
-  assert.match(sourceRegister, /TESSA-backed families, remain\s+unavailable/);
+  assert.match(sourceRegister, /anonymous\s+quote-only calculator/);
+  assert.match(sourceRegister, /1 to\s+10 identical-model heat-pump or solar-water-heater units/);
+  assert.match(sourceRegister, /packaged-system quote-only\s+estimates[\s\S]{0,160}compliance bundles remain\s+blocked/);
+  assert.match(sourceRegister, /candidate official TESSA D17 to D20 automatic registry/);
+  assert.match(sourceRegister, /746 live\s+source rows, comprising 663 `Active` and 83 `Cancelled`/);
   assert.match(handover, /Status: `TRADE-BUSINESS-IDENTITY-QUOTE-DELIVERY-43` released and historical/);
   assert.match(handover, /Status: `TRADE-MULTI-ACTIVITY-USABILITY-42` released and historical/);
   assert.match(handover, /Milestone ID: `TRADE-MULTI-ACTIVITY-USABILITY-42`/);
@@ -666,11 +683,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(roadmapStepNumbers, [1, 2, 3, 4, 5]);
   assert.deepEqual(handoverStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Public quote calculator surface using the same estimate-only contract without trade login\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Activate licensed CEC battery data in production and live-QA PDRS BESS1-4 once platform credentials are installed\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Add governed packaged-system and multi-indoor-unit bundle selection for VEU Part 6\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Connect remaining lawful product authorities, including TESSA families, to unblock product-backed pathways\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Add quote\/invoice rebate lines and customer-shareable estimate receipts\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Install licensed CEC platform credentials and activate\/live-QA BESS1\/2, then obtain exact AC inverter-output authority for BESS3\/4\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Support mixed-model multi-unit water-heater jobs and complete strict packaged\/multi compliance bundles\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Close remaining lawful product-authority and formula gaps across every surfaced calculator\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Connect each home-plan recommendation to one preselected obvious next action \(rebate estimate, plan comparison, assessment, or trade brief\)\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Run representative mobile\/customer\/trade usability and accessibility acceptance, measure abandonment, and simplify any remaining friction\.\*\*/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

@@ -48,7 +48,7 @@ type ApprovedProduct = CreditexOfficialProductOption & {
   sourceSha256: string;
 };
 
-type GovernedEstimate = {
+export type CreditexGovernedEstimate = {
   programCode?: string;
   jurisdiction?: string;
   activityCode: string;
@@ -77,6 +77,12 @@ type GovernedEstimate = {
     wholeCertificates?: string | null;
     unroundedTonnes?: string;
     roundingStatus?: string;
+    unitQuantity?: string;
+    perUnit?: {
+      unroundedTonnes: string;
+      wholeCertificates: string | null;
+      unit: "VEEC";
+    };
   };
   productRegistryRequirements?: readonly string[];
   approvedProducts?: ApprovedProduct[];
@@ -113,6 +119,53 @@ function stringInputs(inputs: Record<string, unknown>) {
   ]));
 }
 
+export type CreditexPart6IndoorUnit = {
+  id: string;
+  label: string;
+  model: string;
+  quantity: string;
+  heatingCapacityKw: string;
+  coolingCapacityKw: string;
+};
+
+const INITIAL_PART_6_INDOOR_UNITS: CreditexPart6IndoorUnit[] = [{
+  id: "indoor-unit-1",
+  label: "",
+  model: "",
+  quantity: "1",
+  heatingCapacityKw: "3.5",
+  coolingCapacityKw: "3.5",
+}];
+
+export function creditexPart6IndoorCapacityTotals(
+  units: readonly CreditexPart6IndoorUnit[],
+) {
+  let quantity = 0;
+  let heatingCapacityKw = 0;
+  let coolingCapacityKw = 0;
+  let complete = units.length > 0;
+  for (const unit of units) {
+    const rowQuantity = Number(unit.quantity);
+    const heating = Number(unit.heatingCapacityKw);
+    const cooling = Number(unit.coolingCapacityKw);
+    if (
+      !Number.isInteger(rowQuantity)
+      || rowQuantity < 1
+      || !Number.isFinite(heating)
+      || heating <= 0
+      || !Number.isFinite(cooling)
+      || cooling <= 0
+    ) {
+      complete = false;
+      continue;
+    }
+    quantity += rowQuantity;
+    heatingCapacityKw += rowQuantity * heating;
+    coolingCapacityKw += rowQuantity * cooling;
+  }
+  return { complete, quantity, heatingCapacityKw, coolingCapacityKw };
+}
+
 const CREDITEX_QUOTE_EVIDENCE_KEYS = /(?:^nsw_site_confirmed$|^payment_exemption$|all_non_formula|_confirmed$|_evidence(?:_|$)|fact_sheet|suitability|warranty|co_payment|decommission|disposal|eligibility_requirements|removal_requirements|as_nzs_2712_status)/;
 
 export function creditexQuoteEvidenceInput(key: string) {
@@ -123,20 +176,20 @@ function creditexQuoteContextInput(key: string) {
   return /(?:postcode|premises|sector|distribution_network)/.test(key);
 }
 
-function outputQuantity(estimate: GovernedEstimate) {
+function outputQuantity(estimate: CreditexGovernedEstimate) {
   if (estimate.output.quantity !== undefined) return estimate.output.quantity;
   return estimate.output.wholeCertificates ?? estimate.output.unroundedTonnes ?? "";
 }
 
 function traceOutput(
-  output: GovernedEstimate["trace"][number]["output"],
+  output: CreditexGovernedEstimate["trace"][number]["output"],
   fallbackUnit = "",
 ) {
   if (typeof output === "string") return `${output} ${fallbackUnit}`.trim();
   return `${output.decimal} ${output.unit}`.trim();
 }
 
-function GovernedResult({ estimate }: { estimate: GovernedEstimate }) {
+function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
   return (
     <section className={styles.estimateResult} aria-live="polite">
       <header>
@@ -155,6 +208,12 @@ function GovernedResult({ estimate }: { estimate: GovernedEstimate }) {
                 .join(" ")}
             </strong>
           ))}
+          {estimate.output.unitQuantity && estimate.output.perUnit && (
+            <span>
+              {estimate.output.perUnit.wholeCertificates
+                ?? estimate.output.perUnit.unroundedTonnes} VEEC per system x {estimate.output.unitQuantity} systems
+            </span>
+          )}
         </div>
       )}
       <details>
@@ -192,9 +251,11 @@ function GovernedResult({ estimate }: { estimate: GovernedEstimate }) {
 function CreditexNswCalculator({
   api,
   program,
+  onEstimate,
 }: {
   api: Api;
   program: CreditexNswProgramDefinition;
+  onEstimate?: (estimate: CreditexGovernedEstimate) => void;
 }) {
   const firstActivity = program.activities[0];
   const [activityCode, setActivityCode] = useState<string>(firstActivity.activityCode);
@@ -211,7 +272,7 @@ function CreditexNswCalculator({
   const [selectedProductEligibleFrom, setSelectedProductEligibleFrom] =
     useState<Record<string, string>>({});
   const [productEvidenceError, setProductEvidenceError] = useState("");
-  const [estimate, setEstimate] = useState<GovernedEstimate | null>(null);
+  const [estimate, setEstimate] = useState<CreditexGovernedEstimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const requestRef = useRef(0);
@@ -279,7 +340,9 @@ function CreditexNswCalculator({
         }),
       });
       if (requestRef.current === requestVersion) {
-        setEstimate(result.estimate as GovernedEstimate);
+        const nextEstimate = result.estimate as CreditexGovernedEstimate;
+        setEstimate(nextEstimate);
+        onEstimate?.(nextEstimate);
       }
     } catch (caught) {
       if (requestRef.current === requestVersion) {
@@ -491,9 +554,42 @@ export function creditexVeuQuoteInputVisible(
   inputs: Record<string, string>,
 ) {
   if (!veuVisibleInput(definition, inputs)) return false;
+  if (
+    inputs.configuration === "multi"
+    && (
+      definition.key === "rated_heating_capacity_kw"
+      || definition.key === "rated_cooling_capacity_kw"
+    )
+  ) {
+    return false;
+  }
   if (definition.source === "operator") return true;
   return definition.quoteSource === "operator"
     && inputs.configuration === "multi";
+}
+
+function creditexVeuQuoteInputLabel(
+  activityCode: string,
+  definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
+  scenario: string,
+) {
+  if (definition.key === "scenario") {
+    return activityCode === "15"
+      ? "What are you sealing?"
+      : "Installation scenario";
+  }
+  if (activityCode !== "15") return definition.label;
+  if (definition.key === "area_m2") return "Total window area being sealed (m2)";
+  if (definition.key !== "installation_count") return definition.label;
+  return ({
+    "15A": "Number of external doors",
+    "15C": "Number of self-closing sealed exhaust fans",
+    "15D": "Number of existing exhaust fans fitted with a damper or seal",
+    "15E": "Number of external wall vents",
+    "15F": "Number of permanent chimney or flue seals",
+    "15G": "Number of temporary or seasonal chimney or flue seals",
+    "15H": "Number of evaporative-cooling ceiling outlets",
+  } as Readonly<Record<string, string>>)[scenario] || "Number installed";
 }
 
 function veuNeedsPostcode(activity: CreditexVeuActivityDefinition) {
@@ -758,7 +854,13 @@ function resetVeuApprovedProductInputs(
   return next;
 }
 
-function CreditexVeuCalculator({ api }: { api: Api }) {
+function CreditexVeuCalculator({
+  api,
+  onEstimate,
+}: {
+  api: Api;
+  onEstimate?: (estimate: CreditexGovernedEstimate) => void;
+}) {
   const firstActivity = CREDITEX_VEU_ACTIVITY_DEFINITIONS[0];
   const [activityCode, setActivityCode] = useState<string>(firstActivity.activityCode);
   const [date, setDate] = useState(todayIso());
@@ -767,6 +869,10 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   const [inputs, setInputs] = useState<Record<string, string>>(
     () => veuDefaults(firstActivity),
   );
+  const [part6IndoorUnits, setPart6IndoorUnits] = useState<
+    CreditexPart6IndoorUnit[]
+  >(INITIAL_PART_6_INDOOR_UNITS);
+  const part6IndoorUnitIdRef = useRef(1);
   const [productUiState, dispatchProductUi] = useReducer(
     creditexVeuProductUiReducer,
     undefined,
@@ -778,7 +884,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   const productIdentityGenerationRef = useRef(0);
   const productRegistryIssue = productUiState.registryIssue;
   const productEvidenceError = productUiState.evidenceError;
-  const [estimate, setEstimate] = useState<GovernedEstimate | null>(null);
+  const [estimate, setEstimate] = useState<CreditexGovernedEstimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [productPickerRevision, setProductPickerRevision] = useState(0);
@@ -818,12 +924,16 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   ))
     ? inputs.scenario
     : "";
-  const productContractScenario = ["27", "34", "35", "48"].includes(
+  const productContractScenario = ["15", "27", "34", "35", "48"].includes(
     activity.activityCode,
   )
     ? operatorScenario
     : "";
   const postcodeRequired = veuNeedsPostcode(activity);
+  const part6IndoorTotals = useMemo(
+    () => creditexPart6IndoorCapacityTotals(part6IndoorUnits),
+    [part6IndoorUnits],
+  );
 
   const invalidate = useCallback(() => {
     requestRef.current += 1;
@@ -913,11 +1023,22 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     setError("");
     setEstimate(null);
     try {
-      const visibleInputs = Object.fromEntries(
+      const visibleInputs: Record<string, unknown> = Object.fromEntries(
         activity.inputDefinitions
           .filter((definition) => veuVisibleInput(definition, inputs))
           .map((definition) => [definition.key, inputs[definition.key]]),
       );
+      if (activity.activityCode === "6" && inputs.configuration === "multi") {
+        delete visibleInputs.rated_heating_capacity_kw;
+        delete visibleInputs.rated_cooling_capacity_kw;
+        visibleInputs.indoor_units = part6IndoorUnits.map((unit) => ({
+          label: unit.label,
+          model: unit.model,
+          quantity: unit.quantity,
+          heatingCapacityKw: unit.heatingCapacityKw,
+          coolingCapacityKw: unit.coolingCapacityKw,
+        }));
+      }
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
         body: JSON.stringify({
@@ -933,7 +1054,9 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         }),
       });
       if (requestRef.current === requestVersion) {
-        setEstimate(result.estimate as GovernedEstimate);
+        const nextEstimate = result.estimate as CreditexGovernedEstimate;
+        setEstimate(nextEstimate);
+        onEstimate?.(nextEstimate);
       }
     } catch (caught) {
       if (requestRef.current === requestVersion) {
@@ -946,15 +1069,54 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     }
   }
 
+  function updatePart6IndoorUnit(
+    id: string,
+    key: Exclude<keyof CreditexPart6IndoorUnit, "id">,
+    value: string,
+  ) {
+    invalidate();
+    setPart6IndoorUnits((current) => current.map((unit) => (
+      unit.id === id ? { ...unit, [key]: value } : unit
+    )));
+  }
+
+  function addPart6IndoorUnit() {
+    invalidate();
+    part6IndoorUnitIdRef.current += 1;
+    const id = `indoor-unit-${part6IndoorUnitIdRef.current}`;
+    setPart6IndoorUnits((current) => current.length >= 20
+      ? current
+      : [
+          ...current,
+          {
+            id,
+            label: "",
+            model: "",
+            quantity: "1",
+            heatingCapacityKw: "3.5",
+            coolingCapacityKw: "3.5",
+          },
+        ]);
+  }
+
+  function removePart6IndoorUnit(id: string) {
+    invalidate();
+    setPart6IndoorUnits((current) => current.length <= 1
+      ? current
+      : current.filter((unit) => unit.id !== id));
+  }
+
   function renderVeuInput(
     definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
   ) {
     if (!creditexVeuQuoteInputVisible(definition, inputs)) return null;
     return (
       <label key={definition.key}>
-        {definition.key === "scenario"
-          ? "Installation scenario"
-          : definition.label}
+        {creditexVeuQuoteInputLabel(
+          activity.activityCode,
+          definition,
+          inputs.scenario,
+        )}
         {definition.type === "select" ? (
           <select
             required={definition.required}
@@ -963,7 +1125,9 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
               invalidate();
               if (
                 definition.key === "scenario"
-                && ["27", "34", "35", "48"].includes(activity.activityCode)
+                && ["15", "27", "34", "35", "48"].includes(
+                  activity.activityCode,
+                )
               ) {
                 productIdentityGenerationRef.current += 1;
                 selectedProductsRef.current = {};
@@ -1013,6 +1177,9 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         ) : (
           <input
             inputMode="decimal"
+            min={definition.min}
+            max={definition.max}
+            step={definition.step}
             required={definition.required}
             value={inputs[definition.key] || ""}
             onChange={(event) => {
@@ -1072,6 +1239,10 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
               if (!next) return;
               invalidate();
               setActivityCode(next.activityCode);
+              if (next.activityCode === "6") {
+                part6IndoorUnitIdRef.current = 1;
+                setPart6IndoorUnits(INITIAL_PART_6_INDOOR_UNITS);
+              }
               try {
                 setInputs(applyVeuPostcode(next, veuDefaults(next), postcode, date));
                 setPostcodeError("");
@@ -1192,6 +1363,107 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             }}
           />
         ))}
+        {activity.activityCode === "6" && inputs.configuration === "multi" && (
+          <fieldset className={styles.officialProductPicker}>
+            <legend>Connected indoor units</legend>
+            <p>
+              Add each indoor-unit type once, then enter how many are connected.
+              The calculator totals their heating and cooling capacity and applies
+              the approved outdoor-unit and formula caps automatically.
+            </p>
+            {part6IndoorUnits.map((unit, index) => (
+              <fieldset key={unit.id}>
+                <legend>Indoor unit {index + 1}</legend>
+                <label>
+                  Room or label (optional)
+                  <input
+                    maxLength={80}
+                    value={unit.label}
+                    onChange={(event) => updatePart6IndoorUnit(
+                      unit.id,
+                      "label",
+                      event.target.value,
+                    )}
+                  />
+                </label>
+                <label>
+                  Indoor model (optional)
+                  <input
+                    maxLength={80}
+                    value={unit.model}
+                    onChange={(event) => updatePart6IndoorUnit(
+                      unit.id,
+                      "model",
+                      event.target.value,
+                    )}
+                  />
+                </label>
+                <label>
+                  Quantity
+                  <input
+                    inputMode="numeric"
+                    pattern="[0-9]+"
+                    min="1"
+                    max="20"
+                    required
+                    value={unit.quantity}
+                    onChange={(event) => updatePart6IndoorUnit(
+                      unit.id,
+                      "quantity",
+                      event.target.value.replace(/\D/g, "").slice(0, 2),
+                    )}
+                  />
+                </label>
+                <label>
+                  Heating capacity each (kW)
+                  <input
+                    inputMode="decimal"
+                    required
+                    value={unit.heatingCapacityKw}
+                    onChange={(event) => updatePart6IndoorUnit(
+                      unit.id,
+                      "heatingCapacityKw",
+                      event.target.value,
+                    )}
+                  />
+                </label>
+                <label>
+                  Cooling capacity each (kW)
+                  <input
+                    inputMode="decimal"
+                    required
+                    value={unit.coolingCapacityKw}
+                    onChange={(event) => updatePart6IndoorUnit(
+                      unit.id,
+                      "coolingCapacityKw",
+                      event.target.value,
+                    )}
+                  />
+                </label>
+                {part6IndoorUnits.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removePart6IndoorUnit(unit.id)}
+                  >
+                    Remove indoor unit
+                  </button>
+                )}
+              </fieldset>
+            ))}
+            <button
+              type="button"
+              disabled={part6IndoorUnits.length >= 20}
+              onClick={addPart6IndoorUnit}
+            >
+              Add another indoor unit
+            </button>
+            <p aria-live="polite">
+              {part6IndoorTotals.complete
+                ? `Connected total: ${part6IndoorTotals.quantity} units, ${part6IndoorTotals.heatingCapacityKw.toLocaleString("en-AU", { maximumFractionDigits: 3 })} kW heating and ${part6IndoorTotals.coolingCapacityKw.toLocaleString("en-AU", { maximumFractionDigits: 3 })} kW cooling.`
+                : "Complete every quantity, heating and cooling field to calculate the connected total."}
+            </p>
+          </fieldset>
+        )}
         {postcodeRequired && (
           <label>
             Postcode
@@ -1271,11 +1543,21 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
 export function CreditexGovernedProgramCalculator({
   api,
   programCode,
+  onEstimate,
 }: {
   api: Api;
   programCode: "VEU" | "NSW-PDRS-2026" | "NSW-ESS-2026";
+  onEstimate?: (estimate: CreditexGovernedEstimate) => void;
 }) {
-  if (programCode === "VEU") return <CreditexVeuCalculator api={api} />;
+  if (programCode === "VEU") {
+    return <CreditexVeuCalculator api={api} onEstimate={onEstimate} />;
+  }
   const program = nswProgram(programCode);
-  return program ? <CreditexNswCalculator api={api} program={program} /> : null;
+  return program ? (
+    <CreditexNswCalculator
+      api={api}
+      program={program}
+      onEstimate={onEstimate}
+    />
+  ) : null;
 }

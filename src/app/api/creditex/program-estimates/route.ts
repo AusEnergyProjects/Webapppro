@@ -692,12 +692,15 @@ export async function POST(request: Request) {
 
   try {
     const database = getD1();
-    await requireCreditexCalculatorAccess(request, database);
     const body = await readBoundedJsonRequest(
       request,
       MAXIMUM_CREDITEX_JSON_BYTES,
     );
     const raw = requestRecord(body);
+    const accessPurpose = requestEstimatePurpose(raw);
+    await requireCreditexCalculatorAccess(request, database, {
+      allowPublicQuote: accessPurpose === "quote",
+    });
     const programCode = typeof raw.programCode === "string"
       ? raw.programCode
       : "";

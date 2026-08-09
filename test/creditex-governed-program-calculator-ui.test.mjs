@@ -271,6 +271,8 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
       html,
       /<input type="date" min="2026-06-30" required="" value="[^"]+"/,
     );
+    assert.match(html, /Number of identical systems/);
+    assert.match(html, /max="10"/);
     assert.doesNotMatch(html, /type="date"[^>]*max=/);
     assert.match(html, /<button type="submit">Calculate rebate estimate<\/button>/);
     assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
@@ -420,7 +422,7 @@ test("quote requests allow future installation dates without exposing evidence c
       indoorHeating,
       { configuration: "multi" },
     ),
-    true,
+    false,
   );
   assert.equal(
     governedModule.creditexVeuQuoteInputVisible(
@@ -438,6 +440,113 @@ test("quote requests allow future installation dates without exposing evidence c
   assert.doesNotMatch(allProgramSource, /program\.effectiveTo \|\| todayIso\(\)/);
   assert.match(allProgramSource, /estimatePurpose: "quote"/);
   assert.match(allProgramSource, /effectiveDate: date/);
+});
+
+test("weather sealing starts with an exact plain-English job type", () => {
+  const activity = veuCatalogueModule.CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
+    (candidate) => candidate.activityCode === "15",
+  );
+  const scenario = activity.inputDefinitions.find(
+    (definition) => definition.key === "scenario",
+  );
+  assert.equal(scenario.source, "operator");
+  assert.equal(scenario.label, "What are you sealing?");
+  assert.deepEqual(
+    scenario.options.map((option) => option.value),
+    ["15A", "15B", "15C", "15D", "15E", "15F", "15G", "15H"],
+  );
+  for (const expected of [
+    /external door/i,
+    /external window/i,
+    /self-closing sealed fan/i,
+    /damper or seal/i,
+    /external wall vent/i,
+    /permanent chimney/i,
+    /temporary or seasonal chimney/i,
+    /evaporative-cooling ceiling outlet/i,
+  ]) {
+    assert.ok(scenario.options.some(({ label }) => expected.test(label)));
+  }
+
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
+    "utf8",
+  );
+  assert.match(source, /\["15", "27", "34", "35", "48"\]/);
+  assert.match(source, /productContractScenario/);
+  assert.match(source, /Number of external doors/);
+  assert.match(source, /Number of permanent chimney or flue seals/);
+  assert.match(source, /Number of temporary or seasonal chimney or flue seals/);
+
+  const selectedDoorSeal = veuProduct({
+    id: "official:15:door-seal",
+    productKind: "veu_weather_sealing",
+    registrationNumber: "VEU-15A-1",
+    attributes: { veuProductCategoryNumber: "15A" },
+  });
+  const exactScenario = governedModule.creditexVeuProductEvidenceState(
+    "15",
+    "2026-08-09",
+    { veu_weather_sealing: selectedDoorSeal },
+    "",
+    "15A",
+  );
+  assert.equal(exactScenario.blocked, false);
+  const wrongScenario = governedModule.creditexVeuProductEvidenceState(
+    "15",
+    "2026-08-09",
+    { veu_weather_sealing: selectedDoorSeal },
+    "",
+    "15B",
+  );
+  assert.equal(wrongScenario.blocked, true);
+  assert.match(wrongScenario.issue, /does not match activity 15/);
+});
+
+test("Part 6 indoor-unit rows derive transparent connected totals", () => {
+  const totals = governedModule.creditexPart6IndoorCapacityTotals([
+    {
+      id: "one",
+      label: "Living",
+      model: "INDOOR-35",
+      quantity: "2",
+      heatingCapacityKw: "3.5",
+      coolingCapacityKw: "3",
+    },
+    {
+      id: "two",
+      label: "Bedroom",
+      model: "",
+      quantity: "1",
+      heatingCapacityKw: "2.5",
+      coolingCapacityKw: "2.5",
+    },
+  ]);
+  assert.deepEqual(totals, {
+    complete: true,
+    quantity: 3,
+    heatingCapacityKw: 9.5,
+    coolingCapacityKw: 8.5,
+  });
+  assert.equal(governedModule.creditexPart6IndoorCapacityTotals([
+    {
+      id: "invalid",
+      label: "",
+      model: "",
+      quantity: "",
+      heatingCapacityKw: "3.5",
+      coolingCapacityKw: "3.5",
+    },
+  ]).complete, false);
+
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
+    "utf8",
+  );
+  assert.match(source, /Connected indoor units/);
+  assert.match(source, /Add another indoor unit/);
+  assert.match(source, /visibleInputs\.indoor_units/);
+  assert.doesNotMatch(source, /Indoor unit evidence confirmed/);
 });
 
 test("VEU Part 6 preserves governed codes behind plain-English scenario labels", () => {

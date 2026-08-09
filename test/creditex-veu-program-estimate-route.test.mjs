@@ -14,7 +14,10 @@ import * as veuEstimator from "../src/lib/creditex-veu-calculator-estimator.ts";
 
 const ROUTE_PATH = "../src/app/api/creditex/program-estimates/route.ts";
 
-function loadRoute(validateOfficialProductSelections) {
+function loadRoute(
+  validateOfficialProductSelections,
+  observeCalculatorAccess = () => undefined,
+) {
   const source = fs.readFileSync(new URL(ROUTE_PATH, import.meta.url), "utf8");
   const output = ts.transpileModule(source, {
     compilerOptions: {
@@ -36,7 +39,10 @@ function loadRoute(validateOfficialProductSelections) {
     "../../../../../db": { getD1: () => ({}) },
     "@/lib/creditex-calculator-access-server": {
       CreditexCalculatorAccessError: TypedError,
-      requireCreditexCalculatorAccess: async () => ({ accessType: "installer" }),
+      requireCreditexCalculatorAccess: async (...args) => {
+        observeCalculatorAccess(args[2]);
+        return { accessType: "installer" };
+      },
     },
     "@/lib/creditex-calculator-route-response": {
       describeCreditexCalculatorRouteError: () => null,
@@ -161,7 +167,9 @@ function airConditionerSelection(configurationClass = "single") {
       veuProductCategoryNumber: "6D",
       veuProductConfiguration: configurationClass === "multi"
         ? "Multiple split - variable refrigerant flow"
-        : "Single split system",
+        : configurationClass === "packaged"
+          ? "Packaged air conditioner"
+          : "Single split system",
       veuProductConfigurationClass: configurationClass,
       ratedHeatingCapacityKw: 3.8,
       ratedCoolingCapacityKw: 3.5,
@@ -506,9 +514,12 @@ test("VEU product-free lighting scenarios skip registry validation and invent no
 test("VEU route produces a future-dated single-system quote without treating evidence assumptions as eligibility", async () => {
   const selection = airConditionerSelection("single");
   let validationInput;
+  let accessOptions;
   const route = loadRoute(async (_database, input) => {
     validationInput = input;
     return validationResult(selection);
+  }, (options) => {
+    accessOptions = options;
   });
   const response = await route.POST(request(
     "6",
@@ -521,6 +532,7 @@ test("VEU route produces a future-dated single-system quote without treating evi
   const body = await response.json();
 
   assert.equal(response.status, 200);
+  assert.deepEqual(accessOptions, { allowPublicQuote: true });
   assert.equal(validationInput.installationDate, "2026-10-15");
   assert.equal(body.estimate.estimatePurpose, "quote");
   assert.equal(body.estimate.eligibilityConfirmed, false);
@@ -537,9 +549,28 @@ test("VEU route produces a future-dated single-system quote without treating evi
 test("VEU route produces a future-dated scenario vii multi and VRF quote from official outdoor metrics and operator indoor sums", async () => {
   const selection = airConditionerSelection("multi");
   const route = loadRoute(async () => validationResult(selection));
+  const inputs = part6QuoteInputs({ configuration: "multi" });
+  delete inputs.rated_heating_capacity_kw;
+  delete inputs.rated_cooling_capacity_kw;
+  inputs.indoor_units = [
+    {
+      label: "Living areas",
+      model: "INDOOR-40",
+      quantity: "2",
+      heatingCapacityKw: "4",
+      coolingCapacityKw: "3.5",
+    },
+    {
+      label: "Bedrooms",
+      model: "INDOOR-45",
+      quantity: "1",
+      heatingCapacityKw: "4.5",
+      coolingCapacityKw: "4.25",
+    },
+  ];
   const response = await route.POST(request(
     "6",
-    part6QuoteInputs({ configuration: "multi" }),
+    inputs,
     { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
     "3000",
     "2026-10-15",
@@ -552,6 +583,8 @@ test("VEU route produces a future-dated scenario vii multi and VRF quote from of
   assert.equal(body.estimate.inputSnapshot.configuration, "multi");
   assert.equal(body.estimate.inputSnapshot.ratedHeatingCapacityKw, "25/2");
   assert.equal(body.estimate.inputSnapshot.ratedCoolingCapacityKw, "45/4");
+  assert.equal(body.estimate.inputSnapshot.indoorUnitQuantity, "3");
+  assert.equal(body.estimate.inputSnapshot.indoorUnits.length, 2);
   assert.equal(body.estimate.inputSnapshot.outdoorHeatingCapacityKw, "19/5");
   assert.equal(body.estimate.inputSnapshot.outdoorCoolingCapacityKw, "7/2");
   assert.equal(body.estimate.inputSnapshot.governedHeatingCapacityKw, "19/5");
@@ -564,9 +597,37 @@ test("VEU route produces a future-dated scenario vii multi and VRF quote from of
   ));
 });
 
+test("VEU route supports an exact approved packaged Part 6 row in quote mode", async () => {
+  const selection = airConditionerSelection("packaged");
+  const route = loadRoute(async () => validationResult(selection));
+  const response = await route.POST(request(
+    "6",
+    part6QuoteInputs(),
+    { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
+    "3000",
+    "2026-10-15",
+    "quote",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.estimate.inputSnapshot.configuration, "packaged");
+  assert.equal(body.estimate.inputSnapshot.ratedHeatingCapacityKw, "19/5");
+  assert.equal(body.estimate.inputSnapshot.ratedCoolingCapacityKw, "7/2");
+  assert.equal(body.estimate.inputSnapshot.outdoorHeatingCapacityKw, "");
+  assert.equal(body.estimate.inputSnapshot.outdoorCoolingCapacityKw, "");
+  assert.equal(body.estimate.eligibilityConfirmed, false);
+});
+
 test("VEU route keeps the same Part 6 evidence gates strict outside quote mode", async () => {
   const selection = airConditionerSelection("single");
-  const route = loadRoute(async () => validationResult(selection));
+  const accessOptions = [];
+  const route = loadRoute(
+    async () => validationResult(selection),
+    (options) => {
+      accessOptions.push(options);
+    },
+  );
   const response = await route.POST(request(
     "6",
     part6QuoteInputs(),
@@ -577,7 +638,19 @@ test("VEU route keeps the same Part 6 evidence gates strict outside quote mode",
   const body = await response.json();
 
   assert.equal(response.status, 409);
+  assert.deepEqual(accessOptions[0], { allowPublicQuote: false });
   assert.equal(body.code, "VEU_SYSTEM_INELIGIBLE");
+
+  const explicitComplianceResponse = await route.POST(request(
+    "6",
+    part6QuoteInputs(),
+    { veu_air_conditioner: "veu-public-product-register:VEU-000006" },
+    "3000",
+    "2026-10-15",
+    "compliance",
+  ));
+  assert.equal(explicitComplianceResponse.status, 409);
+  assert.deepEqual(accessOptions[1], { allowPublicQuote: false });
 });
 
 test("NSW quote mode keeps official product and future date controls while warning on documentary gates", async () => {

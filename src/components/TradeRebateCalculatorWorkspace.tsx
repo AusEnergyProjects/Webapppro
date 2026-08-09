@@ -121,7 +121,11 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
         </p>
       )}
       <div className={styles.tradeCalculatorSurface}>
-        <CreditexAllProgramCalculator api={api} role="trade" />
+        <CreditexAllProgramCalculator
+          api={api}
+          role="trade"
+          documentDraftOwnerUid={user.uid}
+        />
       </div>
     </section>
   );

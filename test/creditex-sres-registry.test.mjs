@@ -1260,8 +1260,13 @@ test("product search and calculation pin product, date, postcode and source snap
     installationDate: "2026-08-08",
     postcode: "3000",
     productKey: "cer-ashp:1",
+    unitQuantity: "2",
   });
-  assert.deepEqual(waterHeaterQuote.output, { quantity: "16", unit: "STC" });
+  assert.deepEqual(waterHeaterQuote.perUnitOutput, { quantity: "16", unit: "STC" });
+  assert.deepEqual(waterHeaterQuote.output, { quantity: "32", unit: "STC" });
+  assert.equal(waterHeaterQuote.unitQuantity, "2");
+  assert.equal(waterHeaterQuote.resolution.perUnitStcs, "16");
+  assert.equal(waterHeaterQuote.resolution.totalStcs, "32");
   assert.equal(waterHeaterQuote.resolution.sourceRecordKey, "cer-ashp:1");
   assert.equal(waterHeaterQuote.eligibilityConfirmed, false);
   assert.equal(waterHeaterQuote.certificateActionEnabled, false);
@@ -1496,7 +1501,10 @@ test("stale or date-ineligible registry data blocks product-backed estimates", a
 });
 
 test("protected APIs, daily Worker and UI enforce server-derived registry values", () => {
-  assert.match(productRouteSource, /requireCreditexCalculatorAccess\(request, database\)/);
+  assert.match(
+    productRouteSource,
+    /requireCreditexCalculatorAccess\(request, database, \{\s*allowPublicQuote: true,\s*\}\)/,
+  );
   assert.match(productRouteSource, /requireComplianceAccess\(request/);
   assert.match(productRouteSource, /allowedRoles: \["admin"\]/);
   assert.match(productRouteSource, /syncCerSresProductRegistry\(database, \{/);
@@ -1509,6 +1517,10 @@ test("protected APIs, daily Worker and UI enforce server-derived registry values
   assert.match(productRouteSource, /model: parameters\.get\("model"\)/);
   assert.match(productRouteSource, /parameters\.get\("mode"\) === "cascade"/);
   assert.match(estimateRouteSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
+  assert.match(
+    estimateRouteSource,
+    /allowPublicQuote: estimatePurpose === "quote"/,
+  );
   assert.match(workerSource, /SRES_REGISTRY_CRON/);
   assert.match(workerSource, /syncCerSresProductRegistry\(db, \{ artifactStore \}\)/);
   assert.match(calculatorSource, /Product type/);

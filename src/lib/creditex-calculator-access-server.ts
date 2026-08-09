@@ -14,7 +14,12 @@ import {
 
 export type CreditexCalculatorAccess =
   | { accessType: "compliance"; identity: ComplianceIdentity }
-  | { accessType: "installer"; identity: VerifiedTradeAccess };
+  | { accessType: "installer"; identity: VerifiedTradeAccess }
+  | { accessType: "public_quote"; identity: null };
+
+export type CreditexCalculatorAccessOptions = Readonly<{
+  allowPublicQuote?: boolean;
+}>;
 
 export class CreditexCalculatorAccessError extends Error {
   readonly code: string;
@@ -30,7 +35,14 @@ export class CreditexCalculatorAccessError extends Error {
 export async function requireCreditexCalculatorAccess(
   request: Request,
   database?: D1Database,
+  options: CreditexCalculatorAccessOptions = {},
 ): Promise<CreditexCalculatorAccess> {
+  if (
+    options.allowPublicQuote === true
+    && !request.headers.has("authorization")
+  ) {
+    return { accessType: "public_quote", identity: null };
+  }
   const identity = await requireFirebaseIdentity(request);
 
   try {

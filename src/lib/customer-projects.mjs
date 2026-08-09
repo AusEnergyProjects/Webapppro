@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-07-31-trade-enquiry-home-systems-v5";
+export const CUSTOMER_PLAN_VERSION = "2026-08-09-guided-home-systems-v6";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -25,6 +25,7 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-29-home-feature-taxonomy-v2",
   "2026-07-29-adviser-print-comfort-v3",
   "2026-07-30-roadmap-context-v4",
+  "2026-07-31-trade-enquiry-home-systems-v5",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -202,8 +203,11 @@ export const customerHomeFeatureSections = [
         noneValue: "heating-cooling-none",
         unknownValue: "heating-cooling-unknown",
         options: [
-          ["reverse-cycle", "Reverse-cycle air conditioner or heat pump"],
+          ["reverse-cycle", "Air-con, including reverse-cycle air-con"],
+          ["heat-pump-space-heating", "Heat-pump space heating"],
           ["gas-heating", "Gas space or ducted heating"],
+          ["hydronic-heating", "Hydronic heating"],
+          ["wood-heating", "Wood fire or wood heater"],
           ["electric-resistance-heating", "Electric panel, portable or resistance heating"],
           ["evaporative-cooling", "Evaporative cooling"],
           ["fans-only", "Ceiling or portable fans"],
@@ -232,6 +236,7 @@ export const customerHomeFeatureSections = [
           ["electric-storage-hot-water", "Electric storage hot water"],
           ["electric-instant-hot-water", "Instantaneous electric hot water"],
           ["solar-hot-water", "Solar hot water, including boosted systems"],
+          ["electric-gas-boosted-hot-water", "Electric hot water with a gas booster"],
           ["hot-water-other", "Another type"],
           ["hot-water-unknown", "Not sure"],
         ],
@@ -265,6 +270,7 @@ export const customerHomeFeatureSections = [
         unknownValue: "electrical-supply-unknown",
         options: [
           ["electrical-supply-single-phase", "Single-phase supply"],
+          ["electrical-supply-two-phase", "Two-phase supply"],
           ["electrical-supply-three-phase", "Three-phase supply"],
           ["electrical-supply-unknown", "Not sure"],
         ],
@@ -515,7 +521,7 @@ export const customerProjectOptions = {
     ["urgent", "Urgent"],
   ],
   budgets: [
-    ["not_set", "Prefer not to set a budget"],
+    ["not_set", "Skip this for now"],
     ["under_2k", "Under $2,000"],
     ["2_10k", "$2,000 to $10,000"],
     ["10k_plus", "$10,000 or more"],
@@ -784,7 +790,10 @@ const homeFeatureFactRules = new Map([
   ["heating-cooling", {
     answered: new Set([
       "reverse-cycle",
+      "heat-pump-space-heating",
       "gas-heating",
+      "hydronic-heating",
+      "wood-heating",
       "electric-resistance-heating",
       "evaporative-cooling",
       "fans-only",
@@ -800,6 +809,7 @@ const homeFeatureFactRules = new Map([
       "electric-storage-hot-water",
       "electric-instant-hot-water",
       "solar-hot-water",
+      "electric-gas-boosted-hot-water",
       "hot-water-other",
     ]),
     unknown: new Set([
@@ -819,6 +829,7 @@ const homeFeatureFactRules = new Map([
   ["electrical-supply", {
     answered: new Set([
       "electrical-supply-single-phase",
+      "electrical-supply-two-phase",
       "electrical-supply-three-phase",
     ]),
     unknown: new Set(["electrical-supply-unknown"]),
@@ -1525,6 +1536,7 @@ const gasHotWaterFeatures = new Set([
   "gas-storage-hot-water",
   "gas-continuous-flow-hot-water",
   "gas-hot-water-type-unknown",
+  "electric-gas-boosted-hot-water",
 ]);
 const advisorRecommendations = {
   authority: {
@@ -1599,6 +1611,30 @@ const advisorRecommendations = {
     href: "/guides/heating",
     action: "Review heating and cooling guidance",
   },
+  heatPumpSpaceHeating: {
+    id: "existing-heat-pump-space-heating",
+    stage: "Use what is already installed",
+    title: "Review the existing heat-pump space-heating system",
+    text: "Record which rooms or zones it serves, its controls, comfort gaps, outdoor-unit condition and recent servicing. Improve the building shell first, then size any extra capacity for the remaining need.",
+    href: "/guides/heating",
+    action: "Review heating and cooling guidance",
+  },
+  hydronicHeating: {
+    id: "existing-hydronic-heating",
+    stage: "Understand the existing system",
+    title: "Map the hydronic heating before changing it",
+    text: "Record the heat source, radiators or floor loops, zones, controls, flow temperatures and rooms that remain uncomfortable. A qualified provider should assess the whole system before its heat source or emitters are changed.",
+    href: "/guides/heating",
+    action: "Review heating and cooling guidance",
+  },
+  woodHeating: {
+    id: "existing-wood-heating",
+    stage: "Plan for comfort, safety and air quality",
+    title: "Include the wood heater in the whole-home plan",
+    text: "Record which rooms it serves, how often it is used, the flue condition and any smoke or air-quality concerns. Keep inspection, maintenance, ventilation and any replacement work within the relevant safety and approval requirements.",
+    href: "/guides/heating",
+    action: "Review heating and cooling guidance",
+  },
   heatPumpHotWater: {
     id: "existing-heat-pump-hot-water",
     stage: "Use what is already installed",
@@ -1644,6 +1680,14 @@ const advisorRecommendations = {
     stage: "Confirm the existing system",
     title: "Confirm which type of gas hot-water system is installed",
     text: "Use a safely visible label, an existing manual or invoice, or a suitably qualified provider to identify whether the system stores hot water or heats it continuously. Do not remove covers or enter an unsafe area to check. The two types can need different space, plumbing and replacement preparation, so do not infer the type from the fuel alone.",
+    href: "/guides/hot-water",
+    action: "Review hot-water guidance",
+  },
+  electricGasBoostedHotWater: {
+    id: "hot-water",
+    stage: "Confirm how the two energy sources work together",
+    title: "Map the electric hot-water system and gas booster",
+    text: "Record the tank or unit, electric heating method, gas booster, controls, fuel use and household demand. A licensed plumber and electrician should confirm how the components interact before controls, fuel supply or the system are changed.",
     href: "/guides/hot-water",
     action: "Review hot-water guidance",
   },
@@ -1714,7 +1758,10 @@ const everydayActionCatalogue = [
       selectedGoals.includes("lower-bills")
       || features.some((item) => [
         "reverse-cycle",
+        "heat-pump-space-heating",
         "gas-heating",
+        "hydronic-heating",
+        "wood-heating",
         "electric-resistance-heating",
         "evaporative-cooling",
         "fans-only",
@@ -1725,6 +1772,7 @@ const everydayActionCatalogue = [
         "electric-storage-hot-water",
         "electric-instant-hot-water",
         "solar-hot-water",
+        "electric-gas-boosted-hot-water",
         "gas-cooking",
         "electric-resistance-cooking",
         "induction-cooking",
@@ -1937,6 +1985,7 @@ function electricalSupplyRecommendationFor(
 ) {
   const supply = features.find((item) => [
     "electrical-supply-single-phase",
+    "electrical-supply-two-phase",
     "electrical-supply-three-phase",
     "electrical-supply-unknown",
   ].includes(item));
@@ -1965,7 +2014,9 @@ function electricalSupplyRecommendationFor(
   }
   const reportedSupply = supply === "electrical-supply-three-phase"
     ? "three-phase"
-    : "single-phase";
+    : supply === "electrical-supply-two-phase"
+      ? "two-phase"
+      : "single-phase";
   return {
     ...advisorRecommendations.electricalSupply,
     title: `Treat the reported ${reportedSupply} supply as a planning clue`,
@@ -1982,6 +2033,9 @@ function gasHotWaterRecommendationFor(features) {
   }
   if (features.includes("gas-hot-water-type-unknown")) {
     return advisorRecommendations.gasHotWaterTypeUnknown;
+  }
+  if (features.includes("electric-gas-boosted-hot-water")) {
+    return advisorRecommendations.electricGasBoostedHotWater;
   }
   return null;
 }
@@ -2352,6 +2406,18 @@ function createAdvisorPlan({
   if (features.includes("reverse-cycle")) {
     pull("heating");
     addContext(advisorRecommendations.reverseCycle);
+  }
+  if (features.includes("heat-pump-space-heating")) {
+    pull("heating");
+    addContext(advisorRecommendations.heatPumpSpaceHeating);
+  }
+  if (features.includes("hydronic-heating")) {
+    pull("heating");
+    addContext(advisorRecommendations.hydronicHeating);
+  }
+  if (features.includes("wood-heating")) {
+    pull("heating");
+    addContext(advisorRecommendations.woodHeating);
   }
   if (
     features.includes("electric-resistance-heating")

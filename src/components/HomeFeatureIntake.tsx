@@ -30,14 +30,28 @@ export function HomeFeatureIntake({
   selected,
   onChange,
   idPrefix,
+  sectionId,
+  questionId,
 }: {
   selected: string[];
   onChange: (next: string[]) => void;
   idPrefix: string;
+  sectionId?: string;
+  questionId?: string;
 }) {
+  const visibleSections = customerHomeFeatureSections
+    .filter((section) => !sectionId || section.id === sectionId)
+    .map((section) => ({
+      ...section,
+      questions: section.questions.filter(
+        (question) => !questionId || question.id === questionId,
+      ),
+    }))
+    .filter((section) => section.questions.length > 0);
+
   return (
     <div className={styles.sections}>
-      {customerHomeFeatureSections.map((section) => {
+      {visibleSections.map((section) => {
         const headingId = `${idPrefix}-section-${section.id}`;
         return (
           <section

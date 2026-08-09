@@ -26,7 +26,7 @@ test("verified installers can open the governed rebate calculator from the trade
   assert.match(dashboard, /<TradeRebateCalculatorWorkspace key=\{user\.uid\} user=\{user\}/);
   assert.match(dashboard, /profile\?\.partnerType === "supplier" && workspace === "calculator"/);
   assert.match(workspace, /Calculate before you quote/);
-  assert.match(workspace, /<CreditexAllProgramCalculator api=\{api\} role="trade"/);
+  assert.match(workspace, /<CreditexAllProgramCalculator[\s\S]*api=\{api\}[\s\S]*role="trade"[\s\S]*documentDraftOwnerUid=\{user\.uid\}/);
   assert.match(workspace, /requestWithCreditexTokenRecovery/);
 });
 
@@ -78,18 +78,17 @@ test("calculator preparation state has deterministic retry and terminal values",
   assert.match(workspace, /assertActiveIdentity\(\);[\s\S]*continue;/);
 });
 
-test("calculator APIs accept compliance users or verified installers and nothing broader", () => {
+test("calculator APIs keep trade access verified while public reads are quote-only", () => {
   assert.match(access, /requireComplianceIdentity\(identity/);
   assert.match(access, /requireVerifiedTradeIdentity\(identity/);
   assert.match(access, /partnerTypes: \["installer"\]/);
   assert.match(access, /CREDITEX_CALCULATOR_ACCESS_REQUIRED/);
-  for (const route of [
-    programEstimateRoute,
-    stcEstimateRoute,
-    officialProductsRoute,
-    stcProductsRoute,
-  ]) {
-    assert.match(route, /requireCreditexCalculatorAccess\(request, database\)/);
+  for (const route of [programEstimateRoute, stcEstimateRoute]) {
+    assert.match(route, /requireCreditexCalculatorAccess\(request, database, \{/);
+    assert.match(route, /allowPublicQuote: [a-zA-Z]+ === "quote"/);
+  }
+  for (const route of [officialProductsRoute, stcProductsRoute]) {
+    assert.match(route, /allowPublicQuote: true/);
   }
 });
 

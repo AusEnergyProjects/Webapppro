@@ -7,23 +7,17 @@ const planner = fs.readFileSync(
   "utf8",
 );
 
-test("the public plan offers one clear privacy-first trade enquiry in both decision points", () => {
-  assert.equal(planner.match(/<PlannerTradeEnquiry\b/g)?.length, 2);
-  assert.match(planner, /placement="summary"/);
-  assert.match(planner, /placement="footer"/);
-  assert.match(
-    planner,
-    /<\/section>\s*<\/section>\s*<PlannerTradeEnquiry\s+href=\{tradeEnquiryHref\}\s+placement="footer"/,
-  );
-  assert.match(planner, /Enquire with verified trades/);
-  assert.match(planner, /Create or sign in to a free private account/);
-  assert.match(planner, /save this plan and carry\s+every current answer across/);
-  assert.match(planner, /Your name, phone number and exact address stay hidden during matching/);
-  assert.match(planner, /Contact details are released only to the one business you choose/);
-  assert.doesNotMatch(planner, /Continue in my free account/);
+test("the public plan offers one optional privacy-first trade enquiry after the roadmap", () => {
+  assert.equal(planner.match(/<PlannerTradeEnquiry\b/g)?.length, 1);
+  assert.match(planner, /Optional next step/);
+  assert.match(planner, /Enquire with verified trades only when you are ready/);
+  assert.match(planner, /free private\s+account saves this plan and carries every current answer across/);
+  assert.match(planner, /This is not required to view your plan/);
+  assert.match(planner, /Your name, phone number\s+and exact address stay hidden during matching/);
+  assert.match(planner, /Contact details are released\s+only to the one business you choose/);
 });
 
-test("both enquiry placements preserve every supported planner selection without double entry", () => {
+test("the optional enquiry preserves every supported planner selection without double entry", () => {
   assert.match(
     planner,
     /new URLSearchParams\(\{\s*pace,\s*situation,\s*approvalContext,\s*budgetRange,\s*\}\)/,
@@ -40,12 +34,12 @@ test("both enquiry placements preserve every supported planner selection without
   );
   assert.equal(
     planner.match(/href=\{tradeEnquiryHref\}/g)?.length,
-    2,
+    1,
   );
 });
 
 test("the enquiry handoff keeps independent plan actions available without implying a transaction", () => {
-  assert.match(planner, /Preview and download PDF/);
+  assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
 
   const handoff = planner.match(

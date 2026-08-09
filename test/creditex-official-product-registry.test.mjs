@@ -375,6 +375,71 @@ test("generic registry rejects official source redirects without following them"
   );
 });
 
+test("registry first-seen dating never invents eligibility for an ineligible official row", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const record = (sourceRecordKey, approvalStatus) => ({
+    sourceKey: "fixture-tessa-water-heaters",
+    sourceRecordKey,
+    productKind: "nsw_heat_pump_water_heater",
+    manufacturer: "Exact Supplier",
+    brand: "Exact Brand",
+    model: sourceRecordKey,
+    series: "Water Heater - Heat Pump",
+    registrationNumber: sourceRecordKey,
+    certificateNumber: "",
+    approvalStatus,
+    eligibleFrom: "",
+    eligibleTo: "",
+    availableInAustralia: approvalStatus === "approved",
+    attributes: { tessaOfficialStatus: approvalStatus },
+  });
+  const sourceRows = [
+    record("ACC0000001", "approved"),
+    record("ACC0000002", "not_approved"),
+  ];
+  const registry = {
+    registryCode: "nsw-tessa-products",
+    title: "Fixture TESSA products",
+    sources: [{
+      ...source(
+        "fixture-tessa-water-heaters",
+        "nsw_heat_pump_water_heater",
+        "nsw-tessa-products",
+      ),
+      minimumRecords: 2,
+    }],
+  };
+  await syncOfficialProductRegistry(d1, registry, {
+    fetchImpl: fetchFixture({
+      "fixture-tessa-water-heaters": sourceRows,
+    }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const dates = database.prepare(`SELECT source_record_key, eligible_from
+    FROM compliance_official_products
+    ORDER BY source_record_key`).all().map((row) => ({ ...row }));
+  assert.deepEqual(dates, [
+    { source_record_key: "ACC0000001", eligible_from: "2026-08-08" },
+    { source_record_key: "ACC0000002", eligible_from: "" },
+  ]);
+  const exact = await searchOfficialProducts(d1, {
+    productKind: "nsw_heat_pump_water_heater",
+    installationDate: "2026-08-08",
+    brand: "Exact Brand",
+    model: "ACC0000001",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(exact.matchCount, 1);
+  assert.equal(exact.products[0].sourceRecordKey, "ACC0000001");
+  const nearMatch = await searchOfficialProducts(d1, {
+    productKind: "nsw_heat_pump_water_heater",
+    installationDate: "2026-08-08",
+    brand: "Exact Bran",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(nearMatch.matchCount, 0);
+  assert.deepEqual(nearMatch.products, []);
+});
+
 function fetchFixture(overrides = {}) {
   return async (input) => {
     const sourceKey = String(input).split("/").at(-1);
@@ -875,6 +940,20 @@ test("VEU facets are restricted to governed activity and scenario categories", a
     veuCategoryRecord("VEU-3C", "veu_water_heater", "Other Heater", "3C Model", "3C"),
     veuCategoryRecord("VEU-3D", "veu_water_heater", "Other Heater", "3D Model", "3D"),
     veuCategoryRecord(
+      "VEU-15A",
+      "veu_weather_sealing",
+      "Weather Shared",
+      "Door Seal",
+      "15A",
+    ),
+    veuCategoryRecord(
+      "VEU-15B",
+      "veu_weather_sealing",
+      "Weather Shared",
+      "Window Seal",
+      "15B",
+    ),
+    veuCategoryRecord(
       "VEU-27A",
       "veu_activity_27_product",
       "Lighting Shared",
@@ -919,6 +998,7 @@ test("VEU facets are restricted to governed activity and scenario categories", a
     productKind: undefined,
     productKinds: [
       "veu_water_heater",
+      "veu_weather_sealing",
       "veu_activity_27_product",
       "veu_ceiling_insulation",
     ],
@@ -969,6 +1049,25 @@ test("VEU facets are restricted to governed activity and scenario categories", a
   assert.deepEqual(
     scenario27A.products.map(({ registrationNumber }) => registrationNumber),
     ["VEU-27A"],
+  );
+
+  const activity15 = await searchOfficialProducts(d1, {
+    productKind: "veu_weather_sealing",
+    installationDate: "2026-08-08",
+    veuActivityCode: "15",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(activity15.matchCount, 2);
+
+  const scenario15A = await searchOfficialProducts(d1, {
+    productKind: "veu_weather_sealing",
+    installationDate: "2026-08-08",
+    veuActivityCode: "15",
+    veuScenario: "15A",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(scenario15A.matchCount, 1);
+  assert.deepEqual(
+    scenario15A.products.map(({ registrationNumber }) => registrationNumber),
+    ["VEU-15A"],
   );
 
   for (const [scenario, registrationNumber] of [
@@ -1956,7 +2055,7 @@ test("licensed connectors cannot be silently promoted to automatic scraping", as
 test("CER-hosted CEC artifacts remain controlled manual until reuse permission is recorded", async () => {
   assert.deepEqual(
     CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.map(({ registryCode }) => registryCode),
-    ["gems-products", "veu-approved-products"],
+    ["gems-products", "nsw-tessa-products", "veu-approved-products"],
   );
   assert.deepEqual(
     CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES.map(
@@ -2358,7 +2457,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   );
 });
 
-test("live automatic feeds activate licensed GEMS products into searchable snapshots", {
+test("live automatic feeds activate official products into searchable snapshots", {
   skip: process.env.CREDITEX_LIVE_OFFICIAL_REGISTRY !== "1",
 }, async (t) => {
   const { database, d1, artifactStore } = fixture();
@@ -2372,15 +2471,16 @@ test("live automatic feeds activate licensed GEMS products into searchable snaps
     }));
   }
   assert.ok(results[0].recordCount >= 30_000);
-  assert.ok(results[1].recordCount >= 70_000);
+  assert.ok(results[1].recordCount >= 500);
+  assert.ok(results[2].recordCount >= 70_000);
   assert.equal(database.prepare(`SELECT count(*) count
     FROM compliance_official_products`).get().count, results.reduce(
       (total, result) => total + result.recordCount,
       0,
     ));
   assert.equal(database.prepare(`SELECT count(*) count
-    FROM compliance_official_product_artifacts`).get().count, 12);
-  assert.equal(artifactStore.objects.size, 12);
+    FROM compliance_official_product_artifacts`).get().count, 13);
+  assert.equal(artifactStore.objects.size, 13);
 
   const refrigerator = await searchOfficialProducts(d1, {
     productKind: "refrigerator_freezer",

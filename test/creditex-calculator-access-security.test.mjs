@@ -186,6 +186,91 @@ test("calculator access requests a non-claiming compliance lookup", async () => 
   assert.equal(result.identity, installerAccess);
 });
 
+test("calculator access permits only an explicitly enabled anonymous quote", async () => {
+  class MockComplianceAccessError extends Error {}
+  class MockTradeAccessError extends Error {}
+  let firebaseReads = 0;
+  const calculatorAccess = loadTypescriptModule(
+    "../src/lib/creditex-calculator-access-server.ts",
+    {
+      "./compliance-access-server": {
+        ComplianceAccessError: MockComplianceAccessError,
+        requireComplianceIdentity: async () => {
+          throw new Error("Public quote must not probe compliance membership");
+        },
+      },
+      "./firebase-server": {
+        requireFirebaseIdentity: async () => {
+          firebaseReads += 1;
+          throw new Error("AUTH_REQUIRED");
+        },
+      },
+      "./trade-access-server": {
+        TradeAccessError: MockTradeAccessError,
+        requireVerifiedTradeIdentity: async () => {
+          throw new Error("Public quote must not probe installer membership");
+        },
+      },
+    },
+  );
+
+  const request = new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+  );
+  const result = await calculatorAccess.requireCreditexCalculatorAccess(
+    request,
+    {},
+    { allowPublicQuote: true },
+  );
+  assert.deepEqual(result, { accessType: "public_quote", identity: null });
+  assert.equal(firebaseReads, 0);
+
+  await assert.rejects(
+    calculatorAccess.requireCreditexCalculatorAccess(request, {}),
+    /AUTH_REQUIRED/,
+  );
+  assert.equal(firebaseReads, 1);
+});
+
+test("an invalid supplied credential never falls back to public quote access", async () => {
+  class MockComplianceAccessError extends Error {}
+  class MockTradeAccessError extends Error {}
+  const calculatorAccess = loadTypescriptModule(
+    "../src/lib/creditex-calculator-access-server.ts",
+    {
+      "./compliance-access-server": {
+        ComplianceAccessError: MockComplianceAccessError,
+        requireComplianceIdentity: async () => {
+          throw new MockComplianceAccessError("No membership");
+        },
+      },
+      "./firebase-server": {
+        requireFirebaseIdentity: async () => {
+          throw new Error("AUTH_REQUIRED");
+        },
+      },
+      "./trade-access-server": {
+        TradeAccessError: MockTradeAccessError,
+        requireVerifiedTradeIdentity: async () => {
+          throw new MockTradeAccessError("No installer");
+        },
+      },
+    },
+  );
+
+  await assert.rejects(
+    calculatorAccess.requireCreditexCalculatorAccess(
+      new Request(
+        "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+        { headers: { Authorization: "Bearer invalid" } },
+      ),
+      {},
+      { allowPublicQuote: true },
+    ),
+    /AUTH_REQUIRED/,
+  );
+});
+
 test("missing and malformed Firebase credentials return a typed 401 without credential details", async () => {
   const malformedCredential = "credential-that-must-not-appear";
   const requests = [

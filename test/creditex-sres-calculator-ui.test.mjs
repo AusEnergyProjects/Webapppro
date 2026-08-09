@@ -139,6 +139,10 @@ test("SRES starts as a short future-date quote form with an enabled CTA", () => 
     calculatorModule.CreditexSresCalculator,
     { api: async () => ({ ok: true }), role: "trade" },
   ));
+  const publicHtml = renderToStaticMarkup(React.createElement(
+    calculatorModule.CreditexSresCalculator,
+    { api: async () => ({ ok: true }), role: "public" },
+  ));
   const order = [
     ">Activity<",
     ">Installation date<",
@@ -163,6 +167,8 @@ test("SRES starts as a short future-date quote form with an enabled CTA", () => 
     /Certificate creation disabled|Calculation disabled|Official product evidence incomplete|official rows|snapshot/i,
   );
   assert.doesNotMatch(html, /Refresh official products/);
+  assert.match(publicHtml, /Calculate rebate estimate/);
+  assert.doesNotMatch(publicHtml, /Refresh official products/);
 
   const source = fs.readFileSync(
     path.resolve("src/components/CreditexSresCalculator.tsx"),
@@ -170,6 +176,9 @@ test("SRES starts as a short future-date quote form with an enabled CTA", () => 
   );
   assert.match(source, /estimatePurpose: "quote"/);
   assert.match(source, /installationDate: form\.effectiveDate/);
+  assert.match(source, /unitQuantity: form\.unitQuantity/);
+  assert.match(source, /Number of identical systems/);
+  assert.match(source, /per system x \{estimate\.unitQuantity\} systems/);
   assert.doesNotMatch(source, /max=\{todayIso\(\)\}/);
   assert.match(source, /<summary>Calculation details<\/summary>/);
   const calculateSource = source.slice(

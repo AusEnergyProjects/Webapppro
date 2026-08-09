@@ -132,7 +132,9 @@ export async function GET(request: Request) {
   }
   try {
     const database = getD1();
-    const access = await requireCreditexCalculatorAccess(request, database);
+    const access = await requireCreditexCalculatorAccess(request, database, {
+      allowPublicQuote: true,
+    });
     const parameters = new URL(request.url).searchParams;
     const productKind = parameters.get("productKind");
     const installationDate = parameters.get("installationDate");

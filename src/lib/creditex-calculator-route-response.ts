@@ -1,4 +1,7 @@
-export type CreditexCalculatorReadAccessType = "compliance" | "installer";
+export type CreditexCalculatorReadAccessType =
+  | "compliance"
+  | "installer"
+  | "public_quote";
 
 export type CreditexCalculatorRouteErrorDescriptor = Readonly<{
   status: 401 | 503;

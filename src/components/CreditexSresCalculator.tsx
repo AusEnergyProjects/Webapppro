@@ -68,7 +68,7 @@ type RegistryStatus = {
   } | null;
 };
 
-type EstimateResult = {
+export type CreditexSresEstimateResult = {
   technology: Technology;
   formulaKey: string;
   formulaVersion: string;
@@ -91,6 +91,11 @@ type EstimateResult = {
   certificateActionEnabled: false;
   receiptHash: string;
   resolvedReceiptHash?: string;
+  unitQuantity?: string;
+  perUnitOutput?: {
+    quantity: string;
+    unit: "STC";
+  };
   resolution?: {
     brand?: string;
     model?: string;
@@ -110,6 +115,7 @@ type FormState = {
   ratedCapacityKw: string;
   nominalCapacityKwh: string;
   usableCapacityKwh: string;
+  unitQuantity: string;
 };
 
 export type CreditexSresProductCascadeState = {
@@ -189,6 +195,7 @@ const INITIAL_FORM: FormState = {
   ratedCapacityKw: "6.6",
   nominalCapacityKwh: "20",
   usableCapacityKwh: "18",
+  unitQuantity: "1",
 };
 
 const EMPTY_PRODUCT_FACETS: ProductFacets = {
@@ -233,9 +240,11 @@ function dateTimeLabel(value: string | null | undefined) {
 export function CreditexSresCalculator({
   api,
   role,
+  onEstimate,
 }: {
   api: Api;
-  role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade";
+  role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade" | "public";
+  onEstimate?: (estimate: CreditexSresEstimateResult) => void;
 }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [productCascade, dispatchProductCascade] = useReducer(
@@ -251,7 +260,7 @@ export function CreditexSresCalculator({
   const [lookupError, setLookupError] = useState("");
   const [lookupVersion, setLookupVersion] = useState(0);
   const [refreshBusy, setRefreshBusy] = useState(false);
-  const [estimate, setEstimate] = useState<EstimateResult | null>(null);
+  const [estimate, setEstimate] = useState<CreditexSresEstimateResult | null>(null);
   const [estimateBusy, setEstimateBusy] = useState(false);
   const [estimateError, setEstimateError] = useState("");
   const estimateRequestRef = useRef(0);
@@ -524,6 +533,7 @@ export function CreditexSresCalculator({
             ...common,
             postcode: form.postcode,
             productKey: productCascade.productKey,
+            unitQuantity: form.unitQuantity,
           }
         : form.technology === "small_wind"
             || form.technology === "small_hydro"
@@ -543,7 +553,9 @@ export function CreditexSresCalculator({
         body: JSON.stringify(payload),
       });
       if (estimateRequestRef.current === requestVersion) {
-        setEstimate(result.estimate as EstimateResult);
+        const nextEstimate = result.estimate as CreditexSresEstimateResult;
+        setEstimate(nextEstimate);
+        onEstimate?.(nextEstimate);
       }
     } catch (error) {
       if (estimateRequestRef.current === requestVersion) {
@@ -811,6 +823,28 @@ export function CreditexSresCalculator({
         )}
         {registeredTechnology(form.technology) && renderPostcode()}
 
+        {registeredTechnology(form.technology) && (
+          <label>
+            Number of identical systems
+            <input
+              inputMode="numeric"
+              pattern="[0-9]+"
+              min="1"
+              max="10"
+              required
+              value={form.unitQuantity}
+              onChange={(event) => updateForm((current) => ({
+                ...current,
+                unitQuantity: event.target.value.replace(/\D/g, "").slice(0, 2),
+              }))}
+            />
+            <small>
+              Install up to 10 identical registered systems. The result shows
+              the rebate per system and the property total.
+            </small>
+          </label>
+        )}
+
         <button
           type="submit"
           disabled={estimateBusy}
@@ -856,6 +890,12 @@ export function CreditexSresCalculator({
                   ? `${estimate.resolution.brand} ${estimate.resolution.model}`
                   : `Postcode ${estimate.resolution.postcode}`}
               </strong>
+              {Number(estimate.unitQuantity || "1") > 1
+                && estimate.perUnitOutput && (
+                <span>
+                  {estimate.perUnitOutput.quantity} STC per system x {estimate.unitQuantity} systems
+                </span>
+              )}
             </div>
           )}
           <details>

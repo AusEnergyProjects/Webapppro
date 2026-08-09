@@ -29,7 +29,6 @@ const layout = read("../src/app/layout.tsx");
 const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
-const heroAsset = path.resolve(directory, "../public/aea-energy-platform-hero.jpg");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
@@ -60,9 +59,12 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /className="site-header"/);
   assert.match(chrome, /href: "\/", label: "Start"/);
   assert.match(chrome, /href: "\/plan", label: "My energy plan"/);
+  assert.match(chrome, /href: "\/calculator", label: "Rebate calculator"/);
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*TLink login/);
+  assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
   assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
   assert.match(electricity, /SiteHeader active="electricity"/);
@@ -173,12 +175,11 @@ test("number fields avoid browser-specific black stepper controls", () => {
   assert.match(styles, /body input\[type="number"\]::\-webkit-inner-spin-button,[\s\S]*\-webkit-appearance: none/);
 });
 
-test("homepage uses the original AEA energy platform artwork", () => {
-  assert.match(guide, /className="start-hero-visual"/);
-  assert.match(styles, /url\("\/aea-energy-platform-hero\.jpg"\)/);
-  assert.equal(fs.existsSync(heroAsset), true);
-  assert.ok(fs.statSync(heroAsset).size > 100_000);
-  assert.ok(fs.statSync(heroAsset).size < 500_000);
+test("homepage uses a lightweight spatial home scene with a reduced-motion boundary", () => {
+  assert.match(guide, /start-hero-visual start-spatial-home/);
+  assert.match(guide, /start-home-model/);
+  assert.match(styles, /@supports \(animation-timeline: view\(\)\)/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.start-home-model/);
 });
 
 test("social sharing metadata uses one launch-ready AEA energy card", () => {
@@ -226,9 +227,12 @@ test("rebates hub contains no prohibited dash characters", () => {
   assert.doesNotMatch(`${rebates}${rebatesRoute}`, /\u2013|\u2014/);
 });
 
-test("homepage hero actions keep visible text on distinct backgrounds", () => {
-  assert.match(styles, /\.start-actions \.btn\.ghost \{ background: rgba\(255, 255, 255, \.08\);/);
-  assert.match(styles, /\.start-actions \.btn\.ghost:hover, \.start-actions \.btn\.ghost:focus-visible \{ background: #fff; color: var\(--color-aea-ink\); \}/);
+test("homepage makes the guided plan the only dominant hero action", () => {
+  const heroActions = guide.match(/<div className="start-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  assert.equal(heroActions.match(/<a\b/g)?.length, 1);
+  assert.match(heroActions, /start-primary-action[\s\S]*Build my home energy plan/);
+  assert.doesNotMatch(heroActions, /ghost|Compare energy plans/);
+  assert.match(guide, /className="start-hero-secondary"/);
 });
 
 test("getting-started copy preserves comparison and privacy boundaries", () => {
@@ -246,15 +250,22 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /Do you own or rent the home\?/);
   assert.match(planner, /Questions that could change the order/);
   assert.match(planner, /Why this is in the plan/);
-  assert.match(planner, /What matters most to your household/);
+  assert.match(planner, /What would make the biggest difference/);
   assert.match(planner, /type="checkbox"/);
   assert.match(planner, /Do you own or rent the home/);
-  assert.match(planner, /Could shared-property approval apply/);
-  assert.match(planner, /What budget boundary should guide the first stage/);
+  assert.match(planner, /Do you live in an apartment complex\?/);
+  assert.match(planner, /body corporate or owners corporation approval/);
+  assert.match(planner, /What investment range feels comfortable for the first stage/);
+  assert.match(plannerRoute, /One question at a time/);
   assert.match(planner, /HomeFeatureIntake/);
+  assert.match(planner, /sectionId=\{currentStep\.featureSection\}/);
+  assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
+  assert.match(planner, /Skip remaining home details/);
+  assert.match(planner, /role="progressbar"/);
+  assert.match(planner, /initialPlannerStep\(initialSelection\)/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
-  assert.match(planner, /Preview and download PDF/);
+  assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
   assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);
   assert.doesNotMatch(planner, /params\.(?:set|append)\("postcode"/);
@@ -285,7 +296,8 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(newProjectRoute, /addressState: controlledValue\(/);
   assert.match(newProjectRoute, /postcode: postcode &&/);
   assert.match(styles, /\.planner-layout \{[^}]*grid-template-columns:/);
-  assert.match(styles, /\.planner-controls legend \{[^}]*background: #fff;[^}]*display: inline-flex;/);
+  assert.match(styles, /\.planner-progress-shell \{[^}]*position: sticky;/);
+  assert.match(styles, /\.planner-step-card \{[^}]*min-height:/);
   assert.match(styles, /\.planner-results-heading h2,[^}]*overflow-wrap: anywhere;/);
   assert.match(styles, /\.planner-results \.planner-result-actions button, \.planner-results \.planner-result-actions a \{[^}]*color: #fff;/);
   assert.doesNotMatch(styles, /background-attachment: fixed/);

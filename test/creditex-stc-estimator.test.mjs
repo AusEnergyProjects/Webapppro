@@ -9,6 +9,7 @@ import {
   estimateCreditexStcs,
 } from "../src/lib/creditex-stc-estimator.ts";
 import {
+  creditexRepeatRegisteredWaterHeaterQuote,
   estimateCreditexSresQuote,
 } from "../src/lib/creditex-sres-calculator-estimator.ts";
 import {
@@ -126,6 +127,40 @@ test("registered water-heater STCs apply the installation-year factor before fin
     largeRegisteredSystem.output,
     { quantity: "1870", unit: "STC" },
   );
+});
+
+test("registered water-heater quote totals retain an explicit per-system result", () => {
+  const perUnit = estimateCreditexStcs({
+    technology: "air_source_heat_pump",
+    installationDate: "2026-07-22",
+    registeredTenYearStcs: "43",
+  });
+  const repeated = creditexRepeatRegisteredWaterHeaterQuote({
+    ...perUnit,
+    resolution: {
+      brand: "Exact Brand",
+      model: "Exact Model",
+    },
+    resolvedReceiptHash: `sha256:${"b".repeat(64)}`,
+  }, "2");
+
+  assert.deepEqual(repeated.perUnitOutput, { quantity: "21", unit: "STC" });
+  assert.deepEqual(repeated.output, { quantity: "42", unit: "STC" });
+  assert.equal(repeated.unitQuantity, "2");
+  assert.equal(repeated.inputSnapshot.unitQuantity, "2");
+  assert.equal(repeated.resolution.perUnitStcs, "21");
+  assert.equal(repeated.resolution.totalStcs, "42");
+  assert.ok(repeated.trace.some(({ key }) => key === "multi_unit_total"));
+  assert.match(repeated.receiptHash, /^sha256:[a-f0-9]{64}$/);
+  assert.match(repeated.resolvedReceiptHash, /^sha256:[a-f0-9]{64}$/);
+  assert.notEqual(repeated.receiptHash, perUnit.receiptHash);
+
+  for (const quantity of ["0", "11", "1.5", 2]) {
+    assert.throws(
+      () => creditexRepeatRegisteredWaterHeaterQuote(perUnit, quantity),
+      expectedError("STC_REQUEST_INVALID"),
+    );
+  }
 });
 
 test("solar battery STCs apply current date factors, capacity bands and the 50 kWh claim cap", () => {
@@ -392,7 +427,10 @@ test("the protected estimate route is same-origin, authenticated, bounded and no
   assert.match(routeSource, /"Cache-Control": "private, no-store"/);
   assert.match(routeSource, /readBoundedJsonRequest\(/);
   assert.match(routeSource, /MAXIMUM_CREDITEX_JSON_BYTES/);
-  assert.match(routeSource, /requireCreditexCalculatorAccess\(request, database\)/);
+  assert.match(
+    routeSource,
+    /requireCreditexCalculatorAccess\(request, database, \{\s*allowPublicQuote: estimatePurpose === "quote",\s*\}\)/,
+  );
   assert.match(routeSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
   assert.match(routeSource, /estimatePurpose === "quote"/);
   assert.match(routeSource, /estimateCreditexSresQuote\(database, body\)/);

@@ -67,19 +67,20 @@ export default async function HomeEnergyPlanPage({
       <SiteHeader active="plan" />
       <header className="planner-hero">
         <div>
-          <span>Your home energy roadmap</span>
-          <h1>Work out what to do first</h1>
+          <span>A clear plan in about three minutes</span>
+          <h1>One question at a time. One useful plan at the end.</h1>
           <p>
-            Combine several household goals with ownership, approval, budget
-            and existing-home information. The roadmap uses the same independent
-            advisor engine as the private project workspace.
+            Tell us what matters and what your home already has. You can skip
+            anything you do not know. We will turn the answers into an ordered,
+            independent home energy roadmap.
           </p>
         </div>
         <aside>
           <strong>Private by design</strong>
           <p>
             No account, address, bill, postcode, meter identifier or contact
-            details are needed. These quick-plan choices are not sent anywhere.
+            details are needed. You see the plan before deciding whether to save
+            it, keep a printable copy or ask a trade business for help.
           </p>
         </aside>
       </header>

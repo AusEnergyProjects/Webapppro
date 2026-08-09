@@ -7,6 +7,8 @@ export const CREDITEX_OFFICIAL_PRODUCT_KINDS = [
   "inverter",
   "battery",
   "cec_battery",
+  "nsw_heat_pump_water_heater",
+  "nsw_solar_water_heater",
   "air_conditioner",
   "close_control_air_conditioner",
   "electric_water_heater",
@@ -52,6 +54,8 @@ export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   inverter: "cer-cec-products",
   battery: "cer-cec-products",
   cec_battery: "cec-products",
+  nsw_heat_pump_water_heater: "nsw-tessa-products",
+  nsw_solar_water_heater: "nsw-tessa-products",
   air_conditioner: "gems-products",
   close_control_air_conditioner: "gems-products",
   electric_water_heater: "gems-products",
@@ -223,6 +227,10 @@ export function officialProductKindsForNswProductKinds(
       kinds.add("pool_pump");
     } else if (kind === "cec_battery") {
       kinds.add("cec_battery");
+    } else if (kind === "heat_pump_water_heater") {
+      kinds.add("nsw_heat_pump_water_heater");
+    } else if (kind === "solar_water_heater") {
+      kinds.add("nsw_solar_water_heater");
     }
   }
   return [...kinds];
@@ -236,6 +244,8 @@ export function unresolvedNswProductKinds(
     && kind !== "refrigerated_cabinet"
     && kind !== "pool_pump"
     && kind !== "cec_battery"
+    && kind !== "heat_pump_water_heater"
+    && kind !== "solar_water_heater"
   ));
 }
 
@@ -269,6 +279,30 @@ const NSW_OFFICIAL_PRODUCT_INPUT_KEYS: Readonly<Record<string, readonly string[]
   BESS4: [
     "nominal_battery_capacity_kwh",
     "battery_inverter_output_kw",
+    "product_registry_eligibility_confirmed",
+  ],
+  D17: [
+    "system_size",
+    "annual_supplementary_energy_gj",
+    "annual_auxiliary_electricity_gj",
+    "product_registry_eligibility_confirmed",
+  ],
+  D18: [
+    "system_size",
+    "annual_supplementary_energy_gj",
+    "annual_auxiliary_electricity_gj",
+    "product_registry_eligibility_confirmed",
+  ],
+  D19: [
+    "system_size",
+    "annual_supplementary_energy_gj",
+    "annual_auxiliary_electricity_gj",
+    "product_registry_eligibility_confirmed",
+  ],
+  D20: [
+    "system_size",
+    "annual_supplementary_energy_gj",
+    "annual_auxiliary_electricity_gj",
     "product_registry_eligibility_confirmed",
   ],
   "HVAC1-SINGLE": [
@@ -668,6 +702,86 @@ function deriveNswAirConditionerInputs(
   return inputs;
 }
 
+function deriveNswTessaWaterHeaterInputs(
+  activityCode: "D17" | "D18" | "D19" | "D20",
+  inputs: Record<string, unknown>,
+  selections: readonly CreditexFormulaProductSelection[],
+) {
+  const heatPump = activityCode === "D17" || activityCode === "D19";
+  const selection = selectedProduct(
+    selections,
+    heatPump
+      ? "nsw_heat_pump_water_heater"
+      : "nsw_solar_water_heater",
+  );
+  const acceptedActivities = officialText(
+    selection,
+    "tessaAcceptedActivities",
+    "an exact TESSA accepted-activity set",
+  ).split(",");
+  if (!acceptedActivities.includes(activityCode)) {
+    return officialProductFailure(
+      `The selected TESSA product is not accepted for activity ${activityCode}.`,
+    );
+  }
+  const callerSystemSize = inputs.system_size;
+  if (callerSystemSize !== "small" && callerSystemSize !== "medium") {
+    return officialProductFailure(
+      "Select the exact small or medium AS/NZS 4234 system size before resolving TESSA product data.",
+    );
+  }
+  let zone: "3" | "5" = "3";
+  if (heatPump) {
+    const bcaClimateZone = String(inputs.bca_climate_zone || "");
+    if (!/^[2-8]$/.test(bcaClimateZone)) {
+      return officialProductFailure(
+        "Select the exact BCA climate zone 2 to 8 before resolving the TESSA heat-pump values.",
+      );
+    }
+    zone = Number(bcaClimateZone) >= 7 ? "5" : "3";
+  }
+  const acceptedSystemSize = officialText(
+    selection,
+    `zone${zone}SystemSize`,
+    `a TESSA zone ${zone} system size`,
+  );
+  const normalizedAcceptedSize = acceptedSystemSize === "Small"
+    ? "small"
+    : acceptedSystemSize === "Medium"
+      ? "medium"
+      : officialProductFailure(
+          `The selected TESSA product publishes unsupported zone ${zone} system size ${JSON.stringify(acceptedSystemSize)}.`,
+        );
+  if (normalizedAcceptedSize !== callerSystemSize) {
+    return officialProductFailure(
+      `The selected TESSA product is ${acceptedSystemSize} for zone ${zone}, not ${callerSystemSize}.`,
+    );
+  }
+  inputs.system_size = normalizedAcceptedSize;
+  setOfficialNumber(
+    inputs,
+    "annual_supplementary_energy_gj",
+    officialNumber(
+      selection,
+      `zone${zone}BsGjPerYear`,
+      `TESSA zone ${zone} annual supplementary energy (Bs)`,
+      { allowZero: true },
+    ),
+  );
+  setOfficialNumber(
+    inputs,
+    "annual_auxiliary_electricity_gj",
+    officialNumber(
+      selection,
+      `zone${zone}BeGjPerYear`,
+      `TESSA zone ${zone} annual auxiliary electricity (Be)`,
+      { allowZero: true },
+    ),
+  );
+  inputs.product_registry_eligibility_confirmed = "yes";
+  return inputs;
+}
+
 export function deriveCreditexNswOfficialProductInputs(
   programCode: string,
   activityCode: string,
@@ -708,6 +822,18 @@ export function deriveCreditexNswOfficialProductInputs(
     }
     inputs.product_registry_eligibility_confirmed = "yes";
     return inputs;
+  }
+  if (
+    activityCode === "D17"
+    || activityCode === "D18"
+    || activityCode === "D19"
+    || activityCode === "D20"
+  ) {
+    return deriveNswTessaWaterHeaterInputs(
+      activityCode,
+      inputs,
+      selections,
+    );
   }
   if (activityCode.startsWith("HVAC") || activityCode.startsWith("D16") || activityCode.startsWith("F4")) {
     return deriveNswAirConditionerInputs(
@@ -891,9 +1017,13 @@ export function deriveCreditexVeuOfficialProductInputs(
       "veuProductConfigurationClass",
       "a governed VEU product configuration class",
     );
-    if (configurationClass !== "single" && configurationClass !== "multi") {
+    if (
+      configurationClass !== "single"
+      && configurationClass !== "multi"
+      && configurationClass !== "packaged"
+    ) {
       return officialProductFailure(
-        `The selected VEU air conditioner is ${sourceConfiguration}. Packaged systems do not yet have a governed quote-calculation contract; choose an approved single-split or multi-split system.`,
+        `The selected VEU air conditioner has unsupported configuration ${JSON.stringify(sourceConfiguration)}.`,
       );
     }
     const premises = inputs.premises;
@@ -973,7 +1103,7 @@ export function deriveCreditexVeuOfficialProductInputs(
     );
     inputs.category = category;
     inputs.configuration = configurationClass;
-    if (configurationClass === "single") {
+    if (configurationClass !== "multi") {
       setOfficialNumber(
         inputs,
         "rated_heating_capacity_kw",
@@ -1026,13 +1156,31 @@ export function deriveCreditexVeuOfficialProductInputs(
     );
   }
   if (activityCode === "15") {
-    assertCreditexVeuOfficialProductSelections(activityCode, selections);
+    const callerScenario = inputs.scenario;
+    if (
+      typeof callerScenario !== "string"
+      || !/^15[A-H]$/.test(callerScenario)
+    ) {
+      return officialProductFailure(
+        "Select the exact VEU Part 15 weather-sealing scenario before resolving approved-product evidence.",
+      );
+    }
+    assertCreditexVeuOfficialProductSelections(
+      activityCode,
+      selections,
+      callerScenario,
+    );
     const selection = selectedProduct(selections, "veu_weather_sealing");
     const scenario = officialText(
       selection,
       "veuProductCategoryNumber",
       "an exact VEU product category number",
     );
+    if (scenario !== callerScenario) {
+      return officialProductFailure(
+        `The selected VEU weather-sealing product is category ${scenario}, not ${callerScenario}.`,
+      );
+    }
     inputs.scenario = scenario;
     if (scenario === "15F" || scenario === "15G") {
       delete inputs.warranty_years;
@@ -1416,6 +1564,38 @@ type CreditexVeuActivityProductContract = {
 };
 
 const CREDITEX_VEU_SCENARIO_PRODUCT_CONTRACTS = {
+  "15A": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15A"],
+  },
+  "15B": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15B"],
+  },
+  "15C": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15C"],
+  },
+  "15D": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15D"],
+  },
+  "15E": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15E"],
+  },
+  "15F": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15F"],
+  },
+  "15G": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15G"],
+  },
+  "15H": {
+    productKinds: ["veu_weather_sealing"],
+    veuProductCategoryNumbers: ["15H"],
+  },
   "27A": {
     productKinds: ["veu_activity_27_product"],
     veuProductCategoryNumbers: ["27A"],
@@ -1572,7 +1752,8 @@ export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
 function veuActivityProductContract(activityCode: string, scenario?: string) {
   if (
     (
-      activityCode === "27"
+      activityCode === "15"
+      || activityCode === "27"
       || activityCode === "34"
       || activityCode === "35"
       || activityCode === "48"
@@ -1668,6 +1849,8 @@ export function officialProductKindLabel(kind: CreditexOfficialProductKind) {
     inverter: "inverter",
     battery: "battery",
     cec_battery: "CEC-approved battery",
+    nsw_heat_pump_water_heater: "TESSA-accepted heat-pump water heater",
+    nsw_solar_water_heater: "TESSA-accepted solar water heater",
     air_conditioner: "air conditioner",
     close_control_air_conditioner: "close-control air conditioner",
     electric_water_heater: "electric water heater",

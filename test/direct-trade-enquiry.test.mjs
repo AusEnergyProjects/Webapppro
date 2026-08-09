@@ -21,7 +21,8 @@ const customerProjectRules = read("../src/lib/customer-projects.mjs");
 test("Direct Trade household projects are routed through the private account gateway", () => {
   assert.match(route, /DirectTradeProjectBrief/);
   assert.match(route, /Direct Trade Project Brief/);
-  assert.match(homepage, /href="\/direct-trade">Start a project brief/);
+  assert.match(homepage, /href="\/plan">Build my home energy plan/);
+  assert.match(homepage, /Create an account after seeing your roadmap/);
   assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
   assert.match(brief, /href="\/account">Open my account/);
   assert.match(brief, /No public lead form/);

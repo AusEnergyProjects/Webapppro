@@ -97,6 +97,17 @@ export type CreditexVeuEstimate = {
       | "nearest_whole_applied"
       | "exact_half_tie_requires_regulator_confirmation";
     unit: "VEEC";
+    unitQuantity?: string;
+    perUnit?: {
+      unroundedTonnes: string;
+      unroundedDecimalStatus: "exact" | "truncated_18dp";
+      exactFraction: string;
+      wholeCertificates: string | null;
+      roundingStatus:
+        | "nearest_whole_applied"
+        | "exact_half_tie_requires_regulator_confirmation";
+      unit: "VEEC";
+    };
   };
   status:
     | "estimate_only_compliance_reconciliation_required"
@@ -635,6 +646,40 @@ function prepareQuoteInputs(
   return { normalizedInputs, warnings };
 }
 
+const MAXIMUM_IDENTICAL_WATER_HEATER_SYSTEMS = "10";
+
+function prepareWaterHeaterUnitQuantity(
+  activityCode: string,
+  estimatePurpose: "compliance" | "quote",
+  inputs: UnknownRecord,
+) {
+  if (!(["1C", "1D", "3C", "3D"] as readonly string[]).includes(activityCode)) {
+    return {
+      executionInputs: inputs,
+      quantity: decimalConstant("1"),
+      quantityText: "1",
+    };
+  }
+  const executionInputs = { ...inputs };
+  const quantity = inputs.unit_quantity === undefined
+    ? decimalConstant("1")
+    : decimalInput(
+      inputs,
+      "unit_quantity",
+      "Number of identical systems",
+      { integer: true, maximum: MAXIMUM_IDENTICAL_WATER_HEATER_SYSTEMS },
+    );
+  delete executionInputs.unit_quantity;
+  const quantityText = decimalPresentation(quantity).decimal;
+  if (estimatePurpose !== "quote" && quantityText !== "1") {
+    fail(
+      "VEU_REQUEST_INVALID",
+      "Strict compliance estimates accept one water-heater activity at a time. Use quote mode to compare multiple identical systems, then validate each installation separately.",
+    );
+  }
+  return { executionInputs, quantity, quantityText };
+}
+
 function ensureAtLeast(value: Fraction, minimumValue: string, message: string) {
   if (compare(value, decimalConstant(minimumValue)) < 0) {
     fail("VEU_SYSTEM_INELIGIBLE", message, 409);
@@ -946,7 +991,7 @@ function ensurePart6CategoryCapacity(category: CreditexVeuPart6Category, capacit
 
 function part6MinimumCoPayment(
   category: CreditexVeuPart6Category,
-  configuration: "single" | "multi",
+  configuration: "single" | "multi" | "packaged",
   ratedCoolingCapacity: Fraction,
   part6RevisionApplied: boolean,
 ) {
@@ -998,11 +1043,102 @@ function part6BaselineValue(
   return decimalConstant(baseline[zoneKey] ?? baseline[key]);
 }
 
+type CreditexVeuPart6IndoorUnitSnapshot = {
+  label: string;
+  model: string;
+  quantity: string;
+  heatingCapacityKw: string;
+  coolingCapacityKw: string;
+};
+
+function optionalPart6IndoorUnitText(
+  value: unknown,
+  label: string,
+) {
+  if (value === undefined || value === "") return "";
+  if (
+    typeof value !== "string"
+    || value.trim() !== value
+    || value.length > 80
+  ) {
+    fail(
+      "VEU_INPUT_INVALID",
+      `${label} must be a trimmed text value of at most 80 characters.`,
+    );
+  }
+  return value;
+}
+
+function part6IndoorUnitList(value: unknown) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
+    fail(
+      "VEU_INPUT_INVALID",
+      "Add between 1 and 20 connected indoor-unit rows for a multi-split or VRF quote.",
+    );
+  }
+  let totalQuantity = ZERO;
+  let totalHeating = ZERO;
+  let totalCooling = ZERO;
+  const snapshot: CreditexVeuPart6IndoorUnitSnapshot[] = [];
+  for (const [index, rawUnit] of value.entries()) {
+    const unit = record(rawUnit, `Indoor unit ${index + 1}`);
+    exactKeys(unit, [
+      "label",
+      "model",
+      "quantity",
+      "heatingCapacityKw",
+      "coolingCapacityKw",
+    ], `indoor unit ${index + 1}`);
+    const quantity = decimalInput(
+      unit,
+      "quantity",
+      `Indoor unit ${index + 1} quantity`,
+      { integer: true, maximum: "20" },
+    );
+    const heating = decimalInput(
+      unit,
+      "heatingCapacityKw",
+      `Indoor unit ${index + 1} heating capacity`,
+      { maximum: "65" },
+    );
+    const cooling = decimalInput(
+      unit,
+      "coolingCapacityKw",
+      `Indoor unit ${index + 1} cooling capacity`,
+      { maximum: "65" },
+    );
+    totalQuantity = add(totalQuantity, quantity);
+    totalHeating = add(totalHeating, multiply(quantity, heating));
+    totalCooling = add(totalCooling, multiply(quantity, cooling));
+    snapshot.push({
+      label: optionalPart6IndoorUnitText(
+        unit.label,
+        `Indoor unit ${index + 1} label`,
+      ),
+      model: optionalPart6IndoorUnitText(
+        unit.model,
+        `Indoor unit ${index + 1} model`,
+      ),
+      quantity: decimalPresentation(quantity).decimal,
+      heatingCapacityKw: decimalPresentation(heating).decimal,
+      coolingCapacityKw: decimalPresentation(cooling).decimal,
+    });
+  }
+  if (compare(totalQuantity, decimalConstant("20")) > 0) {
+    fail(
+      "VEU_INPUT_INVALID",
+      "A multi-split or VRF quote supports no more than 20 connected indoor units.",
+    );
+  }
+  return { snapshot, totalQuantity, totalHeating, totalCooling };
+}
+
 function calculatePart6(
   inputs: UnknownRecord,
   product: unknown,
   installationDate: string,
   part6RevisionApplied: boolean,
+  estimatePurpose: "compliance" | "quote",
 ): Execution {
   exactKeys(inputs, [
     "scenario",
@@ -1014,6 +1150,7 @@ function calculatePart6(
     "rated_cooling_capacity_kw",
     "outdoor_heating_capacity_kw",
     "outdoor_cooling_capacity_kw",
+    "indoor_units",
     "hspf_upgrade",
     "tcspf_upgrade",
     "hspf_cold_eligibility",
@@ -1033,7 +1170,19 @@ function calculatePart6(
   const category = selectInput(inputs, "category", "Part 6 category", CREDITEX_VEU_PART_6_CATEGORIES);
   const premises = selectInput(inputs, "premises", "premises type", ["residential", "business"] as const);
   const locationClass = selectInput(inputs, "location_class", "location class", CREDITEX_VEU_LOCATION_CLASSES);
-  const configuration = selectInput(inputs, "configuration", "air-conditioner configuration", ["single", "multi"] as const);
+  const configuration = selectInput(
+    inputs,
+    "configuration",
+    "air-conditioner configuration",
+    ["single", "multi", "packaged"] as const,
+  );
+  if (configuration === "packaged" && estimatePurpose !== "quote") {
+    fail(
+      "VEU_PRODUCT_EVIDENCE_INVALID",
+      "Packaged Part 6 systems require a complete governed indoor and outdoor bundle evidence contract before a strict compliance estimate can run. Quote mode may use the exact approved packaged-system row.",
+      409,
+    );
+  }
   if (scenario === "xi") {
     rejectNotApplicableInputs(
       inputs,
@@ -1103,8 +1252,40 @@ function calculatePart6(
     "performance basis",
     ["gems", "calculated_from_acop_aeer", "mixed_gems_and_calculated"] as const,
   );
-  const ratedHeating = decimalInput(inputs, "rated_heating_capacity_kw", "Rated heating capacity");
-  const ratedCooling = decimalInput(inputs, "rated_cooling_capacity_kw", "Rated cooling capacity");
+  let indoorUnits: ReturnType<typeof part6IndoorUnitList> | null = null;
+  let ratedHeating: Fraction;
+  let ratedCooling: Fraction;
+  if (configuration === "multi" && inputs.indoor_units !== undefined) {
+    if (estimatePurpose !== "quote") {
+      fail(
+        "VEU_REQUEST_INVALID",
+        "Strict compliance estimates require the governed multi-split evidence contract. Remove the quote-only indoor-unit list.",
+      );
+    }
+    if (
+      inputs.rated_heating_capacity_kw !== undefined
+      || inputs.rated_cooling_capacity_kw !== undefined
+    ) {
+      fail(
+        "VEU_REQUEST_INVALID",
+        "Use the connected indoor-unit list instead of entering separate indoor capacity totals.",
+      );
+    }
+    indoorUnits = part6IndoorUnitList(inputs.indoor_units);
+    ratedHeating = indoorUnits.totalHeating;
+    ratedCooling = indoorUnits.totalCooling;
+  } else {
+    ratedHeating = decimalInput(
+      inputs,
+      "rated_heating_capacity_kw",
+      "Rated heating capacity",
+    );
+    ratedCooling = decimalInput(
+      inputs,
+      "rated_cooling_capacity_kw",
+      "Rated cooling capacity",
+    );
+  }
   let outdoorHeating: Fraction | null = null;
   let outdoorCooling: Fraction | null = null;
   if (configuration === "multi") {
@@ -1121,8 +1302,12 @@ function calculatePart6(
     inputs.outdoor_heating_capacity_kw !== undefined
     || inputs.outdoor_cooling_capacity_kw !== undefined
     || inputs.same_oem_confirmed !== undefined
+    || inputs.indoor_units !== undefined
   ) {
-    fail("VEU_REQUEST_INVALID", "Remove multi-split-only inputs for a single system.");
+    fail(
+      "VEU_REQUEST_INVALID",
+      `Remove multi-split-only inputs for a ${configuration === "packaged" ? "packaged" : "single"} system.`,
+    );
   }
   const productRatedCooling = outdoorCooling ?? ratedCooling;
   ensurePart6CategoryCapacity(category, productRatedCooling);
@@ -1210,6 +1395,10 @@ function calculatePart6(
       performanceBasis,
       ratedHeatingCapacityKw: exactFraction(ratedHeating),
       ratedCoolingCapacityKw: exactFraction(ratedCooling),
+      indoorUnits: indoorUnits?.snapshot || [],
+      indoorUnitQuantity: indoorUnits
+        ? decimalPresentation(indoorUnits.totalQuantity).decimal
+        : "",
       outdoorHeatingCapacityKw: outdoorHeating ? exactFraction(outdoorHeating) : "",
       outdoorCoolingCapacityKw: outdoorCooling ? exactFraction(outdoorCooling) : "",
       governedHeatingCapacityKw: exactFraction(heatingCapacity),
@@ -1233,8 +1422,42 @@ function calculatePart6(
     },
     trace: [
       traceEntry("minimum_co_payment", "Minimum co-payment gate", exactFraction(coPayment), coPaymentRequirement.rule, coPaymentRequirement.minimum, "AUD including GST per installed product"),
-      traceEntry("governed_heating_capacity", "Governed heating capacity", decimalPresentation(ratedHeating).decimal, "indoor sum capped by outdoor rating, scenario cap and applicable 20 kW residential multi-split cap", heatingCapacity, "kW"),
-      traceEntry("governed_cooling_capacity", "Governed cooling capacity", decimalPresentation(ratedCooling).decimal, "indoor sum capped by outdoor rating, scenario cap and applicable 20 kW residential multi-split cap", coolingCapacity, "kW"),
+      ...(indoorUnits
+        ? [
+            traceEntry(
+              "connected_indoor_units",
+              "Connected indoor units",
+              `${indoorUnits.snapshot.length} configured rows`,
+              "sum quantity x rated capacity for each connected indoor-unit row",
+              indoorUnits.totalQuantity,
+              "indoor units",
+            ),
+          ]
+        : []),
+      traceEntry(
+        "governed_heating_capacity",
+        "Governed heating capacity",
+        decimalPresentation(ratedHeating).decimal,
+        configuration === "multi"
+          ? "connected indoor-unit sum capped by approved outdoor rating, scenario cap and applicable 20 kW residential multi-split cap"
+          : configuration === "packaged"
+            ? "exact approved packaged-system rating capped by the selected scenario"
+            : "exact approved single-system rating capped by the selected scenario",
+        heatingCapacity,
+        "kW",
+      ),
+      traceEntry(
+        "governed_cooling_capacity",
+        "Governed cooling capacity",
+        decimalPresentation(ratedCooling).decimal,
+        configuration === "multi"
+          ? "connected indoor-unit sum capped by approved outdoor rating, scenario cap and applicable 20 kW residential multi-split cap"
+          : configuration === "packaged"
+            ? "exact approved packaged-system rating capped by the selected scenario"
+            : "exact approved single-system rating capped by the selected scenario",
+        coolingCapacity,
+        "kW",
+      ),
       traceEntry("gsf_heat", "Heating greenhouse savings factor", `${exactFraction(baselineHeatingIntensity)} / ${exactFraction(baselineHspf)}`, `baseline intensity / baseline HSPF - EEF x ${categoryFactors.lossFactor} / approved-product HSPF`, gsfHeat, "tCO2-e/MWh"),
       traceEntry("heating_savings", "Annual heating savings", `${exactFraction(gsfHeat)} x ${buildingLoads.heating} x ${exactFraction(heatingCapacity)}`, "GSFheat x BTLheat x governed heating capacity", heatingSavings, "tCO2-e/year"),
       traceEntry("gsf_cool", "Cooling greenhouse savings factor", `${exactFraction(EEF)} / ${exactFraction(baselineTcspf)}`, `baseline intensity / baseline TCSPF - EEF x ${categoryFactors.lossFactor} / approved-product TCSPF`, gsfCool, "tCO2-e/MWh"),
@@ -3698,6 +3921,7 @@ function execute(
   product: unknown,
   installationDate: string,
   part6RevisionApplied: boolean,
+  estimatePurpose: "compliance" | "quote",
 ): Execution {
   switch (activityCode) {
     case "1C":
@@ -3707,7 +3931,13 @@ function execute(
     case "3D":
       return calculatePart3(activityCode, inputs, product, installationDate);
     case "6":
-      return calculatePart6(inputs, product, installationDate, part6RevisionApplied);
+      return calculatePart6(
+        inputs,
+        product,
+        installationDate,
+        part6RevisionApplied,
+        estimatePurpose,
+      );
     case "13":
       return calculatePart13(inputs, product, installationDate);
     case "14":
@@ -3803,13 +4033,19 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   const quotePreparation = estimatePurpose === "quote"
     ? prepareQuoteInputs(activity, suppliedInputs)
     : { normalizedInputs: suppliedInputs, warnings: [] };
-  const inputs = quotePreparation.normalizedInputs;
+  const unitPreparation = prepareWaterHeaterUnitQuantity(
+    activityCode,
+    estimatePurpose,
+    quotePreparation.normalizedInputs,
+  );
+  const inputs = unitPreparation.executionInputs;
   const execution = execute(
     activityCode,
     inputs,
     request.product,
     installationDate,
     specification.part6RevisionApplied,
+    estimatePurpose,
   );
   if (
     !(activity.scenarios as readonly string[]).includes(execution.scenario)
@@ -3820,22 +4056,79 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   ) {
     fail("VEU_REQUEST_INVALID", `Scenario ${execution.scenario} is not declared for activity ${activityCode}.`);
   }
-  const rounded = nearestWholeCertificates(execution.result);
-  const presentation = decimalPresentation(execution.result);
+  const repeatedSystems = unitPreparation.quantityText !== "1";
+  const perUnitRounded = nearestWholeCertificates(execution.result);
+  const totalResult = repeatedSystems
+    ? multiply(execution.result, unitPreparation.quantity)
+    : execution.result;
+  const rounded = repeatedSystems
+    ? {
+        wholeCertificates: perUnitRounded.wholeCertificates === null
+          ? null
+          : String(
+            BigInt(perUnitRounded.wholeCertificates)
+              * unitPreparation.quantity.numerator,
+          ),
+        tie: perUnitRounded.tie,
+      }
+    : perUnitRounded;
+  const presentation = decimalPresentation(totalResult);
+  const perUnitPresentation = decimalPresentation(execution.result);
+  const trace = repeatedSystems
+    ? [
+        ...execution.trace,
+        traceEntry(
+          "unit_quantity",
+          "Identical systems",
+          unitPreparation.quantityText,
+          "calculate each identical approved system separately",
+          unitPreparation.quantity,
+          "systems",
+        ),
+        traceEntry(
+          "multi_unit_total",
+          "Total governed reduction",
+          `${perUnitPresentation.decimal} tCO2-e per system`,
+          `multiply the per-system result by ${unitPreparation.quantityText}; whole VEECs are rounded per system before multiplication`,
+          totalResult,
+        ),
+      ]
+    : execution.trace;
   const output = {
     unroundedTonnes: presentation.decimal,
     unroundedDecimalStatus: presentation.status,
-    exactFraction: exactFraction(execution.result),
+    exactFraction: exactFraction(totalResult),
     wholeCertificates: rounded.wholeCertificates,
     roundingStatus: rounded.tie
       ? "exact_half_tie_requires_regulator_confirmation" as const
       : "nearest_whole_applied" as const,
     unit: "VEEC" as const,
+    ...(repeatedSystems
+      ? {
+          unitQuantity: unitPreparation.quantityText,
+          perUnit: {
+            unroundedTonnes: perUnitPresentation.decimal,
+            unroundedDecimalStatus: perUnitPresentation.status,
+            exactFraction: exactFraction(execution.result),
+            wholeCertificates: perUnitRounded.wholeCertificates,
+            roundingStatus: perUnitRounded.tie
+              ? "exact_half_tie_requires_regulator_confirmation" as const
+              : "nearest_whole_applied" as const,
+            unit: "VEEC" as const,
+          },
+        }
+      : {}),
   };
   const formulaKey = `${activity.formulaKey}:${specification.formulaProfile}`;
   const inputSnapshot = {
     installationDate,
     ...execution.inputSnapshot,
+    ...(repeatedSystems
+      ? {
+          unitQuantity: unitPreparation.quantityText,
+          repeatedIdenticalApprovedProduct: true,
+        }
+      : {}),
     ...(estimatePurpose === "quote"
       ? { quoteEligibilityEvidence: quotePreparation.warnings }
       : {}),
@@ -3856,7 +4149,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     specificationVersion: specification.source.version,
     supportingSources: supportingSourcesFor(activity),
     inputSnapshot,
-    trace: execution.trace,
+    trace,
     output,
     ...quoteMetadata,
   };
@@ -3880,7 +4173,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
       ? CREDITEX_VEU_PUBLIC_REGISTRY_URL
       : "",
     inputSnapshot,
-    trace: execution.trace,
+    trace,
     output,
     status: rounded.tie
       ? "estimate_only_rounding_tie_unresolved"
@@ -3892,7 +4185,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
         ? "The official guide requires nearest-whole VEEC rounding but does not state the exact 0.5 tie rule. The unrounded exact quantity is retained and no whole certificate value is asserted."
         : "Estimate only. Reconcile the installation, postcode classification, approved product record, effective dates and all activity evidence against the official VEU systems before certificate creation.",
     inputHash: sha256(inputSnapshot),
-    traceHash: sha256(execution.trace),
+    traceHash: sha256(trace),
     outputHash: sha256(output),
     receiptHash: sha256(receiptBase),
     ...quoteMetadata,

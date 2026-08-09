@@ -26,6 +26,9 @@ import {
   createCreditexLicensedCecBatteryProductRegistry,
   type CreditexLicensedCecBatteryCredentials,
 } from "./creditex-cec-battery-source.ts";
+import {
+  CREDITEX_TESSA_PRODUCT_REGISTRY,
+} from "./creditex-tessa-product-source.ts";
 
 export {
   CREDITEX_CEC_BATTERY_ALL_RECORDS_URL,
@@ -33,6 +36,7 @@ export {
   createCreditexLicensedCecBatteryProductRegistry,
   type CreditexLicensedCecBatteryCredentials,
 };
+export { CREDITEX_TESSA_PRODUCT_REGISTRY };
 
 const PRODUCT_KIND_MAP = {
   solar_pv_module: "pv_module",
@@ -124,6 +128,7 @@ CreditexOfficialProductRegistryDefinition = {
 
 export const CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES = [
   CREDITEX_GEMS_PRODUCT_REGISTRY,
+  CREDITEX_TESSA_PRODUCT_REGISTRY,
   CREDITEX_VEU_PRODUCT_REGISTRY,
 ] as const;
 
@@ -137,7 +142,7 @@ export const CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES = [
   CREDITEX_CER_CEC_PRODUCT_REGISTRY,
 ] as const;
 
-function licensedCecBatteryRegistryFromEnvironment(
+function cecBatteryConnectorState(
   environment: Readonly<Record<string, unknown>>,
 ) {
   const credentials = Object.fromEntries(
@@ -147,13 +152,33 @@ function licensedCecBatteryRegistryFromEnvironment(
     ]),
   ) as CreditexLicensedCecBatteryCredentials;
   const configured = Object.values(credentials).filter((value) => value !== "");
-  if (configured.length === 0) return undefined;
+  if (configured.length === 0) return {};
   if (configured.length !== 3) {
-    throw new Error(
-      "The platform CEC battery connector configuration is incomplete.",
-    );
+    return {
+      issue: `The platform CEC battery connector configuration is incomplete. Configure ${Object.values(CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS).join(", ")} together.`,
+    };
   }
-  return createCreditexLicensedCecBatteryProductRegistry(credentials);
+  try {
+    return {
+      definition: createCreditexLicensedCecBatteryProductRegistry(credentials),
+    };
+  } catch (error) {
+    return {
+      issue: `The platform CEC battery connector configuration is invalid: ${error instanceof Error ? error.message : "unknown validation error"}`,
+    };
+  }
+}
+
+function licensedCecBatteryRegistryFromEnvironment(
+  environment: Readonly<Record<string, unknown>>,
+) {
+  return cecBatteryConnectorState(environment).definition;
+}
+
+export function creditexCecBatteryConnectorConfigurationIssue(
+  environment: Readonly<Record<string, unknown>> = {},
+) {
+  return cecBatteryConnectorState(environment).issue || null;
 }
 
 export function creditexAutomaticProductRegistries(

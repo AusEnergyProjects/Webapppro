@@ -502,6 +502,175 @@ test("future-dated Part 6 multi and VRF quotes use indoor sums capped by the app
   ));
 });
 
+test("Part 6 quote mode derives multi and VRF capacity from a repeatable indoor-unit list", () => {
+  const inputs = part6Inputs({
+    scenario: "vii",
+    category: "6B(ii)",
+    configuration: "multi",
+    outdoor_heating_capacity_kw: "25",
+    outdoor_cooling_capacity_kw: "25",
+    hspf_upgrade: "5",
+    tcspf_upgrade: "5",
+    hspf_cold_eligibility: "3.4",
+    tcspf_cold_eligibility: "4.2",
+    same_oem_confirmed: "no",
+    incumbent_scenario_requirements_confirmed: "no",
+    decommissioning_and_disposal_confirmed: "no",
+    residential_consumer_fact_sheet_provided: "no",
+    residential_suitability_and_sizing_advice_confirmed: "no",
+    warranty_years: "0",
+    warranty_requirements_confirmed: "no",
+    co_payment_per_installed_product_aud: "0",
+  });
+  delete inputs.rated_heating_capacity_kw;
+  delete inputs.rated_cooling_capacity_kw;
+  inputs.indoor_units = [
+    {
+      label: "Living areas",
+      model: "INDOOR-35",
+      quantity: "4",
+      heatingCapacityKw: "3.5",
+      coolingCapacityKw: "3.5",
+    },
+    {
+      label: "Bedrooms",
+      model: "",
+      quantity: "2",
+      heatingCapacityKw: "4",
+      coolingCapacityKw: "4",
+    },
+  ];
+
+  const quote = estimateCreditexVeu({
+    activityCode: "6",
+    installationDate: "2026-10-15",
+    estimatePurpose: "quote",
+    inputs,
+    product: product("VEU", "6B(ii)"),
+  });
+
+  assert.equal(quote.inputSnapshot.configuration, "multi");
+  assert.equal(quote.inputSnapshot.ratedHeatingCapacityKw, "22/1");
+  assert.equal(quote.inputSnapshot.ratedCoolingCapacityKw, "22/1");
+  assert.equal(quote.inputSnapshot.indoorUnitQuantity, "6");
+  assert.equal(quote.inputSnapshot.indoorUnits.length, 2);
+  assert.equal(quote.inputSnapshot.governedHeatingCapacityKw, "20/1");
+  assert.equal(quote.inputSnapshot.governedCoolingCapacityKw, "20/1");
+  assert.ok(quote.trace.some(({ key }) => key === "connected_indoor_units"));
+
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "6",
+      installationDate: "2026-10-15",
+      inputs: {
+        ...inputs,
+        same_oem_confirmed: "yes",
+        incumbent_scenario_requirements_confirmed: "yes",
+        decommissioning_and_disposal_confirmed: "yes",
+        residential_consumer_fact_sheet_provided: "yes",
+        residential_suitability_and_sizing_advice_confirmed: "yes",
+        warranty_years: "5",
+        warranty_requirements_confirmed: "yes",
+        co_payment_per_installed_product_aud: "3000",
+      },
+      product: product("VEU", "6B(ii)"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_REQUEST_INVALID"
+      && /quote-only indoor-unit list/.test(error.message),
+  );
+});
+
+test("Part 6 packaged systems use exact selected-row inputs only in quote mode", () => {
+  const inputs = part6Inputs({
+    scenario: "i",
+    category: "6A",
+    configuration: "packaged",
+    rated_heating_capacity_kw: "8",
+    rated_cooling_capacity_kw: "8",
+  });
+  const quote = estimateCreditexVeu({
+    activityCode: "6",
+    installationDate: "2026-10-15",
+    estimatePurpose: "quote",
+    inputs,
+    product: product("VEU", "6A"),
+  });
+  assert.equal(quote.inputSnapshot.configuration, "packaged");
+  assert.equal(quote.inputSnapshot.ratedHeatingCapacityKw, "8/1");
+  assert.equal(quote.inputSnapshot.ratedCoolingCapacityKw, "8/1");
+  assert.equal(quote.inputSnapshot.governedHeatingCapacityKw, "12/5");
+  assert.equal(quote.inputSnapshot.governedCoolingCapacityKw, "12/5");
+  assert.match(
+    quote.trace.find(({ key }) => key === "governed_heating_capacity").operation,
+    /approved packaged-system rating/,
+  );
+
+  assert.throws(
+    () => estimate("6", inputs, product("VEU", "6A"), "2026-10-15"),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_PRODUCT_EVIDENCE_INVALID"
+      && /Packaged Part 6 systems/.test(error.message),
+  );
+});
+
+test("Parts 1 and 3 quote mode shows per-system and repeated identical-system totals", () => {
+  const baseInputs = {
+    geography: "metropolitan",
+    system_size: "small",
+    climate_zone: "5",
+    bs2021_gj_per_year: "1",
+    be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(true),
+  };
+  const perUnit = estimate("1D", baseInputs, product("VEU", "1D"));
+  const quote = estimateCreditexVeu({
+    activityCode: "1D",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: { ...baseInputs, unit_quantity: "2" },
+    product: product("VEU", "1D"),
+  });
+
+  assert.equal(quote.output.unitQuantity, "2");
+  assert.equal(
+    quote.output.perUnit.wholeCertificates,
+    perUnit.output.wholeCertificates,
+  );
+  assert.equal(
+    quote.output.wholeCertificates,
+    String(BigInt(perUnit.output.wholeCertificates) * 2n),
+  );
+  assert.equal(quote.inputSnapshot.unitQuantity, "2");
+  assert.ok(quote.trace.some(({ key }) => key === "multi_unit_total"));
+  assert.equal(quote.certificateActionEnabled, false);
+
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "1D",
+      installationDate: "2026-08-08",
+      inputs: { ...baseInputs, unit_quantity: "2" },
+      product: product("VEU", "1D"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_REQUEST_INVALID"
+      && /one water-heater activity at a time/.test(error.message),
+  );
+  for (const unit_quantity of ["0", "11", "1.5"]) {
+    assert.throws(
+      () => estimateCreditexVeu({
+        activityCode: "1D",
+        installationDate: "2026-08-08",
+        estimatePurpose: "quote",
+        inputs: { ...baseInputs, unit_quantity },
+        product: product("VEU", "1D"),
+      }),
+      (error) => error instanceof CreditexVeuEstimateError
+        && error.code === "VEU_INPUT_INVALID",
+    );
+  }
+});
+
 test("quote mode still rejects formula-critical performance, category and product dates", () => {
   const request = {
     activityCode: "6",

@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
 import { tradeQuoteDocumentDisplayTotals } from "@/lib/trade-quote-document-totals.mjs";
+import {
+  clearTradeRebateEstimateDraft,
+  loadTradeRebateEstimateDraft,
+  type TradeRebateEstimateDraft,
+} from "@/lib/trade-rebate-draft";
 
 type QuoteLine = { id?: string; priceBookItemId?: string; jobPacketId?: string; jobPacketLineId?: string; lineType: string; description: string; quantity: string; unitPrice: string; taxCode: string; sectionHeading: string; totalCents?: number };
 type SavedLine = { id: string; priceBookItemId: string; jobPacketId: string; jobPacketLineId: string; lineType: string; description: string; quantityMilli: number; unitPriceCents: number; taxCode: string; sectionHeading: string; totalCents: number };
@@ -180,6 +185,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
   const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false); const [answer, setAnswer] = useState(""); const [answeringId, setAnsweringId] = useState("");
   const [sendPreview, setSendPreview] = useState<QuoteSendPreview | null>(null); const [sendConsent, setSendConsent] = useState(false);
+  const [rebateDraft, setRebateDraft] = useState<TradeRebateEstimateDraft | null>(null);
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLElement | null>(null);
 
@@ -215,6 +221,14 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
     const frame = window.requestAnimationFrame(() => void request().then(applyResult).catch((error) => setMessage(error.message)));
     return () => window.cancelAnimationFrame(frame);
   }, [applyResult, available, request]);
+
+  useEffect(() => {
+    if (!available) return;
+    const frame = window.requestAnimationFrame(() => {
+      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, user.uid));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [available, user.uid]);
 
   useEffect(() => {
     if (!sendPreview) return;
@@ -268,6 +282,24 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
     const line: QuoteLine = { priceBookItemId: item.id, lineType: item.lineType, description: item.description || item.name, quantity: "1", unitPrice: (item.sellPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode, sectionHeading: "Included work" };
     if (targetChoiceKey) setChoices((current) => current.map((choice) => choice.clientKey === targetChoiceKey ? { ...choice, lines: [...choice.lines.filter((row) => row.description), line] } : choice));
     else setLines((current) => current.length === 1 && !current[0].description ? [line] : [...current, line]);
+  }
+
+  function applyRebateDiscount() {
+    if (!rebateDraft) return;
+    const line: QuoteLine = {
+      lineType: "adjustment",
+      description: `Rebate discount - ${rebateDraft.activityTitle} (${rebateDraft.quantity} ${rebateDraft.unit} estimate)`,
+      quantity: "1",
+      unitPrice: `-${rebateDraft.customerDiscountDollars}`,
+      taxCode: "gst",
+      sectionHeading: "Rebate and discounts",
+    };
+    setLines((current) => (
+      current.length === 1 && !current[0].description ? [line] : [...current, line]
+    ));
+    clearTradeRebateEstimateDraft(window.sessionStorage, user.uid);
+    setRebateDraft(null);
+    setMessage("Rebate discount added. Check the amount and GST before saving the quote.");
   }
 
   function applyPacket(asPackages: boolean) {
@@ -435,6 +467,7 @@ export function TradeQuotePanel({ user, workOrderId, available, onOpenPriceBook,
   return <section className="trade-quote-panel">
     <header><div><span>Clear customer quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Keep a simple quote fast, or build clear choices without retyping standard work. Issued versions are immutable.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
     {(quote?.questions?.length || 0) > 0 && <section className={`trade-quote-questions ${openQuestions.length ? "needs-attention" : ""}`} id="quote-questions"><span>{openQuestions.length ? `${openQuestions.length} customer ${openQuestions.length === 1 ? "question needs" : "questions need"} a reply` : "Customer questions"}</span><h5>{openQuestions.length ? "Reply before the job moves on" : "Questions and replies"}</h5>{quote?.questions?.map((item) => <article key={item.id}><div><strong>{item.question}</strong><small>Asked {new Date(item.askedAt).toLocaleString("en-AU")}</small>{item.answer && <p>{item.answer}</p>}</div>{item.status === "open" && (answeringId === item.id ? <div><textarea aria-label="Quote question response" rows={3} maxLength={1000} value={answer} onChange={(event) => setAnswer(event.target.value)} /><button type="button" disabled={answer.trim().length < 2 || Boolean(busy)} onClick={() => void linkAction("answer_question", { questionId: item.id, answer })}>Send response</button></div> : <button type="button" onClick={() => setAnsweringId(item.id)}>Answer</button>)}</article>)}</section>}
+    {rebateDraft && <section className="trade-rebate-document-offer"><div><span>REBATE ESTIMATE READY</span><strong>{rebateDraft.quantity} {rebateDraft.unit} | ${rebateDraft.customerDiscountDollars} customer discount</strong><small>{rebateDraft.activityTitle}</small></div><button type="button" onClick={applyRebateDiscount}>Add discount to this quote</button></section>}
     <div className="trade-quote-price-book"><label><span>Add a saved item</span><select aria-label="Add a saved price-book item" value="" disabled={!priceBookItems.length} onChange={(event) => addSavedLine(event.target.value)}><option value="">{priceBookItems.length ? "Choose a saved item" : "No saved items yet"}</option>{priceBookItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} ex GST / {item.unitLabel}</option>)}</select></label>{priceBookItems.length ? <small>Select an item once, then adjust only its quantity. Current description, type, price and GST are checked again when the draft is saved.</small> : <div><small>Save your common labour, materials and call-outs once, then reuse them here.</small><button type="button" onClick={onOpenPriceBook}>Open Price book</button></div>}</div>
     {jobPackets.length > 0 && <div className="trade-quote-packets"><label><span>Start from a common job</span><select value={packetId} onChange={(event) => setPacketId(event.target.value)}><option value="">Choose saved common work</option>{jobPackets.map((packet) => <option key={packet.id} value={packet.id} disabled={!packet.canApply}>{packet.name} | {packet.lines.length} items | {money(packet.summary.sellCentsExGst)} ex GST{packet.canApply ? "" : " | needs attention"}</option>)}</select></label><div className="trade-quote-packet-actions"><button type="button" disabled={!packetId} onClick={() => applyPacket(false)}>Use standard job</button><button type="button" disabled={!packetId} onClick={() => applyPacket(true)}>Build Good, Better, Best</button></div><small>One common job can stay simple or become three customer choices. Edit only what differs.</small></div>}
     {lines.length > 0 && <section className="trade-quote-base"><header><div><strong>Quote items</strong><span>{choices.length ? "These items are included before any customer choices." : "The fastest path for straightforward work."}</span></div></header><div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Type</span><span>Description and section</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => lineEditor(line, index, (field, value) => updateBaseLine(index, field, value), () => setLines((currentLines) => currentLines.filter((_, position) => position !== index)), lines.length > 1 || choices.length > 0))}</div></section>}

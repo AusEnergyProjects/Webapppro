@@ -690,7 +690,7 @@ test("VEU product-backed fields for 13, 15, 26, 30, 31, 33 and 36 discard caller
   );
   const sealing = deriveCreditexVeuOfficialProductInputs(
     "15",
-    { scenario: "15H", warranty_years: "99" },
+    { scenario: "15C", warranty_years: "99" },
     [product("veu_weather_sealing", {
       veuProductCategoryNumber: "15C",
       warrantyYears: 4,
@@ -698,6 +698,17 @@ test("VEU product-backed fields for 13, 15, 26, 30, 31, 33 and 36 discard caller
   );
   assert.equal(sealing.scenario, "15C");
   assert.equal(sealing.warranty_years, "4");
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "15",
+      { scenario: "15H", warranty_years: "99" },
+      [product("veu_weather_sealing", {
+        veuProductCategoryNumber: "15C",
+        warrantyYears: 4,
+      })],
+    ),
+    officialError,
+  );
   assert.equal(
     deriveCreditexVeuOfficialProductInputs(
       "26",

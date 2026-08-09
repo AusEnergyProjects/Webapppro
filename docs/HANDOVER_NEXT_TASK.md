@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `CREDITEX-NATIONAL-CALCULATOR-47` released and live
+Status: `AEA-CALCULATOR-USABILITY-AUTHORITY-48` validated candidate awaiting commit and deployment
 
 Prepared: 9 August 2026
 
-Milestone ID: `CREDITEX-NATIONAL-CALCULATOR-47`
+Milestone ID: `AEA-CALCULATOR-USABILITY-AUTHORITY-48`
 
 Working branch: `codex/sites-custom-domain-migration`
 
@@ -17,6 +17,8 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
 Current production source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+
+Candidate application source: pending exact commit identity
 
 Current production: Sites version 297 from application commit `11f4721b678425a4294e95c631e0d37d3fab0ffd`
 
@@ -32,7 +34,64 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Environment revision: 19
 
-## Released milestone: CREDITEX-NATIONAL-CALCULATOR-47
+## Current validated candidate: AEA-CALCULATOR-USABILITY-AUTHORITY-48
+
+Status: the working-tree candidate is validated at the implementation boundary
+and awaits exact commit identity, GitHub source reconciliation, a Sites saved
+version, deployment and live QA. Do not describe it as released or live. Current
+production remains Sites version 297 from
+`11f4721b678425a4294e95c631e0d37d3fab0ffd`.
+
+### Candidate outcome
+
+Make the public, customer and trade calculator paths fast and obvious while
+keeping quote estimates separate from strict compliance and certificate work.
+
+### Validated candidate capability
+
+- `/calculator` provides anonymous quote-only estimates through the governed
+  calculator contract without registry refresh, compliance or certificate
+  authority.
+- The customer landing page has one dominant home-plan start, the planner asks
+  one question at a time, household language replaces industry shorthand and a
+  direct TLink login sits beside Account. Heating options separate hydronic,
+  wood, air conditioning and heat pump choices; hot water includes electric
+  with a gas booster; electrical supply includes two phase.
+- Activity 15 exposes clear weather-sealing scenarios for doors, windows,
+  exhaust fans, wall vents, temporary and permanent chimney or flue sealing and
+  evaporative-cooler outlets.
+- Future installation dates are available inside the official program and
+  selected-product effective windows.
+- One estimate can include 1 to 10 identical approved heat-pump or
+  solar-water-heater units. Mixed-model multi-unit jobs are not yet supported.
+- VEU Part 6 supports a repeatable multi-split or variable-refrigerant-flow
+  indoor-unit list and packaged-system quote-only estimates. Packaged-system
+  compliance and other strict multi-product compliance bundles remain blocked.
+- The official TESSA D17 to D20 automatic registry candidate retained 746 live
+  source rows, comprising 663 `Active` and 83 `Cancelled`, with source SHA-256
+  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+- A trade can enter one exact customer discount and apply it to the next quote
+  or invoice. Certificate counts are not automatically converted to a dollar
+  amount because market prices and provider fees are not scheme formula inputs.
+- No customer-shareable rebate receipt is included. The product owner rejected
+  it as unnecessary, so the workflow ends at the quote or invoice discount.
+
+### Exact release blockers and limits
+
+- Sites does not contain `CREDITEX_CEC_BATTERY_API_USERNAME`,
+  `CREDITEX_CEC_BATTERY_API_PASSWORD` or
+  `CREDITEX_CEC_BATTERY_LICENCE_REFERENCE`.
+- BESS1 and BESS2 remain pending until those licensed credentials produce and
+  activate an accepted snapshot.
+- BESS3 and BESS4 remain blocked because the current licensed CEC contract does
+  not provide the Rule-required maximum rated AC inverter output.
+- Repeated water-heater quantities apply to one identical approved model only.
+- Packaged-system calculations are quote-only until the exact compliance bundle
+  is governed and validated.
+- The exact candidate application commit, Sites saved version, package identity,
+  deployment and live runtime evidence remain pending.
+
+## Previous released milestone: CREDITEX-NATIONAL-CALCULATOR-47
 
 Status: the registry foundation, complete VEU formula set and shared calculator
 integration are released and active. Exact calculator commit
@@ -346,11 +405,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. **Public quote calculator surface using the same estimate-only contract without trade login.**
-2. **Activate licensed CEC battery data in production and live-QA PDRS BESS1-4 once platform credentials are installed.**
-3. **Add governed packaged-system and multi-indoor-unit bundle selection for VEU Part 6.**
-4. **Connect remaining lawful product authorities, including TESSA families, to unblock product-backed pathways.**
-5. **Add quote/invoice rebate lines and customer-shareable estimate receipts.**
+1. **Install licensed CEC platform credentials and activate/live-QA BESS1/2, then obtain exact AC inverter-output authority for BESS3/4.**
+2. **Support mixed-model multi-unit water-heater jobs and complete strict packaged/multi compliance bundles.**
+3. **Close remaining lawful product-authority and formula gaps across every surfaced calculator.**
+4. **Connect each home-plan recommendation to one preselected obvious next action (rebate estimate, plan comparison, assessment, or trade brief).**
+5. **Run representative mobile/customer/trade usability and accessibility acceptance, measure abandonment, and simplify any remaining friction.**
 
 ## Previous released milestone
 

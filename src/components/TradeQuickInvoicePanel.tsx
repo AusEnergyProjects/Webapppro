@@ -3,6 +3,11 @@
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { australiaLocalDateTime } from "@/lib/trade-schedule";
+import {
+  clearTradeRebateEstimateDraft,
+  loadTradeRebateEstimateDraft,
+  type TradeRebateEstimateDraft,
+} from "@/lib/trade-rebate-draft";
 import { TradeAccountingPanel } from "./TradeAccountingPanel";
 import { TradePaymentPanel } from "./TradePaymentPanel";
 
@@ -63,6 +68,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   const [newTaxCode, setNewTaxCode] = useState<"gst" | "none">("gst");
   const [newDueAt, setNewDueAt] = useState(() =>
     addCalendarDays(australiaSydneyCalendarDate(), 7));
+  const [rebateDraft, setRebateDraft] = useState<TradeRebateEstimateDraft | null>(null);
   const previewDialogRef = useRef<HTMLElement>(null);
   const previewCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
@@ -93,6 +99,13 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     }, 0);
     return () => { active = false; window.clearTimeout(timer); };
   }, [load]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setRebateDraft(loadTradeRebateEstimateDraft(window.sessionStorage, user.uid));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [user.uid]);
 
   useEffect(() => {
     if (!previewOpen) return;
@@ -282,9 +295,44 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     }
   }
 
+  function applyRebateDiscount() {
+    if (!rebateDraft) return;
+    if (invoice?.canCorrect) {
+      setDraftDiscount(amount(
+        toCents(draftDiscount) + toCents(rebateDraft.customerDiscountDollars),
+      ));
+      setStatus("Rebate discount added to the existing invoice discount.");
+    } else if (!invoice) {
+      setNewDiscount(amount(
+        toCents(newDiscount) + toCents(rebateDraft.customerDiscountDollars),
+      ));
+      setStatus("Rebate discount added to the invoice discount. Check the total.");
+    } else {
+      return;
+    }
+    clearTradeRebateEstimateDraft(window.sessionStorage, user.uid);
+    setRebateDraft(null);
+  }
+
+  const rebateOffer = rebateDraft && (!invoice || invoice.canCorrect) ? (
+    <section className="trade-rebate-document-offer">
+      <div>
+        <span>REBATE ESTIMATE READY</span>
+        <strong>
+          {rebateDraft.quantity} {rebateDraft.unit} | ${rebateDraft.customerDiscountDollars} customer discount
+        </strong>
+        <small>{rebateDraft.activityTitle}</small>
+      </div>
+      <button type="button" onClick={applyRebateDiscount}>
+        Use discount on this invoice
+      </button>
+    </section>
+  ) : null;
+
   if (loading) return null;
   if (!invoice) return <section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>Create the invoice from this job</h4><p>Start with one line. You can add or correct lines before sending.</p></div><strong>Not started</strong></header>
+    {rebateOffer}
     <div className="crm-invoice-correction-lines">
       <div>
         <input aria-label="New invoice description" maxLength={180} placeholder="Installation or service" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} />
@@ -321,6 +369,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   const draftDiscountCents = toCents(draftDiscount);
   return <><section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>{invoice.invoiceNumber}</h4><p>{reconciliationRequired ? "The email provider accepted a delivery, but TLink could not verify the matching issued record. Do not resend it." : providerAccepted ? `Submitted to the email provider ${new Date(invoice.sentAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : "Saved in this job and waiting to be submitted."}</p></div><strong>{reconciliationRequired ? "Reconciliation required" : invoice.status === "paid" ? "Paid" : invoice.status === "credited" ? "Credited" : providerAccepted ? "Issued" : "Needs attention"}</strong></header>
+    {rebateOffer}
     <div className="crm-quick-invoice-lines">{invoice.lines.map((line) => <div key={line.lineId}><span>{line.description}<small>{line.taxCode === "gst" ? "GST added" : "GST-free"}</small></span><strong>{money(line.subtotalCents)}</strong></div>)}</div>
     <dl>
       <div><dt>Subtotal</dt><dd>{money(invoice.subtotalCents)}</dd></div>

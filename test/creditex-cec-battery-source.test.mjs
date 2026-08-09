@@ -13,6 +13,7 @@ import {
 } from "../src/lib/creditex-cec-battery-source.ts";
 import {
   CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS,
+  creditexCecBatteryConnectorConfigurationIssue,
   creditexAutomaticProductRegistries,
   creditexAutomaticProductRegistry,
 } from "../src/lib/creditex-official-product-registry-definitions.ts";
@@ -228,13 +229,18 @@ test("platform-held CEC credentials activate the licensed registry without a tra
   };
   assert.deepEqual(
     creditexAutomaticProductRegistries().map(({ registryCode }) => registryCode),
-    ["gems-products", "veu-approved-products"],
+    ["gems-products", "nsw-tessa-products", "veu-approved-products"],
   );
   assert.deepEqual(
     creditexAutomaticProductRegistries(environment).map(
       ({ registryCode }) => registryCode,
     ),
-    ["gems-products", "veu-approved-products", "cec-products"],
+    [
+      "gems-products",
+      "nsw-tessa-products",
+      "veu-approved-products",
+      "cec-products",
+    ],
   );
   const licensed = creditexAutomaticProductRegistry(
     "cec-products",
@@ -256,9 +262,29 @@ test("platform-held CEC credentials activate the licensed registry without a tra
     )?.registryCode,
     "veu-approved-products",
   );
-  assert.throws(
-    () => creditexAutomaticProductRegistries(partialEnvironment),
-    /platform CEC battery connector configuration is incomplete/,
+  assert.equal(
+    creditexAutomaticProductRegistry(
+      "nsw-tessa-products",
+      partialEnvironment,
+    )?.registryCode,
+    "nsw-tessa-products",
+  );
+  assert.deepEqual(
+    creditexAutomaticProductRegistries(partialEnvironment).map(
+      ({ registryCode }) => registryCode,
+    ),
+    ["gems-products", "nsw-tessa-products", "veu-approved-products"],
+  );
+  const issue = creditexCecBatteryConnectorConfigurationIssue(
+    partialEnvironment,
+  );
+  assert.match(issue, /configuration is incomplete/);
+  assert.match(issue, /CREDITEX_CEC_BATTERY_API_USERNAME/);
+  assert.match(issue, /CREDITEX_CEC_BATTERY_API_PASSWORD/);
+  assert.match(issue, /CREDITEX_CEC_BATTERY_LICENCE_REFERENCE/);
+  assert.equal(
+    creditexCecBatteryConnectorConfigurationIssue(environment),
+    null,
   );
 });
 

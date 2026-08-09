@@ -17,6 +17,7 @@ import {
 } from "../src/lib/creditex-sres-registry-server";
 import {
   CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
+  creditexCecBatteryConnectorConfigurationIssue,
   creditexAutomaticProductRegistry,
 } from "../src/lib/creditex-official-product-registry-definitions";
 import {
@@ -245,6 +246,12 @@ const worker = {
             await syncOfficialProductRegistry(db, definition, {
               artifactStore,
             });
+          }
+          const environment = workerEnv as Readonly<Record<string, unknown>>;
+          const cecConfigurationIssue =
+            creditexCecBatteryConnectorConfigurationIssue(environment);
+          if (cecConfigurationIssue) {
+            console.error(cecConfigurationIssue);
           }
           const licensedCecBattery = creditexAutomaticProductRegistry(
             "cec-products",
