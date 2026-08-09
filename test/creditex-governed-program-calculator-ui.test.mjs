@@ -306,7 +306,7 @@ test("admin refresh selects only the program-specific governed registry", () => 
     );
     assert.deepEqual(
       other.registryCodes,
-      ["gems-products", "nsw-tessa-products"],
+      ["nsw-tessa-products", "gems-products"],
     );
     assert.equal(other.requestTimeoutMs, 300_000);
     assert.equal(other.buttonLabel, "Refresh NSW official products");
@@ -318,7 +318,7 @@ test("admin refresh selects only the program-specific governed registry", () => 
   );
 });
 
-test("NSW admin refresh updates GEMS then TESSA and combines their current row counts", async () => {
+test("NSW admin refresh updates TESSA before GEMS and combines their current row counts", async () => {
   const contract = allProgramModule.creditexAutomaticRegistryRefreshContract(
     "NSW-PDRS-2026",
   );
@@ -341,7 +341,7 @@ test("NSW admin refresh updates GEMS then TESSA and combines their current row c
   assert.equal(recordCount, 32_164);
   assert.deepEqual(
     calls.map((call) => call.body.registryCode),
-    ["gems-products", "nsw-tessa-products"],
+    ["nsw-tessa-products", "gems-products"],
   );
   for (const call of calls) {
     assert.equal(call.path, "/api/creditex/official-products");
@@ -361,16 +361,16 @@ test("NSW admin refresh fails closed when either governed source cannot refresh"
       async (_path, init) => {
         const { registryCode } = JSON.parse(init.body);
         registryCodes.push(registryCode);
-        if (registryCode === "nsw-tessa-products") {
-          throw new Error("TESSA refresh unavailable");
+        if (registryCode === "gems-products") {
+          throw new Error("GEMS refresh unavailable");
         }
-        return { registries: [{ recordCount: 31_418 }] };
+        return { registries: [{ recordCount: 746 }] };
       },
       contract,
     ),
-    /TESSA refresh unavailable/,
+    /GEMS refresh unavailable/,
   );
-  assert.deepEqual(registryCodes, ["gems-products", "nsw-tessa-products"]);
+  assert.deepEqual(registryCodes, ["nsw-tessa-products", "gems-products"]);
 });
 
 test("NSW official-product refresh remains admin-only", () => {

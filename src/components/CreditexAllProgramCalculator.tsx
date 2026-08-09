@@ -147,7 +147,7 @@ export function creditexAutomaticRegistryRefreshContract(programCode: string) {
     || programCode === "NSW-PDRS-2026"
   ) {
     return {
-      registryCodes: ["gems-products", "nsw-tessa-products"],
+      registryCodes: ["nsw-tessa-products", "gems-products"],
       sourceLabel: "NSW official product data",
       sourceDescription: "Automatic NSW official product data",
       buttonLabel: "Refresh NSW official products",

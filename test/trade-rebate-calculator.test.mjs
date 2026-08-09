@@ -99,7 +99,7 @@ test("trade access remains estimate-only and cannot refresh an official registry
   assert.match(calculator, /registryCodes: \["veu-approved-products"\]/);
   assert.match(
     calculator,
-    /registryCodes: \["gems-products", "nsw-tessa-products"\]/,
+    /registryCodes: \["nsw-tessa-products", "gems-products"\]/,
   );
   assert.match(calculator, /for \(const registryCode of contract\.registryCodes\)/);
   assert.match(calculator, /requestTimeoutMs: 300_000/);
