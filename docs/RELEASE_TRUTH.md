@@ -136,11 +136,16 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 295 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd` | Exact Sites version 295 built from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`; content hash `sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`; deployment `appgdep_6a77b30bab008191bd61b6476525b4f2` |
 | Historical guided calculator and PDRS licensed-runtime source | `1d3abe172e4eb2fa006fab639233cda49a6d37d4` on `codex/sites-custom-domain-migration` | Exact validated source for the shared guided flow, server-side central CEC credential boundary, PDRS definitions and licensed snapshot runtime; deployed as Sites version 296 |
 | Historical Sites version 296 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134` | Exact Sites version 296 built from `1d3abe172e4eb2fa006fab639233cda49a6d37d4`; content hash `sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186`; deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment revision 19 |
-| Calculator usability and product-authority candidate | Exact application commit pending | Validated working-tree candidate for milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48`; not committed, saved, deployed or live |
-| Current simplified quote-calculator source | `11f4721b678425a4294e95c631e0d37d3fab0ffd` on `codex/sites-custom-domain-migration` | Exact source for the short estimate-only quote flow, future-date rule windows, frictionless SRES quote calculations and VEU single-split and multi-split quote calculations |
-| Current release archive identity | Removed locally after Sites accepted the package and recorded custody | 8,158,365 bytes; SHA-256 `FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563` |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df` | Exact Sites version 297 built from `11f4721b678425a4294e95c631e0d37d3fab0ffd`; 378 stored files; 33,105,920 stored bytes; content hash `sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5` |
-| Current executable application identity | Sites version 297 from `11f4721b678425a4294e95c631e0d37d3fab0ffd` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a781d231ee08191a7d506389be1676b` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Historical simplified quote-calculator source | `11f4721b678425a4294e95c631e0d37d3fab0ffd` on `codex/sites-custom-domain-migration` | Exact source for historical Sites version 297 and its short estimate-only quote flow |
+| Historical Sites version 297 archive identity | Removed locally after Sites accepted the package and recorded custody | 8,158,365 bytes; SHA-256 `FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563` |
+| Historical Sites version 297 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df` | Exact Sites version 297 built from `11f4721b678425a4294e95c631e0d37d3fab0ffd`; 378 stored files; 33,105,920 stored bytes; content hash `sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5`; deployment `appgdep_6a781d231ee08191a7d506389be1676b` |
+| Historical initial calculator usability and product-authority source | `c9fb34115209c0ea0a1fc02ee2095250458c256f` on `codex/sites-custom-domain-migration` | Initial executable source for milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48`; historical Sites version 298 |
+| Historical Sites version 298 archive identity | `.openai/site-release-c9fb341.tar.gz` | 8,173,001 bytes; SHA-256 `ffb841f9a08e69c9697047a3d4fdfffcf1e1cb5f0539cc49a8ec8b42a5d419fd` |
+| Historical Sites version 298 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_acf528bb50208191b6bcd0948190172c` | Exact Sites version 298 built from `c9fb34115209c0ea0a1fc02ee2095250458c256f`; content hash `sha256:ac6bd787b8bb9fd71e44e7d0c23368a528c26dba3eb328c0708f3989b5471c86`; deployment `appgdep_6a786857458c8191ae557d2c2f0f2694` succeeded with environment revision 19 |
+| Current calculator usability and product-authority application source | `ca3d84a497258426c7ab34c87e8059df1cba2a27` on `codex/sites-custom-domain-migration` | Exact executable source for current Sites version 300 and TESSA-first governed refresh ordering |
+| Current release archive identity | `.openai/site-release-ca3d84a.tar.gz` | 8,175,111 bytes; SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`; 398 entries; all 126 migrations |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e` | Exact Sites version 300 built from `ca3d84a497258426c7ab34c87e8059df1cba2a27`; 384 files; 33,607,680 bytes; content hash `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73` |
+| Current executable application identity | Sites version 300 from `ca3d84a497258426c7ab34c87e8059df1cba2a27` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7875602838819182dc5ba7dec6366b` succeeded; environment revision 19 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -152,20 +157,32 @@ deployed to production. The complete calculator first shipped as Sites version
 correction in Sites version 295. Sites version 296 from exact guided calculator
 and PDRS source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical. Sites
 version 297 from exact simplified quote-calculator source
-`11f4721b678425a4294e95c631e0d37d3fab0ffd` is the current executable source.
-Its active VEU snapshot contains 75,492 Public Visible rows and the signed-in
-administrator and verified-installer quote paths passed live QA. Certificate
-creation, submission, trading and settlement remain disabled.
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is historical. Sites version 298
+from exact application source `c9fb34115209c0ea0a1fc02ee2095250458c256f`
+is historical. Sites version 300 from exact corrective source
+`ca3d84a497258426c7ab34c87e8059df1cba2a27` is current. Signed-in trade and
+administrator QA verified the SRES, VEU 1C, Activity 15 and activated TESSA
+boundaries described below. GEMS-backed calculators are fail-closed after an
+unresolved reviewed official-row decrease. Certificate creation, submission,
+trading and settlement remain disabled.
 
-## Validated calculator usability and product-authority candidate
+## Current calculator usability and product-authority release
 
-Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is a validated working-tree
-candidate awaiting an exact application commit, GitHub source reconciliation, a
-Sites saved version, deployment and live QA. Current production remains Sites
-version 297 from `11f4721b678425a4294e95c631e0d37d3fab0ffd`. No candidate Sites
-version, deployment identity or live result is claimed.
+Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is released from exact
+executable application commit `ca3d84a497258426c7ab34c87e8059df1cba2a27` as
+Sites version 300. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
+has content hash
+`sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`
+across 384 files and 33,607,680 bytes. Deployment
+`appgdep_6a7875602838819182dc5ba7dec6366b` succeeded with
+environment revision 19 at `https://compare.ausenergyassessments.com`.
+Local archive `.openai/site-release-ca3d84a.tar.gz` is 8,175,111 bytes with
+SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
+398 entries and all 126 migrations. Initial application commit
+`c9fb34115209c0ea0a1fc02ee2095250458c256f` is historical Sites version 298.
 
-The candidate adds an anonymous quote-only `/calculator` route using the same
+The release adds an anonymous quote-only `/calculator` route using the same
 governed estimate contract without granting registry refresh, compliance or
 certificate authority. The signed-out customer landing page has one dominant
 home-plan start, a one-question-at-a-time planner, plain household taxonomy and
@@ -192,15 +209,19 @@ Calculator usability and flexibility are bounded as follows:
   dollars because certificate prices and provider fees are not scheme formula
   inputs.
 
-The candidate official TESSA D17 to D20 automatic registry retained exact
-source bytes and effective-dated product state. The live official source used
-for candidate validation contained 746 rows, comprising 663 `Active` and 83
+The released source includes the official TESSA D17 to D20 automatic registry
+implementation, which retained exact source bytes and effective-dated product
+state. The live official source used for source validation contained 746 rows,
+comprising 663 `Active` and 83
 `Cancelled`, with source SHA-256
 `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+Version-300 administrator QA activated the TESSA snapshot as current. The D17
+picker exposed 70 official brands, or 71 options including the placeholder;
+Aestiva exposed four exact models, or five options including the placeholder.
 
 No customer-shareable rebate receipt is included. The product owner rejected
-that artifact as unnecessary; the candidate stops at the practical quote or
-invoice discount handoff.
+that artifact as unnecessary; the released workflow stops at the practical
+quote or invoice discount handoff.
 
 The three required licensed CEC keys are absent from Sites:
 
@@ -213,7 +234,26 @@ snapshot. BESS3 and BESS4 remain blocked because the current licensed CEC
 contract does not supply the exact Rule-required maximum rated AC inverter
 output. These are source-authority limits, not user-role or licence locks.
 
-## Current deployed simplified quote calculator, VEU registry and PDRS runtime release
+Historical version-298 public QA confirmed the homepage, `/plan` and
+`/calculator`, plus visible Account and TLink login links. A public SRES
+small-scale solar PV estimate for future date 17 August 2026, postcode 3000 and
+6.6 kW returned 39 STCs.
+
+Version-300 signed-in trade QA returned 39 STCs for small-scale solar PV using
+installation date 9 August 2026, postcode 3000 and 6.6 kW. It also verified the
+VEU 1C repeated identical-unit quantity and Activity 15 plain-English scenario
+flow. Version-300 administrator QA ran TESSA before GEMS and confirmed the
+activated TESSA picker counts above. No quote, invoice, certificate or customer
+record was written.
+
+The subsequent GEMS refresh failed closed because official resource
+`gems-commercial-refrigerators` decreased from 7,500 to 7,499 rows. Current
+public GEMS search returns `OFFICIAL_PRODUCT_REGISTRY_STALE`. GEMS-backed
+calculators must not be represented as active or current until the prior and
+current retained official bytes are exactly reviewed and the decrease is
+accepted or rejected through the governed process.
+
+## Prior deployed simplified quote calculator, VEU registry and PDRS runtime release
 
 The guarded registry foundation was released in exact application source
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
@@ -224,7 +264,7 @@ through `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective source
 historical Sites version 295. Exact guided calculator and PDRS source
 `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical Sites version 296.
 Exact simplified quote-calculator source
-`11f4721b678425a4294e95c631e0d37d3fab0ffd` is current Sites version 297. It is
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is historical Sites version 297. It is
 saved as
 `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
 with 378 stored files, 33,105,920 stored bytes and content hash
@@ -1578,7 +1618,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 297 is:
+The current verified deployed topology for Sites version 300 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -1631,6 +1671,10 @@ The audit recommends withdrawing the generic Database Console because broad cata
 - A production invoice delivery through the provider boundary.
 - An approved Australian address provider reused across customer, site and job.
 - Independently approved complete manual VEU, SRES/STC and NSW governed bundles.
+- Exact review and disposition of the retained prior and current
+  `gems-commercial-refrigerators` bytes after the official row count decreased
+  from 7,500 to 7,499; GEMS-backed calculators remain
+  `OFFICIAL_PRODUCT_REGISTRY_STALE` until resolved.
 - Recovery of legacy issued documents whose exact retained PDF bytes cannot be proven; the current contract fails closed and requires a new revision.
 - One authorised live lead-delivery monitor run confirming the milestone-44 20-second relay and 25-second outer-monitor timeout relationship against the Google Workspace relay.
 - Provider credentials and sender approval for the deployed Resend integration.

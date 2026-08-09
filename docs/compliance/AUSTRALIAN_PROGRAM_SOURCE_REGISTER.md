@@ -48,6 +48,10 @@ templates. The released calculator exposes 50
 executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
+That sealed count describes implemented formula coverage, not current registry
+availability. In version 300, every GEMS-backed pathway fails closed while the
+reviewed official-row decrease leaves the registry
+`OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
 Creditex administrators and active verified installers can use the same
 source-pinned calculator contract. The TLink trade dashboard surface is
@@ -68,8 +72,10 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is a validated working-tree
-candidate awaiting exact commit and deployment identity. It adds an anonymous
+Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is released from exact
+application commit `ca3d84a497258426c7ab34c87e8059df1cba2a27` as Sites version
+300 through deployment `appgdep_6a7875602838819182dc5ba7dec6366b` with
+environment revision 19. It adds an anonymous
 quote-only calculator without compliance or certificate authority, a simpler
 one-question customer planner and direct TLink login, explicit Activity 15
 weather-sealing scenarios, future-date selection inside official windows, 1 to
@@ -78,10 +84,14 @@ multi-split or variable-refrigerant-flow indoor-unit selection and packaged
 quote-only estimates. Mixed-model water-heater quantities and packaged or
 multi-product compliance bundles remain blocked.
 
-The candidate also adds an official TESSA D17 to D20 automatic registry. The
+The released source also includes an official TESSA D17 to D20 automatic
+registry implementation. The
 live official source used for validation contained 746 rows, comprising 663
 `Active` and 83 `Cancelled`, with source SHA-256
 `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+Version-300 administrator QA activated that TESSA snapshot as current. The D17
+picker exposed 70 official brands, or 71 options including the placeholder;
+Aestiva exposed four exact models, or five options including the placeholder.
 The trade handoff applies one exact customer-entered discount to the next quote
 or invoice; it does not infer a dollar discount from a certificate count. No
 customer-shareable rebate receipt is included because the product owner
@@ -94,6 +104,25 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
+The Sites version 300 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
+with content hash
+`sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`
+across 384 files and 33,607,680 bytes. Local archive
+`.openai/site-release-ca3d84a.tar.gz` is 8,175,111 bytes with SHA-256
+`a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
+398 entries and all 126 migrations.
+
+Version-300 signed-in trade QA returned 39 STCs for a 9 August 2026,
+postcode-3000, 6.6 kW small-scale solar PV estimate and verified VEU 1C repeated
+identical-unit quantity plus the Activity 15 plain-English scenario flow. The
+administrator refresh ran TESSA first and activated it as current, then the GEMS
+refresh failed closed because official resource `gems-commercial-refrigerators`
+decreased from 7,500 to 7,499 rows. Current public GEMS search returns
+`OFFICIAL_PRODUCT_REGISTRY_STALE`. No quote, invoice, certificate or customer
+record was written. Historical version-298 public QA remains recorded in release
+truth.
+
 The guarded VEU Public Registry foundation is released from exact commit
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
 VEU calculator was committed as `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
@@ -103,7 +132,7 @@ and deployed as Sites version 294 through
 Exact guided calculator and PDRS licensed-runtime source
 `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical Sites version 296.
 Exact simplified quote-calculator source
-`11f4721b678425a4294e95c631e0d37d3fab0ffd` is current Sites version 297, saved
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is historical Sites version 297, saved
 as `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
 with 378 stored files, 33,105,920 stored bytes and content hash
 `sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5`.
@@ -112,6 +141,13 @@ The 8,158,365-byte publication archive had SHA-256
 and was removed locally after Sites accepted the package and recorded custody.
 Deployment `appgdep_6a781d231ee08191a7d506389be1676b` succeeded with environment
 revision 19 at `https://compare.ausenergyassessments.com`.
+
+Initial milestone source `c9fb34115209c0ea0a1fc02ee2095250458c256f` is
+historical Sites version 298, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_acf528bb50208191b6bcd0948190172c`
+with content hash
+`sha256:ac6bd787b8bb9fd71e44e7d0c23368a528c26dba3eb328c0708f3989b5471c86`
+and deployment `appgdep_6a786857458c8191ae557d2c2f0f2694`.
 
 The active production snapshot contains exactly 75,492 Public Visible rows:
 64,715 `Approved` and 10,777 `Legacy`. The released catalogue contains 32 VEU
@@ -126,16 +162,21 @@ Current product evidence is deliberately split by authority and permission:
 
 - 16,684 CER registered solar-water-heater and air-source-heat-pump rows are in
   the dedicated SRES registry;
-- 31,418 stable GEMS rows from 11 official data.gov.au resources are approved
-  for the automatic registry;
-- all 14 live-tested federal feeds parse 44,119 stable rows, but the 12,701
+- the last accepted GEMS projection contained 31,418 rows from 11 official
+  data.gov.au resources. The current refresh detected the reviewed
+  `gems-commercial-refrigerators` decrease from 7,500 to 7,499 rows, and public
+  GEMS search now returns `OFFICIAL_PRODUCT_REGISTRY_STALE`; no GEMS-backed
+  calculator is active or current while that retained-byte review is unresolved;
+- the historical 14-feed federal validation parsed 44,119 rows, but the 12,701
   CER-hosted public CEC module, inverter and battery rows remain
   controlled-manual; the separate PDRS licensed snapshot route is deployed and
   server-side only, but has no accepted snapshot because the central Sites CEC
   username, password and licence reference are not configured;
-- the candidate official TESSA D17 to D20 automatic registry parsed 746 live
+- the released official TESSA D17 to D20 automatic registry implementation
+  parsed 746 live
   source rows, comprising 663 `Active` and 83 `Cancelled`, under source SHA-256
-  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`;
+  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0` and is
+  activated and current in version 300;
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and
@@ -356,7 +397,7 @@ The remaining VEU boundaries are explicit:
   until an accepted licensed snapshot exists; BESS3 and BESS4 still require
   exact governed inverter-output authority, and BESS5 still requires the Scheme
   Administrator's exact recording method;
-- the validated candidate supports repeatable Part 6 multi-split or
+- the released quote calculator supports repeatable Part 6 multi-split or
   variable-refrigerant-flow indoor-unit selection and packaged-system quote-only
   estimates, but packaged and other multi-product compliance bundles remain
   blocked;
@@ -366,9 +407,10 @@ The remaining VEU boundaries are explicit:
 
 Across the national catalogue, product-backed pathways without a lawful
 supported source connector remain unavailable rather than accepting
-caller-entered substitutes. The candidate TESSA registry closes that product
-authority boundary only for D17 to D20; it does not relax any other product or
-formula gate.
+caller-entered substitutes. The released TESSA implementation closes that
+product-authority boundary only for D17 to D20; its accepted production snapshot
+is active and current in version 300. No other product or formula gate is
+relaxed.
 
 Current deemed-activity inventory:
 
@@ -552,14 +594,16 @@ Current activity inventory:
 
 Sources: [PDRS overview](https://www.energy.nsw.gov.au/nsw-plans-and-progress/regulation-and-policy/energy-security-safeguard/peak-demand-reduction-scheme), [rule and changes](https://www.energysustainabilityschemes.nsw.gov.au/pdrs-rule-and-changes), [legislation](https://www.energysustainabilityschemes.nsw.gov.au/pdrs-legislation), [peak saving](https://www.energysustainabilityschemes.nsw.gov.au/peak-saving), [peak shifting](https://www.energysustainabilityschemes.nsw.gov.au/peak-shifting), [peak response](https://www.energysustainabilityschemes.nsw.gov.au/peak-response) and [PDRS Method Guide Version 2.5](https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/documents/2025-09/PDRS-Method-Guide-V2.5-September-2025.pdf).
 
-The working tree implements 20 typed NSW ESS/PDRS estimator scenarios. Current
-GEMS-backed D5, D16, F4, HVAC1, HVAC2, RF2 and SYS2 activity templates expose
-estimates with server-derived product values. The validated candidate connects
-D17 to D20 to the exact automatic TESSA registry described above. BESS1 and
-BESS2 remain pending the absent central licensed CEC credentials and an accepted
-snapshot. BESS3 and BESS4 remain blocked on the Rule-required maximum rated AC
-inverter output, and BESS5 still requires the Scheme Administrator's exact
-recording method. BESS3 to BESS5 also reject dates before 1 September 2026.
+The released source implements 20 typed NSW ESS/PDRS estimator scenarios.
+GEMS-backed D5, D16, F4, HVAC1, HVAC2, RF2 and SYS2 activity templates have
+server-derived product contracts but are currently unavailable because the
+shared GEMS registry is `OFFICIAL_PRODUCT_REGISTRY_STALE`. TESSA is activated
+and current for D17 to D20; D17 picker brand and model resolution was verified,
+but a live D17 to D20 calculation was not exercised. BESS1 and BESS2 remain
+pending the absent central licensed CEC credentials and an accepted snapshot.
+BESS3 and BESS4 remain blocked on the Rule-required maximum rated AC inverter
+output, and BESS5 still requires the Scheme Administrator's exact recording
+method. BESS3 to BESS5 also reject dates before 1 September 2026.
 
 ### NSW Home Energy Saver
 
@@ -761,14 +805,15 @@ The inspected tenant exposed only a limited configured subset of activities, so 
 
 1. NSW Home Energy Saver discount guidelines, activity specification, evidence payload and Creditex operating interface are unpublished.
 2. Creditex, Dataforce and Runabout provider-owned field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification, and a connector specification is not a scheme rule.
-3. VEU does not expose a supported public bulk product API. The released VEU importer treats the official embedded source as a monitored input with effective dates, statuses, schema and count guards, D1 indexed projections and exact-byte R2 custody; its 75,492-row production snapshot is active. The validated candidate uses the official TESSA spreadsheet for D17 to D20 with exact-byte custody, source hashing and effective-dated status; historical product and rule windows must still fail closed when unsupported.
-4. CER-hosted public CEC files remain controlled-manual. The separate licensed PDRS snapshot route is deployed but cannot activate BESS1 or BESS2 until Sites contains `CREDITEX_CEC_BATTERY_API_USERNAME`, `CREDITEX_CEC_BATTERY_API_PASSWORD` and `CREDITEX_CEC_BATTERY_LICENCE_REFERENCE` and those credentials produce an accepted snapshot. BESS3 and BESS4 still need exact governed maximum rated AC inverter-output authority, and BESS5 still needs the Scheme Administrator's exact recording method.
-5. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
-6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
-7. The public SA provider register lists Creditex only for WH1, HC2A and HC2B. Other REPS activity codes remain disabled without an obliged retailer's authorised current scope. Plenti, Brighte, QRIDA, GrantsNT, SmartyGrants, NILS, REPS-R and TESSA do not expose a verified public claim-submission API contract in the reviewed sources; the candidate TESSA product-registry import does not imply one.
-8. Product, participant, licence, recall, suspension and rule status must be revalidated at installation and again at claim or certificate creation where required.
-9. No certificate count may be hardcoded from this document. Every calculator needs a versioned implementation, official test vectors or independently derived expected values approved for Creditex operations, reconciliation against the official tool and independent approval.
-10. No real case can start until Creditex approves the role matrix, legal data-sharing boundary, customer notice and consent, retention schedule, incident process and evidence-custody design.
+3. VEU does not expose a supported public bulk product API. The released VEU importer treats the official embedded source as a monitored input with effective dates, statuses, schema and count guards, D1 indexed projections and exact-byte R2 custody; its 75,492-row production snapshot is active. The released TESSA D17 to D20 source is activated and current with exact-byte custody, source hashing and effective-dated status; historical product and rule windows must still fail closed when unsupported.
+4. The official `gems-commercial-refrigerators` source decreased from 7,500 to 7,499 rows. The governed refresh rejected the unexplained decrease and current public GEMS search returns `OFFICIAL_PRODUCT_REGISTRY_STALE`. All GEMS-backed calculator paths remain fail-closed until prior and current retained bytes are exactly reviewed and the decrease is accepted or rejected.
+5. CER-hosted public CEC files remain controlled-manual. The separate licensed PDRS snapshot route is deployed but cannot activate BESS1 or BESS2 until Sites contains `CREDITEX_CEC_BATTERY_API_USERNAME`, `CREDITEX_CEC_BATTERY_API_PASSWORD` and `CREDITEX_CEC_BATTERY_LICENCE_REFERENCE` and those credentials produce an accepted snapshot. BESS3 and BESS4 still need exact governed maximum rated AC inverter-output authority, and BESS5 still needs the Scheme Administrator's exact recording method.
+6. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
+7. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
+8. The public SA provider register lists Creditex only for WH1, HC2A and HC2B. Other REPS activity codes remain disabled without an obliged retailer's authorised current scope. Plenti, Brighte, QRIDA, GrantsNT, SmartyGrants, NILS, REPS-R and TESSA do not expose a verified public claim-submission API contract in the reviewed sources; the released TESSA product-registry import does not imply one.
+9. Product, participant, licence, recall, suspension and rule status must be revalidated at installation and again at claim or certificate creation where required.
+10. No certificate count may be hardcoded from this document. Every calculator needs a versioned implementation, official test vectors or independently derived expected values approved for Creditex operations, reconciliation against the official tool and independent approval.
+11. No real case can start until Creditex approves the role matrix, legal data-sharing boundary, customer notice and consent, retention schedule, incident process and evidence-custody design.
 
 ## Required release controls
 

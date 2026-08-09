@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `AEA-CALCULATOR-USABILITY-AUTHORITY-48` validated candidate awaiting commit and deployment
+Status: `AEA-CALCULATOR-USABILITY-AUTHORITY-48` released and live
 
 Prepared: 9 August 2026
 
@@ -8,7 +8,11 @@ Milestone ID: `AEA-CALCULATOR-USABILITY-AUTHORITY-48`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `1d3abe172e4eb2fa006fab639233cda49a6d37d4`
+Previous production application source: `c9fb34115209c0ea0a1fc02ee2095250458c256f`
+
+Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+
+Prior guided calculator and PDRS source: `1d3abe172e4eb2fa006fab639233cda49a6d37d4`
 
 Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
 
@@ -16,15 +20,17 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Current production source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+Current production source: `ca3d84a497258426c7ab34c87e8059df1cba2a27`
 
-Candidate application source: pending exact commit identity
+Released application source: `ca3d84a497258426c7ab34c87e8059df1cba2a27`
 
-Current production: Sites version 297 from application commit `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+Current production: Sites version 300 from application commit `ca3d84a497258426c7ab34c87e8059df1cba2a27`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
 
-Deployment: `appgdep_6a781d231ee08191a7d506389be1676b`
+Deployment: `appgdep_6a7875602838819182dc5ba7dec6366b`
+
+Release archive: `.openai/site-release-ca3d84a.tar.gz`, 8,175,111 bytes, SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`, 398 entries and 126 migrations
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -34,20 +40,38 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Environment revision: 19
 
-## Current validated candidate: AEA-CALCULATOR-USABILITY-AUTHORITY-48
+## Released milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
 
-Status: the working-tree candidate is validated at the implementation boundary
-and awaits exact commit identity, GitHub source reconciliation, a Sites saved
-version, deployment and live QA. Do not describe it as released or live. Current
-production remains Sites version 297 from
-`11f4721b678425a4294e95c631e0d37d3fab0ffd`.
+Status: exact executable application commit
+`ca3d84a497258426c7ab34c87e8059df1cba2a27` is released as Sites version 300
+through deployment `appgdep_6a7875602838819182dc5ba7dec6366b` with
+environment revision 19 at `https://compare.ausenergyassessments.com`.
+The saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
+and its Sites content hash is
+`sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`.
+Sites stored 384 files and 33,607,680 bytes. Local archive
+`.openai/site-release-ca3d84a.tar.gz` is 8,175,111 bytes with SHA-256
+`a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
+398 entries and all 126 migrations.
 
-### Candidate outcome
+Initial application commit `c9fb34115209c0ea0a1fc02ee2095250458c256f`
+was historical Sites version 298. Version 300 is the current corrective release
+that refreshes TESSA before attempting the shared GEMS refresh.
+Historical version 298 is saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_acf528bb50208191b6bcd0948190172c`
+with content hash
+`sha256:ac6bd787b8bb9fd71e44e7d0c23368a528c26dba3eb328c0708f3989b5471c86`.
+Deployment `appgdep_6a786857458c8191ae557d2c2f0f2694` succeeded. Its local archive
+`.openai/site-release-c9fb341.tar.gz` is 8,173,001 bytes with SHA-256
+`ffb841f9a08e69c9697047a3d4fdfffcf1e1cb5f0539cc49a8ec8b42a5d419fd`.
+
+### Released outcome
 
 Make the public, customer and trade calculator paths fast and obvious while
 keeping quote estimates separate from strict compliance and certificate work.
 
-### Validated candidate capability
+### Released capability
 
 - `/calculator` provides anonymous quote-only estimates through the governed
   calculator contract without registry refresh, compliance or certificate
@@ -67,16 +91,18 @@ keeping quote estimates separate from strict compliance and certificate work.
 - VEU Part 6 supports a repeatable multi-split or variable-refrigerant-flow
   indoor-unit list and packaged-system quote-only estimates. Packaged-system
   compliance and other strict multi-product compliance bundles remain blocked.
-- The official TESSA D17 to D20 automatic registry candidate retained 746 live
-  source rows, comprising 663 `Active` and 83 `Cancelled`, with source SHA-256
+- The official TESSA D17 to D20 automatic registry implementation retained 746
+  live source rows during source validation, comprising 663 `Active` and 83
+  `Cancelled`, with source SHA-256
   `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+  It is activated and current in version 300.
 - A trade can enter one exact customer discount and apply it to the next quote
   or invoice. Certificate counts are not automatically converted to a dollar
   amount because market prices and provider fees are not scheme formula inputs.
 - No customer-shareable rebate receipt is included. The product owner rejected
   it as unnecessary, so the workflow ends at the quote or invoice discount.
 
-### Exact release blockers and limits
+### Exact remaining blockers and limits
 
 - Sites does not contain `CREDITEX_CEC_BATTERY_API_USERNAME`,
   `CREDITEX_CEC_BATTERY_API_PASSWORD` or
@@ -88,8 +114,29 @@ keeping quote estimates separate from strict compliance and certificate work.
 - Repeated water-heater quantities apply to one identical approved model only.
 - Packaged-system calculations are quote-only until the exact compliance bundle
   is governed and validated.
-- The exact candidate application commit, Sites saved version, package identity,
-  deployment and live runtime evidence remain pending.
+- The post-TESSA GEMS refresh failed closed because official resource
+  `gems-commercial-refrigerators` decreased from 7,500 to 7,499 rows. Current
+  public GEMS search returns `OFFICIAL_PRODUCT_REGISTRY_STALE`; do not represent
+  any GEMS-backed calculator as active or current until the prior and current
+  retained source bytes are exactly reviewed and the decrease is accepted or
+  rejected through the governed process.
+
+### Confirmed live QA
+
+- Historical version-298 public QA loaded the homepage, `/plan` and
+  `/calculator`, showed Account and TLink login links and accepted future date
+  17 August 2026, postcode 3000 and
+  6.6 kW small-scale solar PV and returned 39 STCs.
+- Version-300 signed-in trade QA returned 39 STCs for small-scale solar PV using
+  installation date 9 August 2026, postcode 3000 and 6.6 kW.
+- Version-300 trade QA verified the VEU 1C repeated identical-unit quantity and
+  Activity 15 plain-English weather-sealing scenario flow.
+- Version-300 administrator QA ran the NSW refresh in the required TESSA-first
+  order. TESSA activated as current; the D17 picker exposed 70 official brands,
+  or 71 options including the placeholder, and Aestiva exposed four exact
+  models, or five options including the placeholder.
+- The subsequent GEMS refresh failed closed on the reviewed decrease described
+  above. No quote, invoice, certificate or customer record was written.
 
 ## Previous released milestone: CREDITEX-NATIONAL-CALCULATOR-47
 
@@ -101,8 +148,8 @@ commit `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is historical Sites version 29
 Exact guided calculator and PDRS licensed-runtime commit
 `1d3abe172e4eb2fa006fab639233cda49a6d37d4` was deployed as Sites version 296.
 Exact simplified quote-calculator commit
-`11f4721b678425a4294e95c631e0d37d3fab0ffd` supersedes it as current Sites
-version 297.
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` superseded it as Sites version 297
+and is now historical after version 300.
 
 Sites version 297 is saved as
 `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`.

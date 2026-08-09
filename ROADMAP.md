@@ -1601,8 +1601,8 @@ deployment `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective commit
 was superseded as Sites version 295. Exact guided calculator and PDRS
 licensed-runtime commit `1d3abe172e4eb2fa006fab639233cda49a6d37d4` was deployed as
 Sites version 296. Exact simplified quote-calculator commit
-`11f4721b678425a4294e95c631e0d37d3fab0ffd` is the current production source,
-saved as Sites version 297 with identity
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` was saved as historical Sites
+version 297 with identity
 `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
 and deployed through `appgdep_6a781d231ee08191a7d506389be1676b` with
 environment revision 19 at `https://compare.ausenergyassessments.com`. Sites
@@ -1735,19 +1735,22 @@ Controlled VEU boundaries remain explicit:
   refurbishment branch fails closed, and PBA and other project-based activities
   remain governed project methods rather than deemed calculators.
 
-The complete calculator, bounded refresh correction and active production
-snapshot are deployed and verified through the signed-in administrator and
-verified-installer estimate paths. This record does not claim that the guarded
-daily schedule, certificate creation, certificate submission, certificate trade
-or settlement has occurred. NSW TESSA and administrator-accepted battery lists
-remain unavailable as supported machine feeds.
+The version-297 calculator, bounded refresh correction and VEU snapshot were
+verified through the signed-in administrator and verified-installer estimate
+paths. That release record does not claim that the guarded daily schedule,
+certificate creation, certificate submission, certificate trade or settlement
+occurred. At the version-297 checkpoint, NSW TESSA and
+administrator-accepted battery lists were unavailable as supported machine
+feeds.
 
-## Validated candidate milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
+## Released milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
 
-Status: validated candidate awaiting an exact application commit, GitHub source
-reconciliation, a Sites saved version, deployment and live QA. Current
-production remains Sites version 297 from
-`11f4721b678425a4294e95c631e0d37d3fab0ffd`.
+Status: exact executable application commit
+`ca3d84a497258426c7ab34c87e8059df1cba2a27` is released as Sites version 300
+through deployment `appgdep_6a7875602838819182dc5ba7dec6366b` with
+environment revision 19 at `https://compare.ausenergyassessments.com`.
+Initial milestone source `c9fb34115209c0ea0a1fc02ee2095250458c256f`
+is historical Sites version 298.
 
 ### Outcome
 
@@ -1755,7 +1758,7 @@ Make the customer and trade paths materially easier to understand and make the
 estimate-only calculator useful without a login, while retaining exact product,
 effective-date and compliance boundaries.
 
-### Validated candidate scope
+### Released scope
 
 - Add a public anonymous quote-only calculator that uses the governed estimate
   contract without granting registry refresh, compliance or certificate access.
@@ -1775,10 +1778,11 @@ effective-date and compliance boundaries.
   variable-refrigerant-flow quotes and a packaged-system quote-only estimate.
   Packaged-system compliance and other strict multi-product compliance bundles
   remain blocked until their exact governed contract is complete.
-- Add the official TESSA D17 to D20 automatic registry. The live official source
-  used for candidate validation contained 746 rows, comprising 663 `Active` and
-  83 `Cancelled`, with source SHA-256
+- Add the official TESSA D17 to D20 automatic registry implementation and exact
+  source validation. The live official source contained 746 rows, comprising
+  663 `Active` and 83 `Cancelled`, with source SHA-256
   `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
+  The source is activated and current in version 300.
 - Let a trade enter the customer discount once and apply that exact amount to
   the next quote or invoice. Certificate counts are not converted to dollars
   automatically because certificate prices and provider fees are not fixed by
@@ -1787,7 +1791,7 @@ effective-date and compliance boundaries.
   as unnecessary; the retained workflow ends at the practical quote or invoice
   discount handoff.
 
-### Controlled limits before release
+### Controlled limits after release
 
 - Sites does not contain `CREDITEX_CEC_BATTERY_API_USERNAME`,
   `CREDITEX_CEC_BATTERY_API_PASSWORD` or
@@ -1798,9 +1802,35 @@ effective-date and compliance boundaries.
   not supply the exact Rule-required maximum rated AC inverter output.
 - Repeated water-heater units must use one identical approved model, and
   packaged-system calculations remain quote-only.
-- No candidate source, commit, Sites version, deployment or live result is
-  represented as released until exact provenance and runtime evidence are
-  recorded.
+- The post-TESSA GEMS refresh failed closed because official resource
+  `gems-commercial-refrigerators` decreased from 7,500 to 7,499 rows. Current
+  public GEMS search returns `OFFICIAL_PRODUCT_REGISTRY_STALE`; no GEMS-backed
+  calculator can be represented as active or current until the prior and
+  current retained source bytes are exactly reviewed and the decrease is
+  accepted or rejected through the governed process.
+
+### Release and live evidence
+
+- The saved-version identity is
+  `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
+  with Sites content hash
+  `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`.
+  Sites stored 384 files and 33,607,680 bytes.
+- Local archive `.openai/site-release-ca3d84a.tar.gz` is 8,175,111 bytes with
+  SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
+  398 entries and all 126 migrations.
+- Historical version-298 public QA loaded the homepage, `/plan` and
+  `/calculator`, showed Account and TLink login links and returned 39 STCs for
+  future date 17 August 2026, postcode 3000 and 6.6 kW small-scale solar PV.
+- Version-300 signed-in trade QA returned 39 STCs for small-scale solar PV using
+  installation date 9 August 2026, postcode 3000 and 6.6 kW. It also verified
+  the VEU 1C repeated identical-unit quantity and Activity 15 plain-English
+  scenario flow.
+- Version-300 administrator QA refreshed TESSA before GEMS. The activated D17
+  picker exposed 70 official brands, or 71 options including the placeholder;
+  Aestiva exposed four exact models, or five options including the placeholder.
+- The later GEMS refresh failed closed on the reviewed decrease described above.
+  No quote, invoice, certificate or customer record was written.
 
 ## Next five logical product steps
 
