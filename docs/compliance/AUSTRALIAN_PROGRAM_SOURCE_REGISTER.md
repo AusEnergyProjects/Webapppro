@@ -2,7 +2,7 @@
 
 Status: controlled discovery baseline, not an eligibility or calculation authority
 
-Reviewed: 9 August 2026
+Reviewed: 10 August 2026
 
 Owner: TLink compliance domain with independent source verification and Creditex operational review required before publication
 
@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 300, every GEMS-backed pathway fails closed while the
+availability. In version 301, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,25 +72,41 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is released from exact
-application commit `ca3d84a497258426c7ab34c87e8059df1cba2a27` as Sites version
-300 through deployment `appgdep_6a7875602838819182dc5ba7dec6366b` with
-environment revision 19. It adds an anonymous
-quote-only calculator without compliance or certificate authority, a simpler
-one-question customer planner and direct TLink login, explicit Activity 15
-weather-sealing scenarios, future-date selection inside official windows, 1 to
-10 identical-model heat-pump or solar-water-heater units, repeatable VEU Part 6
-multi-split or variable-refrigerant-flow indoor-unit selection and packaged
-quote-only estimates. Mixed-model water-heater quantities and packaged or
-multi-product compliance bundles remain blocked.
+Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is released from exact application
+commit `bc4096d61cb493e819555d72113d0c77d45a1653`, pushed to the GitHub branch and
+Sites internal `main`, as Sites version 301 through deployment
+`appgdep_6a7898485dd48191acb31466092b5fe8` with environment revision 19 at
+`https://compare.ausenergyassessments.com`. The semantic lightweight CSS and HTML
+spatial public home uses no canvas, WebGL or video, respects reduced-motion
+preferences and is responsive across desktop, laptop and mobile layouts. The
+planner is task-first, results provide a clear `Start here` action and the TLink
+logo links directly to the trade dashboard. The trade route remains static and
+does not mount public animation.
+
+Quote mode supports mixed exact approved SRES solar-water-heater and
+air-source-heat-pump rows and VEU 1C, 1D, 3C and 3D rows, with up to 10 systems
+in one estimate. Strict compliance remains fail-closed at one unit. Quote
+flexibility does not create certificate authority or relax exact product,
+effective-date or formula validation. No customer-shareable rebate receipt was
+added.
+
+Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is historical Sites version
+300 from exact application commit
+`ca3d84a497258426c7ab34c87e8059df1cba2a27` through deployment
+`appgdep_6a7875602838819182dc5ba7dec6366b`. It added the anonymous quote-only
+calculator without compliance or certificate authority, a simpler
+one-question customer planner, explicit Activity 15 weather-sealing scenarios,
+future-date selection inside official windows, identical-model quantity support
+and repeatable VEU Part 6 indoor-unit selection.
 
 The released source also includes an official TESSA D17 to D20 automatic
 registry implementation. The
 live official source used for validation contained 746 rows, comprising 663
 `Active` and 83 `Cancelled`, with source SHA-256
 `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0`.
-Version-300 administrator QA activated that TESSA snapshot as current. The D17
-picker exposed 70 official brands, or 71 options including the placeholder;
+Historical version-300 administrator QA activated that TESSA snapshot as
+current. The D17 picker exposed 70 official brands, or 71 options including the
+placeholder;
 Aestiva exposed four exact models, or five options including the placeholder.
 The trade handoff applies one exact customer-entered discount to the next quote
 or invoice; it does not infer a dollar discount from a certificate count. No
@@ -104,7 +120,22 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The Sites version 300 saved-version identity is
+The Sites version 301 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
+with content hash
+`sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`
+across 385 stored files and 35,328,000 stored bytes. Local archive
+`.openai/site-release-bc4096d.tar.gz` is 9,823,592 compressed bytes with SHA-256
+`5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`,
+399 tar entries, 385 files and all 126 migrations. Provider identity is
+`info294029--aea-energy-comparison`.
+
+Full validation passed typecheck, lint, 32 of 32 integration tests, 1,803 main
+tests with 1,793 passed, 10 intentionally skipped and 0 failed, all 126
+migrations, the customer-plan PDF audit, the production build and the Sites
+audit. Independent focused final validation passed 115 of 115.
+
+Historical Sites version 300 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
 with content hash
 `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`
@@ -113,7 +144,14 @@ across 384 files and 33,607,680 bytes. Local archive
 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
 398 entries and all 126 migrations.
 
-Version-300 signed-in trade QA returned 39 STCs for a 9 August 2026,
+Signed-out version-301 live QA verified the public home, `/plan`, the result
+`Start here` action and `/calculator`. Native future date `2026-09-03` persisted
+and the live solar-PV result was 39 STCs. The browser console showed no warnings
+or errors. The live trade route stayed static and contained no public animation.
+Both live browser sessions presented the sign-in boundary, so no signed-in v301
+dashboard QA is claimed.
+
+Historical version-300 signed-in trade QA returned 39 STCs for a 9 August 2026,
 postcode-3000, 6.6 kW small-scale solar PV estimate and verified VEU 1C repeated
 identical-unit quantity plus the Activity 15 plain-English scenario flow. The
 administrator refresh ran TESSA first and activated it as current, then the GEMS
@@ -164,8 +202,14 @@ Current product evidence is deliberately split by authority and permission:
   the dedicated SRES registry;
 - the last accepted GEMS projection contained 31,418 rows from 11 official
   data.gov.au resources. The current refresh detected the reviewed
-  `gems-commercial-refrigerators` decrease from 7,500 to 7,499 rows, and public
-  GEMS search now returns `OFFICIAL_PRODUCT_REGISTRY_STALE`; no GEMS-backed
+  `gems-commercial-refrigerators` decrease from 7,500 to 7,499 rows. The accepted
+  commercial-refrigerator artifact has 7,500 rows with SHA-256
+  `dcd5e18d9c58ddf13cde8aa1c00f48c704965b7156db61b1a330eef2752d73df` and the
+  held candidate has 7,499 unique rows with SHA-256
+  `db6068208c9bc6fca9033879a166dbce1ad0941e376aea786ac5b155dd013b09`.
+  The exact missing record is unknown without authorised read-only R2 bytes,
+  and public GEMS search now returns `OFFICIAL_PRODUCT_REGISTRY_STALE`; no
+  GEMS-backed
   calculator is active or current while that retained-byte review is unresolved;
 - the historical 14-feed federal validation parsed 44,119 rows, but the 12,701
   CER-hosted public CEC module, inverter and battery rows remain
@@ -176,7 +220,7 @@ Current product evidence is deliberately split by authority and permission:
   parsed 746 live
   source rows, comprising 663 `Active` and 83 `Cancelled`, under source SHA-256
   `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0` and is
-  activated and current in version 300;
+  activated and current in version 301;
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and

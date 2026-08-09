@@ -1743,9 +1743,9 @@ occurred. At the version-297 checkpoint, NSW TESSA and
 administrator-accepted battery lists were unavailable as supported machine
 feeds.
 
-## Released milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
+## Prior released milestone: AEA-CALCULATOR-USABILITY-AUTHORITY-48
 
-Status: exact executable application commit
+Status: historical. Exact executable application commit
 `ca3d84a497258426c7ab34c87e8059df1cba2a27` is released as Sites version 300
 through deployment `appgdep_6a7875602838819182dc5ba7dec6366b` with
 environment revision 19 at `https://compare.ausenergyassessments.com`.
@@ -1832,13 +1832,78 @@ effective-date and compliance boundaries.
 - The later GEMS refresh failed closed on the reviewed decrease described above.
   No quote, invoice, certificate or customer record was written.
 
+## Released milestone: AEA-IMMERSIVE-CUSTOMER-JOURNEY-49
+
+Status: exact executable application commit
+`bc4096d61cb493e819555d72113d0c77d45a1653` is pushed to the GitHub branch and
+Sites internal `main`, and is released as Sites version 301 through deployment
+`appgdep_6a7898485dd48191acb31466092b5fe8` with environment revision 19 at
+`https://compare.ausenergyassessments.com`. Sites version 300 is historical.
+
+### Outcome
+
+Give public customers a more directional, accessible and responsive home-energy
+journey while keeping the trade workspace static and extending quote-only water
+heater estimates to mixed approved products without weakening compliance.
+
+### Released scope
+
+- Replace the public home experience with a semantic, lightweight CSS and HTML
+  spatial journey. It uses no canvas, WebGL or video, respects reduced-motion
+  preferences and adapts across desktop, laptop and mobile layouts.
+- Make the planner task-first and connect each result to a clear `Start here`
+  action. Add a TLink-logo link that goes directly to the trade dashboard.
+- Keep the trade route static. Public spatial animation is not mounted on the
+  trade route.
+- Support mixed exact approved SRES solar-water-heater and air-source-heat-pump
+  quote rows and VEU 1C, 1D, 3C and 3D quote rows, with up to 10 systems in one
+  estimate.
+- Strict compliance remains fail-closed at one unit. Multi-system
+  quote flexibility does not authorise certificate creation or relax governed
+  product and effective-date checks.
+- Do not add a customer-shareable rebate receipt.
+
+### Release and validation evidence
+
+- Local archive `.openai/site-release-bc4096d.tar.gz` is 9,823,592 compressed
+  bytes with SHA-256
+  `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`,
+  399 tar entries, 385 files and all 126 migrations.
+- Saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
+  has Sites content hash
+  `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`.
+  Sites stored 35,328,000 bytes across 385 files. Provider identity is
+  `info294029--aea-energy-comparison`.
+- Full validation passed: typecheck, lint, 32 of 32 integration tests, 1,803
+  main tests with 1,793 passed, 10 intentionally skipped and 0 failed, all 126
+  migrations, the customer-plan PDF audit, the production build and the Sites
+  audit. Independent focused final validation passed 115 of 115.
+- Signed-out live QA verified the public home, `/plan`, the result `Start here`
+  action and `/calculator`. Native future date `2026-09-03` persisted and a live
+  solar-PV calculation returned 39 STCs. The browser console showed no warnings
+  or errors.
+- Live trade-route QA confirmed the route stayed static and contained no public
+  animation. Signed-in dashboard QA was unavailable because both live browser
+  sessions presented the sign-in boundary; no signed-in v301 QA is claimed.
+
+### Controlled source limit
+
+GEMS remains fail-closed. The accepted commercial-refrigerator artifact has
+7,500 rows with SHA-256
+`dcd5e18d9c58ddf13cde8aa1c00f48c704965b7156db61b1a330eef2752d73df`.
+The held candidate has 7,499 unique rows with SHA-256
+`db6068208c9bc6fca9033879a166dbce1ad0941e376aea786ac5b155dd013b09`.
+The exact missing record is unknown without authorised read-only access to the
+retained R2 bytes, so no GEMS-backed pathway may be represented as current.
+
 ## Next five logical product steps
 
-1. **Install licensed CEC platform credentials and activate/live-QA BESS1/2, then obtain exact AC inverter-output authority for BESS3/4.**
-2. **Support mixed-model multi-unit water-heater jobs and complete strict packaged/multi compliance bundles.**
-3. **Close remaining lawful product-authority and formula gaps across every surfaced calculator.**
-4. **Connect each home-plan recommendation to one preselected obvious next action (rebate estimate, plan comparison, assessment, or trade brief).**
-5. **Run representative mobile/customer/trade usability and accessibility acceptance, measure abandonment, and simplify any remaining friction.**
+1. Obtain authorised read-only R2 bytes and exact-diff the held GEMS 7,500-to-7,499 change.
+2. Connect planner Start here actions into more exact prefilled comparator, calculator and guide handoffs.
+3. Extend governed mixed-product contracts to other multi-component installations where official formulas require it.
+4. Run accessibility and usability validation with real households and verified trades, then fix measured friction.
+5. Add privacy-safe journey completion and friction measurement only after explicit analytics policy and consent design.
 
 ## Global stop conditions
 

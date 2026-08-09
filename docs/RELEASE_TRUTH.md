@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 9 August 2026
+Last reconciled locally: 10 August 2026
 
-Deployment evidence last verified: 9 August 2026
+Deployment evidence last verified: 10 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -142,10 +142,13 @@ This is the only current implementation and release-status document. The [dated 
 | Historical initial calculator usability and product-authority source | `c9fb34115209c0ea0a1fc02ee2095250458c256f` on `codex/sites-custom-domain-migration` | Initial executable source for milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48`; historical Sites version 298 |
 | Historical Sites version 298 archive identity | `.openai/site-release-c9fb341.tar.gz` | 8,173,001 bytes; SHA-256 `ffb841f9a08e69c9697047a3d4fdfffcf1e1cb5f0539cc49a8ec8b42a5d419fd` |
 | Historical Sites version 298 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_acf528bb50208191b6bcd0948190172c` | Exact Sites version 298 built from `c9fb34115209c0ea0a1fc02ee2095250458c256f`; content hash `sha256:ac6bd787b8bb9fd71e44e7d0c23368a528c26dba3eb328c0708f3989b5471c86`; deployment `appgdep_6a786857458c8191ae557d2c2f0f2694` succeeded with environment revision 19 |
-| Current calculator usability and product-authority application source | `ca3d84a497258426c7ab34c87e8059df1cba2a27` on `codex/sites-custom-domain-migration` | Exact executable source for current Sites version 300 and TESSA-first governed refresh ordering |
-| Current release archive identity | `.openai/site-release-ca3d84a.tar.gz` | 8,175,111 bytes; SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`; 398 entries; all 126 migrations |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e` | Exact Sites version 300 built from `ca3d84a497258426c7ab34c87e8059df1cba2a27`; 384 files; 33,607,680 bytes; content hash `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73` |
-| Current executable application identity | Sites version 300 from `ca3d84a497258426c7ab34c87e8059df1cba2a27` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7875602838819182dc5ba7dec6366b` succeeded; environment revision 19 |
+| Historical calculator usability and product-authority application source | `ca3d84a497258426c7ab34c87e8059df1cba2a27` on `codex/sites-custom-domain-migration` | Exact executable source for historical Sites version 300 and TESSA-first governed refresh ordering |
+| Historical Sites version 300 release archive identity | `.openai/site-release-ca3d84a.tar.gz` | 8,175,111 bytes; SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`; 398 entries; all 126 migrations |
+| Historical Sites version 300 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e` | Exact Sites version 300 built from `ca3d84a497258426c7ab34c87e8059df1cba2a27`; 384 files; 33,607,680 bytes; content hash `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`; deployment `appgdep_6a7875602838819182dc5ba7dec6366b` succeeded with environment revision 19 |
+| Current immersive customer journey application source | `bc4096d61cb493e819555d72113d0c77d45a1653` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch and Sites internal `main` for milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` |
+| Current release archive identity | `.openai/site-release-bc4096d.tar.gz` | 9,823,592 compressed bytes; SHA-256 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`; 399 tar entries; 385 files; all 126 migrations |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e` | Exact Sites version 301 built from `bc4096d61cb493e819555d72113d0c77d45a1653`; 385 files; 35,328,000 bytes; content hash `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b` |
+| Current executable application identity | Sites version 301 from `bc4096d61cb493e819555d72113d0c77d45a1653` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7898485dd48191acb31466092b5fe8` succeeded; environment revision 19; provider identity `info294029--aea-energy-comparison` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -160,13 +163,66 @@ version 297 from exact simplified quote-calculator source
 `11f4721b678425a4294e95c631e0d37d3fab0ffd` is historical. Sites version 298
 from exact application source `c9fb34115209c0ea0a1fc02ee2095250458c256f`
 is historical. Sites version 300 from exact corrective source
-`ca3d84a497258426c7ab34c87e8059df1cba2a27` is current. Signed-in trade and
-administrator QA verified the SRES, VEU 1C, Activity 15 and activated TESSA
-boundaries described below. GEMS-backed calculators are fail-closed after an
-unresolved reviewed official-row decrease. Certificate creation, submission,
-trading and settlement remain disabled.
+`ca3d84a497258426c7ab34c87e8059df1cba2a27` is historical. Sites version 301
+from exact source `bc4096d61cb493e819555d72113d0c77d45a1653` is current. Signed-out
+public QA and the static trade-route boundary are verified below. Signed-in
+v301 dashboard QA is not claimed. GEMS-backed calculators remain fail-closed
+after an unresolved reviewed official-row decrease. Certificate creation,
+submission, trading and settlement remain disabled.
 
-## Current calculator usability and product-authority release
+## Current immersive customer journey and mixed water-heater quote release
+
+Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is released from exact executable
+application commit `bc4096d61cb493e819555d72113d0c77d45a1653`, pushed to the
+GitHub branch and Sites internal `main`, as Sites version 301. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
+has content hash
+`sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`
+across 385 stored files and 35,328,000 stored bytes. Deployment
+`appgdep_6a7898485dd48191acb31466092b5fe8` succeeded with environment
+revision 19 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com`.
+
+Local archive `.openai/site-release-bc4096d.tar.gz` is 9,823,592 compressed
+bytes with SHA-256
+`5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`,
+399 tar entries, 385 files and all 126 migrations.
+
+The public home is a semantic lightweight CSS and HTML spatial experience with
+no canvas, WebGL or video. It supports reduced-motion preferences and responsive
+desktop, laptop and mobile layouts. The planner is task-first, result pages show
+a clear `Start here` action and the TLink logo links directly to the trade
+dashboard. The trade route remains static and does not mount public animation.
+
+Quote mode now accepts mixed exact approved SRES solar-water-heater and
+air-source-heat-pump rows and VEU 1C, 1D, 3C and 3D rows, with up to 10 systems
+in one estimate. Strict compliance remains fail-closed at one unit. Mixed-system
+quote support does not authorise certificate actions or relax exact product,
+effective-date or formula validation. No customer-shareable rebate receipt was
+added.
+
+Full validation passed typecheck, lint, 32 of 32 integration tests, 1,803 main
+tests with 1,793 passed, 10 intentionally skipped and 0 failed, all 126
+migrations, the customer-plan PDF audit, the production build and the Sites
+audit. Independent focused final validation passed 115 of 115.
+
+Signed-out live QA verified the public home, `/plan`, the result `Start here`
+action and `/calculator`. Native future date `2026-09-03` persisted and the live
+solar-PV result was 39 STCs. The browser console showed no warnings or errors.
+Live trade-route QA confirmed a static route with no public animation. Both live
+browser sessions presented the sign-in boundary, so signed-in dashboard QA was
+unavailable and no signed-in v301 dashboard claim is made.
+
+GEMS remains fail-closed. The accepted commercial-refrigerator artifact has
+7,500 rows with SHA-256
+`dcd5e18d9c58ddf13cde8aa1c00f48c704965b7156db61b1a330eef2752d73df`.
+The held candidate has 7,499 unique rows with SHA-256
+`db6068208c9bc6fca9033879a166dbce1ad0941e376aea786ac5b155dd013b09`.
+The exact missing record is unknown without authorised read-only access to the
+retained R2 bytes. GEMS-backed pathways remain stale and must not be represented
+as active or current.
+
+## Prior calculator usability and product-authority release
 
 Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is released from exact
 executable application commit `ca3d84a497258426c7ab34c87e8059df1cba2a27` as
@@ -1618,7 +1674,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 300 is:
+The current verified deployed topology for Sites version 301 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
