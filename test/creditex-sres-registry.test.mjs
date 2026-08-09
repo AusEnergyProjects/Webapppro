@@ -196,6 +196,15 @@ function twoRowCsvFixture(source) {
   return `${headers}\r\n${firstRow}\r\n${second.join(",")}\r\n`;
 }
 
+function multiRowCsvFixture(source, rowOverrides) {
+  const [headers, templateRow] = csvFixture(source).trimEnd().split("\r\n");
+  const template = templateRow.split(",");
+  const rows = rowOverrides.map((overrides) => template
+    .map((value, index) => overrides[index] ?? value)
+    .join(","));
+  return `${headers}\r\n${rows.join("\r\n")}\r\n`;
+}
+
 function fetchFixture(overrides = new Map()) {
   return async (input) => {
     const source = SOURCES.find(({ url }) => url === input);
@@ -912,6 +921,32 @@ test("a changed product resolves the version effective on the installation date"
   assert.equal(historicalSearch.products[0].model, "AS51-210HPA");
   assert.equal(currentSearch.products.length, 1);
   assert.equal(currentSearch.products[0].model, "AS51-210HPA-R2");
+  const historicalFacets = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-08",
+    category: "capacity_at_most_425l",
+    brand: "Aestiva",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  const currentFacets = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    category: "capacity_at_most_425l",
+    brand: "Aestiva",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.deepEqual(historicalFacets.facets.models, [{
+    value: "AS51-210HPA",
+    recordCount: 1,
+  }]);
+  assert.deepEqual(currentFacets.facets.models, [{
+    value: "AS51-210HPA-R2",
+    recordCount: 1,
+  }]);
+  assert.deepEqual(historicalFacets.products, []);
+  assert.deepEqual(currentFacets.products, []);
 
   const historicalEstimate = await estimateCreditexStcsFromRegistry(d1, {
     technology: "air_source_heat_pump",
@@ -931,6 +966,192 @@ test("a changed product resolves the version effective on the installation date"
   assert.equal(currentEstimate.resolution.snapshotId, current.snapshotId);
   assert.equal(currentEstimate.resolution.registeredTenYearStcs, "40");
   assert.deepEqual(currentEstimate.output, { quantity: "20", unit: "STC" });
+});
+
+test("guided product facets are complete beyond 50 and exact filters resolve duplicate records", async () => {
+  const { d1, artifactStore } = fixture();
+  const individualBrands = Array.from({ length: 61 }, (_, index) => ({
+    0: String(1_000 + index),
+    1: `Brand ${String(index + 1).padStart(3, "0")}`,
+    2: `Solo Model ${String(index + 1).padStart(3, "0")}`,
+  }));
+  const sharedModels = Array.from({ length: 61 }, (_, index) => ({
+    0: String(2_000 + index),
+    1: "Shared Brand",
+    2: `Shared Model ${String(index + 1).padStart(3, "0")}`,
+  }));
+  const duplicateExactModel = {
+    0: "3001",
+    1: "Shared Brand",
+    2: "Shared Model 001",
+  };
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(new Map([
+      ["cer-ashp", multiRowCsvFixture(SOURCES[0], [
+        ...individualBrands,
+        ...sharedModels,
+        duplicateExactModel,
+      ])],
+    ])),
+    artifactStore,
+    now: new Date("2026-08-09T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+
+  const initial = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    cascade: true,
+    limit: 1,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.deepEqual(initial.facets.categories, [{
+    value: "capacity_at_most_425l",
+    recordCount: 123,
+  }]);
+  assert.deepEqual(initial.facets.brands, []);
+  assert.deepEqual(initial.facets.models, []);
+  assert.deepEqual(initial.products, []);
+
+  const solarWaterHeaterCategories = await searchCerSresProducts(d1, {
+    technology: "solar_water_heater",
+    installationDate: "2026-08-09",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.deepEqual(solarWaterHeaterCategories.facets.categories, [
+    { value: "capacity_at_least_700l", recordCount: 1 },
+    { value: "capacity_less_than_700l", recordCount: 1 },
+  ]);
+  const smallerSolarWaterHeaters = await searchCerSresProducts(d1, {
+    technology: "solar_water_heater",
+    installationDate: "2026-08-09",
+    category: "capacity_less_than_700l",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.deepEqual(smallerSolarWaterHeaters.facets.brands, [{
+    value: "AAE Solar",
+    recordCount: 1,
+  }]);
+
+  const brands = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    category: "capacity_at_most_425l",
+    cascade: true,
+    limit: 1,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.equal(brands.facets.brands.length, 62);
+  assert.equal(brands.facets.brands.at(-1).value, "Shared Brand");
+  assert.deepEqual(brands.products, []);
+
+  const models = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    category: "capacity_at_most_425l",
+    brand: "Shared Brand",
+    cascade: true,
+    limit: 1,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.equal(models.facets.models.length, 61);
+  assert.deepEqual(models.facets.models[0], {
+    value: "Shared Model 001",
+    recordCount: 2,
+  });
+  assert.deepEqual(models.products, []);
+
+  const registrations = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    category: "capacity_at_most_425l",
+    brand: "Shared Brand",
+    model: "Shared Model 001",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  });
+  assert.deepEqual(
+    registrations.products.map(({ sourceItem, sourceRecordKey }) => ({
+      sourceItem,
+      sourceRecordKey,
+    })),
+    [
+      { sourceItem: "2000", sourceRecordKey: "cer-ashp:2000" },
+      { sourceItem: "3001", sourceRecordKey: "cer-ashp:3001" },
+    ],
+  );
+  assert.equal(registrations.matchCount, 2);
+});
+
+test("guided exact-product results fail closed instead of silently truncating registrations", async () => {
+  const { d1, artifactStore } = fixture();
+  const duplicateRecords = Array.from({ length: 501 }, (_, index) => ({
+    0: String(4_000 + index),
+    1: "Exact Brand",
+    2: "Exact Model",
+  }));
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(new Map([
+      ["cer-ashp", multiRowCsvFixture(SOURCES[0], duplicateRecords)],
+    ])),
+    artifactStore,
+    now: new Date("2026-08-09T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+
+  await assert.rejects(
+    searchCerSresProducts(d1, {
+      technology: "air_source_heat_pump",
+      installationDate: "2026-08-09",
+      category: "capacity_at_most_425l",
+      brand: "Exact Brand",
+      model: "Exact Model",
+      cascade: true,
+      limit: 500,
+      now: new Date("2026-08-09T01:00:00.000Z"),
+    }),
+    expectedRegistryError("SRES_PRODUCT_MATCH_OVERFLOW"),
+  );
+});
+
+test("guided product filters reject unknown categories and skipped cascade steps", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-09T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  const common = {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-09",
+    cascade: true,
+    now: new Date("2026-08-09T01:00:00.000Z"),
+  };
+  await assert.rejects(
+    searchCerSresProducts(d1, {
+      ...common,
+      category: "capacity_at_least_700l",
+    }),
+    expectedRegistryError("SRES_PRODUCT_CATEGORY_INVALID"),
+  );
+  await assert.rejects(
+    searchCerSresProducts(d1, { ...common, brand: "Aestiva" }),
+    expectedRegistryError("SRES_PRODUCT_FILTER_INVALID"),
+  );
+  await assert.rejects(
+    searchCerSresProducts(d1, {
+      ...common,
+      category: "capacity_at_most_425l",
+      model: "AS51-210HPA",
+    }),
+    expectedRegistryError("SRES_PRODUCT_FILTER_INVALID"),
+  );
 });
 
 test("an unchanged current row spans a pruned intermediate snapshot", async () => {
@@ -1231,6 +1452,15 @@ test("stale or date-ineligible registry data blocks product-backed estimates", a
     sources: SOURCES,
   });
   await assert.rejects(
+    searchCerSresProducts(d1, {
+      technology: "air_source_heat_pump",
+      installationDate: "2026-08-08",
+      cascade: true,
+      now: new Date("2026-08-11T00:00:01.000Z"),
+    }),
+    expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
+  );
+  await assert.rejects(
     estimateCreditexStcsFromRegistry(d1, {
       technology: "air_source_heat_pump",
       installationDate: "2026-08-08",
@@ -1259,14 +1489,22 @@ test("protected APIs, daily Worker and UI enforce server-derived registry values
   assert.match(productRouteSource, /access\.governanceIdentityVerified !== true/);
   assert.match(productRouteSource, /reviewedCountDecrease,/);
   assert.match(productRouteSource, /"Cache-Control": "private, no-store"/);
+  assert.match(productRouteSource, /category: parameters\.get\("category"\)/);
+  assert.match(productRouteSource, /brand: parameters\.get\("brand"\)/);
+  assert.match(productRouteSource, /model: parameters\.get\("model"\)/);
+  assert.match(productRouteSource, /parameters\.get\("mode"\) === "cascade"/);
   assert.match(estimateRouteSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
   assert.match(workerSource, /SRES_REGISTRY_CRON/);
   assert.match(workerSource, /syncCerSresProductRegistry\(db, \{ artifactStore \}\)/);
-  assert.match(calculatorSource, /Approved product/);
+  assert.match(calculatorSource, /Product type or capacity/);
+  assert.match(calculatorSource, /Exact CER registration/);
+  assert.match(calculatorSource, /productCascade\.productKey/);
+  assert.doesNotMatch(calculatorSource, /Find approved product/);
+  assert.doesNotMatch(calculatorSource, /productQuery/);
   assert.match(calculatorSource, /Installation postcode/);
   assert.match(calculatorSource, /estimateRequestRef\.current === requestVersion/);
   assert.match(calculatorSource, /function updateForm/);
-  assert.match(calculatorSource, /function markRegistryUnverified/);
+  assert.match(calculatorSource, /const markRegistryUnverified = useCallback/);
   assert.match(calculatorSource, /requiresCurrentRegistry\(form\.technology\)/);
   assert.match(calculatorSource, /aria-live="polite"/);
   assert.match(calculatorSource, /role="alert"/);

@@ -668,14 +668,11 @@ export async function POST(request: Request) {
       const unresolvedProductKinds = unresolvedNswProductKinds(
         activity.productKinds,
       );
-      if (
-        activity.calculationStatus === "official_registry_required"
-        || unresolvedProductKinds.length > 0
-      ) {
+      if (unresolvedProductKinds.length > 0) {
         throw new CreditexOfficialProductError(
           "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
           409,
-          `Activity ${activityCode} requires a current NSW administrator or TESSA product source that is not mapped to the controlled official registry.`,
+          `Activity ${activityCode} requires unresolved official product evidence (${unresolvedProductKinds.join(", ")}) that is not mapped to a controlled, installation-date registry.`,
         );
       }
       const requiredProductKinds = officialProductKindsForNswProductKinds(

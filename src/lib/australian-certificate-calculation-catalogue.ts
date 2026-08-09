@@ -699,7 +699,7 @@ function methodForActivity(
         certificateActionEnabled: false,
         operatorMessage: executable
           ? "The 1 July 2026 Rule formula and supported official product feed are connected for an estimate. ACP, network, response and implementation evidence still require reconciliation."
-          : "The governed battery formula is implemented and tested. Calculation stays fail-closed until the current NSW administrator-accepted BESS product evidence is ingested and date-locked; a generic CEC listing is not treated as NSW acceptance.",
+          : "The governed battery formula is implemented and tested. BESS1 to BESS4 require an exact installation-date selection from the CEC Approved Batteries list plus every applicable PDRS Rule requirement. BESS3 and BESS4 also require an exact governed Battery Inverter Output field. BESS5 remains blocked until the Scheme Administrator publishes its recording method.",
       };
     }
     return {

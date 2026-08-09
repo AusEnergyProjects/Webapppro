@@ -3,6 +3,8 @@ import {
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT,
   CREDITEX_PRODUCT_KIND_REGISTRY,
   CreditexOfficialProductError,
+  officialProductKindsForVeuActivity,
+  officialVeuProductCategoryNumbersForActivity,
   type CreditexOfficialProductKind,
   type CreditexOfficialProductRecord,
   type CreditexOfficialProductRegistryStatus,
@@ -146,6 +148,15 @@ type ProductRow = {
   eligible_from: string;
   eligible_to: string;
   attributes_json: string;
+};
+
+type ProductFacetRow = {
+  value: string;
+  match_count: number;
+};
+
+type ProductCountRow = {
+  match_count: number;
 };
 
 type StagedOfficialProductRecord = CreditexOfficialProductRecord & {
@@ -1654,12 +1665,188 @@ function publicProduct(row: ProductRow) {
   };
 }
 
+const MAXIMUM_OFFICIAL_PRODUCT_FACET_OPTIONS = 10_000;
+const MAXIMUM_OFFICIAL_PRODUCT_EXACT_RECORDS = 100;
+const OFFICIAL_PRODUCT_OWNER_UNPUBLISHED = "__official_owner_not_published__";
+const OFFICIAL_PRODUCT_TYPE_UNPUBLISHED = "__official_product_type_not_published__";
+
+const OFFICIAL_PRODUCT_OWNER_SQL = `CASE
+  WHEN product.brand <> '' THEN product.brand
+  WHEN product.manufacturer <> '' THEN product.manufacturer
+  ELSE '${OFFICIAL_PRODUCT_OWNER_UNPUBLISHED}'
+END`;
+
+const OFFICIAL_PRODUCT_TYPE_SQL = `CASE
+  WHEN json_type(product.attributes_json, '$.veuProductType') = 'text'
+    AND trim(CAST(json_extract(product.attributes_json, '$.veuProductType') AS TEXT)) <> ''
+    AND json_type(product.attributes_json, '$.veuProductConfiguration') = 'text'
+    AND trim(CAST(json_extract(product.attributes_json, '$.veuProductConfiguration') AS TEXT)) <> ''
+    THEN trim(CAST(json_extract(product.attributes_json, '$.veuProductType') AS TEXT))
+      || ' | '
+      || trim(CAST(json_extract(product.attributes_json, '$.veuProductConfiguration') AS TEXT))
+  WHEN json_type(product.attributes_json, '$.veuProductType') = 'text'
+    AND trim(CAST(json_extract(product.attributes_json, '$.veuProductType') AS TEXT)) <> ''
+    THEN trim(CAST(json_extract(product.attributes_json, '$.veuProductType') AS TEXT))
+  WHEN json_type(product.attributes_json, '$.veuProductConfiguration') = 'text'
+    AND trim(CAST(json_extract(product.attributes_json, '$.veuProductConfiguration') AS TEXT)) <> ''
+    THEN trim(CAST(json_extract(product.attributes_json, '$.veuProductConfiguration') AS TEXT))
+  WHEN product.series <> '' THEN product.series
+  WHEN json_type(product.attributes_json, '$.veuProductCategoryNumber') = 'text'
+    AND trim(CAST(json_extract(product.attributes_json, '$.veuProductCategoryNumber') AS TEXT)) <> ''
+    THEN trim(CAST(json_extract(product.attributes_json, '$.veuProductCategoryNumber') AS TEXT))
+  ELSE '${OFFICIAL_PRODUCT_TYPE_UNPUBLISHED}'
+END`;
+
+function exactProductFacetFilter(
+  value: unknown,
+  label: string,
+  maximumLength: number,
+) {
+  const text = String(value || "").trim();
+  if (text.length > maximumLength) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      `${label} must not exceed ${maximumLength} characters.`,
+    );
+  }
+  return text;
+}
+
+function eligibleOfficialProductRelation(input: {
+  registryCode: string;
+  productKind: CreditexOfficialProductKind;
+  installationDate: string;
+  query: string;
+  veuProductCategoryNumbers?: readonly string[];
+  brand?: string;
+  model?: string;
+  productType?: string;
+}) {
+  const conditions = [
+    "snapshot.registry_code = ?",
+    "snapshot.status IN ('current', 'superseded')",
+    `(snapshot.registry_code <> 'veu-approved-products'
+      OR snapshot.status = 'current')`,
+    "product.product_kind = ?",
+    "product.available_in_australia = 1",
+    `product.approval_status NOT IN (
+      'cancelled', 'ineligible', 'not_approved', 'rejected', 'superseded',
+      'unknown', 'withdrawn'
+    )`,
+    `(snapshot.registry_code <> 'gems-products'
+      OR product.approval_status = 'approved')`,
+    `(
+      (product.eligible_from <> '' AND product.eligible_from <= ?)
+      OR (
+        product.eligible_from = ''
+        AND snapshot.activated_on <= ?
+      )
+    )`,
+    "(product.eligible_to = '' OR product.eligible_to >= ?)",
+    `(snapshot.registry_code = 'veu-approved-products'
+      OR product.registry_effective_from <= ?)`,
+    `(
+      snapshot.registry_code = 'veu-approved-products'
+      OR snapshot.status = 'current'
+      OR snapshot.superseded_on > ?
+    )`,
+  ];
+  const bindings: string[] = [
+    input.registryCode,
+    input.productKind,
+    input.installationDate,
+    input.installationDate,
+    input.installationDate,
+    input.installationDate,
+    input.installationDate,
+  ];
+  if (input.veuProductCategoryNumbers) {
+    conditions.push(`json_type(
+      product.attributes_json,
+      '$.veuProductCategoryNumber'
+    ) = 'text'`);
+    conditions.push(`trim(CAST(json_extract(
+      product.attributes_json,
+      '$.veuProductCategoryNumber'
+    ) AS TEXT)) IN (${input.veuProductCategoryNumbers.map(() => "?").join(", ")})`);
+    bindings.push(...input.veuProductCategoryNumbers);
+  }
+  if (input.query) {
+    conditions.push("instr(product.search_text, ?) > 0");
+    bindings.push(input.query);
+  }
+  if (input.brand) {
+    conditions.push(`${OFFICIAL_PRODUCT_OWNER_SQL} = ?`);
+    bindings.push(input.brand);
+  }
+  if (input.model) {
+    conditions.push("product.model = ?");
+    bindings.push(input.model);
+  }
+  if (input.productType) {
+    conditions.push(`${OFFICIAL_PRODUCT_TYPE_SQL} = ?`);
+    bindings.push(input.productType);
+  }
+  return {
+    sql: `FROM compliance_official_products product
+      JOIN compliance_official_product_snapshots snapshot
+        ON snapshot.id = product.snapshot_id
+      WHERE ${conditions.join("\n        AND ")}`,
+    bindings,
+  };
+}
+
+function publicFacetOptions(rows: readonly ProductFacetRow[]) {
+  if (rows.length > MAXIMUM_OFFICIAL_PRODUCT_FACET_OPTIONS) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      409,
+      "The official product options are too broad. Narrow the product search before continuing.",
+    );
+  }
+  return rows.map((row) => ({
+    value: row.value,
+    label: row.value === OFFICIAL_PRODUCT_OWNER_UNPUBLISHED
+      ? "Official owner not published"
+      : row.value === OFFICIAL_PRODUCT_TYPE_UNPUBLISHED
+        ? "Not separately classified"
+        : row.value,
+    count: Number(row.match_count),
+  }));
+}
+
+async function officialProductFacet(
+  db: D1Database,
+  relation: ReturnType<typeof eligibleOfficialProductRelation>,
+  expression: string,
+) {
+  const rows = await db.prepare(`SELECT
+      ${expression} AS value, count(*) AS match_count
+    ${relation.sql}
+      AND ${expression} <> ''
+    GROUP BY ${expression}
+    ORDER BY value COLLATE NOCASE, value
+    LIMIT ?`)
+    .bind(
+      ...relation.bindings,
+      MAXIMUM_OFFICIAL_PRODUCT_FACET_OPTIONS + 1,
+    )
+    .all<ProductFacetRow>();
+  return publicFacetOptions(rows.results || []);
+}
+
 export async function searchOfficialProducts(
   db: D1Database,
   input: {
     productKind: unknown;
     installationDate: unknown;
     query?: unknown;
+    brand?: unknown;
+    model?: unknown;
+    productType?: unknown;
+    veuActivityCode?: unknown;
+    veuScenario?: unknown;
     limit?: unknown;
   },
   options: { now?: Date } = {},
@@ -1686,16 +1873,103 @@ export async function searchOfficialProducts(
   if (
     !Number.isInteger(requestedLimit)
     || requestedLimit < 1
-    || requestedLimit > 100
+    || requestedLimit > MAXIMUM_OFFICIAL_PRODUCT_EXACT_RECORDS
   ) {
     return fail(
       "OFFICIAL_PRODUCT_REQUEST_INVALID",
       400,
-      "Product search limit must be a whole number from 1 to 100.",
+      `Product search limit must be a whole number from 1 to ${MAXIMUM_OFFICIAL_PRODUCT_EXACT_RECORDS}.`,
     );
   }
   const limit = requestedLimit;
-  const rows = await db.prepare(`SELECT
+  const brand = exactProductFacetFilter(input.brand, "Product brand", 300);
+  const model = exactProductFacetFilter(input.model, "Product model", 500);
+  const productType = exactProductFacetFilter(
+    input.productType,
+    "Product type",
+    700,
+  );
+  const veuActivityCode = exactProductFacetFilter(
+    input.veuActivityCode,
+    "VEU activity code",
+    20,
+  );
+  const veuScenario = exactProductFacetFilter(
+    input.veuScenario,
+    "VEU scenario",
+    40,
+  );
+  if (veuScenario && !veuActivityCode) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      "Choose a governed VEU activity before choosing a scenario.",
+    );
+  }
+  if (model && !brand) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      "Choose an exact product brand before choosing a model.",
+    );
+  }
+  if (productType && (!brand || !model)) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      "Choose an exact product brand and model before choosing a product type.",
+    );
+  }
+  let veuProductCategoryNumbers: readonly string[] | undefined;
+  if (registryCode === "veu-approved-products") {
+    if (!veuActivityCode) {
+      return fail(
+        "OFFICIAL_PRODUCT_REQUEST_INVALID",
+        400,
+        "Choose a governed VEU activity before searching the VEU Public Registry.",
+      );
+    }
+    const governedKinds = officialProductKindsForVeuActivity(
+      veuActivityCode,
+      veuScenario || undefined,
+    );
+    veuProductCategoryNumbers = officialVeuProductCategoryNumbersForActivity(
+      veuActivityCode,
+      veuScenario || undefined,
+    );
+    if (
+      !governedKinds.includes(kind)
+      || veuProductCategoryNumbers.length < 1
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_REQUEST_INVALID",
+        400,
+        "The VEU activity and scenario do not have a governed approved-product contract for this product type.",
+      );
+    }
+  }
+  const baseRelation = {
+    registryCode,
+    productKind: kind,
+    installationDate,
+    query: "",
+    veuProductCategoryNumbers,
+  } as const;
+  const brandRelation = eligibleOfficialProductRelation(baseRelation);
+  const modelRelation = brand
+    ? eligibleOfficialProductRelation({ ...baseRelation, query, brand })
+    : null;
+  const productTypeRelation = brand && model
+    ? eligibleOfficialProductRelation({ ...baseRelation, query, brand, model })
+    : null;
+  const productRelation = eligibleOfficialProductRelation({
+    ...baseRelation,
+    query,
+    brand,
+    model,
+    productType,
+  });
+  const productStatement = db.prepare(`SELECT
       product.id, product.snapshot_id, snapshot.registry_code,
       snapshot.source_sha256 AS snapshot_source_sha256,
       product.source_key, product.source_record_key, product.product_kind,
@@ -1703,61 +1977,49 @@ export async function searchOfficialProducts(
       product.registration_number, product.certificate_number,
       product.approval_status, product.eligible_from, product.eligible_to,
       product.attributes_json
-    FROM compliance_official_products product
-    JOIN compliance_official_product_snapshots snapshot
-      ON snapshot.id = product.snapshot_id
-    WHERE snapshot.registry_code = ?
-      AND snapshot.status IN ('current', 'superseded')
-      AND (
-        snapshot.registry_code <> 'veu-approved-products'
-        OR snapshot.status = 'current'
-      )
-      AND product.product_kind = ?
-      AND product.available_in_australia = 1
-      AND product.approval_status NOT IN (
-        'cancelled', 'ineligible', 'not_approved', 'rejected', 'superseded',
-        'unknown', 'withdrawn'
-      )
-      AND (snapshot.registry_code <> 'gems-products'
-        OR product.approval_status = 'approved')
-      AND (
-        (product.eligible_from <> '' AND product.eligible_from <= ?)
-        OR (
-          product.eligible_from = ''
-          AND snapshot.activated_on <= ?
-        )
-      )
-      AND (product.eligible_to = '' OR product.eligible_to >= ?)
-      AND (
-        snapshot.registry_code = 'veu-approved-products'
-        OR product.registry_effective_from <= ?
-      )
-      AND (
-        snapshot.registry_code = 'veu-approved-products'
-        OR snapshot.status = 'current'
-        OR snapshot.superseded_on > ?
-      )
-      AND (? = '' OR instr(product.search_text, ?) > 0)
+    ${productRelation.sql}
     ORDER BY product.brand, product.manufacturer, product.model, product.id
     LIMIT ?`)
     .bind(
-      registryCode,
-      kind,
-      installationDate,
-      installationDate,
-      installationDate,
-      installationDate,
-      installationDate,
-      query,
-      query,
-      limit,
+      ...productRelation.bindings,
+      brand && model ? limit + 1 : limit,
     )
     .all<ProductRow>();
+  const countStatement = db.prepare(`SELECT count(*) AS match_count
+    ${productRelation.sql}`)
+    .bind(...productRelation.bindings)
+    .first<ProductCountRow>();
+  const [rows, count, brands, models, productTypes] = await Promise.all([
+    productStatement,
+    countStatement,
+    officialProductFacet(db, brandRelation, OFFICIAL_PRODUCT_OWNER_SQL),
+    modelRelation
+      ? officialProductFacet(db, modelRelation, "product.model")
+      : Promise.resolve([]),
+    productTypeRelation
+      ? officialProductFacet(db, productTypeRelation, OFFICIAL_PRODUCT_TYPE_SQL)
+      : Promise.resolve([]),
+  ]);
+  const productRows = rows.results || [];
+  const exactIdentityOverflow = Boolean(
+    brand && model && productRows.length > limit,
+  );
+  if (exactIdentityOverflow && productType) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      409,
+      `More than ${limit} official approval records share this exact owner and model. The registry identity requires review before one record can be selected safely.`,
+    );
+  }
   return {
     registry: status,
     productKind: kind,
     installationDate,
-    products: (rows.results || []).map(publicProduct),
+    facets: { brands, models, productTypes },
+    matchCount: Number(count?.match_count || 0),
+    products: exactIdentityOverflow
+      ? []
+      : productRows.slice(0, limit).map(publicProduct),
   };
 }
 

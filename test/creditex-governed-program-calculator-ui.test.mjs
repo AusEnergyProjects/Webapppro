@@ -11,6 +11,8 @@ import { createServer } from "vite";
 let server;
 let governedModule;
 let allProgramModule;
+let officialPickerModule;
+let veuCatalogueModule;
 
 before(async () => {
   server = await createServer({
@@ -26,6 +28,12 @@ before(async () => {
   );
   allProgramModule = await server.ssrLoadModule(
     "/src/components/CreditexAllProgramCalculator.tsx",
+  );
+  officialPickerModule = await server.ssrLoadModule(
+    "/src/components/CreditexOfficialProductPicker.tsx",
+  );
+  veuCatalogueModule = await server.ssrLoadModule(
+    "/src/lib/creditex-veu-calculator-catalogue.ts",
   );
 });
 
@@ -223,6 +231,14 @@ test("a stale picker response cannot clear a newer activity or date selection", 
   assert.equal(state.registryIssue, "");
 });
 
+test("a settled current registry does not schedule another parent render", () => {
+  const state = { selectedProducts: {}, registryIssue: "", evidenceError: "" };
+  assert.equal(
+    governedModule.creditexVeuProductUiReducer(state, { type: "registry_current" }),
+    state,
+  );
+});
+
 test("shared admin and trade VEU rendering requires the exact Public Registry model and locks product inputs", () => {
   const api = async () => ({ ok: true });
   const adminHtml = renderToStaticMarkup(React.createElement(
@@ -289,4 +305,75 @@ test("VEU product lookups use the registry governed by each exact product kind",
     governedModule.creditexVeuRegistryCodeForProductKind("unknown"),
     "",
   );
+});
+
+test("the shared approved-product picker guides brand, model, type and exact approval in order", () => {
+  const html = renderToStaticMarkup(React.createElement(
+    officialPickerModule.CreditexOfficialProductPicker,
+    {
+      api: async () => ({ products: [], facets: {}, registry: {} }),
+      kind: "air_conditioner",
+      installationDate: "2026-08-09",
+      selectedId: "",
+      onSelect: () => undefined,
+    },
+  ));
+  const labels = [
+    "1. Product brand",
+    "Find model within this brand",
+    "2. Product model",
+    "3. Product type or configuration",
+    "4. Exact approval record",
+  ];
+  let previous = -1;
+  for (const label of labels) {
+    const index = html.indexOf(label);
+    assert.ok(index > previous, `${label} must follow the prior guided step`);
+    previous = index;
+  }
+  assert.doesNotMatch(html, /Search official registry/);
+  const pickerSource = fs.readFileSync(
+    path.resolve("src/components/CreditexOfficialProductPicker.tsx"),
+    "utf8",
+  );
+  assert.match(
+    pickerSource,
+    /nextFacets\.productTypes\[0\]\.count === Number\([\s\S]*result\.matchCount/,
+    "a sole type is selected only when it represents every matching approval",
+  );
+  assert.doesNotMatch(pickerSource, /hasUnclassifiedProducts/);
+  assert.match(pickerSource, /Retry official registry/);
+  assert.match(pickerSource, /Start product selection again/);
+  assert.match(pickerSource, /aria-busy=\{busy\}/);
+  assert.match(pickerSource, /aria-live="polite"/);
+  assert.doesNotMatch(
+    pickerSource.match(/\}, \[[\s\S]*?\]\);\s*\n\s*return \(/)?.[0] || "",
+    /\bselectedId,\s*\n/,
+    "selecting an exact approval must not repeat the same registry lookup",
+  );
+  assert.doesNotMatch(
+    pickerSource.match(/\}, \[[\s\S]*?\]\);\s*\n\s*const options/)?.[0] || "",
+    /\bonSelect,\s*\n/,
+    "a fresh inline parent callback must not restart the registry fetch effect",
+  );
+});
+
+test("VEU Part 6 preserves governed codes behind plain-English scenario labels", () => {
+  const options = veuCatalogueModule.CREDITEX_VEU_PART_6_SCENARIO_OPTIONS;
+  assert.deepEqual(options.map((option) => option.value), [
+    "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi",
+  ]);
+  assert.match(options[0].label, /hard-wired electric room heater/i);
+  assert.match(options[1].label, /also decommission an air conditioner/i);
+  assert.match(options[1].label, /heats the same area/i);
+  assert.match(options[1].label, /residential bedroom/i);
+  assert.match(options[1].label, /under 20 m²/i);
+  assert.match(options[2].label, /at least 100 m²/i);
+  assert.match(options[4].label, /main heating system/i);
+  assert.match(options[7].label, /also decommission an air conditioner/i);
+  assert.match(options[7].label, /heats the same area/i);
+  assert.match(options[9].label, /also decommission an air conditioner/i);
+  assert.match(options[9].label, /heats the same area/i);
+  assert.match(options[10].label, /without decommissioning existing equipment/i);
+  assert.equal(options.some((option) => /^Scenario \(/.test(option.label)), false);
 });

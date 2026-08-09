@@ -1,4 +1,4 @@
-export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-08-08";
+export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-08-09";
 
 export type CreditexNswInputOption = {
   value: string;
@@ -74,6 +74,8 @@ const PDRS_RULE_URL =
   "https://www.energysustainabilityschemes.nsw.gov.au/sites/default/files/cm9_documents/Peak-Demand-Reduction-Scheme-Rule-of-2022-1-July-2026.PDF";
 const PRODUCT_LIST_URL =
   "https://www.energysustainabilityschemes.nsw.gov.au/product-lists";
+const CEC_BATTERY_LIST_URL =
+  "https://cleanenergycouncil.org.au/industry-programs/products-program/batteries";
 const GEMS_DATA_URL =
   "https://www.energyrating.gov.au/about-us/gems-regulator/registered-appliance-and-equipment-data";
 const ABCB_CLIMATE_URL = "https://www.abcb.gov.au/abcb-climate-map";
@@ -246,7 +248,7 @@ const INVERTER_OUTPUT_INPUT = decimalInput(
   "5",
   "0.000000001",
   "1000000",
-  "Use the output recorded on the administrator-approved product data or in the administrator-specified recording manner.",
+  "Use the exact Rule-defined Battery Inverter Output from the applicable official evidence. The CEC Battery Listing API RatedDCPower field is not treated as this value. BESS5 requires the administrator-specified recording manner.",
 );
 
 const PDRS_COMMON_INPUTS = [
@@ -279,6 +281,13 @@ const PRODUCT_SOURCE: CreditexNswSourceReference = {
   pages: "web registry",
 };
 
+const CEC_BATTERY_SOURCE: CreditexNswSourceReference = {
+  title: "Clean Energy Council Approved Batteries list",
+  url: CEC_BATTERY_LIST_URL,
+  clauses: "Current and installation-date approved battery model",
+  pages: "web registry",
+};
+
 const GEMS_SOURCE: CreditexNswSourceReference = {
   title: "GEMS registered appliance and equipment data",
   url: GEMS_DATA_URL,
@@ -308,7 +317,12 @@ const ESS_OTHER_FUEL_CONVERSION_SOURCE: CreditexNswSourceReference = {
 };
 
 function productKindsFor(officialActivityCode: string) {
-  if (officialActivityCode.startsWith("BESS")) return ["battery_energy_storage_system"];
+  if (["BESS1", "BESS2", "BESS3", "BESS4"].includes(officialActivityCode)) {
+    return ["cec_battery"];
+  }
+  if (officialActivityCode === "BESS5") {
+    return ["administrator_recorded_bess5_system"];
+  }
   if (officialActivityCode === "HVAC1" || officialActivityCode === "HVAC2" || officialActivityCode === "D16" || officialActivityCode === "F4") {
     return ["air_conditioner"];
   }
@@ -360,7 +374,7 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
     activityCode: "BESS1",
     officialActivityCode: "BESS1",
     title: "Install a new behind-the-meter battery at a single dwelling, small business or eligible government site",
-    supportedScenario: "One product whose current approved-list nominal capacity and all non-formula eligibility evidence are confirmed",
+    supportedScenario: "One exact CEC-approved battery whose installation-date nominal capacity and all Rule eligibility evidence are confirmed",
     formulaKey: "nsw-pdrs-bess1-2026-07/v1",
     effectiveFrom: "2026-07-01",
     lifetimeYears: 15,
@@ -397,7 +411,7 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
       ...PDRS_COMMON_INPUTS,
     ],
     productRegistryRequirements: [
-      "Administrator-approved BESS product list",
+      "Exact model on the CEC Approved Batteries list for the implementation date",
       "Administrator-approved installer list",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
@@ -410,19 +424,20 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
         pages: "9, 11-12, 36",
       },
       PRODUCT_SOURCE,
+      CEC_BATTERY_SOURCE,
     ],
   }),
   pdrsActivity({
     activityCode: "BESS2",
     officialActivityCode: "BESS2",
     title: "Onboard an existing behind-the-meter battery with a demand response aggregator",
-    supportedScenario: "One eligible battery with current approved-list nominal capacity and a confirmed 12-month demand-response contract",
+    supportedScenario: "One exact CEC-approved battery with installation-date nominal capacity and a confirmed 12-month demand-response contract",
     formulaKey: "nsw-pdrs-bess2-2026-07/v1",
     effectiveFrom: "2026-07-01",
     lifetimeYears: 6,
     inputDefinitions: [NOMINAL_BATTERY_INPUT, ...PDRS_COMMON_INPUTS],
     productRegistryRequirements: [
-      "Administrator-approved BESS product list",
+      "Exact model on the CEC Approved Batteries list for the implementation date",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
     sourceReferences: [
@@ -434,13 +449,14 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
         pages: "15-16, 41",
       },
       PRODUCT_SOURCE,
+      CEC_BATTERY_SOURCE,
     ],
   }),
   pdrsActivity({
     activityCode: "BESS3",
     officialActivityCode: "BESS3",
     title: "Install a new behind-the-meter apartment battery",
-    supportedScenario: "One outdoor apartment BESS for at least four dwellings with approved product and installer data",
+    supportedScenario: "One outdoor apartment BESS for at least four dwellings with an exact CEC-approved battery and independently governed Battery Inverter Output",
     formulaKey: "nsw-pdrs-bess3-2026-09/v1",
     effectiveFrom: "2026-09-01",
     lifetimeYears: 15,
@@ -488,7 +504,8 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
       ...PDRS_COMMON_INPUTS,
     ],
     productRegistryRequirements: [
-      "Administrator-approved BESS product list",
+      "Exact model on the CEC Approved Batteries list for the implementation date",
+      "Exact Rule-defined Battery Inverter Output from an official field; CEC RatedDCPower is not substituted",
       "Administrator-approved installer list",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
@@ -501,13 +518,14 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
         pages: "3, 12-13, 37",
       },
       PRODUCT_SOURCE,
+      CEC_BATTERY_SOURCE,
     ],
   }),
   pdrsActivity({
     activityCode: "BESS4",
     officialActivityCode: "BESS4",
     title: "Install a small or medium business behind-the-meter battery",
-    supportedScenario: "One non-residential, non-data-centre BESS with approved product, installer and solar-capacity data",
+    supportedScenario: "One non-residential, non-data-centre BESS with an exact CEC-approved battery, governed Battery Inverter Output, installer and solar-capacity data",
     formulaKey: "nsw-pdrs-bess4-2026-09/v1",
     effectiveFrom: "2026-09-01",
     lifetimeYears: 15,
@@ -542,7 +560,8 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
       ...PDRS_COMMON_INPUTS,
     ],
     productRegistryRequirements: [
-      "Administrator-approved BESS product list",
+      "Exact model on the CEC Approved Batteries list for the implementation date",
+      "Exact Rule-defined Battery Inverter Output from an official field; CEC RatedDCPower is not substituted",
       "Administrator-approved installer list",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
@@ -555,6 +574,7 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
         pages: "3, 13-14, 38-39",
       },
       PRODUCT_SOURCE,
+      CEC_BATTERY_SOURCE,
     ],
   }),
   pdrsActivity({
@@ -594,7 +614,7 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
       ...PDRS_COMMON_INPUTS,
     ],
     productRegistryRequirements: [
-      "Capacity and inverter output recorded in the current Scheme Administrator-specified manner",
+      "Distinct BESS5 capacity and inverter evidence recorded in the current Scheme Administrator-specified manner",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
     sourceReferences: [

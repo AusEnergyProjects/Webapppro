@@ -119,7 +119,15 @@ test("VEU product category compatibility uses exact official category numbers", 
   );
   assert.deepEqual(
     officialVeuProductCategoryNumbersForActivity("48"),
+    ["48A", "48B"],
+  );
+  assert.deepEqual(
+    officialVeuProductCategoryNumbersForActivity("48", "48A(ii)"),
     ["48A"],
+  );
+  assert.deepEqual(
+    officialVeuProductCategoryNumbersForActivity("48", "48B(i)"),
+    ["48B"],
   );
   assert.doesNotThrow(() => assertCreditexVeuOfficialProductSelections(
     "6",
@@ -222,6 +230,22 @@ test("VEU appliance formula inputs come only from exact approved-listing attribu
       [veuProduct("veu_induction_cooktop", "46B")],
     ).scenario,
     "46B",
+  );
+  assert.equal(
+    deriveCreditexVeuOfficialProductInputs(
+      "48",
+      { scenario: "48B(i)" },
+      [veuProduct("veu_ceiling_insulation", "48B")],
+    ).scenario,
+    "48B(i)",
+  );
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "48",
+      { scenario: "48B(i)" },
+      [veuProduct("veu_ceiling_insulation", "48A")],
+    ),
+    officialError,
   );
 
   for (const [activityCode, selection] of [

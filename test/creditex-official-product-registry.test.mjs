@@ -447,6 +447,644 @@ test("generic official registry activates atomically and returns effective-dated
   );
 });
 
+test("official product facets expose every eligible brand and narrow exact duplicate models", async () => {
+  const facetStatements = [];
+  const { database, d1, artifactStore } = fixture({
+    onBind(sql, values) {
+      if (sql.includes("product.model = ?")) facetStatements.push({ sql, values });
+    },
+  });
+  const approvedRows = Array.from({ length: 105 }, (_, index) => ({
+    sourceKey: "fixture-veu-facets",
+    sourceRecordKey: `VEU-${String(index).padStart(3, "0")}`,
+    productKind: "veu_air_conditioner",
+    manufacturer: "",
+    brand: `Brand ${String(index).padStart(3, "0")}`,
+    model: index === 0 ? "Shared Model" : `Model ${String(index).padStart(3, "0")}`,
+    series: "",
+    registrationNumber: `VEU-${String(index).padStart(3, "0")}`,
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "",
+    availableInAustralia: true,
+    attributes: index === 0
+      ? {
+          veuProductCategoryNumber: "6D",
+          veuProductType: "Ducted",
+          veuProductConfiguration: "Single split system",
+        }
+      : { veuProductCategoryNumber: "6D" },
+  }));
+  const exactDuplicate = {
+    ...approvedRows[0],
+    sourceRecordKey: "VEU-000-B",
+    registrationNumber: "VEU-000-B",
+    attributes: {
+      veuProductCategoryNumber: "6D",
+      veuProductType: "Non-Ducted",
+      veuProductConfiguration: "Packaged",
+    },
+  };
+  const legacy = {
+    ...approvedRows[0],
+    sourceRecordKey: "VEU-LEGACY",
+    brand: "Legacy Brand",
+    model: "Historical Model",
+    registrationNumber: "VEU-LEGACY",
+    approvalStatus: "legacy",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "2026-08-08",
+    attributes: { veuProductCategoryNumber: "6D" },
+  };
+  const mixedTypeRows = [
+    {
+      ...approvedRows[0],
+      sourceRecordKey: "VEU-MIXED-CLASSIFIED",
+      brand: "Mixed Brand",
+      model: "Mixed Model",
+      series: "Series A",
+      registrationNumber: "VEU-MIXED-CLASSIFIED",
+      attributes: { veuProductCategoryNumber: "6D" },
+    },
+    {
+      ...approvedRows[0],
+      sourceRecordKey: "VEU-MIXED-UNCLASSIFIED",
+      brand: "Mixed Brand",
+      model: "Mixed Model",
+      series: "",
+      registrationNumber: "VEU-MIXED-UNCLASSIFIED",
+      attributes: { veuProductCategoryNumber: "6D" },
+    },
+  ];
+  const facetRows = [
+    ...approvedRows,
+    exactDuplicate,
+    legacy,
+    ...mixedTypeRows,
+  ];
+  const facetSource = {
+    ...source(
+      "fixture-veu-facets",
+      "veu_air_conditioner",
+      "veu-approved-products",
+    ),
+    minimumRecords: facetRows.length,
+    requiresOfficialEligibleFrom: true,
+  };
+  const facetDefinition = {
+    registryCode: "veu-approved-products",
+    title: "Fixture VEU product facets",
+    sources: [facetSource],
+  };
+  await syncOfficialProductRegistry(d1, facetDefinition, {
+    fetchImpl: fetchFixture({ "fixture-veu-facets": facetRows }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  const broad = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    limit: 100,
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(broad.products.length, 100);
+  assert.equal(broad.matchCount, facetRows.length);
+  assert.equal(broad.facets.brands.length, 107);
+  assert.deepEqual(broad.facets.models, []);
+  assert.deepEqual(broad.facets.productTypes, []);
+  assert.deepEqual(broad.facets.brands[0], {
+    value: "Brand 000",
+    label: "Brand 000",
+    count: 2,
+  });
+  assert.ok(broad.facets.brands.some(({ value }) => value === "Legacy Brand"));
+  assert.doesNotMatch(
+    JSON.stringify(broad),
+    /attributes_json|search_text|source_manifest_json|object_key/i,
+  );
+
+  const byBrand = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    brand: "Brand 000",
+    query: "shared",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(byBrand.facets.brands.length, 107);
+  assert.deepEqual(byBrand.facets.models, [{
+    value: "Shared Model",
+    label: "Shared Model",
+    count: 2,
+  }]);
+  assert.deepEqual(byBrand.facets.productTypes, []);
+  assert.equal(byBrand.matchCount, 2);
+
+  const byModel = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    brand: "Brand 000",
+    model: "Shared Model",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(byModel.matchCount, 2);
+  assert.deepEqual(byModel.facets.productTypes, [
+    {
+      value: "Ducted | Single split system",
+      label: "Ducted | Single split system",
+      count: 1,
+    },
+    {
+      value: "Non-Ducted | Packaged",
+      label: "Non-Ducted | Packaged",
+      count: 1,
+    },
+  ]);
+  assert.equal(byModel.products.length, 2);
+
+  const mixedClassification = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    brand: "Mixed Brand",
+    model: "Mixed Model",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(mixedClassification.matchCount, 2);
+  assert.deepEqual(mixedClassification.facets.productTypes, [
+    { value: "6D", label: "6D", count: 1 },
+    { value: "Series A", label: "Series A", count: 1 },
+  ]);
+  assert.deepEqual(
+    mixedClassification.products.map(({ registrationNumber }) => registrationNumber),
+    ["VEU-MIXED-CLASSIFIED", "VEU-MIXED-UNCLASSIFIED"],
+  );
+
+  const exactType = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    brand: "Brand 000",
+    model: "Shared Model",
+    productType: "Non-Ducted | Packaged",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(exactType.matchCount, 1);
+  assert.equal(exactType.products.length, 1);
+  assert.equal(exactType.products[0].registrationNumber, "VEU-000-B");
+  const exactProductStatement = facetStatements.find(({ sql }) => (
+    sql.includes("product.id, product.snapshot_id")
+    && sql.includes("product.model = ?")
+    && sql.includes("ORDER BY product.brand")
+  ));
+  assert.ok(exactProductStatement);
+  const queryPlan = database.prepare(
+    `EXPLAIN QUERY PLAN ${exactProductStatement.sql}`,
+  ).all(...exactProductStatement.values);
+  assert.match(
+    queryPlan.map(({ detail }) => detail).join("\n"),
+    /compliance_official_products_model_idx/,
+  );
+
+  const legacyOnFinalDay = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-08",
+    veuActivityCode: "6",
+    brand: "Legacy Brand",
+    model: "Historical Model",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(legacyOnFinalDay.matchCount, 1);
+  const validatedLegacy = await validateOfficialProductSelections(d1, {
+    installationDate: "2026-08-08",
+    requiredKinds: ["veu_air_conditioner"],
+    selectedProductIds: {
+      veu_air_conditioner: legacyOnFinalDay.products[0].id,
+    },
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(validatedLegacy.selections[0].approvalStatus, "legacy");
+  assert.equal(validatedLegacy.selections[0].eligibleTo, "2026-08-08");
+
+  const afterLegacyWindow = await searchOfficialProducts(d1, {
+    productKind: "veu_air_conditioner",
+    installationDate: "2026-08-09",
+    veuActivityCode: "6",
+    brand: "Legacy Brand",
+    model: "Historical Model",
+  }, { now: new Date("2026-08-09T01:00:00.000Z") });
+  assert.equal(afterLegacyWindow.matchCount, 0);
+  assert.deepEqual(afterLegacyWindow.products, []);
+  assert.ok(!afterLegacyWindow.facets.brands.some(
+    ({ value }) => value === "Legacy Brand",
+  ));
+});
+
+test("an explicit unclassified product-type facet keeps every eligible approval selectable", async () => {
+  const { d1, artifactStore } = fixture();
+  const mixedRows = [
+    {
+      sourceKey: "fixture-gems-mixed-types",
+      sourceRecordKey: "GEMS-MIXED-CLASSIFIED",
+      productKind: "air_conditioner",
+      manufacturer: "Mixed Maker",
+      brand: "Mixed Air",
+      model: "MIX-100",
+      series: "Series A",
+      registrationNumber: "GEMS-MIXED-CLASSIFIED",
+      certificateNumber: "",
+      approvalStatus: "approved",
+      eligibleFrom: "2026-01-01",
+      eligibleTo: "",
+      availableInAustralia: true,
+      attributes: {},
+    },
+    {
+      sourceKey: "fixture-gems-mixed-types",
+      sourceRecordKey: "GEMS-OWNER-UNPUBLISHED",
+      productKind: "air_conditioner",
+      manufacturer: "",
+      brand: "",
+      model: "OWNER-UNKNOWN",
+      series: "",
+      registrationNumber: "GEMS-OWNER-UNPUBLISHED",
+      certificateNumber: "",
+      approvalStatus: "approved",
+      eligibleFrom: "2026-01-01",
+      eligibleTo: "",
+      availableInAustralia: true,
+      attributes: {},
+    },
+    {
+      sourceKey: "fixture-gems-mixed-types",
+      sourceRecordKey: "GEMS-MIXED-UNCLASSIFIED",
+      productKind: "air_conditioner",
+      manufacturer: "Mixed Maker",
+      brand: "Mixed Air",
+      model: "MIX-100",
+      series: "",
+      registrationNumber: "GEMS-MIXED-UNCLASSIFIED",
+      certificateNumber: "",
+      approvalStatus: "approved",
+      eligibleFrom: "2026-01-01",
+      eligibleTo: "",
+      availableInAustralia: true,
+      attributes: {},
+    },
+  ];
+  const mixedDefinition = {
+    registryCode: "gems-products",
+    title: "Fixture GEMS mixed product types",
+    sources: [{
+      ...source(
+        "fixture-gems-mixed-types",
+        "air_conditioner",
+        "gems-products",
+      ),
+      minimumRecords: mixedRows.length,
+    }],
+  };
+  await syncOfficialProductRegistry(d1, mixedDefinition, {
+    fetchImpl: fetchFixture({ "fixture-gems-mixed-types": mixedRows }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  const ownerFacets = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-08-08",
+    limit: 1,
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.ok(ownerFacets.facets.brands.some((option) => (
+    option.value === "__official_owner_not_published__"
+    && option.label === "Official owner not published"
+    && option.count === 1
+  )));
+
+  const search = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-08-08",
+    brand: "Mixed Air",
+    model: "MIX-100",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(search.matchCount, 2);
+  assert.deepEqual(search.facets.productTypes, [
+    {
+      value: "__official_product_type_not_published__",
+      label: "Not separately classified",
+      count: 1,
+    },
+    { value: "Series A", label: "Series A", count: 1 },
+  ]);
+  assert.deepEqual(
+    search.products.map(({ registrationNumber }) => registrationNumber),
+    ["GEMS-MIXED-CLASSIFIED", "GEMS-MIXED-UNCLASSIFIED"],
+  );
+});
+
+test("exact owner and model search fails closed instead of truncating approval records", async () => {
+  const { d1, artifactStore } = fixture();
+  const duplicateRows = Array.from({ length: 101 }, (_, index) => ({
+    sourceKey: "fixture-gems-exact-overflow",
+    sourceRecordKey: `GEMS-OVERFLOW-${String(index).padStart(3, "0")}`,
+    productKind: "air_conditioner",
+    manufacturer: "Overflow Maker",
+    brand: "Overflow Air",
+    model: "ONE-MODEL",
+    series: "",
+    registrationNumber: `GEMS-OVERFLOW-${String(index).padStart(3, "0")}`,
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "",
+    availableInAustralia: true,
+    attributes: {},
+  }));
+  const overflowDefinition = {
+    registryCode: "gems-products",
+    title: "Fixture GEMS exact-record overflow",
+    sources: [{
+      ...source(
+        "fixture-gems-exact-overflow",
+        "air_conditioner",
+        "gems-products",
+      ),
+      minimumRecords: duplicateRows.length,
+      maximumBytes: 1_000_000,
+    }],
+  };
+  await syncOfficialProductRegistry(d1, overflowDefinition, {
+    fetchImpl: fetchFixture({ "fixture-gems-exact-overflow": duplicateRows }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  const broadExactIdentity = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-08-08",
+    brand: "Overflow Air",
+    model: "ONE-MODEL",
+    limit: 100,
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(broadExactIdentity.matchCount, 101);
+  assert.deepEqual(broadExactIdentity.products, []);
+  assert.deepEqual(broadExactIdentity.facets.productTypes, [{
+    value: "__official_product_type_not_published__",
+    label: "Not separately classified",
+    count: 101,
+  }]);
+
+  await assert.rejects(
+    searchOfficialProducts(d1, {
+      productKind: "air_conditioner",
+      installationDate: "2026-08-08",
+      brand: "Overflow Air",
+      model: "ONE-MODEL",
+      productType: "__official_product_type_not_published__",
+      limit: 100,
+    }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+    expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+  );
+});
+
+test("VEU facets are restricted to governed activity and scenario categories", async () => {
+  const { d1, artifactStore } = fixture();
+  const veuCategoryRecord = (
+    sourceRecordKey,
+    productKind,
+    brand,
+    model,
+    category,
+  ) => ({
+    sourceKey: "fixture-veu-governed-categories",
+    sourceRecordKey,
+    productKind,
+    manufacturer: "",
+    brand,
+    model,
+    series: "",
+    registrationNumber: sourceRecordKey,
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "",
+    availableInAustralia: true,
+    attributes: { veuProductCategoryNumber: category },
+  });
+  const categoryRows = [
+    veuCategoryRecord("VEU-1C", "veu_water_heater", "Heater Co", "1C Model", "1C"),
+    veuCategoryRecord("VEU-1D", "veu_water_heater", "Heater Co", "1D Model", "1D"),
+    veuCategoryRecord("VEU-1D-ONLY", "veu_water_heater", "1D Only", "1D Other", "1D"),
+    veuCategoryRecord("VEU-3C", "veu_water_heater", "Other Heater", "3C Model", "3C"),
+    veuCategoryRecord("VEU-3D", "veu_water_heater", "Other Heater", "3D Model", "3D"),
+    veuCategoryRecord(
+      "VEU-27A",
+      "veu_activity_27_product",
+      "Lighting Shared",
+      "27A Control",
+      "27A",
+    ),
+    veuCategoryRecord(
+      "VEU-27B-SHARED",
+      "veu_activity_27_product",
+      "Lighting Shared",
+      "27B Luminaire",
+      "27B",
+    ),
+    veuCategoryRecord(
+      "VEU-27B-ONLY",
+      "veu_activity_27_product",
+      "27B Only",
+      "27B Other",
+      "27B",
+    ),
+    veuCategoryRecord(
+      "VEU-48A",
+      "veu_ceiling_insulation",
+      "Insulation Shared",
+      "48A Product",
+      "48A",
+    ),
+    veuCategoryRecord(
+      "VEU-48B",
+      "veu_ceiling_insulation",
+      "Insulation Shared",
+      "48B Product",
+      "48B",
+    ),
+  ];
+  const categorySource = {
+    ...source(
+      "fixture-veu-governed-categories",
+      "veu_water_heater",
+      "veu-approved-products",
+    ),
+    productKind: undefined,
+    productKinds: [
+      "veu_water_heater",
+      "veu_activity_27_product",
+      "veu_ceiling_insulation",
+    ],
+    minimumRecords: categoryRows.length,
+    requiresOfficialEligibleFrom: true,
+  };
+  const categoryDefinition = {
+    registryCode: "veu-approved-products",
+    title: "Fixture governed VEU categories",
+    sources: [categorySource],
+  };
+  await syncOfficialProductRegistry(d1, categoryDefinition, {
+    fetchImpl: fetchFixture({
+      "fixture-veu-governed-categories": categoryRows,
+    }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  const activity1C = await searchOfficialProducts(d1, {
+    productKind: "veu_water_heater",
+    installationDate: "2026-08-08",
+    veuActivityCode: "1C",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(activity1C.matchCount, 1);
+  assert.deepEqual(activity1C.facets.brands, [{
+    value: "Heater Co",
+    label: "Heater Co",
+    count: 1,
+  }]);
+  assert.deepEqual(
+    activity1C.products.map(({ registrationNumber }) => registrationNumber),
+    ["VEU-1C"],
+  );
+
+  const scenario27A = await searchOfficialProducts(d1, {
+    productKind: "veu_activity_27_product",
+    installationDate: "2026-08-08",
+    veuActivityCode: "27",
+    veuScenario: "27A",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(scenario27A.matchCount, 1);
+  assert.deepEqual(scenario27A.facets.brands, [{
+    value: "Lighting Shared",
+    label: "Lighting Shared",
+    count: 1,
+  }]);
+  assert.deepEqual(
+    scenario27A.products.map(({ registrationNumber }) => registrationNumber),
+    ["VEU-27A"],
+  );
+
+  for (const [scenario, registrationNumber] of [
+    ["48A(i)", "VEU-48A"],
+    ["48B(i)", "VEU-48B"],
+  ]) {
+    const result = await searchOfficialProducts(d1, {
+      productKind: "veu_ceiling_insulation",
+      installationDate: "2026-08-08",
+      veuActivityCode: "48",
+      veuScenario: scenario,
+    }, { now: new Date("2026-08-08T01:00:00.000Z") });
+    assert.equal(result.matchCount, 1);
+    assert.deepEqual(
+      result.products.map((product) => product.registrationNumber),
+      [registrationNumber],
+    );
+  }
+
+  for (const veuScenario of ["48C", "27A"]) {
+    await assert.rejects(
+      searchOfficialProducts(d1, {
+        productKind: "veu_ceiling_insulation",
+        installationDate: "2026-08-08",
+        veuActivityCode: "48",
+        veuScenario,
+      }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+      expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+    );
+  }
+
+  for (const invalidContract of [
+    {},
+    { veuActivityCode: "not-governed" },
+    { veuActivityCode: "27" },
+    { veuScenario: "27A" },
+    { veuActivityCode: "6" },
+  ]) {
+    await assert.rejects(
+      searchOfficialProducts(d1, {
+        productKind: "veu_water_heater",
+        installationDate: "2026-08-08",
+        ...invalidContract,
+      }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+      expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+    );
+  }
+});
+
+test("VEU activity 31 leaves its governed GEMS motor search category-neutral", async () => {
+  const { d1, artifactStore } = fixture();
+  const motorRecord = {
+    sourceKey: "fixture-gems-motor",
+    sourceRecordKey: "GEMS-MOTOR-1",
+    productKind: "electric_motor",
+    manufacturer: "Motor Maker",
+    brand: "Motor Brand",
+    model: "MOTOR-1",
+    series: "",
+    registrationNumber: "GEMS-MOTOR-1",
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "",
+    availableInAustralia: true,
+    attributes: {},
+  };
+  const motorSource = {
+    ...source("fixture-gems-motor", "electric_motor", "gems-products"),
+    minimumRecords: 1,
+  };
+  await syncOfficialProductRegistry(d1, {
+    registryCode: "gems-products",
+    title: "Fixture GEMS motor",
+    sources: [motorSource],
+  }, {
+    fetchImpl: fetchFixture({ "fixture-gems-motor": [motorRecord] }),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+
+  const result = await searchOfficialProducts(d1, {
+    productKind: "electric_motor",
+    installationDate: "2026-08-08",
+    veuActivityCode: "31",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(result.matchCount, 1);
+  assert.equal(result.products[0].registrationNumber, "GEMS-MOTOR-1");
+});
+
+test("official product facet filters require the exact upstream selection", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  await assert.rejects(
+    searchOfficialProducts(d1, {
+      productKind: "pv_module",
+      installationDate: "2026-08-08",
+      model: "Panel 400",
+    }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+    expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+  );
+  await assert.rejects(
+    searchOfficialProducts(d1, {
+      productKind: "pv_module",
+      installationDate: "2026-08-08",
+      brand: "Bright Panel",
+      productType: "P Series",
+    }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+    expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+  );
+});
+
 test("source receipts and staged R2 replays materialize only one source at a time", async () => {
   const { d1 } = fixture();
   const events = [];
@@ -1184,6 +1822,7 @@ test("record-count regressions and failed attempts quarantine the last snapshot"
     searchOfficialProducts(d1, {
       productKind: "pv_module",
       installationDate: "2026-08-09",
+      brand: "Bright Panel",
     }, { now: new Date("2026-08-09T00:00:01.000Z") }),
     expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
   );
@@ -1586,6 +2225,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   const legacySearch = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2024-01-01",
+    veuActivityCode: "17",
     query: "legacy",
   }, { now: new Date("2026-08-08T01:00:00.000Z") });
   assert.equal(legacySearch.products.length, 1);
@@ -1600,6 +2240,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   const currentLegacySearch = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2026-08-08",
+    veuActivityCode: "17",
     query: "legacy",
   }, { now: new Date("2026-08-08T01:00:00.000Z") });
   assert.equal(currentLegacySearch.products.length, 0);
@@ -1622,6 +2263,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
     const emptyWindowSearch = await searchOfficialProducts(d1, {
       productKind: "veu_shower_rose",
       installationDate,
+      veuActivityCode: "17",
       query: "empty window",
     }, { now: new Date("2026-08-08T01:00:00.000Z") });
     assert.equal(emptyWindowSearch.products.length, 0);
@@ -1640,6 +2282,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   const approvedBeforeTransition = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2026-08-09",
+    veuActivityCode: "17",
     query: "current shower",
   }, { now: new Date("2026-08-08T01:00:00.000Z") });
   assert.equal(approvedBeforeTransition.products.length, 1);
@@ -1657,6 +2300,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   const finalEligibleDay = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2026-08-08",
+    veuActivityCode: "17",
     query: "current shower",
   }, { now: new Date("2026-08-10T01:00:00.000Z") });
   assert.equal(finalEligibleDay.products.length, 1);
@@ -1679,6 +2323,7 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   const afterOfficialEnd = await searchOfficialProducts(d1, {
     productKind: "veu_shower_rose",
     installationDate: "2026-08-09",
+    veuActivityCode: "17",
     query: "current shower",
   }, { now: new Date("2026-08-10T01:00:00.000Z") });
   assert.equal(afterOfficialEnd.products.length, 0);

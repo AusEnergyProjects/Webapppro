@@ -20,6 +20,19 @@ import {
   CREDITEX_VEU_PRODUCT_REGISTRY_FETCH,
   CREDITEX_VEU_PRODUCT_SOURCE,
 } from "./creditex-veu-product-sources.ts";
+import {
+  CREDITEX_CEC_BATTERY_ALL_RECORDS_URL,
+  CREDITEX_CEC_BATTERY_CURRENT_RECORDS_URL,
+  createCreditexLicensedCecBatteryProductRegistry,
+  type CreditexLicensedCecBatteryCredentials,
+} from "./creditex-cec-battery-source.ts";
+
+export {
+  CREDITEX_CEC_BATTERY_ALL_RECORDS_URL,
+  CREDITEX_CEC_BATTERY_CURRENT_RECORDS_URL,
+  createCreditexLicensedCecBatteryProductRegistry,
+  type CreditexLicensedCecBatteryCredentials,
+};
 
 const PRODUCT_KIND_MAP = {
   solar_pv_module: "pv_module",
@@ -114,12 +127,54 @@ export const CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES = [
   CREDITEX_VEU_PRODUCT_REGISTRY,
 ] as const;
 
+export const CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS = {
+  username: "CREDITEX_CEC_BATTERY_API_USERNAME",
+  password: "CREDITEX_CEC_BATTERY_API_PASSWORD",
+  licenceReference: "CREDITEX_CEC_BATTERY_LICENCE_REFERENCE",
+} as const;
+
 export const CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES = [
   CREDITEX_CER_CEC_PRODUCT_REGISTRY,
 ] as const;
 
-export function creditexAutomaticProductRegistry(registryCode: string) {
-  return CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.find(
+function licensedCecBatteryRegistryFromEnvironment(
+  environment: Readonly<Record<string, unknown>>,
+) {
+  const credentials = Object.fromEntries(
+    Object.entries(CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS).map(([key, name]) => [
+      key,
+      typeof environment[name] === "string" ? environment[name] : "",
+    ]),
+  ) as CreditexLicensedCecBatteryCredentials;
+  const configured = Object.values(credentials).filter((value) => value !== "");
+  if (configured.length === 0) return undefined;
+  if (configured.length !== 3) {
+    throw new Error(
+      "The platform CEC battery connector configuration is incomplete.",
+    );
+  }
+  return createCreditexLicensedCecBatteryProductRegistry(credentials);
+}
+
+export function creditexAutomaticProductRegistries(
+  environment: Readonly<Record<string, unknown>> = {},
+) {
+  const licensedCecBattery = licensedCecBatteryRegistryFromEnvironment(
+    environment,
+  );
+  return licensedCecBattery
+    ? [...CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES, licensedCecBattery]
+    : [...CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES];
+}
+
+export function creditexAutomaticProductRegistry(
+  registryCode: string,
+  environment: Readonly<Record<string, unknown>> = {},
+) {
+  const base = CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.find(
     (registry) => registry.registryCode === registryCode,
   );
+  if (base) return base;
+  if (registryCode !== "cec-products") return undefined;
+  return licensedCecBatteryRegistryFromEnvironment(environment);
 }

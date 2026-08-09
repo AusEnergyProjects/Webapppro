@@ -427,7 +427,7 @@ export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = [
   },
   {
     key: "insulation",
-    categories: ["12A", "48A"],
+    categories: ["12A", "48A", "48B"],
     fields: [
       ...CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS,
       "R_Value__c",
@@ -596,6 +596,7 @@ export const CREDITEX_VEU_CATEGORY_PRODUCT_KIND = {
   "46A": "veu_induction_cooktop",
   "46B": "veu_induction_cooktop",
   "48A": "veu_ceiling_insulation",
+  "48B": "veu_ceiling_insulation",
 } as const satisfies Record<string, CreditexOfficialProductKind>;
 
 export const CREDITEX_VEU_PRODUCT_KINDS = [
@@ -2043,7 +2044,7 @@ function validateApprovedFormulaFields(
       `${label} cooktop product type`,
     );
   }
-  if (category === "48A") {
+  if (category === "48A" || category === "48B") {
     requiredSupplementalNumber(
       supplement,
       "R_Value__c",

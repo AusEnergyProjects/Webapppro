@@ -152,6 +152,12 @@ test("installer official-product responses redact every registry status and reta
   const searchResponse = projectCreditexCalculatorReadResponse("installer", {
     ok: true,
     registry,
+    facets: {
+      brands: [{ value: "Exact Brand", label: "Exact Brand", count: 2 }],
+      models: [{ value: "Model 1", label: "Model 1", count: 2 }],
+      productTypes: [{ value: "Ducted", label: "Ducted", count: 1 }],
+    },
+    matchCount: 2,
     products: [{ id: "product-1", model: "Model 1" }],
   });
 
@@ -171,6 +177,12 @@ test("installer official-product responses redact every registry status and reta
       },
     });
   }
+  assert.deepEqual(searchResponse.facets, {
+    brands: [{ value: "Exact Brand", label: "Exact Brand", count: 2 }],
+    models: [{ value: "Model 1", label: "Model 1", count: 2 }],
+    productTypes: [{ value: "Ducted", label: "Ducted", count: 1 }],
+  });
+  assert.equal(searchResponse.matchCount, 2);
   assert.deepEqual(searchResponse.products, [{ id: "product-1", model: "Model 1" }]);
   assert.doesNotMatch(
     JSON.stringify([statusResponse, searchResponse]),
@@ -200,4 +212,18 @@ test("all calculator routes share safe descriptors and registry refresh remains 
     assert.match(postSource, /allowedRoles: \["admin"\]/);
     assert.doesNotMatch(postSource, /requireCreditexCalculatorAccess\(request/);
   }
+  assert.match(officialProductsRoute, /brand: parameters\.get\("brand"\)/);
+  assert.match(officialProductsRoute, /model: parameters\.get\("model"\)/);
+  assert.match(
+    officialProductsRoute,
+    /productType: parameters\.get\("productType"\)/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /veuActivityCode: parameters\.get\("veuActivityCode"\)/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /veuScenario: parameters\.get\("veuScenario"\)/,
+  );
 });

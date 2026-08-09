@@ -1592,15 +1592,20 @@ invoice send, legacy issued PDFs without provable retained bytes, the approved
 Australian address-provider integration, and independently approved complete
 manual VEU, SRES/STC and NSW governed bundles.
 
-## Validated release candidate: CREDITEX-NATIONAL-CALCULATOR-47
+## Released milestone: CREDITEX-NATIONAL-CALCULATOR-47
 
-Status: the VEU registry foundation is live from exact commit
-`1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. Its production
-snapshot is active. The expanded formula and calculator integration is a
-validated but uncommitted release candidate; its final commit, Sites version,
-deployment and signed-in production QA remain pending coordinator completion.
+Status: the complete governed VEU calculator was released from exact application
+commit `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` as Sites version 294 through
+deployment `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective commit
+`ad63b90a4e99211998aa1947b7ddd61d5ac1f640` bounds registry history refreshes and
+is the current production source, saved as Sites version 295 with identity
+`appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
+and deployed through `appgdep_6a77b30bab008191bd61b6476525b4f2` with
+environment revision 19 at `https://compare.ausenergyassessments.com`. The saved
+version content hash is
+`sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`.
 
-The release candidate provides one source-controlled calculator workspace
+The released milestone provides one source-controlled calculator workspace
 across 35 Australian program pathways and 216 activity templates. Program,
 activity, scenario, installation date, postcode or service inputs and
 approved-product selectors are driven by typed catalogues. Every result is an
@@ -1629,6 +1634,14 @@ objects. D1 holds indexed current and historical projections for fast product
 search and server-side validation. Calculations query D1 only and never download
 or parse the registry. A live 64 MB acquisition, R2 replay, validation and D1
 activation completed with all 75,492 rows.
+
+The post-optimization production VEU refresh POST succeeded with HTTP 200 under
+request and Ray identifier `a2821aca0bc9b95b`, using 70.404 seconds wall time
+and 3.748 seconds CPU time. The active projection still contains 75,492 rows and
+the UI reports snapshot prefix `78853aad-a77...`; the full snapshot identifier
+was not captured and is not claimed. An earlier pre-optimization refresh returned
+HTTP 503 at the intentional fail-closed resource boundary. The optimized refresh
+subsequently succeeded and later product GET requests returned HTTP 200.
 
 The VEU catalogue contains 32 definitions. Thirty aggregate activity codes are
 formula-ready. Twenty-seven expose an executable estimate path: 21 fully
@@ -1665,31 +1678,47 @@ or non-executable templates. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 Certificate actions enabled remain 0.
 
+Exact production calculation QA passed on both authorised surfaces. A signed-in
+Creditex administrator selected the `Approved` Hisense `40A4NAU`, product
+`000022838`, for Activity 24 and received an estimate of 1 VEEC and 0.8 tCO2-e,
+with registry-receipt prefix `c9bd26ead7ad5a36f838d0f3...` and estimate-receipt
+prefix `0f09591ac56c44dab77e44...`; certificate actions remained disabled. A
+verified installer obtained the same product-backed result from the trade
+dashboard and had no registry-refresh control. The product-free Activity 43 path
+had previously returned 8 VEEC and 7.856856 tCO2-e in live QA.
+
+Exact optimization source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`
+passed the complete `npm.cmd run validate` gate, including the production build
+and Sites server-bundle audit. The 75,492-row scale regression completed in
+3.724 seconds across 38 bounded batches, carrying forward 75,491 unchanged rows,
+resetting one changed row and retaining one history delta. Post-deployment health
+returned HTTP 200 and the subsequent three-minute production Worker error window
+contained no error events.
+
 Every formula-dependent product must match the exact official VEU category,
-status and installation-date window. A current `Approved` row can qualify only
-inside its declared inclusive window. A historical `Legacy` row can qualify
-only inside its exact closed inclusive window. GEMS-only, fuzzy, current
-`Legacy` and out-of-window matches fail closed.
+status and installation-date window. Only an `Approved` row inside its declared
+inclusive window or a `Legacy` row inside its exact closed inclusive window can
+count. GEMS-only, fuzzy, current `Legacy` and out-of-window matches fail closed.
 
 Controlled VEU boundaries remain explicit:
 
-- Activity 14 has no matching Public Registry rows, Activity 28 has no governed
+- Activity 14 has no live Public Registry rows, Activity 28 has no governed
   connector or rows, and Activity 32 has no stable exact VEU-to-GEMS crosslink;
   Activity 32 must never use fuzzy matching;
-- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 46 has no current `Approved` rows and 674 `Legacy` rows available
+  only for exact in-window historical use;
 - Activity 45 is closed, while Activity 47 remains blocked pending lawful CEC,
   distribution-network and installed-system evidence;
 - Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
-  refurbishment branch fails closed, and project-based activities remain project
-  methods rather than deemed calculators.
+  refurbishment branch fails closed, and PBA and other project-based activities
+  remain governed project methods rather than deemed calculators.
 
-The registry milestone and active production snapshot are deployed. This record
-does not claim that the guarded daily refresh has completed an automatic
-production run. The coordinator must commit and deploy the expanded formula
-candidate, then verify both signed-in administrator and verified-trade
-calculation paths before calling that expanded coverage live. NSW TESSA and
-administrator-accepted battery lists remain unavailable as supported machine
-feeds.
+The complete calculator, bounded refresh correction and active production
+snapshot are deployed and verified through the signed-in administrator and
+verified-installer estimate paths. This record does not claim that the guarded
+daily schedule, certificate creation, certificate submission, certificate trade
+or settlement has occurred. NSW TESSA and administrator-accepted battery lists
+remain unavailable as supported machine feeds.
 
 ## Next five logical product steps
 

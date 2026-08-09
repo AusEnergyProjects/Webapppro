@@ -3597,7 +3597,13 @@ function calculatePart48(
     multiply(multiply(savings, area), decimalConstant("25")),
     decimalConstant(regionalFactor),
   );
-  const evidence = validateProductEvidence(product, installationDate, "VEU", ["48A"]);
+  const requiredProductCategory = scenario.startsWith("48A") ? "48A" : "48B";
+  const evidence = validateProductEvidence(
+    product,
+    installationDate,
+    "VEU",
+    [requiredProductCategory],
+  );
   ensurePositiveResult(result);
   return {
     scenario,

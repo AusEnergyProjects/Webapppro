@@ -1,11 +1,12 @@
 export const CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT =
   "creditex-official-products/v1" as const;
-export const CREDITEX_OFFICIAL_PRODUCT_REGISTRY_REVIEWED_ON = "2026-08-08";
+export const CREDITEX_OFFICIAL_PRODUCT_REGISTRY_REVIEWED_ON = "2026-08-09";
 
 export const CREDITEX_OFFICIAL_PRODUCT_KINDS = [
   "pv_module",
   "inverter",
   "battery",
+  "cec_battery",
   "air_conditioner",
   "close_control_air_conditioner",
   "electric_water_heater",
@@ -50,6 +51,7 @@ export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   pv_module: "cer-cec-products",
   inverter: "cer-cec-products",
   battery: "cer-cec-products",
+  cec_battery: "cec-products",
   air_conditioner: "gems-products",
   close_control_air_conditioner: "gems-products",
   electric_water_heater: "gems-products",
@@ -219,6 +221,8 @@ export function officialProductKindsForNswProductKinds(
       kinds.add("commercial_refrigerator");
     } else if (kind === "pool_pump") {
       kinds.add("pool_pump");
+    } else if (kind === "cec_battery") {
+      kinds.add("cec_battery");
     }
   }
   return [...kinds];
@@ -231,6 +235,7 @@ export function unresolvedNswProductKinds(
     kind !== "air_conditioner"
     && kind !== "refrigerated_cabinet"
     && kind !== "pool_pump"
+    && kind !== "cec_battery"
   ));
 }
 
@@ -248,6 +253,24 @@ export function creditexSresCalculationBlocker(technology: string) {
 }
 
 const NSW_OFFICIAL_PRODUCT_INPUT_KEYS: Readonly<Record<string, readonly string[]>> = {
+  BESS1: [
+    "nominal_battery_capacity_kwh",
+    "product_registry_eligibility_confirmed",
+  ],
+  BESS2: [
+    "nominal_battery_capacity_kwh",
+    "product_registry_eligibility_confirmed",
+  ],
+  BESS3: [
+    "nominal_battery_capacity_kwh",
+    "battery_inverter_output_kw",
+    "product_registry_eligibility_confirmed",
+  ],
+  BESS4: [
+    "nominal_battery_capacity_kwh",
+    "battery_inverter_output_kw",
+    "product_registry_eligibility_confirmed",
+  ],
   "HVAC1-SINGLE": [
     "product_class",
     "cooling_efficiency_basis",
@@ -652,6 +675,40 @@ export function deriveCreditexNswOfficialProductInputs(
   selections: readonly CreditexFormulaProductSelection[],
 ) {
   const inputs = { ...callerInputs };
+  if (["BESS1", "BESS2", "BESS3", "BESS4"].includes(activityCode)) {
+    const selection = selectedProduct(selections, "cec_battery");
+    const nominalCapacity = officialNumber(
+      selection,
+      "nominalBatteryCapacityKwh",
+      "CEC nominal battery capacity",
+    );
+    // The licensed response also publishes its own usable-capacity field. It
+    // is required as source evidence, but PDRS clause 10 defines the governed
+    // calculation value independently as 90% of nominal capacity.
+    officialNumber(
+      selection,
+      "cecPublishedUsableCapacityKwh",
+      "CEC published usable battery capacity",
+    );
+    setOfficialNumber(
+      inputs,
+      "nominal_battery_capacity_kwh",
+      nominalCapacity,
+    );
+    if (activityCode === "BESS3" || activityCode === "BESS4") {
+      setOfficialNumber(
+        inputs,
+        "battery_inverter_output_kw",
+        officialNumber(
+          selection,
+          "pdrsBatteryInverterOutputKw",
+          "PDRS Battery Inverter Output",
+        ),
+      );
+    }
+    inputs.product_registry_eligibility_confirmed = "yes";
+    return inputs;
+  }
   if (activityCode.startsWith("HVAC") || activityCode.startsWith("D16") || activityCode.startsWith("F4")) {
     return deriveNswAirConditionerInputs(
       programCode,
@@ -1298,6 +1355,25 @@ export function deriveCreditexVeuOfficialProductInputs(
     inputs.scenario = "25A";
     return inputs;
   }
+  if (activityCode === "48") {
+    const scenario = inputs.scenario;
+    if (
+      scenario !== "48A(i)"
+      && scenario !== "48A(ii)"
+      && scenario !== "48B(i)"
+      && scenario !== "48B(ii)"
+    ) {
+      return officialProductFailure(
+        "Select the exact VEU Part 48 installation scenario before resolving approved insulation evidence.",
+      );
+    }
+    assertCreditexVeuOfficialProductSelections(
+      activityCode,
+      selections,
+      scenario,
+    );
+    return inputs;
+  }
   if (activityCode === "46") {
     assertCreditexVeuOfficialProductSelections(activityCode, selections);
     const selection = selectedProduct(selections, "veu_induction_cooktop");
@@ -1350,6 +1426,22 @@ const CREDITEX_VEU_SCENARIO_PRODUCT_CONTRACTS = {
   },
   "35C": { productKinds: [], veuProductCategoryNumbers: [] },
   "35D": { productKinds: [], veuProductCategoryNumbers: [] },
+  "48A(i)": {
+    productKinds: ["veu_ceiling_insulation"],
+    veuProductCategoryNumbers: ["48A"],
+  },
+  "48A(ii)": {
+    productKinds: ["veu_ceiling_insulation"],
+    veuProductCategoryNumbers: ["48A"],
+  },
+  "48B(i)": {
+    productKinds: ["veu_ceiling_insulation"],
+    veuProductCategoryNumbers: ["48B"],
+  },
+  "48B(ii)": {
+    productKinds: ["veu_ceiling_insulation"],
+    veuProductCategoryNumbers: ["48B"],
+  },
 } as const satisfies Record<string, CreditexVeuActivityProductContract>;
 
 export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
@@ -1450,13 +1542,18 @@ export const CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS = {
   },
   "48": {
     productKinds: ["veu_ceiling_insulation"],
-    veuProductCategoryNumbers: ["48A"],
+    veuProductCategoryNumbers: ["48A", "48B"],
   },
 } as const satisfies Record<string, CreditexVeuActivityProductContract>;
 
 function veuActivityProductContract(activityCode: string, scenario?: string) {
   if (
-    (activityCode === "27" || activityCode === "34" || activityCode === "35")
+    (
+      activityCode === "27"
+      || activityCode === "34"
+      || activityCode === "35"
+      || activityCode === "48"
+    )
     && scenario
   ) {
     const scenarioContract = (
@@ -1464,9 +1561,9 @@ function veuActivityProductContract(activityCode: string, scenario?: string) {
         Record<string, CreditexVeuActivityProductContract | undefined>
       >
     )[scenario];
-    if (scenarioContract && scenario.startsWith(activityCode)) {
-      return scenarioContract;
-    }
+    return scenarioContract && scenario.startsWith(activityCode)
+      ? scenarioContract
+      : undefined;
   }
   return (
     CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS as Readonly<
@@ -1547,6 +1644,7 @@ export function officialProductKindLabel(kind: CreditexOfficialProductKind) {
     pv_module: "PV module",
     inverter: "inverter",
     battery: "battery",
+    cec_battery: "CEC-approved battery",
     air_conditioner: "air conditioner",
     close_control_air_conditioner: "close-control air conditioner",
     electric_water_heater: "electric water heater",

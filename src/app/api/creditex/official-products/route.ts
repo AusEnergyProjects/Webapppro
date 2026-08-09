@@ -154,6 +154,11 @@ export async function GET(request: Request) {
       productKind,
       installationDate,
       query: parameters.get("q") || "",
+      brand: parameters.get("brand") || "",
+      model: parameters.get("model") || "",
+      productType: parameters.get("productType") || "",
+      veuActivityCode: parameters.get("veuActivityCode") || "",
+      veuScenario: parameters.get("veuScenario") || "",
       limit: parameters.get("limit") || "50",
     });
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
@@ -227,9 +232,13 @@ export async function POST(request: Request) {
             sources: reviewedDecreaseSources(body.sources),
           }
         : undefined;
+    const runtimeEnvironment = env as unknown as Record<string, unknown>;
     const definitions = body.registryCode === "all"
       ? [...CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES]
-      : [creditexAutomaticProductRegistry(body.registryCode)].filter(
+      : [creditexAutomaticProductRegistry(
+          body.registryCode,
+          runtimeEnvironment,
+        )].filter(
         (value) => value !== undefined,
       );
     if (definitions.length === 0) {
@@ -248,6 +257,20 @@ export async function POST(request: Request) {
         artifactStore,
         reviewedCountDecrease,
       }));
+    }
+    if (body.registryCode === "all") {
+      const licensedCecBattery = creditexAutomaticProductRegistry(
+        "cec-products",
+        runtimeEnvironment,
+      );
+      if (licensedCecBattery) {
+        definitions.push(licensedCecBattery);
+        results.push(await syncOfficialProductRegistry(
+          database,
+          licensedCecBattery,
+          { artifactStore, reviewedCountDecrease },
+        ));
+      }
     }
     const registries = await Promise.all(
       definitions.map((definition) => (

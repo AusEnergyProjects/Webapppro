@@ -26,6 +26,8 @@ const SOURCE_MAXIMUM_TOTAL_BYTES = 5 * 1024 * 1024;
 const PRODUCT_INSERT_CHUNK = 1_000;
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
 const SYNC_LEASE_MS = 15 * 60 * 1000;
+const PRODUCT_FACET_MAXIMUM_VALUES = 20_000;
+const EXACT_PRODUCT_MAXIMUM_RECORDS = 500;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9:_-]*$/;
 
@@ -70,6 +72,15 @@ type ProductRow = {
   zone_3_stcs: number | null;
   zone_4_stcs: number | null;
   zone_5_stcs: number | null;
+};
+
+type ProductFacetRow = {
+  value: string;
+  record_count: number;
+};
+
+type ProductMatchCountRow = {
+  match_count: number;
 };
 
 type SourceArtifact = {
@@ -1054,14 +1065,114 @@ async function requireCurrentRegistry(
   return status as CurrentRegistryStatus;
 }
 
+const SRES_PRODUCT_CATEGORIES = {
+  air_source_heat_pump: ["capacity_at_most_425l"],
+  solar_water_heater: [
+    "capacity_less_than_700l",
+    "capacity_at_least_700l",
+  ],
+} as const satisfies Record<
+  CerSresRegisteredTechnology,
+  readonly string[]
+>;
+
+const EFFECTIVE_SRES_PRODUCT_CANDIDATES = `WITH candidates AS (
+    SELECT
+      product.source_record_key, product.source_item, product.technology,
+      product.category, product.brand, product.model, product.search_text,
+      product.eligible_from, product.eligible_to, product.zone_1_stcs,
+      product.zone_2_stcs, product.zone_3_stcs, product.zone_4_stcs,
+      product.zone_5_stcs,
+      row_number() OVER (
+        PARTITION BY product.source_record_key
+        ORDER BY
+          CASE snapshot.status WHEN 'superseded' THEN 0 ELSE 1 END,
+          snapshot.activated_at DESC,
+          snapshot.id DESC
+      ) AS effective_rank
+    FROM compliance_product_registry_products product
+    JOIN compliance_product_registry_snapshots snapshot
+      ON snapshot.id = product.snapshot_id
+    WHERE snapshot.registry_code = ?
+      AND snapshot.status IN ('current', 'superseded')
+      AND product.technology = ?
+      AND product.eligible_from <= ? AND product.eligible_to >= ?
+      AND (
+        snapshot.status = 'current'
+        OR (
+          (
+            snapshot.activated_on <= ?
+            OR NOT EXISTS (
+              SELECT 1
+              FROM compliance_product_registry_products earlier_product
+              JOIN compliance_product_registry_snapshots earlier_snapshot
+                ON earlier_snapshot.id = earlier_product.snapshot_id
+              WHERE earlier_snapshot.registry_code = snapshot.registry_code
+                AND earlier_snapshot.status = 'superseded'
+                AND earlier_product.source_record_key = product.source_record_key
+                AND earlier_snapshot.activated_at < snapshot.activated_at
+            )
+          )
+          AND snapshot.superseded_on > ?
+        )
+      )
+  ), effective_products AS (
+    SELECT source_record_key, source_item, technology, category, brand, model,
+      search_text, eligible_from, eligible_to, zone_1_stcs, zone_2_stcs,
+      zone_3_stcs, zone_4_stcs, zone_5_stcs
+    FROM candidates
+    WHERE effective_rank = 1
+  )`;
+
+function effectiveProductBindings(
+  technology: CerSresRegisteredTechnology,
+  installationDate: string,
+) {
+  return [
+    REGISTRY_CODE,
+    technology,
+    installationDate,
+    installationDate,
+    installationDate,
+    installationDate,
+  ] as const;
+}
+
+function exactFacetText(value: unknown, label: string, maximumLength: number) {
+  const text = String(value || "");
+  if (
+    text !== text.trim()
+    || text.length > maximumLength
+    || /[\u0000-\u001f\u007f]/.test(text)
+  ) {
+    return fail(
+      "SRES_PRODUCT_FILTER_INVALID",
+      400,
+      `Choose an exact ${label} from the current official registry.`,
+    );
+  }
+  return text;
+}
+
+function productFacet(row: ProductFacetRow) {
+  return {
+    value: row.value,
+    recordCount: Number(row.record_count),
+  };
+}
+
 export async function searchCerSresProducts(
   db: D1Database,
   input: {
     technology: CerSresRegisteredTechnology;
     installationDate: string;
+    category?: unknown;
+    brand?: unknown;
+    model?: unknown;
     query?: string;
     limit?: number;
     now?: Date;
+    cascade?: boolean;
   },
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
@@ -1079,6 +1190,27 @@ export async function searchCerSresProducts(
     input.installationDate,
     "installation date",
   );
+  const category = exactFacetText(input.category, "product category", 80);
+  if (
+    category
+    && !(SRES_PRODUCT_CATEGORIES[input.technology] as readonly string[])
+      .includes(category)
+  ) {
+    return fail(
+      "SRES_PRODUCT_CATEGORY_INVALID",
+      400,
+      "Choose a product category that applies to the selected technology.",
+    );
+  }
+  const brand = exactFacetText(input.brand, "product brand", 200);
+  const model = exactFacetText(input.model, "product model", 200);
+  if ((brand && !category) || (model && (!category || !brand))) {
+    return fail(
+      "SRES_PRODUCT_FILTER_INVALID",
+      400,
+      "Choose product category, then brand, then model in order.",
+    );
+  }
   const query = String(input.query || "")
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim()
@@ -1090,81 +1222,147 @@ export async function searchCerSresProducts(
       "Product search is limited to 100 characters.",
     );
   }
-  const limit = Math.min(50, Math.max(1, Math.floor(input.limit || 30)));
+  const limit = Math.min(
+    EXACT_PRODUCT_MAXIMUM_RECORDS,
+    Math.max(1, Math.floor(input.limit || 30)),
+  );
   const registry = await requireCurrentRegistry(db, input.now);
-  const rows = await db.prepare(`WITH candidates AS (
-      SELECT
-        product.source_record_key, product.source_item, product.technology,
-        product.category, product.brand, product.model, product.search_text,
-        product.eligible_from, product.eligible_to, product.zone_1_stcs,
-        product.zone_2_stcs, product.zone_3_stcs, product.zone_4_stcs,
-        product.zone_5_stcs,
-        row_number() OVER (
-          PARTITION BY product.source_record_key
-          ORDER BY
-            CASE snapshot.status WHEN 'superseded' THEN 0 ELSE 1 END,
-            snapshot.activated_at DESC,
-            snapshot.id DESC
-        ) AS effective_rank
-      FROM compliance_product_registry_products product
-      JOIN compliance_product_registry_snapshots snapshot
-        ON snapshot.id = product.snapshot_id
-      WHERE snapshot.registry_code = ?
-        AND snapshot.status IN ('current', 'superseded')
-        AND product.technology = ?
-        AND product.eligible_from <= ? AND product.eligible_to >= ?
-        AND (
-          snapshot.status = 'current'
-          OR (
-            (
-              snapshot.activated_on <= ?
-              OR NOT EXISTS (
-                SELECT 1
-                FROM compliance_product_registry_products earlier_product
-                JOIN compliance_product_registry_snapshots earlier_snapshot
-                  ON earlier_snapshot.id = earlier_product.snapshot_id
-                WHERE earlier_snapshot.registry_code = snapshot.registry_code
-                  AND earlier_snapshot.status = 'superseded'
-                  AND earlier_product.source_record_key = product.source_record_key
-                  AND earlier_snapshot.activated_at < snapshot.activated_at
-              )
-            )
-            AND snapshot.superseded_on > ?
-          )
-        )
-    )
-    SELECT source_record_key, source_item, technology, category, brand, model,
-      eligible_from, eligible_to, zone_1_stcs, zone_2_stcs, zone_3_stcs,
-      zone_4_stcs, zone_5_stcs
-    FROM candidates
-    WHERE effective_rank = 1
-      AND (? = '' OR instr(search_text, ?) > 0)
-    ORDER BY brand COLLATE NOCASE, model COLLATE NOCASE, source_record_key
-    LIMIT ?`)
-    .bind(
-      REGISTRY_CODE,
-      input.technology,
-      installationDate,
-      installationDate,
-      installationDate,
-      installationDate,
-      query,
-      query,
-      limit,
-    )
-    .all<Omit<ProductRow,
-      | "snapshot_id"
-      | "snapshot_source_manifest_json"
-      | "snapshot_source_sha256"
-      | "snapshot_activated_at"
-      | "snapshot_activated_on"
-    >>();
+  const bindings = effectiveProductBindings(
+    input.technology,
+    installationDate,
+  );
+  const categoriesRequest = db.prepare(`${EFFECTIVE_SRES_PRODUCT_CANDIDATES}
+    SELECT category AS value, COUNT(*) AS record_count
+    FROM effective_products
+    GROUP BY category
+    ORDER BY category
+    LIMIT ${PRODUCT_FACET_MAXIMUM_VALUES + 1}`).bind(...bindings).all<ProductFacetRow>();
+  const brandsRequest = category
+    ? db.prepare(`${EFFECTIVE_SRES_PRODUCT_CANDIDATES}
+        SELECT brand AS value, COUNT(*) AS record_count
+        FROM effective_products
+        WHERE category = ?
+        GROUP BY brand
+        ORDER BY brand COLLATE NOCASE, brand
+        LIMIT ${PRODUCT_FACET_MAXIMUM_VALUES + 1}`)
+      .bind(...bindings, category)
+      .all<ProductFacetRow>()
+    : Promise.resolve({ results: [] as ProductFacetRow[] });
+  const modelsRequest = category && brand
+    ? db.prepare(`${EFFECTIVE_SRES_PRODUCT_CANDIDATES}
+        SELECT model AS value, COUNT(*) AS record_count
+        FROM effective_products
+        WHERE category = ? AND brand = ?
+        GROUP BY model
+        ORDER BY model COLLATE NOCASE, model
+        LIMIT ${PRODUCT_FACET_MAXIMUM_VALUES + 1}`)
+      .bind(...bindings, category, brand)
+      .all<ProductFacetRow>()
+    : Promise.resolve({ results: [] as ProductFacetRow[] });
+  const loadProducts = input.cascade !== true || Boolean(model);
+  const productsRequest = loadProducts
+    ? db.prepare(`${EFFECTIVE_SRES_PRODUCT_CANDIDATES}
+        SELECT source_record_key, source_item, technology, category, brand,
+          model, eligible_from, eligible_to, zone_1_stcs, zone_2_stcs,
+          zone_3_stcs, zone_4_stcs, zone_5_stcs
+        FROM effective_products
+        WHERE (? = '' OR category = ?)
+          AND (? = '' OR brand = ?)
+          AND (? = '' OR model = ?)
+          AND (? = '' OR instr(search_text, ?) > 0)
+        ORDER BY brand COLLATE NOCASE, model COLLATE NOCASE, source_record_key
+        LIMIT ?`)
+      .bind(
+        ...bindings,
+        category,
+        category,
+        brand,
+        brand,
+        model,
+        model,
+        query,
+        query,
+        input.cascade === true ? limit + 1 : limit,
+      )
+      .all<Omit<ProductRow,
+        | "snapshot_id"
+        | "snapshot_source_manifest_json"
+        | "snapshot_source_sha256"
+        | "snapshot_activated_at"
+        | "snapshot_activated_on"
+      >>()
+    : Promise.resolve({
+        results: [] as Array<Omit<ProductRow,
+          | "snapshot_id"
+          | "snapshot_source_manifest_json"
+          | "snapshot_source_sha256"
+          | "snapshot_activated_at"
+          | "snapshot_activated_on"
+        >>,
+      });
+  const matchCountRequest = loadProducts
+    ? db.prepare(`${EFFECTIVE_SRES_PRODUCT_CANDIDATES}
+        SELECT COUNT(*) AS match_count
+        FROM effective_products
+        WHERE (? = '' OR category = ?)
+          AND (? = '' OR brand = ?)
+          AND (? = '' OR model = ?)
+          AND (? = '' OR instr(search_text, ?) > 0)`)
+      .bind(
+        ...bindings,
+        category,
+        category,
+        brand,
+        brand,
+        model,
+        model,
+        query,
+        query,
+      )
+      .first<ProductMatchCountRow>()
+    : Promise.resolve({ match_count: 0 });
+  const [categoryRows, brandRows, modelRows, rows, matchCountRow] = await Promise.all([
+    categoriesRequest,
+    brandsRequest,
+    modelsRequest,
+    productsRequest,
+    matchCountRequest,
+  ]);
+  for (const [label, facetRows] of [
+    ["product categories", categoryRows.results],
+    ["brands", brandRows.results],
+    ["models", modelRows.results],
+  ] as const) {
+    if (facetRows.length > PRODUCT_FACET_MAXIMUM_VALUES) {
+      return fail(
+        "SRES_PRODUCT_FACET_OVERFLOW",
+        409,
+        `The official registry contains more than ${PRODUCT_FACET_MAXIMUM_VALUES.toLocaleString("en-AU")} ${label}; the product navigation contract requires review before results can be shown safely.`,
+      );
+    }
+  }
+  if (input.cascade === true && rows.results.length > limit) {
+    return fail(
+      "SRES_PRODUCT_MATCH_OVERFLOW",
+      409,
+      `More than ${limit.toLocaleString("en-AU")} exact CER registrations share this product identity; the registry data requires review before one can be selected safely.`,
+    );
+  }
   return {
     registry,
     installationDate,
     technology: input.technology,
+    category,
+    brand,
+    model,
     query,
-    products: rows.results.map((row) => ({
+    matchCount: Number(matchCountRow?.match_count || 0),
+    facets: {
+      categories: categoryRows.results.map(productFacet),
+      brands: brandRows.results.map(productFacet),
+      models: modelRows.results.map(productFacet),
+    },
+    products: rows.results.slice(0, limit).map((row) => ({
       sourceRecordKey: row.source_record_key,
       sourceItem: row.source_item,
       technology: row.technology,

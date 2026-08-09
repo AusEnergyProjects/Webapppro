@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type FormEvent,
@@ -38,6 +40,17 @@ type ProductOption = {
   model: string;
   eligibleFrom: string;
   eligibleTo: string;
+};
+
+type ProductFacet = {
+  value: string;
+  recordCount: number;
+};
+
+type ProductFacets = {
+  categories: ProductFacet[];
+  brands: ProductFacet[];
+  models: ProductFacet[];
 };
 
 type RegistryStatus = {
@@ -95,8 +108,6 @@ type FormState = {
   technology: Technology;
   effectiveDate: string;
   postcode: string;
-  productQuery: string;
-  productKey: string;
   ratedCapacityKw: string;
   resourceAvailability: "default" | "site_assessed";
   resourceHoursPerYear: string;
@@ -104,6 +115,69 @@ type FormState = {
   nominalCapacityKwh: string;
   usableCapacityKwh: string;
 };
+
+export type CreditexSresProductCascadeState = {
+  category: string;
+  brand: string;
+  model: string;
+  productKey: string;
+};
+
+export type CreditexSresProductCascadeAction =
+  | {
+      type: "reset";
+      reason:
+        | "technology"
+        | "installation_date"
+        | "registry_snapshot"
+        | "registry_error";
+    }
+  | { type: "category"; value: string }
+  | { type: "brand"; value: string }
+  | { type: "model"; value: string }
+  | { type: "record"; value: string }
+  | { type: "records_loaded"; productKeys: readonly string[] };
+
+export const EMPTY_CREDITEX_SRES_PRODUCT_CASCADE:
+CreditexSresProductCascadeState = {
+  category: "",
+  brand: "",
+  model: "",
+  productKey: "",
+};
+
+export function creditexSresProductCascadeReducer(
+  state: CreditexSresProductCascadeState,
+  action: CreditexSresProductCascadeAction,
+): CreditexSresProductCascadeState {
+  if (action.type === "reset") {
+    return { ...EMPTY_CREDITEX_SRES_PRODUCT_CASCADE };
+  }
+  if (action.type === "category") {
+    return { category: action.value, brand: "", model: "", productKey: "" };
+  }
+  if (action.type === "brand") {
+    return { ...state, brand: action.value, model: "", productKey: "" };
+  }
+  if (action.type === "model") {
+    return { ...state, model: action.value, productKey: "" };
+  }
+  if (action.type === "record") {
+    return { ...state, productKey: action.value };
+  }
+  if (
+    action.productKeys.length === 1
+    && action.productKeys[0]
+  ) {
+    return { ...state, productKey: action.productKeys[0] };
+  }
+  return {
+    ...state,
+    productKey: action.productKeys.includes(state.productKey)
+      ? state.productKey
+      : "",
+  };
+}
 
 function initialDate() {
   const today = todayIso();
@@ -116,14 +190,24 @@ const INITIAL_FORM: FormState = {
   technology: "solar_pv",
   effectiveDate: initialDate(),
   postcode: "3000",
-  productQuery: "",
-  productKey: "",
   ratedCapacityKw: "6.6",
   resourceAvailability: "default",
   resourceHoursPerYear: "2001",
   deemingYears: "5",
   nominalCapacityKwh: "20",
   usableCapacityKwh: "18",
+};
+
+const EMPTY_PRODUCT_FACETS: ProductFacets = {
+  categories: [],
+  brands: [],
+  models: [],
+};
+
+const PRODUCT_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  capacity_at_most_425l: "Air-source heat pump up to 425 litres",
+  capacity_less_than_700l: "Solar water heater under 700 litres",
+  capacity_at_least_700l: "Solar water heater 700 litres or more",
 };
 
 const SCENARIOS: Record<Technology, string> = {
@@ -165,6 +249,13 @@ export function CreditexSresCalculator({
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade";
 }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [productCascade, dispatchProductCascade] = useReducer(
+    creditexSresProductCascadeReducer,
+    EMPTY_CREDITEX_SRES_PRODUCT_CASCADE,
+  );
+  const [productFacets, setProductFacets] = useState<ProductFacets>(
+    EMPTY_PRODUCT_FACETS,
+  );
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [registry, setRegistry] = useState<RegistryStatus | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
@@ -175,6 +266,7 @@ export function CreditexSresCalculator({
   const [estimateBusy, setEstimateBusy] = useState(false);
   const [estimateError, setEstimateError] = useState("");
   const estimateRequestRef = useRef(0);
+  const registrySnapshotRef = useRef("");
 
   const maximumDeemingYears = useMemo(
     () => String(Math.min(
@@ -185,19 +277,42 @@ export function CreditexSresCalculator({
   );
   const productBlocker = creditexSresCalculationBlocker(form.technology);
 
-  function invalidateEstimate() {
+  const invalidateEstimate = useCallback(() => {
     estimateRequestRef.current += 1;
     setEstimate(null);
     setEstimateError("");
     setEstimateBusy(false);
-  }
+  }, []);
 
   function updateForm(updater: (current: FormState) => FormState) {
     invalidateEstimate();
     setForm(updater);
   }
 
-  function markRegistryUnverified() {
+  function updateProductCascade(action: CreditexSresProductCascadeAction) {
+    invalidateEstimate();
+    dispatchProductCascade(action);
+    if (action.type === "category") {
+      setProducts([]);
+      setProductFacets((current) => ({
+        categories: current.categories,
+        brands: [],
+        models: [],
+      }));
+    } else if (action.type === "brand") {
+      setProducts([]);
+      setProductFacets((current) => ({ ...current, models: [] }));
+    } else if (action.type === "model") {
+      setProducts([]);
+    }
+  }
+
+  const markRegistryUnverified = useCallback(() => {
+    invalidateEstimate();
+    registrySnapshotRef.current = "";
+    dispatchProductCascade({ type: "reset", reason: "registry_error" });
+    setProductFacets(EMPTY_PRODUCT_FACETS);
+    setProducts([]);
     setRegistry((current) => current
       ? { ...current, status: "stale" }
       : {
@@ -206,7 +321,7 @@ export function CreditexSresCalculator({
           snapshot: null,
           lastAttempt: null,
         });
-  }
+  }, [invalidateEstimate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,34 +333,122 @@ export function CreditexSresCalculator({
           ? `/api/creditex/stc-products?${new URLSearchParams({
               technology: form.technology,
               installationDate: form.effectiveDate,
-              q: form.productQuery,
-              limit: "50",
+              mode: "cascade",
+              ...(productCascade.category
+                ? { category: productCascade.category }
+                : {}),
+              ...(productCascade.brand
+                ? { brand: productCascade.brand }
+                : {}),
+              ...(productCascade.model
+                ? { model: productCascade.model }
+                : {}),
+              limit: "500",
             }).toString()}`
           : "/api/creditex/stc-products";
         const result = await api(path);
         if (cancelled) return;
-        setRegistry((result.registry || null) as RegistryStatus | null);
+        const nextRegistry = (result.registry || null) as RegistryStatus | null;
+        const nextSnapshotId = nextRegistry?.snapshot?.id || "";
+        const snapshotChanged = Boolean(
+          registrySnapshotRef.current
+          && nextSnapshotId
+          && registrySnapshotRef.current !== nextSnapshotId,
+        );
+        if (nextSnapshotId) registrySnapshotRef.current = nextSnapshotId;
+        setRegistry(nextRegistry);
+        const rawFacets = result.facets as Partial<ProductFacets> | undefined;
+        const nextFacets: ProductFacets = registeredTechnology(form.technology)
+          ? {
+              categories: Array.isArray(rawFacets?.categories)
+                ? rawFacets.categories as ProductFacet[]
+                : [],
+              brands: Array.isArray(rawFacets?.brands)
+                ? rawFacets.brands as ProductFacet[]
+                : [],
+              models: Array.isArray(rawFacets?.models)
+                ? rawFacets.models as ProductFacet[]
+                : [],
+            }
+          : EMPTY_PRODUCT_FACETS;
+        if (snapshotChanged) {
+          invalidateEstimate();
+          dispatchProductCascade({
+            type: "reset",
+            reason: "registry_snapshot",
+          });
+          setProductFacets({
+            categories: nextFacets.categories,
+            brands: [],
+            models: [],
+          });
+          setProducts([]);
+          return;
+        }
+        setProductFacets(nextFacets);
         const nextProducts = registeredTechnology(form.technology)
           ? (result.products || []) as ProductOption[]
           : [];
+        if (!registeredTechnology(form.technology)) {
+          setProducts([]);
+          dispatchProductCascade({ type: "reset", reason: "technology" });
+          return;
+        }
+        if (
+          productCascade.category
+          && !nextFacets.categories.some(
+            (facet) => facet.value === productCascade.category,
+          )
+        ) {
+          invalidateEstimate();
+          dispatchProductCascade({
+            type: "reset",
+            reason: "registry_snapshot",
+          });
+          setProducts([]);
+          return;
+        }
+        if (!productCascade.category && nextFacets.categories.length === 1) {
+          dispatchProductCascade({
+            type: "category",
+            value: nextFacets.categories[0].value,
+          });
+          setProducts([]);
+          return;
+        }
+        if (
+          productCascade.brand
+          && !nextFacets.brands.some(
+            (facet) => facet.value === productCascade.brand,
+          )
+        ) {
+          dispatchProductCascade({
+            type: "category",
+            value: productCascade.category,
+          });
+          setProducts([]);
+          return;
+        }
+        if (
+          productCascade.model
+          && !nextFacets.models.some(
+            (facet) => facet.value === productCascade.model,
+          )
+        ) {
+          dispatchProductCascade({
+            type: "brand",
+            value: productCascade.brand,
+          });
+          setProducts([]);
+          return;
+        }
         setProducts(nextProducts);
-        setForm((current) => {
-          if (!registeredTechnology(current.technology)) {
-            return current.productKey ? { ...current, productKey: "" } : current;
-          }
-          if (
-            current.productKey
-            && nextProducts.some(
-              (product) => product.sourceRecordKey === current.productKey,
-            )
-          ) {
-            return current;
-          }
-          return { ...current, productKey: "" };
+        dispatchProductCascade({
+          type: "records_loaded",
+          productKeys: nextProducts.map((product) => product.sourceRecordKey),
         });
       } catch (error) {
         if (cancelled) return;
-        setProducts([]);
         markRegistryUnverified();
         setLookupError(
           error instanceof Error
@@ -255,7 +458,7 @@ export function CreditexSresCalculator({
       } finally {
         if (!cancelled) setLookupBusy(false);
       }
-    }, registeredTechnology(form.technology) ? 250 : 0);
+    }, 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
@@ -263,9 +466,13 @@ export function CreditexSresCalculator({
   }, [
     api,
     form.effectiveDate,
-    form.productQuery,
     form.technology,
+    invalidateEstimate,
     lookupVersion,
+    markRegistryUnverified,
+    productCascade.brand,
+    productCascade.category,
+    productCascade.model,
   ]);
 
   async function refreshRegistry() {
@@ -277,7 +484,21 @@ export function CreditexSresCalculator({
         method: "POST",
         body: JSON.stringify({ action: "refresh" }),
       }, { requestTimeoutMs: 90_000 });
-      setRegistry((result.registry || null) as RegistryStatus | null);
+      const nextRegistry = (result.registry || null) as RegistryStatus | null;
+      const nextSnapshotId = nextRegistry?.snapshot?.id || "";
+      if (
+        registrySnapshotRef.current
+        && nextSnapshotId
+        && registrySnapshotRef.current !== nextSnapshotId
+      ) {
+        dispatchProductCascade({
+          type: "reset",
+          reason: "registry_snapshot",
+        });
+        setProductFacets(EMPTY_PRODUCT_FACETS);
+        setProducts([]);
+      }
+      setRegistry(nextRegistry);
       setLookupVersion((current) => current + 1);
     } catch (error) {
       setProducts([]);
@@ -319,7 +540,7 @@ export function CreditexSresCalculator({
         ? {
             ...common,
             postcode: form.postcode,
-            productKey: form.productKey,
+            productKey: productCascade.productKey,
           }
         : form.technology === "small_wind"
             || form.technology === "small_hydro"
@@ -361,12 +582,12 @@ export function CreditexSresCalculator({
   }
 
   function updateTechnology(technology: Technology) {
+    dispatchProductCascade({ type: "reset", reason: "technology" });
+    setProductFacets(EMPTY_PRODUCT_FACETS);
     setProducts([]);
     updateForm((current) => ({
       ...current,
       technology,
-      productKey: "",
-      productQuery: "",
       resourceAvailability: "default",
       resourceHoursPerYear: technology === "small_hydro" ? "4001" : "2001",
       deemingYears: maximumDeemingYears,
@@ -484,13 +705,18 @@ export function CreditexSresCalculator({
                 ...current,
                 effectiveDate,
                 deemingYears: maximum,
-                productKey: "",
               }));
+              dispatchProductCascade({
+                type: "reset",
+                reason: "installation_date",
+              });
+              setProductFacets(EMPTY_PRODUCT_FACETS);
+              setProducts([]);
             }}
           />
         </label>
 
-        {(form.technology === "solar_pv" || registeredTechnology(form.technology)) && (
+        {form.technology === "solar_pv" && (
           <label>
             Installation postcode
             <input
@@ -509,51 +735,120 @@ export function CreditexSresCalculator({
         )}
 
         {registeredTechnology(form.technology) ? (
-          <>
+          <fieldset className={styles.officialProductPicker}>
+            <legend>Registered product</legend>
             <label>
-              Find approved product
-              <input
-                type="search"
-                value={form.productQuery}
-                placeholder="Brand or model"
-                onChange={(event) => updateForm((current) => ({
-                  ...current,
-                  productQuery: event.target.value,
-                  productKey: "",
-                }))}
-              />
-              <small>
-                {lookupBusy
-                  ? "Searching the current official snapshot..."
-                  : `${products.length} eligible matches shown`}
-              </small>
-            </label>
-            <label>
-              Approved product
+              Product type or capacity
               <select
                 required
                 disabled={lookupBusy || registry?.status !== "current"}
-                value={form.productKey}
-                onChange={(event) => updateForm((current) => ({
-                  ...current,
-                  productKey: event.target.value,
-                }))}
+                value={productCascade.category}
+                onChange={(event) => updateProductCascade({
+                  type: "category",
+                  value: event.target.value,
+                })}
               >
-                <option value="">Choose an eligible product</option>
-                {products.map((product) => (
-                  <option
-                    key={product.sourceRecordKey}
-                    value={product.sourceRecordKey}
-                  >
-                    {product.brand} | {product.model}
+                <option value="">Choose a product type</option>
+                {productFacets.categories.map((facet) => (
+                  <option key={facet.value} value={facet.value}>
+                    {PRODUCT_CATEGORY_LABELS[facet.value] || facet.value}
+                    {` (${facet.recordCount.toLocaleString("en-AU")})`}
                   </option>
                 ))}
               </select>
               <small>
-                Product eligibility is filtered to the installation date.
+                {lookupBusy
+                  ? "Checking products eligible on the installation date..."
+                  : "Capacity categories come from the current CER registry snapshot."}
               </small>
             </label>
-          </>
+            <label>
+              Brand
+              <select
+                required
+                disabled={
+                  lookupBusy
+                  || registry?.status !== "current"
+                  || !productCascade.category
+                  || productFacets.brands.length === 0
+                }
+                value={productCascade.brand}
+                onChange={(event) => updateProductCascade({
+                  type: "brand",
+                  value: event.target.value,
+                })}
+              >
+                <option value="">Choose a brand</option>
+                {productFacets.brands.map((facet) => (
+                  <option key={facet.value} value={facet.value}>
+                    {facet.value} ({facet.recordCount.toLocaleString("en-AU")})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Model
+              <select
+                required
+                disabled={
+                  lookupBusy
+                  || registry?.status !== "current"
+                  || !productCascade.brand
+                  || productFacets.models.length === 0
+                }
+                value={productCascade.model}
+                onChange={(event) => updateProductCascade({
+                  type: "model",
+                  value: event.target.value,
+                })}
+              >
+                <option value="">Choose a model</option>
+                {productFacets.models.map((facet) => (
+                  <option key={facet.value} value={facet.value}>
+                    {facet.value} ({facet.recordCount.toLocaleString("en-AU")})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {productCascade.model && products.length > 1 && (
+              <label>
+                Exact CER registration
+                <select
+                  required
+                  disabled={lookupBusy || registry?.status !== "current"}
+                  value={productCascade.productKey}
+                  onChange={(event) => updateProductCascade({
+                    type: "record",
+                    value: event.target.value,
+                  })}
+                >
+                  <option value="">Choose the exact registration</option>
+                  {products.map((product) => (
+                    <option
+                      key={product.sourceRecordKey}
+                      value={product.sourceRecordKey}
+                    >
+                      CER item {product.sourceItem} | eligible {product.eligibleFrom} to {product.eligibleTo}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  This brand and model has more than one eligible CER record.
+                </small>
+              </label>
+            )}
+            {productCascade.model && products.length === 1 && (
+              <small>
+                Exact CER registration: item {products[0].sourceItem}, eligible
+                {` ${products[0].eligibleFrom} to ${products[0].eligibleTo}`}.
+              </small>
+            )}
+            {productCascade.model && !lookupBusy && products.length === 0 && (
+              <small>
+                No exact registration is eligible for this installation date.
+              </small>
+            )}
+          </fieldset>
         ) : form.technology === "solar_battery" ? (
           <>
             <label>
@@ -667,6 +962,24 @@ export function CreditexSresCalculator({
           </label>
         )}
 
+        {registeredTechnology(form.technology) && (
+          <label>
+            Installation postcode
+            <input
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              required
+              value={form.postcode}
+              onChange={(event) => updateForm((current) => ({
+                ...current,
+                postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
+              }))}
+            />
+            <small>The official zone and factor are derived automatically.</small>
+          </label>
+        )}
+
         <button
           type="submit"
           disabled={
@@ -675,7 +988,10 @@ export function CreditexSresCalculator({
             || (requiresCurrentRegistry(form.technology)
               && (
                 registry?.status !== "current"
-                || (registeredTechnology(form.technology) && !form.productKey)
+                || (
+                  registeredTechnology(form.technology)
+                  && !productCascade.productKey
+                )
               ))
           }
         >

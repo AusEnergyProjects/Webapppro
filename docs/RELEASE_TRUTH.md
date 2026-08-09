@@ -128,48 +128,66 @@ This is the only current implementation and release-status document. The [dated 
 | Historical trade document controls and Jobs application source | `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` | Exact validated milestone-45 source; deployed as historical Sites version 283 |
 | Historical Sites version 283 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_435abd4eabd081918c58fd7adbbb49ae` | Exact Sites version 283 built from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`; 364 stored files; 31,682,560 stored bytes; content hash `sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7` |
 | Historical Sites version 283 executable identity | Sites version 283 from `bfd472359dd8ec2457379bc3694dc3c9503ac7dd` | Deployment `appgdep_6a7221a403808191a44c354d51922058` succeeded; environment revision 19 |
-| Current VEU registry foundation application source | `1d77ab222638d3d43d9a49cac0b486173ce88e18` on `codex/sites-custom-domain-migration` | Exact committed and deployed source for the guarded VEU Public Registry importer and indexed product projection |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_3ea0067666848191816b9e9b51293599` | Exact Sites version 293 built from `1d77ab222638d3d43d9a49cac0b486173ce88e18` |
-| Current executable application identity | Sites version 293 from `1d77ab222638d3d43d9a49cac0b486173ce88e18` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a77783225d08191b4fcf8cf98888f06` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
-| Expanded VEU formula and shared calculator release candidate | Uncommitted working tree on `codex/sites-custom-domain-migration` | Validated release candidate only; final commit, saved Sites version, deployment identity and signed-in production QA do not yet exist |
+| VEU registry foundation application source | `1d77ab222638d3d43d9a49cac0b486173ce88e18` on `codex/sites-custom-domain-migration` | Exact committed source for the guarded VEU Public Registry importer and indexed product projection; deployed as historical Sites version 293 |
+| Historical Sites version 293 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_3ea0067666848191816b9e9b51293599` | Exact Sites version 293 built from `1d77ab222638d3d43d9a49cac0b486173ce88e18`; deployment `appgdep_6a77783225d08191b4fcf8cf98888f06` succeeded with environment revision 19 |
+| Complete VEU calculator application source | `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` | Exact committed and deployed source for the complete governed VEU formula set and shared administrator and verified-installer calculator |
+| Historical Sites version 294 executable identity | Sites version 294 from `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` | Deployment `appgdep_6a77aa33d1288191965ba076f690dd46` succeeded before the bounded-refresh correction superseded it |
+| Current VEU bounded-refresh application source | `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` on `codex/sites-custom-domain-migration` | Exact validated corrective source that preserves unchanged effective dates and retains only changed history deltas |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd` | Exact Sites version 295 built from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`; content hash `sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563` |
+| Current executable application identity | Sites version 295 from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a77b30bab008191bd61b6476525b4f2` succeeded; environment revision 19 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
 cleanup, customer, installer and trade releases, protected-trade locality,
 authorised compliance operations, evidence-policy governance, national
 government-activity workflow, VEU pilot and guarded VEU registry foundation are
-deployed to production. Sites version 293 from exact application commit
-`1d77ab222638d3d43d9a49cac0b486173ce88e18` is the current executable source.
-Its active VEU snapshot contains 75,492 Public Visible rows. The expanded VEU
-formula and shared calculator working tree is not the deployed production
-source: it has no final commit, Sites version or deployment identity and has not
-received signed-in production QA. Certificate creation, submission, trading and
-settlement remain disabled.
+deployed to production. The complete calculator first shipped as Sites version
+294 from `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`. Sites version 295 from exact
+corrective commit `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is the current executable
+source. Its active VEU snapshot contains 75,492 Public Visible rows and the
+administrator and verified-installer estimate paths passed live QA. Certificate
+creation, submission, trading and settlement remain disabled.
 
-## Current VEU registry release and expanded calculator release candidate
+## Current VEU calculator and bounded registry refresh release
 
-The registry foundation is released in exact application source
-`1d77ab222638d3d43d9a49cac0b486173ce88e18`, Sites version 293. Its production
-snapshot is active with exactly 75,492 Public Visible rows: 64,715 with source
-status `Approved` and 10,777 with source status `Legacy`. A live 64 MB
-acquisition, exact-byte R2 replay, validation and D1 activation completed with
-all 75,492 rows.
+The guarded registry foundation was released in exact application source
+`1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
+governed VEU calculator was then committed as
+`d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` and deployed as Sites version 294
+through `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective source
+`ad63b90a4e99211998aa1947b7ddd61d5ac1f640` bounds registry-history writes and is
+current Sites version 295. It is saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
+with content hash
+`sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`,
+deployed through `appgdep_6a77b30bab008191bd61b6476525b4f2` with environment
+revision 19 at `https://compare.ausenergyassessments.com`.
 
+The current production snapshot contains exactly 75,492 Public Visible rows:
+64,715 with source status `Approved` and 10,777 with source status `Legacy`.
 The importer retains exact received source bytes, hashes and custody metadata in
-content-addressed R2 objects. D1 stores the indexed normalized current and
-historical rows, source manifest, snapshot identity, registry category, status
-and effective dates needed for fast picker search and server-side validation.
-Calculations query D1 only. They never download or parse the Public Registry.
+content-addressed R2 objects. D1 stores indexed normalized current and historical
+rows, the source manifest, snapshot identity, registry category, status and
+effective dates needed for fast picker search and server-side validation.
+Calculations query D1 only and never download or parse the Public Registry.
 
-The expanded working-tree candidate contains 32 VEU catalogue definitions.
-Thirty aggregate activity codes are formula-ready. Twenty-seven expose an
-executable estimate path: 21 fully available aggregate families plus six
-enforced partial subsets. The fully available set is `3`, `13`, `15`, `17`,
-`22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`,
-`41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` are additionally
+The production VEU refresh POST succeeded with HTTP 200 under request and Ray
+identifier `a2821aca0bc9b95b`, using 70.404 seconds wall time and 3.748 seconds
+CPU time. The active 75,492-row projection reports UI snapshot prefix
+`78853aad-a77...`; the full snapshot identifier was not captured and is not
+claimed. The earlier pre-optimization refresh returned HTTP 503 at the intended
+fail-closed resource boundary. The optimized refresh subsequently succeeded and
+later product GET requests returned HTTP 200.
+
+The released calculator contains 35 controlled Australian program pathways and
+216 activity templates. Its VEU catalogue has 32 definitions, 30 formula-ready
+aggregate codes and 27 executable aggregate paths: 21 fully available families
+plus six enforced partial subsets. The fully available set is `3`, `13`, `15`,
+`17`, `22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`,
+`40`, `41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` are also
 formula-ready but remain source-gated.
 
-The exact `partial_estimate_available` messages are:
+The exact `partial_estimate_available` boundaries are:
 
 - `1`: Exact estimates are available for 1C small systems and supported 1D
   systems. The 1C medium-system Bs/Be conflict between official sources remains
@@ -197,36 +215,48 @@ or non-executable templates. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 Certificate actions enabled remain 0.
 
-Every formula-dependent product must match the exact official VEU category,
-status and installation-date window. A current `Approved` row can qualify only
-inside its declared inclusive window. A historical `Legacy` row can qualify
-only inside its exact closed inclusive window. GEMS-only, fuzzy, current
-`Legacy` and out-of-window matches fail closed.
+Every formula-dependent VEU product must match the exact official category,
+status and installation-date window. Only an `Approved` row inside its declared
+inclusive window or a `Legacy` row inside its exact closed inclusive window can
+count. GEMS-only, fuzzy, current `Legacy` and out-of-window matches fail closed.
 
-The shared calculator is available to Creditex administrators and active
-verified installers. The trade-dashboard surface is estimate-only for quote and
-invoice preparation and cannot refresh the registry. The expanded working-tree
-formula set is not claimed live until the coordinator commits and deploys its
-exact source and completes signed-in administrator and trade QA.
+Signed-in administrator QA selected the exact `Approved` Hisense `40A4NAU`,
+product `000022838`, for Activity 24 and returned an estimate of 1 VEEC and 0.8
+tCO2-e. The registry receipt had prefix `c9bd26ead7ad5a36f838d0f3...` and the
+estimate receipt had prefix `0f09591ac56c44dab77e44...`; certificate actions
+remained disabled. A verified installer obtained the same product-backed result
+from the trade dashboard and had no registry-refresh control. The product-free
+Activity 43 path had previously returned 8 VEEC and 7.856856 tCO2-e in live QA.
+
+Exact source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` passed the complete
+`npm.cmd run validate` gate after the optimization, including the production
+build and Sites server-bundle audit. The 75,492-row scale regression completed
+in 3.724 seconds across 38 bounded batches, with 75,491 unchanged rows carried
+forward, one changed row reset and one history delta retained. Post-deployment
+health returned HTTP 200 and the subsequent three-minute production Worker
+error window contained no events.
 
 Remaining governed boundaries are exact:
 
-- Activity 14 has no matching registry rows;
+- Activity 14 has no live Public Registry rows;
 - Activity 28 has no governed connector or rows;
 - Activity 32 has no stable exact VEU-to-GEMS crosslink and must never use fuzzy
   matching;
-- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 46 has no current `Approved` rows and retains 674 `Legacy` rows for
+  exact in-window historical use only;
 - Activity 45 is closed;
 - Activity 47 is blocked pending lawful CEC, distribution-network and
   installed-system evidence;
 - Activity 27's AEMO load-table alternative is not enabled;
 - the Part 34 J6 refurbishment branch fails closed; and
-- project-based activities remain project methods, not deemed calculators.
+- PBA and other project-based activities remain governed project methods, not
+  deemed calculators.
 
-The registry refresh has schema, row-count, source-status, effective-date,
-source-custody, freshness and reviewed count-decrease gates. The registry
-milestone and active production snapshot are deployed; this record does not
-claim that the next automatic scheduled production run has completed.
+The shared calculator is estimate-only. Creditex administrators can perform the
+guarded registry refresh; verified installers cannot. No certificate was
+created, issued, submitted, traded or settled during release or live QA. This
+record does not claim that the guarded daily schedule has completed an automatic
+production run.
 
 ## Prior trade document controls and Jobs release
 
@@ -1458,7 +1488,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 293 is:
+The current verified deployed topology for Sites version 295 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

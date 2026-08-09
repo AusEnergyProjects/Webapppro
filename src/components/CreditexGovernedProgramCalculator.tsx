@@ -213,8 +213,7 @@ function CreditexNswCalculator({
     [activity.productKinds],
   );
   const missingProduct = requiredKinds.some((kind) => !selectedProductIds[kind]);
-  const registryBlocked = activity.calculationStatus === "official_registry_required"
-    || unresolvedKinds.length > 0;
+  const registryBlocked = unresolvedKinds.length > 0;
   const missingEligibilityStart = requiredKinds.some((kind) => (
     Boolean(selectedProductIds[kind]) && !selectedProductEligibleFrom[kind]
   ));
@@ -323,7 +322,7 @@ function CreditexNswCalculator({
 
         {requiredKinds.map((kind) => (
           <CreditexOfficialProductPicker
-            key={`${activity.activityCode}:${date}:${kind}`}
+            key={`${activity.activityCode}:${inputs.scenario || ""}:${date}:${kind}`}
             api={api}
             kind={kind}
             installationDate={date}
@@ -544,6 +543,7 @@ export function creditexVeuProductUiReducer(
     };
   }
   if (action.type === "registry_current") {
+    if (!state.registryIssue) return state;
     return { ...state, registryIssue: "" };
   }
   if (action.type === "evidence_invalid") {
@@ -758,6 +758,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
   const [estimate, setEstimate] = useState<GovernedEstimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [productPickerRevision, setProductPickerRevision] = useState(0);
   const requestRef = useRef(0);
   const activity = useMemo(
     () => CREDITEX_VEU_ACTIVITY_DEFINITIONS.find((candidate) => (
@@ -789,6 +790,16 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     ],
   );
   const requiredKinds = productEvidence.requiredKinds;
+  const operatorScenario = activity.inputDefinitions.some((definition) => (
+    definition.key === "scenario" && definition.source === "operator"
+  ))
+    ? inputs.scenario
+    : "";
+  const productContractScenario = ["27", "34", "35", "48"].includes(
+    activity.activityCode,
+  )
+    ? operatorScenario
+    : "";
   const productSelectionRequired = requiredKinds.length > 0;
   const postcodeRequired = veuNeedsPostcode(activity);
 
@@ -828,7 +839,9 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
         requestGeneration,
         productIdentityGenerationRef.current,
       )) {
-        return result;
+        const superseded = new Error("The product request identity changed.");
+        superseded.name = "AbortError";
+        throw superseded;
       }
       const registry = result.registry as Record<string, unknown> | undefined;
       const registryCode = String(registry?.registryCode || "");
@@ -847,6 +860,7 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
       const previousSnapshotId = registrySnapshotIdsRef.current[kind];
       registrySnapshotIdsRef.current[kind] = snapshotId;
       if (previousSnapshotId && previousSnapshotId !== snapshotId) {
+        setProductPickerRevision((current) => current + 1);
         clearProductEvidence(
           `The ${registryLabel} snapshot changed. Select the exact installation-date-eligible model again.`,
         );
@@ -907,6 +921,86 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
     } finally {
       if (requestRef.current === requestVersion) setBusy(false);
     }
+  }
+
+  function renderVeuInput(
+    definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
+  ) {
+    if (!veuVisibleInput(definition, inputs)) return null;
+    return (
+      <label key={definition.key}>
+        {definition.key === "scenario"
+          ? "Installation scenario"
+          : definition.label}
+        {definition.type === "select" ? (
+          <select
+            required={definition.required}
+            disabled={
+              definition.source === "postcode_lookup"
+              || (
+                definition.source === "approved_product"
+                && requiredKinds.length > 0
+              )
+            }
+            value={inputs[definition.key] || ""}
+            onChange={(event) => {
+              invalidate();
+              if (
+                definition.key === "scenario"
+                && ["27", "34", "35", "48"].includes(activity.activityCode)
+              ) {
+                productIdentityGenerationRef.current += 1;
+                selectedProductsRef.current = {};
+                registrySnapshotIdsRef.current = {};
+                dispatchProductUi({
+                  type: "identity_changed",
+                  reason: "scenario",
+                });
+                const scenario = event.target.value;
+                setInputs((current) => ({
+                  ...resetVeuApprovedProductInputs(activity, current),
+                  scenario,
+                }));
+                return;
+              }
+              setInputs((current) => ({
+                ...current,
+                [definition.key]: event.target.value,
+              }));
+            }}
+          >
+            {definition.options?.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            inputMode="decimal"
+            required={definition.required}
+            disabled={
+              definition.source === "approved_product"
+              && requiredKinds.length > 0
+            }
+            value={inputs[definition.key] || ""}
+            onChange={(event) => {
+              invalidate();
+              setInputs((current) => ({
+                ...current,
+                [definition.key]: event.target.value,
+              }));
+            }}
+          />
+        )}
+        <small>
+          {definition.source === "approved_product"
+            && requiredKinds.length > 0
+            ? definition.key === "scenario"
+              ? "Determined by the exact approved product selected below."
+              : "Read from the exact VEU Public Registry model approved on the installation date."
+            : definition.help}
+        </small>
+      </label>
+    );
   }
 
   return (
@@ -980,6 +1074,9 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             ))}
           </select>
         </label>
+        {activity.inputDefinitions
+          .filter((definition) => definition.key === "scenario")
+          .map(renderVeuInput)}
         <label>
           Installation date
           <input
@@ -1015,49 +1112,22 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             }}
           />
         </label>
-        {postcodeRequired && (
-          <label>
-            Site postcode
-            <input
-              inputMode="numeric"
-              maxLength={4}
-              required
-              value={postcode}
-              onChange={(event) => {
-                invalidate();
-                const nextPostcode = event.target.value;
-                setPostcode(nextPostcode);
-                productIdentityGenerationRef.current += 1;
-                selectedProductsRef.current = {};
-                dispatchProductUi({
-                  type: "identity_changed",
-                  reason: "postcode",
-                });
-                try {
-                  setInputs((current) => applyVeuPostcode(
-                    activity,
-                    current,
-                    nextPostcode,
-                    date,
-                  ));
-                  setPostcodeError("");
-                } catch (caught) {
-                  setPostcodeError(caught instanceof Error
-                    ? caught.message
-                    : "Postcode lookup failed.");
-                }
-              }}
-            />
-            <small>Resolves the exact v24/v25 Table A geography, climate region and climate zone.</small>
-            {postcodeError && <small className={styles.productRegistryError}>{postcodeError}</small>}
-          </label>
-        )}
         {requiredKinds.map((kind) => (
           <CreditexOfficialProductPicker
-            key={`${activity.activityCode}:${date}:${kind}`}
+            key={`${activity.activityCode}:${productContractScenario}:${date}:${kind}:${productPickerRevision}`}
             api={officialProductApi}
             kind={kind}
             installationDate={date}
+            veuActivityCode={
+              creditexVeuRegistryCodeForProductKind(kind) === "veu-approved-products"
+                ? activity.activityCode
+                : undefined
+            }
+            veuScenario={
+              creditexVeuRegistryCodeForProductKind(kind) === "veu-approved-products"
+                ? productContractScenario
+                : undefined
+            }
             selectedId={selectedProducts[kind]?.id || ""}
             onSelect={(id, product) => {
               invalidate();
@@ -1104,79 +1174,53 @@ function CreditexVeuCalculator({ api }: { api: Api }) {
             }}
           />
         ))}
-        {activity.inputDefinitions.map((definition) => {
-          if (!veuVisibleInput(definition, inputs)) return null;
-          return (
-            <label key={definition.key}>
-              {definition.label}
-              {definition.type === "select" ? (
-                <select
-                  required={definition.required}
-                  disabled={
-                    definition.source === "postcode_lookup"
-                    || (
-                      definition.source === "approved_product"
-                      && requiredKinds.length > 0
-                    )
+        {postcodeRequired && (
+          <label>
+            Site postcode
+            <input
+              inputMode="numeric"
+              maxLength={4}
+              required
+              value={postcode}
+              onChange={(event) => {
+                invalidate();
+                const nextPostcode = event.target.value;
+                setPostcode(nextPostcode);
+                try {
+                  let nextInputs = applyVeuPostcode(
+                    activity,
+                    inputs,
+                    nextPostcode,
+                    date,
+                  );
+                  if (
+                    !productEvidence.blocked
+                    && productEvidence.completeSelections.length > 0
+                  ) {
+                    nextInputs = stringInputs(
+                      deriveCreditexVeuOfficialProductInputs(
+                        activity.activityCode,
+                        nextInputs,
+                        productEvidence.completeSelections,
+                      ),
+                    );
                   }
-                  value={inputs[definition.key] || ""}
-                  onChange={(event) => {
-                    invalidate();
-                    if (
-                      definition.key === "scenario"
-                      && ["27", "34", "35"].includes(activity.activityCode)
-                    ) {
-                      productIdentityGenerationRef.current += 1;
-                      selectedProductsRef.current = {};
-                      registrySnapshotIdsRef.current = {};
-                      dispatchProductUi({
-                        type: "identity_changed",
-                        reason: "scenario",
-                      });
-                      const scenario = event.target.value;
-                      setInputs((current) => ({
-                        ...resetVeuApprovedProductInputs(activity, current),
-                        scenario,
-                      }));
-                      return;
-                    }
-                    setInputs((current) => ({
-                      ...current,
-                      [definition.key]: event.target.value,
-                    }));
-                  }}
-                >
-                  {definition.options?.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  inputMode="decimal"
-                  required={definition.required}
-                  disabled={
-                    definition.source === "approved_product"
-                    && requiredKinds.length > 0
-                  }
-                  value={inputs[definition.key] || ""}
-                  onChange={(event) => {
-                    invalidate();
-                    setInputs((current) => ({
-                      ...current,
-                      [definition.key]: event.target.value,
-                    }));
-                  }}
-                />
-              )}
-              <small>
-                {definition.source === "approved_product"
-                  && requiredKinds.length > 0
-                  ? "Read from the exact VEU Public Registry model approved on the installation date."
-                  : definition.help}
-              </small>
-            </label>
-          );
-        })}
+                  setInputs(nextInputs);
+                  setPostcodeError("");
+                } catch (caught) {
+                  setPostcodeError(caught instanceof Error
+                    ? caught.message
+                    : "Postcode lookup failed.");
+                }
+              }}
+            />
+            <small>Resolves the exact v24/v25 Table A geography, climate region and climate zone.</small>
+            {postcodeError && <small className={styles.productRegistryError}>{postcodeError}</small>}
+          </label>
+        )}
+        {activity.inputDefinitions
+          .filter((definition) => definition.key !== "scenario")
+          .map(renderVeuInput)}
         {productEvidence.issue && (
           <div className={styles.registryStatus} data-status="stale">
             <div>

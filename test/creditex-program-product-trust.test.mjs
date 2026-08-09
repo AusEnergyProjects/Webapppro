@@ -35,25 +35,142 @@ function officialError(error) {
     && error.code === "OFFICIAL_PRODUCT_NOT_ELIGIBLE";
 }
 
-test("NSW administrator lists cannot be substituted with generic CER battery products", () => {
+test("NSW PDRS battery activities use the exact CEC authority while BESS5 remains distinct and unresolved", () => {
   assert.deepEqual(
-    officialProductKindsForNswProductKinds(["battery_energy_storage_system"]),
+    officialProductKindsForNswProductKinds(["cec_battery"]),
+    ["cec_battery"],
+  );
+  assert.deepEqual(
+    unresolvedNswProductKinds(["cec_battery"]),
     [],
   );
-  assert.deepEqual(
-    unresolvedNswProductKinds(["battery_energy_storage_system"]),
-    ["battery_energy_storage_system"],
-  );
-  for (const activityCode of ["BESS1", "BESS2", "BESS3", "BESS4", "BESS5"]) {
+  assert.deepEqual(officialProductKindsForNswProductKinds(["battery"]), []);
+  assert.deepEqual(unresolvedNswProductKinds(["battery"]), ["battery"]);
+  for (const activityCode of ["BESS1", "BESS2", "BESS3", "BESS4"]) {
+    const activity = creditexNswActivityDefinition(
+      "NSW-PDRS-2026",
+      activityCode,
+    );
+    assert.deepEqual(activity.productKinds, ["cec_battery"]);
     assert.equal(
-      creditexNswActivityDefinition("NSW-PDRS-2026", activityCode).calculationStatus,
+      activity.calculationStatus,
       "official_registry_required",
     );
   }
+  const bess5 = creditexNswActivityDefinition("NSW-PDRS-2026", "BESS5");
+  assert.deepEqual(
+    bess5.productKinds,
+    ["administrator_recorded_bess5_system"],
+  );
+  assert.deepEqual(
+    officialProductKindsForNswProductKinds(bess5.productKinds),
+    [],
+  );
+  assert.deepEqual(
+    unresolvedNswProductKinds(bess5.productKinds),
+    ["administrator_recorded_bess5_system"],
+  );
+  assert.equal(bess5.calculationStatus, "official_registry_required");
   for (const activityCode of ["D17", "D18", "D19", "D20"]) {
     assert.equal(
       creditexNswActivityDefinition("NSW-ESS-2026", activityCode).calculationStatus,
       "official_registry_required",
+    );
+  }
+});
+
+test("BESS1 and BESS2 discard caller capacity tampering and apply the Rule-governed 90 percent usable capacity", () => {
+  const activity = creditexNswActivityDefinition("NSW-PDRS-2026", "BESS1");
+  const defaults = Object.fromEntries(activity.inputDefinitions.map((definition) => [
+    definition.key,
+    definition.defaultValue,
+  ]));
+  const selection = product("cec_battery", {
+    nominalBatteryCapacityKwh: 10,
+    cecPublishedUsableCapacityKwh: 9.6,
+    cecRatedDcPowerKw: 5,
+  });
+  const firstInputs = deriveCreditexNswOfficialProductInputs(
+    "NSW-PDRS-2026",
+    "BESS1",
+    defaults,
+    [selection],
+  );
+  const tamperedInputs = deriveCreditexNswOfficialProductInputs(
+    "NSW-PDRS-2026",
+    "BESS1",
+    {
+      ...defaults,
+      nominal_battery_capacity_kwh: "999999",
+      product_registry_eligibility_confirmed: "no",
+    },
+    [selection],
+  );
+  assert.equal(firstInputs.nominal_battery_capacity_kwh, "10");
+  assert.equal(tamperedInputs.nominal_battery_capacity_kwh, "10");
+  assert.equal(tamperedInputs.product_registry_eligibility_confirmed, "yes");
+
+  const first = estimateCreditexNswProgram({
+    programCode: "NSW-PDRS-2026",
+    activityCode: "BESS1",
+    effectiveDate: "2026-08-08",
+    inputs: firstInputs,
+  });
+  const tampered = estimateCreditexNswProgram({
+    programCode: "NSW-PDRS-2026",
+    activityCode: "BESS1",
+    effectiveDate: "2026-08-08",
+    inputs: tamperedInputs,
+  });
+  assert.deepEqual(tampered.output, first.output);
+  assert.equal(tampered.receiptHash, first.receiptHash);
+  assert.equal(
+    first.trace.find((entry) => entry.key === "usable_battery_capacity")?.output,
+    "9",
+  );
+
+  const bess2 = deriveCreditexNswOfficialProductInputs(
+    "NSW-PDRS-2026",
+    "BESS2",
+    {
+      ...Object.fromEntries(
+        creditexNswActivityDefinition("NSW-PDRS-2026", "BESS2")
+          .inputDefinitions.map((definition) => [
+            definition.key,
+            definition.defaultValue,
+          ]),
+      ),
+      nominal_battery_capacity_kwh: "1",
+    },
+    [selection],
+  );
+  assert.equal(bess2.nominal_battery_capacity_kwh, "10");
+});
+
+test("BESS3 and BESS4 reject caller inverter values when the licensed CEC row has only RatedDCPower", () => {
+  const selection = product("cec_battery", {
+    nominalBatteryCapacityKwh: 40,
+    cecPublishedUsableCapacityKwh: 36,
+    cecRatedDcPowerKw: 10,
+  });
+  for (const activityCode of ["BESS3", "BESS4"]) {
+    const activity = creditexNswActivityDefinition(
+      "NSW-PDRS-2026",
+      activityCode,
+    );
+    const callerInputs = Object.fromEntries(activity.inputDefinitions.map(
+      (definition) => [definition.key, definition.defaultValue],
+    ));
+    callerInputs.battery_inverter_output_kw = "999999";
+    assert.throws(
+      () => deriveCreditexNswOfficialProductInputs(
+        "NSW-PDRS-2026",
+        activityCode,
+        callerInputs,
+        [selection],
+      ),
+      (error) => officialError(error)
+        && /PDRS Battery Inverter Output/.test(error.message),
     );
   }
 });
@@ -681,7 +798,24 @@ test("product-backed estimates require a defensible approval start and the API u
     new URL("../src/app/api/creditex/program-estimates/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /activity\.calculationStatus === "official_registry_required"/);
+  const governedCalculator = fs.readFileSync(
+    new URL(
+      "../src/components/CreditexGovernedProgramCalculator.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    governedCalculator,
+    /registryBlocked = activity\.calculationStatus/,
+    "a mapped official registry must become usable as soon as its platform snapshot is current",
+  );
+  assert.match(governedCalculator, /registryBlocked = unresolvedKinds\.length > 0/);
+  assert.doesNotMatch(
+    route,
+    /activity\.calculationStatus === "official_registry_required"/,
+  );
+  assert.match(route, /unresolvedProductKinds\.length > 0/);
   assert.match(route, /deriveCreditexNswOfficialProductInputs\(/);
   assert.match(route, /deriveCreditexVeuOfficialProductInputs\(/);
   assert.match(route, /CREDITEX_VEU_SOURCE_COMPLETE_ACTIVITY_CODES/);

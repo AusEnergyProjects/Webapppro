@@ -82,6 +82,10 @@ test("the Worker gates both UTC candidates against the Sydney regulator clock", 
   );
   assert.match(
     worker,
+    /creditexAutomaticProductRegistry\([\s\S]*"cec-products"[\s\S]*workerEnv as Readonly<Record<string, unknown>>/,
+  );
+  assert.match(
+    worker,
     /CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES\.find\([\s\S]*candidate\.registryCode === VEU_PRODUCT_REGISTRY_CODE/,
   );
 });

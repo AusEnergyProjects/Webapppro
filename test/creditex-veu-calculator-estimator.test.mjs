@@ -425,9 +425,16 @@ test("Parts 13, 14, 17, 26 and 48 preserve governed tables and exact arithmetic"
   const part48Replacement = estimate("48", {
     ...DEFAULT_VECTORS[14][1],
     scenario: "48B(i)",
-  }, product("VEU", "48A"));
+  }, product("VEU", "48B"));
   assert.equal(part48Replacement.scenario, "48B(i)");
-  assert.equal(part48Replacement.inputSnapshot.product.activityCategory, "48A");
+  assert.equal(part48Replacement.inputSnapshot.product.activityCategory, "48B");
+  assert.throws(
+    () => estimate("48", {
+      ...DEFAULT_VECTORS[14][1],
+      scenario: "48B(i)",
+    }, product("VEU", "48A")),
+    /must be 48B/,
+  );
 });
 
 test("every Part 15 scenario executes only with its governed measure and lifetime inputs", () => {

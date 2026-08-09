@@ -30,6 +30,56 @@ export type CreditexOfficialProductOption = {
   attributes: Record<string, string | number | boolean | null>;
 };
 
+export type CreditexOfficialProductFacetOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+type CreditexOfficialProductFacets = {
+  brands: CreditexOfficialProductFacetOption[];
+  models: CreditexOfficialProductFacetOption[];
+  productTypes: CreditexOfficialProductFacetOption[];
+};
+
+function productFacets(value: unknown): CreditexOfficialProductFacets {
+  const facets = value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : {};
+  const options = (candidate: unknown) => (
+    Array.isArray(candidate)
+      ? candidate.flatMap((item) => {
+          if (typeof item === "string" && item.trim()) {
+            return [{ value: item, label: item, count: 0 }];
+          }
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const optionValue = String(record.value || "").trim();
+          if (!optionValue) return [];
+          return [{
+            value: optionValue,
+            label: String(record.label || optionValue),
+            count: Number(record.count || 0),
+          }];
+        })
+      : []
+  );
+  return {
+    brands: options(facets.brands),
+    models: options(facets.models),
+    productTypes: options(facets.productTypes),
+  };
+}
+
+function requestWasSuperseded(value: unknown) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && "name" in value
+    && value.name === "AbortError",
+  );
+}
+
 export function creditexProductOptionLabel(
   product: Pick<
     CreditexOfficialProductOption,
@@ -136,27 +186,49 @@ export function CreditexOfficialProductPicker({
   api,
   kind,
   installationDate,
+  veuActivityCode,
+  veuScenario,
   selectedId,
   onSelect,
 }: {
   api: Api;
   kind: CreditexOfficialProductKind;
   installationDate: string;
+  veuActivityCode?: string;
+  veuScenario?: string;
   selectedId: string;
   onSelect: (
     id: string,
     product: CreditexOfficialProductOption | null,
   ) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
+  const [productType, setProductType] = useState("");
+  const [modelQuery, setModelQuery] = useState("");
   const [products, setProducts] = useState<CreditexOfficialProductOption[]>([]);
-  const [selectedProduct, setSelectedProduct] =
-    useState<CreditexOfficialProductOption | null>(null);
+  const [facets, setFacets] = useState<CreditexOfficialProductFacets>({
+    brands: [],
+    models: [],
+    productTypes: [],
+  });
   const [recordCount, setRecordCount] = useState(0);
+  const [matchCount, setMatchCount] = useState(0);
   const [snapshotId, setSnapshotId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [retryNonce, setRetryNonce] = useState(0);
   const requestRef = useRef(0);
+  const onSelectRef = useRef(onSelect);
+  const selectedIdRef = useRef(selectedId);
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   useEffect(() => {
     const requestVersion = requestRef.current + 1;
@@ -167,21 +239,54 @@ export function CreditexOfficialProductPicker({
       const parameters = new URLSearchParams({
         productKind: kind,
         installationDate,
-        q: query,
-        limit: "100",
+        limit: brand && model ? "100" : "1",
       });
+      if (brand) parameters.set("brand", brand);
+      if (model) parameters.set("model", model);
+      if (productType) parameters.set("productType", productType);
+      if (veuActivityCode) parameters.set("veuActivityCode", veuActivityCode);
+      if (veuScenario) parameters.set("veuScenario", veuScenario);
+      if (brand && !model && modelQuery.trim()) {
+        parameters.set("q", modelQuery.trim());
+      }
       void api(`/api/creditex/official-products?${parameters.toString()}`)
         .then((result) => {
           if (requestRef.current !== requestVersion) return;
           const registry = result.registry as Record<string, unknown> | undefined;
-          setProducts((result.products || []) as CreditexOfficialProductOption[]);
+          const nextProducts = (result.products || []) as CreditexOfficialProductOption[];
+          const nextFacets = productFacets(result.facets);
+          setProducts(nextProducts);
+          setFacets(nextFacets);
           setRecordCount(Number(registry?.recordCount || 0));
+          setMatchCount(Number(result.matchCount || nextProducts.length));
           setSnapshotId(String(registry?.snapshotId || ""));
+          if (
+            model
+            && !productType
+            && nextFacets.productTypes.length === 1
+            && nextFacets.productTypes[0].count === Number(
+              result.matchCount || nextProducts.length,
+            )
+          ) {
+            setProductType(nextFacets.productTypes[0].value);
+          }
+          if (
+            !selectedIdRef.current
+            && brand
+            && model
+            && nextProducts.length === 1
+            && nextFacets.productTypes.length <= 1
+          ) {
+            onSelectRef.current(nextProducts[0].id, nextProducts[0]);
+          }
         })
         .catch((caught) => {
           if (requestRef.current !== requestVersion) return;
+          if (requestWasSuperseded(caught)) return;
           setProducts([]);
+          setFacets({ brands: [], models: [], productTypes: [] });
           setRecordCount(0);
+          setMatchCount(0);
           setSnapshotId("");
           setError(
             caught instanceof Error
@@ -197,42 +302,148 @@ export function CreditexOfficialProductPicker({
       window.clearTimeout(timer);
       requestRef.current += 1;
     };
-  }, [api, installationDate, kind, query]);
+  }, [
+    api,
+    brand,
+    installationDate,
+    kind,
+    model,
+    modelQuery,
+    productType,
+    retryNonce,
+    veuActivityCode,
+    veuScenario,
+  ]);
 
-  const options = selectedProduct
-    && !products.some((product) => product.id === selectedProduct.id)
-    ? [selectedProduct, ...products]
-    : products;
-
+  const options = products;
   return (
-    <fieldset className={styles.officialProductPicker}>
+    <fieldset
+      aria-busy={busy}
+      className={styles.officialProductPicker}
+    >
       <legend>Approved {officialProductKindLabel(kind)}</legend>
       <label>
-        Search official registry
+        1. Product brand
+        <select
+          required
+          value={brand}
+          disabled={busy || Boolean(error)}
+          onChange={(event) => {
+            const nextBrand = event.target.value;
+            setBrand(nextBrand);
+            setModel("");
+            setProductType("");
+            setModelQuery("");
+            setProducts([]);
+            onSelect("", null);
+          }}
+        >
+          <option value="">
+            {busy && !brand ? "Loading approved brands..." : "Choose brand"}
+          </option>
+          {facets.brands.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}{option.count ? ` (${option.count})` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Find model within this brand
         <input
-          value={query}
-          placeholder="Brand, model or approval number"
-          onChange={(event) => setQuery(event.target.value)}
+          type="search"
+          value={modelQuery}
+          disabled={!brand || busy || Boolean(error)}
+          placeholder={brand ? "Type part of the model number" : "Choose a brand first"}
+          onChange={(event) => {
+            setModelQuery(event.target.value);
+            setModel("");
+            setProductType("");
+            setProducts([]);
+            onSelect("", null);
+          }}
         />
       </label>
       <label>
-        Approved product
+        2. Product model
+        <select
+          required
+          value={model}
+          disabled={!brand || busy || Boolean(error)}
+          onChange={(event) => {
+            setModel(event.target.value);
+            setProductType("");
+            setProducts([]);
+            onSelect("", null);
+          }}
+        >
+          <option value="">
+            {!brand
+              ? "Choose a brand first"
+              : busy
+                ? "Loading approved models..."
+                : "Choose model"}
+          </option>
+          {facets.models.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}{option.count > 1 ? ` (${option.count} approvals)` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        3. Product type or configuration
+        <select
+          value={productType}
+          disabled={!model || busy || Boolean(error) || facets.productTypes.length <= 1}
+          onChange={(event) => {
+            setProductType(event.target.value);
+            setProducts([]);
+            onSelect("", null);
+          }}
+        >
+          <option value="">
+            {!model
+              ? "Choose a model first"
+              : facets.productTypes.length === 0
+                ? "Not separately classified"
+                : "Choose product type"}
+          </option>
+          {facets.productTypes.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}{option.count > 1 ? ` (${option.count})` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        4. Exact approval record
         <select
           required
           value={selectedId}
-          disabled={busy || Boolean(error)}
+          disabled={
+            !brand
+            || !model
+            || busy
+            || Boolean(error)
+            || (
+              facets.productTypes.length > 1
+              && !productType
+            )
+          }
           onChange={(event) => {
             const id = event.target.value;
             const product = options.find((candidate) => candidate.id === id)
               || null;
-            setSelectedProduct(product);
             onSelect(id, product);
           }}
         >
           <option value="">
             {busy
               ? "Checking official registry..."
-              : `Select ${officialProductKindLabel(kind)}`}
+              : products.length === 1
+                ? "Exact approved record selected automatically"
+                : `Select exact ${officialProductKindLabel(kind)} approval`}
           </option>
           {options.map((product) => (
             <option key={product.id} value={product.id}>
@@ -242,13 +453,40 @@ export function CreditexOfficialProductPicker({
         </select>
       </label>
       {error ? (
-        <small className={styles.productRegistryError} role="alert">
-          {error}
-        </small>
+        <div>
+          <small className={styles.productRegistryError} role="alert">
+            {error}
+          </small>
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setRetryNonce((current) => current + 1);
+            }}
+          >
+            Retry official registry
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBrand("");
+              setModel("");
+              setProductType("");
+              setModelQuery("");
+              setProducts([]);
+              setFacets({ brands: [], models: [], productTypes: [] });
+              setError("");
+              onSelect("", null);
+              setRetryNonce((current) => current + 1);
+            }}
+          >
+            Start product selection again
+          </button>
+        </div>
       ) : (
-        <small>
+        <small aria-live="polite">
           {snapshotId
-            ? `${recordCount.toLocaleString("en-AU")} official rows | snapshot ${snapshotId.slice(0, 12)}...`
+            ? `${recordCount.toLocaleString("en-AU")} official rows | ${matchCount.toLocaleString("en-AU")} match the current choices | snapshot ${snapshotId.slice(0, 12)}...`
             : "Waiting for the current official snapshot."}
         </small>
       )}

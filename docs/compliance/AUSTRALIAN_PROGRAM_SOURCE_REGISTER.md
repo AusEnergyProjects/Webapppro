@@ -43,7 +43,7 @@ The NSW Government also names Creditex as the delivery partner for the coming Ho
 ## Current calculator and registry status
 
 The controlled national catalogue covers 35 program pathways and 216 activity
-templates. The validated working-tree release candidate exposes 50
+templates. The released calculator exposes 50
 `estimate_available` plus 6 `partial_estimate_available`, for 56 of 216
 executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
@@ -52,15 +52,23 @@ actions enabled remain 0. The sealed coverage hash is
 Creditex administrators and active verified installers can use the same
 source-pinned calculator contract. The TLink trade dashboard surface is
 estimate-only for quote and invoice preparation and grants no registry-refresh,
-certificate-creation, submission, trading or settlement authority. The expanded
-VEU formula candidate is not claimed live until its exact source is committed,
-deployed and verified through signed-in production QA.
+certificate-creation, submission, trading or settlement authority.
 
 The guarded VEU Public Registry foundation is released from exact commit
-`1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The active
-production snapshot contains exactly 75,492 Public Visible rows: 64,715
-`Approved` and 10,777 `Legacy`. The expanded working-tree catalogue contains 32
-VEU definitions, with 30 aggregate codes formula-ready. Twenty-seven expose an
+`1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
+VEU calculator was committed as `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
+and deployed as Sites version 294 through
+`appgdep_6a77aa33d1288191965ba076f690dd46`. Exact bounded-refresh correction
+`ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is current Sites version 295, saved
+as `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
+with content hash
+`sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563` and
+deployed through `appgdep_6a77b30bab008191bd61b6476525b4f2` with environment
+revision 19 at `https://compare.ausenergyassessments.com`.
+
+The active production snapshot contains exactly 75,492 Public Visible rows:
+64,715 `Approved` and 10,777 `Legacy`. The released catalogue contains 32 VEU
+definitions, with 30 aggregate codes formula-ready. Twenty-seven expose an
 executable estimate path: 21 fully available aggregate families plus six
 enforced partial subsets. The fully available codes are `3`, `13`, `15`, `17`,
 `22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`, `41`,
@@ -93,6 +101,28 @@ activation completed with all 75,492 rows. Failed, stale, drifted, incomplete,
 overlapping or custody-invalid refreshes fail closed. Product-controlled formula
 values are derived server-side and cannot be replaced by caller-entered values.
 
+The optimized production VEU refresh POST succeeded with HTTP 200 under request
+and Ray identifier `a2821aca0bc9b95b`, using 70.404 seconds wall time and 3.748
+seconds CPU time. The current projection still contains 75,492 rows and the UI
+reports snapshot prefix `78853aad-a77...`; the full snapshot identifier is not
+claimed. The earlier pre-optimization HTTP 503 was the expected fail-closed
+result at the resource boundary. Subsequent product GET requests returned HTTP
+200. Exact source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` passed the complete
+`npm.cmd run validate` gate, production build and Sites server-bundle audit. Its
+75,492-row regression completed in 3.724 seconds across 38 bounded batches,
+carried forward 75,491 unchanged rows, reset one changed row and retained one
+history delta. Post-deployment health returned HTTP 200 and the subsequent
+three-minute Worker error window contained no error events.
+
+Signed-in administrator QA selected the exact `Approved` Hisense `40A4NAU`,
+product `000022838`, for Activity 24 and returned an estimate of 1 VEEC and 0.8
+tCO2-e, with registry-receipt prefix `c9bd26ead7ad5a36f838d0f3...` and
+estimate-receipt prefix `0f09591ac56c44dab77e44...`. A verified installer
+obtained the same product-backed result from the trade dashboard and had no
+registry-refresh control. The product-free Activity 43 path had previously
+returned 8 VEEC and 7.856856 tCO2-e in live QA. Certificate actions remained
+disabled; no certificate was created, issued, submitted, traded or settled.
+
 ## Federal program register
 
 ### Small-scale Renewable Energy Scheme, STCs
@@ -114,7 +144,7 @@ Cheaper Home Batteries operates through SRES rather than creating a separate cer
 
 Sources: [CER eligible small-scale systems](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems), [CER certificate creation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/create-small-scale-technology-certificates), [CER registered-agent obligations](https://cer.gov.au/schemes/renewable-energy-target/renewable-energy-target-participants-and-industry/registered-agents), [CER entitlement calculation](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements), [CER solar batteries](https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-batteries) and [CER 1 May 2026 battery changes](https://cer.gov.au/news-and-media/media/2026/march/battery-rebates-are-changing-1-may-2026).
 
-Working-tree calculator coverage reviewed 8 August 2026:
+Released calculator coverage reviewed through 9 August 2026:
 
 - the CER air-source-heat-pump and both solar-water-heater CSV exports ingest
   16,684 current products into one effective-dated selector;
@@ -226,15 +256,15 @@ at the registered rated capacity of the installed outdoor unit. From
 The scenario-specific 2.4 kW and 15 kW limits for scenarios (i) to (iv) still
 apply.
 
-The working-tree release candidate contains 32 VEU catalogue definitions and
+The released calculator contains 32 VEU catalogue definitions and
 resolves all 719 explicit Version 24 and Version 25 Table A postcode rows.
 Thirty aggregate activity codes are formula-ready. Twenty-seven expose an
 executable estimate path: 21 fully available aggregate families plus six
 enforced partial subsets. The fully available set is `3`, `13`, `15`, `17`,
 `22`, `24`, `25`, `26`, `27`, `30`, `35`, `36`, `37`, `38`, `39`, `40`,
 `41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` have formulas but
-remain source-gated. These counts describe the validated release candidate, not
-a signed-in production-QA claim for the expanded formula release.
+remain source-gated. These counts describe the released formula boundary and
+were verified through the signed-in administrator and verified-installer paths.
 
 The exact `partial_estimate_available` messages are:
 
@@ -259,22 +289,23 @@ The exact `partial_estimate_available` messages are:
   for a current installation.
 
 Every formula-dependent product must match the exact official VEU category,
-source status and effective installation-date window. A current `Approved` row
-can qualify only inside its declared inclusive window. A historical `Legacy`
-row can qualify only inside its exact closed inclusive window. GEMS-only, fuzzy,
-current `Legacy` and out-of-window matches fail closed.
+source status and effective installation-date window. Only an `Approved` row
+inside its declared inclusive window or a `Legacy` row inside its exact closed
+inclusive window can count. GEMS-only, fuzzy, current `Legacy` and out-of-window
+matches fail closed.
 
 The remaining VEU boundaries are explicit:
 
-- Activity 14 has no matching registry rows, Activity 28 has no governed
+- Activity 14 has no live Public Registry rows, Activity 28 has no governed
   connector or rows, and Activity 32 has no stable exact VEU-to-GEMS crosslink;
   Activity 32 must never use fuzzy matching;
-- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 46 has no current `Approved` rows and 674 `Legacy` rows available
+  only for exact in-window historical use;
 - Activity 45 is closed, while Activity 47 is blocked pending lawful CEC,
   distribution-network and installed-system evidence;
 - Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
-  refurbishment branch fails closed, and project-based activities remain project
-  methods rather than deemed calculators.
+  refurbishment branch fails closed, and PBA and other project-based activities
+  remain governed project methods rather than deemed calculators.
 
 Current deemed-activity inventory:
 
@@ -371,12 +402,11 @@ authoritative participant, accreditation, suspension or product record.
 
 The public product source observed on 9 August 2026 contained exactly 75,492
 rows: 64,715 `Approved` and 10,777 `Legacy`. Product eligibility is determined
-for the installation date, not from a current-status label alone. A
-category-matched `Approved` row is eligible inside its inclusive declared
-effective window, with an open end accepted only while the row is current
-`Approved`. A historical `Legacy` row requires an exact nonblank end date and is
-eligible only inside its inclusive start and end dates. GEMS-only matches and
-out-of-window rows cannot establish VEU approval.
+for the installation date, not from a current-status label alone. Only a
+category-matched `Approved` row inside its inclusive declared effective window
+or a `Legacy` row inside its exact closed inclusive start and end dates can
+count. GEMS-only matches, current `Legacy` rows and out-of-window rows cannot
+establish VEU approval.
 
 The released importer retains exact official response bytes and custody metadata
 under content-addressed R2 keys, then writes indexed normalized current and
@@ -385,8 +415,9 @@ Calculations query D1 only and never download or parse the Public Registry. A
 live 64 MB acquisition, exact-byte R2 replay, validation and D1 activation
 completed with all 75,492 rows. The guarded refresh uses schema, count,
 source-status, effective-date, custody, freshness and reviewed count-decrease
-checks before any replacement snapshot can activate. This register does not
-claim that the next automatic scheduled production run has completed.
+checks before any replacement snapshot can activate. The optimized production
+refresh POST completed as recorded above. This register does not claim that the
+next automatic scheduled production run has completed.
 
 Unavailable provider-portal artefacts:
 

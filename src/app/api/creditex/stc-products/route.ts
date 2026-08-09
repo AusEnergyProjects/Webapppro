@@ -141,8 +141,12 @@ export async function GET(request: Request) {
         | "solar_water_heater"
         | "air_source_heat_pump",
       installationDate: String(installationDate || ""),
+      category: parameters.get("category") || "",
+      brand: parameters.get("brand") || "",
+      model: parameters.get("model") || "",
       query: parameters.get("q") || "",
       limit: Number(parameters.get("limit") || 30),
+      cascade: parameters.get("mode") === "cascade",
     });
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,

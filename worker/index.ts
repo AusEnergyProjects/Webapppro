@@ -15,7 +15,10 @@ import {
   syncCerSresProductRegistry,
   type CreditexSresArtifactStore,
 } from "../src/lib/creditex-sres-registry-server";
-import { CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES } from "../src/lib/creditex-official-product-registry-definitions";
+import {
+  CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
+  creditexAutomaticProductRegistry,
+} from "../src/lib/creditex-official-product-registry-definitions";
 import {
   syncOfficialProductRegistry,
   type CreditexOfficialProductArtifactStore,
@@ -240,6 +243,15 @@ const worker = {
           for (const definition of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
             if (definition.registryCode === VEU_PRODUCT_REGISTRY_CODE) continue;
             await syncOfficialProductRegistry(db, definition, {
+              artifactStore,
+            });
+          }
+          const licensedCecBattery = creditexAutomaticProductRegistry(
+            "cec-products",
+            workerEnv as Readonly<Record<string, unknown>>,
+          );
+          if (licensedCecBattery) {
+            await syncOfficialProductRegistry(db, licensedCecBattery, {
               artifactStore,
             });
           }

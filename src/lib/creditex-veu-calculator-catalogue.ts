@@ -226,6 +226,48 @@ export const CREDITEX_VEU_PART_6_SCENARIOS = [
 export type CreditexVeuPart6Scenario =
   typeof CREDITEX_VEU_PART_6_SCENARIOS[number];
 
+export const CREDITEX_VEU_PART_6_SCENARIO_OPTIONS = [
+  { value: "i", label: "Replace the main hard-wired electric room heater, with no existing air conditioner (i)" },
+  { value: "ii", label: "Replace the main hard-wired electric room heater and also decommission an air conditioner that heats the same area and is outside a residential bedroom or a business room under 20 m² (ii)" },
+  { value: "iii", label: "Replace central electric resistance heating serving at least 100 m², or main slab heating, with no existing air conditioner (iii)" },
+  { value: "iv", label: "Replace central electric resistance heating serving at least 100 m², or main slab heating, and also decommission an air conditioner that heats the same area and is outside a residential bedroom or a business room under 20 m² (iv)" },
+  { value: "v", label: "Replace the ducted reverse-cycle air conditioner used as the main heating system (v)" },
+  { value: "vi", label: "Replace a non-ducted reverse-cycle air conditioner (vi)" },
+  { value: "vii", label: "Replace the main ducted gas heater, with no existing air conditioner (vii)" },
+  { value: "viii", label: "Replace the main ducted gas heater and also decommission an air conditioner that heats the same area and is outside a residential bedroom or a business room under 20 m² (viii)" },
+  { value: "ix", label: "Replace a non-ducted gas heater, with no existing air conditioner (ix)" },
+  { value: "x", label: "Replace a non-ducted gas heater and also decommission an air conditioner that heats the same area and is outside a residential bedroom or a business room under 20 m² (x)" },
+  { value: "xi", label: "Install a new high-efficiency air conditioner without decommissioning existing equipment (xi)" },
+] as const satisfies readonly {
+  value: CreditexVeuPart6Scenario;
+  label: string;
+}[];
+
+const WEATHER_SEALING_SCENARIO_OPTIONS = [
+  { value: "15A", label: "Seal the perimeter of an external door (15A)" },
+  { value: "15B", label: "Seal an external window (15B)" },
+  { value: "15C", label: "Replace an exhaust fan with a self-closing sealed fan (15C)" },
+  { value: "15D", label: "Fit a self-closing damper or seal to an existing exhaust fan (15D)" },
+  { value: "15E", label: "Seal an external wall vent (15E)" },
+  { value: "15F", label: "Fit a permanent chimney or flue seal (15F)" },
+  { value: "15G", label: "Fit a temporary or seasonal chimney or flue seal (15G)" },
+  { value: "15H", label: "Fit a seasonal cover to an evaporative-cooling ceiling outlet (15H)" },
+] as const;
+
+const REFRIGERATOR_SCENARIO_OPTIONS = [
+  { value: "22A", label: "Single-door refrigerator (22A)" },
+  { value: "22B", label: "Two-door refrigerator (22B)" },
+  { value: "22C", label: "Chest freezer (22C)" },
+  { value: "22D", label: "Upright freezer (22D)" },
+] as const;
+
+const CEILING_INSULATION_SCENARIO_OPTIONS = [
+  { value: "48A(i)", label: "Install category 48A bulk insulation in an uninsulated ceiling (48A(i))" },
+  { value: "48A(ii)", label: "Top up an under-insulated ceiling with category 48A bulk insulation (48A(ii))" },
+  { value: "48B(i)", label: "Install category 48B bulk insulation in an uninsulated ceiling (48B(i))" },
+  { value: "48B(ii)", label: "Top up an under-insulated ceiling with category 48B bulk insulation (48B(ii))" },
+] as const;
+
 type Part6CategoryFactors = {
   hspfCold: string;
   hspfMixed: string;
@@ -421,7 +463,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     productRegistry: "VEU",
     productPerformanceInputs: ["rated capacities", "HSPF", "TCSPF", "GWP", "configuration"],
     inputDefinitions: [
-      { key: "scenario", label: "Installation scenario", type: "select", unit: "scenario", help: "Select the exact incumbent-equipment scenario in Part 6; the scenario controls the baseline and asset life.", defaultValue: "xi", source: "operator", required: true, options: CREDITEX_VEU_PART_6_SCENARIOS.map((value) => ({ value, label: `Scenario (${value})` })) },
+      { key: "scenario", label: "Installation scenario", type: "select", unit: "scenario", help: "Choose the plain-English description that exactly matches the equipment at the premises before installation.", defaultValue: "xi", source: "operator", required: true, options: CREDITEX_VEU_PART_6_SCENARIO_OPTIONS },
       { key: "category", label: "Air-conditioner category", type: "select", unit: "category", help: "Populate the approved-product Part 6 category. Categories 6C and 6G are business-only.", defaultValue: "6D", source: "approved_product", required: true, options: CREDITEX_VEU_PART_6_CATEGORIES.map((value) => ({ value, label: `Category ${value}` })) },
       { key: "premises", label: "Premises type", type: "select", unit: "premises", help: "Choose the premises class used by the applicable Part 6 category and building thermal-load table.", defaultValue: "residential", source: "operator", required: true, options: [{ value: "residential", label: "Residential" }, { value: "business", label: "Business or non-residential" }] },
       { key: "location_class", label: "VEU climatic location", type: "select", unit: "location", help: "Resolve the official metropolitan/regional and mild/cold/hot class from the installation postcode.", defaultValue: "metro_mild", source: "postcode_lookup", required: true, options: LOCATION_CLASS_OPTIONS },
@@ -483,7 +525,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     productRegistry: "VEU",
     productPerformanceInputs: ["scenario", "warranty period where applicable", "area or installation count"],
     inputDefinitions: [
-      { key: "scenario", label: "Weather-sealing scenario", type: "select", unit: "scenario", help: "Select the exact approved Part 15 product/activity scenario.", defaultValue: "15A", source: "approved_product", required: true, options: ["15A", "15B", "15C", "15D", "15E", "15F", "15G", "15H"].map((value) => ({ value, label: `Scenario ${value}` })) },
+      { key: "scenario", label: "Weather-sealing scenario", type: "select", unit: "scenario", help: "The exact approved product record determines which weather-sealing upgrade applies.", defaultValue: "15A", source: "approved_product", required: true, options: WEATHER_SEALING_SCENARIO_OPTIONS },
       { key: "location_class", label: "VEU climatic location", type: "select", unit: "location", help: "Resolve the official metropolitan/regional and mild/cold/hot class from the installation postcode.", defaultValue: "metro_mild", source: "postcode_lookup", required: true, options: LOCATION_CLASS_OPTIONS },
       { key: "installation_count", label: "Installation count", type: "decimal", unit: "installations", help: "Enter the eligible installation count. Scenario 15B instead uses window area.", defaultValue: "1", source: "operator", required: true, min: "1", step: "1", showWhen: { key: "scenario", notOneOf: ["15B"] }, omitWhenHidden: true },
       { key: "area_m2", label: "Window area", type: "decimal", unit: "m2", help: "Enter the eligible window area for scenario 15B.", defaultValue: "1", source: "operator", required: true, min: "0", minExclusive: true, step: "any", showWhen: { key: "scenario", oneOf: ["15B"] }, omitWhenHidden: true },
@@ -519,7 +561,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
       "GEMS determination version",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Appliance scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry listing determines the prescribed 22A to 22D scenario.", defaultValue: "22A", source: "approved_product", required: true, options: ["22A", "22B", "22C", "22D"].map((value) => ({ value, label: `Scenario ${value}` })) },
+      { key: "scenario", label: "Appliance scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry listing determines the appliance type.", defaultValue: "22A", source: "approved_product", required: true, options: REFRIGERATOR_SCENARIO_OPTIONS },
     ],
   },
   {
@@ -536,7 +578,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
       "screen area",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Television scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry television listing determines prescribed scenario 24A.", defaultValue: "24A", source: "approved_product", required: true, options: [{ value: "24A", label: "Scenario 24A" }] },
+      { key: "scenario", label: "Television scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry television listing determines this scenario.", defaultValue: "24A", source: "approved_product", required: true, options: [{ value: "24A", label: "Supply an approved high-efficiency television (24A)" }] },
     ],
   },
   {
@@ -553,7 +595,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
       "drying capacity",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Clothes-dryer scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry clothes-dryer listing determines prescribed scenario 25A.", defaultValue: "25A", source: "approved_product", required: true, options: [{ value: "25A", label: "Scenario 25A" }] },
+      { key: "scenario", label: "Clothes-dryer scenario", type: "select", unit: "scenario", help: "The exact Approved VEU Public Registry clothes-dryer listing determines this scenario.", defaultValue: "25A", source: "approved_product", required: true, options: [{ value: "25A", label: "Supply an approved energy-efficient clothes dryer (25A)" }] },
     ],
   },
   {
@@ -618,7 +660,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     productRegistry: "VEU",
     productPerformanceInputs: ["VEU category 30A or 30B"],
     inputDefinitions: [
-      { key: "scenario", label: "In-home display scenario", type: "select", unit: "scenario", help: "Derive scenario 30A or 30B from the exact VEU-approved product category.", defaultValue: "30A", source: "approved_product", required: true, options: [{ value: "30A", label: "Scenario 30A" }, { value: "30B", label: "Scenario 30B" }] },
+      { key: "scenario", label: "In-home display scenario", type: "select", unit: "scenario", help: "The exact VEU-approved product determines whether it connects to the AMI meter or separate sensing equipment.", defaultValue: "30A", source: "approved_product", required: true, options: [{ value: "30A", label: "Display connected to the residential AMI meter (30A)" }, { value: "30B", label: "Display connected to separate residential sensing equipment (30B)" }] },
       { key: "geography", label: "Location", type: "select", unit: "location", help: "Resolve metropolitan or regional Victoria from the official installation-postcode table.", defaultValue: "metropolitan", source: "postcode_lookup", required: true, options: METRO_REGIONAL_OPTIONS },
       { key: "gas_reticulation", label: "Reticulated-gas area", type: "select", unit: "status", help: "Resolve the official reticulated-gas classification from the installation postcode.", defaultValue: "reticulated", source: "postcode_lookup", required: true, options: [{ value: "reticulated", label: "Reticulated gas area" }, { value: "not_reticulated", label: "Non-reticulated gas area" }] },
       { key: "installation_count", label: "Identical display-unit count", type: "decimal", unit: "units", help: "Enter the number of installations using this exact approved model and postcode classification.", defaultValue: "1", source: "operator", required: true, min: "1", step: "1" },
@@ -923,7 +965,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
       "VEU approval start/end",
     ],
     inputDefinitions: [
-      { key: "scenario", label: "Induction-cooking scenario", type: "select", unit: "scenario", help: "The selected VEU-approved product determines the prescribed 46A or 46B scenario.", defaultValue: "46A", source: "approved_product", required: true, options: [{ value: "46A", label: "Scenario 46A" }, { value: "46B", label: "Scenario 46B" }] },
+      { key: "scenario", label: "Induction-cooking scenario", type: "select", unit: "scenario", help: "The selected VEU-approved product determines the applicable cooking-product type.", defaultValue: "46A", source: "approved_product", required: true, options: [{ value: "46A", label: "In-bench induction cooktop for a home with gas or LPG (46A)" }, { value: "46B", label: "Freestanding combined induction cooking product for a home with gas or LPG (46B)" }] },
     ],
   },
   {
@@ -935,7 +977,7 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     productRegistry: "VEU",
     productPerformanceInputs: ["installed area", "climatic region"],
     inputDefinitions: [
-      { key: "scenario", label: "Ceiling-insulation scenario", type: "select", unit: "scenario", help: "Select the exact Part 48 installation and incumbent-insulation scenario.", defaultValue: "48A(i)", source: "operator", required: true, options: ["48A(i)", "48A(ii)", "48B(i)", "48B(ii)"].map((value) => ({ value, label: `Scenario ${value}` })) },
+      { key: "scenario", label: "Ceiling-insulation scenario", type: "select", unit: "scenario", help: "Choose whether the ceiling is uninsulated or under-insulated and the approved product category being installed.", defaultValue: "48A(i)", source: "operator", required: true, options: CEILING_INSULATION_SCENARIO_OPTIONS },
       { key: "geography", label: "Location", type: "select", unit: "location", help: "Resolve this from the installation postcode using the official metropolitan/regional classification.", defaultValue: "metropolitan", source: "postcode_lookup", required: true, options: METRO_REGIONAL_OPTIONS },
       { key: "climatic_region", label: "Climatic region", type: "select", unit: "region", help: "Resolve the official mild, cold or hot climatic region from the installation postcode.", defaultValue: "mild", source: "postcode_lookup", required: true, options: [{ value: "mild", label: "Mild" }, { value: "cold", label: "Cold" }, { value: "hot", label: "Hot" }] },
       { key: "area_m2", label: "Installed insulation area", type: "decimal", unit: "m2", help: "Enter the eligible ceiling area covered by the selected approved insulation product.", defaultValue: "100", source: "operator", required: true, min: "0", minExclusive: true, step: "any" },

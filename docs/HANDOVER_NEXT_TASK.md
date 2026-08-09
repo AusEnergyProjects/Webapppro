@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `CREDITEX-NATIONAL-CALCULATOR-47` validated release candidate
+Status: `CREDITEX-NATIONAL-CALCULATOR-47` released and live
 
 Prepared: 9 August 2026
 
@@ -8,17 +8,21 @@ Milestone ID: `CREDITEX-NATIONAL-CALCULATOR-47`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`
+Previous production application source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
 Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
 
 Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
-Current production: Sites version 293 from application commit `1d77ab222638d3d43d9a49cac0b486173ce88e18`
+Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3ea0067666848191816b9e9b51293599`
+Current production source: `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`
 
-Deployment: `appgdep_6a77783225d08191b4fcf8cf98888f06`
+Current production: Sites version 295 from application commit `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`
+
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
+
+Deployment: `appgdep_6a77b30bab008191bd61b6476525b4f2`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -28,13 +32,16 @@ Sites provider URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Environment revision: 19
 
-## Validated working-tree release candidate: CREDITEX-NATIONAL-CALCULATOR-47
+## Released milestone: CREDITEX-NATIONAL-CALCULATOR-47
 
-Status: the registry foundation is released and active; the expanded VEU
-formula and shared calculator integration is validated in the working tree but
-is not yet committed, deployed or signed-in production-QA verified.
+Status: the registry foundation, complete VEU formula set and shared calculator
+integration are released and active. Exact calculator commit
+`d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` was deployed as Sites version 294
+through `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact refresh-optimization
+commit `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` supersedes it as current Sites
+version 295.
 
-Baseline release: exact commit
+Registry baseline release: exact commit
 `1d77ab222638d3d43d9a49cac0b486173ce88e18`, Sites version 293. The production
 VEU snapshot contains exactly 75,492 Public Visible rows: 64,715 `Approved` and
 10,777 `Legacy`.
@@ -48,7 +55,7 @@ calculator contract. The trade dashboard `Calculator` remains estimate-only for
 quote and invoice preparation and cannot refresh a registry or perform a
 certificate action.
 
-Validated formula and coverage boundary:
+Released formula and coverage boundary:
 
 - the VEU catalogue contains 32 definitions;
 - 30 aggregate VEU activity codes are formula-ready;
@@ -99,35 +106,60 @@ Registry and calculation boundary:
 - a live 64 MB acquisition, exact-byte R2 replay, validation and D1 activation
   completed with all 75,492 rows; and
 - every formula-dependent product must match the exact official category,
-  source status and installation-date window. A current `Approved` row is
-  accepted only inside its declared inclusive window. A historical `Legacy`
-  row is accepted only inside its exact closed inclusive window. GEMS-only,
-  fuzzy, current `Legacy` and out-of-window matches fail closed.
+  source status and installation-date window. Only an `Approved` row inside its
+  declared inclusive window or a `Legacy` row inside its exact closed inclusive
+  window can count. GEMS-only, fuzzy, current `Legacy` and out-of-window matches
+  fail closed.
+
+The production VEU refresh POST succeeded with HTTP 200 under request and Ray
+identifier `a2821aca0bc9b95b`, using 70.404 seconds wall time and 3.748 seconds
+CPU time. The current 75,492-row projection reports UI snapshot prefix
+`78853aad-a77...`; the full snapshot identifier is not claimed. The earlier
+pre-optimization HTTP 503 was the expected fail-closed result at the resource
+boundary. The optimized refresh later succeeded and subsequent product GET
+requests returned HTTP 200.
 
 Explicit remaining VEU boundaries:
 
-- Activity 14 has no matching registry rows;
+- Activity 14 has no live Public Registry rows;
 - Activity 28 has no governed product connector or rows;
 - Activity 32 has no stable exact VEU-to-GEMS crosslink and must never use fuzzy
   matching;
-- Activity 46 has 0 `Approved` and 674 `Legacy` rows;
+- Activity 46 has no current `Approved` rows and 674 `Legacy` rows available
+  only for exact in-window historical use;
 - Activity 45 is closed;
 - Activity 47 is blocked pending lawful CEC, distribution-network and installed
   system evidence;
 - Activity 27's AEMO load-table alternative is not enabled;
 - the Part 34 J6 refurbishment branch fails closed; and
-- project-based activities remain project methods, not deemed calculators.
+- PBA and other project-based activities remain governed project methods, not
+  deemed calculators.
 
-Release coordinator completion gate:
+Validation, release and live QA evidence:
 
-- run the complete repository validation and review the final diff without
-  weakening the exact-product gates;
-- commit only the calculator milestone and preserve unrelated working-tree
-  changes;
-- deploy the exact clean release source through Sites; and
-- verify the signed-in Creditex administrator and verified-trade product picker,
-  postcode, installation-date and calculation paths before calling the expanded
-  formula coverage live.
+- exact optimization source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`
+  passed the complete `npm.cmd run validate` gate, including the production
+  build and Sites server-bundle audit;
+- the 75,492-row scale regression completed in 3.724 seconds across 38 bounded
+  batches, with 75,491 unchanged rows carried forward, one changed row reset and
+  one history delta retained;
+- Sites version 295 was saved with content hash
+  `sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`
+  and deployed with environment revision 19;
+- signed-in administrator QA selected the `Approved` Hisense `40A4NAU`, product
+  `000022838`, for Activity 24 and returned an estimate of 1 VEEC and 0.8
+  tCO2-e, registry-receipt prefix `c9bd26ead7ad5a36f838d0f3...` and
+  estimate-receipt prefix `0f09591ac56c44dab77e44...`, with certificate
+  actions disabled;
+- a verified installer obtained the same product-backed result from the trade
+  dashboard, where no registry-refresh control was exposed;
+- the product-free Activity 43 path had previously returned 8 VEEC and 7.856856
+  tCO2-e in live QA; and
+- post-deployment health returned HTTP 200 and no production Worker error events
+  were recorded in the subsequent three-minute window.
+
+No certificate was created, issued, submitted, traded or settled during release
+or live QA.
 
 ## Previous released milestone 45 contract
 
