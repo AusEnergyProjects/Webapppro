@@ -1598,12 +1598,16 @@ Status: the complete governed VEU calculator was released from exact application
 commit `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` as Sites version 294 through
 deployment `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective commit
 `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` bounds registry history refreshes and
-is the current production source, saved as Sites version 295 with identity
-`appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
-and deployed through `appgdep_6a77b30bab008191bd61b6476525b4f2` with
-environment revision 19 at `https://compare.ausenergyassessments.com`. The saved
-version content hash is
-`sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`.
+was superseded as Sites version 295. Exact guided calculator and PDRS
+licensed-runtime commit `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is the current
+production source, saved as Sites version 296 with identity
+`appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134`
+and deployed through `appgdep_6a77dec8694081918aa42f65c1442326` with
+environment revision 19 at `https://compare.ausenergyassessments.com`. The Sites
+archive content hash is
+`sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` and the
+local release archive SHA-256 is
+`A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3`.
 
 The released milestone provides one source-controlled calculator workspace
 across 35 Australian program pathways and 216 activity templates. Program,
@@ -1614,6 +1618,12 @@ creation, submission, trade and settlement remain disabled. The same governed
 calculator is available to Creditex administrators and verified installer
 accounts from the TLink trade dashboard under `Calculator` for quote and invoice
 preparation. The trade surface is estimate-only and cannot refresh registries.
+
+The shared guided flow asks for a plain-English scenario first, then narrows
+brand, model and product choices across official, VEU, GEMS, SRES and PDRS
+sources. Source trust, accepted-snapshot freshness and installation-date
+eligibility are enforced server-side. Missing, stale or ineligible official
+data fails closed rather than accepting a caller-entered substitute.
 
 Official-product foundations now include:
 
@@ -1678,16 +1688,18 @@ or non-executable templates. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 Certificate actions enabled remain 0.
 
-Exact production calculation QA passed on both authorised surfaces. A signed-in
-Creditex administrator selected the `Approved` Hisense `40A4NAU`, product
-`000022838`, for Activity 24 and received an estimate of 1 VEEC and 0.8 tCO2-e,
-with registry-receipt prefix `c9bd26ead7ad5a36f838d0f3...` and estimate-receipt
-prefix `0f09591ac56c44dab77e44...`; certificate actions remained disabled. A
-verified installer obtained the same product-backed result from the trade
-dashboard and had no registry-refresh control. The product-free Activity 43 path
-had previously returned 8 VEEC and 7.856856 tCO2-e in live QA.
+Signed-in production QA passed across the guided administrator and trade
+surfaces. Administrator VEU QA exposed the plain-English Part 6 scenario, then
+returned 34 brands and 172 Daikin models. Administrator and trade PDRS HVAC QA
+each returned 118 brands. Trade SRES QA for the at-least-700-litre scenario
+returned 16 brands. BESS1 exposed the CEC picker with no per-trade licence or
+credential prompt, but returned no accepted snapshot because the central Sites CEC
+username, password and licence reference are not configured. BESS1 and BESS2
+therefore remain not live-active, although both guided selectors are wired to
+consume an accepted licensed snapshot once active. Certificate actions remained
+disabled.
 
-Exact optimization source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`
+Exact guided calculator source `1d3abe172e4eb2fa006fab639233cda49a6d37d4`
 passed the complete `npm.cmd run validate` gate, including the production build
 and Sites server-bundle audit. The 75,492-row scale regression completed in
 3.724 seconds across 38 bounded batches, carrying forward 75,491 unchanged rows,
@@ -1707,8 +1719,11 @@ Controlled VEU boundaries remain explicit:
   Activity 32 must never use fuzzy matching;
 - Activity 46 has no current `Approved` rows and 674 `Legacy` rows available
   only for exact in-window historical use;
-- Activity 45 is closed, while Activity 47 remains blocked pending lawful CEC,
-  distribution-network and installed-system evidence;
+- Activity 45 is closed; Activity 47 BESS1 and BESS2 definitions, licensed CEC
+  POST route and nightly worker path are deployed but remain not live-active
+  until an accepted licensed snapshot exists; BESS3 and BESS4 still require
+  exact governed inverter-output authority, and BESS5 still requires the Scheme
+  Administrator's exact recording method;
 - Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
   refurbishment branch fails closed, and PBA and other project-based activities
   remain governed project methods rather than deemed calculators.
@@ -1722,11 +1737,11 @@ remain unavailable as supported machine feeds.
 
 ## Next five logical product steps
 
-1. **Obtain and record CEC commercial data permission, then activate CEC module, inverter and battery ingestion with suspension, delisting, recall, NETCC and SAA overlays.**
-2. **Ingest supported NSW TESSA and administrator-accepted product lists, preserve historical ESS/PDRS rules and unlock each activity only inside its exact date window.**
-3. **Obtain WA commercial-reuse permission and a supported Horizon Power feed, then activate battery and managed-device calculations with exact service-territory checks.**
-4. **Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes.**
-5. **Close the remaining regulator-owned calculation boundaries: resolve VEU 1C-medium guidance, add exact Part 6 multi-unit and Activity 32 cross-registry evidence, and complete governed project and facility methods.**
+1. **Activate the three central Sites CEC credentials and complete live BESS1 and BESS2 end-to-end calculation QA against an accepted licensed snapshot.**
+2. **Obtain and map the exact governed PDRS inverter-output authority, then complete BESS3 and BESS4 end-to-end calculation QA.**
+3. **Obtain and transcribe the Scheme Administrator's exact BESS5 capacity and inverter recording method before enabling BESS5.**
+4. **Ingest an effective-dated NSW TESSA product source and complete exact D17 to D20 product-backed calculation QA.**
+5. **Complete the remaining official connectors and governed formula branches, then expose the same guided calculator progressively on the public surface without enabling certificate actions.**
 
 ## Global stop conditions
 

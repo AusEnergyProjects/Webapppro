@@ -169,9 +169,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /Primary trade-workspace recovery source \| `b7e40751e2556ffc64e37704c641a6e917046bb6`/);
   assert.match(releaseTruth, /Historical trade-workspace delivery-recovery application source \| `9c278bb23f3f5eb9c3878c5a4cfc946264f1a29c`/);
   assert.match(releaseTruth, /Historical trade document controls and Jobs application source \| `bfd472359dd8ec2457379bc3694dc3c9503ac7dd`/);
-  assert.match(releaseTruth, /Current executable application identity \| Sites version 295 from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`/);
-  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd/);
-  assert.match(releaseTruth, /appgdep_6a77b30bab008191bd61b6476525b4f2/);
+  assert.match(releaseTruth, /Current executable application identity \| Sites version 296 from `1d3abe172e4eb2fa006fab639233cda49a6d37d4`/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134/);
+  assert.match(releaseTruth, /appgdep_6a77dec8694081918aa42f65c1442326/);
+  assert.match(releaseTruth, /sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186/);
+  assert.match(releaseTruth, /A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3/);
   assert.match(releaseTruth, /7,829,193 bytes/);
   assert.match(releaseTruth, /EC1B166DD9957DA17C4F889E4802C349A76A71454627769D12B5BFD5A1E503E2/);
   assert.match(releaseTruth, /361 stored files; 31,907,840 stored bytes/);
@@ -244,7 +246,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /1,281 main tests with 1,279 passed, 2 intentionally skipped and 0 failed/);
   assert.match(releaseTruth, /32 controlled Australian government program pathways and 212 activity templates/);
   assert.match(releaseTruth, /six live REC Registry oracle vectors reconciled/);
-  assert.match(releaseTruth, /The current verified deployed topology for Sites version 295 is:/);
+  assert.match(releaseTruth, /The current verified deployed topology for Sites version 296 is:/);
   assert.doesNotMatch(releaseTruth, /current verified deployed topology for Sites version 270/i);
   assert.match(releaseTruth, /Sites version 262 built from `11b06b88d68609a9fcf254877a4afe379a95f8b3`/);
   assert.match(releaseTruth, /appgdep_6a6edfb2b8e08191b295825c3db65d4d/);
@@ -481,12 +483,16 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /`bfd472359dd8ec2457379bc3694dc3c9503ac7dd`[\s\S]{0,500}Sites version 283/i);
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `CREDITEX-NATIONAL-CALCULATOR-47` released and live/);
   assert.match(handover, /Milestone ID: `CREDITEX-NATIONAL-CALCULATOR-47`/);
-  assert.match(handover, /Previous production application source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`/);
+  assert.match(handover, /Previous production application source: `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`/);
   assert.match(handover, /Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`/);
   assert.match(handover, /Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`/);
-  assert.match(handover, /Current production: Sites version 295 from application commit `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`/);
-  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd/);
-  assert.match(handover, /appgdep_6a77b30bab008191bd61b6476525b4f2/);
+  assert.match(handover, /Current production: Sites version 296 from application commit `1d3abe172e4eb2fa006fab639233cda49a6d37d4`/);
+  assert.match(handover, /appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134/);
+  assert.match(handover, /appgdep_6a77dec8694081918aa42f65c1442326/);
+  assert.match(handover, /34 brands and 172 Daikin models/);
+  assert.match(handover, /administrator and trade PDRS HVAC QA each returned 118 brands/);
+  assert.match(handover, /at-least-700-litre scenario returned 16\s+brands/);
+  assert.match(handover, /BESS1 and BESS2 remain not live-active/);
   assert.match(handover, /364 files and 31,682,560 bytes/);
   assert.match(handover, /sha256:e3da2fb4a4e4b342a0825a145d8ee3dd2124002123d04c28de753e6767b734c7/);
   assert.match(handover, /1,494 main tests with 1,492\s+passed, 2 intentionally skipped and 0 failed/);
@@ -644,11 +650,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(roadmapStepNumbers, [1, 2, 3, 4, 5]);
   assert.deepEqual(handoverStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Obtain and record CEC commercial data permission, then activate CEC module, inverter and battery ingestion with suspension, delisting, recall, NETCC and SAA overlays\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Ingest supported NSW TESSA and administrator-accepted product lists, preserve historical ESS\/PDRS rules and unlock each activity only inside its exact date window\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Obtain WA commercial-reuse permission and a supported Horizon Power feed, then activate battery and managed-device calculations with exact service-territory checks\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Implement and independently reconcile ACT EEIS and SA REPS retailer-obligation formulas and provider scopes\.\*\*/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Close the remaining regulator-owned calculation boundaries: resolve VEU 1C-medium guidance, add exact Part 6 multi-unit and Activity 32 cross-registry evidence, and complete governed project and facility methods\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Activate the three central Sites CEC credentials and complete live BESS1 and BESS2 end-to-end calculation QA against an accepted licensed snapshot\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Obtain and map the exact governed PDRS inverter-output authority, then complete BESS3 and BESS4 end-to-end calculation QA\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. \*\*Obtain and transcribe the Scheme Administrator's exact BESS5 capacity and inverter recording method before enabling BESS5\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. \*\*Ingest an effective-dated NSW TESSA product source and complete exact D17 to D20 product-backed calculation QA\.\*\*/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. \*\*Complete the remaining official connectors and governed formula branches, then expose the same guided calculator progressively on the public surface without enabling certificate actions\.\*\*/);
 });
 
 test("inactive Netlify deployment targets are removed", () => {

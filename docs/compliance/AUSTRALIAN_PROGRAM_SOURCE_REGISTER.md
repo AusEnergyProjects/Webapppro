@@ -54,16 +54,26 @@ source-pinned calculator contract. The TLink trade dashboard surface is
 estimate-only for quote and invoice preparation and grants no registry-refresh,
 certificate-creation, submission, trading or settlement authority.
 
+The shared guided flow asks for the plain-English scenario first, then narrows
+brand, model and product choices across official, VEU, GEMS, SRES and PDRS
+sources. Source trust, accepted-snapshot freshness and installation-date
+eligibility are enforced server-side. Missing, stale or ineligible official
+data fails closed rather than accepting a caller-entered substitute.
+
 The guarded VEU Public Registry foundation is released from exact commit
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
 VEU calculator was committed as `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 and deployed as Sites version 294 through
 `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact bounded-refresh correction
-`ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is current Sites version 295, saved
-as `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd`
-with content hash
-`sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563` and
-deployed through `appgdep_6a77b30bab008191bd61b6476525b4f2` with environment
+`ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is historical Sites version 295.
+Exact guided calculator and PDRS licensed-runtime source
+`1d3abe172e4eb2fa006fab639233cda49a6d37d4` is current Sites version 296, saved
+as `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134`
+with archive content hash
+`sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` and
+local release archive SHA-256
+`A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3`.
+Deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment
 revision 19 at `https://compare.ausenergyassessments.com`.
 
 The active production snapshot contains exactly 75,492 Public Visible rows:
@@ -81,9 +91,11 @@ Current product evidence is deliberately split by authority and permission:
   the dedicated SRES registry;
 - 31,418 stable GEMS rows from 11 official data.gov.au resources are approved
   for the automatic registry;
-- all 14 live-tested federal feeds parse 44,119 stable rows, but 12,701
-  CER-hosted CEC module, inverter and battery rows remain controlled-manual
-  until commercial reuse permission is recorded;
+- all 14 live-tested federal feeds parse 44,119 stable rows, but the 12,701
+  CER-hosted public CEC module, inverter and battery rows remain
+  controlled-manual; the separate PDRS licensed snapshot route is deployed and
+  server-side only, but has no accepted snapshot because the central Sites CEC
+  username, password and licence reference are not configured;
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and
@@ -107,21 +119,23 @@ seconds CPU time. The current projection still contains 75,492 rows and the UI
 reports snapshot prefix `78853aad-a77...`; the full snapshot identifier is not
 claimed. The earlier pre-optimization HTTP 503 was the expected fail-closed
 result at the resource boundary. Subsequent product GET requests returned HTTP
-200. Exact source `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` passed the complete
+200. Exact source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` passed the complete
 `npm.cmd run validate` gate, production build and Sites server-bundle audit. Its
 75,492-row regression completed in 3.724 seconds across 38 bounded batches,
 carried forward 75,491 unchanged rows, reset one changed row and retained one
 history delta. Post-deployment health returned HTTP 200 and the subsequent
 three-minute Worker error window contained no error events.
 
-Signed-in administrator QA selected the exact `Approved` Hisense `40A4NAU`,
-product `000022838`, for Activity 24 and returned an estimate of 1 VEEC and 0.8
-tCO2-e, with registry-receipt prefix `c9bd26ead7ad5a36f838d0f3...` and
-estimate-receipt prefix `0f09591ac56c44dab77e44...`. A verified installer
-obtained the same product-backed result from the trade dashboard and had no
-registry-refresh control. The product-free Activity 43 path had previously
-returned 8 VEEC and 7.856856 tCO2-e in live QA. Certificate actions remained
-disabled; no certificate was created, issued, submitted, traded or settled.
+Signed-in administrator VEU QA exposed the plain-English Part 6 scenario, then
+returned 34 brands and 172 Daikin models. Signed-in administrator and trade PDRS
+HVAC QA each returned 118 brands. Signed-in trade SRES QA for the
+at-least-700-litre scenario returned 16 brands. Signed-in BESS1 QA exposed the
+CEC picker without a per-trade licence or credential prompt, but no accepted
+snapshot exists because the three central Sites CEC credentials are missing.
+BESS1 and BESS2 therefore remain not live-active, although both guided selectors
+are wired to consume an accepted licensed snapshot once active. Certificate
+actions remained disabled; no certificate was created, issued, submitted,
+traded or settled.
 
 ## Federal program register
 
@@ -301,8 +315,11 @@ The remaining VEU boundaries are explicit:
   Activity 32 must never use fuzzy matching;
 - Activity 46 has no current `Approved` rows and 674 `Legacy` rows available
   only for exact in-window historical use;
-- Activity 45 is closed, while Activity 47 is blocked pending lawful CEC,
-  distribution-network and installed-system evidence;
+- Activity 45 is closed; Activity 47 BESS1 and BESS2 definitions, licensed CEC
+  POST route and nightly worker path are deployed but remain not live-active
+  until an accepted licensed snapshot exists; BESS3 and BESS4 still require
+  exact governed inverter-output authority, and BESS5 still requires the Scheme
+  Administrator's exact recording method;
 - Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
   refurbishment branch fails closed, and PBA and other project-based activities
   remain governed project methods rather than deemed calculators.
@@ -697,7 +714,7 @@ The inspected tenant exposed only a limited configured subset of activities, so 
 1. NSW Home Energy Saver discount guidelines, activity specification, evidence payload and Creditex operating interface are unpublished.
 2. Creditex, Dataforce and Runabout provider-owned field dictionaries, export schemas and API contracts require written authority or authorised documentation. Public observation is not a connector specification, and a connector specification is not a scheme rule.
 3. VEU and NSW TESSA do not expose supported public bulk product APIs. The released VEU importer treats the official embedded source as a monitored input with effective dates, statuses, schema and count guards, D1 indexed projections and exact-byte R2 custody; its 75,492-row production snapshot is active. NSW TESSA remains blocked pending a supported immutable extract and historical-rule contract.
-4. CEC commercial data reuse permission and supported suspension, delisting, recall, NETCC and SAA data boundaries are unresolved. CER-hosted CEC files remain controlled-manual until permission is recorded.
+4. CER-hosted public CEC files remain controlled-manual. The separate licensed PDRS snapshot route is deployed but cannot activate BESS1 or BESS2 until the central Sites CEC username, password and licence reference produce an accepted snapshot. BESS3 and BESS4 still need exact governed inverter-output authority, and BESS5 still needs the Scheme Administrator's exact recording method.
 5. SA has mixed-vintage factor links. Resolve the current Gazette and activity factor for each installation date, especially BS3B and LF1.
 6. Creditex was not listed on the current public ACT Approved Energy Savings Provider register. All Creditex EEIS submission remains disabled. Any retailer or provider intake evidence must be separately labelled as a contractual delivery or connector requirement, never as an EEIS scheme rule. Activity 4.2 needs current legal interpretation after the NSW commercial-lighting closure.
 7. The public SA provider register lists Creditex only for WH1, HC2A and HC2B. Other REPS activity codes remain disabled without an obliged retailer's authorised current scope. Plenti, Brighte, QRIDA, GrantsNT, SmartyGrants, NILS, REPS-R and TESSA do not expose a verified public claim API contract in the reviewed sources.
