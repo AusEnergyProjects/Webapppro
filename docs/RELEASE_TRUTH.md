@@ -134,10 +134,12 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 294 executable identity | Sites version 294 from `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` | Deployment `appgdep_6a77aa33d1288191965ba076f690dd46` succeeded before the bounded-refresh correction superseded it |
 | Historical VEU bounded-refresh application source | `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` on `codex/sites-custom-domain-migration` | Exact validated corrective source that preserves unchanged effective dates and retains only changed history deltas; deployed as historical Sites version 295 |
 | Historical Sites version 295 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_eb2ea4c9ff00819184c55ca709f53ffd` | Exact Sites version 295 built from `ad63b90a4e99211998aa1947b7ddd61d5ac1f640`; content hash `sha256:30d481f24fdcb86d0db94321314fa6d044c37e591a72a47ff6ec09b2885b2563`; deployment `appgdep_6a77b30bab008191bd61b6476525b4f2` |
-| Current guided calculator and PDRS licensed-runtime source | `1d3abe172e4eb2fa006fab639233cda49a6d37d4` on `codex/sites-custom-domain-migration` | Exact validated source for the shared guided flow, server-side central CEC credential boundary, PDRS definitions and licensed snapshot runtime |
-| Current release archive identity | Local release archive SHA-256 `A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3` | Sites archive content hash `sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134` | Exact Sites version 296 built from `1d3abe172e4eb2fa006fab639233cda49a6d37d4`; content hash `sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` |
-| Current executable application identity | Sites version 296 from `1d3abe172e4eb2fa006fab639233cda49a6d37d4` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
+| Historical guided calculator and PDRS licensed-runtime source | `1d3abe172e4eb2fa006fab639233cda49a6d37d4` on `codex/sites-custom-domain-migration` | Exact validated source for the shared guided flow, server-side central CEC credential boundary, PDRS definitions and licensed snapshot runtime; deployed as Sites version 296 |
+| Historical Sites version 296 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134` | Exact Sites version 296 built from `1d3abe172e4eb2fa006fab639233cda49a6d37d4`; content hash `sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186`; deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment revision 19 |
+| Current simplified quote-calculator source | `11f4721b678425a4294e95c631e0d37d3fab0ffd` on `codex/sites-custom-domain-migration` | Exact source for the short estimate-only quote flow, future-date rule windows, frictionless SRES quote calculations and VEU single-split and multi-split quote calculations |
+| Current release archive identity | Removed locally after Sites accepted the package and recorded custody | 8,158,365 bytes; SHA-256 `FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563` |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df` | Exact Sites version 297 built from `11f4721b678425a4294e95c631e0d37d3fab0ffd`; 378 stored files; 33,105,920 stored bytes; content hash `sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5` |
+| Current executable application identity | Sites version 297 from `11f4721b678425a4294e95c631e0d37d3fab0ffd` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a781d231ee08191a7d506389be1676b` succeeded; environment revision 19; provider URL `https://aea-energy-comparison.info294029.chatgpt.site` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -147,12 +149,14 @@ government-activity workflow, VEU pilot and guarded VEU registry foundation are
 deployed to production. The complete calculator first shipped as Sites version
 294 from `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`, followed by the bounded-refresh
 correction in Sites version 295. Sites version 296 from exact guided calculator
-and PDRS source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is the current executable
-source. Its active VEU snapshot contains 75,492 Public Visible rows and the
-administrator and verified-installer guided paths passed live QA. Certificate
+and PDRS source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical. Sites
+version 297 from exact simplified quote-calculator source
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is the current executable source.
+Its active VEU snapshot contains 75,492 Public Visible rows and the signed-in
+administrator and verified-installer quote paths passed live QA. Certificate
 creation, submission, trading and settlement remain disabled.
 
-## Current guided calculator, VEU registry and PDRS runtime release
+## Current simplified quote calculator, VEU registry and PDRS runtime release
 
 The guarded registry foundation was released in exact application source
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
@@ -161,14 +165,17 @@ governed VEU calculator was then committed as
 through `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective source
 `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` bounds registry-history writes and is
 historical Sites version 295. Exact guided calculator and PDRS source
-`1d3abe172e4eb2fa006fab639233cda49a6d37d4` is current Sites version 296. It is
+`1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical Sites version 296.
+Exact simplified quote-calculator source
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is current Sites version 297. It is
 saved as
-`appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134`
-with archive content hash
-`sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186`.
-The local release archive SHA-256 is
-`A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3`.
-Deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment
+`appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
+with 378 stored files, 33,105,920 stored bytes and content hash
+`sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5`.
+The 8,158,365-byte publication archive had SHA-256
+`FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563`
+and was removed locally after Sites accepted the package and recorded custody.
+Deployment `appgdep_6a781d231ee08191a7d506389be1676b` succeeded with environment
 revision 19 at the custom domain `https://compare.ausenergyassessments.com` and
 provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
 
@@ -196,21 +203,28 @@ plus six enforced partial subsets. The fully available set is `3`, `13`, `15`,
 `40`, `41`, `42`, `43`, `44` and `48`. Codes `14`, `28` and `32` are also
 formula-ready but remain source-gated.
 
-The shared guided flow asks for the plain-English scenario first, then narrows
-brand, model and product choices across official, VEU, GEMS, SRES and PDRS
-sources. Source trust, accepted-snapshot freshness and installation-date
-eligibility are enforced server-side. Missing, stale or ineligible official
-data fails closed rather than accepting a caller-entered substitute.
+The shared quote flow now follows a short activity, plain-English scenario,
+date, brand, model, postcode and formula-input sequence. It omits compliance
+attestations such as consumer-fact-sheet, disposal and warranty questions from
+the quote calculator, keeps registry and calculation evidence under collapsed
+details and removes registry refresh from the trade surface. Source trust,
+accepted-snapshot freshness and installation-date eligibility remain enforced
+server-side. Quote mode is estimate-only; the default compliance path remains
+strict.
+
+Future quote dates follow the official rule windows rather than today's date.
+VEU accepts dates from 30 June 2026 onward subject to the selected product's
+effective window. SRES accepts dates through 2030. NSW and local programs use
+their official effective windows.
 
 The exact `partial_estimate_available` boundaries are:
 
 - `1`: Exact estimates are available for 1C small systems and supported 1D
   systems. The 1C medium-system Bs/Be conflict between official sources remains
   fail-closed.
-- `6`: Exact estimates are available for supported single-split systems.
-  Multi-split and packaged systems remain fail-closed until the installed
-  indoor/outdoor quantities and same-manufacturer evidence are represented
-  exactly.
+- `6`: Exact estimates are available for supported single-split and multi-split
+  systems. Multi-split estimates use the approved outdoor unit plus the total
+  connected indoor-unit capacities; packaged systems remain fail-closed.
 - `31`: Exact estimates are available for 31A motors selected from the
   installation-date GEMS register. Activity 31B remains fail-closed until an
   exact VEU-approved product contract is available.
@@ -235,23 +249,20 @@ status and installation-date window. Only an `Approved` row inside its declared
 inclusive window or a `Legacy` row inside its exact closed inclusive window can
 count. GEMS-only, fuzzy, current `Legacy` and out-of-window matches fail closed.
 
-Signed-in administrator VEU QA exposed the plain-English Part 6 scenario, then
-returned 34 brands and 172 Daikin models. Signed-in administrator and trade PDRS
-HVAC QA each returned 118 brands. Signed-in trade SRES QA for the
-at-least-700-litre scenario returned 16 brands. Signed-in BESS1 QA exposed the
-CEC picker with no per-trade licence or credential prompt. It returned no
-accepted snapshot because the central Sites CEC username, password and licence
-reference are not configured, so BESS1 and BESS2 are not live-active. Both
-guided selectors are wired to consume an accepted licensed snapshot once active.
-Certificate actions remained disabled.
+Signed-in production QA passed on Sites version 297. On the trade dashboard, a
+future-date SRES solar-PV quote for 17 August 2026, postcode 3000 and 6.6 kW
+returned 39 STCs. A VEU Activity 6 scenario (xi) quote for ERS Tech model
+`ERS-AC24KWH-G` on 17 August 2026 with 3.5 kW indoor heating and cooling
+capacities returned 2 VEECs. Consumer-fact-sheet and disposal questions were
+absent, registry refresh was absent and calculation details were collapsed.
+The signed-in administrator calculator loaded at release 297. Certificate
+actions remained disabled.
 
-Exact source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` passed the complete
-`npm.cmd run validate` gate, including the production build and Sites
-server-bundle audit. The 75,492-row scale regression completed
-in 3.724 seconds across 38 bounded batches, with 75,491 unchanged rows carried
-forward, one changed row reset and one history delta retained. Post-deployment
-health returned HTTP 200 and the subsequent three-minute production Worker
-error window contained no events.
+Exact source `11f4721b678425a4294e95c631e0d37d3fab0ffd` is pushed to GitHub and
+the Sites managed source branch. Its deployment retained the sealed 56-of-216
+calculation coverage result and active 75,492-row VEU registry projection while
+adding the simplified estimate-only quote contract and future-date handling
+verified above.
 
 Remaining governed boundaries are exact:
 
@@ -268,6 +279,8 @@ Remaining governed boundaries are exact:
 - BESS3 and BESS4 require exact governed inverter-output authority, and BESS5
   requires the Scheme Administrator's exact recording method;
 - Activity 27's AEMO load-table alternative is not enabled;
+- packaged VEU Part 6 systems remain unavailable until governed packaged-system
+  and multi-indoor-unit bundle selection is implemented;
 - the Part 34 J6 refurbishment branch fails closed; and
 - PBA and other project-based activities remain governed project methods, not
   deemed calculators.
@@ -1508,7 +1521,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 296 is:
+The current verified deployed topology for Sites version 297 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

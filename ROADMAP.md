@@ -1599,15 +1599,18 @@ commit `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9` as Sites version 294 through
 deployment `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact corrective commit
 `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` bounds registry history refreshes and
 was superseded as Sites version 295. Exact guided calculator and PDRS
-licensed-runtime commit `1d3abe172e4eb2fa006fab639233cda49a6d37d4` is the current
-production source, saved as Sites version 296 with identity
-`appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134`
-and deployed through `appgdep_6a77dec8694081918aa42f65c1442326` with
-environment revision 19 at `https://compare.ausenergyassessments.com`. The Sites
-archive content hash is
-`sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` and the
-local release archive SHA-256 is
-`A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3`.
+licensed-runtime commit `1d3abe172e4eb2fa006fab639233cda49a6d37d4` was deployed as
+Sites version 296. Exact simplified quote-calculator commit
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is the current production source,
+saved as Sites version 297 with identity
+`appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
+and deployed through `appgdep_6a781d231ee08191a7d506389be1676b` with
+environment revision 19 at `https://compare.ausenergyassessments.com`. Sites
+stored 378 files and 33,105,920 bytes with content hash
+`sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5`.
+The 8,158,365-byte publication archive had SHA-256
+`FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563`
+and was removed locally after Sites accepted the package and recorded custody.
 
 The released milestone provides one source-controlled calculator workspace
 across 35 Australian program pathways and 216 activity templates. Program,
@@ -1619,11 +1622,19 @@ calculator is available to Creditex administrators and verified installer
 accounts from the TLink trade dashboard under `Calculator` for quote and invoice
 preparation. The trade surface is estimate-only and cannot refresh registries.
 
-The shared guided flow asks for a plain-English scenario first, then narrows
-brand, model and product choices across official, VEU, GEMS, SRES and PDRS
-sources. Source trust, accepted-snapshot freshness and installation-date
-eligibility are enforced server-side. Missing, stale or ineligible official
-data fails closed rather than accepting a caller-entered substitute.
+The shared quote flow now follows a short activity, plain-English scenario,
+date, brand, model, postcode and formula-input sequence. It omits compliance
+attestations such as consumer-fact-sheet, disposal and warranty questions from
+the quote calculator, keeps registry and calculation evidence under collapsed
+details and removes the registry-refresh action from the trade surface. Source
+trust, accepted-snapshot freshness and installation-date eligibility remain
+enforced server-side. Quote mode is estimate-only; the default compliance path
+remains strict.
+
+Future quote dates follow the official rule windows rather than today's date.
+VEU accepts dates from 30 June 2026 onward subject to the selected product's
+effective window, SRES accepts dates through 2030, and NSW and local programs
+use their official effective windows.
 
 Official-product foundations now include:
 
@@ -1665,10 +1676,9 @@ The exact partial-estimate messages are:
 - `1`: Exact estimates are available for 1C small systems and supported 1D
   systems. The 1C medium-system Bs/Be conflict between official sources remains
   fail-closed.
-- `6`: Exact estimates are available for supported single-split systems.
-  Multi-split and packaged systems remain fail-closed until the installed
-  indoor/outdoor quantities and same-manufacturer evidence are represented
-  exactly.
+- `6`: Exact estimates are available for supported single-split and multi-split
+  systems. Multi-split estimates use the approved outdoor unit plus the total
+  connected indoor-unit capacities; packaged systems remain fail-closed.
 - `31`: Exact estimates are available for 31A motors selected from the
   installation-date GEMS register. Activity 31B remains fail-closed until an
   exact VEU-approved product contract is available.
@@ -1688,24 +1698,21 @@ or non-executable templates. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 Certificate actions enabled remain 0.
 
-Signed-in production QA passed across the guided administrator and trade
-surfaces. Administrator VEU QA exposed the plain-English Part 6 scenario, then
-returned 34 brands and 172 Daikin models. Administrator and trade PDRS HVAC QA
-each returned 118 brands. Trade SRES QA for the at-least-700-litre scenario
-returned 16 brands. BESS1 exposed the CEC picker with no per-trade licence or
-credential prompt, but returned no accepted snapshot because the central Sites CEC
-username, password and licence reference are not configured. BESS1 and BESS2
-therefore remain not live-active, although both guided selectors are wired to
-consume an accepted licensed snapshot once active. Certificate actions remained
-disabled.
+Signed-in production QA passed on Sites version 297. On the trade dashboard, a
+future-date SRES solar-PV quote for 17 August 2026, postcode 3000 and 6.6 kW
+returned 39 STCs. A VEU Activity 6 scenario (xi) quote for ERS Tech model
+`ERS-AC24KWH-G` on 17 August 2026 with 3.5 kW indoor heating and cooling
+capacities returned 2 VEECs. Consumer-fact-sheet and disposal questions were
+absent, registry refresh was absent and calculation details were collapsed.
+The signed-in administrator calculator also loaded at release 297. BESS1 and
+BESS2 remain not live-active until the central licensed CEC snapshot is
+available. Certificate actions remained disabled.
 
-Exact guided calculator source `1d3abe172e4eb2fa006fab639233cda49a6d37d4`
-passed the complete `npm.cmd run validate` gate, including the production build
-and Sites server-bundle audit. The 75,492-row scale regression completed in
-3.724 seconds across 38 bounded batches, carrying forward 75,491 unchanged rows,
-resetting one changed row and retaining one history delta. Post-deployment health
-returned HTTP 200 and the subsequent three-minute production Worker error window
-contained no error events.
+The version-297 package is pinned to exact application source
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` in GitHub and the Sites managed
+source branch. The release retained the sealed 56-of-216 calculation coverage
+result and active 75,492-row VEU registry projection while adding the simplified
+quote contract and future-date handling verified above.
 
 Every formula-dependent product must match the exact official VEU category,
 status and installation-date window. Only an `Approved` row inside its declared
@@ -1737,11 +1744,11 @@ remain unavailable as supported machine feeds.
 
 ## Next five logical product steps
 
-1. **Activate the three central Sites CEC credentials and complete live BESS1 and BESS2 end-to-end calculation QA against an accepted licensed snapshot.**
-2. **Obtain and map the exact governed PDRS inverter-output authority, then complete BESS3 and BESS4 end-to-end calculation QA.**
-3. **Obtain and transcribe the Scheme Administrator's exact BESS5 capacity and inverter recording method before enabling BESS5.**
-4. **Ingest an effective-dated NSW TESSA product source and complete exact D17 to D20 product-backed calculation QA.**
-5. **Complete the remaining official connectors and governed formula branches, then expose the same guided calculator progressively on the public surface without enabling certificate actions.**
+1. **Public quote calculator surface using the same estimate-only contract without trade login.**
+2. **Activate licensed CEC battery data in production and live-QA PDRS BESS1-4 once platform credentials are installed.**
+3. **Add governed packaged-system and multi-indoor-unit bundle selection for VEU Part 6.**
+4. **Connect remaining lawful product authorities, including TESSA families, to unblock product-backed pathways.**
+5. **Add quote/invoice rebate lines and customer-shareable estimate receipts.**
 
 ## Global stop conditions
 

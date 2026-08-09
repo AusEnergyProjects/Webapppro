@@ -54,11 +54,19 @@ source-pinned calculator contract. The TLink trade dashboard surface is
 estimate-only for quote and invoice preparation and grants no registry-refresh,
 certificate-creation, submission, trading or settlement authority.
 
-The shared guided flow asks for the plain-English scenario first, then narrows
-brand, model and product choices across official, VEU, GEMS, SRES and PDRS
-sources. Source trust, accepted-snapshot freshness and installation-date
-eligibility are enforced server-side. Missing, stale or ineligible official
-data fails closed rather than accepting a caller-entered substitute.
+The shared quote flow follows a short activity, plain-English scenario, date,
+brand, model, postcode and formula-input sequence. It omits compliance
+attestations such as consumer-fact-sheet, disposal and warranty questions from
+the quote calculator, keeps registry and calculation evidence under collapsed
+details and removes registry refresh from the trade surface. Source trust,
+accepted-snapshot freshness and installation-date eligibility remain enforced
+server-side. Quote mode is estimate-only; the default compliance path remains
+strict.
+
+Future quote dates follow the official rule windows rather than today's date.
+VEU accepts dates from 30 June 2026 onward subject to the selected product's
+effective window. SRES accepts dates through 2030. NSW and local programs use
+their official effective windows.
 
 The guarded VEU Public Registry foundation is released from exact commit
 `1d77ab222638d3d43d9a49cac0b486173ce88e18` as Sites version 293. The complete
@@ -67,13 +75,16 @@ and deployed as Sites version 294 through
 `appgdep_6a77aa33d1288191965ba076f690dd46`. Exact bounded-refresh correction
 `ad63b90a4e99211998aa1947b7ddd61d5ac1f640` is historical Sites version 295.
 Exact guided calculator and PDRS licensed-runtime source
-`1d3abe172e4eb2fa006fab639233cda49a6d37d4` is current Sites version 296, saved
-as `appgprj_6a550c378000819185caf094173422bb~appgver_5e6a96b498d481919a0d8816407d8134`
-with archive content hash
-`sha256:ebac21093161618b5e086d4e558582c07ce22db304346927255da5348c1c8186` and
-local release archive SHA-256
-`A9399EF18A3B2294354AD1655E69CD9CE7058B07998EA43EECF93EC072DCFFE3`.
-Deployment `appgdep_6a77dec8694081918aa42f65c1442326` succeeded with environment
+`1d3abe172e4eb2fa006fab639233cda49a6d37d4` is historical Sites version 296.
+Exact simplified quote-calculator source
+`11f4721b678425a4294e95c631e0d37d3fab0ffd` is current Sites version 297, saved
+as `appgprj_6a550c378000819185caf094173422bb~appgver_f6c71f20596c8191a59a1ee2c23045df`
+with 378 stored files, 33,105,920 stored bytes and content hash
+`sha256:03f919b3ec2902590c8079a1d6edf9d725e6163bb515ec6b761be3ed12b099c5`.
+The 8,158,365-byte publication archive had SHA-256
+`FCB2FA3E954FA758EB069C70B76A712C1FC23FEC0EC432380EBD3B58D8646563`
+and was removed locally after Sites accepted the package and recorded custody.
+Deployment `appgdep_6a781d231ee08191a7d506389be1676b` succeeded with environment
 revision 19 at `https://compare.ausenergyassessments.com`.
 
 The active production snapshot contains exactly 75,492 Public Visible rows:
@@ -119,23 +130,20 @@ seconds CPU time. The current projection still contains 75,492 rows and the UI
 reports snapshot prefix `78853aad-a77...`; the full snapshot identifier is not
 claimed. The earlier pre-optimization HTTP 503 was the expected fail-closed
 result at the resource boundary. Subsequent product GET requests returned HTTP
-200. Exact source `1d3abe172e4eb2fa006fab639233cda49a6d37d4` passed the complete
-`npm.cmd run validate` gate, production build and Sites server-bundle audit. Its
-75,492-row regression completed in 3.724 seconds across 38 bounded batches,
-carried forward 75,491 unchanged rows, reset one changed row and retained one
-history delta. Post-deployment health returned HTTP 200 and the subsequent
-three-minute Worker error window contained no error events.
+200. Exact version-297 source `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+is pushed to GitHub and the Sites managed source branch. Its deployment retained
+the sealed 56-of-216 calculation coverage result and active 75,492-row registry
+projection.
 
-Signed-in administrator VEU QA exposed the plain-English Part 6 scenario, then
-returned 34 brands and 172 Daikin models. Signed-in administrator and trade PDRS
-HVAC QA each returned 118 brands. Signed-in trade SRES QA for the
-at-least-700-litre scenario returned 16 brands. Signed-in BESS1 QA exposed the
-CEC picker without a per-trade licence or credential prompt, but no accepted
-snapshot exists because the three central Sites CEC credentials are missing.
-BESS1 and BESS2 therefore remain not live-active, although both guided selectors
-are wired to consume an accepted licensed snapshot once active. Certificate
-actions remained disabled; no certificate was created, issued, submitted,
-traded or settled.
+Signed-in trade QA used future date 17 August 2026. A 6.6 kW SRES solar-PV quote
+for postcode 3000 returned 39 STCs. A VEU Activity 6 scenario (xi) quote for ERS
+Tech model `ERS-AC24KWH-G`, with 3.5 kW indoor heating and cooling capacities,
+returned 2 VEECs. Consumer-fact-sheet and disposal questions were absent,
+registry refresh was absent and calculation details were collapsed. The
+signed-in administrator calculator loaded at release 297. BESS1 and BESS2 remain
+not live-active until the central licensed CEC snapshot is available.
+Certificate actions remained disabled; no certificate was created, issued,
+submitted, traded or settled.
 
 ## Federal program register
 
@@ -285,10 +293,9 @@ The exact `partial_estimate_available` messages are:
 - `1`: Exact estimates are available for 1C small systems and supported 1D
   systems. The 1C medium-system Bs/Be conflict between official sources remains
   fail-closed.
-- `6`: Exact estimates are available for supported single-split systems.
-  Multi-split and packaged systems remain fail-closed until the installed
-  indoor/outdoor quantities and same-manufacturer evidence are represented
-  exactly.
+- `6`: Exact estimates are available for supported single-split and multi-split
+  systems. Multi-split estimates use the approved outdoor unit plus the total
+  connected indoor-unit capacities; packaged systems remain fail-closed.
 - `31`: Exact estimates are available for 31A motors selected from the
   installation-date GEMS register. Activity 31B remains fail-closed until an
   exact VEU-approved product contract is available.
@@ -320,9 +327,15 @@ The remaining VEU boundaries are explicit:
   until an accepted licensed snapshot exists; BESS3 and BESS4 still require
   exact governed inverter-output authority, and BESS5 still requires the Scheme
   Administrator's exact recording method;
+- packaged Part 6 systems remain unavailable until governed packaged-system and
+  multi-indoor-unit bundle selection is implemented;
 - Activity 27's AEMO load-table alternative is not enabled, the Part 34 J6
   refurbishment branch fails closed, and PBA and other project-based activities
   remain governed project methods rather than deemed calculators.
+
+Across the national catalogue, product-backed pathways without a lawful
+supported source connector, including current TESSA-backed families, remain
+unavailable rather than accepting caller-entered substitutes.
 
 Current deemed-activity inventory:
 
