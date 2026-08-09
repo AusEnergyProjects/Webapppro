@@ -145,10 +145,13 @@ This is the only current implementation and release-status document. The [dated 
 | Historical calculator usability and product-authority application source | `ca3d84a497258426c7ab34c87e8059df1cba2a27` on `codex/sites-custom-domain-migration` | Exact executable source for historical Sites version 300 and TESSA-first governed refresh ordering |
 | Historical Sites version 300 release archive identity | `.openai/site-release-ca3d84a.tar.gz` | 8,175,111 bytes; SHA-256 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`; 398 entries; all 126 migrations |
 | Historical Sites version 300 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e` | Exact Sites version 300 built from `ca3d84a497258426c7ab34c87e8059df1cba2a27`; 384 files; 33,607,680 bytes; content hash `sha256:29ca942f7801e5657cff10f4dd2e1e5dde14fc9386f19fb51f6691703c58db73`; deployment `appgdep_6a7875602838819182dc5ba7dec6366b` succeeded with environment revision 19 |
-| Current immersive customer journey application source | `bc4096d61cb493e819555d72113d0c77d45a1653` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch and Sites internal `main` for milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` |
-| Current release archive identity | `.openai/site-release-bc4096d.tar.gz` | 9,823,592 compressed bytes; SHA-256 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`; 399 tar entries; 385 files; all 126 migrations |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e` | Exact Sites version 301 built from `bc4096d61cb493e819555d72113d0c77d45a1653`; 385 files; 35,328,000 bytes; content hash `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b` |
-| Current executable application identity | Sites version 301 from `bc4096d61cb493e819555d72113d0c77d45a1653` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7898485dd48191acb31466092b5fe8` succeeded; environment revision 19; provider identity `info294029--aea-energy-comparison` |
+| Historical immersive customer journey application source | `bc4096d61cb493e819555d72113d0c77d45a1653` on `codex/sites-custom-domain-migration` | Exact executable source for milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49`; historical Sites version 301 |
+| Historical Sites version 301 release archive identity | `.openai/site-release-bc4096d.tar.gz` | 9,823,592 compressed bytes; SHA-256 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`; 399 tar entries; 385 files; all 126 migrations |
+| Historical Sites version 301 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e` | Exact Sites version 301 built from `bc4096d61cb493e819555d72113d0c77d45a1653`; 385 files; 35,328,000 bytes; content hash `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`; deployment `appgdep_6a7898485dd48191acb31466092b5fe8` succeeded with environment revision 19 |
+| Current immersive plan action handoff application source | `f797ab7ee447bc31d66b5760f6613e46f107e97d` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch and Sites internal `main` for milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` |
+| Current release archive identity | `.openai/site-release-f797ab7.tar.gz` | 11,484,967 compressed bytes; SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`; 402 tar entries; all 126 migrations |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd` | Exact Sites version 302 built from `f797ab7ee447bc31d66b5760f6613e46f107e97d`; 388 files; 37,048,320 bytes; content hash `sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300` |
+| Current executable application identity | Sites version 302 from `f797ab7ee447bc31d66b5760f6613e46f107e97d` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a790aefc05c8191b4a03f72181f7031` succeeded; environment revision 19; provider identity `info294029--aea-energy-comparison` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -164,17 +167,82 @@ version 297 from exact simplified quote-calculator source
 from exact application source `c9fb34115209c0ea0a1fc02ee2095250458c256f`
 is historical. Sites version 300 from exact corrective source
 `ca3d84a497258426c7ab34c87e8059df1cba2a27` is historical. Sites version 301
-from exact source `bc4096d61cb493e819555d72113d0c77d45a1653` is current. Signed-out
-public QA and the static trade-route boundary are verified below. Signed-in
-v301 dashboard QA is not claimed. GEMS-backed calculators remain fail-closed
-after an unresolved reviewed official-row decrease. Certificate creation,
-submission, trading and settlement remain disabled.
+from exact source `bc4096d61cb493e819555d72113d0c77d45a1653` is historical. Sites version
+302 from exact source `f797ab7ee447bc31d66b5760f6613e46f107e97d` is current. Signed-out
+desktop and mobile customer-plan QA is verified below. GEMS-backed calculators
+remain fail-closed after an unresolved reviewed official-row decrease.
+Certificate creation, submission, trading and settlement remain disabled.
 
-## Current immersive customer journey and mixed water-heater quote release
+## Current immersive plan action handoff release
 
-Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is released from exact executable
-application commit `bc4096d61cb493e819555d72113d0c77d45a1653`, pushed to the
-GitHub branch and Sites internal `main`, as Sites version 301. Saved version
+Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is released from exact
+executable application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`,
+pushed to the GitHub branch and Sites internal `main`, as Sites version 302.
+Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
+has content hash
+`sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`
+across 388 stored files and 37,048,320 stored bytes. Deployment
+`appgdep_6a790aefc05c8191b4a03f72181f7031` succeeded with environment revision
+19 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`.
+
+Local archive `.openai/site-release-f797ab7.tar.gz` is 11,484,967 compressed
+bytes with SHA-256
+`291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`,
+402 tar entries and all 126 migrations.
+
+The generated home image is visible on the public home and planner. The semantic
+four-stage journey adds progressive CSS 3D and pointer depth without WebGL,
+canvas or video and has a reduced-motion path. The draught intake separates
+`Open wall vents` from `Open or unused chimney or flue`; the duplicate
+`Heat-pump space heating` choice is absent. Precise legacy heat-pump-space values
+normalise into reverse-cycle air conditioning rather than creating a second
+current heating category.
+
+Plan results put `Start here` and answer-specific `Quick wins` before the longer
+roadmap. Advice is conditional and can cover filters and app controls, layers or
+electric throws, ventilation and moisture, hot-water routines, appliance timing,
+solar load shifting, EV charging, fans and shading without presenting irrelevant
+systems as installed.
+
+The public result provides a no-account basic enquiry and a separate `Create free
+account` action. The enquiry accepts only name, email and/or phone, postcode, one
+interest, an optional message and explicit consent. It does not transmit plan
+answers, NMI, interval data, usage, budget, address or account data. Enquiries
+remain `hold_for_authority_review` with `autoSend: false`. Timing alone no longer
+filters a valid request, honeypot traffic remains filtered and the client cannot
+describe a filtered request as received. No lead was submitted during release
+QA.
+
+Shared navigation and result widths were corrected without changing the static
+trade workspace. No customer-shareable rebate receipt was added. The Google Apps
+Script relay source was updated for the home-upgrade enquiry, but its hosted
+Apps Script deployment remains unverified.
+
+Full `npm.cmd run validate` passed before deployment. Independent release review
+found no remaining P0 or P1 issue.
+
+Desktop live QA measured equal 1,407-pixel client and scroll widths with all
+navigation destinations visible. The decoded home image was 1,253 pixels wide,
+the `/plan` image was 1,313 pixels wide and the semantic flow was present. The
+result showed `Start here`, `Quick wins`, the no-account basic enquiry and the
+distinct account action. Live choices showed separate `Open wall vents` and
+`Open or unused chimney or flue` options and no `Heat-pump space heating`
+option.
+
+At a 390-pixel mobile override, client and scroll widths were both 375 pixels,
+the form was 297.6 pixels wide, navigation was 325.6 pixels wide and the image
+remained visible at 1,055 pixels intrinsic width. The browser showed no warnings
+or errors, and the viewport was reset after QA.
+
+## Prior immersive customer journey and mixed water-heater quote release
+
+Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is historical and was released
+from exact executable application commit
+`bc4096d61cb493e819555d72113d0c77d45a1653`, pushed to the GitHub branch and
+Sites internal `main`, as Sites version 301. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
 has content hash
 `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`
@@ -1674,7 +1742,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 301 is:
+The current verified deployed topology for Sites version 302 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

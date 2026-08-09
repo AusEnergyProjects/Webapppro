@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 9 August 2026
+Last reconciled: 10 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -1832,7 +1832,7 @@ effective-date and compliance boundaries.
 - The later GEMS refresh failed closed on the reviewed decrease described above.
   No quote, invoice, certificate or customer record was written.
 
-## Released milestone: AEA-IMMERSIVE-CUSTOMER-JOURNEY-49
+## Prior released milestone: AEA-IMMERSIVE-CUSTOMER-JOURNEY-49
 
 Status: exact executable application commit
 `bc4096d61cb493e819555d72113d0c77d45a1653` is pushed to the GitHub branch and
@@ -1887,6 +1887,74 @@ heater estimates to mixed approved products without weakening compliance.
   animation. Signed-in dashboard QA was unavailable because both live browser
   sessions presented the sign-in boundary; no signed-in v301 QA is claimed.
 
+## Released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
+
+Status: exact executable application commit
+`f797ab7ee447bc31d66b5760f6613e46f107e97d` is pushed to the GitHub branch and
+Sites internal `main`, and is released as Sites version 302 through deployment
+`appgdep_6a790aefc05c8191b4a03f72181f7031` with environment revision 19 at
+`https://compare.ausenergyassessments.com`. The Sites deployment URL is
+`https://aea-energy-comparison.info294029.chatgpt.site`. Sites version 301 is
+historical.
+
+### Outcome
+
+Carry the public customer from a guided home journey into a useful, personalised
+plan and an obvious next action, while keeping the contact handoff minimal,
+consented and independent from account creation.
+
+### Released scope
+
+- Put the generated home image on the public home and planner and connect it to a
+  semantic four-stage home journey. Progressive CSS 3D and pointer depth add
+  spatial movement without WebGL, canvas or video, and reduced-motion users get
+  a stable presentation.
+- Separate `Open wall vents` from `Open or unused chimney or flue`, remove the
+  duplicate `Heat-pump space heating` choice and safely normalise the precise
+  legacy heating value into reverse-cycle air conditioning.
+- Put `Start here` and answer-specific `Quick wins` before the longer roadmap.
+  Recommendations cover only relevant actions such as filter and app controls,
+  layers or electric throws, ventilation and moisture, hot-water routines,
+  appliance timing, solar load shifting, EV charging, fans and shading.
+- Provide a no-account basic enquiry beside a distinct `Create free account`
+  action. The public enquiry accepts only name, email and/or phone, postcode, one
+  interest, an optional message and explicit consent. It does not send plan
+  answers, NMI, interval data, usage, budget, address or account data.
+- Keep public enquiries under `hold_for_authority_review` with `autoSend: false`.
+  Remove the timing-only false-success path, retain honeypot filtering and ensure
+  the client cannot describe a filtered request as received.
+- Correct shared navigation and result widths so the header, image, roadmap and
+  enquiry remain usable without horizontal overflow on desktop and mobile. The
+  professional trade workspace remains static.
+- Update the Google Apps Script relay source for the home-upgrade enquiry. The
+  hosted Apps Script deployment remains unverified and is not claimed current.
+- Do not add a customer-shareable rebate receipt.
+
+### Release and validation evidence
+
+- Local archive `.openai/site-release-f797ab7.tar.gz` is 11,484,967 compressed
+  bytes with SHA-256
+  `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`,
+  402 tar entries and all 126 migrations.
+- Saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
+  has Sites content hash
+  `sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`.
+  Sites stored 37,048,320 bytes across 388 files. Provider identity is
+  `info294029--aea-energy-comparison`.
+- Full `npm.cmd run validate` passed before deployment. Independent release
+  review found no remaining P0 or P1 issue.
+- Desktop live QA measured equal 1,407-pixel client and scroll widths with all
+  navigation visible. The decoded home image was 1,253 pixels wide and the
+  `/plan` image was 1,313 pixels wide. The result exposed `Start here`, `Quick
+  wins`, the no-account enquiry and the distinct account action.
+- Live taxonomy QA showed separate `Open wall vents` and `Open or unused chimney
+  or flue` choices and no `Heat-pump space heating` choice.
+- At a 390-pixel mobile override, client and scroll widths were both 375 pixels;
+  the form was 297.6 pixels wide and navigation was 325.6 pixels wide. The
+  browser showed no warnings or errors. No lead was submitted during QA and the
+  viewport was reset afterward.
+
 ### Controlled source limit
 
 GEMS remains fail-closed. The accepted commercial-refrigerator artifact has
@@ -1899,7 +1967,7 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
 ## Next five logical product steps
 
-1. Obtain authorised read-only R2 bytes and exact-diff the held GEMS 7,500-to-7,499 change.
+1. Obtain authorised read-only R2 bytes and exact-diff held GEMS 7,500-to-7,499 change.
 2. Connect planner Start here actions into more exact prefilled comparator, calculator and guide handoffs.
 3. Extend governed mixed-product contracts to other multi-component installations where official formulas require it.
 4. Run accessibility and usability validation with real households and verified trades, then fix measured friction.

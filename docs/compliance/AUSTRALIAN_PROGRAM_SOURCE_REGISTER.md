@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 301, every GEMS-backed pathway fails closed while the
+availability. In version 302, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,23 +72,42 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is released from exact application
-commit `bc4096d61cb493e819555d72113d0c77d45a1653`, pushed to the GitHub branch and
-Sites internal `main`, as Sites version 301 through deployment
-`appgdep_6a7898485dd48191acb31466092b5fe8` with environment revision 19 at
-`https://compare.ausenergyassessments.com`. The semantic lightweight CSS and HTML
-spatial public home uses no canvas, WebGL or video, respects reduced-motion
-preferences and is responsive across desktop, laptop and mobile layouts. The
-planner is task-first, results provide a clear `Start here` action and the TLink
-logo links directly to the trade dashboard. The trade route remains static and
-does not mount public animation.
+Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is released from exact
+application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`, pushed to the GitHub
+branch and Sites internal `main`, as Sites version 302 through deployment
+`appgdep_6a790aefc05c8191b4a03f72181f7031` with environment revision 19 at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`.
 
-Quote mode supports mixed exact approved SRES solar-water-heater and
-air-source-heat-pump rows and VEU 1C, 1D, 3C and 3D rows, with up to 10 systems
-in one estimate. Strict compliance remains fail-closed at one unit. Quote
-flexibility does not create certificate authority or relax exact product,
-effective-date or formula validation. No customer-shareable rebate receipt was
-added.
+The generated home image is visible on the public home and planner. A semantic
+four-stage journey uses progressive CSS 3D and pointer depth without WebGL,
+canvas or video and respects reduced-motion preferences. Shared navigation and
+result widths are responsive without changing the static trade workspace.
+
+The planner separates `Open wall vents` from `Open or unused chimney or flue`
+and has no duplicate `Heat-pump space heating` option. Results expose `Start
+here`, answer-specific `Quick wins`, a no-account basic enquiry and a distinct
+`Create free account` action. Quick wins are conditional on the answers and can
+cover filters and controls, layers and electric throws, ventilation and
+moisture, hot-water routines, appliance timing, solar load shifting, EV
+charging, fans and shading.
+
+The public enquiry accepts only name, email and/or phone, postcode, one interest,
+an optional message and explicit consent. It does not send plan answers, NMI,
+interval data, usage, budget, address or account data. It remains
+`hold_for_authority_review` with `autoSend: false`. Timing alone no longer
+filters a valid request, and filtered traffic cannot be reported to the customer
+as received. The Google Apps Script relay source was updated, but its hosted
+deployment remains unverified. No lead was submitted during QA and no
+customer-shareable rebate receipt was added.
+
+Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is historical Sites version 301
+from exact application commit `bc4096d61cb493e819555d72113d0c77d45a1653`
+through deployment `appgdep_6a7898485dd48191acb31466092b5fe8`. It introduced
+the semantic public journey and mixed exact approved SRES
+solar-water-heater, air-source-heat-pump and VEU 1C, 1D, 3C and 3D quote rows,
+with up to 10 systems in one estimate. Strict compliance remains fail-closed at
+one unit and quote flexibility grants no certificate authority.
 
 Milestone `AEA-CALCULATOR-USABILITY-AUTHORITY-48` is historical Sites version
 300 from exact application commit
@@ -120,20 +139,27 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The Sites version 301 saved-version identity is
+The Sites version 302 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
+with content hash
+`sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`
+across 388 stored files and 37,048,320 stored bytes. Local archive
+`.openai/site-release-f797ab7.tar.gz` is 11,484,967 compressed bytes with
+SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`,
+402 tar entries and all 126 migrations. Provider identity is
+`info294029--aea-energy-comparison`.
+
+Full `npm.cmd run validate` passed before deployment. Independent release review
+found no remaining P0 or P1 issue.
+
+Historical Sites version 301 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
 with content hash
 `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`
 across 385 stored files and 35,328,000 stored bytes. Local archive
 `.openai/site-release-bc4096d.tar.gz` is 9,823,592 compressed bytes with SHA-256
 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`,
-399 tar entries, 385 files and all 126 migrations. Provider identity is
-`info294029--aea-energy-comparison`.
-
-Full validation passed typecheck, lint, 32 of 32 integration tests, 1,803 main
-tests with 1,793 passed, 10 intentionally skipped and 0 failed, all 126
-migrations, the customer-plan PDF audit, the production build and the Sites
-audit. Independent focused final validation passed 115 of 115.
+399 tar entries, 385 files and all 126 migrations.
 
 Historical Sites version 300 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_e084d0c2568c81918bdcf23adc78ad5e`
@@ -144,12 +170,17 @@ across 384 files and 33,607,680 bytes. Local archive
 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
 398 entries and all 126 migrations.
 
-Signed-out version-301 live QA verified the public home, `/plan`, the result
-`Start here` action and `/calculator`. Native future date `2026-09-03` persisted
-and the live solar-PV result was 39 STCs. The browser console showed no warnings
-or errors. The live trade route stayed static and contained no public animation.
-Both live browser sessions presented the sign-in boundary, so no signed-in v301
-dashboard QA is claimed.
+Signed-out version-302 desktop QA measured equal 1,407-pixel client and scroll
+widths with all navigation visible. The decoded home image was 1,253 pixels wide
+and the `/plan` image was 1,313 pixels wide. The semantic flow, `Start here`,
+`Quick wins`, no-account enquiry and distinct account action were present. Live
+choices separated `Open wall vents` and `Open or unused chimney or flue` and did
+not include `Heat-pump space heating`.
+
+At a 390-pixel mobile override, client and scroll widths were both 375 pixels,
+the form was 297.6 pixels wide, navigation was 325.6 pixels wide and the image
+remained visible at 1,055 pixels intrinsic width. The browser showed no warnings
+or errors and the viewport was reset afterward.
 
 Historical version-300 signed-in trade QA returned 39 STCs for a 9 August 2026,
 postcode-3000, 6.6 kW small-scale solar PV estimate and verified VEU 1C repeated
@@ -220,7 +251,7 @@ Current product evidence is deliberately split by authority and permission:
   parsed 746 live
   source rows, comprising 663 `Active` and 83 `Cancelled`, under source SHA-256
   `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0` and is
-  activated and current in version 301;
+  remains activated and current in version 302;
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and

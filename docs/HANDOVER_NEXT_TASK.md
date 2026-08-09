@@ -1,14 +1,14 @@
 # Next task handover
 
-Status: `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` released and live
+Status: `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` released and live
 
 Prepared: 10 August 2026
 
-Milestone ID: `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49`
+Milestone ID: `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `ca3d84a497258426c7ab34c87e8059df1cba2a27`
+Previous production application source: `bc4096d61cb493e819555d72113d0c77d45a1653`
 
 Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
 
@@ -20,19 +20,21 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Current production source: `bc4096d61cb493e819555d72113d0c77d45a1653`
+Current production source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
 
-Released application source: `bc4096d61cb493e819555d72113d0c77d45a1653`
+Released application source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
 
-Current production: Sites version 301 from application commit `bc4096d61cb493e819555d72113d0c77d45a1653`
+Current production: Sites version 302 from application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
 
-Deployment: `appgdep_6a7898485dd48191acb31466092b5fe8`
+Deployment: `appgdep_6a790aefc05c8191b4a03f72181f7031`
 
-Release archive: `.openai/site-release-bc4096d.tar.gz`, 9,823,592 compressed bytes, SHA-256 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`, 399 tar entries, 385 files and 126 migrations
+Release archive: `.openai/site-release-f797ab7.tar.gz`, 11,484,967 compressed bytes, SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`, 402 tar entries and 126 migrations
 
 Production URL: `https://compare.ausenergyassessments.com`
+
+Sites deployment URL: `https://aea-energy-comparison.info294029.chatgpt.site`
 
 Internal compliance URL: `https://compare.ausenergyassessments.com/creditex/compliance`
 
@@ -40,7 +42,80 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 19
 
-## Released milestone: AEA-IMMERSIVE-CUSTOMER-JOURNEY-49
+## Released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
+
+Status: exact executable application commit
+`f797ab7ee447bc31d66b5760f6613e46f107e97d` is pushed to the GitHub branch and
+Sites internal `main`, and released as Sites version 302 through deployment
+`appgdep_6a790aefc05c8191b4a03f72181f7031` with environment revision 19 at
+`https://compare.ausenergyassessments.com`.
+
+The saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
+with Sites content hash
+`sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`.
+Sites stored 37,048,320 bytes across 388 files under provider identity
+`info294029--aea-energy-comparison`. Local archive
+`.openai/site-release-f797ab7.tar.gz` is 11,484,967 compressed bytes with
+SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`,
+402 tar entries and all 126 migrations.
+
+### Released outcome
+
+Carry the public customer through a visible home journey into a useful,
+personalised plan and an obvious next action without forcing account creation or
+collecting the plan as part of a basic enquiry.
+
+### Released capability
+
+- The generated home image is visible on the public home and planner. A semantic
+  four-stage journey adds progressive CSS 3D and pointer depth without WebGL,
+  canvas or video and respects reduced-motion preferences.
+- Draught intake separates `Open wall vents` from `Open or unused chimney or
+  flue`. The duplicate `Heat-pump space heating` option is removed and the exact
+  legacy value safely normalises into reverse-cycle air conditioning.
+- Results put `Start here` and answer-specific `Quick wins` before the longer
+  roadmap. Relevant advice covers filters and controls, layers and electric
+  throws, ventilation and moisture, hot-water routines, appliance timing, solar
+  load shifting, EV charging, fans and shading.
+- A no-account basic enquiry sits beside a separate `Create free account`
+  action. It accepts only name, email and/or phone, postcode, one interest, an
+  optional message and explicit consent. It does not transmit plan answers, NMI,
+  interval data, usage, budget, address or account data.
+- Public enquiries remain `hold_for_authority_review` with `autoSend: false`.
+  Timing alone no longer discards a valid request, honeypot traffic remains
+  filtered and the client cannot label a filtered request as received.
+- Shared navigation, result, roadmap and form widths are responsive without
+  horizontal overflow. The trade workspace remains static.
+- The Google Apps Script relay source recognises the home-upgrade enquiry, but
+  its hosted deployment remains unverified.
+- No customer-shareable rebate receipt was added.
+
+### Validation and live QA
+
+- Full `npm.cmd run validate` passed before deployment. Independent release
+  review found no remaining P0 or P1 issue.
+- Desktop live QA measured equal 1,407-pixel client and scroll widths with every
+  navigation destination visible. The decoded home image was 1,253 pixels wide;
+  the `/plan` image was 1,313 pixels wide; and the plan result showed `Start
+  here`, `Quick wins`, the no-account enquiry and the distinct account action.
+- Live planner choices showed separate `Open wall vents` and `Open or unused
+  chimney or flue` options and no `Heat-pump space heating` option.
+- At a 390-pixel mobile override, client and scroll widths were both 375 pixels,
+  the form was 297.6 pixels wide and navigation was 325.6 pixels wide. The image
+  remained visible at 1,055 pixels intrinsic width. The browser showed no
+  warnings or errors. No lead was submitted, and the viewport was reset.
+
+### Exact remaining source and delivery limits
+
+- GEMS remains fail-closed pending authorised read-only R2 access and an exact
+  comparison of the held 7,500-to-7,499 row change.
+- The Apps Script relay source was updated, but the hosted Apps Script deployment
+  was not verified in this release.
+- The public enquiry is an authority-review handoff, not automatic installer
+  dispatch, certificate creation, submission, trading or settlement authority.
+
+## Previous released milestone: AEA-IMMERSIVE-CUSTOMER-JOURNEY-49
 
 Status: exact executable application commit
 `bc4096d61cb493e819555d72113d0c77d45a1653` is pushed to the GitHub branch and
@@ -517,7 +592,7 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Obtain authorised read-only R2 bytes and exact-diff the held GEMS 7,500-to-7,499 change.
+1. Obtain authorised read-only R2 bytes and exact-diff held GEMS 7,500-to-7,499 change.
 2. Connect planner Start here actions into more exact prefilled comparator, calculator and guide handoffs.
 3. Extend governed mixed-product contracts to other multi-component installations where official formulas require it.
 4. Run accessibility and usability validation with real households and verified trades, then fix measured friction.
