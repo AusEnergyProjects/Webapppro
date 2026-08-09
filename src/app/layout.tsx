@@ -14,13 +14,13 @@ export const metadata: Metadata = {
     description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
     type: "website",
     siteName: "Australian Energy Assessments",
-    images: [{ url: "/aea-home-energy-plan-og.png", width: 1736, height: 907, alt: "One clear home energy plan with coordinated solar, battery, efficient appliances and EV charging" }],
+    images: [{ url: "/aea-home-energy-plan-og-v2.png", width: 1731, height: 909, alt: "An immersive home energy plan connecting solar, battery, efficient hot water, heating, cooling and EV charging" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "One Clear Home Energy Plan",
     description: "Build a private roadmap, compare electricity and gas, understand upgrades and prepare a clear project scope.",
-    images: ["/aea-home-energy-plan-og.png"],
+    images: ["/aea-home-energy-plan-og-v2.png"],
   },
   manifest: "/manifest.webmanifest",
   icons: {

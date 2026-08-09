@@ -271,10 +271,12 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
       html,
       /<input type="date" min="2026-06-30" required="" value="[^"]+"/,
     );
-    assert.match(html, /Number of identical systems/);
+    assert.match(html, /Approved systems at this property/);
+    assert.match(html, /Systems using this model/);
+    assert.match(html, /Add another approved model/);
     assert.match(html, /max="10"/);
     assert.doesNotMatch(html, /type="date"[^>]*max=/);
-    assert.match(html, /<button type="submit">Calculate rebate estimate<\/button>/);
+    assert.match(html, /<button type="submit" disabled="">Calculate rebate estimate<\/button>/);
     assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
     assert.doesNotMatch(
       html,
@@ -291,6 +293,41 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
 
   assert.match(adminHtml, /Refresh VEU-approved products/);
   assert.doesNotMatch(tradeHtml, /Refresh VEU-approved products/);
+});
+
+test("VEU mixed water-heater drafts require every approved model and cap the property at ten systems", () => {
+  const product = veuProduct({ productKind: "veu_water_heater" });
+  assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
+    { id: "one", unitQuantity: "2", product },
+    { id: "two", unitQuantity: "3", product },
+  ]), { total: 5, complete: true });
+  assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
+    { id: "one", unitQuantity: "10", product },
+    { id: "two", unitQuantity: "1", product },
+  ]), { total: 11, complete: false });
+  assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
+    { id: "one", unitQuantity: "2", product: null },
+  ]), { total: 2, complete: false });
+
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
+    "utf8",
+  );
+  assert.match(source, /waterHeaterItems: waterHeaterItems\.map/);
+  assert.match(source, /selectedProductId: item\.product\?\.id/);
+  assert.match(source, /delete visibleInputs\.unit_quantity/);
+});
+
+test("VEU exact half-certificate ties are visibly labelled as unrounded", () => {
+  const source = fs.readFileSync(
+    "src/components/CreditexGovernedProgramCalculator.tsx",
+    "utf8",
+  );
+  assert.match(
+    source,
+    /Unrounded estimate, regulator confirmation required/,
+  );
+  assert.match(source, /unrounded`/);
 });
 
 test("admin refresh selects only the program-specific governed registry", () => {

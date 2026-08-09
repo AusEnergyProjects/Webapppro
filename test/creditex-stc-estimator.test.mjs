@@ -9,7 +9,9 @@ import {
   estimateCreditexStcs,
 } from "../src/lib/creditex-stc-estimator.ts";
 import {
+  creditexCombineRegisteredWaterHeaterQuotes,
   creditexRepeatRegisteredWaterHeaterQuote,
+  creditexSresWaterHeaterQuoteItems,
   estimateCreditexSresQuote,
 } from "../src/lib/creditex-sres-calculator-estimator.ts";
 import {
@@ -158,6 +160,93 @@ test("registered water-heater quote totals retain an explicit per-system result"
   for (const quantity of ["0", "11", "1.5", 2]) {
     assert.throws(
       () => creditexRepeatRegisteredWaterHeaterQuote(perUnit, quantity),
+      expectedError("STC_REQUEST_INVALID"),
+    );
+  }
+});
+
+test("mixed registered water-heater quotes preserve every approved model and property total", () => {
+  const firstPerUnit = estimateCreditexStcs({
+    technology: "air_source_heat_pump",
+    installationDate: "2026-07-22",
+    registeredTenYearStcs: "43",
+  });
+  const secondPerUnit = estimateCreditexStcs({
+    technology: "air_source_heat_pump",
+    installationDate: "2026-07-22",
+    registeredTenYearStcs: "51",
+  });
+  const resolved = (estimate, suffix, sourceRecordKey) => ({
+    ...estimate,
+    resolution: {
+      postcode: "3000",
+      zone: 4,
+      registryCode: "cer-sres-products",
+      snapshotId: "snapshot-1",
+      registrySourceSha256: "a".repeat(64),
+      registryLastCheckedAt: "2026-08-10T00:00:00.000Z",
+      sourceRecordKey,
+      brand: `Brand ${suffix}`,
+      model: `Model ${suffix}`,
+      eligibleFrom: "2026-01-01",
+      eligibleTo: "",
+    },
+    resolvedReceiptHash: `sha256:${suffix.repeat(64)}`,
+  });
+  const first = creditexRepeatRegisteredWaterHeaterQuote(
+    resolved(firstPerUnit, "b", "cer-ashp:101"),
+    "2",
+  );
+  const second = creditexRepeatRegisteredWaterHeaterQuote(
+    resolved(secondPerUnit, "c", "cer-ashp:202"),
+    "1",
+  );
+  const property = creditexCombineRegisteredWaterHeaterQuotes([
+    { productKey: "cer-ashp:101", unitQuantity: "2", estimate: first },
+    { productKey: "cer-ashp:202", unitQuantity: "1", estimate: second },
+  ]);
+
+  assert.equal(property.unitQuantity, "3");
+  assert.deepEqual(property.output, { quantity: "67", unit: "STC" });
+  assert.equal(property.waterHeaterItems.length, 2);
+  assert.equal(property.waterHeaterItems[0].perUnitOutput.quantity, "21");
+  assert.equal(property.waterHeaterItems[0].output.quantity, "42");
+  assert.equal(property.waterHeaterItems[1].perUnitOutput.quantity, "25");
+  assert.equal(property.waterHeaterItems[1].output.quantity, "25");
+  assert.equal(property.resolution.waterHeaterItems[1].model, "Model c");
+  assert.equal(property.trace.at(-1).key, "property_total");
+  assert.match(property.receiptHash, /^sha256:[a-f0-9]{64}$/);
+  assert.match(property.resolvedReceiptHash, /^sha256:[a-f0-9]{64}$/);
+
+  assert.throws(
+    () => creditexCombineRegisteredWaterHeaterQuotes([
+      { productKey: "cer-ashp:101", unitQuantity: "10", estimate: first },
+      { productKey: "cer-ashp:202", unitQuantity: "1", estimate: second },
+    ]),
+    expectedError("STC_REQUEST_INVALID"),
+  );
+});
+
+test("mixed registered water-heater request lines accept exact products and cap total units", () => {
+  assert.deepEqual(creditexSresWaterHeaterQuoteItems([
+    { productKey: "cer-ashp:101", unitQuantity: "2" },
+    { productKey: "cer-ashp:202", unitQuantity: "3" },
+  ]), [
+    { productKey: "cer-ashp:101", unitQuantity: "2" },
+    { productKey: "cer-ashp:202", unitQuantity: "3" },
+  ]);
+  for (const items of [
+    [],
+    [{ productKey: "cer-ashp:101", unitQuantity: "11" }],
+    [
+      { productKey: "cer-ashp:101", unitQuantity: "6" },
+      { productKey: "cer-ashp:202", unitQuantity: "5" },
+    ],
+    [{ productKey: " cer-ashp:101", unitQuantity: "1" }],
+    [{ productKey: "cer-ashp:101", unitQuantity: "1", callerStcs: "999" }],
+  ]) {
+    assert.throws(
+      () => creditexSresWaterHeaterQuoteItems(items),
       expectedError("STC_REQUEST_INVALID"),
     );
   }

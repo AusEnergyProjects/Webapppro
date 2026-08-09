@@ -8,6 +8,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
+const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
@@ -29,7 +30,7 @@ const layout = read("../src/app/layout.tsx");
 const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
-const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og.png");
+const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
   assert.match(
@@ -63,7 +64,8 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*TLink login/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open TLink trade login"/);
+  assert.match(chrome, /TLinkMark className="site-tlink-mark"/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
   assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
@@ -175,17 +177,22 @@ test("number fields avoid browser-specific black stepper controls", () => {
   assert.match(styles, /body input\[type="number"\]::\-webkit-inner-spin-button,[\s\S]*\-webkit-appearance: none/);
 });
 
-test("homepage uses a lightweight spatial home scene with a reduced-motion boundary", () => {
-  assert.match(guide, /start-hero-visual start-spatial-home/);
-  assert.match(guide, /start-home-model/);
+test("homepage uses an accessible lightweight spatial journey with a reduced-motion boundary", () => {
+  assert.match(guide, /CustomerJourneyScene/);
+  assert.match(customerScene, /aria-labelledby="customer-journey-title"/);
+  assert.match(customerScene, /Understand/);
+  assert.match(customerScene, /Prioritise/);
+  assert.match(customerScene, /Take action/);
+  assert.match(customerScene, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(customerScene, /<canvas|WebGL|from ["']three["']/);
   assert.match(styles, /@supports \(animation-timeline: view\(\)\)/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.start-home-model/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.customer-scene-home/);
 });
 
 test("social sharing metadata uses one launch-ready AEA energy card", () => {
   assert.match(layout, /openGraph:/);
   assert.match(layout, /twitter:/);
-  assert.match(layout, /\/aea-home-energy-plan-og\.png/);
+  assert.match(layout, /\/aea-home-energy-plan-og-v2\.png/);
   assert.equal(fs.existsSync(socialAsset), true);
   assert.ok(fs.statSync(socialAsset).size > 100_000);
   assert.ok(fs.statSync(socialAsset).size < 3_000_000);
@@ -262,6 +269,10 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
   assert.match(planner, /Skip remaining home details/);
   assert.match(planner, /role="progressbar"/);
+  assert.match(planner, /className="planner-stage-nav" aria-label="Planning stages"/);
+  assert.match(planner, /className="planner-next-move"/);
+  assert.match(planner, /Start here/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-stage-nav \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); min-width: 0; \}/);
   assert.match(planner, /initialPlannerStep\(initialSelection\)/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);

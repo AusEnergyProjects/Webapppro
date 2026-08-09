@@ -201,7 +201,10 @@ test("strict SRES paths fail closed while quote mode uses the bounded quote esti
   assert.match(route, /estimateCreditexSresQuote\(database, body\)/);
   assert.match(ui, /estimatePurpose: "quote"/);
   assert.match(ui, /productKey: productCascade\.productKey/);
-  assert.match(ui, /disabled=\{estimateBusy\}/);
+  assert.match(
+    ui,
+    /disabled=\{[\s\S]*estimateBusy[\s\S]*!productCascade\.productKey[\s\S]*!waterHeaterUnitTotal\.complete/,
+  );
   assert.doesNotMatch(ui, /Official product evidence required/);
 });
 

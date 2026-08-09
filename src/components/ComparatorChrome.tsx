@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { ReactNode } from "react";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
+import { TLinkMark } from "@/components/TLinkChrome";
 
 export function BrandBar() {
   return (
@@ -51,7 +52,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
-  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions"><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">●</span> Account</a><a className="site-tlink-link" href="/direct-trade/dashboard"><span aria-hidden="true">↗</span> TLink login</a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
+  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions"><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">●</span> Account</a><a className="site-tlink-link" href="/direct-trade/dashboard" aria-label="Open TLink trade login" title="TLink trade login"><TLinkMark className="site-tlink-mark" size={38} /></a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {

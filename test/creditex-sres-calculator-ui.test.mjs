@@ -134,6 +134,36 @@ test("one exact registration is automatic but duplicates require a choice", () =
   assert.equal(state.productKey, "");
 });
 
+test("mixed SRES water-heater drafts enforce a ten-system property total", () => {
+  assert.deepEqual(
+    calculatorModule.creditexSresWaterHeaterQuoteUnitTotal([
+      { unitQuantity: "2" },
+      { unitQuantity: "3" },
+    ], "4"),
+    { total: 9, complete: true },
+  );
+  assert.deepEqual(
+    calculatorModule.creditexSresWaterHeaterQuoteUnitTotal([
+      { unitQuantity: "6" },
+    ], "5"),
+    { total: 11, complete: false },
+  );
+  assert.deepEqual(
+    calculatorModule.creditexSresWaterHeaterQuoteUnitTotal([
+      { unitQuantity: "" },
+    ], "1"),
+    { total: 1, complete: false },
+  );
+  assert.deepEqual(
+    calculatorModule.creditexSresWaterHeaterQuoteUnitTotal([], "0"),
+    { total: 0, complete: false },
+  );
+  assert.deepEqual(
+    calculatorModule.creditexSresWaterHeaterQuoteUnitTotal([], "11"),
+    { total: 0, complete: false },
+  );
+});
+
 test("SRES starts as a short future-date quote form with an enabled CTA", () => {
   const html = renderToStaticMarkup(React.createElement(
     calculatorModule.CreditexSresCalculator,
@@ -176,9 +206,12 @@ test("SRES starts as a short future-date quote form with an enabled CTA", () => 
   );
   assert.match(source, /estimatePurpose: "quote"/);
   assert.match(source, /installationDate: form\.effectiveDate/);
-  assert.match(source, /unitQuantity: form\.unitQuantity/);
-  assert.match(source, /Number of identical systems/);
-  assert.match(source, /per system x \{estimate\.unitQuantity\} systems/);
+  assert.match(source, /waterHeaterItems:/);
+  assert.match(source, /Systems using this model/);
+  assert.match(source, /Add another approved model/);
+  assert.match(source, /Maximum\s+10 systems across the property/);
+  assert.match(source, /item\.perUnitOutput\.quantity/);
+  assert.match(source, /!waterHeaterUnitTotal\.complete/);
   assert.doesNotMatch(source, /max=\{todayIso\(\)\}/);
   assert.match(source, /<summary>Calculation details<\/summary>/);
   const calculateSource = source.slice(

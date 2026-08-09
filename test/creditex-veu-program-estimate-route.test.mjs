@@ -182,6 +182,45 @@ function airConditionerSelection(configurationClass = "single") {
   });
 }
 
+function waterHeaterSelection(id, bs2021 = 1) {
+  return televisionSelection({
+    id,
+    productKind: "veu_water_heater",
+    registrationNumber: id,
+    sourceRecordKey: id,
+    eligibleFrom: "2026-01-01",
+    eligibleTo: "",
+    attributes: {
+      veuProductId: id,
+      veuProductCategoryNumber: "1D",
+      veuSystemSize: "Small",
+      zone4AnnualEnergySavings: 70,
+      bs2021Zone4StepDownLoadGjPerYear: bs2021,
+      be2021Zone4StepDownLoadGjPerYear: 1,
+    },
+  });
+}
+
+function waterHeaterQuoteInputs() {
+  return {
+    geography: "caller-value",
+    system_size: "caller-value",
+    climate_zone: "caller-value",
+    bs2021_gj_per_year: "999",
+    be2021_gj_per_year: "999",
+    premises: "residential",
+    incumbent_scenario_requirements_confirmed: "no",
+    residential_consumer_fact_sheet_provided: "no",
+    residential_suitability_and_sizing_advice_confirmed: "no",
+    no_additional_inline_storage_or_system_confirmed: "no",
+    decommissioning_and_disposal_confirmed: "no",
+    co_payment_per_installed_product_aud: "0",
+    refrigerant_gwp: "675",
+    warranty_years: "0",
+    warranty_requirements_confirmed: "no",
+  };
+}
+
 function part6QuoteInputs(overrides = {}) {
   return {
     scenario: "vii",
@@ -544,6 +583,108 @@ test("VEU route produces a future-dated single-system quote without treating evi
   assert.ok(body.estimate.eligibilityWarnings.some(
     ({ inputKey, assumptionApplied }) => inputKey === "co_payment_per_installed_product_aud" && assumptionApplied,
   ));
+});
+
+test("VEU route validates and seals every mixed water-heater model before totaling the property", async () => {
+  const selections = {
+    "official:wh-a": waterHeaterSelection("VEU-WH-A", 1),
+    "official:wh-b": waterHeaterSelection("VEU-WH-B", 2),
+  };
+  const validationInputs = [];
+  const route = loadRoute(async (_database, input) => {
+    validationInputs.push(input);
+    const selectedId = input.selectedProductIds.veu_water_heater;
+    return validationResult(selections[selectedId]);
+  });
+  const requestBody = {
+    estimatePurpose: "quote",
+    programCode: "VEU",
+    activityCode: "1D",
+    effectiveDate: "2026-08-08",
+    postcode: "3000",
+    inputs: waterHeaterQuoteInputs(),
+    waterHeaterItems: [
+      { selectedProductId: "official:wh-a", unitQuantity: "2" },
+      { selectedProductId: "official:wh-b", unitQuantity: "1" },
+    ],
+  };
+  const response = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://compare.ausenergyassessments.com",
+      },
+      body: JSON.stringify(requestBody),
+    },
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(validationInputs.length, 2);
+  assert.deepEqual(validationInputs.map((input) => input.selectedProductIds), [
+    { veu_water_heater: "official:wh-a" },
+    { veu_water_heater: "official:wh-b" },
+  ]);
+  assert.ok(validationInputs.every(
+    (input) => input.installationDate === "2026-08-08",
+  ));
+  assert.equal(body.estimate.output.unitQuantity, "3");
+  assert.equal(body.estimate.propertyItems.length, 2);
+  assert.equal(body.estimate.propertyItems[0].unitQuantity, "2");
+  assert.equal(body.estimate.propertyItems[0].approvedProducts[0].attributes.veuProductId, "VEU-WH-A");
+  assert.equal(body.estimate.propertyItems[1].approvedProducts[0].attributes.veuProductId, "VEU-WH-B");
+  assert.equal(body.estimate.propertyItems[0].registryReceipt.installationDate, "2026-08-08");
+  assert.equal(body.estimate.registryReceipt.items.length, 2);
+  assert.equal(body.estimate.approvedProducts.length, 2);
+  assert.equal(body.estimate.certificateActionEnabled, false);
+  assert.equal(body.estimate.eligibilityConfirmed, false);
+  assert.notEqual(body.estimate.receiptHash, body.estimate.arithmeticReceiptHash);
+
+  const strictResponse = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...requestBody, estimatePurpose: "compliance" }),
+    },
+  ));
+  const strictBody = await strictResponse.json();
+  assert.equal(strictResponse.status, 400);
+  assert.equal(strictBody.code, "VEU_REQUEST_INVALID");
+  assert.match(strictBody.error, /Strict compliance requires every installed unit/);
+});
+
+test("VEU mixed water-heater route rejects a property total above ten before product lookup", async () => {
+  let validationCalls = 0;
+  const route = loadRoute(async () => {
+    validationCalls += 1;
+    return validationResult(waterHeaterSelection("VEU-WH-A"));
+  });
+  const response = await route.POST(new Request(
+    "https://compare.ausenergyassessments.com/api/creditex/program-estimates",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        estimatePurpose: "quote",
+        programCode: "VEU",
+        activityCode: "1D",
+        effectiveDate: "2026-08-08",
+        postcode: "3000",
+        inputs: waterHeaterQuoteInputs(),
+        waterHeaterItems: [
+          { selectedProductId: "official:wh-a", unitQuantity: "6" },
+          { selectedProductId: "official:wh-b", unitQuantity: "5" },
+        ],
+      }),
+    },
+  ));
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(body.code, "VEU_INPUT_INVALID");
+  assert.equal(validationCalls, 0);
 });
 
 test("VEU route produces a future-dated scenario vii multi and VRF quote from official outdoor metrics and operator indoor sums", async () => {

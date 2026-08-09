@@ -1,0 +1,79 @@
+"use client";
+
+import type { PointerEvent } from "react";
+
+const journeyStages = [
+  { number: "01", title: "Understand", text: "Tell us what matters at home." },
+  { number: "02", title: "Prioritise", text: "See the right order for upgrades." },
+  { number: "03", title: "Take action", text: "Leave with one clear next move." },
+] as const;
+
+export function CustomerJourneyScene() {
+  function moveScene(event: PointerEvent<HTMLDivElement>) {
+    if (
+      event.pointerType === "touch"
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2;
+    const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2;
+    event.currentTarget.style.setProperty("--scene-shift-x", `${(x * 16).toFixed(2)}px`);
+    event.currentTarget.style.setProperty("--scene-shift-y", `${(y * 12).toFixed(2)}px`);
+    event.currentTarget.style.setProperty("--scene-rotate-x", `${(y * -2).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--scene-rotate-y", `${(x * 3).toFixed(2)}deg`);
+  }
+
+  function resetScene(event: PointerEvent<HTMLDivElement>) {
+    event.currentTarget.style.setProperty("--scene-shift-x", "0px");
+    event.currentTarget.style.setProperty("--scene-shift-y", "0px");
+    event.currentTarget.style.setProperty("--scene-rotate-x", "0deg");
+    event.currentTarget.style.setProperty("--scene-rotate-y", "0deg");
+  }
+
+  return (
+    <section
+      className="customer-journey-scene"
+      onPointerMove={moveScene}
+      onPointerLeave={resetScene}
+      aria-labelledby="customer-journey-title"
+    >
+      <div className="customer-scene-volume" aria-hidden="true">
+        <span className="customer-scene-halo customer-scene-halo-one" />
+        <span className="customer-scene-halo customer-scene-halo-two" />
+        <span className="customer-scene-grid" />
+        <span className="customer-scene-particle customer-scene-particle-one" />
+        <span className="customer-scene-particle customer-scene-particle-two" />
+        <span className="customer-scene-particle customer-scene-particle-three" />
+        <span className="customer-scene-particle customer-scene-particle-four" />
+        <span className="customer-scene-particle customer-scene-particle-five" />
+        <span className="customer-scene-particle customer-scene-particle-six" />
+        <div className="customer-scene-home">
+          <span className="customer-scene-roof" />
+          <span className="customer-scene-solar" />
+          <span className="customer-scene-wall">
+            <i className="customer-scene-window customer-scene-window-one" />
+            <i className="customer-scene-window customer-scene-window-two" />
+            <i className="customer-scene-door" />
+          </span>
+          <span className="customer-scene-platform" />
+        </div>
+        <span className="customer-scene-signal customer-scene-signal-comfort">Comfort</span>
+        <span className="customer-scene-signal customer-scene-signal-energy">Energy</span>
+        <span className="customer-scene-signal customer-scene-signal-action">Action</span>
+      </div>
+
+      <div className="customer-journey-route">
+        <h2 id="customer-journey-title" className="customer-route-eyebrow">Your journey</h2>
+        <ol>
+          {journeyStages.map((stage) => (
+            <li key={stage.number}>
+              <b>{stage.number}</b>
+              <span><strong>{stage.title}</strong><small>{stage.text}</small></span>
+            </li>
+          ))}
+        </ol>
+        <p><span aria-hidden="true" /> Private from the first step</p>
+      </div>
+    </section>
+  );
+}

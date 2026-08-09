@@ -123,6 +123,20 @@ export type CreditexVeuEstimate = {
   eligibilityWarnings?: CreditexVeuQuoteEligibilityWarning[];
 };
 
+export type CreditexVeuWaterHeaterQuoteItem = {
+  itemNumber: string;
+  selectedProductId: string;
+  unitQuantity: string;
+  inputSnapshot: Record<string, unknown>;
+  trace: CreditexVeuTraceEntry[];
+  output: CreditexVeuEstimate["output"];
+  arithmeticReceiptHash: string;
+};
+
+export type CreditexVeuWaterHeaterPropertyQuote = CreditexVeuEstimate & {
+  propertyItems: CreditexVeuWaterHeaterQuoteItem[];
+};
+
 export type CreditexVeuEstimateErrorCode =
   | "VEU_REQUEST_INVALID"
   | "VEU_ACTIVITY_UNSUPPORTED"
@@ -340,6 +354,14 @@ function compare(left: Fraction, right: Fraction) {
 
 function exactFraction(value: Fraction) {
   return `${value.numerator}/${value.denominator}`;
+}
+
+function parsedExactFraction(value: string, label: string) {
+  const matched = /^(-?\d+)\/([1-9]\d*)$/.exec(value);
+  if (!matched) {
+    fail("VEU_REQUEST_INVALID", `${label} has no valid exact rational result.`);
+  }
+  return fraction(BigInt(matched[1]), BigInt(matched[2]));
 }
 
 function decimalPresentation(value: Fraction) {
@@ -4189,5 +4211,203 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     outputHash: sha256(output),
     receiptHash: sha256(receiptBase),
     ...quoteMetadata,
+  };
+}
+
+export function aggregateCreditexVeuWaterHeaterQuotes(
+  items: readonly {
+    selectedProductId: string;
+    unitQuantity: string;
+    estimate: CreditexVeuEstimate;
+  }[],
+): CreditexVeuWaterHeaterPropertyQuote {
+  if (items.length < 1 || items.length > 10) {
+    fail(
+      "VEU_REQUEST_INVALID",
+      "Add between 1 and 10 approved water-heater product groups.",
+    );
+  }
+  const first = items[0].estimate;
+  if (
+    first.estimatePurpose !== "quote"
+    || !( ["1C", "1D", "3C", "3D"] as readonly string[]).includes(
+      first.activityCode,
+    )
+  ) {
+    fail(
+      "VEU_REQUEST_INVALID",
+      "Mixed-model water-heater aggregation is available only for quote estimates.",
+    );
+  }
+  let totalUnits = 0;
+  let totalResult = ZERO;
+  let wholeCertificates = BigInt(0);
+  let unresolvedTie = false;
+  const propertyItems = items.map((item, index) => {
+    const quantity = decimalInput(
+      { unit_quantity: item.unitQuantity },
+      "unit_quantity",
+      `Water-heater group ${index + 1} quantity`,
+      { integer: true, maximum: MAXIMUM_IDENTICAL_WATER_HEATER_SYSTEMS },
+    );
+    const quantityText = decimalPresentation(quantity).decimal;
+    totalUnits += Number(quantityText);
+    if (totalUnits > Number(MAXIMUM_IDENTICAL_WATER_HEATER_SYSTEMS)) {
+      fail(
+        "VEU_INPUT_INVALID",
+        "A mixed-model water-heater quote can include no more than 10 systems in total.",
+      );
+    }
+    if (
+      item.estimate.estimatePurpose !== "quote"
+      || item.estimate.activityCode !== first.activityCode
+      || item.estimate.installationDate !== first.installationDate
+      || item.estimate.formulaKey !== first.formulaKey
+      || item.estimate.specificationVersion !== first.specificationVersion
+      || (item.estimate.output.unitQuantity || "1") !== quantityText
+    ) {
+      fail(
+        "VEU_REQUEST_INVALID",
+        `Water-heater group ${index + 1} does not match the property quote contract.`,
+      );
+    }
+    const itemResult = parsedExactFraction(
+      item.estimate.output.exactFraction,
+      `Water-heater group ${index + 1}`,
+    );
+    if (quantityText !== "1") {
+      const perUnit = item.estimate.output.perUnit;
+      if (
+        !perUnit
+        || compare(
+          multiply(
+            parsedExactFraction(
+              perUnit.exactFraction,
+              `Water-heater group ${index + 1} per-system result`,
+            ),
+            quantity,
+          ),
+          itemResult,
+        ) !== 0
+        || (
+          perUnit.wholeCertificates === null
+            ? item.estimate.output.wholeCertificates !== null
+            : item.estimate.output.wholeCertificates
+              !== String(BigInt(perUnit.wholeCertificates) * BigInt(quantityText))
+        )
+      ) {
+        fail(
+          "VEU_REQUEST_INVALID",
+          `Water-heater group ${index + 1} does not match its per-system arithmetic.`,
+        );
+      }
+    }
+    totalResult = add(
+      totalResult,
+      itemResult,
+    );
+    if (item.estimate.output.wholeCertificates === null) {
+      unresolvedTie = true;
+    } else {
+      wholeCertificates += BigInt(item.estimate.output.wholeCertificates);
+    }
+    return {
+      itemNumber: String(index + 1),
+      selectedProductId: requiredString(
+        item.selectedProductId,
+        `Water-heater group ${index + 1} approved product`,
+      ),
+      unitQuantity: quantityText,
+      inputSnapshot: item.estimate.inputSnapshot,
+      trace: item.estimate.trace,
+      output: item.estimate.output,
+      arithmeticReceiptHash: item.estimate.receiptHash,
+    };
+  });
+  const presentation = decimalPresentation(totalResult);
+  const output = {
+    unroundedTonnes: presentation.decimal,
+    unroundedDecimalStatus: presentation.status,
+    exactFraction: exactFraction(totalResult),
+    wholeCertificates: unresolvedTie ? null : String(wholeCertificates),
+    roundingStatus: unresolvedTie
+      ? "exact_half_tie_requires_regulator_confirmation" as const
+      : "nearest_whole_applied" as const,
+    unit: "VEEC" as const,
+    unitQuantity: String(totalUnits),
+  };
+  const trace = [
+    ...propertyItems.map((item) => traceEntry(
+      `water_heater_item_${item.itemNumber}`,
+      `Approved model ${item.itemNumber}`,
+      `${item.output.perUnit?.unroundedTonnes ?? item.output.unroundedTonnes} tCO2-e per system x ${item.unitQuantity}`,
+      "calculate this exact approved product independently, round whole VEECs per system, then multiply by its installed quantity",
+      parsedExactFraction(
+        item.output.exactFraction,
+        `Water-heater group ${item.itemNumber}`,
+      ),
+    )),
+    traceEntry(
+      "property_total",
+      "Property total",
+      `${propertyItems.length} approved model group${propertyItems.length === 1 ? "" : "s"}; ${totalUnits} systems`,
+      "add the independently governed totals for every approved product group",
+      totalResult,
+    ),
+  ];
+  const inputSnapshot = {
+    installationDate: first.installationDate,
+    totalUnitQuantity: String(totalUnits),
+    mixedApprovedProducts: propertyItems.length > 1,
+    propertyItems: propertyItems.map((item) => ({
+      itemNumber: item.itemNumber,
+      selectedProductId: item.selectedProductId,
+      unitQuantity: item.unitQuantity,
+      arithmeticReceiptHash: item.arithmeticReceiptHash,
+      product: item.inputSnapshot.product,
+    })),
+    quoteEligibilityEvidence: propertyItems.flatMap((item) => (
+      Array.isArray(item.inputSnapshot.quoteEligibilityEvidence)
+        ? item.inputSnapshot.quoteEligibilityEvidence
+        : []
+    )),
+  };
+  const eligibilityWarnings = items.flatMap(
+    (item) => item.estimate.eligibilityWarnings || [],
+  );
+  const receiptBase = {
+    schemaVersion: CREDITEX_VEU_ESTIMATE_SCHEMA,
+    estimatorVersion: CREDITEX_VEU_ESTIMATOR_VERSION,
+    contract: "creditex-veu-mixed-water-heater-property-quote/v1",
+    activityCode: first.activityCode,
+    formulaKey: first.formulaKey,
+    installationDate: first.installationDate,
+    inputSnapshot,
+    trace,
+    output,
+    itemArithmeticReceiptHashes: propertyItems.map(
+      (item) => item.arithmeticReceiptHash,
+    ),
+  };
+  return {
+    ...first,
+    inputSnapshot,
+    trace,
+    output,
+    propertyItems,
+    status: unresolvedTie
+      ? "estimate_only_rounding_tie_unresolved"
+      : "estimate_only_compliance_reconciliation_required",
+    certificateActionEnabled: false,
+    operatorMessage: unresolvedTie
+      ? "Potential property rebate estimate only. At least one approved model produces an exact half-certificate tie, so no final whole VEEC total is asserted. Regulator confirmation and full activity validation are required before any certificate action."
+      : "Potential property rebate estimate only. Every approved model was checked independently for the installation date and its own governed values. Validate every installed unit and all activity evidence before any certificate action.",
+    inputHash: sha256(inputSnapshot),
+    traceHash: sha256(trace),
+    outputHash: sha256(output),
+    receiptHash: sha256(receiptBase),
+    estimatePurpose: "quote",
+    eligibilityConfirmed: false,
+    eligibilityWarnings,
   };
 }

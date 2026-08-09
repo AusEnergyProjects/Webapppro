@@ -67,22 +67,14 @@ export default async function HomeEnergyPlanPage({
       <SiteHeader active="plan" />
       <header className="planner-hero">
         <div>
-          <span>A clear plan in about three minutes</span>
-          <h1>One question at a time. One useful plan at the end.</h1>
-          <p>
-            Tell us what matters and what your home already has. You can skip
-            anything you do not know. We will turn the answers into an ordered,
-            independent home energy roadmap.
-          </p>
-        </div>
-        <aside>
-          <strong>Private by design</strong>
+          <span>Private home energy planning</span>
+          <h1>One question at a time. Your plan starts here.</h1>
           <p>
             No account, address, bill, postcode, meter identifier or contact
-            details are needed. You see the plan before deciding whether to save
-            it, keep a printable copy or ask a trade business for help.
+            details are needed. Answer what you know, skip the rest and see an
+            ordered roadmap in about three minutes.
           </p>
-        </aside>
+        </div>
       </header>
       <HomeEnergyPlanner
         initialSelection={{

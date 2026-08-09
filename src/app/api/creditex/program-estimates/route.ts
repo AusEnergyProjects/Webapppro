@@ -24,6 +24,7 @@ import {
   CREDITEX_VEU_ACTIVITY_DEFINITIONS,
 } from "@/lib/creditex-veu-calculator-catalogue";
 import {
+  aggregateCreditexVeuWaterHeaterQuotes,
   CreditexVeuEstimateError,
   estimateCreditexVeu,
   type CreditexVeuProductEvidence,
@@ -203,6 +204,11 @@ function inputRecord(value: unknown) {
 
 type EstimatePurpose = "compliance" | "quote";
 
+type VeuWaterHeaterQuoteItem = {
+  selectedProductId: string;
+  unitQuantity: string;
+};
+
 type QuoteEligibilityWarning = {
   inputKey: string;
   label: string;
@@ -221,6 +227,82 @@ function requestEstimatePurpose(raw: Record<string, unknown>): EstimatePurpose {
     "LOCAL_ESTIMATE_INVALID",
     "estimatePurpose must be compliance or quote.",
   );
+}
+
+function requestVeuWaterHeaterQuoteItems(
+  raw: Record<string, unknown>,
+  estimatePurpose: EstimatePurpose,
+  activityCode: string,
+): VeuWaterHeaterQuoteItem[] | null {
+  if (raw.waterHeaterItems === undefined) return null;
+  if (
+    estimatePurpose !== "quote"
+    || !(["1C", "1D", "3C", "3D"] as readonly string[]).includes(activityCode)
+  ) {
+    throw new CreditexVeuEstimateError(
+      "VEU_REQUEST_INVALID",
+      "Mixed-model water-heater groups are available only for quote estimates. Strict compliance requires every installed unit to be validated separately.",
+    );
+  }
+  if (
+    !Array.isArray(raw.waterHeaterItems)
+    || raw.waterHeaterItems.length < 1
+    || raw.waterHeaterItems.length > 10
+  ) {
+    throw new CreditexVeuEstimateError(
+      "VEU_REQUEST_INVALID",
+      "Add between 1 and 10 approved water-heater product groups.",
+    );
+  }
+  let totalUnits = 0;
+  return raw.waterHeaterItems.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new CreditexVeuEstimateError(
+        "VEU_REQUEST_INVALID",
+        `Water-heater product group ${index + 1} is invalid.`,
+      );
+    }
+    const item = candidate as Record<string, unknown>;
+    exactRequestKeys(
+      item,
+      ["selectedProductId", "unitQuantity"],
+      `Water-heater product group ${index + 1} contains unexpected fields.`,
+    );
+    const selectedProductId = typeof item.selectedProductId === "string"
+      ? item.selectedProductId.trim()
+      : "";
+    if (
+      !selectedProductId
+      || selectedProductId !== item.selectedProductId
+      || selectedProductId.length > 640
+    ) {
+      throw new CreditexVeuEstimateError(
+        "VEU_REQUEST_INVALID",
+        `Choose an exact approved product for water-heater group ${index + 1}.`,
+      );
+    }
+    if (typeof item.unitQuantity !== "string" || !/^\d+$/.test(item.unitQuantity)) {
+      throw new CreditexVeuEstimateError(
+        "VEU_INPUT_INVALID",
+        `Water-heater group ${index + 1} quantity must be a whole number.`,
+      );
+    }
+    const quantity = Number(item.unitQuantity);
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
+      throw new CreditexVeuEstimateError(
+        "VEU_INPUT_INVALID",
+        `Water-heater group ${index + 1} quantity must be from 1 to 10.`,
+      );
+    }
+    totalUnits += quantity;
+    if (totalUnits > 10) {
+      throw new CreditexVeuEstimateError(
+        "VEU_INPUT_INVALID",
+        "A mixed-model water-heater quote can include no more than 10 systems in total.",
+      );
+    }
+    return { selectedProductId, unitQuantity: String(quantity) };
+  });
 }
 
 function quoteAssumptionSatisfied(value: unknown, assumedValue: string) {
@@ -750,6 +832,11 @@ export async function POST(request: Request) {
         activityCode,
         selectedScenario,
       );
+      const waterHeaterItems = requestVeuWaterHeaterQuoteItems(
+        raw,
+        estimatePurpose,
+        activityCode,
+      );
       const requestKeys = [
         "programCode",
         "activityCode",
@@ -757,7 +844,11 @@ export async function POST(request: Request) {
         "inputs",
         ...(raw.estimatePurpose === undefined ? [] : ["estimatePurpose"]),
         ...(postcodeRequired ? ["postcode"] : []),
-        ...(requiredKinds.length > 0 ? ["selectedProductIds"] : []),
+        ...(waterHeaterItems
+          ? ["waterHeaterItems"]
+          : requiredKinds.length > 0
+            ? ["selectedProductIds"]
+            : []),
       ];
       exactRequestKeys(
         raw,
@@ -770,6 +861,121 @@ export async function POST(request: Request) {
         raw.postcode,
         raw.effectiveDate,
       );
+      if (waterHeaterItems) {
+        if (
+          requiredKinds.length !== 1
+          || requiredKinds[0] !== "veu_water_heater"
+        ) {
+          return veuEvidenceFailure(
+            activityCode,
+            "does not resolve every property item to one VEU-approved water-heater record",
+          );
+        }
+        const calculatedItems = await Promise.all(
+          waterHeaterItems.map(async (item) => {
+            const productValidation = await validateOfficialProductSelections(
+              database,
+              {
+                installationDate: raw.effectiveDate,
+                requiredKinds,
+                selectedProductIds: {
+                  veu_water_heater: item.selectedProductId,
+                },
+              },
+            );
+            const derivedInputs = deriveCreditexVeuOfficialProductInputs(
+              activityCode,
+              {
+                ...postcodeDerivedInputs,
+                unit_quantity: item.unitQuantity,
+              },
+              productValidation.selections,
+            );
+            const arithmeticEstimate = estimateCreditexVeu({
+              activityCode,
+              installationDate: raw.effectiveDate,
+              inputs: derivedInputs,
+              product: deriveVeuProductEvidence(
+                activityCode,
+                productValidation.selections,
+              ),
+              estimatePurpose: "quote",
+            });
+            return {
+              ...item,
+              arithmeticEstimate,
+              sealedEstimate: await attachRegistryReceipt(
+                arithmeticEstimate as unknown as Record<string, unknown> & {
+                  receiptHash: string;
+                },
+                productValidation,
+              ),
+            };
+          }),
+        );
+        const arithmeticEstimate = aggregateCreditexVeuWaterHeaterQuotes(
+          calculatedItems.map((item) => ({
+            selectedProductId: item.selectedProductId,
+            unitQuantity: item.unitQuantity,
+            estimate: item.arithmeticEstimate,
+          })),
+        );
+        const propertyItems = arithmeticEstimate.propertyItems.map(
+          (item, index) => {
+            const sealed = calculatedItems[index].sealedEstimate;
+            return {
+              ...item,
+              approvedProducts: sealed.approvedProducts,
+              registryReceipt: sealed.registryReceipt,
+              registryReceiptHash: sealed.registryReceiptHash,
+              receiptHash: sealed.receiptHash,
+            };
+          },
+        );
+        const approvedProducts = propertyItems.flatMap(
+          (item) => item.approvedProducts as CreditexOfficialProductSelection[],
+        );
+        const registryReceipt = {
+          contract: "creditex-veu-mixed-water-heater-registry-receipt/v1",
+          installationDate: raw.effectiveDate,
+          items: propertyItems.map((item) => ({
+            itemNumber: item.itemNumber,
+            selectedProductId: item.selectedProductId,
+            unitQuantity: item.unitQuantity,
+            registryReceipt: item.registryReceipt,
+            registryReceiptHash: item.registryReceiptHash,
+            sealedItemReceiptHash: item.receiptHash,
+          })),
+        };
+        const registryReceiptBase = {
+          arithmeticReceiptHash: arithmeticEstimate.receiptHash,
+          registryReceipt,
+          approvedProducts,
+          propertyItems: propertyItems.map((item) => ({
+            itemNumber: item.itemNumber,
+            unitQuantity: item.unitQuantity,
+            arithmeticReceiptHash: item.arithmeticReceiptHash,
+            registryReceiptHash: item.registryReceiptHash,
+            receiptHash: item.receiptHash,
+          })),
+        };
+        const registryReceiptHash = await sha256(registryReceiptBase);
+        return json({
+          ok: true,
+          estimate: {
+            ...arithmeticEstimate,
+            propertyItems,
+            arithmeticReceiptHash: arithmeticEstimate.receiptHash,
+            approvedProducts,
+            registryReceipt,
+            registryReceiptHash,
+            receiptHash: await sha256({
+              ...registryReceiptBase,
+              registryReceiptHash,
+            }),
+          },
+        });
+      }
       if (requiredKinds.length > 1) {
         return veuEvidenceFailure(
           activityCode,

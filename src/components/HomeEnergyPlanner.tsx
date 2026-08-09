@@ -104,6 +104,13 @@ const plannerSteps: PlannerStep[] = [
 const firstPostFeatureStepIndex =
   plannerStepsBeforeFeatures.length + plannerFeatureSteps.length;
 
+const plannerStages = [
+  { id: "understand", label: "Understand", text: "Your home and priorities" },
+  { id: "home", label: "Home", text: "The systems you already have" },
+  { id: "direction", label: "Direction", text: "Investment, timing and location" },
+  { id: "plan", label: "Your plan", text: "Your ordered next moves" },
+] as const;
+
 function appendValues(params: URLSearchParams, name: string, values: string[]) {
   values.forEach((value) => params.append(name, value));
 }
@@ -153,6 +160,13 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
   const currentStep = plannerSteps[stepIndex];
   const questionCount = plannerSteps.length - 1;
   const isResult = currentStep.id === "result";
+  const stageIndex = isResult
+    ? 3
+    : currentStep.id === "features"
+      ? 1
+      : stepIndex < plannerStepsBeforeFeatures.length
+        ? 0
+        : 2;
   const progressValue = isResult ? 100 : Math.round(((stepIndex + 1) / questionCount) * 100);
   const currentFeatureQuestion = currentStep.id === "features"
     ? customerHomeFeatureSections
@@ -193,6 +207,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     return params;
   }, [goals, pace, situation, approvalContext, budgetRange, addressState, features]);
   const tradeEnquiryHref = `/account/projects/new?${selectionParams.toString()}`;
+  const firstActionItem = plan.items.find((item) => Boolean(item.href));
 
   const apartmentAnswer = approvalContext === "strata"
     ? "yes"
@@ -236,6 +251,21 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
   return (
     <section className="planner-layout" aria-label="Home energy planning tool">
+      <section className="planner-stage-shell" aria-labelledby="planner-stage-title">
+        <h2 id="planner-stage-title">Your planning journey</h2>
+        <ol className="planner-stage-nav" aria-label="Planning stages">
+          {plannerStages.map((stage, index) => (
+            <li
+              className={index < stageIndex ? "complete" : index === stageIndex ? "current" : "upcoming"}
+              aria-current={index === stageIndex ? "step" : undefined}
+              key={stage.id}
+            >
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <div><strong>{stage.label}</strong><small>{stage.text}</small></div>
+            </li>
+          ))}
+        </ol>
+      </section>
       <header className="planner-progress-shell">
         <div className="planner-progress-copy">
           <span>{isResult ? "Plan ready" : `Question ${stepIndex + 1} of ${questionCount}`}</span>
@@ -257,6 +287,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
       {!isResult ? (
         <form className="planner-controls planner-guided-controls" onSubmit={(event) => event.preventDefault()}>
           <section className="planner-step-card" aria-labelledby={`planner-step-${stepIndex}`}>
+            <span className={`planner-stage-emblem planner-stage-emblem-${plannerStages[stageIndex].id}`} aria-hidden="true" />
             {currentStep.id === "situation" ? (
               <>
                 <span className="planner-step-eyebrow">First, the permission boundary</span>
@@ -387,6 +418,16 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               {plan.items.length} ordered steps prepared from your answers.
             </p>
           </div>
+          {firstActionItem ? (
+            <section className="planner-next-move" aria-labelledby="planner-next-move-title">
+              <div>
+                <span>Start here</span>
+                <h3 id="planner-next-move-title">{firstActionItem.title}</h3>
+                <p>{firstActionItem.text}</p>
+              </div>
+              <a href={firstActionItem.href}>{firstActionItem.action}</a>
+            </section>
+          ) : null}
           <div className="planner-result-actions">
             <a className="planner-primary-result" href={`/plan/print?${selectionParams.toString()}`}>Open my printable plan</a>
             <button type="button" className="planner-reset" onClick={() => goToStep(0)}>Edit my answers</button>

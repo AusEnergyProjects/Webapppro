@@ -5,6 +5,7 @@ import {
   CREDITEX_VEU_ACTIVITY_DEFINITIONS,
 } from "../src/lib/creditex-veu-calculator-catalogue.ts";
 import {
+  aggregateCreditexVeuWaterHeaterQuotes,
   CreditexVeuEstimateError,
   estimateCreditexVeu,
 } from "../src/lib/creditex-veu-calculator-estimator.ts";
@@ -669,6 +670,86 @@ test("Parts 1 and 3 quote mode shows per-system and repeated identical-system to
         && error.code === "VEU_INPUT_INVALID",
     );
   }
+});
+
+test("mixed VEU water-heater quotes preserve per-model arithmetic and one property total", () => {
+  const baseInputs = {
+    geography: "metropolitan",
+    system_size: "small",
+    climate_zone: "5",
+    bs2021_gj_per_year: "1",
+    be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(true),
+  };
+  const first = estimateCreditexVeu({
+    activityCode: "1D",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: { ...baseInputs, unit_quantity: "2" },
+    product: product("VEU", "1D", { productId: "VEU-WH-A" }),
+  });
+  const second = estimateCreditexVeu({
+    activityCode: "1D",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: {
+      ...baseInputs,
+      bs2021_gj_per_year: "2",
+      unit_quantity: "1",
+    },
+    product: product("VEU", "1D", { productId: "VEU-WH-B" }),
+  });
+  const property = aggregateCreditexVeuWaterHeaterQuotes([
+    { selectedProductId: "official:wh-a", unitQuantity: "2", estimate: first },
+    { selectedProductId: "official:wh-b", unitQuantity: "1", estimate: second },
+  ]);
+
+  assert.equal(property.output.unitQuantity, "3");
+  assert.equal(
+    property.output.wholeCertificates,
+    String(
+      BigInt(first.output.wholeCertificates)
+        + BigInt(second.output.wholeCertificates),
+    ),
+  );
+  assert.equal(property.propertyItems.length, 2);
+  assert.equal(property.propertyItems[0].selectedProductId, "official:wh-a");
+  assert.equal(property.propertyItems[0].unitQuantity, "2");
+  assert.equal(property.propertyItems[1].inputSnapshot.product.productId, "VEU-WH-B");
+  assert.equal(property.trace.at(-1).key, "property_total");
+  assert.equal(property.certificateActionEnabled, false);
+  assert.equal(property.estimatePurpose, "quote");
+  assert.match(property.receiptHash, /^sha256:[a-f0-9]{64}$/);
+  assert.notEqual(property.receiptHash, first.receiptHash);
+
+  const unresolvedProperty = aggregateCreditexVeuWaterHeaterQuotes([{
+    selectedProductId: "official:wh-a",
+    unitQuantity: "2",
+    estimate: {
+      ...first,
+      status: "estimate_only_rounding_tie_unresolved",
+      output: {
+        ...first.output,
+        wholeCertificates: null,
+        roundingStatus: "exact_half_tie_requires_regulator_confirmation",
+        perUnit: {
+          ...first.output.perUnit,
+          wholeCertificates: null,
+        },
+      },
+    },
+  }]);
+  assert.equal(unresolvedProperty.output.wholeCertificates, null);
+  assert.match(unresolvedProperty.operatorMessage, /exact half-certificate tie/);
+
+  assert.throws(
+    () => aggregateCreditexVeuWaterHeaterQuotes([
+      { selectedProductId: "official:wh-a", unitQuantity: "2", estimate: first },
+      { selectedProductId: "official:wh-b", unitQuantity: "10", estimate: second },
+    ]),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_INPUT_INVALID",
+  );
 });
 
 test("quote mode still rejects formula-critical performance, category and product dates", () => {

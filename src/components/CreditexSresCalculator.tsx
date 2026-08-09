@@ -96,6 +96,28 @@ export type CreditexSresEstimateResult = {
     quantity: string;
     unit: "STC";
   };
+  waterHeaterItems?: Array<{
+    itemNumber: string;
+    productKey: string;
+    unitQuantity: string;
+    resolution: {
+      brand?: string;
+      model?: string;
+      sourceRecordKey?: string;
+      eligibleFrom?: string;
+      eligibleTo?: string;
+    };
+    perUnitOutput: {
+      quantity: string;
+      unit: "STC";
+    };
+    output: {
+      quantity: string;
+      unit: "STC";
+    };
+    receiptHash: string;
+    resolvedReceiptHash?: string;
+  }>;
   resolution?: {
     brand?: string;
     model?: string;
@@ -104,6 +126,8 @@ export type CreditexSresEstimateResult = {
     zoneRating?: string;
     registeredTenYearStcs?: string;
     registryLastCheckedAt?: string;
+    unitQuantity?: string;
+    totalStcs?: string;
   };
   operatorMessage: string;
 };
@@ -117,6 +141,39 @@ type FormState = {
   usableCapacityKwh: string;
   unitQuantity: string;
 };
+
+export type CreditexSresWaterHeaterItemDraft = {
+  id: string;
+  productKey: string;
+  brand: string;
+  model: string;
+  unitQuantity: string;
+};
+
+export function creditexSresWaterHeaterQuoteUnitTotal(
+  items: readonly Pick<CreditexSresWaterHeaterItemDraft, "unitQuantity">[],
+  currentQuantity?: string,
+) {
+  const quantities = [
+    ...items.map((item) => item.unitQuantity),
+    ...(currentQuantity === undefined ? [] : [currentQuantity]),
+  ];
+  let total = 0;
+  let complete = true;
+  for (const quantity of quantities) {
+    if (!/^\d+$/.test(quantity)) {
+      complete = false;
+      continue;
+    }
+    const parsed = Number(quantity);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 10) {
+      complete = false;
+      continue;
+    }
+    total += parsed;
+  }
+  return { total, complete: complete && total >= 1 && total <= 10 };
+}
 
 export type CreditexSresProductCascadeState = {
   category: string;
@@ -263,10 +320,18 @@ export function CreditexSresCalculator({
   const [estimate, setEstimate] = useState<CreditexSresEstimateResult | null>(null);
   const [estimateBusy, setEstimateBusy] = useState(false);
   const [estimateError, setEstimateError] = useState("");
+  const [waterHeaterItems, setWaterHeaterItems] = useState<
+    CreditexSresWaterHeaterItemDraft[]
+  >([]);
+  const waterHeaterItemIdRef = useRef(0);
   const estimateRequestRef = useRef(0);
   const registrySnapshotRef = useRef("");
 
   const productBlocker = creditexSresCalculationBlocker(form.technology);
+  const waterHeaterUnitTotal = creditexSresWaterHeaterQuoteUnitTotal(
+    waterHeaterItems,
+    registeredTechnology(form.technology) ? form.unitQuantity : "0",
+  );
 
   const invalidateEstimate = useCallback(() => {
     estimateRequestRef.current += 1;
@@ -301,6 +366,8 @@ export function CreditexSresCalculator({
   const markRegistryUnverified = useCallback(() => {
     invalidateEstimate();
     registrySnapshotRef.current = "";
+    waterHeaterItemIdRef.current = 0;
+    setWaterHeaterItems([]);
     dispatchProductCascade({ type: "reset", reason: "registry_error" });
     setProductFacets(EMPTY_PRODUCT_FACETS);
     setProducts([]);
@@ -364,6 +431,8 @@ export function CreditexSresCalculator({
           : EMPTY_PRODUCT_FACETS;
         if (snapshotChanged) {
           invalidateEstimate();
+          waterHeaterItemIdRef.current = 0;
+          setWaterHeaterItems([]);
           dispatchProductCascade({
             type: "reset",
             reason: "registry_snapshot",
@@ -482,6 +551,8 @@ export function CreditexSresCalculator({
         && nextSnapshotId
         && registrySnapshotRef.current !== nextSnapshotId
       ) {
+        waterHeaterItemIdRef.current = 0;
+        setWaterHeaterItems([]);
         dispatchProductCascade({
           type: "reset",
           reason: "registry_snapshot",
@@ -532,8 +603,16 @@ export function CreditexSresCalculator({
         ? {
             ...common,
             postcode: form.postcode,
-            productKey: productCascade.productKey,
-            unitQuantity: form.unitQuantity,
+            waterHeaterItems: [
+              ...waterHeaterItems.map((item) => ({
+                productKey: item.productKey,
+                unitQuantity: item.unitQuantity,
+              })),
+              {
+                productKey: productCascade.productKey,
+                unitQuantity: form.unitQuantity,
+              },
+            ],
           }
         : form.technology === "small_wind"
             || form.technology === "small_hydro"
@@ -573,6 +652,8 @@ export function CreditexSresCalculator({
   }
 
   function updateTechnology(technology: Technology) {
+    waterHeaterItemIdRef.current = 0;
+    setWaterHeaterItems([]);
     dispatchProductCascade({ type: "reset", reason: "technology" });
     setProductFacets(EMPTY_PRODUCT_FACETS);
     setProducts([]);
@@ -580,6 +661,38 @@ export function CreditexSresCalculator({
       ...current,
       technology,
     }));
+  }
+
+  function addWaterHeaterItem() {
+    const selected = products.find(
+      (product) => product.sourceRecordKey === productCascade.productKey,
+    );
+    if (!selected || !waterHeaterUnitTotal.complete) return;
+    invalidateEstimate();
+    waterHeaterItemIdRef.current += 1;
+    setWaterHeaterItems((current) => [
+      ...current,
+      {
+        id: `water-heater-item-${waterHeaterItemIdRef.current}`,
+        productKey: selected.sourceRecordKey,
+        brand: selected.brand,
+        model: selected.model,
+        unitQuantity: form.unitQuantity,
+      },
+    ]);
+    dispatchProductCascade({ type: "reset", reason: "technology" });
+    setProductFacets((current) => ({
+      categories: current.categories,
+      brands: [],
+      models: [],
+    }));
+    setProducts([]);
+    setForm((current) => ({ ...current, unitQuantity: "1" }));
+  }
+
+  function removeWaterHeaterItem(id: string) {
+    invalidateEstimate();
+    setWaterHeaterItems((current) => current.filter((item) => item.id !== id));
   }
 
   function renderPostcode() {
@@ -653,6 +766,8 @@ export function CreditexSresCalculator({
                 type: "reset",
                 reason: "installation_date",
               });
+              waterHeaterItemIdRef.current = 0;
+              setWaterHeaterItems([]);
               setProductFacets(EMPTY_PRODUCT_FACETS);
               setProducts([]);
             }}
@@ -664,9 +779,27 @@ export function CreditexSresCalculator({
           && !registeredTechnology(form.technology)
           && renderPostcode()}
 
+        {registeredTechnology(form.technology) && waterHeaterItems.length > 0 && (
+          <fieldset className={styles.officialProductPicker}>
+            <legend>Added approved products</legend>
+            {waterHeaterItems.map((item, index) => (
+              <div key={item.id}>
+                <strong>{index + 1}. {item.brand} {item.model}</strong>
+                <span>{item.unitQuantity} system{item.unitQuantity === "1" ? "" : "s"}</span>
+                <button
+                  type="button"
+                  onClick={() => removeWaterHeaterItem(item.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </fieldset>
+        )}
+
         {registeredTechnology(form.technology) ? (
           <fieldset className={styles.officialProductPicker}>
-            <legend>Approved product</legend>
+            <legend>Approved product {waterHeaterItems.length + 1}</legend>
             {productFacets.categories.length > 1 && (
               <label>
                 Product type
@@ -824,30 +957,55 @@ export function CreditexSresCalculator({
         {registeredTechnology(form.technology) && renderPostcode()}
 
         {registeredTechnology(form.technology) && (
-          <label>
-            Number of identical systems
-            <input
-              inputMode="numeric"
-              pattern="[0-9]+"
-              min="1"
-              max="10"
-              required
-              value={form.unitQuantity}
-              onChange={(event) => updateForm((current) => ({
-                ...current,
-                unitQuantity: event.target.value.replace(/\D/g, "").slice(0, 2),
-              }))}
-            />
-            <small>
-              Install up to 10 identical registered systems. The result shows
-              the rebate per system and the property total.
-            </small>
-          </label>
+          <>
+            <label>
+              Systems using this model
+              <input
+                inputMode="numeric"
+                pattern="[0-9]+"
+                min="1"
+                max="10"
+                required
+                value={form.unitQuantity}
+                onChange={(event) => updateForm((current) => ({
+                  ...current,
+                  unitQuantity: event.target.value.replace(/\D/g, "").slice(0, 2),
+                }))}
+              />
+              <small>
+                Add another approved model when this property uses a mix. Maximum
+                10 systems across the property.
+              </small>
+            </label>
+            <p aria-live="polite">
+              Property total: {waterHeaterUnitTotal.total} of 10 systems.
+            </p>
+            <button
+              type="button"
+              disabled={
+                !productCascade.productKey
+                || !waterHeaterUnitTotal.complete
+                || waterHeaterUnitTotal.total >= 10
+              }
+              onClick={addWaterHeaterItem}
+            >
+              Add another approved model
+            </button>
+          </>
         )}
 
         <button
           type="submit"
-          disabled={estimateBusy}
+          disabled={
+            estimateBusy
+            || (
+              registeredTechnology(form.technology)
+              && (
+                !productCascade.productKey
+                || !waterHeaterUnitTotal.complete
+              )
+            )
+          }
         >
           {estimateBusy ? "Calculating..." : "Calculate rebate estimate"}
         </button>
@@ -891,11 +1049,17 @@ export function CreditexSresCalculator({
                   : `Postcode ${estimate.resolution.postcode}`}
               </strong>
               {Number(estimate.unitQuantity || "1") > 1
-                && estimate.perUnitOutput && (
+                && estimate.perUnitOutput
+                && !estimate.waterHeaterItems && (
                 <span>
                   {estimate.perUnitOutput.quantity} STC per system x {estimate.unitQuantity} systems
                 </span>
               )}
+              {estimate.waterHeaterItems?.map((item) => (
+                <span key={item.itemNumber}>
+                  {item.resolution.brand} {item.resolution.model}: {item.perUnitOutput.quantity} STC per system x {item.unitQuantity} = {item.output.quantity} STC
+                </span>
+              ))}
             </div>
           )}
           <details>
