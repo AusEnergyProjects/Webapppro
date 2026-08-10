@@ -112,6 +112,15 @@ test("shared navigation never clips its first destination and explains mobile ov
     styles,
     /\.site-header \.site-nav-shell \{ grid-column: 1 \/ -1; grid-row: 2;[^}]*width: 100%; \}/,
   );
+  assert.match(
+    styles,
+    /@media \(max-width: 520px\) \{[\s\S]*?\.site-header-actions \{[^}]*display: flex;[^}]*grid-column: 2;[^}]*grid-row: 1;/,
+  );
+  assert.match(
+    styles,
+    /\.site-header-actions \.site-account-link \{[^}]*grid-column: auto;[^}]*grid-row: auto;/,
+  );
+  assert.match(styles, /\.site-header-actions \.site-account-link span \{ display: none; \}/);
 });
 
 test("direct trade proposition presents the free verified operating model honestly", () => {

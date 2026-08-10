@@ -5740,10 +5740,11 @@ body input[type="number"]::-webkit-outer-spin-button {
   .brandtag { display: none; }
   .site-header { grid-template-columns: minmax(0, 1fr) auto; }
   .site-header .brandbar { grid-column: 1; grid-row: 1; min-width: 0; }
-  .site-header-actions { display: grid; gap: 6px; grid-column: 2; grid-row: 1; grid-template-columns: auto 42px; width: auto; }
+  .site-header-actions { display: flex; gap: 6px; grid-column: 2; grid-row: 1; width: auto; }
   .site-header .site-nav-shell { grid-column: 1 / -1; grid-row: 2; min-width: 0; width: 100%; }
-  .site-account-link { font-size: .65rem; min-width: 0; padding: 0 9px; }
-  .site-tlink-link { justify-self: end; width: 40px; }
+  .site-header-actions .site-account-link { font-size: .65rem; grid-column: auto; grid-row: auto; min-width: 0; padding: 0 10px; }
+  .site-header-actions .site-account-link span { display: none; }
+  .site-tlink-link { flex: 0 0 40px; justify-self: auto; width: 40px; }
   .start-hero-copy { min-width: 0; }
   .start-hero h1 { font-size: clamp(2rem, 10vw, 2.55rem); overflow-wrap: break-word; }
   .start-hero aside ul { grid-template-columns: 1fr; }
