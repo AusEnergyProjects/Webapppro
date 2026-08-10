@@ -1,14 +1,14 @@
 # Next task handover
 
-Status: `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` released and live
+Status: `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` released and live
 
-Prepared: 10 August 2026
+Prepared: 11 August 2026
 
-Milestone ID: `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52`
+Milestone ID: `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `c75ff7bb4355f2f74bc9996527900c3d515ab85e`
+Previous production application source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
 
 Historical v305 corrective source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
@@ -22,19 +22,21 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Milestone application source: `c75ff7bb4355f2f74bc9996527900c3d515ab85e`
+Milestone application source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
 
-Current production source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
+Current production source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
 
-Released application source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
+Released application source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
 
-Current production: Sites version 307 from application commit `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
+Current production: Sites version 308 from application commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
 
-Deployment: `appgdep_6a79b1799b988191a1ac6ac58888e134`
+Deployment: `appgdep_6a79e3700444819191ac709f0bd509c6`
 
-Sites stored release: 391 files, 37,744,640 bytes and content SHA-256 `77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`
+Sites stored release: 392 files, 38,696,960 bytes and content SHA-256 `881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`
+
+Local release package: 392 entries, 11,903,586 bytes and SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -46,15 +48,91 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52
+## Released milestone: AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53
+
+Status: exact executable application commit
+`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` is pushed to the GitHub working
+branch and Sites internal `main`, and released as current Sites version 308.
+
+The current saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`.
+Deployment `appgdep_6a79e3700444819191ac709f0bd509c6` succeeded with environment
+revision 20 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`. Sites stored 392 files
+and 38,696,960 bytes with content hash
+`sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`.
+The local 392-entry package was 11,903,586 bytes with SHA-256
+`f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`.
+
+### Released outcome
+
+The public plan now ends in one readable, no-account enquiry that captures a
+searchable address, accepts every relevant service, preserves household control
+over trade disclosure and opens a clear four-way next-step gateway after a
+successful submission.
+
+### Released capability
+
+- First and last name are separate searchable CRM fields. Postcode drives an
+  exact suburb and state choice before street address and optional unit number.
+- Customers can select any of 11 services or select all. Every active
+  platform-approved trade with a matching declared service and service area is
+  eligible for the handoff; there is no six-trade cap.
+- Australian Energy Assessments retains the full address privately. Email and
+  postcode support trade replies, while name, phone and street-address sharing
+  remain separate customer choices.
+- The public enquiry has no customer-account prompt. Its successful state opens
+  a native gateway to electricity comparison, gas comparison, the rebate
+  calculator and the printable plan.
+- Light-mint plan-result actions with dark text remain readable in normal, hover
+  and focus states and become full-width controls on mobile.
+- Additive migration `0127_public_trade_lead_customer_address.sql` adds split
+  identity and structured address fields while retaining the legacy combined
+  name for a safe mixed-version deployment. The package contains all 128
+  migrations through `0127`.
+- The exact committed Apps Script relay source was saved in the existing project
+  and the existing deployment update to version 14 was initiated. Hosted v14
+  signed lead delivery remains unverified because hosted secrets are redacted
+  and no local test token exists. No real customer lead was submitted.
+
+### Validation and operational QA
+
+- Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+  1,882 tests with 1,872 passed, 10 intentional skips and 0 failures,
+  `db:check`, the customer-plan PDF audit, production build and Sites bundle
+  audit.
+- `/api/health` returned HTTP 200. Postcode `3000` resolved Melbourne, VIC;
+  `0872` exposed valid NT, SA and WA localities; invalid `9999` returned the
+  expected HTTP 400. Recent Worker outcomes were clean apart from that deliberate
+  400 probe.
+- Fresh assets `HomeEnergyPlanner-BCCDCklm.js` and
+  `HomeEnergyPlanner-DMhDf6y_.css` expose the structured enquiry and gateway.
+  Live DOM QA confirmed first/last name, postcode to suburb/state to street/unit,
+  all 11 services, privacy toggles and no account prompt.
+- Browser QA confirmed the light-mint calls to action are readable. A temporary
+  client-side successful-response mock opened the native gateway without sending
+  a real lead, and verified all four exact destinations and the 390-pixel layout.
+- The authorised internal lead-webhook probe was not run because its hosted
+  secret is redacted and no local token exists. This is unverified, not failed.
+
+### Exact remaining source and delivery limits
+
+- Hosted Apps Script v14 signed lead delivery and a real downstream trade inbox
+  receipt were not exercised.
+- GEMS remains fail-closed pending authorised exact reconciliation of the retained
+  7,500-row source against the reviewed 7,499-row candidate.
+
+## Previous released milestone: AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52
 
 Status: complete journey application commit
 `c75ff7bb4355f2f74bc9996527900c3d515ab85e` was released as historical Sites
 version 306, then exact mobile-header corrective commit
 `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` was pushed to the GitHub branch,
-GitHub `main` and Sites internal `main` and released as current Sites version 307.
+GitHub `main` and Sites internal `main` and released as historical Sites version
+307 before version 308 superseded it.
 
-The current saved-version identity is
+The historical v307 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`.
 Deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` succeeded with environment
 revision 20 under provider identity `info294029--aea-energy-comparison` at

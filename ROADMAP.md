@@ -2066,9 +2066,85 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52
+## Released milestone: AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53
 
-Status: exact application commit
+Status: exact executable application commit
+`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` is pushed to
+`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
+released as Sites version 308 through deployment
+`appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
+`https://compare.ausenergyassessments.com`. Sites version 307 remains the
+historical guided-journey and mobile-header release.
+
+### Outcome
+
+Replace the narrow single-service enquiry with one readable, privacy-controlled
+customer handoff that captures a searchable structured address, lets the
+household request every relevant service, distributes the resulting lead to all
+approved matching TLink trades and gives the customer an immediate four-way next
+step without requiring a customer account.
+
+### Released scope
+
+- The public enquiry stores first and last name separately and captures postcode,
+  exact suburb and state, street address and optional unit number. Postcode drives
+  the available locality choices before street and unit details are entered.
+- Customers can select any of the 11 available services or select all. The lead
+  handoff targets every active platform-approved trade whose declared services
+  and service area match the submitted request, without a six-trade cap.
+- Australian Energy Assessments retains the complete address for its private CRM
+  record. Email and postcode are shared for trade replies; the household controls
+  whether trades also receive name, phone and street address.
+- The customer-account prompt is absent from the public enquiry. A successful
+  enquiry opens a native next-step gateway with exact actions for electricity
+  comparison, gas comparison, the rebate calculator and the printable plan.
+- The plan result next-step actions use light-mint buttons with dark text and
+  full-width mobile layout so their labels remain readable in normal, hover and
+  focus states.
+- Additive migration `0127_public_trade_lead_customer_address.sql` adds split
+  customer identity and structured-address custody while retaining the legacy
+  combined-name field for a safe mixed-version deployment. The packaged and
+  audited migration inventory is 128 migrations through `0127`.
+- The exact committed Apps Script relay source was saved in the existing relay
+  project and an update of the existing deployment to version 14 was initiated.
+  A live signed lead-delivery probe for that hosted version remains unverified;
+  no real customer lead was submitted during release QA.
+
+### Release and validation evidence
+
+- Saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
+  identifies exact executable commit
+  `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`. Sites stored 392 files and
+  38,696,960 bytes with content hash
+  `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`.
+- The local 392-entry release package was 11,903,586 bytes with SHA-256
+  `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`
+  and included all 128 migrations through additive `0127`.
+- Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+  1,882 tests with 1,872 passed, 10 intentional skips and 0 failures,
+  `db:check`, the customer-plan PDF audit, production build and Sites bundle
+  audit.
+- Live `/api/health` returned HTTP 200. Postcode `3000` resolved Melbourne, VIC;
+  `0872` exposed the valid NT, SA and WA locality tuples; invalid `9999` returned
+  the expected HTTP 400. The recent Worker outcome was clean apart from that
+  deliberate 400 validation probe.
+- Fresh production assets `HomeEnergyPlanner-BCCDCklm.js` and
+  `HomeEnergyPlanner-DMhDf6y_.css` expose the split-name, structured-address,
+  select-all multi-service and next-step gateway release. Live DOM QA confirmed
+  first and last name, postcode to suburb/state to street/unit progression, all
+  11 services, privacy toggles and no account prompt.
+- The light-mint next-step actions were visually readable. Browser QA opened the
+  native gateway with a temporary client-side successful-response mock, so no
+  real lead was sent, and verified its four exact destinations and 390-pixel
+  mobile layout.
+- The authorised internal lead-webhook probe was not run because hosted secret
+  values are redacted and no local test token exists. Hosted v14 lead delivery is
+  unverified, not failed.
+
+## Previous released milestone: AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52
+
+Status: historical exact application commit
 `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` is pushed to
 `origin/codex/sites-custom-domain-migration`, `origin/main` and Sites internal
 `main`, and released as Sites version 307 through deployment

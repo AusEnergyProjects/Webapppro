@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 10 August 2026
+Last reconciled locally: 11 August 2026
 
-Deployment evidence last verified: 10 August 2026
+Deployment evidence last verified: 11 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -159,10 +159,13 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 305 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1` | Exact Sites version 305 built from `79f7e2e5be14464410ba40a749453c7473b22d4d`; 391 files; 37,201,920 bytes; content hash `sha256:e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`; deployment `appgdep_6a797f25df8c819187590b70811a6794` |
 | Historical complete guided journey application source | `c75ff7bb4355f2f74bc9996527900c3d515ab85e` on `codex/sites-custom-domain-migration` | Exact source for historical Sites version 306; superseded by the v307 mobile-header hotfix |
 | Historical Sites version 306 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df` | Exact Sites version 306 built from `c75ff7bb4355f2f74bc9996527900c3d515ab85e`; 391 files; 37,744,640 bytes; content hash `sha256:61319a3fa5e852f5f8c9edbe8fe94a1508e612147a5252907d477e9da5084fd8`; deployment `appgdep_6a79aa88b3088191af653a395a2501a1` succeeded with environment revision 20 |
-| Current complete guided journey application source | `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch, GitHub `main` and Sites internal `main` for milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8` | Exact Sites version 307 built from `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`; 391 files; 37,744,640 bytes; content hash `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806` |
-| Current executable application identity | Sites version 307 from `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` succeeded; environment revision 20; provider identity `info294029--aea-energy-comparison` |
-| Current Google Apps Script relay identity | Version 13 deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Signed health and lead-delivery probe returned exact `healthy`; no real lead was submitted |
+| Historical complete guided journey application source | `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` on `codex/sites-custom-domain-migration` | Exact executable source for historical Sites version 307 and milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52`; superseded by version 308 |
+| Historical Sites version 307 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8` | Exact Sites version 307 built from `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`; 391 files; 37,744,640 bytes; content hash `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`; deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` |
+| Current structured customer enquiry gateway application source | `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub working branch and Sites internal `main` for milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` |
+| Current Sites version 308 release package | Local package supplied to Sites | 392 entries; 11,903,586 bytes; SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`; all 128 migrations through additive `0127_public_trade_lead_customer_address.sql` |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075` | Exact Sites version 308 built from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`; 392 files; 38,696,960 bytes; content hash `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57` |
+| Current executable application identity | Sites version 308 from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a79e3700444819191ac709f0bd509c6` succeeded; environment revision 20; provider identity `info294029--aea-energy-comparison` |
+| Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Exact committed relay source saved and the existing deployment update to version 14 was initiated; hosted v14 identity and signed lead-delivery probe remain unverified; no real lead was submitted |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -185,31 +188,89 @@ Sites version 304 from milestone source `a0fcbf200ece76f68bbd83c298f1d556333c615
 and corrective Sites version 305 from
 `79f7e2e5be14464410ba40a749453c7473b22d4d` are historical. Sites version 306
 from `c75ff7bb4355f2f74bc9996527900c3d515ab85e` completed the guided customer
-journey and is explicitly superseded by current Sites version 307 from mobile
-header corrective source `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`.
-Signed operational health, lead-delivery and customer-plan PDF acceptance are
-verified below. GEMS-backed calculators remain fail-closed after an unresolved
-reviewed official-row decrease.
+journey. Mobile-header corrective Sites version 307 from
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` is historical and superseded by
+current Sites version 308 from structured customer enquiry gateway source
+`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`. Public health, structured-locality
+and customer-plan PDF acceptance are verified below. Hosted Apps Script v14
+signed lead delivery remains unverified. GEMS-backed calculators remain
+fail-closed after an unresolved reviewed official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current complete guided home energy journey release
+## Current structured customer enquiry gateway release
+
+Milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` is released from exact
+executable application commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`,
+pushed to the GitHub working branch and Sites internal `main`.
+
+Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
+and deployment `appgdep_6a79e3700444819191ac709f0bd509c6` identify Sites
+version 308 from that exact source. Deployment succeeded with environment
+revision 20 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`. Sites stored 392 files
+and 38,696,960 bytes with content hash
+`sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`.
+The local 392-entry release package was 11,903,586 bytes with SHA-256
+`f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`
+and contains all 128 migrations through additive
+`0127_public_trade_lead_customer_address.sql`.
+
+The public enquiry separates first and last name for searchable CRM records.
+Postcode drives an exact suburb and state choice before street address and
+optional unit number. Customers can select any of 11 services or select all.
+Every active platform-approved TLink trade with a matching declared service and
+service area is eligible for the handoff; there is no six-trade cap.
+
+Australian Energy Assessments retains the complete address for its private CRM
+record. Email and postcode support trade replies, while the household separately
+controls whether trades also receive name, phone and street address. The public
+enquiry contains no customer-account prompt. A successful response opens a
+native gateway to electricity comparison, gas comparison, the rebate calculator
+and the printable plan.
+
+Plan-result next-step actions use light-mint surfaces with dark text and a
+full-width mobile layout. Live DOM QA confirmed first and last name, postcode to
+suburb/state to street/unit progression, all 11 services, privacy toggles and no
+account prompt. Fresh production assets are `HomeEnergyPlanner-BCCDCklm.js` and
+`HomeEnergyPlanner-DMhDf6y_.css`.
+
+Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+1,882 tests with 1,872 passed, 10 intentional skips and 0 failures, `db:check`,
+the customer-plan PDF audit, production build and Sites bundle audit.
+`/api/health` returned HTTP 200. Postcode `3000` resolved Melbourne, VIC; `0872`
+exposed valid NT, SA and WA locality tuples; invalid `9999` returned the expected
+HTTP 400. Recent Worker outcomes were clean apart from that deliberate 400
+validation probe.
+
+Browser QA verified readable light-mint actions. A temporary client-side
+successful-response mock opened the native gateway without sending a real lead,
+and verified its four exact destinations and 390-pixel layout. The authorised
+internal lead-webhook probe was not run because no local test token exists;
+hosted v14 identity and signed lead delivery remain unverified, not failed. The
+exact committed Apps Script relay source was saved and an update of the existing
+deployment to version 14 was initiated.
+
+## Prior complete guided home energy journey release
 
 Milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` was implemented by
 application commit `c75ff7bb4355f2f74bc9996527900c3d515ab85e` and corrected for the
 compact mobile header by exact executable commit
-`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`. The current commit is pushed to
-the GitHub branch, GitHub `main` and Sites internal `main`.
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`. That historical commit is pushed
+to the GitHub branch, GitHub `main` and Sites internal `main`.
 
 Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`
-and deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` identify Sites
-version 307 from the exact corrective source. Deployment succeeded with
+and deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` identify historical
+Sites version 307 from the exact corrective source. Deployment succeeded with
 environment revision 20 under provider identity
 `info294029--aea-energy-comparison` at
 `https://compare.ausenergyassessments.com` and
 `https://aea-energy-comparison.info294029.chatgpt.site`. Sites stored 391 files
 and 37,744,640 bytes with content hash
 `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`.
+Version 307 is superseded by current version 308.
 
 Historical Sites version 306 saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df`
@@ -1944,7 +2005,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 307 is:
+The current verified deployed topology for Sites version 308 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

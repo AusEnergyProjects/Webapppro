@@ -2,7 +2,7 @@
 
 Status: controlled discovery baseline, not an eligibility or calculation authority
 
-Reviewed: 10 August 2026
+Reviewed: 11 August 2026
 
 Owner: TLink compliance domain with independent source verification and Creditex operational review required before publication
 
@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 307, every GEMS-backed pathway fails closed while the
+availability. In version 308, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,54 +72,70 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Current milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` was implemented
-by application commit `c75ff7bb4355f2f74bc9996527900c3d515ab85e` and corrected
-for the compact mobile header by exact executable commit
-`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`. The corrective commit is pushed to
-the GitHub branch, GitHub `main` and Sites internal `main`, and is released as
-Sites version 307 through deployment `appgdep_6a79b1799b988191a1ac6ac58888e134`
-with environment revision 20 under provider identity
-`info294029--aea-energy-comparison` at
+Current milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` is released from
+exact executable commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`, pushed to
+the GitHub working branch and Sites internal `main`, as Sites version 308 through
+deployment `appgdep_6a79e3700444819191ac709f0bd509c6` with environment
+revision 20 under provider identity `info294029--aea-energy-comparison` at
 `https://compare.ausenergyassessments.com` and
 `https://aea-energy-comparison.info294029.chatgpt.site`.
 
-The released customer journey is a complete 38-screen planner with one
-plain-English question per screen, safe `Not sure` choices, conditional question
-skipping and preservation of bounded context through no-account enquiry,
-free-account handoff, print and report. Results add answer-specific Australian
-Government-aligned quick wins, an ordered roadmap and clear electricity, gas,
-calculator and rebate handoffs. Guided electricity and gas comparison retain
-private NMI and interval-data boundaries, calculation evidence and retailer
-checks.
+The public enquiry separates first and last name, then uses postcode to offer an
+exact suburb and state before street address and optional unit number. Customers
+can select any of 11 services or select all. Every active platform-approved
+TLink trade with a matching declared service and service area is eligible for
+the handoff; there is no six-trade cap.
 
-All customer-facing copy spells out Australian Energy Assessments. At 390 pixels,
-the compact header shows Account then the TLink logo without a separator dot or
-horizontal overflow. The professional trade workspace remains static. The shared
-report identity is `2026-08-10-professional-personalised-report-v5`, design
-identity is `2026-08-10-professional-personalised-report-design-v4` and PDF
-identity remains `2026-08-10-personalised-plan-pdf-v7`. The audited PDF has 18
-tagged pages, embedded fonts and 37 checked links.
+Australian Energy Assessments retains the complete address for its private CRM
+record. Email and postcode support trade replies; the household separately
+controls whether trades receive name, phone and street address. The public
+enquiry has no customer-account prompt. A successful response opens a native
+gateway to electricity comparison, gas comparison, the rebate calculator and
+the printable plan.
 
-July 2026 NatHERS Existing Homes guidance and technical material and Australian
-Government quick-win sources are planning references only. The self-reported plan
-is not a NatHERS rating, assessment or endorsement.
+Additive migration `0127_public_trade_lead_customer_address.sql` adds split
+identity and structured address fields while retaining the legacy combined name.
+The release package contains all 128 migrations through `0127`. Plan-result
+next-step actions use readable light-mint surfaces with dark text and a
+full-width mobile layout.
 
-Google Apps Script relay version 13 retains deployment ID
-`AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`.
-The signed monitor returned exact `healthy`: `site_runtime` HTTP 200 in 1,134 ms,
-`electricity_plans` HTTP 200 in 43,155 ms, `gas_plans` HTTP 200 in 15,840 ms and
-signed `lead_delivery` HTTP 200 in 2,588 ms for probe
-`3d36c715-4904-4a1b-bde3-aa3e8253c74b`. No real customer lead was submitted.
+Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+1,882 tests with 1,872 passed, 10 intentional skips and 0 failures, `db:check`,
+the customer-plan PDF audit, production build and Sites bundle audit.
+`/api/health` returned HTTP 200. Postcode `3000` resolved Melbourne, VIC; `0872`
+exposed valid NT, SA and WA locality tuples; invalid `9999` returned the expected
+HTTP 400. Worker outcomes were clean apart from that deliberate 400 validation
+probe.
 
-Full validation passed with 1,859 tests passed, 10 intentionally skipped and 0
-failed, typecheck, warning-free lint, production build, all 127 migrations, the
-customer-plan PDF audit and the Sites bundle audit. The v307 header correction
-then passed 22 of 22 focused checks, typecheck, lint and production build. Live
-v306 QA exercised desktop and 390-pixel planner progression across all 38 screens,
-electricity and gas handoffs, full brand naming and no horizontal overflow. Live
-v307 QA confirmed Account then TLink, no separator dot and no horizontal overflow
-at 390 pixels. `/api/health` returned HTTP 200 and the recent Sites Worker
-errors-only query was empty.
+Live DOM QA confirmed first and last name, postcode to suburb/state to
+street/unit progression, all 11 services, privacy toggles and no account prompt.
+Fresh production assets are `HomeEnergyPlanner-BCCDCklm.js` and
+`HomeEnergyPlanner-DMhDf6y_.css`. Browser QA opened the native gateway with a
+temporary client-side successful-response mock, so no real lead was sent, and
+verified its four exact destinations and 390-pixel layout.
+
+The exact committed Apps Script relay source was saved in the existing project
+and an update of the existing deployment to version 14 was initiated. Hosted v14
+identity and signed lead delivery remain unverified because hosted secrets are
+redacted and no local test token exists. This is unverified, not failed.
+
+Historical milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` is Sites
+version 307 from exact executable commit
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` through deployment
+`appgdep_6a79b1799b988191a1ac6ac58888e134`. It remains the historical complete
+38-screen journey and mobile-header release.
+
+That historical release used a complete 38-screen planner with one
+plain-English question per screen, report identity
+`2026-08-10-professional-personalised-report-v5`, design identity
+`2026-08-10-professional-personalised-report-design-v4` and PDF identity
+`2026-08-10-personalised-plan-pdf-v7`. Its audited PDF had 18 tagged pages, embedded fonts and 37 checked links. NatHERS and government guidance remained
+planning references only; the plan was not a NatHERS rating, assessment or endorsement. Historical Google Apps Script relay version 13 returned an exact
+healthy signed monitor for probe `3d36c715-4904-4a1b-bde3-aa3e8253c74b`.
+Historical v307 QA confirmed Account then TLink, no separator dot and no
+horizontal overflow. Its full validation passed 1,859 tests with 10 intentional
+skips and 0 failures, all 127 migrations, the PDF and Sites audits; the header
+correction passed 22 of 22 focused checks.
 
 Historical milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` was implemented by
 application commit `a0fcbf200ece76f68bbd83c298f1d556333c615e` and corrected for
@@ -216,12 +232,22 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The current Sites version 307 saved-version identity is
+The current Sites version 308 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
+with content hash
+`sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`
+across 392 stored files and 38,696,960 stored bytes. The local release package
+contained 392 entries, was 11,903,586 bytes and had SHA-256
+`f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`.
+Provider identity is `info294029--aea-energy-comparison`.
+
+Historical Sites version 307 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`
 with content hash
 `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`
-across 391 stored files and 37,744,640 stored bytes. Provider identity is
-`info294029--aea-energy-comparison`.
+across 391 stored files and 37,744,640 stored bytes. Deployment
+`appgdep_6a79b1799b988191a1ac6ac58888e134` identifies exact commit
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`; v307 is superseded by v308.
 
 Historical Sites version 306 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df`
