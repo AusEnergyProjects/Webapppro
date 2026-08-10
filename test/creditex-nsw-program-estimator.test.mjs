@@ -115,7 +115,16 @@ test("all 20 executable NSW scenarios expose a complete UI contract and execute 
 });
 
 test("BESS1 and BESS2 apply usable capacity, firmness, lifetime, network loss and whole-certificate floor", () => {
-  assertOutput(estimate("NSW-PDRS-2026", "BESS1", "2026-07-01"), "718", "PRC");
+  const bess1 = estimate("NSW-PDRS-2026", "BESS1", "2026-07-01");
+  assertOutput(bess1, "718", "PRC");
+  assert.equal(
+    bess1.trace.find((entry) => entry.key === "peak_demand_reduction_capacity")?.output,
+    "69.093",
+  );
+  assert.equal(
+    bess1.trace.find((entry) => entry.key === "raw_prcs")?.output,
+    "718.5672",
+  );
   assertOutput(estimate("NSW-PDRS-2026", "BESS2", "2026-07-01"), "197", "PRC");
 
   const endeavour = estimate("NSW-PDRS-2026", "BESS1", "2026-07-01", {
@@ -123,6 +132,28 @@ test("BESS1 and BESS2 apply usable capacity, firmness, lifetime, network loss an
   });
   assertOutput(endeavour, "725", "PRC");
   assert.equal(endeavour.trace.find((entry) => entry.key === "raw_prcs")?.output, "725.4765");
+});
+
+test("BESS2 separates the 50 kWh eligibility ceiling from the 28 kWh calculation cap", () => {
+  const belowCeiling = estimate("NSW-PDRS-2026", "BESS2", "2026-07-01", {
+    nominal_battery_capacity_kwh: "55.555555555",
+  });
+  assert.equal(
+    belowCeiling.trace.find((entry) => entry.key === "usable_battery_capacity")?.output,
+    "49.9999999995",
+  );
+  assert.equal(
+    belowCeiling.trace.find((entry) => entry.key === "calculation_battery_capacity")?.output,
+    "28",
+  );
+  assertOutput(belowCeiling, "615", "PRC");
+
+  assertError("NSW_INPUT_INVALID", () => estimate(
+    "NSW-PDRS-2026",
+    "BESS2",
+    "2026-07-01",
+    { nominal_battery_capacity_kwh: "55.555555556" },
+  ));
 });
 
 test("BESS1 fails closed without its post-30 June 2025 exception or minimum purchaser payment", () => {
@@ -258,6 +289,26 @@ test("BESS4 and BESS5 enforce solar, inverter and administrator-recording gates"
   });
   assert.equal(capped.trace.find((entry) => entry.key === "calculation_battery_capacity")?.output, "10000");
   assertOutput(capped, "936000", "PRC");
+});
+
+test("BESS4 exposes the Rule's unconditional 5,000 AUD minimum payment", () => {
+  const bess4 = activity("NSW-PDRS-2026", "BESS4");
+  assert.equal(
+    bess4.inputDefinitions.some((definition) => definition.key === "payment_exemption"),
+    false,
+  );
+  assert.match(
+    bess4.inputDefinitions.find((definition) => (
+      definition.key === "net_payment_ex_gst_aud"
+    ))?.help || "",
+    /no payment-program exception/,
+  );
+  assertError("NSW_INPUT_INVALID", () => estimate(
+    "NSW-PDRS-2026",
+    "BESS4",
+    "2026-09-01",
+    { net_payment_ex_gst_aud: "4999.99" },
+  ));
 });
 
 test("PDRS HVAC threshold, capacity and multi-split certificate-cap boundaries fail closed", () => {

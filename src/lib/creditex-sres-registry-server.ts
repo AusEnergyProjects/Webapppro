@@ -1,5 +1,7 @@
+import { strFromU8, unzipSync } from "fflate";
 import {
   CER_SRES_PRODUCT_SOURCES,
+  CER_SRES_PRODUCT_REGISTER_URL,
   CER_SRES_REFERENCE_SOURCES,
   CREDITEX_SRES_REGISTRY_CONTRACT,
   CreditexSresRegistryError,
@@ -23,6 +25,9 @@ import { australianRegulatorDate } from "./creditex-australian-regulator-date.ts
 const REGISTRY_CODE = "cer_sres_swh" as const;
 const SOURCE_MAXIMUM_BYTES = 1_900_000;
 const SOURCE_MAXIMUM_TOTAL_BYTES = 5 * 1024 * 1024;
+const REGISTER_METADATA_MAXIMUM_EXPANDED_BYTES = 1_000_000;
+const XLSX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PRODUCT_INSERT_CHUNK = 1_000;
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
 const SYNC_LEASE_MS = 15 * 60 * 1000;
@@ -89,6 +94,7 @@ type SourceArtifact = {
   bytes: Uint8Array;
   sha256: string;
   records: CerSresProductRecord[];
+  registerMetadata: RegisterMetadataArtifact;
 };
 
 type SourceCountRow = {
@@ -104,7 +110,23 @@ type ReferenceArtifact = {
   records: readonly [];
 };
 
-type RegistryArtifact = SourceArtifact | ReferenceArtifact;
+type RegisterMetadataArtifact = {
+  source: {
+    sourceKey: string;
+    url: string;
+  };
+  contentType: typeof XLSX_CONTENT_TYPE;
+  bytes: Uint8Array;
+  sha256: string;
+  records: readonly [];
+  registerVersion: number;
+  publishedOn: string;
+};
+
+type RegistryArtifact =
+  | SourceArtifact
+  | ReferenceArtifact
+  | RegisterMetadataArtifact;
 
 export type CreditexSresArtifactStore = {
   head(key: string): Promise<{
@@ -347,6 +369,229 @@ async function boundedResponseBytes(response: Response, sourceKey: string) {
   return bytes;
 }
 
+const FULL_MONTHS = new Map([
+  ["January", "01"],
+  ["February", "02"],
+  ["March", "03"],
+  ["April", "04"],
+  ["May", "05"],
+  ["June", "06"],
+  ["July", "07"],
+  ["August", "08"],
+  ["September", "09"],
+  ["October", "10"],
+  ["November", "11"],
+  ["December", "12"],
+]);
+
+function spreadsheetXmlText(value: string) {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => (
+      String.fromCodePoint(Number.parseInt(code, 16))
+    ))
+    .replace(/&#(\d+);/g, (_, code) => (
+      String.fromCodePoint(Number.parseInt(code, 10))
+    ))
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+function registerPublishedDate(day: string, monthName: string, year: string) {
+  const month = FULL_MONTHS.get(monthName);
+  const date = month
+    ? `${year}-${month}-${day.padStart(2, "0")}`
+    : "";
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (
+    !date
+    || Number.isNaN(parsed.getTime())
+    || parsed.toISOString().slice(0, 10) !== date
+  ) {
+    return fail(
+      "SRES_REGISTER_METADATA_INVALID",
+      502,
+      "The official CER register workbook contains an invalid published date.",
+    );
+  }
+  return date;
+}
+
+export function parseCerSresRegisterMetadataXlsx(value: Uint8Array) {
+  let sharedStrings: Uint8Array | undefined;
+  let oversized = false;
+  try {
+    sharedStrings = unzipSync(Uint8Array.from(value), {
+      filter(file) {
+        if (file.name !== "xl/sharedStrings.xml") return false;
+        if (file.originalSize > REGISTER_METADATA_MAXIMUM_EXPANDED_BYTES) {
+          oversized = true;
+          return false;
+        }
+        return true;
+      },
+    })["xl/sharedStrings.xml"];
+  } catch {
+    return fail(
+      "SRES_REGISTER_METADATA_INVALID",
+      502,
+      "The official CER register workbook could not be read safely.",
+    );
+  }
+  if (!sharedStrings || oversized) {
+    return fail(
+      "SRES_REGISTER_METADATA_INVALID",
+      502,
+      "The official CER register workbook is missing bounded release metadata.",
+    );
+  }
+  const sharedXml = strFromU8(sharedStrings);
+  const releases = new Map<string, { registerVersion: number; publishedOn: string }>();
+  for (const match of sharedXml.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)) {
+    const text = spreadsheetXmlText(match[1]).replace(/\s+/g, " ").trim();
+    const release = /^Version (\d{1,4}) - Published (\d{1,2}) ([A-Z][a-z]+) (\d{4})$/
+      .exec(text);
+    if (!release) continue;
+    const registerVersion = Number(release[1]);
+    if (!Number.isSafeInteger(registerVersion) || registerVersion < 1) {
+      return fail(
+        "SRES_REGISTER_METADATA_INVALID",
+        502,
+        "The official CER register workbook contains an invalid version.",
+      );
+    }
+    const publishedOn = registerPublishedDate(release[2], release[3], release[4]);
+    releases.set(`${registerVersion}:${publishedOn}`, {
+      registerVersion,
+      publishedOn,
+    });
+  }
+  if (releases.size !== 1) {
+    return fail(
+      "SRES_REGISTER_METADATA_INVALID",
+      502,
+      "The official CER register workbook does not identify one exact release.",
+    );
+  }
+  return [...releases.values()][0];
+}
+
+async function fetchRegisterMetadata(
+  source: CerSresProductSource,
+  fetchImpl: FetchLike,
+): Promise<RegisterMetadataArtifact> {
+  const sourceKey = `${source.sourceKey}-register-metadata`;
+  let response: Response;
+  try {
+    response = await fetchImpl(source.registerMetadataUrl, {
+      cache: "no-store",
+      redirect: "manual",
+      headers: { Accept: XLSX_CONTENT_TYPE },
+    });
+  } catch (error) {
+    console.error("CER SRES register metadata fetch failed.", {
+      sourceKey,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return fail(
+      "SRES_REGISTER_METADATA_UNAVAILABLE",
+      502,
+      `The official ${sourceKey} source could not be fetched.`,
+    );
+  }
+  if (response.status >= 300 && response.status < 400) {
+    return fail(
+      "SRES_REGISTER_METADATA_UNAVAILABLE",
+      502,
+      `The official ${sourceKey} source returned an HTTP redirect.`,
+    );
+  }
+  if (!response.ok) {
+    return fail(
+      "SRES_REGISTER_METADATA_UNAVAILABLE",
+      502,
+      `The official ${sourceKey} source returned HTTP ${response.status}.`,
+    );
+  }
+  const contentType = (response.headers.get("content-type") || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (contentType !== XLSX_CONTENT_TYPE) {
+    return fail(
+      "SRES_REGISTER_METADATA_INVALID",
+      502,
+      `The official ${sourceKey} source did not return XLSX data.`,
+    );
+  }
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (
+    Number.isFinite(declaredLength)
+    && declaredLength > SOURCE_MAXIMUM_BYTES
+  ) {
+    return fail(
+      "SRES_PRODUCT_SOURCE_TOO_LARGE",
+      502,
+      `The official ${sourceKey} source exceeded the size limit.`,
+    );
+  }
+  const bytes = await boundedResponseBytes(response, sourceKey);
+  const release = parseCerSresRegisterMetadataXlsx(bytes);
+  return {
+    source: {
+      sourceKey,
+      url: source.registerMetadataUrl,
+    },
+    contentType: XLSX_CONTENT_TYPE,
+    bytes,
+    sha256: await sha256Hex(bytes),
+    records: [],
+    ...release,
+  };
+}
+
+function validateReviewedRegisterRelease(
+  source: CerSresProductSource,
+  csvSha256: string,
+  records: readonly CerSresProductRecord[],
+  metadata: RegisterMetadataArtifact,
+) {
+  const reviewed = source.reviewedRelease;
+  if (!reviewed) return;
+  if (
+    metadata.registerVersion < reviewed.version
+    || metadata.publishedOn < reviewed.publishedOn
+    || (
+      metadata.registerVersion > reviewed.version
+      && metadata.publishedOn <= reviewed.publishedOn
+    )
+  ) {
+    return fail(
+      "SRES_REGISTER_RELEASE_REGRESSION",
+      503,
+      "The official CER register release regressed behind the independently reviewed release.",
+    );
+  }
+  if (
+    metadata.registerVersion === reviewed.version
+    && (
+      metadata.publishedOn !== reviewed.publishedOn
+      || records.length !== reviewed.recordCount
+      || csvSha256 !== reviewed.csvSha256
+      || metadata.sha256 !== reviewed.workbookSha256
+    )
+  ) {
+    return fail(
+      "SRES_REGISTER_RELEASE_CHANGED",
+      503,
+      "The reviewed CER register version changed without a new official release and was quarantined.",
+    );
+  }
+}
+
 async function fetchSource(
   source: CerSresProductSource,
   fetchImpl: FetchLike,
@@ -421,12 +666,16 @@ async function fetchSource(
     );
   }
   const records = parseCerSresProductCsv(body, source);
+  const sha256 = await sha256Hex(bytes);
+  const registerMetadata = await fetchRegisterMetadata(source, fetchImpl);
+  validateReviewedRegisterRelease(source, sha256, records, registerMetadata);
   return {
     source,
     contentType,
     bytes,
-    sha256: await sha256Hex(bytes),
+    sha256,
     records,
+    registerMetadata,
   };
 }
 
@@ -497,7 +746,11 @@ async function fetchReference(
 }
 
 function artifactObjectKey(artifact: RegistryArtifact) {
-  const extension = artifact.contentType === "application/pdf" ? "pdf" : "csv";
+  const extension = artifact.contentType === "application/pdf"
+    ? "pdf"
+    : artifact.contentType === XLSX_CONTENT_TYPE
+      ? "xlsx"
+      : "csv";
   return `creditex/official-sources/${REGISTRY_CODE}/${artifact.source.sourceKey}/${artifact.sha256}.${extension}`;
 }
 
@@ -745,11 +998,32 @@ export async function syncCerSresProductRegistry(
     for (const source of references) {
       referenceArtifacts.push(await fetchReference(source, fetchImpl));
     }
-    const artifacts: RegistryArtifact[] = [
+    const registerMetadataArtifacts = productArtifacts.map(
+      (artifact) => artifact.registerMetadata,
+    );
+    const registerRelease = registerMetadataArtifacts[0];
+    if (
+      !registerRelease
+      || registerMetadataArtifacts.some((artifact) => (
+        artifact.registerVersion !== registerRelease.registerVersion
+        || artifact.publishedOn !== registerRelease.publishedOn
+      ))
+    ) {
+      return fail(
+        "SRES_REGISTER_RELEASE_INCONSISTENT",
+        503,
+        "The official CER product workbooks do not identify one consistent register release.",
+      );
+    }
+    const artifacts: (SourceArtifact | ReferenceArtifact)[] = [
       ...productArtifacts,
       ...referenceArtifacts,
     ];
-    const totalBytes = artifacts.reduce(
+    const custodyArtifacts: RegistryArtifact[] = [
+      ...artifacts,
+      ...registerMetadataArtifacts,
+    ];
+    const totalBytes = custodyArtifacts.reduce(
       (total, artifact) => total + artifact.bytes.byteLength,
       0,
     );
@@ -817,7 +1091,7 @@ export async function syncCerSresProductRegistry(
       );
     }
     const objectKeys = new Map<string, string>();
-    for (const artifact of artifacts) {
+    for (const artifact of custodyArtifacts) {
       objectKeys.set(
         artifact.source.sourceKey,
         await retainArtifact(artifactStore, artifact),
@@ -826,12 +1100,26 @@ export async function syncCerSresProductRegistry(
     const manifest = {
       contract: CREDITEX_SRES_REGISTRY_CONTRACT,
       registryCode: REGISTRY_CODE,
+      registerRelease: {
+        registerUrl: CER_SRES_PRODUCT_REGISTER_URL,
+        version: registerRelease.registerVersion,
+        publishedOn: registerRelease.publishedOn,
+      },
       sources: artifacts.map((artifact) => ({
         sourceKey: artifact.source.sourceKey,
-        ...("technology" in artifact.source
+        ...("registerMetadata" in artifact
           ? {
               technology: artifact.source.technology,
               category: artifact.source.category,
+              registerMetadata: {
+                url: artifact.registerMetadata.source.url,
+                contentType: artifact.registerMetadata.contentType,
+                byteLength: artifact.registerMetadata.bytes.byteLength,
+                sha256: artifact.registerMetadata.sha256,
+                objectKey: objectKeys.get(
+                  artifact.registerMetadata.source.sourceKey,
+                ),
+              },
             }
           : { referenceType: "postcode_zone_map" }),
         url: artifact.source.url,

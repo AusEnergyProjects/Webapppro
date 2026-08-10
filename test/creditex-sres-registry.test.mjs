@@ -3,7 +3,13 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { strToU8, zipSync } from "fflate";
 import {
+  CER_SRES_PRODUCT_SOURCES,
+  CER_SRES_REGISTER_RELEASE_URL,
+  CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+  CER_SRES_REGISTER_REVIEWED_VERSION,
+  CER_SRES_REGISTRY_REVIEWED_ON,
   CreditexSresRegistryError,
   parseCerSresProductCsv,
   registeredStcsForZone,
@@ -13,6 +19,7 @@ import {
 import {
   estimateCreditexStcsFromRegistry,
   loadCerSresRegistryStatus,
+  parseCerSresRegisterMetadataXlsx,
   searchCerSresProducts,
   syncCerSresProductRegistry,
 } from "../src/lib/creditex-sres-registry-server.ts";
@@ -133,6 +140,8 @@ const SOURCES = [
     technology: "air_source_heat_pump",
     category: "capacity_at_most_425l",
     url: "https://cer.gov.au/document/air-source-heat-pump-models",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/air-source-heat-pump-models-0",
     expectedColumns: 10,
     minimumRecords: 1,
   },
@@ -141,6 +150,8 @@ const SOURCES = [
     technology: "solar_water_heater",
     category: "capacity_less_than_700l",
     url: "https://cer.gov.au/document/solar-water-heater-models-capacity-less-700l",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/solar-water-heater-models-capacity-less-700l-0",
     expectedColumns: 9,
     minimumRecords: 1,
   },
@@ -149,6 +160,8 @@ const SOURCES = [
     technology: "solar_water_heater",
     category: "capacity_at_least_700l",
     url: "https://cer.gov.au/document/solar-water-heater-models-capacity-more-700l",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/solar-water-heater-models-capacity-more-700l-0",
     expectedColumns: 9,
     minimumRecords: 1,
   },
@@ -208,10 +221,42 @@ function multiRowCsvFixture(source, rowOverrides) {
   return `${headers}\r\n${rows.join("\r\n")}\r\n`;
 }
 
+function registerMetadataFixture(
+  version = CER_SRES_REGISTER_REVIEWED_VERSION,
+  published = "10 August 2026",
+) {
+  const sharedStrings = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">
+      <si><t>Version ${version} - Published ${published}</t></si>
+    </sst>`;
+  return zipSync({
+    "xl/sharedStrings.xml": strToU8(sharedStrings),
+  }, {
+    mtime: new Date("2026-08-10T00:00:00.000Z"),
+  });
+}
+
+const REGISTER_METADATA_FIXTURE = registerMetadataFixture();
+
 function fetchFixture(overrides = new Map()) {
   return async (input) => {
     const source = SOURCES.find(({ url }) => url === input);
     if (!source) {
+      const registerSource = SOURCES.find(
+        ({ registerMetadataUrl }) => registerMetadataUrl === input,
+      );
+      if (registerSource) {
+        const body = overrides.get(`${registerSource.sourceKey}-register-metadata`)
+          ?? REGISTER_METADATA_FIXTURE;
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "content-type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "content-length": String(body.byteLength),
+          },
+        });
+      }
       const reference = REFERENCES.find(({ url }) => url === input);
       if (!reference) return new Response("not found", { status: 404 });
       const body = overrides.get(reference.sourceKey)
@@ -314,6 +359,86 @@ test("official CER postcode transcriptions resolve technology-specific zones", (
   );
 });
 
+test("reviewed CER register release 58 pins every official product export", () => {
+  assert.equal(CER_SRES_REGISTRY_REVIEWED_ON, "2026-08-10");
+  assert.equal(CER_SRES_REGISTER_REVIEWED_VERSION, 58);
+  assert.equal(CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON, "2026-08-10");
+  assert.equal(
+    CER_SRES_REGISTER_RELEASE_URL,
+    "https://cer.gov.au/news-and-media/news/2026/august/register-solar-water-heaters-version-58-now-available",
+  );
+  assert.deepEqual(
+    CER_SRES_PRODUCT_SOURCES.map((source) => ({
+      sourceKey: source.sourceKey,
+      registerMetadataUrl: source.registerMetadataUrl,
+      minimumRecords: source.minimumRecords,
+      reviewedRelease: source.reviewedRelease,
+    })),
+    [
+      {
+        sourceKey: "cer-ashp",
+        registerMetadataUrl:
+          "https://cer.gov.au/document/air-source-heat-pump-models-0",
+        minimumRecords: 1_178,
+        reviewedRelease: {
+          version: 58,
+          publishedOn: "2026-08-10",
+          recordCount: 1_178,
+          csvSha256:
+            "b764b58c6717a82563da6db498e03c9e63940de35865e483f6395e33ac12916b",
+          workbookSha256:
+            "12c9b300992d29c88a35e0a70c486ebff862fa8e5febdd6576000c3f9045e241",
+        },
+      },
+      {
+        sourceKey: "cer-swh-lt-700l",
+        registerMetadataUrl:
+          "https://cer.gov.au/document/solar-water-heater-models-capacity-less-700l-0",
+        minimumRecords: 6_591,
+        reviewedRelease: {
+          version: 58,
+          publishedOn: "2026-08-10",
+          recordCount: 6_591,
+          csvSha256:
+            "c93c34b33011f0688d09cdb9278f563a782c06464ddb9abed96aa870b6078c9b",
+          workbookSha256:
+            "f43cd02ac317d61a44683dd382883b9ca09dbf800666af5365c0852daf31f8a5",
+        },
+      },
+      {
+        sourceKey: "cer-swh-ge-700l",
+        registerMetadataUrl:
+          "https://cer.gov.au/document/solar-water-heater-models-capacity-more-700l-0",
+        minimumRecords: 8_989,
+        reviewedRelease: {
+          version: 58,
+          publishedOn: "2026-08-10",
+          recordCount: 8_989,
+          csvSha256:
+            "95162d637f75ae5b94b1a687c262f503c897607f5143ba03a1f3bc88b3659903",
+          workbookSha256:
+            "cb27f9a0546f80e8ea9d0e04449e8f5953ead5d27193473149bb7f2fa8edf179",
+        },
+      },
+    ],
+  );
+});
+
+test("CER register workbooks expose one exact version and published date", () => {
+  assert.deepEqual(
+    parseCerSresRegisterMetadataXlsx(REGISTER_METADATA_FIXTURE),
+    { registerVersion: 58, publishedOn: "2026-08-10" },
+  );
+  assert.throws(
+    () => parseCerSresRegisterMetadataXlsx(new Uint8Array([1, 2, 3])),
+    expectedRegistryError("SRES_REGISTER_METADATA_INVALID"),
+  );
+  assert.throws(
+    () => parseCerSresRegisterMetadataXlsx(registerMetadataFixture(58, "99 August 2026")),
+    expectedRegistryError("SRES_REGISTER_METADATA_INVALID"),
+  );
+});
+
 test("CER CSV parsing is exact, effective-dated and fails closed on schema drift", () => {
   const ashp = parseCerSresProductCsv(csvFixture(SOURCES[0]), SOURCES[0]);
   assert.deepEqual(ashp[0], {
@@ -383,10 +508,21 @@ test("registry sync uses bounded Worker-compatible official source requests", as
     sources: SOURCES,
   });
 
-  assert.deepEqual(
-    requests.map(({ input }) => input),
-    [...SOURCES, ...REFERENCES].map(({ url }) => url),
-  );
+  const expectedRequests = [
+    ...SOURCES.flatMap((source) => [
+      { url: source.url, accept: "text/csv" },
+      {
+        url: source.registerMetadataUrl,
+        accept:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    ]),
+    ...REFERENCES.map((source) => ({
+      url: source.url,
+      accept: source.expectedContentType,
+    })),
+  ];
+  assert.deepEqual(requests.map(({ input }) => input), expectedRequests.map(({ url }) => url));
   for (const [index, request] of requests.entries()) {
     assert.equal(request.init.cache, "no-store");
     assert.equal(request.init.method, undefined);
@@ -397,11 +533,67 @@ test("registry sync uses bounded Worker-compatible official source requests", as
     );
     assert.equal(
       new Headers(request.init.headers).get("accept"),
-      index < SOURCES.length
-        ? "text/csv"
-        : REFERENCES[index - SOURCES.length].expectedContentType,
+      expectedRequests[index].accept,
     );
   }
+});
+
+test("reviewed register bytes fail closed unless CER publishes a newer release", async () => {
+  const workbookSha256 = createHash("sha256")
+    .update(REGISTER_METADATA_FIXTURE)
+    .digest("hex");
+  const pinnedSources = SOURCES.map((source) => ({
+    ...source,
+    reviewedRelease: {
+      version: 58,
+      publishedOn: "2026-08-10",
+      recordCount: 1,
+      csvSha256: createHash("sha256")
+        .update(csvFixture(source))
+        .digest("hex"),
+      workbookSha256,
+    },
+  }));
+  const first = fixture();
+  await syncCerSresProductRegistry(first.d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore: first.artifactStore,
+    now: new Date("2026-08-10T00:30:00.000Z"),
+    references: REFERENCES,
+    sources: pinnedSources,
+  });
+
+  const changed = fixture();
+  await assert.rejects(
+    syncCerSresProductRegistry(changed.d1, {
+      fetchImpl: fetchFixture(new Map([
+        ["cer-ashp", csvFixture(SOURCES[0], { 2: "UNRELEASED-MUTATION" })],
+      ])),
+      artifactStore: changed.artifactStore,
+      now: new Date("2026-08-10T00:30:00.000Z"),
+      references: REFERENCES,
+      sources: pinnedSources,
+    }),
+    expectedRegistryError("SRES_REGISTER_RELEASE_CHANGED"),
+  );
+
+  const newer = fixture();
+  const version59 = registerMetadataFixture(59, "1 September 2026");
+  const metadataOverrides = new Map([
+    ["cer-ashp", csvFixture(SOURCES[0], { 2: "VERSION-59" })],
+    ...SOURCES.map((source) => [
+      `${source.sourceKey}-register-metadata`,
+      version59,
+    ]),
+  ]);
+  const accepted = await syncCerSresProductRegistry(newer.d1, {
+    fetchImpl: fetchFixture(metadataOverrides),
+    artifactStore: newer.artifactStore,
+    now: new Date("2026-09-01T00:30:00.000Z"),
+    references: REFERENCES,
+    sources: pinnedSources,
+  });
+  assert.equal(accepted.changed, true);
 });
 
 test("registry sync rejects official source redirects without following them", async () => {
@@ -466,7 +658,7 @@ test("daily sync keeps exact source custody and atomically activates one snapsho
       FROM compliance_product_registry_source_artifacts`).get().count,
     5,
   );
-  assert.equal(artifactStore.objects.size, 5);
+  assert.equal(artifactStore.objects.size, 8);
   assert.equal(
     database.prepare(`SELECT COUNT(*) count
       FROM compliance_product_registry_products`).get().count,
@@ -500,6 +692,18 @@ test("daily sync keeps exact source custody and atomically activates one snapsho
   assert.equal(status.snapshot.recordCount, 3);
   assert.equal(status.snapshot.activatedOn, "2026-08-08");
   assert.equal(status.lastAttempt.status, "unchanged");
+  assert.deepEqual(status.snapshot.sourceManifest.registerRelease, {
+    registerUrl:
+      "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters",
+    version: 58,
+    publishedOn: "2026-08-10",
+  });
+  assert.equal(
+    status.snapshot.sourceManifest.sources.filter(
+      (source) => source.registerMetadata,
+    ).length,
+    3,
+  );
 
   const changed = new Map([
     ["cer-ashp", csvFixture(SOURCES[0], { 2: "AS51-210HPA-R2" })],
@@ -534,7 +738,7 @@ test("daily sync keeps exact source custody and atomically activates one snapsho
       FROM compliance_product_registry_source_artifacts`).get().count,
     10,
   );
-  assert.equal(artifactStore.objects.size, 6);
+  assert.equal(artifactStore.objects.size, 9);
   assert.throws(
     () => database.prepare(`DELETE FROM compliance_product_registry_products
       WHERE snapshot_id = ?`).run(third.snapshotId),
@@ -1551,7 +1755,7 @@ test("live CER product exports satisfy the controlled ingestion contract", {
     now: new Date(),
   });
   assert.equal(result.changed, true);
-  assert.ok(result.recordCount > 10_000);
+  assert.equal(result.recordCount, 16_758);
   assert.equal(
     database.prepare(`SELECT COUNT(*) count
       FROM compliance_product_registry_source_artifacts`).get().count,
@@ -1561,5 +1765,75 @@ test("live CER product exports satisfy the controlled ingestion contract", {
     database.prepare(`SELECT COUNT(*) count
       FROM compliance_product_registry_products`).get().count,
     result.recordCount,
+  );
+  assert.equal(artifactStore.objects.size, 8);
+  const status = await loadCerSresRegistryStatus(d1, { now: new Date() });
+  assert.deepEqual(status.snapshot.sourceManifest.registerRelease, {
+    registerUrl:
+      "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters",
+    version: 58,
+    publishedOn: "2026-08-10",
+  });
+  assert.deepEqual(
+    status.snapshot.sourceManifest.sources
+      .filter((source) => source.recordCount > 0)
+      .map((source) => ({
+        sourceKey: source.sourceKey,
+        recordCount: source.recordCount,
+        csvSha256: source.sha256,
+        workbookSha256: source.registerMetadata.sha256,
+      })),
+    CER_SRES_PRODUCT_SOURCES.map((source) => ({
+      sourceKey: source.sourceKey,
+      recordCount: source.reviewedRelease.recordCount,
+      csvSha256: source.reviewedRelease.csvSha256,
+      workbookSha256: source.reviewedRelease.workbookSha256,
+    })),
+  );
+  assert.deepEqual(
+    database.prepare(`SELECT source_record_key, brand, model, eligible_from,
+        eligible_to, zone_1_stcs, zone_2_stcs, zone_3_stcs, zone_4_stcs,
+        zone_5_stcs
+      FROM compliance_product_registry_products
+      WHERE source_record_key IN ('cer-ashp:863', 'cer-ashp:865', 'cer-ashp:870')
+      ORDER BY source_record_key`).all().map((row) => ({ ...row })),
+    [
+      {
+        source_record_key: "cer-ashp:863",
+        brand: "Rinnai",
+        model: "KSHP250M24L70",
+        eligible_from: "2026-08-10",
+        eligible_to: "2026-12-13",
+        zone_1_stcs: 26,
+        zone_2_stcs: 25,
+        zone_3_stcs: 31,
+        zone_4_stcs: 33,
+        zone_5_stcs: 33,
+      },
+      {
+        source_record_key: "cer-ashp:865",
+        brand: "Rinnai",
+        model: "KSHP250M24L70H",
+        eligible_from: "2026-08-10",
+        eligible_to: "2026-12-13",
+        zone_1_stcs: 26,
+        zone_2_stcs: 25,
+        zone_3_stcs: 31,
+        zone_4_stcs: 33,
+        zone_5_stcs: 33,
+      },
+      {
+        source_record_key: "cer-ashp:870",
+        brand: "Rinnai",
+        model: "KSHP315M24L70",
+        eligible_from: "2026-08-10",
+        eligible_to: "2026-12-13",
+        zone_1_stcs: 26,
+        zone_2_stcs: 25,
+        zone_3_stcs: 31,
+        zone_4_stcs: 33,
+        zone_5_stcs: 33,
+      },
+    ],
   );
 });

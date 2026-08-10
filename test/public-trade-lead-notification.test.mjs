@@ -71,6 +71,8 @@ test("public notification dispatch rechecks the exact current consent and reads 
   ]) assert.match(deliveryServer, new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(deliveryServer, /verifiedTradeAccountPredicate\("account"\)/);
   assert.match(deliveryServer, /current_account\.partner_type = 'installer'/);
+  assert.match(deliveryServer, /mandatory_public_email\.status = 'active'/);
+  assert.match(deliveryServer, /mandatory_public_email\.withdrawn_at = ''/);
   assert.match(deliveryServer, /!disclosedFields\.includes\("customer_email"\)/);
   assert.match(deliveryServer, /!disclosedFields\.includes\("postcode"\)/);
   assert.match(deliveryServer, /!disclosedFields\.includes\("service_categories"\)/);

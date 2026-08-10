@@ -2,7 +2,9 @@ import { getD1 } from "../../db";
 import {
   opportunityNotificationDraft,
   opportunityNotificationEmailHash,
+  opportunityNotificationEmailPreferenceAllows,
   opportunityNotificationIdempotencyKey,
+  type OpportunityNotificationSourceKind,
 } from "@/lib/opportunity-notifications";
 import {
   CUSTOMER_MATCHING_NOTICE_VERSION,
@@ -30,6 +32,10 @@ type DrainOptions = {
 const CALLBACK_URL =
   "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
 const MAX_ATTEMPTS = 3;
+const LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS = [
+  "Opportunity email consent is not active.",
+  "Optional opportunity emails are disabled.",
+] as const;
 
 function text(value: unknown, maximum: number) {
   return String(value || "").trim().slice(0, maximum);
@@ -84,6 +90,7 @@ async function deliveryContext(deliveryId: string) {
       matching_locality_consent.granted_at matching_granted_at,
       matching_locality_consent.withdrawn_at matching_withdrawn_at,
       account.email, account.business_name, account.consent_at, account.email_opportunities,
+      account.availability_status,
       CASE WHEN ${verifiedTradeAccountPredicate("account")} AND account.partner_type = 'installer'
         THEN 1 ELSE 0 END installer_access_approved,
       COALESCE((
@@ -131,8 +138,20 @@ function ineligibility(context: DeliveryRow) {
   if (Number(context.installer_access_approved || 0) !== 1) {
     return "The installer no longer has active verified access.";
   }
-  if (!String(context.consent_at || "") || !Boolean(context.email_opportunities)) {
-    return "Opportunity email consent is not active.";
+  if (!String(context.consent_at || "")) {
+    return "The trade account consent is not active.";
+  }
+  if (!["open", "limited"].includes(String(context.availability_status || ""))) {
+    return "The installer is not currently open to matching.";
+  }
+  const notificationSource = String(
+    context.notification_source || "legacy_marketplace",
+  ) as OpportunityNotificationSourceKind;
+  if (!opportunityNotificationEmailPreferenceAllows(
+    notificationSource,
+    context.email_opportunities,
+  )) {
+    return "Optional opportunity emails are disabled.";
   }
   if (context.notification_source === "public_plan_enquiry") {
     const disclosedFields = list(context.public_contact_disclosed_fields);
@@ -206,6 +225,52 @@ async function finishWithoutSend(deliveryId: string, status: "skipped" | "suppre
   return { outcome: status };
 }
 
+async function recoverLegacyPublicOptionalEmailSkips(now: string) {
+  return getD1().prepare(`UPDATE trade_opportunity_notification_deliveries
+    SET status = 'pending', eligibility_reason = '', next_attempt_at = '', updated_at = ?
+    WHERE status = 'skipped'
+      AND attempts = 0
+      AND eligibility_reason IN (?, ?)
+      AND EXISTS (
+        SELECT 1
+        FROM trade_opportunity_matches recovery_match
+        JOIN trade_opportunities recovery_opportunity
+          ON recovery_opportunity.id = recovery_match.opportunity_id
+        JOIN trade_accounts recovery_account
+          ON recovery_account.firebase_uid = recovery_match.firebase_uid
+        JOIN public_trade_lead_contact_releases recovery_public_contact
+          ON recovery_public_contact.opportunity_id = recovery_opportunity.id
+        WHERE recovery_match.id = trade_opportunity_notification_deliveries.match_id
+          AND recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')
+          AND recovery_opportunity.status = 'open'
+          AND (
+            (recovery_opportunity.expires_at <> '' AND recovery_opportunity.expires_at > ?)
+            OR (
+              recovery_opportunity.expires_at = ''
+              AND datetime(recovery_opportunity.created_at, '+30 days') > ?
+            )
+          )
+          AND recovery_account.partner_type = 'installer'
+          AND recovery_account.consent_at <> ''
+          AND recovery_account.availability_status IN ('open', 'limited')
+          AND recovery_account.email <> ''
+          AND ${verifiedTradeAccountPredicate("recovery_account")}
+          AND recovery_public_contact.status = 'active'
+          AND recovery_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+          AND recovery_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+          AND datetime(recovery_public_contact.granted_at) IS NOT NULL
+          AND recovery_public_contact.withdrawn_at = ''
+          AND recovery_public_contact.postcode = recovery_opportunity.postcode
+      )`)
+    .bind(
+      now,
+      LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS[0],
+      LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS[1],
+      now,
+      now,
+    ).run();
+}
+
 async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const db = getD1();
   const context = await deliveryContext(String(row.id));
@@ -238,11 +303,11 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   }
 
   const provider = serviceReminderProviderConfiguration();
-  if (!provider.email.configured || !provider.email.callbacks) {
+  if (!provider.email.configured) {
     return finishWithoutSend(
       String(row.id),
       "waiting_for_channel",
-      "Resend delivery and authenticated callbacks must both be configured.",
+      "Resend delivery must be configured.",
     );
   }
 
@@ -326,8 +391,21 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
             )
           )
           AND current_account.email = ?
-          AND current_account.email_opportunities = 1
+          AND (
+            current_account.email_opportunities = 1
+            OR EXISTS (
+              SELECT 1
+              FROM public_trade_lead_contact_releases mandatory_public_email
+              WHERE mandatory_public_email.opportunity_id = current_opportunity.id
+                AND mandatory_public_email.status = 'active'
+                AND mandatory_public_email.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+                AND mandatory_public_email.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                AND datetime(mandatory_public_email.granted_at) IS NOT NULL
+                AND mandatory_public_email.withdrawn_at = ''
+            )
+          )
           AND current_account.consent_at <> ''
+          AND current_account.availability_status IN ('open', 'limited')
           AND current_account.partner_type = 'installer'
           AND ${verifiedTradeAccountPredicate("current_account")}
           AND (
@@ -422,6 +500,7 @@ export async function drainOpportunityNotificationDeliveries({
       next_attempt_at = ?, updated_at = ?
     WHERE status = 'sending' AND last_attempt_at <> '' AND last_attempt_at <= ?`)
     .bind(now, now, staleClaimCutoff).run();
+  await recoverLegacyPublicOptionalEmailSkips(now);
   const boundedLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
   const opportunityFilter = opportunityId
     ? ` AND EXISTS (

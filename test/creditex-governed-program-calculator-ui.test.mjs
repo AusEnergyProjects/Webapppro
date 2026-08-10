@@ -13,6 +13,7 @@ let governedModule;
 let allProgramModule;
 let officialPickerModule;
 let veuCatalogueModule;
+let nswCatalogueModule;
 
 before(async () => {
   server = await createServer({
@@ -35,6 +36,28 @@ before(async () => {
   veuCatalogueModule = await server.ssrLoadModule(
     "/src/lib/creditex-veu-calculator-catalogue.ts",
   );
+  nswCatalogueModule = await server.ssrLoadModule(
+    "/src/lib/creditex-nsw-program-catalogue.ts",
+  );
+});
+
+test("BESS2 asks for the onboarding date while every other NSW activity keeps the installation date", () => {
+  const activities = nswCatalogueModule.CREDITEX_NSW_PROGRAM_DEFINITIONS
+    .flatMap((program) => program.activities);
+  const bess2 = activities.find((activity) => activity.activityCode === "BESS2");
+  assert.ok(bess2);
+  assert.equal(
+    governedModule.creditexNswEffectiveDateLabel(bess2),
+    "Onboarding date",
+  );
+
+  for (const activity of activities.filter((candidate) => candidate !== bess2)) {
+    assert.equal(
+      governedModule.creditexNswEffectiveDateLabel(activity),
+      "Installation date",
+      `${activity.activityCode} must retain the installation-date basis`,
+    );
+  }
 });
 
 after(async () => {

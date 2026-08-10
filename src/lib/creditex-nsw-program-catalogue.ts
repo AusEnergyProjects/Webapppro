@@ -1,4 +1,4 @@
-export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-08-09";
+export const CREDITEX_NSW_PROGRAM_CATALOGUE_REVIEWED_ON = "2026-08-11";
 
 export type CreditexNswInputOption = {
   value: string;
@@ -32,6 +32,7 @@ export type CreditexNswActivityDefinition = {
   formulaKey: string;
   effectiveFrom: string;
   effectiveTo: string;
+  effectiveDateLabel?: "Installation date" | "Onboarding date";
   lifetimeYears: number;
   outputUnit: "ESC" | "PRC";
   calculationStatus: "estimate_available" | "official_registry_required";
@@ -373,7 +374,7 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
   pdrsActivity({
     activityCode: "BESS1",
     officialActivityCode: "BESS1",
-    title: "Install a new behind-the-meter battery at a single dwelling, small business or eligible government site",
+    title: "Install a new behind-the-meter battery at an eligible government or exempt-program site",
     supportedScenario: "One exact CEC-approved battery whose installation-date nominal capacity and all Rule eligibility evidence are confirmed",
     formulaKey: "nsw-pdrs-bess1-2026-07/v1",
     effectiveFrom: "2026-07-01",
@@ -431,13 +432,14 @@ const PDRS_BATTERY_ACTIVITIES: readonly CreditexNswActivityDefinition[] = [
     activityCode: "BESS2",
     officialActivityCode: "BESS2",
     title: "Onboard an existing behind-the-meter battery with a demand response aggregator",
-    supportedScenario: "One exact CEC-approved battery with installation-date nominal capacity and a confirmed 12-month demand-response contract",
+    supportedScenario: "One existing exact CEC-approved battery with onboarding-date product-list status, nominal capacity and a confirmed 12-month demand-response contract",
     formulaKey: "nsw-pdrs-bess2-2026-07/v1",
     effectiveFrom: "2026-07-01",
+    effectiveDateLabel: "Onboarding date",
     lifetimeYears: 6,
     inputDefinitions: [NOMINAL_BATTERY_INPUT, ...PDRS_COMMON_INPUTS],
     productRegistryRequirements: [
-      "Exact model on the CEC Approved Batteries list for the implementation date",
+      "Exact model on the CEC Approved Batteries list for the onboarding date (the BESS2 Implementation Date)",
       "Current banned equipment, VPP and demand-response-aggregator notices",
     ],
     sourceReferences: [
@@ -1094,7 +1096,7 @@ export const CREDITEX_NSW_PROGRAM_DEFINITIONS: readonly CreditexNswProgramDefini
     outputUnit: "PRC",
     effectiveFrom: "2026-07-01",
     effectiveTo: "2026-12-31",
-    sourceVersion: "Peak Demand Reduction Scheme Rule of 2022 effective 1 July 2026; implementation pin reviewed 8 August 2026",
+    sourceVersion: "Peak Demand Reduction Scheme Rule of 2022 effective 1 July 2026; implementation pin reviewed 11 August 2026",
     officialSourceUrl: PDRS_RULE_URL,
     officialSourceTitle: "Peak Demand Reduction Scheme Rule of 2022 - 1 July 2026",
     activities: [...PDRS_BATTERY_ACTIVITIES, ...PDRS_EFFICIENCY_ACTIVITIES],

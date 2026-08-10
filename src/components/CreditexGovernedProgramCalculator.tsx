@@ -124,6 +124,12 @@ function nswDefaults(activity: CreditexNswActivityDefinition) {
   ]));
 }
 
+export function creditexNswEffectiveDateLabel(
+  activity: CreditexNswActivityDefinition,
+) {
+  return activity.effectiveDateLabel || "Installation date";
+}
+
 function veuDefaults(activity: CreditexVeuActivityDefinition) {
   return Object.fromEntries(activity.inputDefinitions.map((definition) => [
     definition.key,
@@ -523,7 +529,7 @@ function CreditexNswCalculator({
           </select>
         </label>
         <label>
-          Installation date
+          {creditexNswEffectiveDateLabel(activity)}
           <input
             type="date"
             min={activity.effectiveFrom}

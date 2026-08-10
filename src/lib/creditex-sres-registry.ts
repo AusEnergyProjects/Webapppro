@@ -6,7 +6,11 @@ import {
 
 export const CREDITEX_SRES_REGISTRY_CONTRACT =
   "creditex-sres-official-registry/v1";
-export const CER_SRES_REGISTRY_REVIEWED_ON = "2026-08-08";
+export const CER_SRES_REGISTRY_REVIEWED_ON = "2026-08-10";
+export const CER_SRES_REGISTER_REVIEWED_VERSION = 58;
+export const CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON = "2026-08-10";
+export const CER_SRES_REGISTER_RELEASE_URL =
+  "https://cer.gov.au/news-and-media/news/2026/august/register-solar-water-heaters-version-58-now-available";
 export const CER_SRES_PRODUCT_REGISTER_URL =
   "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters";
 export const CER_SRES_POSTCODE_ZONE_URL =
@@ -39,24 +43,57 @@ export const CER_SRES_PRODUCT_SOURCES = [
     technology: "air_source_heat_pump",
     category: "capacity_at_most_425l",
     url: "https://cer.gov.au/document/air-source-heat-pump-models",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/air-source-heat-pump-models-0",
     expectedColumns: 10,
-    minimumRecords: 1_104,
+    minimumRecords: 1_178,
+    reviewedRelease: {
+      version: CER_SRES_REGISTER_REVIEWED_VERSION,
+      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      recordCount: 1_178,
+      csvSha256:
+        "b764b58c6717a82563da6db498e03c9e63940de35865e483f6395e33ac12916b",
+      workbookSha256:
+        "12c9b300992d29c88a35e0a70c486ebff862fa8e5febdd6576000c3f9045e241",
+    },
   },
   {
     sourceKey: "cer-swh-lt-700l",
     technology: "solar_water_heater",
     category: "capacity_less_than_700l",
     url: "https://cer.gov.au/document/solar-water-heater-models-capacity-less-700l",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/solar-water-heater-models-capacity-less-700l-0",
     expectedColumns: 9,
     minimumRecords: 6_591,
+    reviewedRelease: {
+      version: CER_SRES_REGISTER_REVIEWED_VERSION,
+      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      recordCount: 6_591,
+      csvSha256:
+        "c93c34b33011f0688d09cdb9278f563a782c06464ddb9abed96aa870b6078c9b",
+      workbookSha256:
+        "f43cd02ac317d61a44683dd382883b9ca09dbf800666af5365c0852daf31f8a5",
+    },
   },
   {
     sourceKey: "cer-swh-ge-700l",
     technology: "solar_water_heater",
     category: "capacity_at_least_700l",
     url: "https://cer.gov.au/document/solar-water-heater-models-capacity-more-700l",
+    registerMetadataUrl:
+      "https://cer.gov.au/document/solar-water-heater-models-capacity-more-700l-0",
     expectedColumns: 9,
     minimumRecords: 8_989,
+    reviewedRelease: {
+      version: CER_SRES_REGISTER_REVIEWED_VERSION,
+      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      recordCount: 8_989,
+      csvSha256:
+        "95162d637f75ae5b94b1a687c262f503c897607f5143ba03a1f3bc88b3659903",
+      workbookSha256:
+        "cb27f9a0546f80e8ea9d0e04449e8f5953ead5d27193473149bb7f2fa8edf179",
+    },
   },
 ] as const;
 

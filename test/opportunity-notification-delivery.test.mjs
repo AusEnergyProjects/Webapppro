@@ -6,8 +6,12 @@ import {
   OPPORTUNITY_INBOX_URL,
   opportunityNotificationDraft,
   opportunityNotificationEmailHash,
+  opportunityNotificationEmailPreferenceAllows,
   opportunityNotificationIdempotencyKey,
 } from "../src/lib/opportunity-notifications.ts";
+import {
+  serviceReminderProviderConfiguration,
+} from "../src/lib/service-reminder-delivery.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0087_trade_opportunity_notifications.sql");
@@ -71,6 +75,71 @@ test("provider and suppression hashes are deterministic without retaining the em
   assert.doesNotMatch(firstHash, /business|example/);
   assert.equal(key.length, 64);
   assert.equal(firstHash.length, 64);
+});
+
+test("public plan opportunity email is mandatory despite the optional account preference", () => {
+  assert.equal(
+    opportunityNotificationEmailPreferenceAllows("public_plan_enquiry", false),
+    true,
+  );
+  assert.equal(
+    opportunityNotificationEmailPreferenceAllows("customer_project", false),
+    false,
+  );
+  assert.equal(
+    opportunityNotificationEmailPreferenceAllows("legacy_marketplace", true),
+    true,
+  );
+  assert.match(
+    deliveryServer,
+    /current_account\.email_opportunities = 1[\s\S]*OR EXISTS \([\s\S]*mandatory_public_email/,
+  );
+});
+
+test("Resend submit does not wait for a webhook secret when send credentials are ready", () => {
+  const provider = serviceReminderProviderConfiguration({
+    RESEND_API_KEY: "re_1234567890123456",
+    RESEND_FROM_EMAIL: "Australian Energy Assessments <service@example.com>",
+  });
+  assert.equal(provider.email.configured, true);
+  assert.equal(provider.email.callbacks, false);
+  assert.match(deliveryServer, /if \(!provider\.email\.configured\) \{/);
+  assert.doesNotMatch(
+    deliveryServer,
+    /!provider\.email\.configured \|\| !provider\.email\.callbacks/,
+  );
+});
+
+test("zero-attempt public emails skipped by the old optional preference are safely requeued", () => {
+  for (const boundary of [
+    "Opportunity email consent is not active.",
+    "Optional opportunity emails are disabled.",
+    "status = 'skipped'",
+    "attempts = 0",
+    "recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')",
+    "recovery_opportunity.status = 'open'",
+    "recovery_account.consent_at <> ''",
+    "recovery_account.availability_status IN ('open', 'limited')",
+    "verifiedTradeAccountPredicate(\"recovery_account\")",
+    "recovery_public_contact.status = 'active'",
+    "recovery_public_contact.withdrawn_at = ''",
+    "recovery_public_contact.postcode = recovery_opportunity.postcode",
+  ]) {
+    assert.match(
+      deliveryServer,
+      new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+  }
+  const drainIndex = deliveryServer.indexOf("export async function drainOpportunityNotificationDeliveries");
+  const recoveryIndex = deliveryServer.indexOf(
+    "await recoverLegacyPublicOptionalEmailSkips(now)",
+    drainIndex,
+  );
+  const claimIndex = deliveryServer.indexOf(
+    "const statement = db.prepare(`SELECT id, status, attempts",
+    drainIndex,
+  );
+  assert.ok(drainIndex > 0 && recoveryIndex > drainIndex && claimIndex > recoveryIndex);
 });
 
 test("new automatic or manual match inserts atomically enqueue exactly once and updates do not resend", () => {
@@ -163,7 +232,8 @@ test("delivery storage has unique match, provider idempotency, event replay and 
 
 test("dispatch rechecks authoritative access, consent, current email and live offer state", () => {
   for (const boundary of ["verifiedTradeAccountPredicate", "account.email", "account.consent_at",
-    "account.email_opportunities", "opportunity.status opportunity_status", "assignment.status match_status",
+    "account.availability_status", "opportunityNotificationEmailPreferenceAllows",
+    "opportunity.status opportunity_status", "assignment.status match_status",
     "\"offered\", \"viewed\", \"interested\", \"connected\"", "evidence.sharing_scope = 'allocated-installers'",
     "consent.purpose = 'installer_evidence_sharing'", "consent.withdrawn_at = ''",
     "trade_opportunity_email_suppressions"]) {
@@ -171,6 +241,7 @@ test("dispatch rechecks authoritative access, consent, current email and live of
   }
   assert.match(deliveryServer, /status = 'sending'[\s\S]*AND status = \? AND attempts = \?/);
   assert.match(deliveryServer, /datetime\(current_opportunity\.created_at, '\+30 days'\) > \?/);
+  assert.match(deliveryServer, /current_account\.availability_status IN \('open', 'limited'\)/);
   assert.match(deliveryServer, /previousAttempts > 0/);
   assert.match(deliveryServer, /storedIdempotencyKey/);
   assert.match(deliveryServer, /storedEmailHash !== emailHash/);

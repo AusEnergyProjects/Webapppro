@@ -15,6 +15,18 @@ type OpportunityNotificationDraftInput = {
   customerSharedEvidenceCount: number;
 };
 
+export type OpportunityNotificationSourceKind =
+  | "customer_project"
+  | "public_plan_enquiry"
+  | "legacy_marketplace";
+
+export function opportunityNotificationEmailPreferenceAllows(
+  sourceKind: OpportunityNotificationSourceKind,
+  emailOpportunities: unknown,
+) {
+  return sourceKind === "public_plan_enquiry" || Boolean(emailOpportunities);
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   assessment: "Energy assessment",
   solar: "Rooftop solar",

@@ -1913,11 +1913,12 @@ export function TradeBusinessSettingsWorkspace({
                     <strong>
                       {profile.partnerType === "supplier"
                         ? "Trade request and order emails"
-                        : "Opportunity and customer response emails"}
+                        : "Other opportunity and customer response emails"}
                     </strong>
                     <small>
-                      Send important work and customer updates to the account
-                      contact.
+                      {profile.partnerType === "supplier"
+                        ? "Send important work and customer updates to the account contact."
+                        : "New matched public enquiries are always emailed while your approved business is open to matching."}
                     </small>
                   </span>
                 </label>

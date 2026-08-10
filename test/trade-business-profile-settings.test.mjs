@@ -254,6 +254,13 @@ test("business settings render as one continuous page with explicit section acti
   );
 });
 
+test("installer email settings explain that matched public enquiries are mandatory", () => {
+  assert.match(
+    settingsUi,
+    /New matched public enquiries are always emailed while your approved business is open to matching\./,
+  );
+});
+
 test("customer document identity, crop and payment settings have one strict owner contract", () => {
   const columns = [
     ["document_business_name", "documentBusinessName"],
