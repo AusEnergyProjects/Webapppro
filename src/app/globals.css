@@ -5593,6 +5593,12 @@ body input[type="number"]::-webkit-outer-spin-button {
 .planner-quick-wins-grid article > span, .planner-quick-wins-grid article > small { color: #7ff1cf; display: block; font-size: .55rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
 .planner-quick-wins-grid article h4 { color: #fff; font-size: .74rem; margin: 4px 0 0; overflow-wrap: anywhere; }
 .planner-quick-wins-grid article p { color: #c9dfe1; font-size: .63rem; line-height: 1.5; margin: 5px 0 0; overflow-wrap: anywhere; }
+.planner-quick-wins-grid article > a,
+.planner-quick-wins-grid article > a:link,
+.planner-quick-wins-grid article > a:visited { align-items: center; background: #eafff8; border: 1px solid #a7f3d0; border-radius: 9px; color: #043b46; display: inline-flex; font-size: .66rem; font-weight: 900; justify-content: center; line-height: 1.35; margin-top: 11px; min-height: 42px; padding: 9px 11px; text-align: center; text-decoration: none; transition: background .16s, border-color .16s, color .16s, transform .16s; }
+.planner-quick-wins-grid article > a:hover,
+.planner-quick-wins-grid article > a:focus-visible { background: #6ee7b7; border-color: #d1fae5; color: #022c37; transform: translateY(-1px); }
+.planner-quick-wins-grid article > a:focus-visible { outline: 3px solid #8ff8d8; outline-offset: 3px; }
 
 @keyframes customer-scene-float {
   0%, 100% { translate: 0 0; }
@@ -5765,6 +5771,7 @@ body input[type="number"]::-webkit-outer-spin-button {
   .planner-home-journey-copy li strong { font-size: .48rem; }
   .planner-home-focus-marker { font-size: .44rem; padding: 6px 8px; }
   .planner-quick-wins-grid { grid-template-columns: 1fr; }
+  .planner-quick-wins-grid article > a { width: 100%; }
 }
 @media (max-width: 360px) {
   .start-hero-planner { min-height: 680px; padding: 28px 22px 250px; }

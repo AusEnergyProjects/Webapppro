@@ -359,6 +359,26 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /initialPlannerStep\(initialSelection\)/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
+  assert.match(planner, /Start electricity comparison/);
+  assert.match(planner, /Start gas comparison/);
+  assert.match(planner, /Open rebate calculator/);
+  assert.match(planner, /View rebates and assistance/);
+  assert.match(
+    styles,
+    /\.planner-quick-wins-grid article > a,[\s\S]*\.planner-quick-wins-grid article > a:link,[\s\S]*\.planner-quick-wins-grid article > a:visited \{[\s\S]*background: #eafff8;[\s\S]*color: #043b46;/,
+  );
+  assert.match(
+    styles,
+    /\.planner-quick-wins-grid article > a:hover,[\s\S]*\.planner-quick-wins-grid article > a:focus-visible \{[\s\S]*background: #6ee7b7;[\s\S]*color: #022c37;/,
+  );
+  assert.match(
+    styles,
+    /\.planner-quick-wins-grid article > a:focus-visible \{ outline: 3px solid #8ff8d8; outline-offset: 3px; \}/,
+  );
+  assert.match(
+    styles,
+    /@media \(max-width: 520px\)[\s\S]*\.planner-quick-wins-grid article > a \{ width: 100%; \}/,
+  );
   assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
   assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);
