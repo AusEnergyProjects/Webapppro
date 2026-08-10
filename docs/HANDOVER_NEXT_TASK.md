@@ -1,14 +1,16 @@
 # Next task handover
 
-Status: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` corrected, released and live
+Status: `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` released and live
 
 Prepared: 10 August 2026
 
-Milestone ID: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51`
+Milestone ID: `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
+Previous production application source: `c75ff7bb4355f2f74bc9996527900c3d515ab85e`
+
+Historical v305 corrective source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
 Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
 
@@ -20,19 +22,19 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Milestone application source: `a0fcbf200ece76f68bbd83c298f1d556333c615e`
+Milestone application source: `c75ff7bb4355f2f74bc9996527900c3d515ab85e`
 
-Current production source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
+Current production source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
 
-Released application source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
+Released application source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
 
-Current production: Sites version 305 from application commit `79f7e2e5be14464410ba40a749453c7473b22d4d`
+Current production: Sites version 307 from application commit `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`
 
-Deployment: `appgdep_6a797f25df8c819187590b70811a6794`
+Deployment: `appgdep_6a79b1799b988191a1ac6ac58888e134`
 
-Sites stored release: 391 files, 37,201,920 bytes and content SHA-256 `e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`; no separate local v305 release archive identity was supplied
+Sites stored release: 391 files, 37,744,640 bytes and content SHA-256 `77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -44,7 +46,90 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
+## Released milestone: AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52
+
+Status: complete journey application commit
+`c75ff7bb4355f2f74bc9996527900c3d515ab85e` was released as historical Sites
+version 306, then exact mobile-header corrective commit
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` was pushed to the GitHub branch,
+GitHub `main` and Sites internal `main` and released as current Sites version 307.
+
+The current saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`.
+Deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` succeeded with environment
+revision 20 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`. Sites stored 391 files
+and 37,744,640 bytes with content hash
+`sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`.
+
+Historical v306 saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df`
+and deployment `appgdep_6a79aa88b3088191af653a395a2501a1` identify exact
+commit `c75ff7bb4355f2f74bc9996527900c3d515ab85e`. Its 391-file, 37,744,640-byte
+package had content hash
+`sha256:61319a3fa5e852f5f8c9edbe8fe94a1508e612147a5252907d477e9da5084fd8`.
+It is explicitly historical and superseded by the v307 mobile-header hotfix.
+
+### Released outcome
+
+Households now move through one complete 38-screen home intake into an ordered,
+professional-quality plan, conditional quick wins, a private report, no-account
+enquiry or free-account handoff and guided electricity and gas comparisons.
+
+### Released capability
+
+- One plain-English question appears per planner screen. Complete home context is
+  preserved through enquiry, account, print and report paths, with safe `Not sure`
+  answers and conditional skipping of irrelevant construction questions.
+- Results include answer-specific quick wins, an ordered roadmap, printable plan,
+  no-account enquiry, separate account choice and clear electricity, gas,
+  calculator and rebate actions.
+- Guided electricity and gas comparison use three-step journeys, preserve private
+  NMI and interval-data boundaries and retain calculation and retailer checks.
+- Customer-facing copy spells out Australian Energy Assessments. At 390 pixels,
+  the compact header presents Account then the TLink logo without a separator dot
+  or horizontal overflow. The trade dashboard remains static.
+- Report identity is `2026-08-10-professional-personalised-report-v5`, design
+  identity is `2026-08-10-professional-personalised-report-design-v4` and PDF
+  identity remains `2026-08-10-personalised-plan-pdf-v7`. The audited 18-page PDF
+  is tagged, embeds its fonts and contains 37 checked links.
+- July 2026 NatHERS Existing Homes guidance and technical material and Australian
+  Government quick-win sources are planning references only, not a NatHERS
+  rating, assessment or endorsement.
+- Google Apps Script relay version 13 retains deployment ID
+  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+  and the signed exact-healthy delivery boundary. No real customer lead was
+  submitted.
+
+### Validation and operational QA
+
+- Full validation passed with 1,859 tests passed, 10 intentionally skipped and 0
+  failed, typecheck, warning-free lint, production build, all 127 migrations,
+  customer-plan PDF audit and Sites bundle audit.
+- The PDF audit rendered 18 tagged pages with embedded fonts and 37 checked links.
+  Report contract v5 and design contract v4 are the current shared email, print
+  and PDF presentation contracts.
+- The v307 mobile-header correction passed 22 of 22 focused checks, typecheck,
+  lint and production build.
+- The signed version-13 monitor returned exact `healthy`: `site_runtime` HTTP 200
+  in 1,134 ms, `electricity_plans` HTTP 200 in 43,155 ms, `gas_plans` HTTP 200 in
+  15,840 ms and signed `lead_delivery` HTTP 200 in 2,588 ms for probe
+  `3d36c715-4904-4a1b-bde3-aa3e8253c74b`.
+- Live v306 QA exercised desktop and 390-pixel planner progression across all 38
+  screens, electricity and gas handoffs, full brand naming and no horizontal
+  overflow. Live v307 QA confirmed Account then TLink, no separator dot and no
+  horizontal overflow at 390 pixels. `/api/health` returned HTTP 200 and the
+  recent Sites Worker errors-only query was empty.
+
+### Exact remaining source and delivery limits
+
+- GEMS remains fail-closed pending authorised exact reconciliation of the retained
+  7,500-row source against the reviewed 7,499-row candidate.
+- No real customer lead, customer email attachment or downstream trade inbox was
+  used during release verification.
+
+## Previous released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
 
 Status: milestone application commit
 `a0fcbf200ece76f68bbd83c298f1d556333c615e` and production PDF-font correction
@@ -110,9 +195,9 @@ without adding a second approval system.
   and 0 duplicates before migration `0126`. The refreshed signed-in owner
   Database console then reported 239 application tables and confirmed
   `public_trade_lead_contact_releases` is present.
-- Google Apps Script version 12 deployment
+- Historical Google Apps Script version 12 deployment
   `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
-  is active. Prior version 10 deployment
+  served v305. Prior version 10 deployment
   `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
   is archived.
 - The signed `runOperationalHealthCheck` ran from 18:08:25 to 18:09:18 Sydney
@@ -698,11 +783,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Exact-diff the held GEMS 7,500-to-7,499 source change against authorised retained bytes.
-2. Prefill planner handoffs into calculators, comparators and guides.
-3. Extend governed mixed-product contracts where official formulas require multi-component installations.
-4. Run real household and trade accessibility and usability validation, then fix measured friction.
-5. Add privacy-safe journey measurement only after explicit analytics consent.
+1. Run a usability and accessibility pilot for the expanded planner and guided electricity and gas comparators, then fix measured friction.
+2. Verify saved-account and legacy snapshot parity across planner restore, account handoff, report and print flows.
+3. Add consent-safe journey analytics for planner and comparator abandonment and completion without collecting private plan or meter data.
+4. Reconcile the exact GEMS 7,500-to-7,499 source change against authorised retained bytes.
+5. Implement the next governed mixed-product calculator contracts only where current official formulas and approved product data support them.
 
 ## Previous released milestone
 
