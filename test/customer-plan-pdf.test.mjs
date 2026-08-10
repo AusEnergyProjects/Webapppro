@@ -49,6 +49,10 @@ const PUBLIC_LEAD_ROUTE_SOURCE = readFileSync(
   new URL("../src/app/api/leads/route.js", import.meta.url),
   "utf8",
 );
+const PDF_FONT_SOURCE = readFileSync(
+  new URL("../src/lib/customer-plan-pdf-fonts.ts", import.meta.url),
+  "utf8",
+);
 const PDF_SOURCE = readFileSync(
   new URL("../src/lib/customer-plan-pdf.mjs", import.meta.url),
   "utf8",
@@ -794,12 +798,28 @@ test("PDF route returns a clear unsupported-text response", () => {
   );
 });
 
-test("Sites PDF font loading relies on its module cache without unsupported fetch cache modes", () => {
+test("Sites PDF font loading is bundled and shared without Worker self-fetches", () => {
   for (const source of [PDF_ROUTE_SOURCE, PUBLIC_LEAD_ROUTE_SOURCE]) {
-    assert.match(source, /const (?:fontCache|pdfFontCache) = new Map(?:<[\s\S]{0,160}>)?\(\)/);
-    assert.match(source, /fetch\(new URL\(path, origin\)\)/);
-    assert.doesNotMatch(source, /cache:\s*["']force-cache["']/);
+    assert.match(source, /loadCustomerPlanPdfFonts/);
+    assert.doesNotMatch(source, /LiberationSans-(?:Regular|Bold)\.ttf/);
+    assert.doesNotMatch(source, /fetch\(/);
   }
+  assert.match(
+    PDF_FONT_SOURCE,
+    /LiberationSans-Regular\.ttf\?inline/,
+  );
+  assert.match(
+    PDF_FONT_SOURCE,
+    /LiberationSans-Bold\.ttf\?inline/,
+  );
+  assert.match(
+    PDF_FONT_SOURCE,
+    /let fontCache: Promise<CustomerPlanPdfFonts> \| undefined/,
+  );
+  assert.match(PDF_FONT_SOURCE, /decoded\.length < MIN_FONT_BYTES/);
+  assert.match(PDF_FONT_SOURCE, /decoded\.length > MAX_FONT_BYTES/);
+  assert.match(PDF_FONT_SOURCE, /TRUE_TYPE_SIGNATURE\.every/);
+  assert.doesNotMatch(PDF_FONT_SOURCE, /fetch\(/);
   assert.match(PDF_ROUTE_SOURCE, /customer_plan_pdf_generation_failed/);
   assert.match(PDF_ROUTE_SOURCE, /errorType:/);
   assert.doesNotMatch(PDF_ROUTE_SOURCE, /console\.error\(error\)/);

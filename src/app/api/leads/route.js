@@ -19,25 +19,19 @@ import {
   createCustomerPlanPdfBytes,
   customerPlanPdfFileName,
 } from "@/lib/customer-plan-pdf.mjs";
+import {
+  CustomerPlanPdfFontError,
+  loadCustomerPlanPdfFonts,
+} from "@/lib/customer-plan-pdf-fonts";
 
 export const runtime = "nodejs";
 
 const leadRateLimiter = createSharedLeadRateLimiter({ getDatabase: getD1 });
 const MAX_CUSTOMER_PLAN_PDF_BYTES = 1_500_000;
-const PDF_FONT_PATHS = {
-  regular: "/fonts/LiberationSans-Regular.ttf",
-  bold: "/fonts/LiberationSans-Bold.ttf",
-};
-const pdfFontCache = new Map();
 
 function leadPdfFailureCode(error) {
+  if (error instanceof CustomerPlanPdfFontError) return "font_invalid";
   const message = error instanceof Error ? error.message : "";
-  if (/^LEAD_PDF_(?:REGULAR|BOLD)_FONT_UNAVAILABLE$/.test(message)) {
-    return "font_unavailable";
-  }
-  if (/^LEAD_PDF_(?:REGULAR|BOLD)_FONT_INVALID$/.test(message)) {
-    return "font_invalid";
-  }
   if (error instanceof CustomerPlanPdfUnsupportedTextError) {
     return "unsupported_text";
   }
@@ -57,30 +51,6 @@ function publicPlanPdfPreparationError(error) {
   });
 }
 
-function leadPdfFonts(request) {
-  const origin = new URL(request.url).origin;
-  const cached = pdfFontCache.get(origin);
-  if (cached) return cached;
-  const loading = Promise.all(
-    Object.entries(PDF_FONT_PATHS).map(async ([weight, path]) => {
-      // Vinext's Worker fetch wrapper rejects framework cache modes. The
-      // completed byte pair is already cached in this module by origin.
-      const response = await fetch(new URL(path, origin));
-      if (!response.ok) throw new Error(`LEAD_PDF_${weight.toUpperCase()}_FONT_UNAVAILABLE`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength < 10_000 || bytes.byteLength > 500_000) {
-        throw new Error(`LEAD_PDF_${weight.toUpperCase()}_FONT_INVALID`);
-      }
-      return [weight, bytes];
-    }),
-  ).then((entries) => Object.fromEntries(entries)).catch((error) => {
-    pdfFontCache.delete(origin);
-    throw error;
-  });
-  pdfFontCache.set(origin, loading);
-  return loading;
-}
-
 async function sha256Hex(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest))
@@ -89,7 +59,6 @@ async function sha256Hex(bytes) {
 }
 
 export async function preparePublicPlanLeadEnvelope({
-  request,
   validatedPayload,
   envelope,
 }) {
@@ -108,7 +77,7 @@ export async function preparePublicPlanLeadEnvelope({
       ...reportInput,
       name: validatedPayload.name,
     });
-    const fonts = await leadPdfFonts(request);
+    const fonts = await loadCustomerPlanPdfFonts();
     let bytes;
     try {
       bytes = await createCustomerPlanPdfBytes(report, fonts);

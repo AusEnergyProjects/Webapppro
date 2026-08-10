@@ -330,7 +330,7 @@ test("plan email saves before delivery while PDF download is mutation-free and s
   );
   assert.match(
     planPdfRoute,
-    /createCustomerPlanPdfBytes\(\s*report,\s*await embeddedPdfFonts\(request\),\s*\)/,
+    /createCustomerPlanPdfBytes\(\s*report,\s*await loadCustomerPlanPdfFonts\(\),\s*\)/,
   );
   assert.match(planPdfRoute, /Content-Disposition/);
   assert.match(planPdfRoute, /application\/pdf/);
