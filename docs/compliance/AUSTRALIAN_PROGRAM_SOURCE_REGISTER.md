@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 303, every GEMS-backed pathway fails closed while the
+availability. In version 305, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,10 +72,13 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` is released from exact
-application commit `59ea305f9a45d1e4c22b354af2e211d22fe11358`, pushed to the GitHub
-branch and Sites internal `main`, as Sites version 303 through deployment
-`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
+Milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` was implemented by
+application commit `a0fcbf200ece76f68bbd83c298f1d556333c615e` and corrected for
+production PDF fonts by exact executable commit
+`79f7e2e5be14464410ba40a749453c7473b22d4d`. Both are pushed to the GitHub
+branch, GitHub `main` and Sites internal `main`. The corrective source is
+released as Sites version 305 through deployment
+`appgdep_6a797f25df8c819187590b70811a6794` with environment revision 20 at
 `https://compare.ausenergyassessments.com` and
 `https://aea-energy-comparison.info294029.chatgpt.site`.
 
@@ -102,15 +105,23 @@ separate capability-qualification subsystem. Contact release, notification and
 manual assignment recheck platform approval, service, state, service area and
 current consent.
 
-Google Apps Script version 11 deployment
+Australian Energy Assessments retains the submitted name, email, phone and
+postcode for its own record. Every matching-trade handoff includes email,
+postcode, service and the non-empty customer question. Sharing name and phone
+with trades is separately optional. The full plan and PDF remain private.
+
+Google Apps Script version 12 deployment
 `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
 is active. Legacy version 10 deployment
 `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
-is archived. The signed `runOperationalHealthCheck` completed at 14:44:49 on 10
-August 2026 with site, electricity, gas and `lead_delivery` HTTP 200 and status
-`healthy` for probe `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. The installed
-`sendFollowUps` and `runOperationalHealthCheck` triggers reported 0% error. No
-real customer lead was submitted during release verification.
+is archived. The signed `runOperationalHealthCheck` ran from 18:08:25 to
+18:09:18 Sydney time on 10 August 2026. Monitor `api-health-1786349306423` was
+`healthy`: `site_runtime` HTTP 200 in 1,555 ms, `electricity_plans` HTTP 200 in
+35,575 ms, `gas_plans` HTTP 200 in 13,232 ms and `lead_delivery` HTTP 200 in
+2,193 ms for probe `7bbd1b86-db74-4b0f-acc9-290ff8ae9469`. Sites Worker request
+`a28d84795b0fba39` returned HTTP 200 with outcome `ok`, 1,198 ms wall time and 7
+ms CPU. A final five-minute errors-only query returned zero events. No real
+customer lead was submitted during release verification.
 
 Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is historical Sites version 302
 from exact application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`
@@ -156,17 +167,19 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The Sites version 303 saved-version identity is
-`appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+The Sites version 305 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1`
 with content hash
-`sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`
-across 391 stored files and 37,160,960 stored bytes. Provider identity is
+`sha256:e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`
+across 391 stored files and 37,201,920 stored bytes. Provider identity is
 `info294029--aea-energy-comparison`.
 
-Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
-SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
-and 405 tar entries. It is ignored release staging and is removed after this
-release record is committed.
+No separate local v305 release-archive identity was supplied. Historical Sites
+version 303 retains local archive `.openai/site-release-59ea305.tar.gz`,
+11,501,890 bytes, SHA-256
+`8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11` and
+405 tar entries. Intermediate Sites version 304 exposed a production-only PDF
+font fetch stall and is superseded by v305.
 
 Production migration preflight found 210 opportunities, 210 non-empty source
 references and 0 duplicate source references. The refreshed signed-in owner
@@ -175,24 +188,33 @@ Database console reported 239 application tables and confirmed that
 `0126_public_trade_lead_contact_release.sql` is therefore applied. The chain ends
 at `0126`; no separate per-service approval migration exists.
 
-Full `npm.cmd run validate` passed before deployment. Independent release review
-returned SHIP with no remaining P0 or P1 issue.
+Full `npm.cmd run validate` passed typecheck, lint, integration, all 1,858 main
+tests with 10 intentional skips and zero failures, `db:check`, the PDF audit,
+the production build and the Sites bundle audit. The focused font, public and
+account group passed 41 of 41.
 
-Live custom-domain desktop QA confirmed consistent-width customer surfaces, the
-holographic home, exact shared-property wording, all five Home basics fields and
-a completed sample townhouse plan with 8 ordered steps, Quick wins, printable
-plan, no-account enquiry and optional free-account path. Independent live review
-also returned SHIP with no P0 or P1 issue. At effective 1,309 by 818 desktop and
-355 by 767 mobile viewports, scroll width equalled client width at 1,295 and 341
-pixels respectively. The mobile customer surfaces aligned to 313 pixels and the
-holographic home remained visible and safely clipped. Production confirmed the
-separate open-wall-vent and open-unused-chimney choices, no heat-pump-space
-option, no-account enquiry first and personalised Quick wins. No real customer
-lead was submitted.
+Live v305 result and print QA preserved Townhouse, two storeys, 100-199 m2,
+three/four occupants and two or more shared sides. Quick wins, optional
+name/phone sharing and the private full-plan boundary were present. The
+impossible all-walls-adjoin-other-dwellings option was absent, and desktop
+client width equalled scroll width.
+
+Corrective commit `79f7e2e5be14464410ba40a749453c7473b22d4d` bundles and validates
+the Liberation Sans regular and bold font programs without a customer-plan PDF
+network fetch. Production PDF requests `a28d5de18fe874e0` and
+`a28d603abf6674e0` returned HTTP 200 `application/pdf` in 467/441 ms wall/CPU
+and 452/430 ms wall/CPU. Local Cloudflare validation returned a valid
+268,767-byte PDF in 203 ms cold and 115 ms cached. The PDF audit found 10 tagged
+pages and two embedded font programs.
+
+No real customer lead was submitted. The post-v305 mobile viewport override did
+not apply, so no new live mobile emulation is claimed. Earlier 341-pixel QA of
+the same visual source had no overflow; the v305 font correction did not change
+that visual source.
 
 The Sites control plane recheck kept deployment
-`appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20,
-updated `2026-08-10T04:40:04Z`. The custom domain remained active with an active
+`appgdep_6a797f25df8c819187590b70811a6794` succeeded at environment revision 20,
+updated `2026-08-10T07:38:34.260391Z`. The custom domain remained active with an active
 provider and SSL.
 
 Historical Sites version 302 saved-version identity is

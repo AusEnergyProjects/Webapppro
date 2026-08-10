@@ -1957,11 +1957,14 @@ consented and independent from account creation.
 
 ## Released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
 
-Status: exact executable application commit
-`59ea305f9a45d1e4c22b354af2e211d22fe11358` is pushed to the GitHub branch and
-Sites internal `main`, and is released as Sites version 303 through deployment
-`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
-`https://compare.ausenergyassessments.com`. Sites version 302 is historical.
+Status: milestone application commit
+`a0fcbf200ece76f68bbd83c298f1d556333c615e` and production PDF-font correction
+`79f7e2e5be14464410ba40a749453c7473b22d4d` are pushed to the GitHub branch,
+GitHub `main` and Sites internal `main`. Exact executable commit
+`79f7e2e5be14464410ba40a749453c7473b22d4d` is released as Sites version 305
+through deployment `appgdep_6a797f25df8c819187590b70811a6794` with
+environment revision 20 at `https://compare.ausenergyassessments.com`. Sites
+versions 303 and 304 are historical.
 
 ### Outcome
 
@@ -1993,6 +1996,10 @@ requiring an account or adding a second trade-qualification system.
 - Recheck active platform approval and current customer consent before contact
   disclosure or notification. Manual assignment uses the same platform-approval,
   service, state and area contract.
+- Keep the complete customer plan and PDF private. Australian Energy Assessments
+  retains the submitted name, email, phone and postcode. Matching trades receive
+  email, postcode, service and the non-empty question; sharing name and phone is
+  separately optional.
 - Sign the Google Apps Script relay and health probe, reject stale or invalid
   signatures, preserve one stable submission identity across retries and dedupe
   repeated delivery before downstream effects.
@@ -2002,54 +2009,52 @@ requiring an account or adding a second trade-qualification system.
 
 ### Release and validation evidence
 
-- Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
-  SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
-  and 405 tar entries. It is ignored release staging and is removed after the
-  release record is committed.
 - Saved version
-  `appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
-  has Sites content hash
-  `sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`.
-  Sites stored 37,160,960 bytes across 391 files. Provider identity is
-  `info294029--aea-energy-comparison`.
-- Google Apps Script version 11 deployment
+  `appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1`
+  and deployment `appgdep_6a797f25df8c819187590b70811a6794` identify exact
+  commit `79f7e2e5be14464410ba40a749453c7473b22d4d`, environment revision 20
+  and project `appgprj_6a550c378000819185caf094173422bb`. Sites stored 391
+  files and 37,201,920 bytes with content hash
+  `sha256:e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`.
+  No separate local v305 release-archive identity was supplied.
+- Google Apps Script version 12 deployment
   `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
-  was deployed on 10 August 2026 at 14:34. The prior version 10 deployment is
-  archived. Its deployment identity is
-  `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`.
-- The signed `runOperationalHealthCheck` completed at 14:44:49 with overall
-  status `healthy`: site HTTP 200, electricity HTTP 200, gas HTTP 200 and
-  `lead_delivery` HTTP 200 for probe
-  `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. Both installed Apps Script triggers
-  `sendFollowUps` and `runOperationalHealthCheck` reported 0% error.
+  is active. The prior version 10 deployment
+  `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
+  is archived.
+- The signed `runOperationalHealthCheck` ran from 18:08:25 to 18:09:18 Sydney
+  time. Monitor `api-health-1786349306423` was healthy: `site_runtime` HTTP 200
+  in 1,555 ms, `electricity_plans` HTTP 200 in 35,575 ms, `gas_plans` HTTP 200
+  in 13,232 ms and `lead_delivery` HTTP 200 in 2,193 ms for probe
+  `7bbd1b86-db74-4b0f-acc9-290ff8ae9469`. Worker request
+  `a28d84795b0fba39` returned HTTP 200 with outcome `ok`, 1,198 ms wall time and
+  7 ms CPU. The final five-minute errors-only query returned zero events.
 - Production migration preflight found 210 opportunities, 210 non-empty source
   references and 0 duplicate source references before migration `0126`. After
   deployment, the refreshed signed-in owner Database console reported 239
   application tables and confirmed `public_trade_lead_contact_releases` is
   present.
-- Full `npm.cmd run validate` passed on the exact application source. Independent
-  release review returned SHIP with no P0 or P1 issue.
-- Live custom-domain desktop QA found one consistent width across the header,
-  introduction, home journey, progress and question surfaces with no visible
-  clipping, and the holographic home rendered. The flow showed the exact shared
-  property wording, all five Home basics fields and separate external-wall and
-  shared-party-wall context. A sample townhouse plan completed with 8 ordered
-  steps, Quick wins, printable plan, prominent no-account `Ask about an upgrade`
-  form and the optional free-account path.
-- The Sites control plane recheck kept deployment
-  `appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20.
-  `compare.ausenergyassessments.com` remained active with an active provider and
-  SSL.
-- Independent live reviewer returned SHIP with no P0 or P1 issue. At an effective
-  1,309 by 818 desktop viewport, header, hero, planner and results aligned at x82
-  with 1,132-pixel width; scroll width and client width were both 1,295 pixels.
-  At an effective 355 by 767 mobile viewport, the same surfaces aligned at x14
-  with 313-pixel width; scroll width and client width were both 341 pixels. The
-  holographic home remained visible and safely clipped, selects were 284 pixels,
-  and enquiry fields and action stacked without overflow. Production also
-  confirmed separate open-wall-vent and open-unused-chimney choices, no
-  heat-pump-space option, no-account enquiry first, optional account creation and
-  personalised Quick wins. No real customer lead was submitted.
+- Full `npm.cmd run validate` passed typecheck, lint, integration, all 1,858 main
+  tests with 10 intentional skips and zero failures, `db:check`, the PDF audit,
+  production build and Sites bundle audit. The focused font, public and account
+  group passed 41 of 41.
+- Live v305 result and print QA preserved Townhouse, two storeys, 100-199 m2,
+  three/four occupants and two or more shared sides. Quick wins, optional
+  name/phone trade sharing and the private full-plan boundary were present. The
+  impossible all-walls-adjoin-other-dwellings option was absent, and desktop
+  client width equalled scroll width.
+- Sites version 304 exposed a production-only runtime fetch stall for PDF fonts.
+  Corrective commit `79f7e2e5be14464410ba40a749453c7473b22d4d` bundles and validates
+  both Liberation Sans programs without a customer-plan PDF network fetch.
+  Production PDF requests `a28d5de18fe874e0` and `a28d603abf6674e0` then
+  returned HTTP 200 `application/pdf` in 467/441 ms wall/CPU and 452/430 ms
+  wall/CPU. Local Cloudflare validation returned a valid 268,767-byte PDF in 203
+  ms cold and 115 ms cached; its audit found 10 tagged pages and two embedded
+  font programs.
+- No real customer lead was submitted. The post-v305 mobile viewport override
+  did not apply, so no new live mobile emulation is claimed. Earlier 341-pixel QA
+  of the same visual source had no overflow; the font-only corrective commit did
+  not change that visual source.
 
 ### Controlled source limit
 
@@ -2063,11 +2068,11 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
 ## Next five logical product steps
 
-1. Obtain authorised read-only R2 bytes and exact-diff held GEMS 7,500-to-7,499 change.
-2. Connect planner Start here actions into more exact prefilled comparator, calculator and guide handoffs.
-3. Extend governed mixed-product contracts to other multi-component installations where official formulas require it.
-4. Run accessibility and usability validation with real households and verified trades, then fix measured friction.
-5. Add privacy-safe journey completion and friction measurement only after explicit analytics policy and consent design.
+1. Exact-diff the held GEMS 7,500-to-7,499 source change against authorised retained bytes.
+2. Prefill planner handoffs into calculators, comparators and guides.
+3. Extend governed mixed-product contracts where official formulas require multi-component installations.
+4. Run real household and trade accessibility and usability validation, then fix measured friction.
+5. Add privacy-safe journey measurement only after explicit analytics consent.
 
 ## Global stop conditions
 

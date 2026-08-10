@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` released and live
+Status: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` corrected, released and live
 
 Prepared: 10 August 2026
 
@@ -8,7 +8,7 @@ Milestone ID: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
+Previous production application source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
 
 Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
 
@@ -20,19 +20,19 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Current production source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
+Milestone application source: `a0fcbf200ece76f68bbd83c298f1d556333c615e`
 
-Released application source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
+Current production source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
-Current production: Sites version 303 from application commit `59ea305f9a45d1e4c22b354af2e211d22fe11358`
+Released application source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+Current production: Sites version 305 from application commit `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
-Deployment: `appgdep_6a7955e575008191b9cd07b1beff2df9`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1`
 
-Release archive: `.openai/site-release-59ea305.tar.gz`, 11,501,890 bytes, SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11` and 405 tar entries; ignored release staging removed after the release record is committed
+Deployment: `appgdep_6a797f25df8c819187590b70811a6794`
 
-Sites stored release: 391 files, 37,160,960 bytes and content SHA-256 `65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`; migration chain through `0126_public_trade_lead_contact_release.sql`
+Sites stored release: 391 files, 37,201,920 bytes and content SHA-256 `e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`; no separate local v305 release archive identity was supplied
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -46,23 +46,21 @@ Environment revision: 20
 
 ## Released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
 
-Status: exact executable application commit
-`59ea305f9a45d1e4c22b354af2e211d22fe11358` is pushed to the GitHub branch and
-Sites internal `main`, and released as Sites version 303 through deployment
-`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
-`https://compare.ausenergyassessments.com`.
+Status: milestone application commit
+`a0fcbf200ece76f68bbd83c298f1d556333c615e` and production PDF-font correction
+`79f7e2e5be14464410ba40a749453c7473b22d4d` are pushed to the GitHub branch,
+GitHub `main` and Sites internal `main`. Exact executable commit
+`79f7e2e5be14464410ba40a749453c7473b22d4d` is released as Sites version 305
+through deployment `appgdep_6a797f25df8c819187590b70811a6794` with
+environment revision 20 at `https://compare.ausenergyassessments.com`.
 
 The saved-version identity is
-`appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
-with Sites content hash
-`sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`.
-Sites stored 37,160,960 bytes across 391 files under provider identity
-`info294029--aea-energy-comparison`.
-
-Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
-SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
-and 405 tar entries. It is ignored release staging and is removed after this
-release record is committed.
+`appgprj_6a550c378000819185caf094173422bb~appgver_248c3d6df9448191b171e990ac8dfdd1`.
+The active Sites project is `appgprj_6a550c378000819185caf094173422bb` and the
+deployment URL remains `https://aea-energy-comparison.info294029.chatgpt.site`.
+Sites stored 391 files and 37,201,920 bytes with content hash
+`sha256:e2869ae853c4e927c32799128bb83133c7a3d1974effd60ed23baacec5ae6976`.
+No separate local v305 release-archive identity was supplied.
 
 ### Released outcome
 
@@ -94,54 +92,58 @@ without adding a second approval system.
 - The lead relay and probe use signed, fresh envelopes and one stable submission
   identity across retries. Repeated delivery is deduplicated before downstream
   effects.
+- Australian Energy Assessments retains the submitted name, email, phone and
+  postcode for its own record. Every trade handoff includes email, postcode,
+  service and the non-empty customer question. Sharing name and phone with
+  matching trades is separately optional. The full plan and PDF remain private.
 - Forward migration `0126_public_trade_lead_contact_release.sql` adds the contact
   release and unique non-empty opportunity source-reference contracts. The
   migration chain ends at `0126` and contains no per-service approval migration.
 
 ### Validation and operational QA
 
-- Full `npm.cmd run validate` passed on the exact application source. Independent
-  release review returned SHIP with no P0 or P1 issue.
+- Full `npm.cmd run validate` passed typecheck, lint, integration, all 1,858 main
+  tests with 10 intentional skips and zero failures, `db:check`, the PDF audit,
+  the production build and the Sites bundle audit. The focused font, public and
+  account group passed 41 of 41.
 - Production preflight found 210 opportunities, 210 non-empty source references
   and 0 duplicates before migration `0126`. The refreshed signed-in owner
   Database console then reported 239 application tables and confirmed
   `public_trade_lead_contact_releases` is present.
-- Google Apps Script version 11 deployment
+- Google Apps Script version 12 deployment
   `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
-  was deployed on 10 August 2026 at 14:34. Prior version 10 deployment
+  is active. Prior version 10 deployment
   `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
   is archived.
-- The signed `runOperationalHealthCheck` completed at 14:44:49 with status
-  `healthy`: site HTTP 200, electricity HTTP 200, gas HTTP 200 and
-  `lead_delivery` HTTP 200 for probe
-  `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. Installed `sendFollowUps` and
-  `runOperationalHealthCheck` triggers reported 0% error.
-- Live custom-domain desktop QA confirmed consistent-width header, introduction,
-  home journey, progress and question surfaces with no visible clipping, and the
-  holographic home rendered. The flow exposed the shared-property question, all
-  five Home basics fields and separate party-wall context. A sample townhouse
-  produced 8 ordered steps, Quick wins, printable plan, the prominent no-account
-  `Ask about an upgrade` form and an optional free-account path.
-- The Sites control plane recheck kept deployment
-  `appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20.
-  The custom domain remained active with an active provider and SSL.
-- Independent live reviewer returned SHIP with no P0 or P1 issue. At an effective
-  1,309 by 818 desktop viewport, header, hero, planner and results aligned at x82
-  with 1,132-pixel width; scroll width and client width were both 1,295 pixels.
-  At an effective 355 by 767 mobile viewport, the same surfaces aligned at x14
-  with 313-pixel width; scroll width and client width were both 341 pixels. The
-  holographic home stayed visible and safely clipped, selects were 284 pixels,
-  and 189-pixel enquiry fields and action stacked without overflow. Production
-  confirmed separate open-wall-vent and open-unused-chimney choices, no
-  heat-pump-space option, no-account enquiry first, optional account creation and
-  personalised Quick wins. No real customer lead was submitted.
+- The signed `runOperationalHealthCheck` ran from 18:08:25 to 18:09:18 Sydney
+  time with monitor `api-health-1786349306423` healthy: `site_runtime` HTTP 200 in
+  1,555 ms, `electricity_plans` HTTP 200 in 35,575 ms, `gas_plans` HTTP 200 in
+  13,232 ms and `lead_delivery` HTTP 200 in 2,193 ms for probe
+  `7bbd1b86-db74-4b0f-acc9-290ff8ae9469`. Sites Worker request
+  `a28d84795b0fba39` returned HTTP 200 with outcome `ok`, 1,198 ms wall time and
+  7 ms CPU. A final five-minute errors-only query returned zero events.
+- Live v305 result and print QA preserved Townhouse, two storeys, 100-199 m2,
+  three/four occupants and two or more shared sides. Quick wins, optional
+  name/phone trade sharing and the private full-plan boundary were visible. The
+  impossible all-walls-adjoin-other-dwellings option was absent and desktop
+  client width equalled scroll width.
+- Production PDF requests `a28d5de18fe874e0` and `a28d603abf6674e0`
+  returned HTTP 200 `application/pdf` in 467/441 ms wall/CPU and 452/430 ms
+  wall/CPU respectively. Local Cloudflare validation returned a valid
+  268,767-byte PDF in 203 ms cold and 115 ms cached. The audit found 10 tagged
+  pages and two embedded font programs.
+- No real customer lead was submitted. The post-v305 mobile viewport override
+  did not apply, so no new live mobile emulation is claimed. Earlier 341-pixel QA
+  of the same visual source had no overflow; the v305 font correction did not
+  change that visual source.
 
 ### Exact remaining source and delivery limits
 
 - GEMS remains fail-closed pending authorised read-only R2 access and an exact
   comparison of the held 7,500-to-7,499 row change.
-- The release proves signed relay acceptance, not end-user inbox presentation or
-  a real customer lead submission.
+- The release proves signed relay acceptance and customer-plan PDF
+  generation/download, not a real customer lead submission, customer email
+  attachment or downstream trade inbox presentation.
 - Independent review noted one non-blocking P2: administrator allocation after
   consent withdrawal can retain an inaccessible internal match. Current contact
   data stays hidden and no notification is sent.
@@ -696,11 +698,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Obtain authorised read-only R2 bytes and exact-diff held GEMS 7,500-to-7,499 change.
-2. Connect planner Start here actions into more exact prefilled comparator, calculator and guide handoffs.
-3. Extend governed mixed-product contracts to other multi-component installations where official formulas require it.
-4. Run accessibility and usability validation with real households and verified trades, then fix measured friction.
-5. Add privacy-safe journey completion and friction measurement only after explicit analytics policy and consent design.
+1. Exact-diff the held GEMS 7,500-to-7,499 source change against authorised retained bytes.
+2. Prefill planner handoffs into calculators, comparators and guides.
+3. Extend governed mixed-product contracts where official formulas require multi-component installations.
+4. Run real household and trade accessibility and usability validation, then fix measured friction.
+5. Add privacy-safe journey measurement only after explicit analytics consent.
 
 ## Previous released milestone
 
