@@ -1207,6 +1207,7 @@ export const publicTradeLeadContactReleases = sqliteTable("public_trade_lead_con
   noticeVersion: text("notice_version").notNull(),
   consentPurpose: text("consent_purpose").notNull(),
   disclosedFields: text("disclosed_fields").notNull().default("[]"),
+  customerName: text("customer_name").notNull(),
   customerFirstName: text("customer_first_name").notNull().default(""),
   customerLastName: text("customer_last_name").notNull().default(""),
   customerEmail: text("customer_email").notNull().default(""),

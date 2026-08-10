@@ -114,6 +114,7 @@ test("a public contact release stores the private admin address without adding p
   for (const allowed of [
     "customer_first_name",
     "customer_last_name",
+    "customer_name",
     "customer_email",
     "customer_phone",
     "customer_unit_number",
@@ -127,13 +128,15 @@ test("a public contact release stores the private admin address without adding p
     "disclosed_fields",
     "granted_at",
   ]) assert.equal(columns.includes(allowed), true, allowed);
-  assert.equal(columns.includes("customer_name"), false);
-  assert.deepEqual({ ...database.prepare(`SELECT customer_first_name, customer_last_name
+  assert.equal(columns.includes("customer_name"), true);
+  assert.deepEqual({ ...database.prepare(`SELECT customer_name, customer_first_name, customer_last_name
     FROM public_trade_lead_contact_releases WHERE id = 'legacy-release'`).get() }, {
+    customer_name: "Jamie Example Family",
     customer_first_name: "Jamie",
     customer_last_name: "Example Family",
   });
   assert.match(schema, /sqliteTable\("public_trade_lead_contact_releases"/);
+  assert.match(schema, /customerName: text\("customer_name"\)\.notNull\(\)/);
   assert.match(
     schema,
     /customerFirstName: text\("customer_first_name"\)\.notNull\(\)\.default\(""\)/,
@@ -163,10 +166,10 @@ test("every allocated trade sees routing fields and written notes while name and
   apply(database, addressMigration);
   database.prepare(`INSERT INTO public_trade_lead_contact_releases
     (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
-     disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+     disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
      customer_street_address, customer_suburb, customer_address_state, postcode,
      customer_message, granted_at, withdrawn_at, created_at, updated_at)
-    VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`)
+    VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`)
     .run(
       "release-1",
       "opportunity-1",
@@ -179,6 +182,7 @@ test("every allocated trade sees routing fields and written notes while name and
         "service_categories",
         "customer_message",
       ]),
+      "Jamie Example",
       "Jamie",
       "Example",
       "jamie@example.test",
@@ -251,11 +255,11 @@ test("every allocated trade sees routing fields and written notes while name and
     WHERE allocation.firebase_uid = ?`).get("trade-not-allocated").count, 0);
   assert.throws(() => database.prepare(`INSERT INTO public_trade_lead_contact_releases
     (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
-     disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+     disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
      customer_street_address, customer_suburb, customer_address_state, postcode,
      customer_message, granted_at, withdrawn_at, created_at, updated_at)
     SELECT 'release-duplicate', opportunity_id, 'AEA-OTHER', status, notice_version,
-      consent_purpose, disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone,
+      consent_purpose, disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone,
       customer_unit_number, customer_street_address, customer_suburb, customer_address_state,
       postcode, customer_message, granted_at, withdrawn_at, created_at, updated_at
     FROM public_trade_lead_contact_releases WHERE id = 'release-1'`).run(), /UNIQUE constraint failed/);
@@ -301,11 +305,11 @@ test("CRM lead projection keeps the admin address private until the customer opt
         '2026-08-10T04:00:00.000Z', '2026-08-10T04:00:00.000Z');`);
   database.prepare(`INSERT INTO public_trade_lead_contact_releases
       (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
-       disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+       disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
        customer_street_address, customer_suburb, customer_address_state,
        postcode, customer_message, granted_at, withdrawn_at, created_at, updated_at)
       VALUES ('release-1', 'opportunity-1', 'AEA-20260810-CRM', 'active', ?, ?, ?,
-        'Jamie', 'Example', 'jamie@example.test', '0400000000', 'Unit 4',
+        'Jamie Example', 'Jamie', 'Example', 'jamie@example.test', '0400000000', 'Unit 4',
         '15 Example Street', 'MELBOURNE', 'VIC',
         '3000', 'Solar and battery help please.', '2026-08-10T04:00:00.000Z', '',
         '2026-08-10T04:00:00.000Z', '2026-08-10T04:00:00.000Z')`)

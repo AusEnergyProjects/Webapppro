@@ -62,12 +62,15 @@ export async function persistLeadOpportunity(
   const canonicalId = String(canonical.id);
   let contactIsCurrent = !record.publicPlanEnquiry;
   if (contactRelease) {
+    const customerFirstName = String(contactRelease.customerFirstName).trim();
+    const customerLastName = String(contactRelease.customerLastName).trim();
+    const customerName = [customerFirstName, customerLastName].filter(Boolean).join(" ");
     await database.prepare(`INSERT INTO public_trade_lead_contact_releases
       (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
-       disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+       disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
        customer_street_address, customer_suburb, customer_address_state, postcode,
        customer_message, granted_at, withdrawn_at, created_at, updated_at)
-      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
       ON CONFLICT DO NOTHING`)
       .bind(
         contactRelease.id,
@@ -76,8 +79,9 @@ export async function persistLeadOpportunity(
         contactRelease.noticeVersion,
         contactRelease.consentPurpose,
         JSON.stringify(contactRelease.disclosedFields),
-        contactRelease.customerFirstName,
-        contactRelease.customerLastName,
+        customerName,
+        customerFirstName,
+        customerLastName,
         contactRelease.customerEmail,
         contactRelease.customerPhone,
         contactRelease.customerUnitNumber,
@@ -92,7 +96,7 @@ export async function persistLeadOpportunity(
       )
       .run();
     const storedRelease = await database.prepare(`SELECT status, notice_version, consent_purpose,
-        disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+        disclosed_fields, customer_name, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
         customer_street_address, customer_suburb, customer_address_state, postcode,
         customer_message, granted_at, withdrawn_at
       FROM public_trade_lead_contact_releases
@@ -110,8 +114,9 @@ export async function persistLeadOpportunity(
     const requestedFields = [...new Set(contactRelease.disclosedFields.map(String))].sort();
     if (
       !storedRelease
-      || String(storedRelease.customer_first_name) !== contactRelease.customerFirstName
-      || String(storedRelease.customer_last_name) !== contactRelease.customerLastName
+      || String(storedRelease.customer_name) !== customerName
+      || String(storedRelease.customer_first_name) !== customerFirstName
+      || String(storedRelease.customer_last_name) !== customerLastName
       || String(storedRelease.customer_email) !== contactRelease.customerEmail
       || String(storedRelease.customer_phone) !== contactRelease.customerPhone
       || String(storedRelease.customer_unit_number) !== contactRelease.customerUnitNumber

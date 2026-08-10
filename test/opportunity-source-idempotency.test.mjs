@@ -61,6 +61,7 @@ function sourceDatabase() {
     notice_version text NOT NULL,
     consent_purpose text NOT NULL,
     disclosed_fields text NOT NULL,
+    customer_name text NOT NULL,
     customer_first_name text NOT NULL,
     customer_last_name text NOT NULL,
     customer_email text NOT NULL,
@@ -153,6 +154,12 @@ test("the exact current notice creates one open opportunity and current contact 
   });
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_opportunities").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM public_trade_lead_contact_releases").get().count, 1);
+  assert.deepEqual({ ...database.prepare(`SELECT customer_name, customer_first_name, customer_last_name
+    FROM public_trade_lead_contact_releases`).get() }, {
+    customer_name: "Jamie Example",
+    customer_first_name: "Jamie",
+    customer_last_name: "Example",
+  });
   database.close();
 });
 

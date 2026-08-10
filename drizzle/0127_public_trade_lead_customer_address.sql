@@ -23,8 +23,6 @@ SET
     60
   );
 ALTER TABLE `public_trade_lead_contact_releases`
-  DROP COLUMN `customer_name`;
-ALTER TABLE `public_trade_lead_contact_releases`
   ADD `customer_unit_number` text DEFAULT '' NOT NULL;
 ALTER TABLE `public_trade_lead_contact_releases`
   ADD `customer_street_address` text DEFAULT '' NOT NULL;
