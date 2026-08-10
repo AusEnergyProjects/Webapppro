@@ -35,7 +35,7 @@ const project = {
 };
 
 test("important home facts derive customer reports without claiming validation", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-home-context-v8");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-external-wall-taxonomy-v9");
   assert.equal(CUSTOMER_ADVISOR_PROFILE_VERSION, "2026-07-31-advisor-profile-v5");
   assert.equal(
     CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
@@ -47,6 +47,7 @@ test("important home facts derive customer reports without claiming validation",
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-07-29-home-feature-taxonomy-v2"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-08-09-guided-home-systems-v6"));
   assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-08-10-quick-wins-home-systems-v7"));
+  assert.ok(CUSTOMER_LEGACY_PLAN_VERSIONS.includes("2026-08-10-home-context-v8"));
   assert.deepEqual(
     customerAdvisorOptions.evidenceSources.find(([value]) => value === "photo-supported"),
     ["photo-supported", "Photo available for review"],

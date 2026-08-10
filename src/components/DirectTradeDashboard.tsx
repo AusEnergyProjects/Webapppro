@@ -1209,7 +1209,7 @@ export function DirectTradeDashboard() {
     try {
       const report = await installerPlanReport(opportunity, activeUser);
       if (identityIsCurrent()) {
-        downloadCustomerPlanPdf(report);
+        await downloadCustomerPlanPdf(report);
         setOpportunityStatus("The complete privacy-safe plan PDF download started.");
       }
     } catch (planError) {

@@ -102,7 +102,7 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
   const services = serviceLabels(input.matchedCategories);
   const timing = TIMING_LABELS[bounded(input.timing, 40)] || "Planning";
   if (input.sourceKind === "public_plan_enquiry") {
-    const customerName = bounded(input.customerName, 120) || "Customer enquiry";
+    const customerName = bounded(input.customerName, 120);
     const customerMessage = bounded(input.customerMessage, 500);
     const postcode = broadPostcode(input.postcode);
     const subject = `New TLink customer enquiry in ${postcode || broadState(input.state)}`
@@ -112,7 +112,7 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
       "",
       "A customer chose to share a matched energy upgrade enquiry with your verified business.",
       "",
-      `Customer: ${customerName}`,
+      ...(customerName ? [`Customer: ${customerName}`] : []),
       `Postcode: ${postcode || "Check the signed-in workspace"}`,
       `Selected ${services.length === 1 ? "service" : "services"}: ${services.join(", ")}`,
       `Timing: ${timing}`,

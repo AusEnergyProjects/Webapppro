@@ -94,6 +94,33 @@ function cleanProvenance(value) {
   };
 }
 
+function publicPlanTradeSharing(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "Choose which contact details matching trades may receive." };
+  }
+  const allowedKeys = new Set(["email", "postcode", "name", "phone"]);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+    return { ok: false, error: "The trade sharing selection contained an unsupported field." };
+  }
+  if (value.email !== true || value.postcode !== true) {
+    return { ok: false, error: "Email and postcode must be shared so matching trades can respond." };
+  }
+  for (const key of ["name", "phone"]) {
+    if (typeof value[key] !== "boolean") {
+      return { ok: false, error: "Choose each optional trade sharing preference." };
+    }
+  }
+  return {
+    ok: true,
+    value: {
+      email: true,
+      postcode: true,
+      name: value.name,
+      phone: value.phone,
+    },
+  };
+}
+
 export function validateLeadPayload(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, error: "Invalid request." };
@@ -147,6 +174,8 @@ export function validateLeadPayload(raw) {
     : [])].slice(0, 8);
   if (publicPlanEnquiry) {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    if (!email) return { ok: false, error: "Please enter an email address." };
+    if (!phone) return { ok: false, error: "Please enter a phone number for Australian Energy Assessments records." };
     if (!postcode) return { ok: false, error: "Please enter the property's postcode." };
     if (!residentialStateFromPostcode(postcode)) return { ok: false, error: "Please enter a valid Australian postcode." };
     if (projectCategories.length !== 1) return { ok: false, error: "Please choose one upgrade to discuss first." };
@@ -162,7 +191,15 @@ export function validateLeadPayload(raw) {
     )) return { ok: false, error: "Please enter a valid phone number." };
     const planSnapshot = normalizePublicPlanSnapshot(raw.planSnapshot);
     if (!planSnapshot.ok) return planSnapshot;
-    raw = { ...raw, planSnapshot: planSnapshot.value };
+    const projectNotes = cleanText(raw.projectNotes, 500);
+    const tradeSharing = publicPlanTradeSharing(raw.tradeSharing);
+    if (!tradeSharing.ok) return tradeSharing;
+    raw = {
+      ...raw,
+      planSnapshot: planSnapshot.value,
+      projectNotes,
+      tradeSharing: tradeSharing.value,
+    };
   }
   if (enquiry === "direct-trade-project") {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
@@ -214,6 +251,7 @@ export function validateLeadPayload(raw) {
         projectCategories,
         preferredContact: email && phone ? "either" : email ? "email" : "phone",
         projectNotes: cleanText(raw.projectNotes, 500),
+        tradeSharing: raw.tradeSharing,
         planSnapshot: raw.planSnapshot,
       },
     };

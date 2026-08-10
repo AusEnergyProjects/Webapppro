@@ -44,6 +44,19 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
       AND datetime(current_public_release.granted_at) IS NOT NULL
       AND current_public_release.withdrawn_at = ''
       AND current_public_release.postcode = current_public_opportunity.postcode
+      AND json_valid(current_public_release.disclosed_fields)
+      AND EXISTS (
+        SELECT 1 FROM json_each(current_public_release.disclosed_fields) disclosed
+        WHERE disclosed.value = 'customer_email'
+      )
+      AND EXISTS (
+        SELECT 1 FROM json_each(current_public_release.disclosed_fields) disclosed
+        WHERE disclosed.value = 'postcode'
+      )
+      AND EXISTS (
+        SELECT 1 FROM json_each(current_public_release.disclosed_fields) disclosed
+        WHERE disclosed.value = 'service_categories'
+      )
       AND current_public_account.partner_type = 'installer'
       AND ${verifiedTradeAccountPredicate("current_public_account")}
   )

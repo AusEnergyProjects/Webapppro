@@ -33,6 +33,29 @@ function createOpportunitySourceTable(database) {
   );`);
 }
 
+function disclosedContactForTrade(database, firebaseUid) {
+  const disclosureJson = "CASE WHEN json_valid(release.disclosed_fields) THEN release.disclosed_fields ELSE '[]' END";
+  return database.prepare(`SELECT
+      CASE WHEN EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'customer_name')
+        THEN release.customer_name ELSE '' END customer_name,
+      CASE WHEN EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'customer_email')
+        THEN release.customer_email ELSE '' END customer_email,
+      CASE WHEN EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'customer_phone')
+        THEN release.customer_phone ELSE '' END customer_phone,
+      CASE WHEN EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'postcode')
+        THEN release.postcode ELSE '' END postcode,
+      CASE WHEN EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'customer_message')
+        THEN release.customer_message ELSE '' END customer_message
+    FROM trade_opportunity_matches allocation
+    JOIN public_trade_lead_contact_releases release
+      ON release.opportunity_id = allocation.opportunity_id AND release.status = 'active'
+    WHERE allocation.firebase_uid = ?
+      AND EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'customer_email')
+      AND EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'postcode')
+      AND EXISTS (SELECT 1 FROM json_each(${disclosureJson}) field WHERE field.value = 'service_categories')`)
+    .get(firebaseUid);
+}
+
 test("a public contact release contains only the consented basic lead fields", () => {
   const database = new DatabaseSync(":memory:");
   createOpportunitySourceTable(database);
@@ -68,7 +91,7 @@ test("a public contact release contains only the consented basic lead fields", (
   database.close();
 });
 
-test("every allocated trade can resolve one consented contact and a nonmatch resolves none", () => {
+test("every allocated trade sees routing fields and written notes while name and phone remain independently optional", () => {
   const database = new DatabaseSync(":memory:");
   createOpportunitySourceTable(database);
   apply(database, migration);
@@ -84,9 +107,7 @@ test("every allocated trade can resolve one consented contact and a nonmatch res
       "2026-08-10",
       "Share my selected contact details with every verified matching trade",
       JSON.stringify([
-        "customer_name",
         "customer_email",
-        "customer_phone",
         "postcode",
         "service_categories",
         "customer_message",
@@ -105,19 +126,37 @@ test("every allocated trade can resolve one consented contact and a nonmatch res
   );
   insertMatch.run("match-a", "trade-a");
   insertMatch.run("match-b", "trade-b");
-  const visibleContact = database.prepare(`SELECT release.customer_name, release.customer_email,
-      release.customer_phone, release.postcode, release.customer_message
-    FROM trade_opportunity_matches allocation
-    JOIN public_trade_lead_contact_releases release
-      ON release.opportunity_id = allocation.opportunity_id AND release.status = 'active'
-    WHERE allocation.firebase_uid = ?`).all("trade-a");
-  assert.deepEqual(visibleContact.map((row) => ({ ...row })), [{
+  assert.deepEqual({ ...disclosedContactForTrade(database, "trade-a") }, {
+    customer_name: "",
+    customer_email: "jamie@example.test",
+    customer_phone: "",
+    postcode: "3000",
+    customer_message: "Please call after 4 pm.",
+  });
+  const changeDisclosure = database.prepare(
+    "UPDATE public_trade_lead_contact_releases SET disclosed_fields = ? WHERE id = 'release-1'",
+  );
+  changeDisclosure.run(JSON.stringify([
+    "customer_email", "postcode", "service_categories", "customer_message", "customer_name",
+  ]));
+  assert.deepEqual({ ...disclosedContactForTrade(database, "trade-a") }, {
+    customer_name: "Jamie Example",
+    customer_email: "jamie@example.test",
+    customer_phone: "",
+    postcode: "3000",
+    customer_message: "Please call after 4 pm.",
+  });
+  changeDisclosure.run(JSON.stringify([
+    "customer_email", "postcode", "service_categories", "customer_message", "customer_name", "customer_phone",
+  ]));
+  assert.deepEqual({ ...disclosedContactForTrade(database, "trade-a") }, {
     customer_name: "Jamie Example",
     customer_email: "jamie@example.test",
     customer_phone: "0400000000",
     postcode: "3000",
     customer_message: "Please call after 4 pm.",
-  }]);
+  });
+  assert.equal(disclosedContactForTrade(database, "trade-not-allocated"), undefined);
   assert.equal(database.prepare(`SELECT COUNT(*) count
     FROM trade_opportunity_matches allocation
     JOIN public_trade_lead_contact_releases release
@@ -138,19 +177,39 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(opportunityServer, /contactConsentReceipt/);
   assert.match(opportunityServer, /noticeVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION/);
   assert.match(opportunityServer, /consentPurpose !== PUBLIC_PLAN_CONSENT_PURPOSE/);
-  assert.match(opportunityServer, /Only the contact fields the customer consented to share are available to matched verified trades/);
+  assert.match(opportunityServer, /Only the contact fields the customer consented to share are available to approved matching TLink trades/);
   assert.match(opportunityServer, /The private home plan and PDF are not shared with trades/);
   assert.match(opportunityServer, /!sourceReference/);
   assert.match(opportunityServer, /public_trade_lead_contact_releases contact/);
+  assert.match(opportunityServer, /"customer_email",\s*"postcode",\s*"service_categories"/);
+  assert.match(opportunityServer, /tradeSharing\.name \? \["customer_name"\] : \[\]/);
+  assert.match(opportunityServer, /tradeSharing\.phone \? \["customer_phone"\] : \[\]/);
+  assert.match(opportunityServer, /customerMessage \? \["customer_message"\] : \[\]/);
+  assert.match(opportunityServer, /json_valid\(contact\.disclosed_fields\)/);
+  assert.match(opportunityServer, /disclosed\.value = 'customer_name'/);
+  assert.match(opportunityServer, /disclosed\.value = 'customer_phone'/);
+  assert.match(opportunityServer, /disclosed\.value = 'customer_message'/);
   assert.match(opportunityServer, /CASE WHEN contact\.id IS NULL THEN 1 ELSE 0 END/);
   assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);
   assert.match(tradeRoute, /WHERE m\.firebase_uid = \?/);
   assert.match(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
   assert.match(tradeRoute, /public_contact\.notice_version = '\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}'/);
+  assert.match(tradeRoute, /function publicTradeContact\(/);
+  assert.match(tradeRoute, /parseJsonList\(row\.public_contact_disclosed_fields\)/);
+  assert.match(tradeRoute, /!disclosedFields\.has\("customer_email"\)/);
+  assert.match(tradeRoute, /!disclosedFields\.has\("postcode"\)/);
+  assert.match(tradeRoute, /!disclosedFields\.has\("service_categories"\)/);
+  assert.match(tradeRoute, /name: disclosedFields\.has\("customer_name"\)/);
+  assert.match(tradeRoute, /phone: disclosedFields\.has\("customer_phone"\)/);
+  assert.match(tradeRoute, /message: disclosedFields\.has\("customer_message"\)/);
   assert.match(tradeEnquiriesRoute, /currentPublicMarketplaceAccessSql/);
   assert.match(tradeEnquiriesRoute, /verifiedTradeAccountPredicate\("current_public_account"\)/);
   assert.match(tradeEnquiriesRoute, /current_public_release\.withdrawn_at = ''/);
+  assert.match(tradeEnquiriesRoute, /json_valid\(current_public_release\.disclosed_fields\)/);
+  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'customer_email'/);
+  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'postcode'/);
+  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'service_categories'/);
   assert.match(adminMatchesRoute, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
   assert.match(adminMatchesRoute, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(`${opportunityServer}\n${tradeRoute}\n${tradeEnquiriesRoute}\n${adminMatchesRoute}`, /trade_capability|capability_review|service qualification/i);

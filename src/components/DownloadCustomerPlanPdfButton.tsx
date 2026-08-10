@@ -16,15 +16,15 @@ export function DownloadCustomerPlanPdfButton({
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
-  const download = () => {
+  const download = async () => {
     if (downloadingRef.current) return;
     downloadingRef.current = true;
     setBusy(true);
     setError("");
     setStatus("");
     try {
-      downloadCustomerPlanPdf(report);
-      setStatus("PDF download requested. No print window will open.");
+      await downloadCustomerPlanPdf(report);
+      setStatus("Your PDF download has started.");
     } catch (downloadError) {
       setError(
         downloadError instanceof Error

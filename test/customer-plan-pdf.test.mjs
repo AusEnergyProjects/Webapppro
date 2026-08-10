@@ -794,6 +794,17 @@ test("PDF route returns a clear unsupported-text response", () => {
   );
 });
 
+test("Sites PDF font loading relies on its module cache without unsupported fetch cache modes", () => {
+  for (const source of [PDF_ROUTE_SOURCE, PUBLIC_LEAD_ROUTE_SOURCE]) {
+    assert.match(source, /const (?:fontCache|pdfFontCache) = new Map(?:<[\s\S]{0,160}>)?\(\)/);
+    assert.match(source, /fetch\(new URL\(path, origin\)\)/);
+    assert.doesNotMatch(source, /cache:\s*["']force-cache["']/);
+  }
+  assert.match(PDF_ROUTE_SOURCE, /customer_plan_pdf_generation_failed/);
+  assert.match(PDF_ROUTE_SOURCE, /errorType:/);
+  assert.doesNotMatch(PDF_ROUTE_SOURCE, /console\.error\(error\)/);
+});
+
 test("maximum bounded roadmap produces a complete multi-page A4 PDF", async () => {
   const actions = Array.from({ length: 40 }, (_, index) => ({
     number: index + 1,

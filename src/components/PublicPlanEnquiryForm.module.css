@@ -104,6 +104,7 @@ textarea.control {
 
 .control:focus-visible,
 .consentBox:focus-visible,
+.shareChoices input:focus-visible,
 .submit:focus-visible,
 .reset:focus-visible,
 .privacy summary:focus-visible {
@@ -125,6 +126,45 @@ textarea.control {
   overflow: hidden;
   position: absolute;
   width: 1px;
+}
+
+.shareChoices {
+  background: #f7fcfb;
+  border: 1px solid #c5e5dc;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+  padding: 0.9rem;
+}
+
+.shareChoices legend {
+  color: #143e45;
+  font-size: 0.9rem;
+  font-weight: 900;
+  padding: 0 0.3rem;
+}
+
+.shareChoices p {
+  color: #4d696d;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.shareChoices label {
+  align-items: center;
+  color: #214b51;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 750;
+  gap: 0.6rem;
+}
+
+.shareChoices input {
+  accent-color: #078465;
+  height: 1.1rem;
+  width: 1.1rem;
 }
 
 .consent {

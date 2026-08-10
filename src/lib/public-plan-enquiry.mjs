@@ -8,10 +8,10 @@ import {
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
 export const PUBLIC_PLAN_CONSENT_PURPOSE =
-  "Share my enquiry with every active verified matching trade and email my private plan when I provide an email address";
+  "Share my email, postcode, service and any message I write with all approved TLink trades in my area, plus chosen name or phone, and email my private plan";
 
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
-  "2026-08-10-open-matching-and-private-plan-v2";
+  "2026-08-10-customer-selected-trade-sharing-v4";
 
 export const PUBLIC_PLAN_SNAPSHOT_VERSION =
   "2026-08-10-bounded-public-plan-snapshot-v1";

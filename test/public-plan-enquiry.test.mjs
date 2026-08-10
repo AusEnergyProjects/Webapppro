@@ -34,10 +34,16 @@ function validPlanEnquiry(overrides = {}) {
     submissionId: "20260810.12345678-abcd-4abc-8def-123456789abc",
     name: "Jamie Customer",
     email: "jamie@example.com",
-    phone: "",
+    phone: "0400 000 000",
     postcode: "3000",
     projectCategories: ["heating-cooling"],
     projectNotes: "The main unit is near the end of its life.",
+    tradeSharing: {
+      email: true,
+      postcode: true,
+      name: false,
+      phone: false,
+    },
     planSnapshot: {
       goals: ["lower-bills", "improve-comfort"],
       pace: "staged",
@@ -66,21 +72,28 @@ function validPlanEnquiry(overrides = {}) {
   };
 }
 
-test("public plan enquiries accept email or phone without an account", () => {
-  const withEmail = validateLeadPayload(validPlanEnquiry());
-  assert.equal(withEmail.ok, true);
-  assert.equal(withEmail.value.preferredContact, "email");
-
-  const withPhone = validateLeadPayload(validPlanEnquiry({ email: "", phone: "0400 000 000" }));
-  assert.equal(withPhone.ok, true);
-  assert.equal(withPhone.value.preferredContact, "phone");
+test("public plan enquiries privately collect name, email, phone and postcode without an account", () => {
+  const result = validateLeadPayload(validPlanEnquiry());
+  assert.equal(result.ok, true);
+  assert.equal(result.value.name, "Jamie Customer");
+  assert.equal(result.value.email, "jamie@example.com");
+  assert.equal(result.value.phone, "0400 000 000");
+  assert.equal(result.value.postcode, "3000");
+  assert.equal(result.value.preferredContact, "either");
+  assert.deepEqual(result.value.tradeSharing, {
+    email: true,
+    postcode: true,
+    name: false,
+    phone: false,
+  });
 });
 
-test("public plan enquiries require contact, postcode, one interest and the exact consent notice", () => {
-  assert.ok(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length > 40);
+test("public plan enquiries require private contact records, mandatory trade routing fields and the exact consent notice", () => {
+  assert.match(PUBLIC_PLAN_CONSENT_NOTICE_VERSION, /^\d{4}-\d{2}-\d{2}-[a-z0-9-]+-v\d+$/);
   assert.ok(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length <= 64);
   assert.equal(validateLeadPayload(validPlanEnquiry()).ok, true);
-  assert.match(validateLeadPayload(validPlanEnquiry({ email: "", phone: "" })).error, /email address or phone/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({ email: "" })).error, /email address/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({ phone: "" })).error, /phone number.*records/i);
   assert.match(validateLeadPayload(validPlanEnquiry({ postcode: "" })).error, /postcode/i);
   assert.match(validateLeadPayload(validPlanEnquiry({ postcode: "0000" })).error, /valid Australian postcode/i);
   assert.match(validateLeadPayload(validPlanEnquiry({ postcode: "9999" })).error, /valid Australian postcode/i);
@@ -88,7 +101,17 @@ test("public plan enquiries require contact, postcode, one interest and the exac
   assert.match(validateLeadPayload(validPlanEnquiry({ projectCategories: ["solar", "battery"] })).error, /choose one upgrade/i);
   assert.match(validateLeadPayload(validPlanEnquiry({ submissionId: "" })).error, /new home plan enquiry/i);
   assert.match(validateLeadPayload(validPlanEnquiry({ submissionId: "20260810.not-random" })).error, /new home plan enquiry/i);
-  assert.match(validateLeadPayload(validPlanEnquiry({ email: "", phone: "call me" })).error, /valid phone number/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({ phone: "call me" })).error, /valid phone number/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({ tradeSharing: undefined })).error, /which contact details/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({
+    tradeSharing: { email: false, postcode: true, name: false, phone: false },
+  })).error, /email and postcode must be shared/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({
+    tradeSharing: { email: true, postcode: true, name: false },
+  })).error, /each optional trade sharing preference/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({
+    tradeSharing: { email: true, postcode: true, name: false, phone: false, message: false },
+  })).error, /unsupported field/i);
   assert.match(validateLeadPayload(validPlanEnquiry({
     consent: { accepted: true, purpose: PUBLIC_PLAN_CONSENT_PURPOSE, noticeVersion: "old", grantedAt: new Date().toISOString() },
   })).error, /current contact notice/i);
@@ -114,7 +137,7 @@ test("public plan validation keeps only the bounded canonicalizable snapshot and
   }
   assert.deepEqual(Object.keys(result.value).sort(), [
     "clientStartedAt", "consent", "email", "enquiry", "name", "phone", "postcode",
-    "planSnapshot", "preferredContact", "projectCategories", "projectNotes", "submissionType", "submittedAt",
+    "planSnapshot", "preferredContact", "projectCategories", "projectNotes", "submissionType", "submittedAt", "tradeSharing",
     "submissionId", "upgrades", "website",
   ].sort());
   assert.equal(result.value.planSnapshot.propertyContext.propertyType, "townhouse");
@@ -137,7 +160,18 @@ test("public plan envelopes open matching under the exact consent receipt and st
     purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
     noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     grantedAt: validated.value.consent.grantedAt,
+    disclosedFields: ["customer_email", "postcode", "service_categories", "customer_message"],
   });
+  const withoutMessage = validateLeadPayload(validPlanEnquiry({ projectNotes: "" }));
+  assert.equal(withoutMessage.ok, true);
+  const envelopeWithoutMessage = createLeadEnvelope(withoutMessage.value, {
+    now: () => new Date("2026-08-10T03:00:00.000Z"),
+    createId: () => "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  });
+  assert.deepEqual(
+    envelopeWithoutMessage.directTradeTriage.contactConsentReceipt.disclosedFields,
+    ["customer_email", "postcode", "service_categories"],
+  );
   assert.deepEqual(envelope.projectCategories, ["heating-cooling"]);
   assert.equal("planSnapshot" in envelope, false);
   assert.equal("customerPlanDelivery" in envelope, false);
@@ -171,21 +205,54 @@ test("the public submission fingerprint binds the stable reference to material c
     }),
     publicPlanSubmissionFingerprint(original.value),
   );
+  const changedSharing = validateLeadPayload(validPlanEnquiry({
+    tradeSharing: {
+      email: true,
+      postcode: true,
+      name: false,
+      phone: true,
+    },
+  }));
+  assert.equal(changedSharing.ok, true);
+  assert.notEqual(
+    publicPlanSubmissionFingerprint(original.value),
+    publicPlanSubmissionFingerprint(changedSharing.value),
+  );
 });
 
 test("the public component sends the visible contact fields and bounded plan selection with explicit open-matching consent", () => {
   const component = fs.readFileSync("src/components/PublicPlanEnquiryForm.tsx", "utf8");
+  const submittedSharing = component.match(
+    /body: JSON\.stringify\(\{[\s\S]*?tradeSharing:\s*\{([\s\S]*?)\},\s*planSnapshot,/,
+  )?.[1] || "";
   assert.match(component, /fetch\("\/api\/leads"/);
   assert.match(component, /submissionType: "upgrade"/);
   assert.match(component, /projectCategories: \[interest\]/);
   assert.match(component, /projectNotes: message/);
+  assert.match(component, /tradeSharing:/);
+  assert.match(component, /email: true/);
+  assert.match(component, /postcode: true/);
+  assert.match(component, /name: shareName/);
+  assert.match(component, /phone: sharePhone/);
+  assert.match(submittedSharing, /email: true/);
+  assert.match(submittedSharing, /postcode: true/);
+  assert.match(submittedSharing, /name: shareName/);
+  assert.match(submittedSharing, /phone: sharePhone/);
+  assert.doesNotMatch(submittedSharing, /message:/);
+  assert.match(component, /useState\(false\)/);
   assert.match(component, /planSnapshot/);
   assert.match(component, /residentialStateFromPostcode\(postcode\)/);
   assert.match(component, /maxLength=\{500\}/);
   assert.match(component, /if \(result\.filtered\)/);
-  assert.match(component, /every active, verified matching trade that services this area/);
+  assert.match(component, /all approved TLink trades that service my area/);
   assert.match(component, /full plan and PDF stay private/);
-  assert.match(component, /Add an email address to receive your personalised plan PDF/);
+  assert.match(component, /Also share my name/);
+  assert.match(component, /Also share my phone number/);
+  assert.doesNotMatch(component, /shareMessage|Also share my optional message/);
+  assert.match(component, /email, postcode, selected service and any message you write are included/i);
+  assert.match(component, /any message I wrote/i);
+  assert.match(component, /Australian Energy Assessments keeps these details for your enquiry/i);
+  assert.match(component, /full plan and PDF stay private and are emailed only to me/i);
   assert.match(component, /lastAttemptCore\.current !== currentCore/);
   assert.match(component, /submissionId\.current = createSubmissionId\(\)/);
   assert.match(component, /function changeConsent\(accepted: boolean\)/);

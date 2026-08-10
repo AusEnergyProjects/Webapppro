@@ -35,6 +35,7 @@ export function CustomerJourneyScene() {
   return (
     <section
       className="customer-journey-scene"
+      data-spatial-scene="landing"
       onPointerMove={moveScene}
       onPointerLeave={resetScene}
       aria-labelledby="customer-journey-title"
@@ -42,12 +43,18 @@ export function CustomerJourneyScene() {
       <div className="customer-scene-volume" aria-hidden="true">
         <HolographicEnergyField
           className="customer-scene-energy-field"
+          density="rich"
           focusX={0.7}
           focusY={0.53}
-          intensity={1.08}
+          intensity={1.34}
+          mode="landing"
+          progress={14}
         />
+        <span className="customer-scene-nebula customer-scene-nebula-one" />
+        <span className="customer-scene-nebula customer-scene-nebula-two" />
         <span className="customer-scene-halo customer-scene-halo-one" />
         <span className="customer-scene-halo customer-scene-halo-two" />
+        <span className="customer-scene-halo customer-scene-halo-three" />
         <span className="customer-scene-grid" />
         <span className="customer-scene-particle customer-scene-particle-one" />
         <span className="customer-scene-particle customer-scene-particle-two" />
@@ -66,6 +73,9 @@ export function CustomerJourneyScene() {
             priority
           />
         </div>
+        <span className="customer-scene-energy-route customer-scene-energy-route-one" />
+        <span className="customer-scene-energy-route customer-scene-energy-route-two" />
+        <span className="customer-scene-energy-route customer-scene-energy-route-three" />
         <span className="customer-scene-scan" />
         <span className="customer-scene-data customer-scene-data-live">Live home model</span>
         <span className="customer-scene-data customer-scene-data-private">Private by design</span>

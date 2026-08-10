@@ -141,22 +141,24 @@ function ineligibility(context: DeliveryRow) {
     const hasEmail = Number(context.public_contact_has_email || 0) === 1;
     const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
     const hasMessage = Boolean(text(context.public_customer_message, 500));
+    const sharesName = disclosedFields.includes("customer_name");
+    const sharesPhone = disclosedFields.includes("customer_phone");
+    const sharesMessage = disclosedFields.includes("customer_message");
     if (
       context.public_contact_status !== "active"
       || context.public_contact_notice_version !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
       || context.public_contact_consent_purpose !== PUBLIC_PLAN_CONSENT_PURPOSE
       || !Number.isFinite(Date.parse(String(context.public_contact_granted_at || "")))
       || Boolean(String(context.public_contact_withdrawn_at || ""))
-      || !text(context.public_customer_name, 120)
       || !/^\d{4}$/.test(text(context.public_contact_postcode, 4))
       || text(context.public_contact_postcode, 4) !== text(context.opportunity_postcode, 4)
-      || !disclosedFields.includes("customer_name")
+      || !disclosedFields.includes("customer_email")
       || !disclosedFields.includes("postcode")
       || !disclosedFields.includes("service_categories")
-      || (!hasEmail && !hasPhone)
-      || hasEmail !== disclosedFields.includes("customer_email")
-      || hasPhone !== disclosedFields.includes("customer_phone")
-      || hasMessage !== disclosedFields.includes("customer_message")
+      || !hasEmail
+      || (sharesName && !text(context.public_customer_name, 120))
+      || (sharesPhone && !hasPhone)
+      || (sharesMessage && !hasMessage)
       || disclosedFields.some((field) => !allowedFields.has(field))
     ) return "The public enquiry contact consent is unavailable or no longer current.";
   }
@@ -244,6 +246,9 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
     ? storedIdempotencyKey
     : await opportunityNotificationIdempotencyKey(String(context.match_id));
   const publicPlanEnquiry = context.notification_source === "public_plan_enquiry";
+  const publicDisclosedFields = new Set(
+    publicPlanEnquiry ? list(context.public_contact_disclosed_fields) : [],
+  );
   const matchingLocality = publicPlanEnquiry
     ? {
         suburb: "",
@@ -266,8 +271,12 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
       businessName: String(context.business_name || ""),
       sourceKind: String(context.notification_source || "legacy_marketplace") as
         "customer_project" | "public_plan_enquiry" | "legacy_marketplace",
-      customerName: String(context.public_customer_name || ""),
-      customerMessage: String(context.public_customer_message || ""),
+      customerName: publicDisclosedFields.has("customer_name")
+        ? String(context.public_customer_name || "")
+        : "",
+      customerMessage: publicDisclosedFields.has("customer_message")
+        ? String(context.public_customer_message || "")
+        : "",
       suburb: matchingLocality.suburb,
       postcode: matchingLocality.postcode,
       state: matchingLocality.state,

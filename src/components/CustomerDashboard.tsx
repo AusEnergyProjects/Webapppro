@@ -2381,7 +2381,7 @@ function ProjectEditor({
     }
   }
 
-  function downloadPlanPdf() {
+  async function downloadPlanPdf() {
     if (activePdfDownload.current) return;
     const blocker = planShareBlocker();
     if (blocker) {
@@ -2395,7 +2395,7 @@ function ProjectEditor({
       const report = createCustomerPlanReportView(
         shareablePlanDocument,
       );
-      downloadCustomerPlanPdf(report);
+      await downloadCustomerPlanPdf(report);
       setStatus(
         "PDF download requested. Your private draft and evidence were not changed.",
       );

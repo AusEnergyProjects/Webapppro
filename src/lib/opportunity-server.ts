@@ -26,12 +26,25 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
     SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
       CASE WHEN m.status IN ('interested', 'connected') THEN 'contacted'
            WHEN m.status IN ('declined', 'closed') THEN 'lost' ELSE 'new' END,
-      'residential', COALESCE(contact.customer_name, ''), '',
-      COALESCE(contact.customer_email, ''), COALESCE(contact.customer_phone, ''), o.state,
+      'residential', CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_name'
+      ) THEN contact.customer_name ELSE '' END, '',
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_email'
+      ) THEN contact.customer_email ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_phone'
+      ) THEN contact.customer_phone ELSE '' END, o.state,
       CASE WHEN contact.id IS NULL THEN '' ELSE contact.postcode END,
       COALESCE(json_extract(m.matched_categories, '$[0]'), 'other'), m.matched_categories,
       o.summary || CASE
-        WHEN contact.id IS NOT NULL AND contact.customer_message <> ''
+        WHEN contact.id IS NOT NULL AND contact.customer_message <> '' AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+          WHERE disclosed.value = 'customer_message'
+        )
           THEN ' Customer message: ' || contact.customer_message
         ELSE '' END,
       o.priority, o.state, CASE WHEN contact.id IS NULL THEN 1 ELSE 0 END,
@@ -46,6 +59,18 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
         AND datetime(contact.granted_at) IS NOT NULL
         AND contact.withdrawn_at = ''
         AND contact.postcode = o.postcode
+        AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) required_email
+          WHERE required_email.value = 'customer_email'
+        )
+        AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) required_postcode
+          WHERE required_postcode.value = 'postcode'
+        )
+        AND EXISTS (
+          SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) required_services
+          WHERE required_services.value = 'service_categories'
+        )
         AND EXISTS (
           SELECT 1 FROM trade_accounts current_trade_account
           WHERE current_trade_account.firebase_uid = m.firebase_uid
@@ -132,6 +157,12 @@ type DirectTradeLead = {
   projectStage?: string;
   projectPriorities?: string[];
   projectNotes?: string;
+  tradeSharing?: {
+    email?: boolean;
+    postcode?: boolean;
+    name?: boolean;
+    phone?: boolean;
+  };
   timeframe?: string;
   directTradeTriage?: {
     status?: string;
@@ -152,6 +183,7 @@ function publicContactRelease(payload: DirectTradeLead) {
   const customerName = String(payload.name || "").trim().slice(0, 120);
   const customerEmail = String(payload.email || "").trim().toLowerCase().slice(0, 254);
   const customerPhone = String(payload.phone || "").trim().slice(0, 40);
+  const tradeSharing = payload.tradeSharing;
   const noticeVersion = String(receipt?.noticeVersion || "").trim().slice(0, 120);
   const consentPurpose = String(receipt?.purpose || "").trim().slice(0, 160);
   const grantedAt = String(receipt?.grantedAt || "");
@@ -159,18 +191,21 @@ function publicContactRelease(payload: DirectTradeLead) {
     receipt?.accepted !== true
     || !sourceReference
     || !customerName
-    || (!customerEmail && !customerPhone)
+    || !customerEmail
+    || !customerPhone
+    || tradeSharing?.email !== true
+    || tradeSharing?.postcode !== true
     || noticeVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
     || consentPurpose !== PUBLIC_PLAN_CONSENT_PURPOSE
     || !Number.isFinite(Date.parse(grantedAt))
   ) return null;
   const customerMessage = String(payload.projectNotes || "").trim().slice(0, 500);
   const disclosedFields = [
-    "customer_name",
-    ...(customerEmail ? ["customer_email"] : []),
-    ...(customerPhone ? ["customer_phone"] : []),
+    "customer_email",
     "postcode",
     "service_categories",
+    ...(tradeSharing.name ? ["customer_name"] : []),
+    ...(tradeSharing.phone ? ["customer_phone"] : []),
     ...(customerMessage ? ["customer_message"] : []),
   ];
   return {
@@ -214,7 +249,7 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const property = readable(String(payload.propertyType || "home"));
   const stage = readable(String(payload.projectStage || "planning"));
   const summary = `${property} project at the ${stage.toLowerCase()} stage. ${priorities.length ? `Priorities: ${priorities.join(", ")}. ` : ""}${payload.sourceJourney === "public-home-energy-plan"
-    ? "Only the contact fields the customer consented to share are available to matched verified trades. The private home plan and PDF are not shared with trades."
+    ? "Only the contact fields the customer consented to share are available to approved matching TLink trades. The private home plan and PDF are not shared with trades."
     : "Detailed household notes and contact details remain in the protected enquiry record and are not displayed in the opportunity feed."}`;
   const title =
     categoryNames.length === 1

@@ -11,12 +11,12 @@ const deliveryServer = read("../src/lib/opportunity-notification-server.ts");
 const migration = read("../drizzle/0087_trade_opportunity_notifications.sql");
 const worker = read("../worker/index.ts");
 
-test("public lead notification names the customer, selected service, postcode and bounded message", () => {
+test("public lead notification omits name and message when the customer supplied neither", () => {
   const draft = opportunityNotificationDraft({
     businessName: "Example Energy",
     sourceKind: "public_plan_enquiry",
-    customerName: "Jamie Example",
-    customerMessage: "Please call after 4 pm.",
+    customerName: "",
+    customerMessage: "",
     suburb: "Private suburb",
     postcode: "3000",
     state: "VIC",
@@ -26,16 +26,34 @@ test("public lead notification names the customer, selected service, postcode an
     customerSharedEvidenceCount: 99,
   });
   for (const value of [
-    "Jamie Example",
     "Postcode: 3000",
     "Selected services: Heating and cooling, Hot water",
-    "Please call after 4 pm.",
     OPPORTUNITY_INBOX_URL,
     "private home plan is not shared with trades",
   ]) assert.match(draft.body, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  assert.doesNotMatch(draft.body, /Customer:|Customer message:/);
   assert.doesNotMatch(draft.body, /private suburb|customer-shared evidence|complete privacy-safe customer plan/i);
   assert.doesNotMatch(draft.body, /jamie@example\.test|0400000000|street|unit address|bill|meter|document/i);
   assert.ok(draft.subject.length <= 160 && draft.body.length <= 1800);
+});
+
+test("public lead notification includes a shared name and the customer's written message", () => {
+  const draft = opportunityNotificationDraft({
+    businessName: "Example Energy",
+    sourceKind: "public_plan_enquiry",
+    customerName: "Jamie Example",
+    customerMessage: "Please call after 4 pm.",
+    suburb: "Private suburb",
+    postcode: "3000",
+    state: "VIC",
+    matchedCategories: ["heating-cooling"],
+    timing: "within_3_months",
+    expiresAt: "2026-09-09T00:00:00.000Z",
+    customerSharedEvidenceCount: 99,
+  });
+  assert.match(draft.body, /Customer: Jamie Example/);
+  assert.match(draft.body, /Customer message: Please call after 4 pm\./);
+  assert.doesNotMatch(draft.body, /Private suburb|jamie@example\.test|0400000000/i);
 });
 
 test("public notification dispatch rechecks the exact current consent and reads no private plan fields", () => {
@@ -53,6 +71,12 @@ test("public notification dispatch rechecks the exact current consent and reads 
   ]) assert.match(deliveryServer, new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(deliveryServer, /verifiedTradeAccountPredicate\("account"\)/);
   assert.match(deliveryServer, /current_account\.partner_type = 'installer'/);
+  assert.match(deliveryServer, /!disclosedFields\.includes\("customer_email"\)/);
+  assert.match(deliveryServer, /!disclosedFields\.includes\("postcode"\)/);
+  assert.match(deliveryServer, /!disclosedFields\.includes\("service_categories"\)/);
+  assert.match(deliveryServer, /const publicDisclosedFields = new Set/);
+  assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_name"\)/);
+  assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_message"\)/);
   assert.doesNotMatch(deliveryServer, /trade_capability|public_capability_current|service qualification/i);
   assert.doesNotMatch(deliveryServer, /public_contact\.(customer_email|customer_phone)\s+public_/);
   assert.doesNotMatch(deliveryServer, /public_contact\.(address_line|plan_snapshot|bill_data|meter_data|documents)/);

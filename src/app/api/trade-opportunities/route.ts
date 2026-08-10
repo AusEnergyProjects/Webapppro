@@ -138,6 +138,42 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
+function publicTradeContact(row: Record<string, unknown>) {
+  if (!row.public_contact_release_id) return null;
+  const disclosedFields = new Set(
+    parseJsonList(row.public_contact_disclosed_fields),
+  );
+  const email = String(row.public_customer_email || "").trim().toLowerCase();
+  const postcode = String(row.public_contact_postcode || "").trim();
+  if (
+    !disclosedFields.has("customer_email")
+    || !disclosedFields.has("postcode")
+    || !disclosedFields.has("service_categories")
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || !/^\d{4}$/.test(postcode)
+  ) return null;
+  return {
+    name: disclosedFields.has("customer_name")
+      ? String(row.public_customer_name || "")
+      : "",
+    email,
+    phone: disclosedFields.has("customer_phone")
+      ? String(row.public_customer_phone || "")
+      : "",
+    addressLine1: "",
+    addressLine2: "",
+    suburb: "",
+    addressState: row.state,
+    postcode,
+    grantedAt: row.public_contact_granted_at,
+    noticeVersion: row.public_contact_notice_version,
+    message: disclosedFields.has("customer_message")
+      ? String(row.public_customer_message || "")
+      : "",
+    releaseScope: "all_qualified_trades",
+  };
+}
+
 function tradeAccessCode(error: unknown) {
   return error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
 }
@@ -229,6 +265,7 @@ export async function GET(request: Request) {
     r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
     r.notice_version contact_notice_version, r.granted_at contact_granted_at,
     public_contact.id public_contact_release_id,
+    public_contact.disclosed_fields public_contact_disclosed_fields,
     public_contact.customer_name public_customer_name,
     public_contact.customer_email public_customer_email,
     public_contact.customer_phone public_customer_phone,
@@ -367,6 +404,7 @@ export async function GET(request: Request) {
       }));
       const platformOnly = String(row.source_reference || "")
         .startsWith("customer-project:");
+      const publicContact = publicTradeContact(row);
       return {
         matchId: row.match_id,
         matchStatus: row.match_status,
@@ -412,20 +450,7 @@ export async function GET(request: Request) {
           noticeVersion: row.contact_notice_version,
           message: "",
           releaseScope: "shortlisted_installer",
-        } : row.public_contact_release_id ? {
-          name: row.public_customer_name,
-          email: row.public_customer_email,
-          phone: row.public_customer_phone,
-          addressLine1: "",
-          addressLine2: "",
-          suburb: "",
-          addressState: row.state,
-          postcode: row.public_contact_postcode,
-          grantedAt: row.public_contact_granted_at,
-          noticeVersion: row.public_contact_notice_version,
-          message: row.public_customer_message,
-          releaseScope: "all_qualified_trades",
-        } : null,
+        } : publicContact,
         evidence,
         arrivalProposal: row.arrival_proposal_id ? {
           id: row.arrival_proposal_id,

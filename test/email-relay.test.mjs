@@ -409,6 +409,11 @@ test("public plan enquiries use customer-friendly titles and category labels", (
   assert.match(sent[0].subject, /personalised home energy plan is attached/i);
   assert.doesNotMatch(sent[0].subject, /Direct Trade project brief/i);
   assert.match(sent[0].htmlBody, /matching request is being processed/i);
+  assert.match(sent[0].htmlBody, /email, postcode, selected service and any message you wrote will be shared with all approved TLink trades/i);
+  assert.match(sent[0].htmlBody, /name and phone are shared only if you selected them/i);
+  assert.match(sent[0].htmlBody, /private plan PDF is not shared with trades/i);
+  assert.match(sent[0].body, /email, postcode, selected service and any message you wrote will be shared with all approved TLink trades/i);
+  assert.match(sent[0].body, /name and phone are shared only if you selected them/i);
   assert.doesNotMatch(sent[0].htmlBody, /enquiry is open to matching trades/i);
   assert.match(sent[1].subject, /Home energy plan upgrade enquiry/);
   assert.match(

@@ -657,7 +657,7 @@ function acknowledgementContent_(payload) {
     return intro
       + summaryGrid_(projectRows_(payload))
       + notice_("Your personalised plan is attached", "The PDF contains your private home energy roadmap, quick wins, preparation checks and trusted resources. It is emailed only to you and is not included in the trade enquiry.")
-      + notice_("Your matching request is being processed", "You asked us to share your name, chosen email or phone, postcode, selected service and optional message with every active, verified matching trade servicing the area. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
+      + notice_("Your matching request is being processed", "Your email, postcode, selected service and any message you wrote will be shared with all approved TLink trades that service your area. Your name and phone are shared only if you selected them. Your private plan PDF is not shared with trades. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
   }
   if (payload.eventType === "direct_trade.project") {
     return intro
@@ -683,7 +683,8 @@ function acknowledgementText_(payload) {
     lines.push(
       "",
       "Your personalised home energy plan PDF is attached and remains customer-only.",
-      "Your request to share the consented contact and enquiry details with matching trades is being processed.",
+      "Your email, postcode, selected service and any message you wrote will be shared with all approved TLink trades that service your area.",
+      "Your name and phone are shared only if you selected them. Your private plan PDF is not shared with trades.",
       "This acknowledgement is not a quote or installation booking.",
     );
   } else {

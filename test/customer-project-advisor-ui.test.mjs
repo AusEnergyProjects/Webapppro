@@ -285,9 +285,9 @@ test("everyday actions stay outside the ordered roadmap in account and report vi
   assert.match(projectPlan, /everydayActions,\s*everydayActionsBoundary:[\s\S]{0,100}\s*items,/);
 });
 
-test("plan email saves before delivery while PDF download is mutation-free and browser native", () => {
+test("plan email saves before delivery while PDF download is mutation-free and stays on the current page", () => {
   const downloadPlanSource = dashboard.match(
-    /function downloadPlanPdf\(\)[\s\S]*?function openInstallerRequest\(\)/,
+    /async function downloadPlanPdf\(\)[\s\S]*?function openInstallerRequest\(\)/,
   )?.[0] || "";
   assert.match(dashboard, /Email this plan/);
   assert.match(dashboard, /Download PDF/);
@@ -299,7 +299,8 @@ test("plan email saves before delivery while PDF download is mutation-free and b
     downloadPlanSource,
     /savePlanForSharing|onSave|onUploadEvidence/,
   );
-  assert.match(downloadPlanSource, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(downloadPlanSource, /async function downloadPlanPdf\(\)/);
+  assert.match(downloadPlanSource, /await downloadCustomerPlanPdf\(report\)/);
   assert.match(
     downloadPlanSource,
     /Your private draft and evidence were not changed/,
@@ -310,15 +311,22 @@ test("plan email saves before delivery while PDF download is mutation-free and b
   );
   assert.match(planPdf, /export async function createCustomerPlanPdfBytes\(/);
   assert.match(planPdf, /export function customerPlanPdfFileName\(report/);
-  assert.match(planPdfClient, /export function downloadCustomerPlanPdf\(/);
-  assert.match(planPdfClient, /createElement\("form"\)/);
-  assert.match(planPdfClient, /form\.method = "POST"/);
-  assert.match(planPdfClient, /form\.action = "\/api\/customer-plan-pdf"/);
-  assert.match(planPdfClient, /input\.name = "report"/);
-  assert.match(planPdfClient, /form\.submit\(\)/);
+  assert.match(planPdfClient, /export async function downloadCustomerPlanPdf\(/);
+  assert.match(planPdfClient, /await fetch\("\/api\/customer-plan-pdf"/);
+  assert.match(planPdfClient, /method: "POST"/);
+  assert.match(planPdfClient, /application\/x-www-form-urlencoded/);
+  assert.match(planPdfClient, /body: new URLSearchParams\(\{ report: serializedReport \}\)/);
+  assert.match(planPdfClient, /if \(!response\.ok\)/);
+  assert.match(planPdfClient, /response\.headers\.get\("content-type"\)/);
+  assert.match(planPdfClient, /const blob = await response\.blob\(\)/);
+  assert.match(planPdfClient, /URL\.createObjectURL\(blob\)/);
+  assert.match(planPdfClient, /createElement\("a"\)/);
+  assert.match(planPdfClient, /link\.download = responseFileName\(response\)/);
+  assert.match(planPdfClient, /link\.click\(\)/);
+  assert.match(planPdfClient, /URL\.revokeObjectURL\(objectUrl\)/);
   assert.doesNotMatch(
     planPdfClient,
-    /new Worker|new Blob|createObjectURL|anchor\.click/,
+    /createElement\("form"\)|form\.submit|window\.location|location\.(?:assign|replace)/,
   );
   assert.match(
     planPdfRoute,
@@ -327,7 +335,9 @@ test("plan email saves before delivery while PDF download is mutation-free and b
   assert.match(planPdfRoute, /Content-Disposition/);
   assert.match(planPdfRoute, /application\/pdf/);
   assert.match(planPdfRoute, /"Cache-Control": "no-store"/);
-  assert.match(planPdfButton, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(planPdfButton, /const download = async \(\) =>/);
+  assert.match(planPdfButton, /await downloadCustomerPlanPdf\(report\)/);
+  assert.match(installerDashboard, /await downloadCustomerPlanPdf\(report\)/);
   assert.match(planPdfButton, /if \(downloadingRef\.current\) return/);
   assert.match(planPdfButton, /downloadingRef\.current = true/);
   assert.match(planPdfButton, /downloadingRef\.current = false/);

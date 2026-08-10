@@ -7,6 +7,7 @@ import {
 } from "@/components/DownloadCustomerPlanPdfButton";
 import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
 import {
+  buildInstallerPropertyContext,
   createCustomerProjectPlan,
   customerProjectOptions,
   MAX_HOME_FEATURE_SELECTIONS,
@@ -40,6 +41,13 @@ type CustomerPlan = {
   situation: string;
   approvalContext: string;
   features: string[];
+  propertyContext: {
+    propertyType?: string;
+    storeys: string;
+    floorArea: string;
+    occupants?: string;
+    sharedWalls?: string;
+  };
   title: string;
   summary: string;
   everydayActions: Array<{
@@ -89,6 +97,13 @@ export default async function PrintableHomeEnergyPlanPage({
   const suppliedGoals = values(params.goal, 10);
   const suppliedBudget = value(params.budgetRange);
   const suppliedState = value(params.addressState).toUpperCase();
+  const suppliedPropertyContext = buildInstallerPropertyContext({
+    propertyType: value(params.propertyType),
+    storeys: value(params.storeys),
+    floorArea: value(params.floorArea),
+    occupants: value(params.occupants),
+    sharedWalls: value(params.sharedWalls),
+  });
   const plan = createCustomerProjectPlan({
     goals: suppliedGoals.length ? suppliedGoals : ["lower-bills"],
     pace: value(params.pace),
@@ -97,6 +112,7 @@ export default async function PrintableHomeEnergyPlanPage({
     budgetRange: suppliedBudget,
     addressState: suppliedState,
     features: values(params.feature, MAX_HOME_FEATURE_SELECTIONS),
+    propertyContext: suppliedPropertyContext,
   }) as CustomerPlan;
   const budgetRange = optionLabel(
     customerProjectOptions.budgets,
@@ -116,6 +132,32 @@ export default async function PrintableHomeEnergyPlanPage({
   plan.goals.forEach((item) => returnParams.append("goal", item));
   plan.features.forEach((item) => returnParams.append("feature", item));
   if (addressState) returnParams.set("addressState", addressState);
+  if (plan.propertyContext.propertyType) {
+    returnParams.set("propertyType", plan.propertyContext.propertyType);
+  }
+  if (plan.propertyContext.storeys) {
+    returnParams.set("storeys", plan.propertyContext.storeys);
+  }
+  if (plan.propertyContext.floorArea) {
+    returnParams.set("floorArea", plan.propertyContext.floorArea);
+  }
+  if (plan.propertyContext.occupants) {
+    returnParams.set("occupants", plan.propertyContext.occupants);
+  }
+  if (plan.propertyContext.sharedWalls) {
+    returnParams.set("sharedWalls", plan.propertyContext.sharedWalls);
+  }
+
+  const propertyType = optionLabel(
+    customerProjectOptions.propertyTypes,
+    plan.propertyContext.propertyType || "",
+  );
+  const homeDetails = [
+    optionLabel(customerProjectOptions.storeys, plan.propertyContext.storeys),
+    optionLabel(customerProjectOptions.floorAreas, plan.propertyContext.floorArea),
+    optionLabel(customerProjectOptions.occupants, plan.propertyContext.occupants || ""),
+    optionLabel(customerProjectOptions.sharedWalls, plan.propertyContext.sharedWalls || ""),
+  ].filter(Boolean);
 
   const context = [
     plan.goals
@@ -127,6 +169,8 @@ export default async function PrintableHomeEnergyPlanPage({
       customerProjectOptions.approvalContexts,
       plan.approvalContext,
     ),
+    propertyType,
+    ...homeDetails,
     optionLabel(customerProjectOptions.budgets, budgetRange),
     optionLabel(customerProjectOptions.paces, plan.pace),
     addressState,
@@ -140,7 +184,7 @@ export default async function PrintableHomeEnergyPlanPage({
       goals: plan.goals
         .map((item) => optionLabel(customerProjectOptions.goals, item))
         .filter(Boolean),
-      propertyType: "Home",
+      propertyType: propertyType || "Home",
       tenure: optionLabel(customerProjectOptions.situations, plan.situation)
         || "Not recorded",
       approval: optionLabel(
@@ -152,6 +196,7 @@ export default async function PrintableHomeEnergyPlanPage({
       budget: optionLabel(customerProjectOptions.budgets, budgetRange)
         || "Not recorded",
       state: addressState || "Not recorded",
+      homeDetails,
     },
     evidence: null,
     existingFeatures: plan.features,

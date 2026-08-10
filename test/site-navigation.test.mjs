@@ -200,6 +200,12 @@ test("homepage uses an accessible progressive holographic journey with a reduced
   assert.match(holographicField, /prefers-reduced-motion: reduce/);
   assert.match(holographicField, /ResizeObserver/);
   assert.match(holographicField, /devicePixelRatio/);
+  assert.match(holographicField, /seededRandom\(0xa3e2026\)/);
+  assert.match(holographicField, /data-spatial-scene/);
+  assert.match(holographicField, /pointermove/);
+  assert.match(holographicField, /addEventListener\("scroll"/);
+  assert.match(customerScene, /density="rich"/);
+  assert.match(customerScene, /mode="landing"/);
   assert.doesNotMatch(holographicField, /WebGL|from ["']three["']|video/i);
   assert.match(styles, /@supports \(animation-timeline: view\(\)\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.customer-scene-home/);
@@ -212,7 +218,7 @@ test("the generated whole-home scene is visible and drives the planner room jour
   assert.match(plannerJourney, /stage: PlannerJourneyStage/);
   assert.match(plannerJourney, /focusKey\?: string/);
   assert.match(plannerJourney, /data-focus=\{activeFocus\}/);
-  assert.match(plannerJourney, /sizes="\(max-width: 720px\) 100vw, 64vw"/);
+  assert.match(plannerJourney, /sizes="\(max-width: 720px\) 110vw, 100vw"/);
   assert.match(plannerJourney, /ceiling-insulation|insulation/);
   assert.match(plannerJourney, /heating-cooling/);
   assert.match(plannerJourney, /hot-water/);
@@ -220,6 +226,10 @@ test("the generated whole-home scene is visible and drives the planner room jour
   assert.match(plannerJourney, /aria-label="Home planning journey"/);
   assert.match(plannerJourney, /HolographicEnergyField/);
   assert.match(plannerJourney, /focusPositions/);
+  assert.match(plannerJourney, /data-entry=\{safeProgress <= 5/);
+  assert.match(plannerJourney, /density="rich"/);
+  assert.match(plannerJourney, /mode=\{stage\}/);
+  assert.match(plannerJourney, /Start with the question below/);
   assert.doesNotMatch(plannerJourney, /WebGL|from ["']three["']/);
   assert.match(styles, /\.planner-home-journey\[data-focus="insulation"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="windows"\]/);
@@ -227,6 +237,10 @@ test("the generated whole-home scene is visible and drives the planner room jour
   assert.match(styles, /\.planner-home-journey\[data-focus="heating-cooling"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="solar"\]/);
   assert.match(styles, /prefers-reduced-motion: reduce\)[\s\S]*\.planner-home-journey-depth/);
+  assert.match(styles, /\.planner-home-journey\[data-entry="true"\] \{ min-height: clamp\(570px, 70svh, 780px\); \}/);
+  assert.match(styles, /\.planner-home-journey\[data-stage="plan"\] \{ min-height: clamp\(540px, 62svh, 700px\); \}/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ min-height: 330px; \}/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey\[data-entry="true"\] \{ min-height: 570px; \}/);
   assert.equal(fs.existsSync(immersiveHomeAsset), true);
   assert.ok(fs.statSync(immersiveHomeAsset).size > 100_000);
   assert.ok(fs.statSync(immersiveHomeAsset).size < 3_000_000);
@@ -323,7 +337,7 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(plannerJourney, /aria-label="Home planning journey"/);
   assert.match(planner, /className="planner-next-move"/);
   assert.match(planner, /Start here/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ display: grid; grid-template-columns: 1fr;/);
+  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ min-height: 330px; \}/);
   assert.match(planner, /initialPlannerStep\(initialSelection\)/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
@@ -339,11 +353,19 @@ test("integrated planner is private, ordered and responsive", () => {
     /<DownloadCustomerPlanPdfButton\s+report=\{report\}\s*\/>/,
   );
   assert.doesNotMatch(plannerPrintRoute, /PrintRoadmapButton/);
-  assert.match(planPdfButton, /downloadCustomerPlanPdf\(report\)/);
+  assert.match(planPdfButton, /await downloadCustomerPlanPdf\(report\)/);
   assert.match(planPdfButton, /Download PDF/);
   assert.doesNotMatch(planPdfButton, /window\.print/);
+  assert.match(planPdfClient, /export async function downloadCustomerPlanPdf\(/);
+  assert.match(planPdfClient, /await fetch\("\/api\/customer-plan-pdf"/);
+  assert.match(planPdfClient, /method: "POST"/);
+  assert.match(planPdfClient, /application\/x-www-form-urlencoded/);
+  assert.match(planPdfClient, /URL\.createObjectURL\(blob\)/);
+  assert.match(planPdfClient, /link\.click\(\)/);
+  assert.match(planPdfClient, /URL\.revokeObjectURL\(objectUrl\)/);
   assert.doesNotMatch(planPdfClient, /window\.print/);
   assert.doesNotMatch(planPdfClient, /createElement\("iframe"\)|srcdoc/);
+  assert.doesNotMatch(planPdfClient, /createElement\("form"\)|form\.submit|window\.location/);
   assert.match(plannerPrintRoute, /createCustomerProjectPlan/);
   assert.match(plannerPrintRoute, /robots: \{ index: false, follow: false \}/);
   assert.match(plannerRoute, /initialSelection=/);

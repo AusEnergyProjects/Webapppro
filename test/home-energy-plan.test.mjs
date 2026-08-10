@@ -168,11 +168,31 @@ test("wall insulation stays specific to external walls while shared walls are re
   assert.ok(wallQuestion);
   assert.match(wallQuestion.label, /walls that face outdoors/i);
   assert.match(wallQuestion.help, /party walls.*Home basics/i);
-  assert.ok(wallQuestion.options.some(([value, label]) => (
-    value === "wall-insulation-not-applicable"
-    && /all adjoin other dwellings/i.test(label)
-  )));
+  assert.equal(
+    wallQuestion.options.some(([value]) => value === "wall-insulation-not-applicable"),
+    false,
+  );
+  assert.doesNotMatch(JSON.stringify(wallQuestion), /no walls face outdoors/i);
   assert.doesNotMatch(JSON.stringify(wallQuestion), /\u2013|\u2014/);
+});
+
+test("legacy impossible wall answers become unknown without erasing shared-wall context", () => {
+  const plan = createCustomerProjectPlan({
+    goals: ["improve-comfort"],
+    situation: "owner",
+    approvalContext: "strata",
+    features: ["wall-insulation-not-applicable"],
+    propertyContext: {
+      propertyType: "apartment",
+      sharedWalls: "two_plus_sides",
+    },
+  });
+  assert.equal(plan.features.includes("wall-insulation-not-applicable"), false);
+  assert.equal(plan.features.includes("wall-insulation-unknown"), true);
+  const context = plan.items.find((item) => item.id === "home-planning-context");
+  assert.ok(context);
+  assert.match(context.text, /remaining external wall construction/i);
+  assert.doesNotMatch(context.text, /no walls face outdoors|zero external walls/i);
 });
 
 test("compact home basics normalize saved values and refine the canonical plan context", () => {

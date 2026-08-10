@@ -33,6 +33,36 @@ test("the customer print route uses the dedicated semantic report preview", () =
   assert.doesNotMatch(printPage, /CustomerPlanPrintReport/);
 });
 
+test("the customer print route preserves bounded home context in the report and return link", () => {
+  assert.match(
+    printPage,
+    /buildInstallerPropertyContext\(\{[\s\S]*propertyType: value\(params\.propertyType\),[\s\S]*storeys: value\(params\.storeys\),[\s\S]*floorArea: value\(params\.floorArea\),[\s\S]*occupants: value\(params\.occupants\),[\s\S]*sharedWalls: value\(params\.sharedWalls\),[\s\S]*\}\)/,
+  );
+  assert.match(
+    printPage,
+    /propertyContext: suppliedPropertyContext/,
+  );
+  for (const field of [
+    "propertyType",
+    "storeys",
+    "floorArea",
+    "occupants",
+    "sharedWalls",
+  ]) {
+    assert.match(
+      printPage,
+      new RegExp(`returnParams\\.set\\("${field}", plan\\.propertyContext\\.${field}\\)`),
+    );
+  }
+  assert.match(
+    printPage,
+    /const homeDetails = \[[\s\S]*customerProjectOptions\.storeys[\s\S]*customerProjectOptions\.floorAreas[\s\S]*customerProjectOptions\.occupants[\s\S]*customerProjectOptions\.sharedWalls[\s\S]*\]\.filter\(Boolean\)/,
+  );
+  assert.match(printPage, /propertyType: propertyType \|\| "Home"/);
+  assert.match(printPage, /homeDetails,/);
+  assert.doesNotMatch(printPage, /propertyType: "Home"/);
+});
+
 test("the report preview is pure, bounded and semantically ordered", () => {
   assert.match(
     previewSource,

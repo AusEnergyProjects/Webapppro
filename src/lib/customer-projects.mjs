@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-08-10-home-context-v8";
+export const CUSTOMER_PLAN_VERSION = "2026-08-10-external-wall-taxonomy-v9";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -28,6 +28,7 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-31-trade-enquiry-home-systems-v5",
   "2026-08-09-guided-home-systems-v6",
   "2026-08-10-quick-wins-home-systems-v7",
+  "2026-08-10-home-context-v8",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -90,7 +91,6 @@ export const customerHomeFeatureSections = [
           ["wall-insulation-none", "No external wall insulation that I know of"],
           ["wall-insulation-limited", "Some external walls are insulated, or coverage may be old or patchy"],
           ["wall-insulation-well", "External walls are well insulated or recently upgraded"],
-          ["wall-insulation-not-applicable", "No walls face outdoors because they all adjoin other dwellings"],
           ["wall-insulation-unknown", "Not sure"],
         ],
       },
@@ -326,6 +326,7 @@ const canonicalHomeFeatureValues = new Set(
 const legacyHomeFeatureValues = new Set([
   "roof-insulation",
   "wall-insulation",
+  "wall-insulation-not-applicable",
   "floor-insulation",
   "insulation-unknown",
   "internal-window-coverings",
@@ -365,6 +366,9 @@ function migrateLegacyHomeFeatures(value) {
   }
   if (selected.has("wall-insulation")) {
     addWhenUnanswered("wall-insulation", "wall-insulation-unknown");
+  }
+  if (selected.has("wall-insulation-not-applicable")) {
+    selected.add("wall-insulation-unknown");
   }
   if (selected.has("floor-insulation")) {
     addWhenUnanswered("floor-insulation", "floor-insulation-unknown");
@@ -767,7 +771,6 @@ const homeFeatureFactRules = new Map([
       "wall-insulation-none",
       "wall-insulation-limited",
       "wall-insulation-well",
-      "wall-insulation-not-applicable",
     ]),
     unknown: new Set(["wall-insulation-unknown"]),
   }],

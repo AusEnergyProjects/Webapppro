@@ -49,6 +49,15 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
     ],
   );
   assert.deepEqual(
+    question("wall-insulation").options.map(([value]) => value),
+    [
+      "wall-insulation-none",
+      "wall-insulation-limited",
+      "wall-insulation-well",
+      "wall-insulation-unknown",
+    ],
+  );
+  assert.deepEqual(
     question("window-coverings").options.map(([value]) => value),
     [
       "window-coverings-none",
@@ -249,6 +258,17 @@ test("internal coverings and external shade remain separate compatible answers",
 });
 
 test("legacy home features map deterministically without inventing insulation quality", () => {
+  assert.deepEqual(
+    normalizeHomeFeatureSelections(["wall-insulation-not-applicable"]),
+    ["wall-insulation-unknown"],
+  );
+  assert.deepEqual(
+    normalizeHomeFeatureSelections([
+      "wall-insulation-not-applicable",
+      "wall-insulation-well",
+    ]),
+    ["wall-insulation-unknown"],
+  );
   assert.deepEqual(
     normalizeHomeFeatureSelections([
       "roof-insulation",
@@ -791,7 +811,10 @@ test("the public planner uses the accessible shared intake and bounded query han
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-home-context-v8");
+  assert.equal(
+    CUSTOMER_PLAN_VERSION,
+    "2026-08-10-external-wall-taxonomy-v9",
+  );
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
     "2026-07-31-advisor-profile-v5",
@@ -805,6 +828,12 @@ test("the taxonomy release is versioned and the previous plan remains migratable
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
       "2026-08-10-quick-wins-home-systems-v7",
+    ),
+    true,
+  );
+  assert.equal(
+    CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
+      "2026-08-10-home-context-v8",
     ),
     true,
   );

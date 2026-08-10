@@ -29,6 +29,15 @@ function messageResponse(message: string, status: number) {
   });
 }
 
+function pdfFailureCode(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/^PDF_(?:REGULAR|BOLD)_FONT_(?:UNAVAILABLE|INVALID)$/.test(message)) {
+    return "font_unavailable";
+  }
+  if (/embedded .* font/i.test(message)) return "font_invalid";
+  return "generation_failed";
+}
+
 function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -40,9 +49,9 @@ function embeddedPdfFonts(request: Request) {
   if (cached) return cached;
   const loading = Promise.all(
     Object.entries(PDF_FONT_PATHS).map(async ([weight, path]) => {
-      const response = await fetch(new URL(path, origin), {
-        cache: "force-cache",
-      });
+      // Vinext's Worker fetch wrapper rejects framework cache modes. The
+      // completed byte pair is already cached in this module by origin.
+      const response = await fetch(new URL(path, origin));
       if (!response.ok) {
         throw new Error(`PDF_${weight.toUpperCase()}_FONT_UNAVAILABLE`);
       }
@@ -133,6 +142,16 @@ export async function POST(request: Request) {
         422,
       );
     }
-    return messageResponse("The PDF could not be prepared.", 400);
+    const failureCode = pdfFailureCode(error);
+    console.error("customer_plan_pdf_generation_failed", {
+      code: failureCode,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    });
+    return messageResponse(
+      failureCode.startsWith("font_")
+        ? "The PDF service could not load its document fonts. Please try again."
+        : "The PDF could not be prepared. Please try again.",
+      failureCode.startsWith("font_") ? 503 : 500,
+    );
   }
 }

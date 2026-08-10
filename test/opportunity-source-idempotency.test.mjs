@@ -126,8 +126,9 @@ const currentConsent = {
   purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
 };
 
-test("the exact current 44 character notice creates one open opportunity and current contact release", async () => {
-  assert.equal(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length, 44);
+test("the exact current notice creates one open opportunity and current contact release", async () => {
+  assert.ok(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length > 40);
+  assert.ok(PUBLIC_PLAN_CONSENT_NOTICE_VERSION.length <= 64);
   const database = sourceDatabase();
   const stored = await persistLeadOpportunity(
     databaseAdapter(database),

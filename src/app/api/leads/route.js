@@ -30,15 +30,42 @@ const PDF_FONT_PATHS = {
 };
 const pdfFontCache = new Map();
 
+function leadPdfFailureCode(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (/^LEAD_PDF_(?:REGULAR|BOLD)_FONT_UNAVAILABLE$/.test(message)) {
+    return "font_unavailable";
+  }
+  if (/^LEAD_PDF_(?:REGULAR|BOLD)_FONT_INVALID$/.test(message)) {
+    return "font_invalid";
+  }
+  if (error instanceof CustomerPlanPdfUnsupportedTextError) {
+    return "unsupported_text";
+  }
+  if (message === "CUSTOMER_PLAN_PDF_SIZE_INVALID") return "size_invalid";
+  return "generation_failed";
+}
+
+function publicPlanPdfPreparationError(error) {
+  const code = leadPdfFailureCode(error);
+  console.error("customer_plan_pdf_attachment_failed", {
+    code,
+    errorType: error instanceof Error ? error.name : "UnknownError",
+  });
+  return Object.assign(new Error("CUSTOMER_PLAN_PDF_PREPARATION_FAILED"), {
+    name: "CustomerPlanPdfPreparationError",
+    code,
+  });
+}
+
 function leadPdfFonts(request) {
   const origin = new URL(request.url).origin;
   const cached = pdfFontCache.get(origin);
   if (cached) return cached;
   const loading = Promise.all(
     Object.entries(PDF_FONT_PATHS).map(async ([weight, path]) => {
-      const response = await fetch(new URL(path, origin), {
-        cache: "force-cache",
-      });
+      // Vinext's Worker fetch wrapper rejects framework cache modes. The
+      // completed byte pair is already cached in this module by origin.
+      const response = await fetch(new URL(path, origin));
       if (!response.ok) throw new Error(`LEAD_PDF_${weight.toUpperCase()}_FONT_UNAVAILABLE`);
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.byteLength < 10_000 || bytes.byteLength > 500_000) {
@@ -70,51 +97,55 @@ export async function preparePublicPlanLeadEnvelope({
     !isPublicPlanEnquiry(validatedPayload?.enquiry)
     || !validatedPayload?.email
   ) return envelope;
-  const reportInput = {
-    snapshot: validatedPayload.planSnapshot,
-    postcode: validatedPayload.postcode,
-    projectCategories: validatedPayload.projectCategories,
-    preparedAt: envelope.submittedAt,
-  };
-  let report = createPublicPlanCustomerReportView({
-    ...reportInput,
-    name: validatedPayload.name,
-  });
-  const fonts = await leadPdfFonts(request);
-  let bytes;
   try {
-    bytes = await createCustomerPlanPdfBytes(report, fonts);
-  } catch (error) {
-    const nameCharacters = new Set(Array.from(validatedPayload.name || ""));
-    const displayNameOnly = error instanceof CustomerPlanPdfUnsupportedTextError
-      && error.unsupportedCharacters.length > 0
-      && error.unsupportedCharacters.every((character) => nameCharacters.has(character));
-    if (!displayNameOnly) throw error;
-    report = createPublicPlanCustomerReportView({
-      ...reportInput,
-      name: "Customer",
-    });
-    report = {
-      ...report,
-      privacyNote: "This personalised copy is emailed only to the customer and uses a neutral cover label because the current PDF font cannot display every character in the customer's name. The real name remains in the private enquiry. The PDF excludes street address, contact details, bills, meter identifiers, usage files, account records, uploaded documents and private trade notes.",
+    const reportInput = {
+      snapshot: validatedPayload.planSnapshot,
+      postcode: validatedPayload.postcode,
+      projectCategories: validatedPayload.projectCategories,
+      preparedAt: envelope.submittedAt,
     };
-    bytes = await createCustomerPlanPdfBytes(report, fonts);
+    let report = createPublicPlanCustomerReportView({
+      ...reportInput,
+      name: validatedPayload.name,
+    });
+    const fonts = await leadPdfFonts(request);
+    let bytes;
+    try {
+      bytes = await createCustomerPlanPdfBytes(report, fonts);
+    } catch (error) {
+      const nameCharacters = new Set(Array.from(validatedPayload.name || ""));
+      const displayNameOnly = error instanceof CustomerPlanPdfUnsupportedTextError
+        && error.unsupportedCharacters.length > 0
+        && error.unsupportedCharacters.every((character) => nameCharacters.has(character));
+      if (!displayNameOnly) throw error;
+      report = createPublicPlanCustomerReportView({
+        ...reportInput,
+        name: "Customer",
+      });
+      report = {
+        ...report,
+        privacyNote: "This personalised copy is emailed only to the customer and uses a neutral cover label because the current PDF font cannot display every character in the customer's name. The real name remains in the private enquiry. The PDF excludes street address, contact details, bills, meter identifiers, usage files, account records, uploaded documents and private trade notes.",
+      };
+      bytes = await createCustomerPlanPdfBytes(report, fonts);
+    }
+    if (bytes.byteLength < 20_000 || bytes.byteLength > MAX_CUSTOMER_PLAN_PDF_BYTES) {
+      throw new Error("CUSTOMER_PLAN_PDF_SIZE_INVALID");
+    }
+    return {
+      ...envelope,
+      customerPlanDelivery: {
+        version: "customer-only-home-plan-pdf-v1",
+        filename: customerPlanPdfFileName(report),
+        mimeType: "application/pdf",
+        encoding: "base64",
+        byteLength: bytes.byteLength,
+        sha256: await sha256Hex(bytes),
+        content: Buffer.from(bytes).toString("base64"),
+      },
+    };
+  } catch (error) {
+    throw publicPlanPdfPreparationError(error);
   }
-  if (bytes.byteLength < 20_000 || bytes.byteLength > MAX_CUSTOMER_PLAN_PDF_BYTES) {
-    throw new Error("CUSTOMER_PLAN_PDF_SIZE_INVALID");
-  }
-  return {
-    ...envelope,
-    customerPlanDelivery: {
-      version: "customer-only-home-plan-pdf-v1",
-      filename: customerPlanPdfFileName(report),
-      mimeType: "application/pdf",
-      encoding: "base64",
-      byteLength: bytes.byteLength,
-      sha256: await sha256Hex(bytes),
-      content: Buffer.from(bytes).toString("base64"),
-    },
-  };
 }
 
 function incidentBucket() {

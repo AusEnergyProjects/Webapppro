@@ -74,6 +74,7 @@ export function publicPlanSubmissionFingerprint(payload) {
     postcode: payload?.postcode || "",
     projectCategories: payload?.projectCategories || [],
     projectNotes: payload?.projectNotes || "",
+    tradeSharing: payload?.tradeSharing || null,
     planSnapshot: payload?.planSnapshot || null,
     consent: {
       accepted: payload?.consent?.accepted === true,
@@ -121,6 +122,14 @@ export function createLeadEnvelope(payload, options = {}) {
             purpose: leadPayload.consent?.purpose || "",
             noticeVersion: leadPayload.consent?.noticeVersion || "",
             grantedAt: leadPayload.consent?.grantedAt || "",
+            disclosedFields: [
+              "customer_email",
+              "postcode",
+              "service_categories",
+              ...(leadPayload.tradeSharing?.name ? ["customer_name"] : []),
+              ...(leadPayload.tradeSharing?.phone ? ["customer_phone"] : []),
+              ...(leadPayload.projectNotes ? ["customer_message"] : []),
+            ],
           },
           matchCriteria: {
             state: leadPayload.state || inferredState || "",
