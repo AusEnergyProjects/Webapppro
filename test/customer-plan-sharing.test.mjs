@@ -35,7 +35,13 @@ const SELF_DECLARED_READINESS_BOUNDARY =
 const EVERYDAY_ACTION_IDS = [
   "moisture-safe-routine",
   "personal-warmth-first",
+  "safe-draught-stopper",
   "use-existing-controls",
+  "hot-water-routine",
+  "efficient-cooking",
+  "appliance-routines",
+  "lighting-routine",
+  "pool-spa-routine",
   "safe-seasonal-airflow",
   "seasonal-window-and-landscape",
   "renter-friendly-diy-boundary",
@@ -189,7 +195,7 @@ test("shareable plan is server-derived, ordered and excludes private project con
   }
 });
 
-test("the customer report shows the five home basics and considered work without duplicate priorities", () => {
+test("the customer report shows structured home facts and considered work without duplicate priorities", () => {
   const document = createCustomerPlanDocument(row, {
     preparedAt: "2026-07-29T10:00:00.000Z",
   });
@@ -198,17 +204,10 @@ test("the customer report shows the five home basics and considered work without
     report.planningSnapshot.map((item) => [item.label, item.value]),
   );
 
-  const homeDetails = snapshot.get("Home details");
-  assert.equal(typeof homeDetails, "string");
-  for (const expected of [
-    "Two storeys",
-    "Built before 1960",
-    "100 to 199 m2",
-    "Metal roof",
-    "Older fuse board",
-  ]) {
-    assert.match(homeDetails, new RegExp(expected));
-  }
+  assert.match(snapshot.get("Size and occupancy") || "", /Two storeys.*100 to 199 m2/);
+  assert.match(snapshot.get("Age and shared walls") || "", /Built before 1960/);
+  assert.match(snapshot.get("Roof") || "", /Metal roof/);
+  assert.match(snapshot.get("Electrical context") || "", /Older fuse board/);
   assert.equal(
     snapshot.get("Work being considered"),
     "Glazing, Draught-proofing",
@@ -217,7 +216,10 @@ test("the customer report shows the five home basics and considered work without
   const html = customerPlanDocumentHtml(document);
   const text = customerPlanDocumentText(document);
   for (const expected of [
-    "Home details",
+    "Size and occupancy",
+    "Age and shared walls",
+    "Roof",
+    "Electrical context",
     "Two storeys",
     "Built before 1960",
     "100 to 199 m2",
@@ -240,7 +242,7 @@ test("plans without a valid professional review retain the exact household evide
   const report = createCustomerPlanReportView(document);
 
   assert.equal(CUSTOMER_PLAN_DOCUMENT_VERSION, "2026-07-29-plan-document-v2");
-  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-08-10-personalised-report-v4");
+  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-08-10-professional-personalised-report-v5");
   assert.equal(document.version, CUSTOMER_PLAN_DOCUMENT_VERSION);
   assert.equal(report.version, CUSTOMER_PLAN_REPORT_VERSION);
   assert.equal(document.professionalReview, null);
@@ -385,7 +387,7 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.equal(CUSTOMER_PLAN_EMAIL_SUBJECT, "Your home energy plan is ready");
   assert.equal(
     CUSTOMER_PLAN_REPORT_DESIGN_VERSION,
-    "2026-08-10-personalised-report-design-v3",
+    "2026-08-10-professional-personalised-report-design-v4",
   );
   assert.match(
     html,
@@ -420,18 +422,18 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
     /"Cache-Control": "public, max-age=31536000, immutable"/,
   );
   assert.ok(
-    html.indexOf("Your plan in one view")
-      < html.indexOf("Start with these three moves"),
+    html.indexOf("Your home and the decisions that come first")
+      < html.indexOf("Your first three priorities"),
   );
   assert.ok(
-    html.indexOf("Start with these three moves")
-      < html.indexOf("Build the rest of your roadmap"),
+    html.indexOf("Your first three priorities")
+      < html.indexOf("Your complete ordered plan"),
   );
   assert.ok(
-    html.indexOf("Build the rest of your roadmap")
-      < html.indexOf("Comfort wins you can try this week"),
+    html.indexOf("Your complete ordered plan")
+      < html.indexOf("Useful actions you can take now"),
   );
-  assert.match(text, /YOUR HOME AT A GLANCE/);
+  assert.match(text, /EXECUTIVE SUMMARY/);
   assert.match(text, /START HERE/);
   assert.match(text, /YOUR STEP-BY-STEP PLAN/);
   assert.match(text, /PRIVATE BY DESIGN/);
@@ -475,7 +477,7 @@ test("everyday actions are allowlisted, capped, rendered once and kept outside r
     report.everydayActions.map((action) => action.id),
     EVERYDAY_ACTION_IDS,
   );
-  assert.equal(report.everydayActions.length, 6);
+  assert.equal(report.everydayActions.length, 12);
   assert.ok(report.everydayActions.every((action) => (
     !("number" in action)
     && !("priority" in action)
@@ -491,12 +493,14 @@ test("everyday actions are allowlisted, capped, rendered once and kept outside r
       .filter((id) => EVERYDAY_ACTION_IDS.includes(id)),
     [],
   );
-  assert.equal(occurrenceCount(html, "Quick comfort wins"), 1);
-  assert.equal(occurrenceCount(text, "QUICK COMFORT WINS"), 1);
-  for (const action of allowedActions) {
+  assert.equal(occurrenceCount(html, "Energy-saving actions"), 1);
+  assert.equal(occurrenceCount(text, "ENERGY-SAVING ACTIONS"), 1);
+  for (const action of allowedActions.slice(0, 6)) {
     assert.equal(occurrenceCount(html, action.title), 1, action.id);
     assert.equal(occurrenceCount(text, action.title), 1, action.id);
   }
+  assert.match(html, /This email shows 6 of 12 optional comfort tips/);
+  assert.match(text, /This email shows 6 of 12 optional comfort tips/);
   assert.match(
     html,
     /Everyday boundary &lt;img src=x onerror=&quot;EVERYDAY_BOUNDARY_CANARY&quot;&gt;/,
@@ -508,7 +512,7 @@ test("everyday actions are allowlisted, capped, rendered once and kept outside r
   );
 });
 
-test("broad customer reports stay concise, ordered and free of repeated per-action rationale", () => {
+test("broad customer reports stay bounded, ordered and keep complete professional step detail", () => {
   const broadRow = {
     ...row,
     goals: JSON.stringify(customerProjectOptions.goals.map(([value]) => value)),
@@ -547,19 +551,34 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
     report.laterActions.map((action) => action.id),
     report.actions.filter((action) => !action.priority).map((action) => action.id),
   );
-  assert.ok(report.questions.length <= 3);
+  assert.equal(report.questions.length, 0);
   assert.ok(report.decisionBasis.length <= 4);
   assert.ok(report.beforeTrade.length <= 3);
   assert.deepEqual(
     report.everydayActions.map((action) => action.id),
-    EVERYDAY_ACTION_IDS,
+    document.everydayActions.map((action) => action.id),
   );
   assert.equal(report.readiness.linked, 2);
   assert.ok(report.readiness.missingLabels.length <= 3);
   assert.match(report.readiness.boundary, /supplied by the household/i);
   assert.match(report.readiness.boundary, /not been professionally checked/i);
 
-  for (const action of report.actions) {
+  const htmlActionCount = report.actions.filter((action) =>
+    html.includes(`>${action.title}</h3>`)
+  ).length;
+  const textActionCount = report.actions.filter((action) =>
+    text.includes(`${String(action.number).padStart(2, "0")}. ${action.title}`)
+  ).length;
+  assert.ok(htmlActionCount > 0 && htmlActionCount <= report.actions.length);
+  assert.equal(textActionCount, htmlActionCount);
+  for (const action of report.actions.slice(0, htmlActionCount)) {
+    assert.ok(action.whatToDo);
+    assert.ok(action.whyItMatters);
+    assert.ok(action.householdReason);
+    assert.ok(action.confirmBeforeWork.length > 0);
+    assert.ok(action.quoteChecklist.length > 0);
+    assert.ok(action.sequence);
+    assert.ok(action.safety);
     assert.equal(html.split(`>${action.title}</h3>`).length - 1, 1, action.title);
     assert.equal(
       text.split(`${String(action.number).padStart(2, "0")}. ${action.title}`)
@@ -568,11 +587,15 @@ test("broad customer reports stay concise, ordered and free of repeated per-acti
       action.title,
     );
   }
+  if (htmlActionCount < report.actions.length) {
+    assert.match(html, /This email shows the first \d+ of \d+ plan steps/);
+    assert.match(text, /This email shows the first \d+ of \d+ plan steps/);
+  }
   // The premium email keeps client-safe inline typography on every repeated
   // action card. The cap retains bounded headroom while still catching
   // duplicated sections or unbounded per-action detail.
-  assert.ok(html.length < 66_000, `HTML length was ${html.length}`);
-  assert.ok(text.length < 12_500, `text length was ${text.length}`);
+  assert.ok(html.length < 88_000, `HTML length was ${html.length}`);
+  assert.ok(text.length < 25_000, `text length was ${text.length}`);
   assert.equal(
     text.split(report.changeBoundary).length - 1,
     1,

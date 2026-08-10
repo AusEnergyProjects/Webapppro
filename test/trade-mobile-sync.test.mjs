@@ -77,12 +77,12 @@ test("the mobile sync contract is authenticated, assignment scoped and cursor bo
   assert.ok(getHandler.indexOf("FROM trade_team_sync_changes WHERE") < getHandler.lastIndexOf("const jobs = await accessibleJobs(access)"));
 });
 
-test("mobile payloads preserve AEA customer privacy and short-lived direct addresses", () => {
+test("mobile payloads preserve Australian Energy Assessments customer privacy and short-lived direct addresses", () => {
   assert.match(syncRoute, /row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
   assert.match(syncRoute, /const directCustomer = !protectedJob && row\.customer_source === "trade_owned"/);
   assert.match(syncRoute, /const serviceAddress = directCustomer \?/);
   assert.doesNotMatch(syncRoute, /c\.email/);
-  assert.match(syncRoute, /customerName: protectedJob \? "AEA protected customer"/);
+  assert.match(syncRoute, /customerName: protectedJob \? "Australian Energy Assessments protected customer"/);
   assert.match(syncRoute, /customerPhone: directCustomer \?/);
   assert.match(syncRoute, /containsPersonalData: Boolean\(serviceAddress \|\| \(directCustomer && row\.customer_phone\)\)/);
   assert.match(syncRoute, /maxAgeSeconds: serviceAddress \|\| \(directCustomer && row\.customer_phone\) \? 86_400 : 604_800/);

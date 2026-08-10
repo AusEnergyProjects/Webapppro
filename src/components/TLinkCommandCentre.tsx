@@ -218,7 +218,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
               {partnerType === "supplier" && businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
               {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "work")}><b>T</b><span><strong>Team</strong><small>Open people and dispatch</small></span></button>}
             </div>
-            <p>Only records this business can already access are included. AEA protected household contact details are never indexed.</p>
+            <p>Only records this business can already access are included. Australian Energy Assessments protected household contact details are never indexed.</p>
           </div>}
           {query.trim().length === 1 && <div className="tlink-command-empty"><strong>Keep typing</strong><span>Enter at least two characters to search.</span></div>}
           {query.trim().length >= 2 && loading && !results.length && <div className="tlink-command-empty loading"><strong>Searching your workspace</strong><span>Checking the latest matching records...</span></div>}

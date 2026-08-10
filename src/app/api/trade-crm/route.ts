@@ -392,7 +392,7 @@ function indexedJob(row: Record<string, unknown>) {
     scheduledEnd: row.scheduled_end, assigneeLabel: row.assignee_label, sourceType, customerSource,
     crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
     serviceSiteId: customerSource === "platform_private" ? "" : String(row.service_site_id || ""),
-    customerDisplayName: customerSource === "platform_private" ? "AEA protected customer" : String(row.customer_name || ""),
+    customerDisplayName: customerSource === "platform_private" ? "Australian Energy Assessments protected customer" : String(row.customer_name || ""),
     pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"), buildingType: row.building_type || "not_sure",
     description: row.description || "", customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
     nextAction: row.next_action || "", tags: storedList(row.job_tags), estimatedValueCents: Number(row.estimated_value_cents || 0),

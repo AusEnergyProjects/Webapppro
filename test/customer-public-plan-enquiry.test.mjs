@@ -34,9 +34,17 @@ test("the optional enquiry preserves every supported planner selection without d
   for (const field of [
     "propertyType",
     "storeys",
+    "ageBand",
     "floorArea",
     "occupants",
     "sharedWalls",
+    "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
+    "switchboard",
+    "wallConstruction",
+    "floorConstruction",
   ]) {
     assert.match(
       planner,
@@ -69,43 +77,63 @@ test("the enquiry handoff keeps independent plan actions available without imply
 
 test("the result leads with a progressing home journey and visible answer-specific quick wins", () => {
   assert.match(planner, /<PlannerHomeJourney/);
-  assert.match(planner, /focusKey=\{currentStep\.id === "features" \? currentStep\.featureQuestion : currentStep\.id\}/);
+  assert.match(planner, /focusKey=\{currentStep\.id === "features"/);
+  assert.match(planner, /currentStep\.id === "property"/);
   assert.match(planner, /<section className="planner-quick-wins"/);
   assert.match(planner, /Quick wins for your home/);
   assert.match(planner, /plan\.everydayActions\.map/);
-  assert.doesNotMatch(planner, /<summary>Optional ways to refine or use this plan<\/summary>/);
+  assert.doesNotMatch(planner, /Questions that could refine this plan/);
+  assert.match(planner, /href="\/compare\?from=home-plan"/);
+  assert.match(planner, /href="\/gas-compare\?from=home-plan"/);
+  assert.match(planner, /href="\/calculator"/);
+  assert.match(planner, /href="\/rebates"/);
 });
 
-test("shared property and home basics stay clear and compact", () => {
+test("shared property and complete home facts stay clear and one-at-a-time", () => {
   assert.match(
     planner,
     /Does the home have strata, a body corporate, an owners corporation or shared common property\?/,
   );
   assert.match(planner, /apartments, units, townhouses, villas, duplexes and other housing complexes/);
-  assert.equal(
-    planner.match(/currentStep\.id === "home-basics"/g)?.length,
-    1,
-  );
-  for (const label of [
-    "Type of home",
-    "Storeys inside your home",
-    "Approximate internal floor area",
-    "People who usually live here",
-    "Walls shared with another dwelling",
-  ]) {
-    assert.match(planner, new RegExp(`aria-label="${label}"`));
-  }
-  assert.match(planner, /planSnapshot=\{\{/);
-  assert.match(planner, /propertyContext:\s*\{\s*propertyType,\s*storeys,\s*floorArea,\s*occupants,\s*sharedWalls,/);
-  for (const field of [
+  assert.doesNotMatch(planner, /currentStep\.id === "home-basics"/);
+  for (const key of [
     "propertyType",
     "storeys",
     "floorArea",
     "occupants",
     "sharedWalls",
+    "ageBand",
+    "wallConstruction",
+    "floorConstruction",
+    "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
+    "switchboard",
+  ]) {
+    assert.match(planner, new RegExp(`propertyKey: "${key}"`));
+  }
+  assert.match(planner, /planSnapshot=\{\{/);
+  assert.match(planner, /const enquiryPropertyContext = \{/);
+  assert.match(planner, /propertyContext: enquiryPropertyContext/);
+  for (const field of [
+    "propertyType",
+    "storeys",
+    "ageBand",
+    "floorArea",
+    "occupants",
+    "sharedWalls",
+    "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
+    "switchboard",
+    "wallConstruction",
+    "floorConstruction",
   ]) {
     assert.match(planPage, new RegExp(`${field}: value\\(params\\.${field}\\)`));
   }
   assert.match(planPage, /One clear step at a time\. Your plan starts here\./);
+  assert.match(planPage, /no follow-up homework/i);
   assert.doesNotMatch(planner, /\u2013|\u2014/);
 });

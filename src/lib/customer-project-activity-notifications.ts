@@ -96,7 +96,7 @@ export function customerProjectActivityDraft({
     ? `${installerName} has sent a structured quote for your home project.`
     : "The customer chose your business to discuss the next step and released their contact details.";
   const action = customerMessage
-    ? "Review the quote in your secure AEA account. Choose Get in touch only if you want that business to receive your contact details. This does not accept a quote, make a payment or authorise work."
+    ? "Review the quote in your secure Australian Energy Assessments account. Choose Get in touch only if you want that business to receive your contact details. This does not accept a quote, make a payment or authorise work."
     : "Open the lead in TLink, call or email the customer, and schedule the next step.";
   const exactInstallerLeadUrl = UUID_PATTERN.test(
     String(opportunityMatchId || ""),

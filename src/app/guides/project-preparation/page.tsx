@@ -34,7 +34,7 @@ export default function ProjectPreparationGuidePage() {
             Record whether each important fact is customer-reported, has a photo
             available for review, has a document available for review or is still
             unknown. This source label does not prove that a file is attached,
-            linked to that fact or verified by AEA or a trade.
+            linked to that fact or verified by Australian Energy Assessments or a trade.
           </p>
         </GuideSection>
       </div>

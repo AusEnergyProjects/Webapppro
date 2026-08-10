@@ -34,10 +34,7 @@ test("the customer print route uses the dedicated semantic report preview", () =
 });
 
 test("the customer print route preserves bounded home context in the report and return link", () => {
-  assert.match(
-    printPage,
-    /buildInstallerPropertyContext\(\{[\s\S]*propertyType: value\(params\.propertyType\),[\s\S]*storeys: value\(params\.storeys\),[\s\S]*floorArea: value\(params\.floorArea\),[\s\S]*occupants: value\(params\.occupants\),[\s\S]*sharedWalls: value\(params\.sharedWalls\),[\s\S]*\}\)/,
-  );
+  assert.match(printPage, /buildInstallerPropertyContext\(\{/);
   assert.match(
     printPage,
     /propertyContext: suppliedPropertyContext/,
@@ -48,7 +45,19 @@ test("the customer print route preserves bounded home context in the report and 
     "floorArea",
     "occupants",
     "sharedWalls",
+    "ageBand",
+    "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
+    "switchboard",
+    "wallConstruction",
+    "floorConstruction",
   ]) {
+    assert.match(
+      printPage,
+      new RegExp(`${field}: value\\(params\\.${field}\\)`),
+    );
     assert.match(
       printPage,
       new RegExp(`returnParams\\.set\\("${field}", plan\\.propertyContext\\.${field}\\)`),
@@ -56,10 +65,11 @@ test("the customer print route preserves bounded home context in the report and 
   }
   assert.match(
     printPage,
-    /const homeDetails = \[[\s\S]*customerProjectOptions\.storeys[\s\S]*customerProjectOptions\.floorAreas[\s\S]*customerProjectOptions\.occupants[\s\S]*customerProjectOptions\.sharedWalls[\s\S]*\]\.filter\(Boolean\)/,
+    /const homeDetails = \[[\s\S]*customerProjectOptions\.storeys[\s\S]*customerProjectOptions\.floorAreas[\s\S]*customerProjectOptions\.occupants[\s\S]*customerProjectOptions\.sharedWalls[\s\S]*customerProjectOptions\.ageBands[\s\S]*customerProjectOptions\.roofTypes[\s\S]*customerProjectOptions\.roofColours[\s\S]*customerProjectOptions\.roofForms[\s\S]*customerProjectOptions\.roofConditions[\s\S]*customerProjectOptions\.switchboards[\s\S]*customerProjectOptions\.wallConstructions[\s\S]*customerProjectOptions\.floorConstructions[\s\S]*\]\.filter\(Boolean\)/,
   );
   assert.match(printPage, /propertyType: propertyType \|\| "Home"/);
   assert.match(printPage, /homeDetails,/);
+  assert.match(printPage, /homeFacts: \{/);
   assert.doesNotMatch(printPage, /propertyType: "Home"/);
 });
 

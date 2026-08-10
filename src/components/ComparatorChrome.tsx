@@ -33,7 +33,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
     <div className="site-nav-shell">
       <div className="site-nav-discovery" id="site-nav-discovery">
         <span>Energy services</span>
-        <span>Scroll for more options <span aria-hidden="true">→</span></span>
+        <span>Scroll for more options <span aria-hidden="true">&#8594;</span></span>
       </div>
       <nav aria-describedby="site-nav-discovery" aria-label="Energy services" className="comparator-nav">
         {links.map((link) => (
@@ -52,7 +52,7 @@ export function SiteNav({ active }: { active: SiteActive }) {
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
-  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions"><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">●</span> Account</a><a className="site-tlink-link" href="/direct-trade/dashboard" aria-label="Open TLink trade login" title="TLink trade login"><TLinkMark className="site-tlink-mark" size={38} /></a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
+  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions"><a className={`site-account-link ${active === "account" ? "active" : ""}`} href="/account" aria-current={active === "account" ? "page" : undefined}><span aria-hidden="true">&#9679;</span> Account</a><a className="site-tlink-link" href="/direct-trade/dashboard" aria-label="Open TLink trade login" title="TLink trade login"><TLinkMark className="site-tlink-mark" size={38} /></a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
@@ -65,6 +65,35 @@ export function ComparatorHero({ title, children }: { title: string; children: R
       <h1>{title}</h1>
       {children}
     </header>
+  );
+}
+
+export type ComparisonJourneyStep = {
+  label: string;
+  description: string;
+};
+
+export function ComparisonJourney({ title, current, steps }: {
+  title: string;
+  current: number;
+  steps: readonly ComparisonJourneyStep[];
+}) {
+  const safeCurrent = Math.min(Math.max(1, current), steps.length);
+  return (
+    <section className="comparison-journey" aria-label={title}>
+      <div className="comparison-journey-heading">
+        <div><span>Simple guided comparison</span><h2>{title}</h2></div>
+        <strong>Step {safeCurrent} of {steps.length}</strong>
+      </div>
+      <ol>
+        {steps.map((step, index) => {
+          const stepNumber = index + 1;
+          const state = stepNumber < safeCurrent ? "complete" : stepNumber === safeCurrent ? "current" : "upcoming";
+          return <li className={state} key={step.label} aria-current={state === "current" ? "step" : undefined}><b>{stepNumber}</b><span><strong>{step.label}</strong><small>{step.description}</small></span></li>;
+        })}
+      </ol>
+      <div className="comparison-journey-track" role="progressbar" aria-label={`${title} progress`} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={safeCurrent}><span style={{ width: `${safeCurrent / steps.length * 100}%` }} /></div>
+    </section>
   );
 }
 

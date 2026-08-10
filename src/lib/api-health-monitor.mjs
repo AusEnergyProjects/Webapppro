@@ -188,8 +188,8 @@ async function sendAlert({ alertWebhookUrl, checks, fetchImpl, monitorId, siteUr
   try {
     const failed = checks.filter((check) => !check.ok).map((check) => check.name);
     const text = status === "healthy"
-      ? "AEA Energy API monitoring recovered."
-      : `AEA Energy API monitoring failed: ${failed.join(", ")}.`;
+      ? "Australian Energy Assessments API monitoring recovered."
+      : `Australian Energy Assessments API monitoring failed: ${failed.join(", ")}.`;
     const response = await fetchWithTimeout(fetchImpl, alertWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

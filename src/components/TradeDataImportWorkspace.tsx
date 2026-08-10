@@ -19,9 +19,9 @@ type ImportRow = {
 type ImportResult = { ok?: boolean; partnerType?: "installer" | "supplier"; batches?: ImportBatch[]; batch?: ImportBatch; rows?: ImportRow[]; rolledBack?: number; blocked?: number; error?: string };
 
 const labels: Record<ImportType, { eyebrow: string; title: string; description: string }> = {
-  customers: { eyebrow: "Private installer contacts", title: "Customers", description: "Move customers who contacted your business directly. Never import AEA protected household details." },
+  customers: { eyebrow: "Private installer contacts", title: "Customers", description: "Move customers who contacted your business directly. Never import Australian Energy Assessments protected household details." },
   enquiries: { eyebrow: "Unified inbox", title: "Enquiries", description: "Bring direct enquiries into the same review and conversion workflow while preserving source IDs." },
-  jobs: { eyebrow: "Historical business records", title: "Jobs", description: "Bring across previous and active jobs. Job IDs are assigned by AEA and cannot be imported or edited." },
+  jobs: { eyebrow: "Historical business records", title: "Jobs", description: "Bring across previous and active jobs. Job IDs are assigned by Australian Energy Assessments and cannot be imported or edited." },
   products: { eyebrow: "Wholesaler catalogue", title: "Products", description: "Move catalogue items into draft review. Imported products remain invisible to installers until approved." },
 };
 
@@ -187,7 +187,7 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
   return <section className="trade-import-workspace" aria-labelledby="trade-import-title">
     <header className="trade-import-hero">
       <div><span>Guided migration</span><h2 id="trade-import-title">Bring your business records across safely</h2><p>Use a clear template, check every row, decide what to do with duplicates, then import. A preview never changes your CRM.</p></div>
-      <aside><strong>Import safety</strong><span>Maximum 500 rows per batch</span><span>System IDs stay controlled by AEA</span><span>Seven-day rollback for unchanged records</span></aside>
+      <aside><strong>Import safety</strong><span>Maximum 500 rows per batch</span><span>System IDs stay controlled by Australian Energy Assessments</span><span>Seven-day rollback for unchanged records</span></aside>
     </header>
 
     <ol className="trade-import-steps" aria-label="Import steps">
@@ -201,7 +201,7 @@ export function TradeDataImportWorkspace({ user, partnerType, onImported }: { us
       <div className="trade-import-type-grid">{availableTypes.map((type) => <button key={type} type="button" className={importType === type ? "active" : ""} onClick={() => { setImportType(type); setActiveBatch(null); setRows([]); setSourceFile(null); setSourceHeaders([]); setMapping({}); setStatus(""); }}><span>{labels[type].eyebrow}</span><strong>{labels[type].title}</strong><small>{labels[type].description}</small></button>)}</div>
       <div className="trade-import-template-card"><div><span>Start with the correct columns</span><strong>{IMPORT_DEFINITIONS[importType].label} template</strong><p>The examples are fictional. Remove them before adding business data.</p></div><div><button type="button" onClick={downloadTemplate}>Download CSV template</button><a href="/downloads/aea-business-data-import-templates.xlsx" download>Download all templates in Excel</a></div></div>
       <label className={`trade-import-dropzone ${busy === "prepare" ? "busy" : ""}`}><span>{busy === "prepare" ? "Reading file..." : `Choose completed ${labels[importType].title.toLowerCase()} CSV or Excel file`}</span><small>CSV or .xlsx, up to 2 MB and 500 rows. Previewing makes no changes.</small><input type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void prepareFile(file); event.currentTarget.value = ""; }} /></label>
-      {sourceFile && !activeBatch && <section className="trade-import-mapping"><header><div><span>{sourceFile.name}</span><strong>Map file columns</strong><p>Confirm each AEA field. Unmapped optional fields stay blank and validation will flag missing required data.</p></div></header><div>{IMPORT_DEFINITIONS[importType].headers.map((target: string) => <label key={target}><span>{readable(target)}</span><select value={mapping[target] || ""} onChange={(event) => setMapping((current) => ({ ...current, [target]: event.target.value }))}><option value="">Not mapped</option>{sourceHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void previewMapped()}>{busy === "preview" ? "Checking..." : "Preview mapped rows"}</button></section>}
+      {sourceFile && !activeBatch && <section className="trade-import-mapping"><header><div><span>{sourceFile.name}</span><strong>Map file columns</strong><p>Confirm each Australian Energy Assessments field. Unmapped optional fields stay blank and validation will flag missing required data.</p></div></header><div>{IMPORT_DEFINITIONS[importType].headers.map((target: string) => <label key={target}><span>{readable(target)}</span><select value={mapping[target] || ""} onChange={(event) => setMapping((current) => ({ ...current, [target]: event.target.value }))}><option value="">Not mapped</option>{sourceHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><button className="btn" type="button" disabled={Boolean(busy)} onClick={() => void previewMapped()}>{busy === "preview" ? "Checking..." : "Preview mapped rows"}</button></section>}
     </section>
 
     {activeBatch && <section className="trade-import-review">

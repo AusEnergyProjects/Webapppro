@@ -76,7 +76,7 @@ test("team job payloads preserve protected-customer boundaries", () => {
   assert.match(route, /row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
   assert.match(route, /const address = protectedJob \? ""/);
   assert.doesNotMatch(route, /c\.email|c\.phone|c\.first_name|c\.last_name/);
-  assert.match(portal, /AEA protected job, no customer identity or street address/);
+  assert.match(portal, /Australian Energy Assessments protected job, no customer identity or street address/);
   assert.match(portal, /Direct customer address has not been added/);
   assert.match(portal, /Only work assigned to you is visible/);
 });

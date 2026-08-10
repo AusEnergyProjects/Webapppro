@@ -15,7 +15,7 @@ AEA Field is the native iOS and Android technician app for the Australian Energy
 - Resumable multipart field uploads that continue after a network drop or restart.
 - Automatic foreground, reconnect, notification-open and operating-system scheduled background sync.
 - Immediate local purge on sign-out, unassignment tombstones or remote device revocation.
-- A 24-hour maximum cache for direct-customer street addresses. AEA protected jobs remain region-only.
+- A 24-hour maximum cache for direct-customer street addresses. Australian Energy Assessments protected jobs remain region-only.
 
 ## Development setup
 
@@ -56,4 +56,4 @@ The capture envelope and hash support Creditex review. They do not prove that ev
 
 ## Privacy boundary
 
-The web CRM remains the system of record. Technicians receive only work authorised by the server. AEA protected leads never include a household name, phone, email or street address. Diagnostics and notification content must remain free of customer information, tokens and field notes.
+The web CRM remains the system of record. Technicians receive only work authorised by the server. Australian Energy Assessments protected leads never include a household name, phone, email or street address. Diagnostics and notification content must remain free of customer information, tokens and field notes.

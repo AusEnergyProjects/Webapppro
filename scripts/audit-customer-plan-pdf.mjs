@@ -41,6 +41,32 @@ function documentStructureRoles(pdf, structureRoot) {
   return roles;
 }
 
+function extractedTaggedText(pdf) {
+  const parts = [];
+  const structureRoot = pdf.catalog.lookup(
+    PDFName.of("StructTreeRoot"),
+    PDFDict,
+  );
+
+  function visit(value) {
+    const resolved = pdf.context.lookup(value);
+    if (resolved instanceof PDFArray) {
+      for (const child of resolved.asArray()) visit(child);
+      return;
+    }
+    if (!(resolved instanceof PDFDict)) return;
+    const actualText = resolved.get(PDFName.of("ActualText"));
+    if (actualText && typeof actualText.decodeText === "function") {
+      parts.push(actualText.decodeText());
+    }
+    const kids = resolved.get(PDFName.of("K"));
+    if (kids) visit(kids);
+  }
+
+  visit(structureRoot.get(PDFName.of("K")));
+  return parts.join(" ");
+}
+
 function relativeLuminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((value) =>
     Number.parseInt(value, 16) / 255
@@ -136,16 +162,19 @@ createCustomerPlanReportView({
   adviceBoundary:
     "This is independent general guidance, not a quote, rating or savings promise.",
   resources: [
-    { label: "Review the AEA home energy plan", description: "Update the plan when the home or priorities change.", href: "/plan" },
+    { label: "Review the Australian Energy Assessments home energy plan", description: "Update the plan when the home or priorities change.", href: "/plan" },
     { label: "Find current rebates", description: "Check government support and official eligibility rules.", href: "/rebates" },
     { label: "Estimate rebate value", description: "Prepare an indicative scheme estimate.", href: "/calculator" },
     { label: "Compare electricity plans", description: "Compare current electricity options.", href: "/compare" },
+    { label: "Compare gas plans", description: "Compare current gas options where relevant.", href: "/gas-compare" },
     { label: "Prepare for an assessment", description: "Understand the independent assessment path.", href: "/assessments" },
     { label: "Australian Government household hub", description: "National household energy guidance.", href: "https://www.energy.gov.au/households" },
     { label: "Australian Government quick wins", description: "Low-cost and no-cost actions.", href: "https://www.energy.gov.au/households/quick-wins" },
     { label: "Official rebate finder", description: "Search current government rebates.", href: "https://www.energy.gov.au/rebates" },
-    { label: "Existing-home energy ratings", description: "Official existing-home rating guidance.", href: "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes" },
-    { label: "Your Home passive design guide", description: "Official climate-responsive design guidance.", href: "https://www.yourhome.gov.au/passive-design/introduction" },
+    { label: "Reduce household energy bills", description: "Official Australian Government household guidance.", href: "https://www.energy.gov.au/households/household-guides/reduce-energy-bills" },
+    { label: "Insulation and draught proofing", description: "Official comfort and ventilation guidance.", href: "https://www.energy.gov.au/households/insulation-and-draught-proofing" },
+    { label: "Existing Homes Guidance Note, July 2026", description: "Current NatHERS guidance for formal existing-home assessments.", href: "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note" },
+    { label: "Existing Homes Technical Note, July 2026", description: "Current NatHERS technical requirements for formal assessments.", href: "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note" },
   ],
 });
 
@@ -173,16 +202,42 @@ const representativeReport = createPublicPlanCustomerReportView({
       floorArea: "100_199",
       occupants: "three_four",
       sharedWalls: "one_side",
+      ageBand: "1960_1999",
+      roofType: "tile",
+      roofColour: "dark",
+      roofForm: "pitched",
+      roofCondition: "weathered",
+      switchboard: "older_fuses",
+      wallConstruction: "brick_veneer",
+      floorConstruction: "suspended_timber",
     },
   },
 });
 assert.match(representativeReport.customerSummary, /Townhouse/);
 assert.match(
-  representativeReport.planningSnapshot.find((item) => item.label === "Home details")?.value || "",
-  /Two storeys.*100 to 199 m2.*Three or four people.*One side shared/,
+  representativeReport.planningSnapshot.find((item) => item.label === "Size and occupancy")?.value || "",
+  /Two storeys.*100 to 199 m2.*Three or four people/,
+);
+assert.match(
+  representativeReport.planningSnapshot.find((item) => item.label === "Age and shared walls")?.value || "",
+  /1960.*1999.*One side shared/,
+);
+assert.match(
+  representativeReport.planningSnapshot.find((item) => item.label === "Roof")?.value || "",
+  /tiles.*Pitched.*Dark.*weathered/i,
 );
 assert.ok(representativeReport.actions.length >= 8);
 assert.ok(representativeReport.actions.every((item) => !/^Clear home energy step/.test(item.title)));
+assert.equal(representativeReport.questions.length, 0);
+assert.ok(representativeReport.actions.every((item) => (
+  item.whatToDo
+  && item.whyItMatters
+  && item.householdReason
+  && item.confirmBeforeWork.length
+  && item.quoteChecklist.length
+  && item.sequence
+  && item.safety
+)));
 assert.match(representativeReport.privacyNote, /emailed only to the customer/i);
 assert.doesNotMatch(representativeReport.privacyNote, /shared copy/i);
 
@@ -231,6 +286,7 @@ const documentElement = pdf.context.lookup(
 const metadata = pdf.catalog.lookup(PDFName.of("Metadata"), PDFRawStream);
 const xmp = new TextDecoder().decode(metadata.contents);
 const structureRoles = documentStructureRoles(pdf, structureRoot);
+const taggedText = extractedTaggedText(pdf);
 
 assert.equal(language?.decodeText(), "en-AU");
 assert.equal(
@@ -265,6 +321,16 @@ for (const role of ["L", "LI", "Lbl", "LBody"]) {
 assert.equal(pdf.catalog.has(PDFName.of("OpenAction")), false);
 assert.equal(pdf.catalog.has(PDFName.of("AA")), false);
 assert.equal(pdf.catalog.has(PDFName.of("AcroForm")), false);
+assert.match(taggedText, /Australian Energy Assessments/);
+assert.match(taggedText, /WHAT TO DO/);
+assert.match(taggedText, /WHY IT MATTERS/);
+assert.match(taggedText, /WHY THIS APPLIES TO YOUR HOME/);
+assert.match(taggedText, /CONFIRM BEFORE QUOTING/);
+assert.match(taggedText, /QUOTE AND EVIDENCE CHECKLIST/);
+assert.match(taggedText, /SEQUENCE AND DEPENDENCIES/);
+assert.match(taggedText, /SAFETY BOUNDARY/);
+assert.doesNotMatch(taggedText, /\bAEA\b/);
+assert.doesNotMatch(taggedText, /Questions that could|Home details to check/i);
 for (const foreground of [
   CUSTOMER_PLAN_PDF_CONTRAST_COLORS.oceanBlue,
   CUSTOMER_PLAN_PDF_CONTRAST_COLORS.muted,
@@ -278,6 +344,7 @@ for (const foreground of [
 }
 
 let linkCount = 0;
+const linkTargets = new Set();
 let checkedFontResources = 0;
 const embeddedFontPrograms = new Set();
 const toUnicodeCMaps = new Set();
@@ -328,10 +395,21 @@ for (const page of pdf.getPages()) {
       "URI",
     );
     assert.ok(annotation.has(PDFName.of("Contents")));
+    linkTargets.add(action.get(PDFName.of("URI")).decodeText());
     linkCount += 1;
   }
 }
 assert.ok(linkCount > 0);
+for (const href of [
+  "https://compare.ausenergyassessments.com/calculator",
+  "https://compare.ausenergyassessments.com/rebates",
+  "https://compare.ausenergyassessments.com/compare",
+  "https://compare.ausenergyassessments.com/gas-compare",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
+]) {
+  assert.ok(linkTargets.has(href), `missing trusted report link: ${href}`);
+}
 assert.ok(checkedFontResources >= 2);
 assert.ok(embeddedFontPrograms.size >= 2);
 const allToUnicode = Array.from(toUnicodeCMaps).join("\n").toUpperCase();

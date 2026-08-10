@@ -13,7 +13,7 @@ const chart = fs.readFileSync(path.resolve(__dirname, "../src/components/electri
 const styles = fs.readFileSync(path.resolve(__dirname, "../src/app/globals.css"), "utf8");
 
 test("native electricity is primary with noindex regression and rollback routes", () => {
-  assert.match(page, /Electricity plan comparison/);
+  assert.match(page, /Compare electricity plans/);
   assert.match(page, /<NativeElectricityComparator \/>/);
   assert.match(previewPage, /robots: \{ index: false, follow: false \}/);
   assert.match(previewPage, /<NativeElectricityComparator preview \/>/);

@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     const invoices = result.results.map((row) => {
       const protectedJob = row.customer_source === "platform_private";
       const customerName = protectedJob
-        ? "AEA protected customer"
+        ? "Australian Energy Assessments protected customer"
         : String(row.business_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "Customer not linked");
       const quickInvoice = Boolean(row.quick_invoice_number);
       const totalCents = quickInvoice

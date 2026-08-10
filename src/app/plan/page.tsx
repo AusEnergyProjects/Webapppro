@@ -60,9 +60,17 @@ export default async function HomeEnergyPlanPage({
     propertyContext: {
       propertyType: value(params.propertyType),
       storeys: value(params.storeys),
+      ageBand: value(params.ageBand),
       floorArea: value(params.floorArea),
       occupants: value(params.occupants),
       sharedWalls: value(params.sharedWalls),
+      roofType: value(params.roofType),
+      roofColour: value(params.roofColour),
+      roofForm: value(params.roofForm),
+      roofCondition: value(params.roofCondition),
+      switchboard: value(params.switchboard),
+      wallConstruction: value(params.wallConstruction),
+      floorConstruction: value(params.floorConstruction),
     },
   });
   const validBudgets = new Set(
@@ -78,8 +86,8 @@ export default async function HomeEnergyPlanPage({
           <h1>One clear step at a time. Your plan starts here.</h1>
           <p>
             No account, address, bill, postcode, meter identifier or contact
-            details are needed. Answer what you know, skip the rest and see an
-            ordered roadmap in about three minutes.
+            details are needed. Every home-detail question includes Not sure,
+            and your answers become one ordered roadmap with no follow-up homework.
           </p>
         </div>
       </header>
@@ -98,9 +106,17 @@ export default async function HomeEnergyPlanPage({
           features: plan.features,
           propertyType: plan.propertyContext.propertyType || "",
           storeys: plan.propertyContext.storeys || "",
+          ageBand: plan.propertyContext.ageBand || "",
           floorArea: plan.propertyContext.floorArea || "",
           occupants: plan.propertyContext.occupants || "",
           sharedWalls: plan.propertyContext.sharedWalls || "",
+          roofType: plan.propertyContext.roofType || "",
+          roofColour: plan.propertyContext.roofColour || "",
+          roofForm: plan.propertyContext.roofForm || "",
+          roofCondition: plan.propertyContext.roofCondition || "",
+          switchboard: plan.propertyContext.switchboard || "",
+          wallConstruction: plan.propertyContext.wallConstruction || "",
+          floorConstruction: plan.propertyContext.floorConstruction || "",
         }}
       />
       <SiteFooter>

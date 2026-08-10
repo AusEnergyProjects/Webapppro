@@ -316,7 +316,7 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(plannerRoute, /createCustomerProjectPlan/);
   assert.match(planner, /createCustomerProjectPlan/);
   assert.match(planner, /Do you own or rent the home\?/);
-  assert.match(planner, /Questions that could change the order/);
+  assert.doesNotMatch(planner, /Questions that could change the order/);
   assert.match(planner, /Why this is in the plan/);
   assert.match(planner, /What would make the biggest difference/);
   assert.match(planner, /type="checkbox"/);
@@ -324,14 +324,14 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /Does the home have strata, a body corporate, an owners corporation or shared common property\?/);
   assert.match(planner, /other housing complexes/);
   assert.match(planner, /equipment locations that may need approval/);
-  assert.match(planner, /Approximate internal floor area/);
-  assert.match(planner, /Walls shared with another dwelling/);
+  assert.match(planner, /About how large is the home inside/);
+  assert.match(planner, /How many sides share a wall with another dwelling/);
   assert.match(planner, /What investment range feels comfortable for the first stage/);
   assert.match(plannerRoute, /One clear step at a time/);
   assert.match(planner, /HomeFeatureIntake/);
   assert.match(planner, /sectionId=\{currentStep\.featureSection\}/);
   assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
-  assert.match(planner, /Skip remaining home details/);
+  assert.doesNotMatch(planner, /Skip remaining home details/);
   assert.match(planner, /role="progressbar"/);
   assert.match(planner, /<PlannerHomeJourney/);
   assert.match(plannerJourney, /aria-label="Home planning journey"/);

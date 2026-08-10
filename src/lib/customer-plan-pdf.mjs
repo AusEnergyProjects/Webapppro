@@ -256,7 +256,7 @@ function requiredReport(value) {
     ["questions", 12],
     ["decisionBasis", 24],
     ["beforeTrade", 24],
-    ["resources", 10],
+    ["resources", 12],
   ]) {
     if (!Array.isArray(value[field]) || value[field].length > maximum) {
       throw new TypeError(
@@ -375,9 +375,13 @@ export function customerPlanPdfFileName(report) {
 
 const TRUSTED_EXTERNAL_REPORT_URLS = new Set([
   "https://www.energy.gov.au/households",
+  "https://www.energy.gov.au/households/household-guides/reduce-energy-bills",
+  "https://www.energy.gov.au/households/insulation-and-draught-proofing",
   "https://www.energy.gov.au/households/quick-wins",
   "https://www.energy.gov.au/rebates",
   "https://www.homeenergyrating.gov.au/",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
   "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
   "https://www.yourhome.gov.au/passive-design/introduction",
   "https://www.yourhome.gov.au/passive-design/insulation",
@@ -1042,10 +1046,8 @@ export async function createCustomerPlanPdfBytes(
           label: "LEFT TO PLAN",
         },
         {
-          value: String(report.questions.length),
-          label: report.questions.length === 1
-            ? "DETAIL TO CHECK"
-            : "DETAILS TO CHECK",
+          value: String(report.actions.length),
+          label: "CHECKLISTS INCLUDED",
         },
       ]
       : [
@@ -1060,10 +1062,8 @@ export async function createCustomerPlanPdfBytes(
           label: laterActions.length === 1 ? "STEP TO PLAN" : "STEPS TO PLAN",
         },
         {
-          value: String(report.questions.length),
-          label: report.questions.length === 1
-            ? "DETAIL TO CHECK"
-            : "DETAILS TO CHECK",
+          value: String(report.actions.length),
+          label: "CHECKLISTS INCLUDED",
         },
       ];
     const metricGap = 10;
@@ -1375,12 +1375,12 @@ export async function createCustomerPlanPdfBytes(
       ? [
         [String(completedCount), "STEPS COMPLETE"],
         ["0", "LEFT TO PLAN"],
-        [String(report.questions.length), "CHECK FIRST"],
+        [String(report.actions.length), "CHECKLISTS"],
       ]
       : [
         [String(priorityActions.length), "START NOW"],
         [String(laterActions.length), "PLAN NEXT"],
-        [String(report.questions.length), "CHECK FIRST"],
+        [String(report.actions.length), "CHECKLISTS"],
       ];
     const columnWidth = CONTENT_WIDTH / signals.length;
     signals.forEach(([value, label], index) => {
@@ -1629,60 +1629,178 @@ export async function createCustomerPlanPdfBytes(
       ? "DONE"
       : String(Number(action?.number) || 1).padStart(2, "0");
     const numberWidth = 44;
-    const innerX = MARGIN + numberWidth + 24;
-    const innerWidth = CONTENT_WIDTH - numberWidth - 42;
+    const contentX = MARGIN + 24;
+    const contentWidth = CONTENT_WIDTH - 48;
+    const headerX = MARGIN + numberWidth + 34;
+    const headerWidth = CONTENT_WIDTH - numberWidth - 58;
+    const columnGap = 16;
+    const columnWidth = (contentWidth - columnGap) / 2;
+    const bodyColor = priority ? palette.heroBody : palette.body;
+    const labelColor = priority ? palette.aqua : palette.oceanBlue;
+    const titleColor = priority ? palette.white : palette.navy;
     const stageText = priority
       ? `START HERE | ${normalizedText(action?.stage)}`
       : normalizedText(action?.stage);
     const stageLines = linesFor(stageText.toUpperCase(), {
       font: bold,
       size: 7.1,
-      width: innerWidth,
+      width: headerWidth,
       lineHeight: 9.5,
-      color: priority ? palette.aqua : palette.oceanBlue,
+      color: labelColor,
     });
     const titleLines = linesFor(action?.title, {
       font: bold,
       size: priority ? 15.5 : 14.2,
-      width: innerWidth,
+      width: headerWidth,
       lineHeight: priority ? 18.5 : 17,
-      color: priority ? palette.white : palette.navy,
+      color: titleColor,
     });
-    const bodyLines = linesFor(action?.description, {
-      font: regular,
-      size: 10,
-      width: innerWidth,
-      lineHeight: 14.5,
-      color: priority ? palette.heroBody : palette.body,
-    });
-    const safeHref = absoluteGuideHref(action?.guideHref);
-    const linkLabel = normalizedText(
-      action?.guideLabel || copy.guideLabel || "Open the helpful guide",
-      140,
-    );
-    const linkLines = safeHref
-      ? linesFor(linkLabel, {
+
+    const paragraphBlock = (label, text, width = contentWidth) => {
+      const actualText = normalizedText(text, 900);
+      if (!actualText) return null;
+      const labelLines = linesFor(label, {
         font: bold,
-        size: 9.2,
-        width: innerWidth,
-        lineHeight: 12.5,
-        color: priority ? palette.aqua : palette.greenDark,
-      })
-      : [];
-    const contentHeight = measureLines(stageLines)
-      + PDF_LAYOUT.labelTitleGap
-      + measureLines(titleLines)
-      + PDF_LAYOUT.titleBodyGap
-      + measureLines(bodyLines)
-      + (
-        linkLines.length
-          ? PDF_LAYOUT.bodyLinkGap + measureLines(linkLines)
-          : 0
-      );
-    const height = Math.max(
-      96,
-      contentHeight + (PDF_LAYOUT.panelPaddingY * 2),
+        size: 6.7,
+        width,
+        lineHeight: 8.7,
+        color: labelColor,
+      });
+      const bodyLines = linesFor(actualText, {
+        font: regular,
+        size: width === contentWidth ? 8.8 : 8.25,
+        width,
+        lineHeight: width === contentWidth ? 12.2 : 11.3,
+        color: bodyColor,
+      });
+      return {
+        label,
+        actualText,
+        labelLines,
+        bodyLines,
+        height: measureLines(labelLines) + 3 + measureLines(bodyLines),
+      };
+    };
+    const listBlock = (label, values) => {
+      const items = (Array.isArray(values) ? values : [])
+        .map((value) => normalizedText(value, 260))
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((actualText) => ({
+          actualText,
+          lines: linesFor(actualText, {
+            font: regular,
+            size: 8.05,
+            width: columnWidth - 17,
+            lineHeight: 10.9,
+            color: bodyColor,
+          }),
+        }));
+      if (!items.length) return null;
+      const labelLines = linesFor(label, {
+        font: bold,
+        size: 6.7,
+        width: columnWidth,
+        lineHeight: 8.7,
+        color: labelColor,
+      });
+      return {
+        label,
+        labelLines,
+        items,
+        height: measureLines(labelLines)
+          + 4
+          + items.reduce((total, item, index) => (
+            total + measureLines(item.lines) + (index ? 3 : 0)
+          ), 0),
+      };
+    };
+    const whatToDo = paragraphBlock(
+      "WHAT TO DO",
+      action?.whatToDo || action?.description,
     );
+    const whyItMatters = paragraphBlock(
+      "WHY IT MATTERS",
+      action?.whyItMatters,
+      columnWidth,
+    );
+    const householdReason = paragraphBlock(
+      "WHY THIS APPLIES TO YOUR HOME",
+      action?.householdReason,
+      columnWidth,
+    );
+    const confirmations = listBlock(
+      "CONFIRM BEFORE QUOTING",
+      action?.confirmBeforeWork,
+    );
+    const quoteChecklist = listBlock(
+      "QUOTE AND EVIDENCE CHECKLIST",
+      action?.quoteChecklist,
+    );
+    const sequence = paragraphBlock(
+      "SEQUENCE AND DEPENDENCIES",
+      action?.sequence,
+      columnWidth,
+    );
+    const safety = paragraphBlock(
+      "SAFETY BOUNDARY",
+      action?.safety,
+      columnWidth,
+    );
+    const links = (Array.isArray(action?.links) ? action.links : [])
+      .concat(
+        action?.guideHref
+          ? [{
+            label: action?.guideLabel || copy.guideLabel,
+            href: action.guideHref,
+          }]
+          : [],
+      )
+      .flatMap((link) => {
+        const safeHref = absoluteGuideHref(link?.href);
+        const label = normalizedText(link?.label, 140);
+        return safeHref && label ? [{ safeHref, label }] : [];
+      })
+      .filter((link, index, values) => (
+        values.findIndex((candidate) => candidate.safeHref === link.safeHref)
+          === index
+      ))
+      .slice(0, 3)
+      .map((link) => ({
+        ...link,
+        lines: linesFor(link.label, {
+          font: bold,
+          size: 8,
+          width: contentWidth - 16,
+          lineHeight: 10.6,
+          color: priority ? palette.aqua : palette.greenDark,
+        }),
+      }));
+    const headerHeight = measureLines(stageLines)
+      + PDF_LAYOUT.labelTitleGap
+      + measureLines(titleLines);
+    const rowHeight = (left, right) => Math.max(
+      left?.height || 0,
+      right?.height || 0,
+    );
+    const linksHeight = links.length
+      ? 8.7
+        + 4
+        + links.reduce((total, link, index) => (
+          total + measureLines(link.lines) + (index ? 3 : 0)
+        ), 0)
+      : 0;
+    const contentHeight = headerHeight
+      + 15
+      + (whatToDo?.height || 0)
+      + 13
+      + rowHeight(whyItMatters, householdReason)
+      + 13
+      + rowHeight(confirmations, quoteChecklist)
+      + 13
+      + rowHeight(sequence, safety)
+      + (linksHeight ? 13 + linksHeight : 0);
+    const height = Math.max(220, contentHeight + 38);
     ensureSpace(height + CARD_GAP, priority ? "Start here" : "Your plan");
     const bottom = y - height;
     pdfTags.artifact(page, () => {
@@ -1771,149 +1889,284 @@ export async function createCustomerPlanPdfBytes(
     let cursor = y - PDF_LAYOUT.panelPaddingY;
     pdfTags.mark(page, "P", () => {
       cursor = drawLines(stageLines, {
-        x: innerX,
+        x: headerX,
         startY: cursor,
         characterSpacing: 0.45,
       });
     }, { actualText: stageText });
     cursor -= PDF_LAYOUT.labelTitleGap;
     pdfTags.mark(page, "H3", () => {
-      cursor = drawLines(titleLines, { x: innerX, startY: cursor });
+      cursor = drawLines(titleLines, { x: headerX, startY: cursor });
     }, { actualText: action?.title });
-    cursor -= PDF_LAYOUT.titleBodyGap;
-    pdfTags.mark(page, "P", () => {
-      cursor = drawLines(bodyLines, { x: innerX, startY: cursor });
-    }, { actualText: action?.description });
-    if (linkLines.length) {
-      cursor -= PDF_LAYOUT.bodyLinkGap;
-      const linkTop = cursor;
-      const linkStructure = pdfTags.mark(page, "Link", () => {
-        cursor = drawLines(linkLines, { x: innerX, startY: cursor });
-      }, { actualText: linkLabel });
-      const linkWidth = Math.min(
-        innerWidth,
-        Math.max(...linkLines.map((line) =>
-          line.font.widthOfTextAtSize(line.text, line.size)
-        )),
-      );
-      pdfTags.artifact(page, () => {
-        page.drawLine({
-          start: { x: innerX, y: linkTop - 2 },
-          end: { x: innerX + linkWidth, y: linkTop - 2 },
-          thickness: 0.5,
-          color: priority ? palette.aqua : palette.greenDark,
+
+    const drawParagraphBlock = (block, x, startY) => {
+      if (!block) return startY;
+      let blockCursor = startY;
+      pdfTags.mark(page, "P", () => {
+        blockCursor = drawLines(block.labelLines, {
+          x,
+          startY: blockCursor,
+          characterSpacing: 0.45,
         });
+      }, { actualText: block.label });
+      blockCursor -= 3;
+      pdfTags.mark(page, "P", () => {
+        blockCursor = drawLines(block.bodyLines, {
+          x,
+          startY: blockCursor,
+        });
+      }, { actualText: block.actualText });
+      return blockCursor;
+    };
+    const drawListBlock = (block, x, startY) => {
+      if (!block) return startY;
+      let blockCursor = startY;
+      pdfTags.mark(page, "P", () => {
+        blockCursor = drawLines(block.labelLines, {
+          x,
+          startY: blockCursor,
+          characterSpacing: 0.45,
+        });
+      }, { actualText: block.label });
+      blockCursor -= 4;
+      const list = pdfTags.beginContainer("L", { title: block.label });
+      block.items.forEach((item, index) => {
+        if (index) blockCursor -= 3;
+        const listItem = pdfTags.beginContainer("LI", { parent: list });
+        pdfTags.mark(page, "Lbl", () => {
+          page.drawCircle({
+            x: x + 3.5,
+            y: blockCursor - 3.2,
+            size: 2.3,
+            color: priority ? palette.teal : palette.electricBlue,
+          });
+        }, { actualText: "Bullet", parent: listItem });
+        pdfTags.mark(page, "LBody", () => {
+          blockCursor = drawLines(item.lines, {
+            x: x + 14,
+            startY: blockCursor,
+          });
+        }, { actualText: item.actualText, parent: listItem });
       });
-      addLinkAnnotation({
-        x: innerX,
-        y: cursor + 1,
-        width: linkWidth,
-        height: measureLines(linkLines) + 6,
-        href: safeHref,
-        label: linkLabel,
-        structure: linkStructure,
+      return blockCursor;
+    };
+    const drawPair = (left, right, startY, drawBlock) => {
+      if (left) drawBlock(left, contentX, startY);
+      if (right) drawBlock(
+        right,
+        contentX + columnWidth + columnGap,
+        startY,
+      );
+      return startY - rowHeight(left, right);
+    };
+
+    cursor -= 15;
+    cursor = drawParagraphBlock(whatToDo, contentX, cursor);
+    cursor -= 13;
+    cursor = drawPair(
+      whyItMatters,
+      householdReason,
+      cursor,
+      drawParagraphBlock,
+    );
+    cursor -= 13;
+    cursor = drawPair(
+      confirmations,
+      quoteChecklist,
+      cursor,
+      drawListBlock,
+    );
+    cursor -= 13;
+    cursor = drawPair(sequence, safety, cursor, drawParagraphBlock);
+
+    if (links.length) {
+      cursor -= 13;
+      const linkLabelLines = linesFor("HELPFUL LINKS", {
+        font: bold,
+        size: 6.7,
+        width: contentWidth,
+        lineHeight: 8.7,
+        color: labelColor,
+      });
+      pdfTags.mark(page, "P", () => {
+        cursor = drawLines(linkLabelLines, {
+          x: contentX,
+          startY: cursor,
+          characterSpacing: 0.45,
+        });
+      }, { actualText: "Helpful links" });
+      cursor -= 4;
+      links.forEach((link, index) => {
+        if (index) cursor -= 3;
+        const linkTop = cursor;
+        const linkStructure = pdfTags.mark(page, "Link", () => {
+          cursor = drawLines(link.lines, {
+            x: contentX + 14,
+            startY: cursor,
+          });
+        }, { actualText: link.label });
+        const linkWidth = Math.min(
+          contentWidth - 14,
+          Math.max(...link.lines.map((line) =>
+            line.font.widthOfTextAtSize(line.text, line.size)
+          )),
+        );
+        pdfTags.artifact(page, () => {
+          page.drawCircle({
+            x: contentX + 3.5,
+            y: linkTop - 3.2,
+            size: 2.3,
+            color: priority ? palette.teal : palette.greenDark,
+          });
+          page.drawLine({
+            start: { x: contentX + 14, y: linkTop - 2 },
+            end: { x: contentX + 14 + linkWidth, y: linkTop - 2 },
+            thickness: 0.45,
+            color: priority ? palette.aqua : palette.greenDark,
+          });
+        });
+        addLinkAnnotation({
+          x: contentX + 14,
+          y: cursor + 1,
+          width: linkWidth,
+          height: measureLines(link.lines) + 6,
+          href: link.safeHref,
+          label: link.label,
+          structure: linkStructure,
+        });
       });
     }
     y = bottom - CARD_GAP;
   }
 
   function drawEverydayGrid(actions) {
-    const gap = 12;
-    const cellWidth = (CONTENT_WIDTH - gap) / 2;
-    for (let index = 0; index < actions.length; index += 2) {
-      const pair = actions.slice(index, index + 2);
-      const prepared = pair.map((action) => {
-        const labelLines = linesFor(
-          normalizedText(action?.category).toUpperCase(),
-          {
-            font: bold,
-            size: 6.8,
-            width: cellWidth - 36,
-            lineHeight: 9,
-            color: palette.oceanBlue,
-          },
-        );
-        const titleLines = linesFor(action?.title, {
+    const gap = 11;
+    const inset = 18;
+    const outcomeWidth = 158;
+    const textWidth = CONTENT_WIDTH - (inset * 2) - outcomeWidth - 22;
+    for (const [index, action] of actions.entries()) {
+      const labelLines = linesFor(
+        normalizedText(action?.category).toUpperCase(),
+        {
           font: bold,
-          size: 12.7,
-          width: cellWidth - 36,
-          lineHeight: 15.5,
-          color: palette.navy,
-        });
-        const bodyLines = linesFor(action?.description, {
-          font: regular,
-          size: 9.6,
-          width: cellWidth - 36,
-          lineHeight: 13.7,
-          color: palette.body,
-        });
-        return { action, labelLines, titleLines, bodyLines };
-      });
-      const rowHeight = Math.max(
-        ...prepared.map(({ labelLines, titleLines, bodyLines }) =>
-          measureLines(labelLines)
-            + PDF_LAYOUT.labelTitleGap
-            + measureLines(titleLines)
-            + PDF_LAYOUT.titleBodyGap
-            + measureLines(bodyLines)
-            + (PDF_LAYOUT.panelPaddingY * 2)
-        ),
-        122,
+          size: 6.8,
+          width: textWidth,
+          lineHeight: 9,
+          color: palette.oceanBlue,
+        },
       );
-      ensureSpace(rowHeight + gap, "Quick comfort wins");
-      const bottom = y - rowHeight;
-      prepared.forEach((card, pairIndex) => {
-        const x = MARGIN + (pairIndex * (cellWidth + gap));
-        pdfTags.artifact(page, () => {
-          drawRoundedRectangle(page, {
-            x,
-            y: bottom,
-            width: cellWidth,
-            height: rowHeight,
-            radius: PDF_LAYOUT.compactRadius,
-            color: palette.paper,
-            borderColor: palette.line,
-            borderWidth: 0.7,
-          });
-          drawRoundedRectangle(page, {
-            x: x + 12,
-            y: y - 5,
-            width: cellWidth - 24,
-            height: 5,
-            radius: 2.5,
-            color: pairIndex === 0 ? palette.teal : palette.electricBlue,
-          });
-          page.drawCircle({
-            x: x + cellWidth - 16,
-            y: y - 18,
-            size: 10,
-            color: pairIndex === 0 ? palette.teal : palette.electricBlue,
-            opacity: 0.18,
-          });
-        });
-        let cursor = y - PDF_LAYOUT.panelPaddingY;
-        pdfTags.mark(page, "P", () => {
-          cursor = drawLines(card.labelLines, {
-            x: x + 18,
-            startY: cursor,
-            characterSpacing: 0.45,
-          });
-        }, { actualText: card.action?.category });
-        cursor -= PDF_LAYOUT.labelTitleGap;
-        pdfTags.mark(page, "H3", () => {
-          cursor = drawLines(card.titleLines, {
-            x: x + 18,
-            startY: cursor,
-          });
-        }, { actualText: card.action?.title });
-        cursor -= PDF_LAYOUT.titleBodyGap;
-        pdfTags.mark(page, "P", () => {
-          drawLines(card.bodyLines, {
-            x: x + 18,
-            startY: cursor,
-          });
-        }, { actualText: card.action?.description });
+      const titleLines = linesFor(action?.title, {
+        font: bold,
+        size: 12.8,
+        width: textWidth,
+        lineHeight: 15.3,
+        color: palette.navy,
       });
+      const bodyLines = linesFor(action?.description, {
+        font: regular,
+        size: 9.2,
+        width: textWidth,
+        lineHeight: 12.9,
+        color: palette.body,
+      });
+      const outcomeText = normalizedText(
+        action?.outcome
+          || "A practical, low-friction step that can improve comfort or reduce avoidable energy use.",
+        260,
+      );
+      const outcomeLabelLines = linesFor("WHY TRY IT", {
+        font: bold,
+        size: 6.6,
+        width: outcomeWidth - 24,
+        lineHeight: 8.6,
+        color: palette.greenDark,
+      });
+      const outcomeLines = linesFor(outcomeText, {
+        font: regular,
+        size: 8.5,
+        width: outcomeWidth - 24,
+        lineHeight: 11.6,
+        color: palette.body,
+      });
+      const leftHeight = measureLines(labelLines)
+        + PDF_LAYOUT.labelTitleGap
+        + measureLines(titleLines)
+        + PDF_LAYOUT.titleBodyGap
+        + measureLines(bodyLines);
+      const rightHeight = measureLines(outcomeLabelLines)
+        + 4
+        + measureLines(outcomeLines);
+      const rowHeight = Math.max(leftHeight, rightHeight) + 34;
+      ensureSpace(rowHeight + gap, "Energy-saving actions");
+      const bottom = y - rowHeight;
+      const outcomeX = MARGIN + CONTENT_WIDTH - inset - outcomeWidth;
+      pdfTags.artifact(page, () => {
+        drawRoundedRectangle(page, {
+          x: MARGIN,
+          y: bottom,
+          width: CONTENT_WIDTH,
+          height: rowHeight,
+          radius: PDF_LAYOUT.compactRadius,
+          color: palette.paper,
+          borderColor: palette.line,
+          borderWidth: 0.7,
+        });
+        drawRoundedRectangle(page, {
+          x: MARGIN + 10,
+          y: bottom + 10,
+          width: 5,
+          height: rowHeight - 20,
+          radius: 2.5,
+          color: index % 2 === 0 ? palette.teal : palette.electricBlue,
+        });
+        drawRoundedRectangle(page, {
+          x: outcomeX,
+          y: bottom + 12,
+          width: outcomeWidth,
+          height: rowHeight - 24,
+          radius: 7,
+          color: palette.mint,
+          borderColor: palette.line,
+          borderWidth: 0.5,
+        });
+      });
+      let cursor = y - 17;
+      pdfTags.mark(page, "P", () => {
+        cursor = drawLines(labelLines, {
+          x: MARGIN + inset,
+          startY: cursor,
+          characterSpacing: 0.45,
+        });
+      }, { actualText: action?.category });
+      cursor -= PDF_LAYOUT.labelTitleGap;
+      pdfTags.mark(page, "H3", () => {
+        cursor = drawLines(titleLines, {
+          x: MARGIN + inset,
+          startY: cursor,
+        });
+      }, { actualText: action?.title });
+      cursor -= PDF_LAYOUT.titleBodyGap;
+      pdfTags.mark(page, "P", () => {
+        drawLines(bodyLines, {
+          x: MARGIN + inset,
+          startY: cursor,
+        });
+      }, { actualText: action?.description });
+      let outcomeCursor = y - 22;
+      pdfTags.mark(page, "P", () => {
+        outcomeCursor = drawLines(outcomeLabelLines, {
+          x: outcomeX + 12,
+          startY: outcomeCursor,
+          characterSpacing: 0.45,
+        });
+      }, { actualText: "Why try it" });
+      outcomeCursor -= 4;
+      pdfTags.mark(page, "P", () => {
+        drawLines(outcomeLines, {
+          x: outcomeX + 12,
+          startY: outcomeCursor,
+        });
+      }, { actualText: outcomeText });
       y = bottom - gap;
     }
   }
@@ -1927,7 +2180,7 @@ export async function createCustomerPlanPdfBytes(
         const safeHref = absoluteGuideHref(resource?.href);
         if (!safeHref) return [];
         const sourceLabel = safeHref.startsWith(CUSTOMER_PLAN_PUBLIC_ORIGIN)
-          ? "AEA PLANNING TOOL"
+          ? "AUSTRALIAN ENERGY ASSESSMENTS"
           : "OFFICIAL RESOURCE";
         const labelLines = linesFor(sourceLabel, {
           font: bold,
@@ -2083,7 +2336,7 @@ export async function createCustomerPlanPdfBytes(
     eyebrow: copy.readinessEyebrow || "Before you spend",
     title: readiness.title,
     body: readiness.body,
-    tone: report.questions.length ? "cream" : "mint",
+    tone: "mint",
   });
 
   if (priorityActions.length) {
@@ -2105,7 +2358,7 @@ export async function createCustomerPlanPdfBytes(
     pageSection = priorityActions.length
       ? copy.roadmapEyebrow || "Your plan"
       : copy.completedEyebrow || "Plan progress";
-    ensureSpace(240, pageSection);
+    ensureSpace(650, pageSection);
     pdfTags.beginSection(
       priorityActions.length
         ? copy.roadmapTitle || "Build the rest of your roadmap"
@@ -2128,7 +2381,10 @@ export async function createCustomerPlanPdfBytes(
     pdfTags.beginSection(
       copy.everydayTitle || "Comfort wins you can try this week",
     );
-    ensureSpace(240, copy.everydayEyebrow || "Quick comfort wins");
+    // Keep the section introduction with at least the first useful action.
+    // An orphaned heading at the foot of a roadmap page makes the report feel
+    // unfinished even when the following page contains the action cards.
+    ensureSpace(390, copy.everydayEyebrow || "Quick comfort wins");
     drawSectionHeading(
       copy.everydayEyebrow || "Easy things to try",
       copy.everydayTitle || "Comfort wins you can try this week",
@@ -2169,21 +2425,6 @@ export async function createCustomerPlanPdfBytes(
     body: report.changeBoundary,
     tone: "cream",
   });
-
-  if (report.questions.length) {
-    drawInfoPanel({
-      eyebrow: "Home details to check",
-      title: `${report.questions.length} answer${
-        report.questions.length === 1 ? "" : "s"
-      } could make this plan more precise`,
-      bullets: report.questions.map((question) =>
-        `${normalizedText(question?.prompt)}: ${
-          normalizedText(question?.whyItMatters)
-        }`
-      ),
-      tone: "cream",
-    });
-  }
 
   const professional = report.professionalPresentation;
   if (professional) {
@@ -2258,7 +2499,7 @@ export async function createCustomerPlanPdfBytes(
           ? "Every current step is marked complete"
           : "Use this plan as your project checklist"
       ),
-    body: report.changeBoundary,
+    body: closingAction?.whatToDo || report.changeBoundary,
     tone: "dark",
   });
   drawInfoPanel({
@@ -2273,14 +2514,24 @@ export async function createCustomerPlanPdfBytes(
   });
   drawResourceGrid([
     {
-      label: "Review or update your home energy plan",
-      description: "Return when priorities, equipment or known home details change.",
-      href: "/plan",
+      label: "Compare your electricity options",
+      description: "Start the guided electricity comparison when you are ready for the next household cost check.",
+      href: "/compare",
     },
     {
-      label: "Prepare for an independent assessment",
-      description: "Use the AEA assessment path or call 1300 241 149 when a site-specific review would help.",
-      href: "/assessments",
+      label: "Compare your gas options",
+      description: "Use the guided gas comparison if the home still has an active gas account.",
+      href: "/gas-compare",
+    },
+    {
+      label: "Check current rebates and assistance",
+      description: "Review current support before accepting a quote or ordering equipment.",
+      href: "/rebates",
+    },
+    {
+      label: "Estimate certificate or rebate value",
+      description: "Use the Australian Energy Assessments calculator for an early, plain-English estimate.",
+      href: "/calculator",
     },
   ]);
 

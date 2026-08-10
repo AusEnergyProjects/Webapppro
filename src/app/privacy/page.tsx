@@ -24,7 +24,7 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "AEA protected opportunities keep the full home plan, exact street address, bills, meter data and uploaded documents behind the authorised marketplace boundary. When a household explicitly submits a trade enquiry, the consent screen names the basic contact fields that will be released to every active verified trade whose service area and capability match the selected work. Wholesalers do not receive household lead details.",
+    body: "Australian Energy Assessments protected opportunities keep the full home plan, exact street address, bills, meter data and uploaded documents behind the authorised marketplace boundary. When a household explicitly submits a trade enquiry, the consent screen names the basic contact fields that will be released to every active verified trade whose service area and capability match the selected work. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
               Open TLink
             </Link>
             <Link className="btn ghost" href="/">
-              AEA home
+              Australian Energy Assessments home
             </Link>
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
       <section className="trade-information-boundary">
         <div>
           <span>Need a privacy review?</span>
-          <h2>Contact the AEA privacy team</h2>
+          <h2>Contact the Australian Energy Assessments privacy team</h2>
           <p>
             Email info@ausenergyassessments.com with enough context to locate
             the relevant account or record. Do not email passwords, payment

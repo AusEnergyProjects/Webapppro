@@ -119,7 +119,7 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
     const weekday = localDayAndMinute(String(row.starts_at)).weekday;
     const savedHours = workingHoursByMemberAndDay.get(`${row.assignee_member_id}:${weekday}`);
     const workingWindow = savedHours || defaultWorkingWindow(weekday);
-    const customerDisplayName = protectedJob ? "AEA protected customer"
+    const customerDisplayName = protectedJob ? "Australian Energy Assessments protected customer"
       : row.customer_source === "trade_owned"
         ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
         : "No customer linked";
@@ -128,7 +128,7 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       startsAt: row.starts_at, endsAt: row.ends_at, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
       status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
-      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
+      siteSummary: protectedJob ? "Australian Energy Assessments protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
       quoteStatus: String(row.quote_status || "not_started"), quotedValueCents: Number(row.quoted_value_cents || 0), protectedJob, conflicts,
       outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
@@ -147,14 +147,14 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       currentAssigneeMemberId: row.current_assignee_member_id, currentAssigneeLabel: row.current_assignee_label,
       appointmentRevision: Number(row.appointment_revision) })),
     unassignedJobs: unassignedJobs.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
-      const customerDisplayName = protectedJob ? "AEA protected customer"
+      const customerDisplayName = protectedJob ? "Australian Energy Assessments protected customer"
         : row.customer_source === "trade_owned"
           ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
           : "No customer linked";
       const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
       return { id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
-      siteSummary: protectedJob ? "AEA protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
+      siteSummary: protectedJob ? "Australian Energy Assessments protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
       priority: row.priority, stage: row.stage, revision: Number(row.revision || 1), assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label }; }) };
 }
 

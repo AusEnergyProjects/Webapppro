@@ -25,7 +25,7 @@ const question = (id) => customerHomeFeatureSections
   .find((item) => item.id === id);
 
 test("the universal taxonomy is grouped, bounded and contains the required home states", () => {
-  assert.equal(MAX_HOME_FEATURE_SELECTIONS, 32);
+  assert.equal(MAX_HOME_FEATURE_SELECTIONS, 36);
   assert.deepEqual(
     customerHomeFeatureSections.map((section) => section.id),
     [
@@ -36,6 +36,7 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
       "heating-cooling",
       "hot-water-cooking",
       "solar-storage-transport",
+      "lighting-pool",
     ],
   );
   assert.deepEqual(
@@ -86,6 +87,9 @@ test("the universal taxonomy is grouped, bounded and contains the required home 
       "electrical-supply-unknown",
     ],
   );
+  assert.ok(question("sun-exposure"));
+  assert.ok(question("lighting"));
+  assert.ok(question("pool-spa"));
   assert.ok(
     question("heating-cooling-systems").options.some(
       ([value, label]) => value === "hydronic-heating" && /hydronic heating/i.test(label),
@@ -491,12 +495,17 @@ test("quick wins are conditional, practical and bounded by equipment and ventila
   );
   assert.match(quickWins.get("personal-warmth-first").text, /layers/i);
   assert.match(quickWins.get("personal-warmth-first").text, /electric throw/i);
+  assert.match(quickWins.get("safe-draught-stopper").text, /draught stopper/i);
+  assert.match(quickWins.get("safe-draught-stopper").text, /Never block a fixed wall vent/i);
   assert.match(quickWins.get("use-existing-controls").title, /clean filters/i);
   assert.match(quickWins.get("use-existing-controls").text, /app or remote controls/i);
-  assert.match(quickWins.get("use-existing-controls").text, /shorter showers/i);
-  assert.match(quickWins.get("use-existing-controls").text, /laundry and dishwasher/i);
-  assert.match(quickWins.get("use-existing-controls").text, /fridge and freezer/i);
-  assert.match(quickWins.get("use-existing-controls").text, /standby loads/i);
+  assert.match(quickWins.get("use-existing-controls").text, /18°C to 20°C/i);
+  assert.match(quickWins.get("use-existing-controls").text, /25°C to 27°C/i);
+  assert.match(quickWins.get("hot-water-routine").text, /shorter showers/i);
+  assert.match(quickWins.get("hot-water-routine").text, /cold water/i);
+  assert.match(quickWins.get("appliance-routines").text, /full loads/i);
+  assert.match(quickWins.get("appliance-routines").text, /fridge and freezer/i);
+  assert.match(quickWins.get("appliance-routines").text, /standby loads/i);
   assert.match(quickWins.get("use-existing-controls").text, /solar hours/i);
   assert.match(quickWins.get("use-existing-controls").text, /electric vehicle charging/i);
   assert.match(quickWins.get("safe-seasonal-airflow").title, /fans before or alongside air-con/i);
@@ -522,12 +531,17 @@ test("quick wins are conditional, practical and bounded by equipment and ventila
     situation: "owner",
     features: ["heating-cooling-none", "ventilation-none-known"],
   });
-  const unrelatedControls = lowerBillsWithoutEquipment.everydayActions.find(
-    (action) => action.id === "use-existing-controls",
+  assert.equal(
+    lowerBillsWithoutEquipment.everydayActions.some(
+      (action) => action.id === "use-existing-controls",
+    ),
+    false,
   );
-  assert.ok(unrelatedControls);
-  assert.doesNotMatch(unrelatedControls.text, /solar hours|electric vehicle|hot-water/i);
-  assert.doesNotMatch(unrelatedControls.title, /clean filters/i);
+  assert.ok(
+    lowerBillsWithoutEquipment.everydayActions.some(
+      (action) => action.id === "appliance-routines",
+    ),
+  );
 
   const cookingOnly = createCustomerProjectPlan({
     goals: ["replace-now"],
@@ -535,10 +549,10 @@ test("quick wins are conditional, practical and bounded by equipment and ventila
     features: ["induction-cooking"],
   });
   const cookingControls = cookingOnly.everydayActions.find(
-    (action) => action.id === "use-existing-controls",
+    (action) => action.id === "efficient-cooking",
   );
   assert.ok(cookingControls);
-  assert.match(cookingControls.title, /cooking equipment/i);
+  assert.match(cookingControls.title, /cooking task/i);
   assert.match(cookingControls.text, /cookware|ventilation/i);
 
   const hydronicOnly = createCustomerProjectPlan({
@@ -552,6 +566,19 @@ test("quick wins are conditional, practical and bounded by equipment and ventila
   assert.ok(hydronicControls);
   assert.match(hydronicControls.title, /heating and cooling controls/i);
   assert.doesNotMatch(hydronicControls.title, /filters/i);
+
+  const lightingAndPool = createCustomerProjectPlan({
+    goals: ["lower-bills"],
+    situation: "owner",
+    features: ["lighting-mostly-old", "pool-installed", "solar"],
+  });
+  const lightingAndPoolWins = new Map(
+    lightingAndPool.everydayActions.map((action) => [action.id, action]),
+  );
+  assert.match(lightingAndPoolWins.get("lighting-routine").title, /LEDs/i);
+  assert.match(lightingAndPoolWins.get("lighting-routine").text, /task lamp/i);
+  assert.match(lightingAndPoolWins.get("pool-spa-routine").text, /cover/i);
+  assert.match(lightingAndPoolWins.get("pool-spa-routine").text, /sanitation|filtration/i);
 });
 
 test("answered canonical facts become customer reported without weakening stronger sources", () => {
@@ -795,9 +822,25 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /questionId=\{currentStep\.featureQuestion\}/);
   assert.match(publicPlanner, /plannerFeatureSteps = customerHomeFeatureSections\.flatMap/);
   assert.match(publicPlanner, /featureQuestion: question\.id/);
-  assert.match(publicPlanner, /Question \$\{stepIndex \+ 1\} of \$\{questionCount\}/);
-  assert.match(publicPlanner, /Skip remaining home details/);
-  assert.match(publicPlanner, /Skip this question/);
+  assert.match(publicPlanner, /Question \$\{visibleQuestionNumber\} of \$\{visibleQuestionCount\}/);
+  assert.doesNotMatch(publicPlanner, /Skip remaining home details/);
+  assert.doesNotMatch(publicPlanner, /Skip this question/);
+  assert.match(publicPlanner, /Select Not sure whenever you do not safely know/);
+  assert.match(publicPlanner, /currentStep\.id === "property"/);
+  assert.match(publicPlanner, /propertyKey: "ageBand"/);
+  assert.match(publicPlanner, /propertyKey: "roofColour"/);
+  assert.match(publicPlanner, /propertyKey: "roofForm"/);
+  assert.match(publicPlanner, /propertyKey: "roofCondition"/);
+  assert.match(publicPlanner, /propertyKey: "wallConstruction"/);
+  assert.match(publicPlanner, /propertyKey: "floorConstruction"/);
+  assert.deepEqual(
+    customerProjectOptions.propertyTypes.at(-1),
+    ["not_sure", "Not sure"],
+  );
+  assert.match(publicPlanner, /floor-insulation-not-applicable/);
+  assert.match(publicPlanner, /floorConstruction === "slab_on_ground"/);
+  assert.match(publicPlanner, /featureQuestion === "floor-insulation"/);
+  assert.match(publicPlanner, /floorInsulationStepIndex/);
   assert.match(sharedIntake, /<fieldset/);
   assert.match(sharedIntake, /questionId\?: string/);
   assert.match(sharedIntake, /!questionId \|\| question\.id === questionId/);
@@ -813,7 +856,7 @@ test("the public planner uses the accessible shared intake and bounded query han
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
   assert.equal(
     CUSTOMER_PLAN_VERSION,
-    "2026-08-10-external-wall-taxonomy-v9",
+    "2026-08-10-complete-home-intake-v10",
   );
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
@@ -834,6 +877,12 @@ test("the taxonomy release is versioned and the previous plan remains migratable
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
       "2026-08-10-home-context-v8",
+    ),
+    true,
+  );
+  assert.equal(
+    CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
+      "2026-08-10-external-wall-taxonomy-v9",
     ),
     true,
   );

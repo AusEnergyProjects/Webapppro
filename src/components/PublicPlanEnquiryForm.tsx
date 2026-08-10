@@ -34,9 +34,17 @@ export type PublicPlanSnapshot = {
   propertyContext?: {
     propertyType?: string;
     storeys?: string;
+    ageBand?: string;
     floorArea?: string;
     occupants?: string;
     sharedWalls?: string;
+    roofType?: string;
+    roofColour?: string;
+    roofForm?: string;
+    roofCondition?: string;
+    switchboard?: string;
+    wallConstruction?: string;
+    floorConstruction?: string;
   };
 };
 
@@ -122,9 +130,17 @@ function submissionCoreKey({
       propertyContext: {
         propertyType: planSnapshot.propertyContext?.propertyType || "",
         storeys: planSnapshot.propertyContext?.storeys || "",
+        ageBand: planSnapshot.propertyContext?.ageBand || "",
         floorArea: planSnapshot.propertyContext?.floorArea || "",
         occupants: planSnapshot.propertyContext?.occupants || "",
         sharedWalls: planSnapshot.propertyContext?.sharedWalls || "",
+        roofType: planSnapshot.propertyContext?.roofType || "",
+        roofColour: planSnapshot.propertyContext?.roofColour || "",
+        roofForm: planSnapshot.propertyContext?.roofForm || "",
+        roofCondition: planSnapshot.propertyContext?.roofCondition || "",
+        switchboard: planSnapshot.propertyContext?.switchboard || "",
+        wallConstruction: planSnapshot.propertyContext?.wallConstruction || "",
+        floorConstruction: planSnapshot.propertyContext?.floorConstruction || "",
       },
     },
     consent: {

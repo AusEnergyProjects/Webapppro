@@ -74,7 +74,7 @@ test("sync registers the device, safely replays work and handles revocation", ()
 
 test("technician UI stays focused while retaining full field capability", () => {
   assert.match(work, /Assigned work/);
-  assert.match(work, /AEA protected/);
+  assert.match(work, /Australian Energy Assessments protected/);
   assert.match(job, /job\.workNumber/);
   assert.doesNotMatch(job, /setWorkNumber|changeWorkNumber|editWorkNumber/);
   assert.match(job, /advance_field_job/);

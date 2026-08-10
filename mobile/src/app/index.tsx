@@ -96,7 +96,7 @@ export default function SignInScreen() {
           {GOOGLE_CLIENT_ID ? <GoogleButton onError={setMessage} /> : null}
           <FieldButton variant="quiet" disabled={busy} onPress={() => void reset()}>Forgot password</FieldButton>
         </View>
-        <Text style={styles.privacy}>Only authorised installer team members can sign in. AEA protected customer contact details never enter this app.</Text>
+        <Text style={styles.privacy}>Only authorised installer team members can sign in. Australian Energy Assessments protected customer contact details never enter this app.</Text>
       </Screen>
     </KeyboardAvoidingView>
   );

@@ -57,7 +57,7 @@ export function TradeCommercialHandoffPanel({ user, workOrderId, isProtected, ha
 
   const refreshAll = useCallback(async () => { await Promise.all([load(), onChanged()]); }, [load, onChanged]);
 
-  if (isProtected) return <div className="crm-payment-boundary"><strong>AEA protected commercial boundary</strong><p>Acceptance, deposits and accounting for this customer remain inside the protected AEA process.</p></div>;
+  if (isProtected) return <div className="crm-payment-boundary"><strong>Australian Energy Assessments protected commercial boundary</strong><p>Acceptance, deposits and accounting for this customer remain inside the protected Australian Energy Assessments process.</p></div>;
   if (!hasDirectCustomer) return <section className="crm-commercial-handoff empty"><span>Accepted quote handoff</span><h4>Link your customer first</h4><p>A direct customer record is required before commercial details can leave TLink.</p></section>;
   if (!handoff) return <section className="crm-commercial-handoff empty"><span>Next step</span><h4>Issue the quote for acceptance</h4><p>Once the customer accepts, their exact scope and total will appear here automatically for deposit and accounting.</p>{status && <p role="status">{status}</p>}</section>;
 

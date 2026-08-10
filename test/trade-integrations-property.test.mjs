@@ -166,7 +166,7 @@ test("Sites exposes neither payment initiation nor checkout links", () => {
   assert.doesNotMatch(paymentUi, /checkoutUrl|Open checkout|Request with Stripe|Request with Square|<a\s/);
 });
 
-test("field records are owner or assigned-team scoped and protected customer sign-off stays with AEA", () => {
+test("field records are owner or assigned-team scoped and protected customer sign-off stays with Australian Energy Assessments", () => {
   for (const table of ["trade_crm_time_entries", "trade_crm_job_media", "trade_crm_signoffs"]) {
     assert.match(schema, new RegExp(`sqliteTable\\("${table}"`));
     assert.match(fieldMigration, new RegExp("CREATE TABLE `" + table + "`"));
@@ -177,7 +177,7 @@ test("field records are owner or assigned-team scoped and protected customer sig
   assert.match(fieldRoute, /firebase_uid = \?/);
   assert.match(fieldRoute, /job\.source_type === "opportunity" && signerRole === "customer"/);
   assert.match(fieldRoute, /PROTECTED_CUSTOMER/);
-  assert.match(fieldUi, /Customer sign-off stays with AEA/);
+  assert.match(fieldUi, /Customer sign-off stays with Australian Energy Assessments/);
   assert.match(fieldUi, /Technician time/);
   assert.match(fieldUi, /Photos and files/);
   assert.match(fieldUi, /Digital sign-off/);

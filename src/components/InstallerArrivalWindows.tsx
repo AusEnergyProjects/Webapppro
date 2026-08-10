@@ -69,7 +69,7 @@ export function InstallerArrivalWindows({ matchId, initialProposal, onStatus }: 
     {proposal.preparationAcknowledgedAt && <small>Customer site-preparation checklist acknowledged.</small>}
   </section>;
 
-  if (proposal?.status === "direct_contact") return <section className="installer-arrival-windows selected"><header><div><span>Customer reviewed</span><h4>Direct contact selected</h4></div></header><p>The customer chose to contact the business directly instead of selecting an arrival window. AEA administrators received an audit notification.</p></section>;
+  if (proposal?.status === "direct_contact") return <section className="installer-arrival-windows selected"><header><div><span>Customer reviewed</span><h4>Direct contact selected</h4></div></header><p>The customer chose to contact the business directly instead of selecting an arrival window. Australian Energy Assessments administrators received an audit notification.</p></section>;
 
   return <section className="installer-arrival-windows" aria-label="Customer arrival window proposal">
     <header><div><span>Accepted installer action</span><h4>Provide arrival windows for the customer</h4><p>Offer one to three windows. The customer reviews and selects an option before scheduling progresses.</p></div>{proposal && <strong>Revision {proposal.revision}</strong>}</header>

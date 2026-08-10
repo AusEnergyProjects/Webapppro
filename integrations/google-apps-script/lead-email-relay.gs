@@ -134,7 +134,7 @@ function opsPreviousState_(value) {
 function opsSendAlert_(status, checks, monitorId, occurredAt) {
   try {
     const failed = checks.filter(function(check) { return !check.ok; }).map(function(check) { return check.name; });
-    const subject = status === "healthy" ? "AEA Energy services recovered" : "AEA Energy service alert";
+    const subject = status === "healthy" ? "Australian Energy Assessments services recovered" : "Australian Energy Assessments service alert";
     const summary = status === "healthy" ? "All monitored services are healthy." : "Checks requiring attention: " + failed.join(", ") + ".";
     const rows = checks.map(function(check) {
       return check.name + ": " + (check.ok ? "healthy" : "failed") + " | HTTP " + check.status + " | " + check.durationMs + " ms";
@@ -284,7 +284,7 @@ function pruneAdminNotificationDedupe_(properties, now) {
 function sendAdminNotification_(alert) {
   const notification = alert.notification;
   const portalUrl = OPS_SITE_URL + alert.actionPath;
-  const subject = "AEA " + notification.priority.toUpperCase() + ": " + notification.title;
+  const subject = "Australian Energy Assessments " + notification.priority.toUpperCase() + ": " + notification.title;
   const body = notification.title + "\n\n" + notification.summary
     + "\n\nPriority: " + notification.priority
     + "\nCategory: " + notification.category

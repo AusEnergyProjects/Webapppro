@@ -14,7 +14,7 @@ export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-10-customer-selected-trade-sharing-v4";
 
 export const PUBLIC_PLAN_SNAPSHOT_VERSION =
-  "2026-08-10-bounded-public-plan-snapshot-v1";
+  "2026-08-10-complete-home-context-snapshot-v2";
 
 export const PUBLIC_PLAN_SUBMISSION_ID_PATTERN =
   /^\d{8}\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -107,9 +107,17 @@ export function normalizePublicPlanSnapshot(raw) {
   const allowedContextKeys = new Set([
     "propertyType",
     "storeys",
+    "ageBand",
     "floorArea",
     "occupants",
     "sharedWalls",
+    "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
+    "switchboard",
+    "wallConstruction",
+    "floorConstruction",
   ]);
   if (Object.keys(sourceContext).some((key) => !allowedContextKeys.has(key))) {
     return { ok: false, error: "The home summary contained an unsupported field." };
@@ -120,11 +128,31 @@ export function normalizePublicPlanSnapshot(raw) {
       "propertyTypes",
     ),
     storeys: propertyContextValue(sourceContext.storeys, "storeys"),
+    ageBand: propertyContextValue(sourceContext.ageBand, "ageBands"),
     floorArea: propertyContextValue(sourceContext.floorArea, "floorAreas"),
     occupants: propertyContextValue(sourceContext.occupants, "occupants"),
     sharedWalls: propertyContextValue(
       sourceContext.sharedWalls,
       "sharedWalls",
+    ),
+    roofType: propertyContextValue(sourceContext.roofType, "roofTypes"),
+    roofColour: propertyContextValue(sourceContext.roofColour, "roofColours"),
+    roofForm: propertyContextValue(sourceContext.roofForm, "roofForms"),
+    roofCondition: propertyContextValue(
+      sourceContext.roofCondition,
+      "roofConditions",
+    ),
+    switchboard: propertyContextValue(
+      sourceContext.switchboard,
+      "switchboards",
+    ),
+    wallConstruction: propertyContextValue(
+      sourceContext.wallConstruction,
+      "wallConstructions",
+    ),
+    floorConstruction: propertyContextValue(
+      sourceContext.floorConstruction,
+      "floorConstructions",
     ),
   };
   for (const key of Object.keys(propertyContext)) {

@@ -118,7 +118,7 @@ test("owners and dispatch roles receive server-enforced conflict and revision ch
 test("schedule payloads preserve customer privacy boundaries", () => {
   assert.match(route, /protectedJob =\s*row\.source_type === "opportunity" \|\|\s*row\.customer_source === "platform_private"/);
   assert.match(route, /LEFT JOIN trade_crm_customers c ON c\.id = d\.crm_customer_id AND c\.firebase_uid = w\.firebase_uid AND c\.record_status = 'active'/);
-  assert.match(route, /protectedJob \? "AEA protected customer"/);
+  assert.match(route, /protectedJob \? "Australian Energy Assessments protected customer"/);
   assert.match(route, /protectedJob\s*\?\s*row\.site_area \|\| "Protected service region"/);
   assert.match(route, /customer_business_name/);
   assert.match(route, /customer_first_name, row\.customer_last_name/);

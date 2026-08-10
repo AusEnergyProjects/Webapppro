@@ -177,6 +177,55 @@ test("home basics and considered work are bounded inputs to the neutral roadmap"
   assert.doesNotMatch(consideredCopy, /quote selected|recommended installer/i);
 });
 
+test("complete self-reported construction context changes professional verification without unsafe homework", () => {
+  const plan = createCustomerProjectPlan({
+    goals: ["add-solar-storage", "improve-comfort"],
+    pace: "staged",
+    situation: "owner",
+    propertyContext: {
+      propertyType: "townhouse",
+      storeys: "two",
+      ageBand: "1960_1999",
+      floorArea: "100_199",
+      occupants: "three_four",
+      sharedWalls: "one_side",
+      roofType: "tile",
+      roofColour: "dark",
+      roofForm: "pitched",
+      roofCondition: "known_issue",
+      switchboard: "not_sure",
+      wallConstruction: "brick_veneer",
+      floorConstruction: "slab_on_ground",
+    },
+  });
+
+  assert.deepEqual(plan.propertyContext, {
+    propertyType: "townhouse",
+    storeys: "two",
+    floorArea: "100_199",
+    occupants: "three_four",
+    sharedWalls: "one_side",
+    ageBand: "1960_1999",
+    roofType: "tile",
+    roofColour: "dark",
+    roofForm: "pitched",
+    roofCondition: "known_issue",
+    switchboard: "not_sure",
+    wallConstruction: "brick_veneer",
+    floorConstruction: "slab_on_ground",
+  });
+  const context = plan.items.find((item) => item.id === "home-planning-context");
+  assert.ok(context);
+  assert.match(context.title, /known roof issue/i);
+  assert.match(context.text, /dark coloured/i);
+  assert.match(context.text, /pitched or sloping roof/i);
+  assert.match(context.text, /brick veneer/i);
+  assert.match(context.text, /slab-on-ground/i);
+  assert.match(context.text, /licensed trade should verify switchboard type/i);
+  assert.match(context.text, /does not need to enter a roof space/i);
+  assert.doesNotMatch(context.text, /still to confirm/i);
+});
+
 test("legacy installer priorities are derived from goals and conflicting client choices are ignored", () => {
   const normalized = normalizeCustomerProject({
     ...baseProject,
@@ -246,6 +295,7 @@ test("everyday actions are deterministic, bounded and separate from the ordered 
       "condensation-moisture",
       "comfort-too-cold",
       "comfort-too-hot",
+      "draughty",
       "reverse-cycle",
       "single-glazing",
       "window-coverings-basic",
@@ -257,13 +307,16 @@ test("everyday actions are deterministic, bounded and separate from the ordered 
   const first = createCustomerProjectPlan(input);
   const second = createCustomerProjectPlan(input);
   assert.deepEqual(second.everydayActions, first.everydayActions);
-  assert.equal(first.everydayActions.length <= 6, true);
+  assert.equal(first.everydayActions.length <= 12, true);
   assert.deepEqual(
     first.everydayActions.map((action) => action.id),
     [
       "moisture-safe-routine",
       "personal-warmth-first",
+      "safe-draught-stopper",
       "use-existing-controls",
+      "appliance-routines",
+      "lighting-routine",
       "safe-seasonal-airflow",
       "seasonal-window-and-landscape",
       "renter-friendly-diy-boundary",
@@ -303,6 +356,13 @@ test("everyday actions have controlled triggers, safety boundaries and no produc
         features: ["reverse-cycle"],
       },
       expectedId: "use-existing-controls",
+    },
+    {
+      input: {
+        goals: ["improve-comfort"],
+        features: ["draughty"],
+      },
+      expectedId: "safe-draught-stopper",
     },
     {
       input: {
@@ -363,8 +423,8 @@ test("everyday actions have controlled triggers, safety boundaries and no produc
     /manufacturer directs|not a substitute for safe adequate heating/i,
   );
   assert.match(
-    actions.find((action) => action.id === "use-existing-controls").text,
-    /Do not disable hot-water safety cycles|bypass safety controls/i,
+    actions.find((action) => action.id === "hot-water-routine").text,
+    /disable safety cycles|bypass controls/i,
   );
   assert.match(
     actions.find((action) => action.id === "safe-seasonal-airflow").text,

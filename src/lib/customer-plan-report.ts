@@ -4,10 +4,18 @@ export type CustomerPlanReportAction = {
   stage: string;
   title: string;
   description: string;
+  whatToDo: string;
+  whyItMatters: string;
+  householdReason: string;
+  confirmBeforeWork: string[];
+  quoteChecklist: string[];
+  sequence: string;
+  safety: string;
   completed: boolean;
   priority: boolean;
   guideLabel: string;
   guideHref: string;
+  links: Array<{ label: string; href: string }>;
 };
 
 export type CustomerPlanReportView = {
@@ -18,6 +26,8 @@ export type CustomerPlanReportView = {
   summary: string;
   preparedDate: string;
   displayDate: string;
+  preparedFor: string;
+  customerSummary: string;
   copy: {
     brand: string;
     heroEyebrow: string;
@@ -89,6 +99,7 @@ export type CustomerPlanReportView = {
     category: string;
     title: string;
     description: string;
+    outcome: string;
   }>;
   everydayActionsBoundary: string;
   questions: Array<{
@@ -102,6 +113,11 @@ export type CustomerPlanReportView = {
   laterActions: CustomerPlanReportAction[];
   changeBoundary: string;
   beforeTrade: string[];
+  resources: Array<{
+    label: string;
+    description: string;
+    href: string;
+  }>;
   privacyNote: string;
   adviceBoundary: string;
 };

@@ -387,7 +387,7 @@ async function accessibleJobs(access: TeamAccess) {
       assigneeMemberId: row.assignee_member_id,
       assigneeLabel: row.assignee_label,
       protectedJob,
-      customerName: protectedJob ? "AEA protected customer" : directCustomer ? String(row.customer_name || "Direct customer") : "Internal job",
+      customerName: protectedJob ? "Australian Energy Assessments protected customer" : directCustomer ? String(row.customer_name || "Direct customer") : "Internal job",
       customerPhone: directCustomer ? String(row.customer_phone || "") : "",
       serviceAddress,
       appointmentId: row.appointment_id || "",

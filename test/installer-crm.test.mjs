@@ -56,10 +56,10 @@ test("platform households stay separate from installer-owned contacts", () => {
   assert.match(route, /sourceType === "opportunity" \? "platform_private"/);
   assert.match(route, /customerSource === "platform_private" \? ""/);
   assert.match(route, /platformPrivate \? ""/);
-  assert.match(crm, /AEA manages the household relationship/);
+  assert.match(crm, /Australian Energy Assessments manages the household relationship/);
   assert.match(crm, /project scope, broad service region and protected reference/);
   assert.match(crm, /Only add contacts who came directly to your business/);
-  assert.match(crm, /AEA protected households never appear here/);
+  assert.match(crm, /Australian Energy Assessments protected households never appear here/);
 });
 
 test("direct customers have full addresses while global TLink job IDs are read only", () => {

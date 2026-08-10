@@ -280,7 +280,7 @@ function documentStructureRoles(pdf, structureRoot) {
   return roles;
 }
 
-test("the shared report brandmark is the exact 96px AEA PNG", () => {
+test("the shared report brandmark is the exact 96px Australian Energy Assessments PNG", () => {
   assert.match(AEA_BRANDMARK_PNG_DATA_URI, /^data:image\/png;base64,/);
   const png = Buffer.from(
     AEA_BRANDMARK_PNG_DATA_URI.replace(/^data:image\/png;base64,/, ""),
@@ -581,7 +581,7 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
       urls.push(url);
       assert.match(
         annotation.get(PDFName.of("Contents")).decodeText(),
-        url.endsWith("/guides/heating") ? /guidance/i : /trusted resource/i,
+        /guidance|rebates|certificate|trusted resource/i,
       );
       assert.ok(
         annotation.lookup(PDFName.of("StructParent"), PDFNumber).asNumber()
@@ -592,8 +592,10 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
 
   assert.deepEqual(new Set(urls), new Set([
     "https://compare.ausenergyassessments.com/guides/heating",
-    "https://compare.ausenergyassessments.com/plan",
-    "https://compare.ausenergyassessments.com/assessments",
+    "https://compare.ausenergyassessments.com/rebates",
+    "https://compare.ausenergyassessments.com/calculator",
+    "https://compare.ausenergyassessments.com/compare",
+    "https://compare.ausenergyassessments.com/gas-compare",
   ]));
 });
 
@@ -626,7 +628,7 @@ test("personalised customer PDF includes the named home summary and trusted offi
     customerSummary: "Townhouse or terrace | postcode 3000 | VIC",
     resources: [
       {
-        label: "Review the AEA home energy plan",
+        label: "Review the Australian Energy Assessments home energy plan",
         description: "Update the plan when the home changes.",
         href: "/plan",
       },
@@ -655,8 +657,20 @@ test("personalised customer PDF includes the named home summary and trusted offi
   assert.match(text, /Trusted tools and official information/);
   assert.match(text, /Turn this roadmap into a clear first conversation/);
   assert.match(text, /Prepare once for an assessor or trade/);
+  assert.match(text, /WHAT TO DO/);
+  assert.match(text, /WHY IT MATTERS/);
+  assert.match(text, /WHY THIS APPLIES TO YOUR HOME/);
+  assert.match(text, /CONFIRM BEFORE QUOTING/);
+  assert.match(text, /QUOTE AND EVIDENCE CHECKLIST/);
+  assert.match(text, /SEQUENCE AND DEPENDENCIES/);
+  assert.match(text, /SAFETY BOUNDARY/);
+  assert.doesNotMatch(text, /\bAEA\b/);
+  assert.doesNotMatch(text, /Questions that could|Home details to check/i);
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/calculator"));
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/rebates"));
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/compare"));
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/gas-compare"));
   assert.ok(urls.includes("https://compare.ausenergyassessments.com/plan"));
-  assert.ok(urls.includes("https://compare.ausenergyassessments.com/assessments"));
   assert.ok(urls.includes("https://www.energy.gov.au/households"));
   assert.equal(
     customerPlanPdfFileName(report),
@@ -856,7 +870,7 @@ test("maximum bounded roadmap produces a complete multi-page A4 PDF", async () =
   const pdf = await PDFDocument.load(maximumBytes);
   const pageTexts = extractedPdfPageTexts(pdf);
   const roadmapHeadingPage = pageTexts.find((text) =>
-    text.includes("Build the rest of your roadmap")
+    text.includes("Your complete ordered plan")
   );
   const decisionHeadingPage = pageTexts.find((text) =>
     text.includes("How your priorities were chosen")

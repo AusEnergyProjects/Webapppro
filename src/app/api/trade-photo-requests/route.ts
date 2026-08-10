@@ -72,7 +72,7 @@ function responseForError(error: unknown) {
   if (code === "PHOTO_REQUEST_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage customer photo requests." }, 403);
   if (code === "JOB_NOT_FOUND" || code === "DIRECT_JOB_NOT_FOUND") return adminJson({ ok: false, error: "Direct customer job not found." }, 404);
   if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Link a customer your business owns before requesting photos." }, 409);
-  if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "AEA protected customer evidence must stay in the AEA customer pathway." }, 403);
+  if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Australian Energy Assessments protected customer evidence must stay in the Australian Energy Assessments customer pathway." }, 403);
   if (code === "INVALID_PHOTO_REQUIREMENTS") return adminJson({ ok: false, error: "Add between 1 and 12 complete, uniquely named photo requirements." }, 400);
   if (code === "PHOTO_REQUEST_NOT_FOUND") return adminJson({ ok: false, error: "Create the photo request before issuing a link." }, 404);
   if (code === "PHOTO_REQUEST_CHANGED") return adminJson({ ok: false, error: "This request changed in another session. Reload before saving again." }, 409);

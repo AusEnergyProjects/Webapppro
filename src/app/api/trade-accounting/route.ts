@@ -45,7 +45,7 @@ function accountingError(error: unknown) {
   if (["PROFILE_REQUIRED", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "ACCOUNT_INACTIVE"].includes(code)) {
     return adminJson({ ok: false, error: "Accounting export is not available to this account." }, 403);
   }
-  if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. AEA protected customer details cannot be sent to an accounting provider." }, 403);
+  if (code === "DIRECT_CUSTOMER_REQUIRED") return adminJson({ ok: false, error: "Accounting export is only available for customers who contacted your business directly. Australian Energy Assessments protected customer details cannot be sent to an accounting provider." }, 403);
   if (code === "ACCEPTED_HANDOFF_REQUIRED") return adminJson({ ok: false, error: "Accept a current quote before preparing its accounting draft." }, 409);
   if (code === "QUICK_INVOICE_REQUIRED") return adminJson({ ok: false, error: "Create the TLink quick invoice before preparing its accounting draft." }, 409);
   if (code === "QUICK_INVOICE_CREDITED") return adminJson({ ok: false, error: "This TLink invoice has a credit. Keep it in TLink until provider credit-note export is added." }, 409);

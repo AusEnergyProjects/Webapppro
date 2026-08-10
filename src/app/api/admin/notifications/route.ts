@@ -229,7 +229,7 @@ export async function PATCH(request: Request) {
         eventType: "platform.admin_alert_test",
         category: "platform",
         priority: "high",
-        title: "AEA operations alert test",
+        title: "Australian Energy Assessments operations alert test",
         summary: "The private off-screen operations alert channel is connected and accepting privacy-safe notifications.",
         entityType: "platform_service",
         entityId: "admin_alert_delivery",

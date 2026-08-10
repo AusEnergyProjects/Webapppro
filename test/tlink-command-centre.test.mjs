@@ -30,7 +30,7 @@ test("the TLink command centre uses a bounded role scoped server search", () => 
   assert.match(searchRoute, /entitlements\.features\.installer_marketplace/);
   assert.match(searchRoute, /entitlements\.features\.team_access/);
   assert.match(command, /partnerType === "installer"/);
-  assert.match(command, /AEA protected household contact details are never indexed/);
+  assert.match(command, /Australian Energy Assessments protected household contact details are never indexed/);
   assert.doesNotMatch(searchRoute, /address_line_1|private_notes|source_reference/);
 });
 

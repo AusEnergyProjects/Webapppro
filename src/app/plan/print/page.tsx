@@ -47,6 +47,14 @@ type CustomerPlan = {
     floorArea: string;
     occupants?: string;
     sharedWalls?: string;
+    ageBand?: string;
+    roofType?: string;
+    roofColour?: string;
+    roofForm?: string;
+    roofCondition?: string;
+    switchboard?: string;
+    wallConstruction?: string;
+    floorConstruction?: string;
   };
   title: string;
   summary: string;
@@ -103,6 +111,14 @@ export default async function PrintableHomeEnergyPlanPage({
     floorArea: value(params.floorArea),
     occupants: value(params.occupants),
     sharedWalls: value(params.sharedWalls),
+    ageBand: value(params.ageBand),
+    roofType: value(params.roofType),
+    roofColour: value(params.roofColour),
+    roofForm: value(params.roofForm),
+    roofCondition: value(params.roofCondition),
+    switchboard: value(params.switchboard),
+    wallConstruction: value(params.wallConstruction),
+    floorConstruction: value(params.floorConstruction),
   });
   const plan = createCustomerProjectPlan({
     goals: suppliedGoals.length ? suppliedGoals : ["lower-bills"],
@@ -147,6 +163,30 @@ export default async function PrintableHomeEnergyPlanPage({
   if (plan.propertyContext.sharedWalls) {
     returnParams.set("sharedWalls", plan.propertyContext.sharedWalls);
   }
+  if (plan.propertyContext.ageBand) {
+    returnParams.set("ageBand", plan.propertyContext.ageBand);
+  }
+  if (plan.propertyContext.roofType) {
+    returnParams.set("roofType", plan.propertyContext.roofType);
+  }
+  if (plan.propertyContext.roofColour) {
+    returnParams.set("roofColour", plan.propertyContext.roofColour);
+  }
+  if (plan.propertyContext.roofForm) {
+    returnParams.set("roofForm", plan.propertyContext.roofForm);
+  }
+  if (plan.propertyContext.roofCondition) {
+    returnParams.set("roofCondition", plan.propertyContext.roofCondition);
+  }
+  if (plan.propertyContext.switchboard) {
+    returnParams.set("switchboard", plan.propertyContext.switchboard);
+  }
+  if (plan.propertyContext.wallConstruction) {
+    returnParams.set("wallConstruction", plan.propertyContext.wallConstruction);
+  }
+  if (plan.propertyContext.floorConstruction) {
+    returnParams.set("floorConstruction", plan.propertyContext.floorConstruction);
+  }
 
   const propertyType = optionLabel(
     customerProjectOptions.propertyTypes,
@@ -157,6 +197,14 @@ export default async function PrintableHomeEnergyPlanPage({
     optionLabel(customerProjectOptions.floorAreas, plan.propertyContext.floorArea),
     optionLabel(customerProjectOptions.occupants, plan.propertyContext.occupants || ""),
     optionLabel(customerProjectOptions.sharedWalls, plan.propertyContext.sharedWalls || ""),
+    optionLabel(customerProjectOptions.ageBands, plan.propertyContext.ageBand || ""),
+    optionLabel(customerProjectOptions.roofTypes, plan.propertyContext.roofType || ""),
+    optionLabel(customerProjectOptions.roofColours, plan.propertyContext.roofColour || ""),
+    optionLabel(customerProjectOptions.roofForms, plan.propertyContext.roofForm || ""),
+    optionLabel(customerProjectOptions.roofConditions, plan.propertyContext.roofCondition || ""),
+    optionLabel(customerProjectOptions.switchboards, plan.propertyContext.switchboard || ""),
+    optionLabel(customerProjectOptions.wallConstructions, plan.propertyContext.wallConstruction || ""),
+    optionLabel(customerProjectOptions.floorConstructions, plan.propertyContext.floorConstruction || ""),
   ].filter(Boolean);
 
   const context = [
@@ -197,6 +245,20 @@ export default async function PrintableHomeEnergyPlanPage({
         || "Not recorded",
       state: addressState || "Not recorded",
       homeDetails,
+      homeFacts: {
+        storeys: optionLabel(customerProjectOptions.storeys, plan.propertyContext.storeys),
+        ageBand: optionLabel(customerProjectOptions.ageBands, plan.propertyContext.ageBand || ""),
+        floorArea: optionLabel(customerProjectOptions.floorAreas, plan.propertyContext.floorArea),
+        occupants: optionLabel(customerProjectOptions.occupants, plan.propertyContext.occupants || ""),
+        sharedWalls: optionLabel(customerProjectOptions.sharedWalls, plan.propertyContext.sharedWalls || ""),
+        roofType: optionLabel(customerProjectOptions.roofTypes, plan.propertyContext.roofType || ""),
+        roofColour: optionLabel(customerProjectOptions.roofColours, plan.propertyContext.roofColour || ""),
+        roofForm: optionLabel(customerProjectOptions.roofForms, plan.propertyContext.roofForm || ""),
+        roofCondition: optionLabel(customerProjectOptions.roofConditions, plan.propertyContext.roofCondition || ""),
+        switchboard: optionLabel(customerProjectOptions.switchboards, plan.propertyContext.switchboard || ""),
+        wallConstruction: optionLabel(customerProjectOptions.wallConstructions, plan.propertyContext.wallConstruction || ""),
+        floorConstruction: optionLabel(customerProjectOptions.floorConstructions, plan.propertyContext.floorConstruction || ""),
+      },
     },
     evidence: null,
     existingFeatures: plan.features,

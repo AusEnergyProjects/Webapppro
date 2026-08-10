@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Australian Energy Assessments",
-    short_name: "AEA Energy",
+    short_name: "Australian Energy Assessments",
     description: "Private home energy planning, plan comparison and project preparation tools.",
     start_url: "/",
     display: "standalone",

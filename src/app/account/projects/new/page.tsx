@@ -47,6 +47,60 @@ export default async function NewCustomerProjectPage({ searchParams }: NewProjec
     goalOptions.has(item),
   );
   const postcode = value(query.postcode);
+  const propertySelection = {
+    propertyType: controlledValue(
+      query.propertyType,
+      optionSet(customerProjectOptions.propertyTypes),
+    ),
+    storeys: controlledValue(
+      query.storeys,
+      optionSet(customerProjectOptions.storeys),
+    ),
+    ageBand: controlledValue(
+      query.ageBand,
+      optionSet(customerProjectOptions.ageBands),
+    ),
+    floorArea: controlledValue(
+      query.floorArea,
+      optionSet(customerProjectOptions.floorAreas),
+    ),
+    occupants: controlledValue(
+      query.occupants,
+      optionSet(customerProjectOptions.occupants),
+    ),
+    sharedWalls: controlledValue(
+      query.sharedWalls,
+      optionSet(customerProjectOptions.sharedWalls),
+    ),
+    roofType: controlledValue(
+      query.roofType,
+      optionSet(customerProjectOptions.roofTypes),
+    ),
+    roofColour: controlledValue(
+      query.roofColour,
+      optionSet(customerProjectOptions.roofColours),
+    ),
+    roofForm: controlledValue(
+      query.roofForm,
+      optionSet(customerProjectOptions.roofForms),
+    ),
+    roofCondition: controlledValue(
+      query.roofCondition,
+      optionSet(customerProjectOptions.roofConditions),
+    ),
+    switchboard: controlledValue(
+      query.switchboard,
+      optionSet(customerProjectOptions.switchboards),
+    ),
+    wallConstruction: controlledValue(
+      query.wallConstruction,
+      optionSet(customerProjectOptions.wallConstructions),
+    ),
+    floorConstruction: controlledValue(
+      query.floorConstruction,
+      optionSet(customerProjectOptions.floorConstructions),
+    ),
+  };
   return <CustomerDashboard initialView="new" initialPlannerSelection={{
     goal: goals[0],
     goals,
@@ -73,6 +127,7 @@ export default async function NewCustomerProjectPage({ searchParams }: NewProjec
     categories: values(query.category, 12).filter((item) =>
       categoryOptions.has(item),
     ),
+    ...propertySelection,
     postcode: postcode && /^\d{4}$/.test(postcode) ? postcode : undefined,
   }} />;
 }

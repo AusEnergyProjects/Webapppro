@@ -1,5 +1,5 @@
 export const CUSTOMER_PLAN_REPORT_DESIGN_VERSION =
-  "2026-08-10-personalised-report-design-v3";
+  "2026-08-10-professional-personalised-report-design-v4";
 
 export const customerPlanReportColors = Object.freeze({
   navy: "#063448",
@@ -56,36 +56,36 @@ export const customerPlanReportLayout = Object.freeze({
 export const customerPlanReportCopy = Object.freeze({
   brand: "Australian Energy Assessments",
   heroEyebrow: "Your personalised home energy plan",
-  heroTitle: "Your home energy roadmap",
+  heroTitle: "A practical plan for a more comfortable, efficient home",
   heroIntro:
-    "See what to do now, what to check and what can wait.",
-  snapshotEyebrow: "Your home at a glance",
-  snapshotTitle: "Your plan in one view",
+    "Your answers have been turned into an ordered scope, clear checks and useful next steps.",
+  snapshotEyebrow: "Executive summary",
+  snapshotTitle: "Your home and the decisions that come first",
   readinessEyebrow: "Before you spend",
   climateEyebrow: "Planning for your climate",
   startEyebrow: "Start here",
-  startTitle: "Start with these three moves",
+  startTitle: "Your first three priorities",
   startIntro:
-    "These reduce uncertainty first. Work through them before committing to larger upgrades.",
-  everydayEyebrow: "Quick comfort wins",
-  everydayTitle: "Comfort wins you can try this week",
+    "Each step includes what to do, why it matters, what applies to this home and what a useful quote must contain.",
+  everydayEyebrow: "Energy-saving actions",
+  everydayTitle: "Useful actions you can take now",
   everydayIntro:
-    "Use the ideas that suit your home. Skip anything unsafe, unsuitable or against the product instructions.",
+    "These are tailored to the answers in this plan. Use only what is safe and suitable for the household.",
   whyEyebrow: "Why this order",
   whyTitle: "How your priorities were chosen",
   roadmapEyebrow: "Your step-by-step plan",
-  roadmapTitle: "Build the rest of your roadmap",
+  roadmapTitle: "Your complete ordered plan",
   roadmapIntro:
-    "Each step appears once. A site check or new information can still change the order.",
+    "Work through the sequence in order. Unknown details are listed inside the step where they affect scope, safety or price.",
   completedEyebrow: "Plan progress",
   completedTitle: "Every step in this plan is marked complete",
   completedIntro:
     "Keep this copy for your records. Review it if your home, equipment or priorities change.",
   tradeEyebrow: "Before you book a trade",
-  tradeTitle: "Three checks that protect your budget",
+  tradeTitle: "Use the same evidence checklist for every quote",
   privacyEyebrow: "Private by design",
   privacyTitle: "Useful detail without exposing private information",
-  guideLabel: "Open the helpful guide",
+  guideLabel: "Open the related Australian Energy Assessments guide",
   footer:
     "Independent, brand-neutral home energy guidance",
 });
@@ -121,17 +121,13 @@ export function customerPlanReadinessPresentation(
   const total = Math.max(0, Number(readiness?.total || 0));
   const missing = Math.max(0, Number(readiness?.missing || 0));
   const notSure = Math.max(0, Number(readiness?.notSure || 0));
-  let title = "This plan is ready for a first review.";
+  let title = "This plan is ready to use as a planning and quoting brief.";
   if (total && missing > 0) {
-    title = `${missing} of ${total} home detail${
-      missing === 1 ? "" : "s"
-    } still need a quick check.`;
+    title = "This plan is ready to use. Remaining site confirmations are placed inside the affected steps.";
   } else if (total && notSure > 0) {
-    title = `All ${total} key questions are covered. ${
-      notSure
-    } answer${notSure === 1 ? " is" : "s are"} still marked "Not sure".`;
+    title = "This plan is ready to use. Details marked \"Not sure\" are handled inside the relevant steps.";
   } else if (total) {
-    title = `All ${total} key home questions are covered.`;
+    title = `All ${total} key home details are covered.`;
   }
   const body = String(
     readiness?.boundary

@@ -204,7 +204,7 @@ function fieldError(error: unknown) {
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to your team account." }, 403);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field tools require team access on the installer account." }, 403);
-  if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Customer sign-off for an AEA protected job must stay in the AEA customer pathway." }, 403);
+  if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Customer sign-off for an Australian Energy Assessments protected job must stay in the Australian Energy Assessments customer pathway." }, 403);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Job file storage is not available." }, 503);
   if (code === "FIELD_TRANSITION_CONFLICT") return adminJson({ ok: false, error: "The job changed on another device. Refresh before trying again." }, 409);
   return adminJson({ ok: false, error: "The field-work record could not be completed." }, 500);
@@ -277,7 +277,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
   const action = Object.entries(FIELD_TRANSITIONS).find(([, transition]) => transition.from === appointmentStatus);
   const fieldJob = job ? { id: job.id, workNumber: job.work_number, title: job.title, status: appointmentStatus || job.stage,
-    customerName: direct ? String(job.customer_name || "Direct customer") : job.source_type === "opportunity" ? "AEA protected customer" : "Internal job",
+    customerName: direct ? String(job.customer_name || "Direct customer") : job.source_type === "opportunity" ? "Australian Energy Assessments protected customer" : "Internal job",
     serviceSite: direct ? String(job.site_label || job.suburb || "Service site") : String(job.site_area || "Protected service area"),
     scheduledStart: job.starts_at || job.scheduled_start, scheduledEnd: job.ends_at || job.scheduled_end,
     appointmentId: String(job.appointment_id || ""), primaryAction: action ? { action: action[0], label: action[1].label } : null,

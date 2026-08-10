@@ -395,8 +395,15 @@ type CustomerProject = {
     storeys: string;
     ageBand: string;
     floorArea: string;
+    occupants: string;
+    sharedWalls: string;
     roofType: string;
+    roofColour: string;
+    roofForm: string;
+    roofCondition: string;
     switchboard: string;
+    wallConstruction: string;
+    floorConstruction: string;
     approvalContext: string;
     accessConstraints: string[];
   };
@@ -413,8 +420,15 @@ type CustomerProject = {
       storeys: string;
       ageBand: string;
       floorArea: string;
+      occupants: string;
+      sharedWalls: string;
       roofType: string;
+      roofColour: string;
+      roofForm: string;
+      roofCondition: string;
       switchboard: string;
+      wallConstruction: string;
+      floorConstruction: string;
     };
   };
   planRevision: number;
@@ -623,8 +637,15 @@ function projectDefaults(profile: CustomerProfile | null): ProjectDraft {
       storeys: "",
       ageBand: "",
       floorArea: "",
+      occupants: "",
+      sharedWalls: "",
       roofType: "",
+      roofColour: "",
+      roofForm: "",
+      roofCondition: "",
       switchboard: "",
+      wallConstruction: "",
+      floorConstruction: "",
       approvalContext: "none",
       accessConstraints: [],
     },
@@ -653,6 +674,19 @@ function projectDefaultsWithSelection(
     approvalContext?: string;
     budgetRange?: string;
     addressState?: string;
+    propertyType?: string;
+    storeys?: string;
+    ageBand?: string;
+    floorArea?: string;
+    occupants?: string;
+    sharedWalls?: string;
+    roofType?: string;
+    roofColour?: string;
+    roofForm?: string;
+    roofCondition?: string;
+    switchboard?: string;
+    wallConstruction?: string;
+    floorConstruction?: string;
     features?: string[];
     categories?: string[];
     postcode?: string;
@@ -676,11 +710,27 @@ function projectDefaultsWithSelection(
       : draft.householdSituation,
     existingFeatures: selection.features || draft.existingFeatures,
     serviceCategories: selection.categories || draft.serviceCategories,
+    propertyType: selection.propertyType || draft.propertyType,
     postcode: selection.postcode || draft.postcode,
     addressState: selection.addressState || draft.addressState,
     budgetRange: selection.budgetRange || draft.budgetRange,
     propertyContext: {
       ...draft.propertyContext,
+      storeys: selection.storeys || draft.propertyContext.storeys,
+      ageBand: selection.ageBand || draft.propertyContext.ageBand,
+      floorArea: selection.floorArea || draft.propertyContext.floorArea,
+      occupants: selection.occupants || draft.propertyContext.occupants,
+      sharedWalls: selection.sharedWalls || draft.propertyContext.sharedWalls,
+      roofType: selection.roofType || draft.propertyContext.roofType,
+      roofColour: selection.roofColour || draft.propertyContext.roofColour,
+      roofForm: selection.roofForm || draft.propertyContext.roofForm,
+      roofCondition:
+        selection.roofCondition || draft.propertyContext.roofCondition,
+      switchboard: selection.switchboard || draft.propertyContext.switchboard,
+      wallConstruction:
+        selection.wallConstruction || draft.propertyContext.wallConstruction,
+      floorConstruction:
+        selection.floorConstruction || draft.propertyContext.floorConstruction,
       approvalContext:
         selection.approvalContext || draft.propertyContext.approvalContext,
     },
@@ -1218,8 +1268,15 @@ function ProjectEditor({
         storeys: draft.propertyContext.storeys,
         ageBand: draft.propertyContext.ageBand,
         floorArea: draft.propertyContext.floorArea,
+        occupants: draft.propertyContext.occupants,
+        sharedWalls: draft.propertyContext.sharedWalls,
         roofType: draft.propertyContext.roofType,
+        roofColour: draft.propertyContext.roofColour,
+        roofForm: draft.propertyContext.roofForm,
+        roofCondition: draft.propertyContext.roofCondition,
         switchboard: draft.propertyContext.switchboard,
+        wallConstruction: draft.propertyContext.wallConstruction,
+        floorConstruction: draft.propertyContext.floorConstruction,
       },
     },
   });
@@ -4622,7 +4679,7 @@ function ArrivalCoordination({
           Contact installer directly
         </button>
         <small>
-          AEA records this choice so administrators can see that the connection
+          Australian Energy Assessments records this choice so administrators can see that the connection
           may continue outside TLink.
         </small>
       </article>
@@ -4658,8 +4715,8 @@ function ArrivalCoordination({
           </div>
         </dl>
         <small>
-          AEA recorded that you chose direct contact. Agreements or arrangements
-          made outside TLink may not be visible to AEA.
+          Australian Energy Assessments recorded that you chose direct contact. Agreements or arrangements
+          made outside TLink may not be visible to Australian Energy Assessments.
         </small>
       </article>
     );
@@ -5577,7 +5634,7 @@ function ProjectDetail({
                 <p>
                   The installer provides up to three arrival windows. Contacting
                   them directly is the fourth option and records a notice for
-                  AEA administrators.
+                  Australian Energy Assessments administrators.
                 </p>
               </div>
               {project.quotes
@@ -5929,6 +5986,19 @@ export function CustomerDashboard({
     approvalContext?: string;
     budgetRange?: string;
     addressState?: string;
+    propertyType?: string;
+    storeys?: string;
+    ageBand?: string;
+    floorArea?: string;
+    occupants?: string;
+    sharedWalls?: string;
+    roofType?: string;
+    roofColour?: string;
+    roofForm?: string;
+    roofCondition?: string;
+    switchboard?: string;
+    wallConstruction?: string;
+    floorConstruction?: string;
     features?: string[];
     categories?: string[];
     postcode?: string;
@@ -5983,6 +6053,19 @@ export function CustomerDashboard({
         initialPlannerSelection.approvalContext ||
         initialPlannerSelection.budgetRange ||
         initialPlannerSelection.addressState ||
+        initialPlannerSelection.propertyType ||
+        initialPlannerSelection.storeys ||
+        initialPlannerSelection.ageBand ||
+        initialPlannerSelection.floorArea ||
+        initialPlannerSelection.occupants ||
+        initialPlannerSelection.sharedWalls ||
+        initialPlannerSelection.roofType ||
+        initialPlannerSelection.roofColour ||
+        initialPlannerSelection.roofForm ||
+        initialPlannerSelection.roofCondition ||
+        initialPlannerSelection.switchboard ||
+        initialPlannerSelection.wallConstruction ||
+        initialPlannerSelection.floorConstruction ||
         initialPlannerSelection.postcode),
   );
 
@@ -6603,7 +6686,7 @@ export function CustomerDashboard({
         );
       else if (action === "select_installer_contact")
         setStatus(
-          "Installer business contact details are now available. AEA administrators were notified of the direct-contact choice.",
+          "Installer business contact details are now available. Australian Energy Assessments administrators were notified of the direct-contact choice.",
         );
       else if (action === "acknowledge_arrival_preparation")
         setStatus("Site preparation confirmed for the CRM appointment.");
@@ -7460,7 +7543,7 @@ export function CustomerDashboard({
                 <article>
                   <span>Installer options</span>
                   <strong>{responseCount}</strong>
-                  <small>replies kept inside AEA</small>
+                  <small>replies kept inside Australian Energy Assessments</small>
                 </article>
                 <article className="privacy">
                   <span>Your details</span>

@@ -1466,11 +1466,11 @@ export function DirectTradeDashboard() {
                 }}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
                 <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
                 <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
-                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>AEA protected opportunities</small></button>
+                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
                 <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">06</b><span>Products</span><small>Approved trade catalogue</small></button>
                 <button type="button" className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">07</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
                 <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">08</b><span>Business</span><small>Settings and verification</small></button>
-                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>AEA leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
+                <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
               {workspace === "work" && <TradeBusinessHub

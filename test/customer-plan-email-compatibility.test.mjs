@@ -125,6 +125,28 @@ function maximumEmailDocument() {
       "This is independent general guidance",
       700,
     ),
+    resources: [
+      {
+        label: "Estimate certificate and rebate value",
+        description: "Use the Australian Energy Assessments calculator.",
+        href: "/calculator",
+      },
+      {
+        label: "Find current rebates and support",
+        description: "Review current support before accepting a quote.",
+        href: "/rebates",
+      },
+      {
+        label: "Compare electricity plans",
+        description: "Continue with the guided electricity comparison.",
+        href: "/compare",
+      },
+      {
+        label: "Compare gas plans",
+        description: "Continue with the guided gas comparison where relevant.",
+        href: "/gas-compare",
+      },
+    ],
   };
 }
 
@@ -195,6 +217,12 @@ test("true maximum plan email stays below clipping risk with explicit plain text
   assert.match(text, /Some longer wording was shortened for email readability/);
   assert.match(html, /Private by design/i);
   assert.match(text, /PRIVATE BY DESIGN/);
+  assert.match(html, /Australian Energy Assessments/);
+  assert.match(text, /Australian Energy Assessments/);
+  assert.doesNotMatch(html, />[^<]*\bAEA\b[^<]*</);
+  assert.doesNotMatch(text, /\bAEA\b/);
+  assert.doesNotMatch(html, /Questions that could|Home details to check/i);
+  assert.doesNotMatch(text, /Questions that could|Home details to check/i);
 });
 
 test("email markup uses conservative table layout and inline client fallbacks", () => {
@@ -276,11 +304,17 @@ test("email markup keeps one accessible hosted brandmark and trusted links", () 
   assert.match(images[0], /\bheight="32"/);
   assert.match(images[0], /\balt=""/);
   assert.ok(links.length >= 6);
-  assert.ok(links.length < 40);
+  assert.ok(links.length < 50);
   for (const link of links) {
     assert.match(
       link,
-      /^https:\/\/compare\.ausenergyassessments\.com\/guides\//,
+      /^https:\/\/compare\.ausenergyassessments\.com\/(?:guides\/|calculator$|rebates$|compare$|gas-compare$)/,
+    );
+  }
+  for (const href of ["calculator", "rebates", "compare", "gas-compare"]) {
+    assert.ok(
+      links.includes(`https://compare.ausenergyassessments.com/${href}`),
+      `email is missing the guided ${href} link`,
     );
   }
 });

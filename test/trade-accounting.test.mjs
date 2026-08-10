@@ -61,7 +61,7 @@ test("server blocks protected jobs before provider export", () => {
   assert.match(route, /row\.source_type !== "internal"/);
   assert.match(route, /row\.customer_source !== "trade_owned"/);
   assert.match(route, /DIRECT_CUSTOMER_REQUIRED/);
-  assert.match(route, /AEA protected customer details cannot be sent to an accounting provider/);
+  assert.match(route, /Australian Energy Assessments protected customer details cannot be sent to an accounting provider/);
 });
 
 test("exports are drafts, do not email, and refresh provider totals", () => {

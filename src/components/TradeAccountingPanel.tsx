@@ -106,7 +106,7 @@ export function TradeAccountingPanel({
     finally { setBusy(""); }
   }
 
-  if (isProtected) return <div className="crm-payment-boundary"><strong>AEA protected accounting boundary</strong><p>Customer identity and address details cannot be exported to an installer accounting account. AEA will mediate this customer&apos;s paperwork.</p></div>;
+  if (isProtected) return <div className="crm-payment-boundary"><strong>Australian Energy Assessments protected accounting boundary</strong><p>Customer identity and address details cannot be exported to an installer accounting account. Australian Energy Assessments will mediate this customer&apos;s paperwork.</p></div>;
   if (!hasDirectCustomer) return <div className="crm-accounting-panel"><header><div><span>Accounting invoice</span><h4>Prepare a draft</h4><p>Link one of your own direct customers to this job before exporting customer details.</p></div></header></div>;
 
   const document = documents[0];

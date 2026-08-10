@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-08-10-external-wall-taxonomy-v9";
+export const CUSTOMER_PLAN_VERSION = "2026-08-10-complete-home-intake-v10";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -29,6 +29,7 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-08-09-guided-home-systems-v6",
   "2026-08-10-quick-wins-home-systems-v7",
   "2026-08-10-home-context-v8",
+  "2026-08-10-external-wall-taxonomy-v9",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -36,7 +37,7 @@ export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
 const LEGACY_CUSTOMER_PLAN_VERSIONS = new Set(CUSTOMER_LEGACY_PLAN_VERSIONS);
 export const MAX_CUSTOMER_PROJECTS = 40;
 export const MAX_OPEN_CUSTOMER_OPPORTUNITIES = 5;
-export const MAX_HOME_FEATURE_SELECTIONS = 32;
+export const MAX_HOME_FEATURE_SELECTIONS = 36;
 
 export const customerHomeFeatureSections = [
   {
@@ -153,6 +154,20 @@ export const customerHomeFeatureSections = [
           ["external-shading", "Some sun-exposed windows have useful external shade"],
           ["external-shading-most", "Most sun-exposed windows have effective external shade"],
           ["external-shading-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "sun-exposure",
+        label: "Direct sun on the main living areas",
+        help: "Choose the closest safe observation. This helps separate morning glare from afternoon overheating without asking you to measure orientation.",
+        mode: "single",
+        unknownValue: "sun-exposure-unknown",
+        options: [
+          ["sun-exposure-morning", "Mostly morning sun"],
+          ["sun-exposure-afternoon", "Mostly afternoon sun"],
+          ["sun-exposure-both", "Strong sun at different times of day"],
+          ["sun-exposure-little", "Little direct sun"],
+          ["sun-exposure-unknown", "Not sure"],
         ],
       },
     ],
@@ -312,6 +327,41 @@ export const customerHomeFeatureSections = [
           ["ev", "An electric vehicle is owned or planned"],
           ["ev-none", "No electric vehicle is owned or planned"],
           ["ev-unknown", "Not sure"],
+        ],
+      },
+    ],
+  },
+  {
+    id: "lighting-pool",
+    title: "Lighting, pool and spa",
+    description: "These can be useful everyday energy-saving opportunities when they are present.",
+    questions: [
+      {
+        id: "lighting",
+        label: "Lighting used most often",
+        help: "Choose the closest answer. You do not need to count every light.",
+        mode: "single",
+        unknownValue: "lighting-unknown",
+        options: [
+          ["lighting-mostly-led", "Mostly LED lights"],
+          ["lighting-mixed", "A mix of LED and older lights"],
+          ["lighting-mostly-old", "Mostly halogen, incandescent or older lights"],
+          ["lighting-unknown", "Not sure"],
+        ],
+      },
+      {
+        id: "pool-spa",
+        label: "Pool or spa at the property",
+        help: "Include equipment you are responsible for operating.",
+        mode: "single",
+        noneValue: "pool-spa-none",
+        unknownValue: "pool-spa-unknown",
+        options: [
+          ["pool-installed", "A pool is present"],
+          ["spa-installed", "A spa is present"],
+          ["pool-and-spa-installed", "Both a pool and spa are present"],
+          ["pool-spa-none", "No pool or spa"],
+          ["pool-spa-unknown", "Not sure"],
         ],
       },
     ],
@@ -504,6 +554,7 @@ export const customerProjectOptions = {
     ["apartment", "Apartment or unit"],
     ["rural", "Rural home"],
     ["new-build", "New build or major renovation"],
+    ["not_sure", "Not sure"],
   ],
   serviceCategories: [
     ["assessment", "Energy assessment"],
@@ -579,16 +630,50 @@ export const customerProjectOptions = {
     ["not_sure", "Not sure"],
   ],
   roofTypes: [
-    ["metal", "Metal roof"],
-    ["tile", "Tiled roof"],
-    ["flat", "Flat or membrane roof"],
-    ["mixed", "Mixed roof types"],
+    ["metal", "Metal roof covering"],
+    ["tile", "Concrete or terracotta roof tiles"],
+    ["flat", "Membrane or another flat-roof covering"],
+    ["mixed", "Mixed roof coverings"],
+    ["not_sure", "Not sure"],
+  ],
+  roofColours: [
+    ["light", "Light coloured"],
+    ["medium", "Mid coloured"],
+    ["dark", "Dark coloured"],
+    ["mixed", "Mixed colours"],
+    ["not_sure", "Not sure"],
+  ],
+  roofForms: [
+    ["pitched", "Pitched or sloping roof"],
+    ["flat_low_pitch", "Flat or low-pitch roof"],
+    ["mixed", "A mix of roof forms"],
+    ["not_sure", "Not sure"],
+  ],
+  roofConditions: [
+    ["good", "No known leaks, damage or major deterioration"],
+    ["weathered", "Older or weathered, but no known active problem"],
+    ["known_issue", "A known leak, damage or condition issue"],
     ["not_sure", "Not sure"],
   ],
   switchboards: [
     ["modern_breakers", "Modern circuit breakers"],
     ["older_fuses", "Older fuse board"],
     ["recent_upgrade", "Recently upgraded"],
+    ["not_sure", "Not sure"],
+  ],
+  wallConstructions: [
+    ["brick_veneer", "Brick veneer"],
+    ["double_brick", "Double brick or solid brick"],
+    ["lightweight", "Weatherboard or another lightweight cladding"],
+    ["masonry_concrete", "Concrete block, concrete or other masonry"],
+    ["mixed", "A mix of wall constructions"],
+    ["not_sure", "Not sure"],
+  ],
+  floorConstructions: [
+    ["slab_on_ground", "Concrete slab on the ground"],
+    ["suspended_timber", "Suspended timber floor"],
+    ["suspended_concrete", "Suspended concrete floor"],
+    ["mixed", "A mix of floor constructions"],
     ["not_sure", "Not sure"],
   ],
   accessConstraints: [
@@ -708,7 +793,12 @@ const floorAreas = new Set(customerProjectOptions.floorAreas.map(([value]) => va
 const occupants = new Set(customerProjectOptions.occupants.map(([value]) => value));
 const sharedWalls = new Set(customerProjectOptions.sharedWalls.map(([value]) => value));
 const roofTypes = new Set(customerProjectOptions.roofTypes.map(([value]) => value));
+const roofColours = new Set(customerProjectOptions.roofColours.map(([value]) => value));
+const roofForms = new Set(customerProjectOptions.roofForms.map(([value]) => value));
+const roofConditions = new Set(customerProjectOptions.roofConditions.map(([value]) => value));
 const switchboards = new Set(customerProjectOptions.switchboards.map(([value]) => value));
+const wallConstructions = new Set(customerProjectOptions.wallConstructions.map(([value]) => value));
+const floorConstructions = new Set(customerProjectOptions.floorConstructions.map(([value]) => value));
 const accessConstraints = new Set(customerProjectOptions.accessConstraints.map(([value]) => value));
 const advisorFactKeys = new Set(customerAdvisorOptions.factKeys.map(([value]) => value));
 const evidenceSources = new Set(customerAdvisorOptions.evidenceSources.map(([value]) => value));
@@ -1745,7 +1835,7 @@ const advisorRecommendations = {
 };
 
 export const CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY =
-  "Optional general actions based on the answers in this plan. They are not upgrade steps, a site assessment, product endorsements or savings promises. Skip anything unsafe, unsuitable or inconsistent with product instructions.";
+  "Practical actions selected from current Australian Government household energy guidance and your answers. They are not upgrade steps, a site assessment, product endorsements or savings promises. Skip anything unsafe, unsuitable or inconsistent with product instructions.";
 
 const heatingCoolingQuickWinFeatures = new Set([
   "reverse-cycle",
@@ -1782,19 +1872,10 @@ const cookingQuickWinFeatures = new Set([
   "mixed-cooking",
 ]);
 
-function existingEquipmentQuickWinText({ features, selectedGoals }) {
+function existingEquipmentQuickWinText({ features }) {
   const sentences = [];
   if (features.some((item) => heatingCoolingQuickWinFeatures.has(item))) {
-    sentences.push("Follow the manufacturer instructions to clean or replace accessible user-serviceable filters safely, and use supported schedules, timers, fan speeds, zones, economy modes and app or remote controls. Use the least intensive comfortable setting and condition occupied rooms, while accounting for health needs.");
-  }
-  if (features.some((item) => hotWaterQuickWinFeatures.has(item))) {
-    sentences.push("Use shorter showers where suitable and review any supported hot-water timer or tariff settings. Do not disable hot-water safety cycles or bypass safety controls.");
-  }
-  if (features.some((item) => cookingQuickWinFeatures.has(item))) {
-    sentences.push("Match cookware to the burner or cooking zone, use lids when suitable, heat only the water needed and switch equipment off when finished. Keep required kitchen ventilation operating and follow the appliance instructions.");
-  }
-  if (selectedGoals.includes("lower-bills")) {
-    sentences.push("Run full laundry and dishwasher loads where practical, use cold washes and air drying when suitable, check fridge and freezer settings and door seals, and switch off genuinely unused standby loads when safe.");
+    sentences.push("Follow the manufacturer instructions to clean or replace accessible user-serviceable filters safely, and use supported schedules, timers, fan speeds, zones, economy modes and app or remote controls. Condition occupied rooms rather than the whole home where practical. As a general starting point, Australian Government guidance suggests 18°C to 20°C for heating and 25°C to 27°C for cooling, adjusted for health, age and comfort needs.");
   }
   if (features.includes("solar")) {
     sentences.push("Move flexible loads into solar hours when the equipment, tariff and household routine make that practical.");
@@ -1812,13 +1893,7 @@ function existingEquipmentQuickWinTitle({ features }) {
   if (features.some((item) => heatingCoolingQuickWinFeatures.has(item))) {
     return "Tune the heating and cooling controls you already have";
   }
-  if (features.some((item) => hotWaterQuickWinFeatures.has(item))) {
-    return "Tune hot-water controls and everyday routines";
-  }
-  if (features.some((item) => cookingQuickWinFeatures.has(item))) {
-    return "Use cooking equipment efficiently and keep ventilation working";
-  }
-  return "Tighten everyday appliance routines";
+  return "Use the controls and timing you already have";
 }
 
 const everydayActionCatalogue = [
@@ -1852,13 +1927,19 @@ const everydayActionCatalogue = [
     ),
   },
   {
+    id: "safe-draught-stopper",
+    category: "Draughts",
+    title: "Stop confirmed unwanted gaps without blocking ventilation",
+    text: "Use a removable draught stopper under a door or a suitable weather seal only where the gap is confirmed as unwanted. Ask the owner or property manager before attaching seals in a rental or shared-property setting. Never block a fixed wall vent, chimney, flue, exhaust outlet or other opening until its purpose and any combustion-safety need are confirmed.",
+    matches: ({ features }) => features.includes("draughty"),
+  },
+  {
     id: "use-existing-controls",
     category: "Equipment settings",
     title: existingEquipmentQuickWinTitle,
     text: existingEquipmentQuickWinText,
-    matches: ({ features, selectedGoals }) => (
-      selectedGoals.includes("lower-bills")
-      || features.some((item) => [
+    matches: ({ features }) => (
+      features.some((item) => [
         "reverse-cycle",
         "gas-heating",
         "hydronic-heating",
@@ -1866,18 +1947,65 @@ const everydayActionCatalogue = [
         "electric-resistance-heating",
         "evaporative-cooling",
         "fans-only",
-        "gas-storage-hot-water",
-        "gas-continuous-flow-hot-water",
-        "gas-hot-water-type-unknown",
-        "heat-pump-hot-water",
-        "electric-storage-hot-water",
-        "electric-instant-hot-water",
-        "solar-hot-water",
-        "electric-gas-boosted-hot-water",
-        "gas-cooking",
-        "electric-resistance-cooking",
-        "induction-cooking",
-        "mixed-cooking",
+        "solar",
+        "ev",
+      ].includes(item))
+    ),
+  },
+  {
+    id: "hot-water-routine",
+    category: "Hot water",
+    title: "Use less hot water without changing safety settings",
+    text: "Take shorter showers where suitable, use a water-efficient showerhead when compatible, wash clothes in cold water and run full laundry and dishwasher loads. Use only supported timer or tariff settings. Do not lower storage temperatures, disable safety cycles or bypass controls without qualified advice.",
+    matches: ({ features }) => (
+      features.some((item) => hotWaterQuickWinFeatures.has(item))
+    ),
+  },
+  {
+    id: "efficient-cooking",
+    category: "Cooking",
+    title: "Match the cooking task to the smallest practical energy use",
+    text: "Use lids when suitable, match cookware to the burner or cooking zone, heat only the water needed in a kettle or pot, and avoid using a large oven for a small task when a suitable smaller appliance is available. Keep required kitchen ventilation operating and follow the appliance instructions.",
+    matches: ({ features }) => (
+      features.some((item) => cookingQuickWinFeatures.has(item))
+    ),
+  },
+  {
+    id: "appliance-routines",
+    category: "Appliances and standby",
+    title: "Cut avoidable appliance energy without disrupting essentials",
+    text: "Run full loads, use cold washes and energy-saving cycles where suitable, and line-dry clothes when practical. Check fridge and freezer door seals, settings and ventilation clearances, and switch off genuinely unused standby loads at the wall. Keep fridges, freezers, medical equipment, security systems and anything else that must stay powered on.",
+    matches: ({ selectedGoals }) => selectedGoals.includes("lower-bills"),
+  },
+  {
+    id: "lighting-routine",
+    category: "Lighting",
+    title: ({ features }) => (
+      features.includes("lighting-mostly-old")
+      || features.includes("lighting-mixed")
+        ? "Replace the most-used old lights with suitable LEDs first"
+        : "Use daylight, task lighting and LEDs efficiently"
+    ),
+    text: "Use daylight where it is comfortable, switch off lights in empty rooms and use a task lamp instead of lighting a whole room when suitable. Replace frequently used halogen or incandescent lamps with compatible quality LEDs before little-used lights. Check dimmer, transformer, fitting and enclosed-luminaire compatibility before replacement.",
+    matches: ({ features, selectedGoals }) => (
+      selectedGoals.includes("lower-bills")
+      || features.some((item) => [
+        "lighting-mostly-led",
+        "lighting-mixed",
+        "lighting-mostly-old",
+      ].includes(item))
+    ),
+  },
+  {
+    id: "pool-spa-routine",
+    category: "Pool and spa",
+    title: "Review pool or spa heating, cover and pump schedules",
+    text: "Use a suitable cover to reduce heat and water loss, and review pump, filter and heating schedules against the equipment instructions, water-quality needs and applicable tariff. Run only for the safe time required. If rooftop solar is installed, consider suitable daytime operation without compromising sanitation or required filtration.",
+    matches: ({ features }) => (
+      features.some((item) => [
+        "pool-installed",
+        "spa-installed",
+        "pool-and-spa-installed",
       ].includes(item))
     ),
   },
@@ -1945,7 +2073,7 @@ function createEverydayActions({
   };
   return everydayActionCatalogue
     .filter((item) => item.matches(context))
-    .slice(0, 6)
+    .slice(0, 12)
     .map((item) => ({
       id: item.id,
       category: item.category,
@@ -2045,20 +2173,30 @@ function windowRecommendationFor(features) {
 
 function shadingRecommendationFor(features, selectedGoals, advisorProfile) {
   const heatConcern = features.includes("comfort-too-hot");
+  const afternoonSun = features.includes("sun-exposure-afternoon")
+    || features.includes("sun-exposure-both");
   const hotClimate = ["hot-humid", "hot-dry", "warm-humid"].includes(
     advisorProfile.climate?.code,
   );
   if (
     features.includes("external-shading-none")
-    && (heatConcern || hotClimate || selectedGoals.includes("improve-comfort"))
+    && (
+      heatConcern
+      || afternoonSun
+      || hotClimate
+      || selectedGoals.includes("improve-comfort")
+    )
   ) {
     return {
       ...advisorRecommendations.shading,
       title: "Add suitable external shade where summer sun is a problem",
-      text: "Map when direct sun reaches each affected window. Compare orientation-specific awnings, shutters, external blinds or other suitable shade before adding cooling capacity.",
+      text: `${afternoonSun ? "The household reports strong afternoon sun. " : ""}Map when direct sun reaches each affected window. Compare orientation-specific awnings, shutters, external blinds or other suitable shade before adding cooling capacity.`,
     };
   }
-  if (features.includes("external-shading-unknown") && (heatConcern || hotClimate)) {
+  if (
+    features.includes("external-shading-unknown")
+    && (heatConcern || afternoonSun || hotClimate)
+  ) {
     return {
       ...advisorRecommendations.shading,
       title: "Map direct sun before choosing more shade",
@@ -2256,7 +2394,12 @@ function propertyContextRecommendation(
     ["sharedWalls", customerProjectOptions.sharedWalls],
     ["ageBand", customerProjectOptions.ageBands],
     ["roofType", customerProjectOptions.roofTypes],
+    ["roofColour", customerProjectOptions.roofColours],
+    ["roofForm", customerProjectOptions.roofForms],
+    ["roofCondition", customerProjectOptions.roofConditions],
     ["switchboard", customerProjectOptions.switchboards],
+    ["wallConstruction", customerProjectOptions.wallConstructions],
+    ["floorConstruction", customerProjectOptions.floorConstructions],
   ];
   if (!fields.some(([key]) => typeof context[key] === "string" && context[key])) {
     return null;
@@ -2273,11 +2416,17 @@ function propertyContextRecommendation(
     || selectedServices.some((category) =>
       ["solar", "insulation"].includes(category));
   const establishedContextKeys = new Set([
+    "propertyType",
     "storeys",
     "ageBand",
     "floorArea",
     "roofType",
+    "roofColour",
+    "roofForm",
+    "roofCondition",
     "switchboard",
+    "wallConstruction",
+    "floorConstruction",
   ]);
   const unknownFields = fields
     .filter(([key]) => (
@@ -2292,7 +2441,12 @@ function propertyContextRecommendation(
       sharedWalls: "shared walls",
       ageBand: "home age",
       roofType: "roof covering",
+      roofColour: "roof colour",
+      roofForm: "roof form",
+      roofCondition: "roof condition",
       switchboard: "switchboard type",
+      wallConstruction: "external wall construction",
+      floorConstruction: "floor construction",
     })[key]);
   let title = "Use the home basics to confirm access, scale and enabling work";
   let stage = "Check the scope before quoting";
@@ -2324,6 +2478,27 @@ function propertyContextRecommendation(
       "The recorded roof covering changes mounting, access and condition questions for solar or roof-insulation work.",
     );
   }
+  if (context.roofCondition === "known_issue" && roofWork) {
+    title = "Resolve the known roof issue before roof-mounted work";
+    stage = "Check the building condition first";
+    notes.push(
+      "A suitably qualified roof professional should assess the reported leak, damage or condition issue before solar, insulation or other roof-mounted work is designed or priced.",
+    );
+  } else if (context.roofCondition === "weathered" && roofWork) {
+    notes.push(
+      "Ask the relevant roof or solar professional to confirm remaining roof condition and any maintenance that should happen before roof-mounted work.",
+    );
+  }
+  if (context.roofColour && context.roofColour !== "not_sure") {
+    notes.push(
+      "Roof colour can influence summer heat gain, but it should be considered with insulation, roof form, shade, ventilation and local climate rather than used alone.",
+    );
+  }
+  if (context.roofForm && context.roofForm !== "not_sure" && roofWork) {
+    notes.push(
+      "The recorded roof form helps the relevant professional plan access, mounting, drainage, usable area and any roof-space limitations.",
+    );
+  }
   if (["pre_1960", "1960_1999"].includes(context.ageBand)) {
     notes.push(
       "Use the recorded age only to prompt checks of the actual construction and services. It does not prove what insulation, wiring or other materials are present.",
@@ -2347,6 +2522,23 @@ function propertyContextRecommendation(
       "The recorded shared walls are not external heat-loss surfaces. Confirm the remaining external wall construction before insulation work is scoped.",
     );
   }
+  if (context.wallConstruction && context.wallConstruction !== "not_sure") {
+    notes.push(
+      "Use the reported external wall construction to guide a site check. It does not by itself prove whether insulation is present or continuous.",
+    );
+  }
+  if (context.floorConstruction === "slab_on_ground") {
+    notes.push(
+      "A slab-on-ground floor changes the available underfloor improvement path, so underfloor insulation should not be assumed to be accessible or applicable.",
+    );
+  } else if (
+    context.floorConstruction
+    && context.floorConstruction !== "not_sure"
+  ) {
+    notes.push(
+      "The reported floor construction helps an assessor decide whether safe underfloor inspection or a different insulation approach is relevant.",
+    );
+  }
   if (context.occupants && context.occupants !== "not_sure") {
     notes.push(
       "Household size helps frame hot-water demand and occupied-zone needs, but actual routines and usage still need confirmation before sizing equipment.",
@@ -2354,12 +2546,12 @@ function propertyContextRecommendation(
   }
   if (!notes.length) {
     notes.push(
-      "Home height and floor area provide broad scale. Home age, roof covering and switchboard type guide the checks needed before fixed work.",
+      "Home height and floor area provide broad scale. Home age, construction, roof details and switchboard type guide the checks needed before fixed work.",
     );
   }
   if (unknownFields.length) {
     notes.push(
-      `Still to confirm: ${unknownFields.join(", ")}. Not sure remains a valid planning answer.`,
+      `Where they affect the selected work, the relevant assessor or licensed trade should verify ${unknownFields.join(", ")} during the site check. The household does not need to enter a roof space, crawl under the home, remove an electrical cover or guess.`,
     );
   }
   return {
@@ -2719,7 +2911,22 @@ function createAdvisorPlan({
         : {}),
       ageBand: propertyContext.ageBand,
       roofType: propertyContext.roofType,
+      ...(propertyContext.roofColour
+        ? { roofColour: propertyContext.roofColour }
+        : {}),
+      ...(propertyContext.roofForm
+        ? { roofForm: propertyContext.roofForm }
+        : {}),
+      ...(propertyContext.roofCondition
+        ? { roofCondition: propertyContext.roofCondition }
+        : {}),
       switchboard: propertyContext.switchboard,
+      ...(propertyContext.wallConstruction
+        ? { wallConstruction: propertyContext.wallConstruction }
+        : {}),
+      ...(propertyContext.floorConstruction
+        ? { floorConstruction: propertyContext.floorConstruction }
+        : {}),
     },
     title,
     summary: `This is ${paceLabel}. It is independent guidance, not a product endorsement, quote or savings promise.`,
@@ -3016,7 +3223,22 @@ export function buildAnonymizedOpportunity(project, projectId) {
     label(customerProjectOptions.ageBands, context.ageBand, "Age not confirmed"),
     label(customerProjectOptions.floorAreas, context.floorArea, "Floor area not confirmed"),
     label(customerProjectOptions.roofTypes, context.roofType, "Roof not confirmed"),
+    ...(context.roofColour
+      ? [label(customerProjectOptions.roofColours, context.roofColour)]
+      : []),
+    ...(context.roofForm
+      ? [label(customerProjectOptions.roofForms, context.roofForm)]
+      : []),
+    ...(context.roofCondition
+      ? [label(customerProjectOptions.roofConditions, context.roofCondition)]
+      : []),
     label(customerProjectOptions.switchboards, context.switchboard, "Switchboard not confirmed"),
+    ...(context.wallConstruction
+      ? [label(customerProjectOptions.wallConstructions, context.wallConstruction)]
+      : []),
+    ...(context.floorConstruction
+      ? [label(customerProjectOptions.floorConstructions, context.floorConstruction)]
+      : []),
   ];
   const constraints = Array.isArray(context.accessConstraints)
     ? context.accessConstraints.map((item) => label(customerProjectOptions.accessConstraints, item)).join(", ")
@@ -3145,7 +3367,22 @@ export function buildInstallerPropertyContext(value = {}) {
     ...(occupantCount ? { occupants: occupantCount } : {}),
     ...(sharedWallCount ? { sharedWalls: sharedWallCount } : {}),
     roofType: roofTypes.has(supplied.roofType) ? supplied.roofType : "",
+    ...(roofColours.has(supplied.roofColour)
+      ? { roofColour: supplied.roofColour }
+      : {}),
+    ...(roofForms.has(supplied.roofForm)
+      ? { roofForm: supplied.roofForm }
+      : {}),
+    ...(roofConditions.has(supplied.roofCondition)
+      ? { roofCondition: supplied.roofCondition }
+      : {}),
     switchboard: switchboards.has(supplied.switchboard) ? supplied.switchboard : "",
+    ...(wallConstructions.has(supplied.wallConstruction)
+      ? { wallConstruction: supplied.wallConstruction }
+      : {}),
+    ...(floorConstructions.has(supplied.floorConstruction)
+      ? { floorConstruction: supplied.floorConstruction }
+      : {}),
     approvalContext: approvalContexts.has(supplied.approvalContext)
       ? supplied.approvalContext
       : "none",

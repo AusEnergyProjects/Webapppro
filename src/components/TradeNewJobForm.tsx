@@ -642,7 +642,7 @@ export function TradeNewJobForm({
             <label><span>Email</span><input type="email" name="email" required={step === 2} autoComplete="email" maxLength={180} value={newCustomerEmail} onChange={(event) => { setNewCustomerEmail(event.target.value); setDuplicates([]); setDuplicateReviewed(false); }} onBlur={() => void checkDuplicates()} /></label>
           </div>
         </>}
-        <small>AEA protected leads use their authorised workflow and cannot become direct customer records here.</small>
+        <small>Australian Energy Assessments protected leads use their authorised workflow and cannot become direct customer records here.</small>
       </fieldset>
       {duplicates.length > 0 && <div className="crm-duplicate-match" role="alert"><strong>Customer already found</strong><p>Use the existing record so the customer and job history stay together.</p>{duplicates.map((candidate) => <div key={candidate.customerId}><span><b>{candidate.displayName}</b><small>{candidate.customerNumber} | matched {candidate.reasons.join(", ")}</small></span><button type="button" onClick={() => attachDuplicate(candidate)}>Use this customer</button></div>)}<button type="button" className="crm-text-action" onClick={() => { setDuplicateReviewed(true); setDuplicates([]); setMessage("Continuing as a different customer."); }}>This is a different customer</button></div>}
       {(customerMode === "new" || customerId) && <fieldset className="crm-service-site"><legend>Job address</legend>

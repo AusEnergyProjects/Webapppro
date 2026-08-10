@@ -23,7 +23,7 @@ import {
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
 export const CUSTOMER_PLAN_REPORT_VERSION =
-  "2026-08-10-personalised-report-v4";
+  "2026-08-10-professional-personalised-report-v5";
 export const INSTALLER_ENQUIRY_PACK_VERSION =
   "2026-07-31-installer-enquiry-pack-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
@@ -59,9 +59,13 @@ const trustedPlanResourceHrefs = new Set([
   "/gas-compare",
   "/assessments",
   "https://www.energy.gov.au/households",
+  "https://www.energy.gov.au/households/household-guides/reduce-energy-bills",
+  "https://www.energy.gov.au/households/insulation-and-draught-proofing",
   "https://www.energy.gov.au/households/quick-wins",
   "https://www.energy.gov.au/rebates",
   "https://www.homeenergyrating.gov.au/",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
+  "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
   "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
   "https://www.yourhome.gov.au/passive-design/introduction",
   "https://www.yourhome.gov.au/passive-design/insulation",
@@ -91,10 +95,30 @@ const readinessFactKeys = new Set(
 const allowedEverydayActionIds = new Set([
   "moisture-safe-routine",
   "personal-warmth-first",
+  "safe-draught-stopper",
   "use-existing-controls",
+  "hot-water-routine",
+  "efficient-cooking",
+  "appliance-routines",
+  "lighting-routine",
+  "pool-spa-routine",
   "safe-seasonal-airflow",
   "seasonal-window-and-landscape",
   "renter-friendly-diy-boundary",
+]);
+const everydayActionOutcomeById = new Map([
+  ["moisture-safe-routine", "Helps clear everyday moisture while preserving the ventilation the home needs."],
+  ["personal-warmth-first", "Can improve comfort without heating every room or increasing fixed equipment capacity."],
+  ["safe-draught-stopper", "Reduces a confirmed unwanted gap while keeping required vents, chimneys, flues and exhaust paths clear."],
+  ["use-existing-controls", "Reduces unnecessary runtime and helps existing equipment deliver the performance it was designed for."],
+  ["hot-water-routine", "Reduces hot-water demand without changing storage temperatures, safety cycles or protected controls."],
+  ["efficient-cooking", "Avoids heating more cookware, water or oven space than the task needs while preserving required ventilation."],
+  ["appliance-routines", "Targets avoidable laundry, drying, refrigeration and standby energy while keeping essential equipment powered."],
+  ["lighting-routine", "Cuts lighting energy first in the rooms and fittings used most often."],
+  ["pool-spa-routine", "Can reduce pumping and heating runtime while preserving water quality and required filtration."],
+  ["safe-seasonal-airflow", "Uses low-energy air movement when outdoor conditions are helpful and avoids conditioning empty rooms."],
+  ["seasonal-window-and-landscape", "Manages heat at the window before a higher-cost glazing or equipment decision."],
+  ["renter-friendly-diy-boundary", "Keeps early action reversible while protecting ventilation, the property and the tenancy approval boundary."],
 ]);
 
 const optionLabel = (options, value, fallback = "") => (
@@ -204,14 +228,29 @@ function safePlanResourceHref(value) {
 function safePlanResources(value) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
-  return value.slice(0, 16).flatMap((resource) => {
+  return value.slice(0, 20).flatMap((resource) => {
     const href = safePlanResourceHref(resource?.href);
     const label = boundedText(resource?.label, 160);
     const description = boundedText(resource?.description, 360);
     if (!href || !label || seen.has(href)) return [];
     seen.add(href);
     return [{ label, description, href }];
-  }).slice(0, 10);
+  }).slice(0, 12);
+}
+
+function safeActionLinks(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.slice(0, 6).flatMap((link) => {
+    const suppliedHref = boundedText(link?.href, 260);
+    const guideHref = safeGuideHref(suppliedHref);
+    const resourceHref = safePlanResourceHref(suppliedHref);
+    const href = guideHref || resourceHref;
+    const label = boundedText(link?.label, 140);
+    if (!href || !label || seen.has(href)) return [];
+    seen.add(href);
+    return [{ label, href }];
+  }).slice(0, 3);
 }
 
 function safeGuidance(value) {
@@ -222,6 +261,340 @@ function safeGuidance(value) {
     basedOn: boundedStringList(source.basedOn, 6, 240),
     stillUncertain: boundedStringList(source.stillUncertain, 6, 240),
     reconsiderIf: boundedStringList(source.reconsiderIf, 6, 240),
+  };
+}
+
+function professionalReportSentence(value) {
+  let text = boundedText(value, 240)
+    .replace(/^Roof type and condition has\b/i, "Roof type and condition have")
+    .trim();
+  if (!text) return "";
+  if (!/[.!?]$/.test(text)) text = `${text}.`;
+  return text;
+}
+
+const actionReportBlueprints = Object.freeze({
+  permissions: Object.freeze({
+    whyItMatters: "Written authority prevents a quote from being built around work that cannot be approved or installed.",
+    confirmations: [
+      "Confirm who owns each surface, service and external location affected by the work.",
+      "Confirm any owners-corporation, strata, landlord or property-manager requirements in writing.",
+    ],
+    quoteChecklist: [
+      "The exact approved work area and equipment location.",
+      "Who obtains permits or approvals and which costs are included.",
+      "Any make-good, access or common-property conditions.",
+    ],
+    sequence: "Secure written authority before paying a deposit, ordering equipment or booking fixed work.",
+    safety: "Do not inspect roofs, electrical equipment, gas equipment or concealed services to answer an approval question.",
+  }),
+  electrical: Object.freeze({
+    whyItMatters: "Electrical supply, switchboard condition and existing loads can change the safe scope, cost and order of electrification work.",
+    confirmations: [
+      "Have a licensed electrician confirm supply phases, service capacity, main switch, protective devices and available circuit capacity.",
+      "Confirm the simultaneous loads expected from hot water, cooking, heating, cooling, solar, batteries and vehicle charging.",
+    ],
+    quoteChecklist: [
+      "Switchboard and circuit work itemised separately from the appliance or system.",
+      "Protection, isolation, metering, network and testing requirements.",
+      "Allowances, exclusions and a compliance-certificate handover.",
+    ],
+    sequence: "Confirm capacity before equipment is selected so enabling work is priced once and coordinated across later upgrades.",
+    safety: "Use a safe front-on photo only. Never remove the switchboard cover or touch internal electrical parts.",
+  }),
+  fabric: Object.freeze({
+    whyItMatters: "Reducing uncontrolled heat flow first can improve comfort and avoid oversizing later heating or cooling equipment.",
+    confirmations: [
+      "Confirm the actual construction, existing insulation or seals, condition, moisture risks and safe access.",
+      "Distinguish unwanted leakage from required ventilation, flues, chimneys and active exhaust paths.",
+    ],
+    quoteChecklist: [
+      "Areas, quantities, product performance and installation method.",
+      "Electrical, moisture, fire, ventilation and clearance checks.",
+      "Access, removal, disposal, make-good, warranty and completion evidence.",
+    ],
+    sequence: "Investigate moisture and ventilation first, then seal uncontrolled gaps and improve insulation before final equipment sizing.",
+    safety: "Do not enter a roof or subfloor, disturb insulation, seal a flue or block a fixed vent unless a suitably qualified person confirms it is safe.",
+  }),
+  windows: Object.freeze({
+    whyItMatters: "Window orientation, shade, air leakage and coverings can determine whether a low-cost improvement is enough before glazing replacement.",
+    confirmations: [
+      "Record the most uncomfortable windows, orientation, direct-sun period, glazing, frame condition, leakage and current coverings.",
+      "Confirm external-shade permissions, drainage, access and wind exposure.",
+    ],
+    quoteChecklist: [
+      "Each window and opening identified on the scope.",
+      "Frame, glazing, seals, coverings or shade performance and finish.",
+      "Access, removal, make-good, warranty and any approval responsibilities.",
+    ],
+    sequence: "Start with operation, seals, close-fitting coverings and suitable shade; replace glazing only where evidence supports the extra cost.",
+    safety: "Do not work at height or alter external fixtures, balustrades, fire egress or common property without the required competent advice and approval.",
+  }),
+  heating: Object.freeze({
+    whyItMatters: "The building shell, occupied rooms and existing equipment determine the capacity and zoning that will actually improve comfort.",
+    confirmations: [
+      "Confirm rooms served, operating condition, controls, filters, outdoor-unit location and the remaining comfort gap.",
+      "Obtain room-by-room or zone sizing after relevant draught, insulation and window work is understood.",
+    ],
+    quoteChecklist: [
+      "Model, rated capacity, efficiency basis and rooms or zones served.",
+      "Electrical, drainage, refrigerant, condensate, pipework and outdoor-unit work.",
+      "Commissioning, controls demonstration, warranty and disposal of replaced equipment.",
+    ],
+    sequence: "Use and maintain sound existing equipment, improve the shell, then size only the remaining heating and cooling need.",
+    safety: "Refrigerant, fixed electrical and gas work must be completed by appropriately licensed people. Preserve required combustion ventilation until gas equipment is safely removed.",
+  }),
+  hotWater: Object.freeze({
+    whyItMatters: "Household demand, system location, tariffs and enabling work can change the right hot-water capacity and operating cost.",
+    confirmations: [
+      "Confirm the existing system type, capacity, age, location, household demand and available installation space.",
+      "Confirm electrical capacity, plumbing, drainage, condensate, noise, clearances and any tariff or timer requirements.",
+    ],
+    quoteChecklist: [
+      "Exact model, storage or delivery capacity and recovery or backup operation.",
+      "Electrical, plumbing, valves, drainage, condensate, base and noise treatment.",
+      "Decommissioning, disposal, commissioning, warranty and rebate documentation.",
+    ],
+    sequence: "Research the replacement before failure, confirm demand and site constraints, then compare eligible systems and written installed prices.",
+    safety: "Keep storage water at safe temperatures and use licensed plumbing and electrical trades. Do not alter temperature controls, valves or gas connections without competent advice.",
+  }),
+  cooking: Object.freeze({
+    whyItMatters: "Cookware, bench dimensions, ventilation and circuit capacity can add enabling work that is easy to miss in an appliance-only quote.",
+    confirmations: [
+      "Confirm appliance dimensions, cookware compatibility, circuit capacity, isolation and effective kitchen exhaust.",
+      "Confirm safe gas disconnection and any bench or cabinetry alterations.",
+    ],
+    quoteChecklist: [
+      "Appliance, circuit, isolation and switchboard work separately itemised.",
+      "Bench, cabinetry, ventilation and gas-disconnection scope.",
+      "Testing, demonstration, warranty and make-good.",
+    ],
+    sequence: "Confirm the electrical and physical fit before purchasing the appliance or removing the existing cooker.",
+    safety: "Fixed electrical and gas disconnection work requires appropriately licensed trades. Keep effective ventilation for the equipment still in use.",
+  }),
+  solar: Object.freeze({
+    whyItMatters: "Roof condition, shade, electricity use, network limits and switchboard capacity determine whether a solar system is suitable and well sized.",
+    confirmations: [
+      "Confirm roof covering, form, condition, orientation, shade, usable area and safe access.",
+      "Review interval electricity use, existing generation, switchboard capacity and current network connection rules.",
+    ],
+    quoteChecklist: [
+      "Panel, inverter and mounting models, layout and proposed annual generation basis.",
+      "Roof, switchboard, metering, network application, monitoring and export-limit work.",
+      "Warranties, commissioning evidence, emergency information and rebate or certificate treatment.",
+    ],
+    sequence: "Reduce avoidable demand, understand future electric loads, verify the roof and network boundary, then size solar to the household plan.",
+    safety: "Roof access and all electrical work require competent people. Do not rely on aerial imagery or a self-report as proof of roof condition or structural suitability.",
+  }),
+  battery: Object.freeze({
+    whyItMatters: "A battery's usable capacity, power, operating mode and tariff interaction determine what it can actually save or support.",
+    confirmations: [
+      "Confirm the purpose: bill shifting, solar self-use, backup, resilience or another priority.",
+      "Review interval use, solar generation, critical loads, installation location, switchboard capacity and network rules.",
+    ],
+    quoteChecklist: [
+      "Usable capacity, continuous and peak power, reserve setting and backup circuits.",
+      "Compatible inverter, switchboard, gateway, monitoring, network and location work.",
+      "Operating warranty, throughput terms, commissioning and emergency information.",
+    ],
+    sequence: "Define the outcome and analyse usage first; coordinate the battery with solar, tariffs, future loads and any backup requirement.",
+    safety: "Battery location, clearances, fire response and electrical installation must meet current requirements and manufacturer instructions.",
+  }),
+  ev: Object.freeze({
+    whyItMatters: "Vehicle use, charging speed, tariffs and household peak load determine the circuit and control strategy needed.",
+    confirmations: [
+      "Confirm vehicle and charger compatibility, daily distance, parking location and realistic charging window.",
+      "Have a licensed electrician confirm circuit, switchboard, supply capacity, cable route and load-management options.",
+    ],
+    quoteChecklist: [
+      "Charger model, power, cable, mounting and vehicle compatibility.",
+      "Dedicated circuit, protection, load management, metering and network requirements.",
+      "Commissioning, app or access setup, warranty and make-good.",
+    ],
+    sequence: "Set the charging need first, then coordinate electrical capacity, tariff timing, solar and other planned electric loads.",
+    safety: "Use a compliant fixed installation by a licensed electrician. Do not use extension leads or an unsuitable general-purpose outlet for routine vehicle charging.",
+  }),
+  assessment: Object.freeze({
+    whyItMatters: "A site-specific assessment can replace assumptions with measured or observed evidence before larger spending decisions.",
+    confirmations: [
+      "Define the decisions the assessment must support and the rooms or systems causing concern.",
+      "Gather bills, safe photos, plans, past invoices and known approval constraints without entering unsafe areas.",
+    ],
+    quoteChecklist: [
+      "Assessment scope, site time, methods, deliverables and exclusions.",
+      "Whether thermal performance, appliances, bills, comfort, moisture and upgrade sequencing are included.",
+      "Report format, follow-up discussion, credentials and total fee.",
+    ],
+    sequence: "Use an assessment before coordinating multiple high-cost measures or when the source of discomfort, moisture or high use is unclear.",
+    safety: "This self-reported plan is not a NatHERS rating. A formal rating or inspection must follow the applicable current method and safe-access requirements.",
+  }),
+  bills: Object.freeze({
+    whyItMatters: "Supply charges, usage rates, discounts, tariff structures and solar credits can change household costs without changing any equipment.",
+    confirmations: [
+      "Use a recent bill or current-plan summary to confirm usage, supply charges, tariff type, discounts, expiry dates and solar feed-in terms.",
+      "Compare electricity and gas separately, using the correct postcode and the household's actual usage where available.",
+    ],
+    quoteChecklist: [
+      "Estimated annual cost and every usage, supply and controlled-load rate used.",
+      "Discount conditions, benefit periods, fees, solar credits and contract terms.",
+      "The comparison date, usage period and assumptions so the result can be checked later.",
+    ],
+    sequence: "Compare the current plan first, then review the full terms before switching. Recheck after major electrification, solar or usage changes.",
+    safety: "Use a trusted comparison path. Never share an account password, one-time code or unnecessary identity document to compare plans.",
+  }),
+  incentives: Object.freeze({
+    whyItMatters: "Rebates and certificates can materially change an installed price, but eligibility depends on the current rules, product, property, installer and timing.",
+    confirmations: [
+      "Confirm the exact activity, product model, installation address, date and customer pathway against current official program rules.",
+      "Confirm whether the written price already includes any rebate, certificate value, finance cost or provider fee.",
+    ],
+    quoteChecklist: [
+      "The incentive, certificate quantity or rebate amount shown separately from the installed price.",
+      "Eligibility assumptions, required evidence, claim responsibility and what happens if the claim is rejected.",
+      "All fees, finance terms, customer contributions and cancellation conditions in writing.",
+    ],
+    sequence: "Check current assistance and estimate value before accepting a quote, then verify final eligibility before equipment is ordered or work begins.",
+    safety: "Treat every estimate as indicative until the official pathway is confirmed. Do not sign blank forms or provide access credentials to claim an incentive.",
+  }),
+  climate: Object.freeze({
+    whyItMatters: "A broad postcode profile helps order early planning, but the home's orientation, shade, construction, moisture and local exposure determine the final scope.",
+    confirmations: [
+      "Confirm room orientation, seasonal sun, shade, wind exposure, moisture signs and the locations that are actually uncomfortable.",
+      "Use a site-specific assessment when formal ratings, equipment sizing or unresolved comfort and moisture problems affect a major decision.",
+    ],
+    quoteChecklist: [
+      "The observed site conditions and household priorities used to develop the scope.",
+      "Any measurements, modelling method, assumptions and limitations clearly stated.",
+      "The recommended sequence separated from optional work and product choices.",
+    ],
+    sequence: "Use the broad climate profile to plan investigations, then replace assumptions with site evidence before final sizing or high-cost work.",
+    safety: "This self-reported postcode profile is not a climate zone determination, NatHERS assessment, home energy rating or equipment-sizing result.",
+  }),
+  budget: Object.freeze({
+    whyItMatters: "A staged budget works best when enabling work and the highest-value constraint are identified before products are selected.",
+    confirmations: [
+      "Confirm the first problem to solve, the spending range for this stage and which later upgrades must remain possible.",
+      "Separate essential enabling work from optional finishes, future-ready allowances and product upgrades.",
+    ],
+    quoteChecklist: [
+      "Itemised base scope, enabling work, options, exclusions and contingency assumptions.",
+      "Expected service life, warranty, maintenance and any work deferred to a later stage.",
+      "Current rebates or certificate value shown separately and never treated as guaranteed savings.",
+    ],
+    sequence: "Resolve safety and enabling constraints first, then fund the measure that best unlocks comfort, cost or later electrification goals.",
+    safety: "Do not use an indicative rebate, market estimate or savings claim as the only basis for taking on finance or committing to work.",
+  }),
+  planning: Object.freeze({
+    whyItMatters: "A clear scope keeps later quotes comparable and prevents one upgrade from making another harder or more expensive.",
+    confirmations: [
+      "Confirm the problem to solve, the rooms or services affected and the evidence already available.",
+      "Confirm site condition, access, approvals, electrical capacity and the dependencies named in this step.",
+    ],
+    quoteChecklist: [
+      "A written scope with inclusions, exclusions and assumptions.",
+      "Enabling work, access, make-good, disposal and approvals.",
+      "Product performance, commissioning, warranties and current incentive treatment.",
+    ],
+    sequence: "Complete evidence and safety checks first, then compare like-for-like written scopes before committing.",
+    safety: "Stay within safe observation and existing records. Use appropriately qualified people for regulated work and uncertain building conditions.",
+  }),
+});
+
+function reportActionFamily(item) {
+  const haystack = `${item?.id || ""} ${item?.title || ""} ${item?.href || ""}`.toLowerCase();
+  if (/authority|permission|renter|strata|owner/.test(haystack)) return "permissions";
+  if (/energy[- ]?offer|electricity plan|gas plan|plans? (?:you )?already pay|retailer|tariff/.test(haystack)) return "bills";
+  if (/rebate|certificate|finance|incentive/.test(haystack)) return "incentives";
+  if (/climate|postcode|local conditions/.test(haystack)) return "climate";
+  if (/budget|highest-value constraint|stage the work/.test(haystack)) return "budget";
+  if (/switchboard|electrical|supply|circuit/.test(haystack)) return "electrical";
+  if (/draught|insulation|fabric|moisture|ventilation/.test(haystack)) return "fabric";
+  if (/window|glazing|shade/.test(haystack)) return "windows";
+  if (/heating|cooling|reverse-cycle|hydronic|wood-heating/.test(haystack)) return "heating";
+  if (/hot-water|hot water/.test(haystack)) return "hotWater";
+  if (/cooking|cooktop|induction/.test(haystack)) return "cooking";
+  if (/battery|storage/.test(haystack)) return "battery";
+  if (/solar/.test(haystack)) return "solar";
+  if (/\bev\b|vehicle|charging/.test(haystack)) return "ev";
+  if (/assessment|assessor|rating/.test(haystack)) return "assessment";
+  return "planning";
+}
+
+function actionReportLinks(item, family) {
+  const links = [];
+  const guideHref = safeGuideHref(item?.href || item?.guideHref);
+  if (guideHref) {
+    links.push({
+      label: boundedText(item?.action || item?.guideLabel, 120)
+        || "Open the related Australian Energy Assessments guide",
+      href: guideHref,
+    });
+  }
+  if (["fabric", "windows", "heating", "hotWater", "cooking", "solar", "battery", "ev"].includes(family)) {
+    links.push(
+      { label: "Check current rebates and assistance", href: "/rebates" },
+      { label: "Estimate eligible certificate or rebate value", href: "/calculator" },
+    );
+  }
+  if (family === "assessment") {
+    links.push({ label: "Prepare for an independent assessment", href: "/assessments" });
+  }
+  if (family === "bills") {
+    links.push(
+      { label: "Compare electricity plans", href: "/compare" },
+      { label: "Compare gas plans", href: "/gas-compare" },
+    );
+  }
+  if (["incentives", "budget"].includes(family)) {
+    links.push(
+      { label: "Check current rebates and assistance", href: "/rebates" },
+      { label: "Estimate certificate or rebate value", href: "/calculator" },
+    );
+  }
+  if (family === "climate") {
+    links.push({
+      label: "Read the July 2026 NatHERS Existing Homes Guidance Note",
+      href: "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
+    });
+  }
+  return links.slice(0, 3);
+}
+
+function enrichedReportAction(item, index, completedIds) {
+  const safeItem = privacySafeControlledItem(item);
+  const family = reportActionFamily(safeItem);
+  const blueprint = actionReportBlueprints[family] || actionReportBlueprints.planning;
+  const guidance = safeGuidance(safeItem.guidance);
+  const householdReason = guidance.basedOn.length
+    ? guidance.basedOn.map(professionalReportSentence).filter(Boolean).join(" ")
+    : "This step is included because it supports the goals and home context recorded in this plan.";
+  const confirmations = uniqueReportText([
+    ...guidance.stillUncertain,
+    ...blueprint.confirmations,
+  ], 4);
+  return {
+    number: index + 1,
+    id: boundedText(safeItem.id, 80),
+    stage: boundedText(safeItem.stage, 100),
+    title: boundedText(safeItem.title, 180),
+    description: boundedSentenceText(safeItem.text, 900),
+    whatToDo: boundedSentenceText(safeItem.text, 600),
+    whyItMatters: boundedSentenceText(blueprint.whyItMatters, 360),
+    householdReason: boundedSentenceText(householdReason, 420),
+    confirmBeforeWork: confirmations,
+    quoteChecklist: boundedStringList(blueprint.quoteChecklist, 3, 220),
+    sequence: boundedSentenceText(
+      [blueprint.sequence, ...guidance.reconsiderIf].filter(Boolean).join(" "),
+      420,
+    ),
+    safety: boundedSentenceText(blueprint.safety, 360),
+    completed: completedIds.has(safeItem.id),
+    guideLabel: safeGuideHref(safeItem.href)
+      ? boundedText(safeItem.action, 120)
+      : "",
+    guideHref: safeGuideHref(safeItem.href),
+    links: actionReportLinks(safeItem, family),
+    guidance,
   };
 }
 
@@ -446,32 +819,13 @@ export function createCustomerPlanDocument(
     approvalContext: boundedText(propertyContext.approvalContext, 40),
     planItems: controlledItems,
   });
-  const actions = controlledItems.map((item, index) => {
-    const safeItem = privacySafeControlledItem(item);
-    const href = safeGuideHref(safeItem.href);
-    return {
-      number: index + 1,
-      id: boundedText(safeItem.id, 80),
-      stage: boundedText(safeItem.stage, 100),
-      title: boundedText(safeItem.title, 180),
-      description: boundedSentenceText(safeItem.text, 900),
-      completed: completedIds.has(safeItem.id),
-      guideLabel: href ? boundedText(safeItem.action, 120) : "",
-      guideHref: href,
-      guidance: safeGuidance(safeItem.guidance),
-    };
-  });
+  const actions = controlledItems.map((item, index) =>
+    enrichedReportAction(item, index, completedIds)
+  );
   const goalLabels = goals
     .map((goal) => optionLabel(customerProjectOptions.goals, goal))
     .filter(Boolean)
     .slice(0, 10);
-  const questions = Array.isArray(generatedPlan.nextQuestions)
-    ? generatedPlan.nextQuestions.slice(0, 3).map((question, index) => ({
-      number: index + 1,
-      prompt: boundedText(question?.prompt, 240),
-      whyItMatters: boundedText(question?.whyItMatters, 360),
-    })).filter((question) => question.prompt)
-    : [];
   const everydayActions = Array.isArray(generatedPlan.everydayActions)
     ? generatedPlan.everydayActions
       .filter((item) => allowedEverydayActionIds.has(item?.id))
@@ -481,6 +835,7 @@ export function createCustomerPlanDocument(
         category: boundedText(item.category, 100),
         title: boundedText(item.title, 180),
         description: boundedSentenceText(item.text, 900),
+        outcome: everydayActionOutcomeById.get(item.id) || "A practical low-cost action that can be tried before fixed work.",
       }))
     : [];
   return {
@@ -520,6 +875,68 @@ export function createCustomerPlanDocument(
       state: customerProjectOptions.states.includes(row.address_state)
         ? row.address_state
         : "Not recorded",
+      homeFacts: {
+        storeys: optionLabel(
+          customerProjectOptions.storeys,
+          propertyContext.storeys,
+          "Not sure",
+        ),
+        ageBand: optionLabel(
+          customerProjectOptions.ageBands,
+          propertyContext.ageBand,
+          "Not sure",
+        ),
+        floorArea: optionLabel(
+          customerProjectOptions.floorAreas,
+          propertyContext.floorArea,
+          "Not sure",
+        ),
+        occupants: optionLabel(
+          customerProjectOptions.occupants || [],
+          propertyContext.occupants,
+          "Not sure",
+        ),
+        sharedWalls: optionLabel(
+          customerProjectOptions.sharedWalls || [],
+          propertyContext.sharedWalls,
+          "Not sure",
+        ),
+        roofType: optionLabel(
+          customerProjectOptions.roofTypes,
+          propertyContext.roofType,
+          "Not sure",
+        ),
+        roofColour: optionLabel(
+          customerProjectOptions.roofColours || [],
+          propertyContext.roofColour,
+          "Not sure",
+        ),
+        roofForm: optionLabel(
+          customerProjectOptions.roofForms || [],
+          propertyContext.roofForm,
+          "Not sure",
+        ),
+        roofCondition: optionLabel(
+          customerProjectOptions.roofConditions || [],
+          propertyContext.roofCondition,
+          "Not sure",
+        ),
+        wallConstruction: optionLabel(
+          customerProjectOptions.wallConstructions || [],
+          propertyContext.wallConstruction,
+          "Not sure",
+        ),
+        floorConstruction: optionLabel(
+          customerProjectOptions.floorConstructions || [],
+          propertyContext.floorConstruction,
+          "Not sure",
+        ),
+        switchboard: optionLabel(
+          customerProjectOptions.switchboards,
+          propertyContext.switchboard,
+          "Not sure",
+        ),
+      },
       homeDetails: [
         optionLabel(
           customerProjectOptions.storeys,
@@ -571,7 +988,7 @@ export function createCustomerPlanDocument(
       700,
     ),
     actions,
-    questions,
+    questions: [],
     permissionSections: permissionPack.sections
       .map((section) => ({
         label: boundedText(section.label, 160),
@@ -584,7 +1001,7 @@ export function createCustomerPlanDocument(
     permissionBoundary: boundedText(permissionPack.disclaimer, 700),
     omitted: countPrivateItems(sourceAdvisorProfile, snapshotItems),
     privacyNote: "This shareable copy deliberately excludes the exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text.",
-    adviceBoundary: "This plan is independent general guidance. It is not a quote, product endorsement, home energy rating, equipment sizing result or savings promise. Confirm safety, permissions, suitability and current incentives before committing to work.",
+    adviceBoundary: "This plan is independent planning guidance based on household answers. It is not a quote, product endorsement, NatHERS assessment, home energy rating, equipment sizing result or savings promise. Confirm safety, permissions, suitability and current incentives before committing to work.",
   };
 }
 
@@ -747,6 +1164,14 @@ function absoluteGuideHref(href) {
     : "";
 }
 
+function absolutePlanResourceHref(href) {
+  const safeHref = safePlanResourceHref(href);
+  if (!safeHref) return "";
+  return safeHref.startsWith("/")
+    ? `${CUSTOMER_PLAN_PUBLIC_ORIGIN}${safeHref}`
+    : safeHref;
+}
+
 function uniqueReportText(values, maximum) {
   const seen = new Set();
   const result = [];
@@ -788,7 +1213,7 @@ function reportReadiness(document) {
     linked: 0,
     missing: 0,
     missingLabels: [],
-    message: "This starter roadmap uses the choices recorded here. Review the open questions before treating the order as final.",
+    message: "This roadmap uses the choices recorded here. Any remaining confirmation is placed inside the step where it affects the scope.",
     boundary: "These details were supplied by the household and have not been professionally checked.",
   };
 }
@@ -797,6 +1222,16 @@ export function createCustomerPlanReportView(document) {
   const sourceActions = Array.isArray(document?.actions)
     ? document.actions.slice(0, 40)
     : [];
+  const legacyConfirmations = uniqueReportText([
+    ...boundedStringList(document?.readiness?.missingLabels, 6, 160)
+      .map((label) => `Confirm ${label.toLowerCase()} before relying on the affected scope.`),
+    ...(Array.isArray(document?.questions) ? document.questions : [])
+      .slice(0, 6)
+      .map((question) => [
+        boundedText(question?.prompt, 240),
+        boundedText(question?.whyItMatters, 360),
+      ].filter(Boolean).join(" ")),
+  ], 5);
   const priorityIndexes = new Set(
     sourceActions
       .map((action, index) => ({ action, index }))
@@ -806,7 +1241,22 @@ export function createCustomerPlanReportView(document) {
   );
   const actions = sourceActions.map((action, index) => {
     const guideHref = safeGuideHref(action?.guideHref || action?.href);
+    const completedIds = action?.completed === true
+      ? new Set([boundedText(action?.id, 80)])
+      : new Set();
+    const enriched = enrichedReportAction({
+      ...action,
+      text: action?.whatToDo || action?.description || action?.text,
+      href: guideHref,
+      action: action?.guideLabel || action?.action,
+    }, index, completedIds);
+    const confirmBeforeWork = uniqueReportText([
+      ...boundedStringList(action?.confirmBeforeWork, 3, 220),
+      ...enriched.confirmBeforeWork,
+      ...(index === 0 ? legacyConfirmations : []),
+    ], 3).map((item) => boundedSentenceText(item, 220));
     return {
+      ...enriched,
       number: Number.isFinite(Number(action?.number))
         ? Number(action.number)
         : index + 1,
@@ -814,6 +1264,31 @@ export function createCustomerPlanReportView(document) {
       stage: boundedText(action?.stage, 100),
       title: boundedText(action?.title, 180),
       description: boundedSentenceText(action?.description || action?.text, 900),
+      whatToDo: boundedSentenceText(
+        action?.whatToDo || action?.description || action?.text,
+        600,
+      ),
+      whyItMatters: boundedSentenceText(
+        action?.whyItMatters || enriched.whyItMatters,
+        360,
+      ),
+      householdReason: boundedSentenceText(
+        action?.householdReason || enriched.householdReason,
+        420,
+      ),
+      confirmBeforeWork,
+      quoteChecklist: boundedStringList(
+        Array.isArray(action?.quoteChecklist)
+          ? action.quoteChecklist
+          : enriched.quoteChecklist,
+        3,
+        220,
+      ),
+      sequence: boundedSentenceText(
+        action?.sequence || enriched.sequence,
+        420,
+      ),
+      safety: boundedSentenceText(action?.safety || enriched.safety, 360),
       completed: action?.completed === true,
       priority: priorityIndexes.has(index),
       guideLabel: guideHref
@@ -821,6 +1296,11 @@ export function createCustomerPlanReportView(document) {
           || "Open the related guide"
         : "",
       guideHref,
+      links: safeActionLinks(
+        Array.isArray(action?.links) && action.links.length
+          ? action.links
+          : enriched.links,
+      ),
     };
   });
   const decisionBasis = uniqueReportText(
@@ -836,7 +1316,7 @@ export function createCustomerPlanReportView(document) {
         && !/part of the independent planning sequence/i.test(String(item))
       )),
     4,
-  );
+  ).map(professionalReportSentence).filter(Boolean);
   if (!decisionBasis.length) {
     decisionBasis.push(
       "The sequence reflects the goals, home context, budget and pace recorded for this plan.",
@@ -851,25 +1331,22 @@ export function createCustomerPlanReportView(document) {
       ? { boundary: professionalReview.readinessBoundary }
       : {}),
   };
-  const questions = readiness.missingLabels.length
-    ? readiness.missingLabels.map((label, index) => ({
-      number: index + 1,
-      prompt: label,
-      whyItMatters: "Choose the answer that best fits this home. Not sure remains a valid answer.",
-    }))
-    : (Array.isArray(document?.questions) ? document.questions : [])
-      .slice(0, 3)
-      .map((question, index) => ({
-        number: index + 1,
-        prompt: boundedText(question?.prompt, 240),
-        whyItMatters: boundedText(question?.whyItMatters, 360),
-      }))
-      .filter((question) => question.prompt);
   const overview = document?.overview && typeof document.overview === "object"
     ? document.overview
     : {};
   const goals = boundedStringList(overview.goals, 10, 120);
-  const homeDetails = boundedStringList(overview.homeDetails, 5, 120);
+  const homeDetails = boundedStringList(overview.homeDetails, 12, 120);
+  const homeFacts = overview.homeFacts
+    && typeof overview.homeFacts === "object"
+    && !Array.isArray(overview.homeFacts)
+    ? overview.homeFacts
+    : {};
+  const joinedFacts = (keys, fallback = "Not recorded") => {
+    const values = keys
+      .map((key) => boundedText(homeFacts[key], 120))
+      .filter(Boolean);
+    return values.join(", ") || fallback;
+  };
   const consideredWork = boundedStringList(
     overview.consideredWork,
     12,
@@ -889,8 +1366,32 @@ export function createCustomerPlanReportView(document) {
       ].filter(Boolean).join(", ") || "Not recorded",
     },
     {
-      label: "Home details",
-      value: homeDetails.join(", ") || "Not recorded",
+      label: "Size and occupancy",
+      value: joinedFacts(
+        ["storeys", "floorArea", "occupants"],
+        homeDetails.join(", ") || "Not recorded",
+      ),
+    },
+    {
+      label: "Age and shared walls",
+      value: joinedFacts(["ageBand", "sharedWalls"]),
+    },
+    {
+      label: "Roof",
+      value: joinedFacts([
+        "roofType",
+        "roofForm",
+        "roofColour",
+        "roofCondition",
+      ]),
+    },
+    {
+      label: "Walls and floor",
+      value: joinedFacts(["wallConstruction", "floorConstruction"]),
+    },
+    {
+      label: "Electrical context",
+      value: joinedFacts(["switchboard"]),
     },
     {
       label: "Work being considered",
@@ -901,7 +1402,7 @@ export function createCustomerPlanReportView(document) {
       value: boundedText(overview.approval, 180) || "Not recorded",
     },
     {
-      label: "Plan boundary",
+      label: "Delivery approach",
       value: [
         boundedText(overview.pace, 100),
         boundedText(overview.budget, 100),
@@ -918,7 +1419,7 @@ export function createCustomerPlanReportView(document) {
   const everydayActions = (
     Array.isArray(document?.everydayActions) ? document.everydayActions : []
   )
-    .slice(0, 12)
+    .slice(0, 24)
     .flatMap((item) => {
       const id = boundedText(item?.id, 80);
       if (
@@ -937,9 +1438,13 @@ export function createCustomerPlanReportView(document) {
         category: boundedText(item?.category, 100),
         title,
         description,
+        outcome: boundedSentenceText(
+          item?.outcome || everydayActionOutcomeById.get(id),
+          420,
+        ),
       }];
     })
-    .slice(0, 6);
+    .slice(0, 12);
   const displayDate = customerPlanDisplayDate(
     boundedText(document?.preparedDate, 20),
   );
@@ -968,7 +1473,7 @@ export function createCustomerPlanReportView(document) {
     readinessPresentation,
     professionalReview,
     professionalPresentation,
-    questions,
+    questions: [],
     decisionBasis,
     everydayActions,
     everydayActionsBoundary: boundedText(
@@ -995,34 +1500,34 @@ export function createCustomerPlanReportView(document) {
 function publicPlanResourceSet() {
   return [
     {
-      label: "Review or update your AEA home energy plan",
+      label: "Review or update your Australian Energy Assessments home energy plan",
       description: "Return to the private, no-account planner when your home, priorities or equipment change.",
       href: "/plan",
     },
     {
       label: "Find current rebates and support",
-      description: "Use the AEA government rebate finder, then confirm the current official program rules before signing a quote.",
+      description: "Use the Australian Energy Assessments rebate finder, then confirm current official program rules before signing a quote.",
       href: "/rebates",
     },
     {
       label: "Estimate certificate and rebate value",
-      description: "Use the AEA calculator for an indicative estimate based on the selected activity, product and location.",
+      description: "Use the Australian Energy Assessments calculator for an indicative estimate based on the selected activity, product and location.",
       href: "/calculator",
     },
     {
       label: "Compare electricity plans",
-      description: "Use the AEA independent comparator to check current electricity options against your household usage.",
+      description: "Use the Australian Energy Assessments guided comparator to check current electricity options against your household usage.",
       href: "/compare",
     },
     {
-      label: "Prepare for an independent assessment",
-      description: "See the AEA assessment path when a site-specific review would make the next decision clearer.",
-      href: "/assessments",
+      label: "Compare gas plans",
+      description: "Use the Australian Energy Assessments guided gas comparator if the household still has a gas account.",
+      href: "/gas-compare",
     },
     {
-      label: "Australian Government household energy hub",
-      description: "Independent national guidance for household energy use, comfort and upgrade planning.",
-      href: "https://www.energy.gov.au/households",
+      label: "Prepare for an independent assessment",
+      description: "See the Australian Energy Assessments assessment path when a site-specific review would make the next decision clearer.",
+      href: "/assessments",
     },
     {
       label: "Australian Government quick wins",
@@ -1030,19 +1535,24 @@ function publicPlanResourceSet() {
       href: "https://www.energy.gov.au/households/quick-wins",
     },
     {
-      label: "Find official rebates",
-      description: "Search the Australian Government rebate directory and verify eligibility with the administering program.",
-      href: "https://www.energy.gov.au/rebates",
+      label: "Australian Government guide to reducing energy bills",
+      description: "Use the current household guide to understand bills, identify major loads and act in a practical order.",
+      href: "https://www.energy.gov.au/households/household-guides/reduce-energy-bills",
     },
     {
-      label: "Understand an existing-home energy rating",
-      description: "Official guidance on measuring the energy efficiency of an existing Australian home.",
-      href: "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
+      label: "Australian Government insulation and draught-proofing guide",
+      description: "Official guidance on insulation, uncontrolled leakage, required ventilation and safe installation checks.",
+      href: "https://www.energy.gov.au/households/insulation-and-draught-proofing",
     },
     {
-      label: "Your Home passive design guide",
-      description: "Australian Government guidance on climate-responsive home design, comfort and efficiency.",
-      href: "https://www.yourhome.gov.au/passive-design/introduction",
+      label: "NatHERS Guidance Note for existing homes - July 2026",
+      description: "Current official guidance for assessors undertaking a NatHERS existing-home assessment. This self-reported plan is not that assessment.",
+      href: "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
+    },
+    {
+      label: "NatHERS Technical Note for existing homes - July 2026",
+      description: "Current requirements for formal NatHERS existing-home assessments and audit assurance.",
+      href: "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
     },
   ];
 }
@@ -1055,9 +1565,17 @@ function publicPlanHomeDetails(propertyContext) {
     : {};
   return [
     optionLabel(customerProjectOptions.storeys, source.storeys),
+    optionLabel(customerProjectOptions.ageBands, source.ageBand),
     optionLabel(customerProjectOptions.floorAreas, source.floorArea),
     optionLabel(customerProjectOptions.occupants || [], source.occupants),
     optionLabel(customerProjectOptions.sharedWalls || [], source.sharedWalls),
+    optionLabel(customerProjectOptions.roofTypes || [], source.roofType),
+    optionLabel(customerProjectOptions.roofForms || [], source.roofForm),
+    optionLabel(customerProjectOptions.roofColours || [], source.roofColour),
+    optionLabel(customerProjectOptions.roofConditions || [], source.roofCondition),
+    optionLabel(customerProjectOptions.wallConstructions || [], source.wallConstruction),
+    optionLabel(customerProjectOptions.floorConstructions || [], source.floorConstruction),
+    optionLabel(customerProjectOptions.switchboards || [], source.switchboard),
   ].filter(Boolean);
 }
 
@@ -1215,6 +1733,21 @@ function createCustomerPlanEmailProjection(report, profile) {
       stage: trim(action.stage, profile.actionStage),
       title: trim(action.title, profile.actionTitle),
       description: trim(action.description, profile.actionDescription),
+      whatToDo: trim(action.whatToDo, profile.actionDescription),
+      whyItMatters: trim(action.whyItMatters, 220),
+      householdReason: trim(action.householdReason, 220),
+      confirmBeforeWork: boundedStringList(
+        action.confirmBeforeWork,
+        2,
+        180,
+      ).map((item) => trim(item, 180)),
+      quoteChecklist: boundedStringList(
+        action.quoteChecklist,
+        2,
+        160,
+      ).map((item) => trim(item, 160)),
+      sequence: trim(action.sequence, 220),
+      safety: trim(action.safety, 180),
       guideLabel: trim(action.guideLabel, 80),
     }));
   const everydayActions = report.everydayActions
@@ -1227,6 +1760,7 @@ function createCustomerPlanEmailProjection(report, profile) {
         action.description,
         profile.everydayDescription,
       ),
+      outcome: trim(action.outcome, 180),
     }));
   const professionalPresentation = report.professionalPresentation
     ? {
@@ -1265,11 +1799,7 @@ function createCustomerPlanEmailProjection(report, profile) {
       body: trim(report.readinessPresentation.body, profile.generalBody),
     },
     professionalPresentation,
-    questions: report.questions.map((question) => ({
-      ...question,
-      prompt: trim(question.prompt, 180),
-      whyItMatters: trim(question.whyItMatters, 240),
-    })),
+    questions: [],
     decisionBasis: report.decisionBasis.map((item) =>
       trim(item, profile.generalBody)
     ),
@@ -1361,6 +1891,9 @@ function htmlActionCard(action, priority = false) {
   const cellSurface = priority
     ? "background-color:#063448;background-image:linear-gradient(135deg,#031f38 0%,#05677b 100%);"
     : "background-color:#f8fcfd;";
+  const detailSurface = priority ? "rgba(0,21,43,.38)" : "#eaf4f7";
+  const confirmation = boundedStringList(action.confirmBeforeWork, 2, 180)
+    .join(" ");
   return `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 ${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;${surface}">
       <tr>
@@ -1370,7 +1903,14 @@ function htmlActionCard(action, priority = false) {
         <td valign="top" style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px ${emailLayout.tilePaddingY}px 16px;${cellSurface}border-radius:0 ${emailLayout.tileRadius}px ${emailLayout.tileRadius}px 0;">
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:${labelColor};">${escapeHtml(priority ? `Start here | ${action.stage}` : action.stage)}</div>
           <h3 style="margin:${emailLayout.labelTitleGap}px 0 ${emailLayout.titleBodyGap}px;font-family:Arial,Helvetica,sans-serif;font-size:${priority ? "22px" : "19px"};line-height:${priority ? "27px" : "24px"};font-weight:800;letter-spacing:-.25px;color:${titleColor};">${escapeHtml(action.title)}</h3>
-          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${bodyColor};">${escapeHtml(action.description)}</p>
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${bodyColor};">${escapeHtml(action.whatToDo || action.description)}</p>
+          <div style="margin-top:14px;padding:14px 16px;border-radius:${emailLayout.insetRadius}px;background-color:${detailSurface};">
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:${labelColor};">Why it matters</div>
+            <p style="margin:4px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:${bodyColor};">${escapeHtml(action.whyItMatters)}</p>
+            <div style="margin-top:10px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:${labelColor};">Why it is in this plan</div>
+            <p style="margin:4px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:${bodyColor};">${escapeHtml(action.householdReason)}</p>
+            ${confirmation ? `<div style="margin-top:10px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:${labelColor};">Confirm before quoting</div><p style="margin:4px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:${bodyColor};">${escapeHtml(confirmation)}</p>` : ""}
+          </div>
           ${guideHref ? `<p style="margin:${emailLayout.bodyLinkGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;"><a href="${escapeHtml(guideHref)}" style="font-weight:700;color:${linkColor};text-decoration:underline;">${escapeHtml(action.guideLabel || customerPlanReportCopy.guideLabel)}</a></p>` : ""}
         </td>
       </tr>
@@ -1385,9 +1925,24 @@ function htmlEverydayActionTile(action, isLast = false) {
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#74f1d7;">${escapeHtml(action.category)}</div>
           <div style="margin-top:${emailLayout.labelTitleGap}px;font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:25px;font-weight:800;color:#ffffff;">${escapeHtml(action.title)}</div>
           <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#cae8f0;">${escapeHtml(action.description)}</p>
+          ${action.outcome ? `<p style="margin:12px 0 0;padding-top:12px;border-top:1px solid rgba(116,241,215,.3);font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#ffffff;"><strong>Why try it:</strong> ${escapeHtml(action.outcome)}</p>` : ""}
         </td>
       </tr>
     </table>`;
+}
+
+function htmlPrimaryResourceRows(resources) {
+  const preferred = ["/calculator", "/rebates", "/compare", "/gas-compare"];
+  const selected = preferred.flatMap((href) => {
+    const resource = (Array.isArray(resources) ? resources : [])
+      .find((item) => item?.href === href);
+    return resource ? [resource] : [];
+  });
+  if (!selected.length) return "";
+  return selected.map((resource, index) => {
+    const href = `${CUSTOMER_PLAN_PUBLIC_ORIGIN}${resource.href}`;
+    return `<tr><td style="padding:${index ? "14px 0 0" : "0"};font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;"><a href="${escapeHtml(href)}" style="font-weight:800;color:#047857;text-decoration:underline;">${escapeHtml(resource.label)}</a><div style="margin-top:4px;color:#536c78;">${escapeHtml(resource.description)}</div></td></tr>`;
+  }).join("");
 }
 
 function renderCustomerPlanDocumentHtml(report, notices = []) {
@@ -1401,22 +1956,16 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
     ? [
       [report.actions.length, "STEPS COMPLETE"],
       [0, "LEFT TO PLAN"],
-      [report.questions.length, "CHECK FIRST"],
+      [report.actions.length, "CHECKLISTS INCLUDED"],
     ]
     : [
       [report.priorityActions.length, "START NOW"],
       [report.laterActions.length, "PLAN NEXT"],
-      [report.questions.length, "CHECK FIRST"],
+      [report.actions.length, "CHECKLISTS INCLUDED"],
     ];
   const preheader = planComplete
-    ? `${report.planTitle}. Every current step is marked complete.${
-      report.questions.length
-        ? ` Check ${report.questions.length} open home detail${report.questions.length === 1 ? "" : "s"}.`
-        : ""
-    }`
-    : report.questions.length
-      ? `${report.planTitle}. Start with your first three steps and check ${report.questions.length} open home detail${report.questions.length === 1 ? "" : "s"}.`
-      : report.priorityActions.length
+    ? `${report.planTitle}. Every current step is marked complete.`
+    : report.priorityActions.length
       ? `${report.planTitle}. Your first three steps are ready.`
       : report.actions.length
         ? `${report.planTitle}. Every current step is marked complete.`
@@ -1586,11 +2135,10 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
 
               <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 ${htmlSectionHeading(copy.readinessEyebrow, "How confident is this plan?")}
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};border:1px solid ${report.questions.length ? "#e8c66f" : "#74f1d7"};border-top:5px solid ${report.questions.length ? "#e8c66f" : "#20d8c1"};">
-                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:${report.questions.length ? "#fff7e5" : "#e8f7f5"};">
-                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:${report.questions.length ? "#6d5315" : "#063448"};">${escapeHtml(readiness.title)}</div>
-                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:${report.questions.length ? "#6d5315" : "#365467"};">${escapeHtml(readiness.body)}</p>
-                    ${report.questions.length ? htmlBulletRows(report.questions.map((question) => `${question.prompt}: ${question.whyItMatters}`), { color: "#6d5315" }) : ""}
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;overflow:hidden;background-color:#e8f7f5;border:1px solid #74f1d7;border-top:5px solid #20d8c1;">
+                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;border-radius:${emailLayout.tileRadius}px;background-color:#e8f7f5;">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:27px;font-weight:800;color:#063448;">${escapeHtml(readiness.title)}</div>
+                    <p style="margin:${emailLayout.titleBodyGap}px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#365467;">${escapeHtml(readiness.body)}</p>
                   </td></tr>
                 </table>
                 ${professional ? `
@@ -1624,6 +2172,14 @@ function renderCustomerPlanDocumentHtml(report, notices = []) {
                   <tr><td style="padding:14px 20px 21px;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;">${htmlBulletRows(report.beforeTrade)}</td></tr>
                 </table>
               </div>
+
+              ${htmlPrimaryResourceRows(report.resources) ? `
+              <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
+                ${htmlSectionHeading("Useful next steps", "Check rebates, estimate support and compare energy plans", "These Australian Energy Assessments tools continue the same guided journey.")}
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:${emailLayout.tileGap}px;border-collapse:separate;border-spacing:0;border-radius:${emailLayout.tileRadius}px;background-color:#f8fcfd;border:1px solid #c9dfe5;border-top:5px solid #20d8c1;">
+                  <tr><td style="padding:${emailLayout.tilePaddingY}px ${emailLayout.tilePaddingX}px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${htmlPrimaryResourceRows(report.resources)}</table></td></tr>
+                </table>
+              </div>` : ""}
 
               <div class="section-pad" style="padding-top:${emailLayout.sectionGap}px;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0;border-radius:${emailLayout.featureRadius}px;overflow:hidden;background-color:#063448;background-image:linear-gradient(135deg,#00152b 0%,#056779 100%);border-bottom:6px solid #20d8c1;">
@@ -1678,7 +2234,15 @@ function renderCustomerPlanDocumentText(report, notices = []) {
         "",
         `${String(action.number).padStart(2, "0")}. ${action.title}${action.completed ? " [completed]" : ""}`,
         action.stage,
-        action.description,
+        `What to do: ${action.whatToDo || action.description}`,
+        `Why it matters: ${action.whyItMatters}`,
+        `Why this applies to your home: ${action.householdReason}`,
+        "Confirm before quoting:",
+        ...action.confirmBeforeWork.map((item) => `- ${item}`),
+        "Quote and evidence checklist:",
+        ...action.quoteChecklist.map((item) => `- ${item}`),
+        `Sequence and dependencies: ${action.sequence}`,
+        `Safety boundary: ${action.safety}`,
       );
       if (action.guideHref) {
         lines.push(
@@ -1706,7 +2270,15 @@ function renderCustomerPlanDocumentText(report, notices = []) {
         "",
         `${String(action.number).padStart(2, "0")}. ${action.title}${action.completed ? " [completed]" : ""}`,
         action.stage,
-        action.description,
+        `What to do: ${action.whatToDo || action.description}`,
+        `Why it matters: ${action.whyItMatters}`,
+        `Why this applies to your home: ${action.householdReason}`,
+        "Confirm before quoting:",
+        ...action.confirmBeforeWork.map((item) => `- ${item}`),
+        "Quote and evidence checklist:",
+        ...action.quoteChecklist.map((item) => `- ${item}`),
+        `Sequence and dependencies: ${action.sequence}`,
+        `Safety boundary: ${action.safety}`,
       );
       if (action.guideHref) {
         lines.push(
@@ -1731,6 +2303,7 @@ function renderCustomerPlanDocumentText(report, notices = []) {
         "",
         `${action.category}: ${action.title}`,
         action.description,
+        action.outcome ? `Why try it: ${action.outcome}` : "",
       );
     }
     lines.push("", report.everydayActionsBoundary);
@@ -1749,14 +2322,6 @@ function renderCustomerPlanDocumentText(report, notices = []) {
     report.readinessPresentation.title,
     report.readinessPresentation.body,
   );
-  if (report.questions.length) {
-    for (const question of report.questions) {
-      lines.push(
-        `${question.number}. ${question.prompt}`,
-        question.whyItMatters,
-      );
-    }
-  }
   if (professional) {
     lines.push(
       "",
@@ -1781,6 +2346,11 @@ function renderCustomerPlanDocumentText(report, notices = []) {
     "",
     copy.tradeEyebrow.toUpperCase(),
     ...report.beforeTrade.map((item) => `- ${item}`),
+    "",
+    "USEFUL NEXT STEPS",
+    ...report.resources.slice(0, 6).map((resource) =>
+      `${resource.label}: ${absolutePlanResourceHref(resource.href)}`
+    ),
     "",
     copy.privacyEyebrow.toUpperCase(),
     report.privacyNote,
