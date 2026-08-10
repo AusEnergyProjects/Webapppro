@@ -82,6 +82,15 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
+test("public navigation keeps TLink visible without promoting customer accounts", () => {
+  assert.match(chrome, /active === "account" \? <a className="site-account-link active" href="\/account"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open TLink trade login"/);
+  assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
+  assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
+  assert.match(guide, /Ask matching trades/);
+  assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
+});
+
 test("shared navigation never clips its first destination and explains mobile overflow", () => {
   assert.match(chrome, /className="site-nav-shell"/);
   assert.match(chrome, /className="site-nav-discovery" id="site-nav-discovery"/);

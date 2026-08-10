@@ -61,9 +61,14 @@ function sourceDatabase() {
     notice_version text NOT NULL,
     consent_purpose text NOT NULL,
     disclosed_fields text NOT NULL,
-    customer_name text NOT NULL,
+    customer_first_name text NOT NULL,
+    customer_last_name text NOT NULL,
     customer_email text NOT NULL,
     customer_phone text NOT NULL,
+    customer_unit_number text NOT NULL,
+    customer_street_address text NOT NULL,
+    customer_suburb text NOT NULL,
+    customer_address_state text NOT NULL,
     postcode text NOT NULL,
     customer_message text NOT NULL,
     granted_at text NOT NULL,
@@ -112,9 +117,14 @@ function contact(id, overrides = {}) {
       "service_categories",
       "customer_message",
     ],
-    customerName: "Jamie Example",
+    customerFirstName: "Jamie",
+    customerLastName: "Example",
     customerEmail: "jamie@example.test",
     customerPhone: "",
+    customerUnitNumber: "Unit 4",
+    customerStreetAddress: "15 Example Street",
+    customerSuburb: "MELBOURNE",
+    customerAddressState: "VIC",
     customerMessage: "Please call after 4 pm.",
     grantedAt: "2026-08-10T00:00:00.000Z",
     ...overrides,
@@ -188,6 +198,24 @@ test("a reused source reference with different lead or contact fields is rejecte
     adapter,
     opportunity("opportunity-altered", { postcode: "3001" }),
     contact("contact-altered", { customerMessage: "Different message" }),
+    currentConsent,
+  ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
+  await assert.rejects(() => persistLeadOpportunity(
+    adapter,
+    opportunity("opportunity-altered-address"),
+    contact("contact-altered-address", { customerStreetAddress: "99 Different Street" }),
+    currentConsent,
+  ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
+  await assert.rejects(() => persistLeadOpportunity(
+    adapter,
+    opportunity("opportunity-altered-locality"),
+    contact("contact-altered-locality", { customerSuburb: "CARLTON" }),
+    currentConsent,
+  ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
+  await assert.rejects(() => persistLeadOpportunity(
+    adapter,
+    opportunity("opportunity-altered-name"),
+    contact("contact-altered-name", { customerLastName: "Changed" }),
     currentConsent,
   ), /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
   assert.equal(database.prepare("SELECT postcode FROM trade_opportunities").get().postcode, "3000");

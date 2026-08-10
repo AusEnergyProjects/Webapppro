@@ -18,11 +18,11 @@ const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispat
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const customerProjectRules = read("../src/lib/customer-projects.mjs");
 
-test("Direct Trade household projects are routed through the private account gateway", () => {
+test("legacy Direct Trade projects stay account scoped while the homepage uses the no-account planner", () => {
   assert.match(route, /DirectTradeProjectBrief/);
   assert.match(route, /Direct Trade Project Brief/);
   assert.match(homepage, /href="\/plan">Build my home energy plan/);
-  assert.match(homepage, /Create an account after seeing your roadmap/);
+  assert.match(homepage, /No account is needed to build a plan or send an enquiry to matching trades/);
   assert.match(brief, /href="\/account\/projects\/new">Create a free private project/);
   assert.match(brief, /href="\/account">Open my account/);
   assert.match(brief, /No public lead form/);

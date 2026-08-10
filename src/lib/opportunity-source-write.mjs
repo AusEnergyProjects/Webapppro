@@ -64,9 +64,10 @@ export async function persistLeadOpportunity(
   if (contactRelease) {
     await database.prepare(`INSERT INTO public_trade_lead_contact_releases
       (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
-       disclosed_fields, customer_name, customer_email, customer_phone, postcode,
+       disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+       customer_street_address, customer_suburb, customer_address_state, postcode,
        customer_message, granted_at, withdrawn_at, created_at, updated_at)
-      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
       ON CONFLICT DO NOTHING`)
       .bind(
         contactRelease.id,
@@ -75,9 +76,14 @@ export async function persistLeadOpportunity(
         contactRelease.noticeVersion,
         contactRelease.consentPurpose,
         JSON.stringify(contactRelease.disclosedFields),
-        contactRelease.customerName,
+        contactRelease.customerFirstName,
+        contactRelease.customerLastName,
         contactRelease.customerEmail,
         contactRelease.customerPhone,
+        contactRelease.customerUnitNumber,
+        contactRelease.customerStreetAddress,
+        contactRelease.customerSuburb,
+        contactRelease.customerAddressState,
         record.postcode,
         contactRelease.customerMessage,
         contactRelease.grantedAt,
@@ -86,7 +92,8 @@ export async function persistLeadOpportunity(
       )
       .run();
     const storedRelease = await database.prepare(`SELECT status, notice_version, consent_purpose,
-        disclosed_fields, customer_name, customer_email, customer_phone, postcode,
+        disclosed_fields, customer_first_name, customer_last_name, customer_email, customer_phone, customer_unit_number,
+        customer_street_address, customer_suburb, customer_address_state, postcode,
         customer_message, granted_at, withdrawn_at
       FROM public_trade_lead_contact_releases
       WHERE opportunity_id = ? AND source_reference = ? LIMIT 1`)
@@ -103,9 +110,14 @@ export async function persistLeadOpportunity(
     const requestedFields = [...new Set(contactRelease.disclosedFields.map(String))].sort();
     if (
       !storedRelease
-      || String(storedRelease.customer_name) !== contactRelease.customerName
+      || String(storedRelease.customer_first_name) !== contactRelease.customerFirstName
+      || String(storedRelease.customer_last_name) !== contactRelease.customerLastName
       || String(storedRelease.customer_email) !== contactRelease.customerEmail
       || String(storedRelease.customer_phone) !== contactRelease.customerPhone
+      || String(storedRelease.customer_unit_number) !== contactRelease.customerUnitNumber
+      || String(storedRelease.customer_street_address) !== contactRelease.customerStreetAddress
+      || String(storedRelease.customer_suburb) !== contactRelease.customerSuburb
+      || String(storedRelease.customer_address_state) !== contactRelease.customerAddressState
       || String(storedRelease.postcode) !== String(record.postcode)
       || String(storedRelease.customer_message) !== contactRelease.customerMessage
       || String(storedRelease.notice_version) !== contactRelease.noticeVersion

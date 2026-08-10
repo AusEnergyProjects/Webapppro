@@ -82,7 +82,7 @@ test("household opportunity distribution is deduplicated while response and expi
   assert.match(adminMatches, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(adminMatches, /trade_capability|capability_review/);
   assert.match(standards, /Households control what is shared/i);
-  assert.match(standards, /selected service and optional message to all verified matching trades/i);
+  assert.match(standards, /email, postcode, selected services and any written message to all approved matching trades/i);
   assert.match(
     customerBrief,
     /customer-controlled connection/i,

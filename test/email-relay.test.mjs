@@ -388,12 +388,19 @@ test("public plan enquiries use customer-friendly titles and category labels", (
     eventType: "direct_trade.project",
     enquiry: "home-plan-upgrade",
     sourceJourney: "public-home-energy-plan",
+    customerFirstName: "Jamie",
+    customerLastName: "Customer",
     projectCategories: [
       "draught-proofing",
       "insulation",
       "glazing",
       "window-coverings",
     ],
+    customerUnitNumber: "Unit 4",
+    customerStreetAddress: "15 Example Street",
+    customerSuburb: "MELBOURNE",
+    customerState: "VIC",
+    tradeSharing: { email: true, postcode: true, name: false, phone: false, address: false },
     directTradeTriage: {
       status: "automatic_verified_area_allocation",
       priority: "standard_allocation",
@@ -409,11 +416,11 @@ test("public plan enquiries use customer-friendly titles and category labels", (
   assert.match(sent[0].subject, /personalised home energy plan is attached/i);
   assert.doesNotMatch(sent[0].subject, /Direct Trade project brief/i);
   assert.match(sent[0].htmlBody, /matching request is being processed/i);
-  assert.match(sent[0].htmlBody, /email, postcode, selected service and any message you wrote will be shared with all approved TLink trades/i);
-  assert.match(sent[0].htmlBody, /name and phone are shared only if you selected them/i);
+  assert.match(sent[0].htmlBody, /email, postcode, selected services and any message you wrote will be shared with all approved TLink trades/i);
+  assert.match(sent[0].htmlBody, /name, phone and full service address are shared only when you selected each one/i);
   assert.match(sent[0].htmlBody, /private plan PDF is not shared with trades/i);
-  assert.match(sent[0].body, /email, postcode, selected service and any message you wrote will be shared with all approved TLink trades/i);
-  assert.match(sent[0].body, /name and phone are shared only if you selected them/i);
+  assert.match(sent[0].body, /email, postcode, selected services and any message you wrote will be shared with all approved TLink trades/i);
+  assert.match(sent[0].body, /name, phone and full service address are shared only when you selected each one/i);
   assert.doesNotMatch(sent[0].htmlBody, /enquiry is open to matching trades/i);
   assert.match(sent[1].subject, /Home energy plan upgrade enquiry/);
   assert.match(
@@ -422,6 +429,7 @@ test("public plan enquiries use customer-friendly titles and category labels", (
   );
   assert.match(sent[1].htmlBody, /Open matching to active verified trades/);
   assert.match(sent[1].htmlBody, /every active, verified matching trade servicing the area/i);
+  assert.match(sent[1].htmlBody, /Unit 4 15 Example Street, MELBOURNE, VIC, 3000/);
 });
 
 function publicPlanPdfDelivery() {
@@ -447,8 +455,15 @@ function publicPlanRelayPayload() {
     eventType: "direct_trade.project",
     enquiry: "home-plan-upgrade",
     sourceJourney: "public-home-energy-plan",
+    customerFirstName: "Jamie",
+    customerLastName: "Customer",
     submissionFingerprint: "a".repeat(64),
     projectCategories: ["heating-cooling"],
+    customerUnitNumber: "Unit 4",
+    customerStreetAddress: "15 Example Street",
+    customerSuburb: "MELBOURNE",
+    customerState: "VIC",
+    tradeSharing: { email: true, postcode: true, name: false, phone: false, address: false },
     projectNotes: "Please contact me about replacing the main system.",
     directTradeTriage: {
       status: "automatic_verified_area_allocation",
@@ -492,6 +507,13 @@ test("public enquiry delivery attaches one verified PDF only to the customer and
   assert.equal(sent[1].to, "info@ausenergyassessments.com");
   assert.equal("attachments" in sent[1], false);
   assert.equal(rows.length, 2);
+  const details = JSON.parse(rows[1][rows[0].indexOf("Details")]);
+  assert.equal(details.customerFirstName, "Jamie");
+  assert.equal(details.customerLastName, "Customer");
+  assert.equal(details.customerUnitNumber, "Unit 4");
+  assert.equal(details.customerStreetAddress, "15 Example Street");
+  assert.equal(details.customerSuburb, "MELBOURNE");
+  assert.equal(details.customerState, "VIC");
 
   assert.equal(context.handleEnquiry_(payload).value, "ok");
   assert.equal(sent.length, 2);

@@ -68,9 +68,14 @@ export function publicPlanSubmissionFingerprint(payload) {
   const core = canonicalFingerprintValue({
     submissionType: payload?.submissionType || "",
     enquiry: payload?.enquiry || "",
-    name: payload?.name || "",
+    customerFirstName: payload?.customerFirstName || "",
+    customerLastName: payload?.customerLastName || "",
     email: payload?.email || "",
     phone: payload?.phone || "",
+    customerUnitNumber: payload?.customerUnitNumber || "",
+    customerStreetAddress: payload?.customerStreetAddress || "",
+    customerSuburb: payload?.customerSuburb || "",
+    customerState: payload?.customerState || "",
     postcode: payload?.postcode || "",
     projectCategories: payload?.projectCategories || [],
     projectNotes: payload?.projectNotes || "",
@@ -108,7 +113,12 @@ export function createLeadEnvelope(payload, options = {}) {
     : "";
   const reference = inferredPublicReference
     || `AEA-${referenceDate(submittedAt)}-${suffix}`;
-  const inferredState = residentialStateFromPostcode(leadPayload.postcode);
+  const inferredState = publicPlanEnquiry
+    ? ""
+    : residentialStateFromPostcode(leadPayload.postcode);
+  const resolvedState = publicPlanEnquiry
+    ? leadPayload.customerState || ""
+    : leadPayload.state || inferredState || "";
   const directTradeTriage =
     publicPlanEnquiry
       ? {
@@ -128,11 +138,12 @@ export function createLeadEnvelope(payload, options = {}) {
               "service_categories",
               ...(leadPayload.tradeSharing?.name ? ["customer_name"] : []),
               ...(leadPayload.tradeSharing?.phone ? ["customer_phone"] : []),
+              ...(leadPayload.tradeSharing?.address ? ["customer_address"] : []),
               ...(leadPayload.projectNotes ? ["customer_message"] : []),
             ],
           },
           matchCriteria: {
-            state: leadPayload.state || inferredState || "",
+            state: resolvedState,
             postcode: leadPayload.postcode || "",
             capabilities: leadPayload.projectCategories || [],
             participantStatus: "active_verified",
@@ -143,7 +154,7 @@ export function createLeadEnvelope(payload, options = {}) {
       : eventType === "direct_trade.project"
       ? buildDirectTradeTriage({
           ...leadPayload,
-          state: leadPayload.state || inferredState || "",
+          state: resolvedState,
         })
       : null;
   const participantReview =
@@ -157,7 +168,7 @@ export function createLeadEnvelope(payload, options = {}) {
     eventType,
     reference,
     submittedAt,
-    state: leadPayload.state || inferredState || "",
+    state: resolvedState,
     source: "aea-energy-web",
     ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
     ...(publicPlanEnquiry ? { submissionFingerprint } : {}),

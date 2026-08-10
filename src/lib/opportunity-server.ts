@@ -20,7 +20,8 @@ const D1_ALLOCATION_WRITE_BATCH_SIZE = 50;
 export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: string, firebaseUid = "") {
   await db.prepare(`INSERT INTO trade_crm_enquiries
     (id, firebase_uid, source_type, source_reference, external_record_id, opportunity_match_id, status,
-     customer_type, first_name, last_name, email, phone, address_state, postcode,
+     customer_type, first_name, last_name, email, phone, address_line_1, address_line_2, suburb,
+     address_state, postcode,
      service_category, service_categories, description, urgency, service_region, protected_source,
      duplicate_decision, record_status, created_at, updated_at)
     SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
@@ -29,7 +30,11 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
       'residential', CASE WHEN contact.id IS NOT NULL AND EXISTS (
         SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
         WHERE disclosed.value = 'customer_name'
-      ) THEN contact.customer_name ELSE '' END, '',
+      ) THEN contact.customer_first_name ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_name'
+      ) THEN contact.customer_last_name ELSE '' END,
       CASE WHEN contact.id IS NOT NULL AND EXISTS (
         SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
         WHERE disclosed.value = 'customer_email'
@@ -37,7 +42,23 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
       CASE WHEN contact.id IS NOT NULL AND EXISTS (
         SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
         WHERE disclosed.value = 'customer_phone'
-      ) THEN contact.customer_phone ELSE '' END, o.state,
+      ) THEN contact.customer_phone ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_address'
+      ) THEN contact.customer_street_address ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_address'
+      ) THEN contact.customer_unit_number ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_address'
+      ) THEN contact.customer_suburb ELSE '' END,
+      CASE WHEN contact.id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
+        WHERE disclosed.value = 'customer_address'
+      ) THEN contact.customer_address_state ELSE '' END,
       CASE WHEN contact.id IS NULL THEN '' ELSE contact.postcode END,
       COALESCE(json_extract(m.matched_categories, '$[0]'), 'other'), m.matched_categories,
       o.summary || CASE
@@ -82,8 +103,10 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
       status = excluded.status, service_category = excluded.service_category,
       service_categories = excluded.service_categories, description = excluded.description,
       urgency = excluded.urgency, service_region = excluded.service_region,
-      first_name = excluded.first_name, email = excluded.email, phone = excluded.phone,
-      address_state = excluded.address_state, postcode = excluded.postcode,
+      first_name = excluded.first_name, last_name = excluded.last_name,
+      email = excluded.email, phone = excluded.phone,
+      address_line_1 = excluded.address_line_1, address_line_2 = excluded.address_line_2,
+      suburb = excluded.suburb, address_state = excluded.address_state, postcode = excluded.postcode,
       protected_source = excluded.protected_source,
       duplicate_decision = excluded.duplicate_decision, updated_at = excluded.updated_at`)
     .bind(opportunityId, firebaseUid, firebaseUid).run();
@@ -148,8 +171,14 @@ type DirectTradeLead = {
   reference?: string;
   submittedAt?: string;
   name?: string;
+  customerFirstName?: string;
+  customerLastName?: string;
   email?: string;
   phone?: string;
+  customerUnitNumber?: string;
+  customerStreetAddress?: string;
+  customerSuburb?: string;
+  customerState?: string;
   postcode?: string;
   state?: string;
   projectCategories?: string[];
@@ -162,6 +191,7 @@ type DirectTradeLead = {
     postcode?: boolean;
     name?: boolean;
     phone?: boolean;
+    address?: boolean;
   };
   timeframe?: string;
   directTradeTriage?: {
@@ -180,9 +210,34 @@ function publicContactRelease(payload: DirectTradeLead) {
   if (payload.sourceJourney !== "public-home-energy-plan") return null;
   const receipt = payload.directTradeTriage?.contactConsentReceipt;
   const sourceReference = String(payload.reference || "").trim();
-  const customerName = String(payload.name || "").trim().slice(0, 120);
+  const customerFirstName = String(payload.customerFirstName || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  const customerLastName = String(payload.customerLastName || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
   const customerEmail = String(payload.email || "").trim().toLowerCase().slice(0, 254);
   const customerPhone = String(payload.phone || "").trim().slice(0, 40);
+  const customerUnitNumber = String(payload.customerUnitNumber || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  const customerStreetAddress = String(payload.customerStreetAddress || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+  const customerSuburb = String(payload.customerSuburb || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  const customerAddressState = canonicalAustralianState(payload.customerState) || "";
   const tradeSharing = payload.tradeSharing;
   const noticeVersion = String(receipt?.noticeVersion || "").trim().slice(0, 120);
   const consentPurpose = String(receipt?.purpose || "").trim().slice(0, 160);
@@ -190,9 +245,14 @@ function publicContactRelease(payload: DirectTradeLead) {
   if (
     receipt?.accepted !== true
     || !sourceReference
-    || !customerName
+    || !customerFirstName
+    || !customerLastName
     || !customerEmail
     || !customerPhone
+    || !customerStreetAddress
+    || !customerSuburb
+    || !customerAddressState
+    || customerAddressState !== canonicalAustralianState(payload.state)
     || tradeSharing?.email !== true
     || tradeSharing?.postcode !== true
     || noticeVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
@@ -206,12 +266,18 @@ function publicContactRelease(payload: DirectTradeLead) {
     "service_categories",
     ...(tradeSharing.name ? ["customer_name"] : []),
     ...(tradeSharing.phone ? ["customer_phone"] : []),
+    ...(tradeSharing.address ? ["customer_address"] : []),
     ...(customerMessage ? ["customer_message"] : []),
   ];
   return {
-    customerName,
+    customerFirstName,
+    customerLastName,
     customerEmail,
     customerPhone,
+    customerUnitNumber,
+    customerStreetAddress,
+    customerSuburb,
+    customerAddressState,
     customerMessage,
     noticeVersion,
     consentPurpose,

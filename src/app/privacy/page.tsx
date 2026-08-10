@@ -24,7 +24,7 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "Australian Energy Assessments protected opportunities keep the full home plan, exact street address, bills, meter data and uploaded documents behind the authorised marketplace boundary. When a household explicitly submits a trade enquiry, the consent screen names the basic contact fields that will be released to every active verified trade whose service area and capability match the selected work. Wholesalers do not receive household lead details.",
+    body: "Australian Energy Assessments keeps the household name, email, phone, unit number, street address, suburb, state and postcode in the protected enquiry record. When a household submits a trade enquiry, every approved TLink trade whose services and active service area match the selected work receives the email, postcode, selected services and any message the household writes. The household separately chooses whether those trades also receive the name, phone or full property address. The full home plan, PDF, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",
@@ -36,7 +36,7 @@ const sections = [
   },
   {
     title: "Emailing a home energy plan",
-    body: "When a signed-in household chooses to email a plan, the nominated recipient address is sent to our email delivery provider for that requested delivery. The shareable plan is generated from controlled planning information and deliberately excludes the exact postcode, private project names, account details, private notes, room names and routines, permission notes, evidence filenames, meter information and customer review text. The household must confirm that the nominated recipient is appropriate before sending.",
+    body: "A household can request its personalised plan by email without creating an account. The email address is sent to our delivery provider only for the requested delivery. The customer PDF stays private and is not attached to trade notifications or copied into trade CRM leads. The household must confirm that the email address and selected trade-sharing choices are correct before submitting.",
   },
   {
     title: "Storage, security and retention",
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
       <TLinkHeader active="dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 29 July 2026</span>
+          <span>Effective 10 August 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments and TLink

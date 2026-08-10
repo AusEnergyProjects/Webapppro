@@ -77,6 +77,9 @@ test("public notification dispatch rechecks the exact current consent and reads 
   assert.match(deliveryServer, /const publicDisclosedFields = new Set/);
   assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_name"\)/);
   assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_message"\)/);
+  assert.match(deliveryServer, /sharesAddress && !hasAddress/);
+  assert.match(deliveryServer, /public_contact_has_address/);
+  assert.doesNotMatch(deliveryServer, /public_contact\.customer_address public_customer_address/);
   assert.doesNotMatch(deliveryServer, /trade_capability|public_capability_current|service qualification/i);
   assert.doesNotMatch(deliveryServer, /public_contact\.(customer_email|customer_phone)\s+public_/);
   assert.doesNotMatch(deliveryServer, /public_contact\.(address_line|plan_snapshot|bill_data|meter_data|documents)/);

@@ -1616,6 +1616,11 @@ export function DirectTradeDashboard() {
                           opportunity.matchId,
                         );
                         const releasedCustomerContact = opportunity.customerContact;
+                        const releasedCustomerName =
+                          releasedCustomerContact?.name.trim() || "";
+                        const customerDisplayName = releasedCustomerName
+                          || opportunity.title
+                          || "Customer enquiry";
                         const detailId = `opportunity-details-${opportunity.matchId}`;
                         const toggleId = `opportunity-toggle-${opportunity.matchId}`;
                         const customerIdentityId =
@@ -1639,12 +1644,8 @@ export function DirectTradeDashboard() {
                               <span>
                                 {opportunityBroadLocation(opportunity)} | {opportunity.distanceBand}
                               </span>
-                              <h3>
-                                {releasedCustomerContact
-                                  ? releasedCustomerContact.name
-                                  : opportunity.title}
-                              </h3>
-                              {releasedCustomerContact && (
+                              <h3>{customerDisplayName}</h3>
+                              {releasedCustomerName && (
                                 <span className="dashboard-connected-customer-scope">
                                   {opportunity.title}
                                 </span>
@@ -1689,7 +1690,7 @@ export function DirectTradeDashboard() {
                                   <div className="dashboard-connected-customer-intro">
                                     <span>Customer-authorised contact</span>
                                     <h4 id={customerIdentityHeadingId}>
-                                      {releasedCustomerContact.name}
+                                      {customerDisplayName}
                                     </h4>
                                     <p>
                                       {releasedCustomerContact.releaseScope === "all_qualified_trades"
@@ -1703,7 +1704,7 @@ export function DirectTradeDashboard() {
                                   </div>
                                   <dl
                                     className="dashboard-connected-customer-contact-grid"
-                                    aria-label={`Contact details for ${releasedCustomerContact.name}`}
+                                    aria-label={`Contact details for ${customerDisplayName}`}
                                   >
                                     {releasedCustomerContact.phone && <div>
                                       <dt>Phone</dt>

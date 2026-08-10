@@ -10,14 +10,22 @@ const planPage = fs.readFileSync(
   new URL("../src/app/plan/page.tsx", import.meta.url),
   "utf8",
 );
+const enquiryForm = fs.readFileSync(
+  new URL("../src/components/PublicPlanEnquiryForm.tsx", import.meta.url),
+  "utf8",
+);
+const enquiryStyles = fs.readFileSync(
+  new URL("../src/components/PublicPlanEnquiryForm.module.css", import.meta.url),
+  "utf8",
+);
 
-test("the public plan offers one clear no-account enquiry and a separate account option", () => {
+test("the public plan offers one clear no-account enquiry without promoting an account", () => {
   assert.equal(planner.match(/<PublicPlanEnquiryForm\b/g)?.length, 1);
   assert.match(planner, /id="plan-enquiry"/);
   assert.match(planner, /suggestedInterests=\{enquiryInterests\}/);
-  assert.match(planner, /Want to save the full plan first\?/);
-  assert.match(planner, /An account is not required to enquire/);
-  assert.match(planner, />Create a free account<\/a>/);
+  assert.match(planner, /planHref=\{printablePlanHref\}/);
+  assert.doesNotMatch(planner, /planner-result-account-option/);
+  assert.doesNotMatch(planner, /Create a free account/);
 });
 
 test("the optional enquiry preserves every supported planner selection without double entry", () => {
@@ -51,14 +59,116 @@ test("the optional enquiry preserves every supported planner selection without d
       new RegExp(`if \\(${field}\\) params\\.set\\("${field}", ${field}\\)`),
     );
   }
-  assert.match(
-    planner,
-    /const accountProjectHref = `\/account\/projects\/new\?\$\{selectionParams\.toString\(\)\}`/,
-  );
-  assert.equal(
-    planner.match(/href=\{accountProjectHref\}/g)?.length,
-    1,
-  );
+  assert.match(planner, /const printablePlanHref = `\/plan\/print\?\$\{selectionParams\.toString\(\)\}`/);
+  assert.match(planner, /planHref=\{printablePlanHref\}/);
+  assert.match(planner, /href=\{printablePlanHref\}/);
+});
+
+test("the enquiry captures the private address and supports one, several or all services", () => {
+  assert.match(enquiryForm, /const \[customerFirstName, setCustomerFirstName\] = useState\(""\)/);
+  assert.match(enquiryForm, /const \[customerLastName, setCustomerLastName\] = useState\(""\)/);
+  assert.match(enquiryForm, /required autoComplete="given-name" maxLength=\{60\}/);
+  assert.match(enquiryForm, /required autoComplete="family-name" maxLength=\{60\}/);
+  assert.match(enquiryForm, /Enter your first name for Australian Energy Assessments records/);
+  assert.match(enquiryForm, /Enter your last name for Australian Energy Assessments records/);
+  assert.match(enquiryForm, /const \[customerUnitNumber, setCustomerUnitNumber\] = useState\(""\)/);
+  assert.match(enquiryForm, /const \[customerStreetAddress, setCustomerStreetAddress\] = useState\(""\)/);
+  assert.match(enquiryForm, /const \[customerSuburb, setCustomerSuburb\] = useState\(""\)/);
+  assert.match(enquiryForm, /const \[customerState, setCustomerState\] = useState\(""\)/);
+  assert.match(enquiryForm, /fetch\(`\/api\/address-localities\?postcode=\$\{encodeURIComponent\(postcode\)\}`/);
+  assert.match(enquiryForm, /setCustomerSuburb\(""\)/);
+  assert.match(enquiryForm, /setCustomerState\(""\)/);
+  assert.match(enquiryForm, /controller\.abort\(\)/);
+  assert.match(enquiryForm, /result\.postcode !== postcode/);
+  assert.match(enquiryForm, /record\.suburb/);
+  assert.match(enquiryForm, /record\.state/);
+  assert.match(enquiryForm, /function localityOptionValue\(locality: AddressLocality\)/);
+  assert.match(enquiryForm, /function changeLocality\(nextLocalityValue: string\)/);
+  assert.match(enquiryForm, /localityOptionValue\(locality\) === nextLocalityValue/);
+  assert.match(enquiryForm, /setCustomerSuburb\(selected\?\.suburb \|\| ""\)/);
+  assert.match(enquiryForm, /setCustomerState\(selected\?\.state \|\| ""\)/);
+  assert.match(enquiryForm, /value=\{localityOptionValue\(locality\)\}/);
+  assert.match(enquiryForm, /locality\.suburb === customerSuburb && locality\.state === customerState/);
+  assert.match(enquiryForm, /State or territory/);
+  assert.match(enquiryForm, /readOnly/);
+  assert.match(enquiryForm, /showLocalityStates \? ` \(\$\{locality\.state\}\)`/);
+  assert.match(enquiryForm, /Unit number/);
+  assert.match(enquiryForm, /Street address/);
+  assert.match(enquiryForm, /autoComplete="address-line2" maxLength=\{40\}/);
+  assert.match(enquiryForm, /autoComplete="address-line1" maxLength=\{140\}/);
+  assert.ok(enquiryForm.indexOf("autoComplete=\"address-line1\"") < enquiryForm.indexOf("autoComplete=\"address-line2\""));
+  assert.match(enquiryForm, /customerUnitNumber,/);
+  assert.match(enquiryForm, /customerStreetAddress,/);
+  assert.match(enquiryForm, /customerSuburb,/);
+  assert.match(enquiryForm, /customerState,/);
+  assert.doesNotMatch(enquiryForm, /customerAddress,/);
+  assert.match(enquiryForm, /projectCategories: interests/);
+  assert.match(enquiryForm, /Which services would you like help with\?/);
+  assert.match(enquiryForm, /Select all services/);
+  assert.match(enquiryForm, /toggleAllInterests/);
+  assert.match(enquiryForm, /INTEREST_OPTIONS\.map/);
+  assert.match(enquiryForm, /aria-required="true"/);
+  assert.match(enquiryForm, /aria-invalid=\{serviceSelectionInvalid\}/);
+  assert.match(enquiryForm, /Choose at least one service/);
+  assert.match(enquiryStyles, /\.serviceGrid \{/);
+  assert.match(enquiryStyles, /\.serviceChoices\[aria-invalid="true"\]/);
+  assert.match(enquiryStyles, /\.addressGrid \{/);
+  assert.match(enquiryStyles, /\.readOnlyControl \{/);
+});
+
+test("the enquiry keeps admin contact data private unless each field is selected for sharing", () => {
+  assert.match(enquiryForm, /name: shareName/);
+  assert.match(enquiryForm, /phone: sharePhone/);
+  assert.match(enquiryForm, /address: shareAddress/);
+  assert.match(enquiryForm, /Also share my first and last name/);
+  assert.match(enquiryForm, /Also share my phone number/);
+  assert.match(enquiryForm, /Also share my full property address/);
+  assert.match(enquiryForm, /email: true/);
+  assert.match(enquiryForm, /postcode: true/);
+  assert.doesNotMatch(enquiryForm, /shareMessage|Also share my message/);
+});
+
+test("the retry key binds the exact address tuple and keeps plan state separate", () => {
+  const retryKey = enquiryForm.match(
+    /function submissionCoreKey\([\s\S]*?\n\}\n\nexport function PublicPlanEnquiryForm/,
+  )?.[0] || "";
+  assert.match(retryKey, /customerFirstName: customerFirstName\.trim\(\)/);
+  assert.match(retryKey, /customerLastName: customerLastName\.trim\(\)/);
+  assert.doesNotMatch(retryKey, /\bname: name\.trim/);
+  assert.match(retryKey, /customerUnitNumber: customerUnitNumber\.trim\(\)/);
+  assert.match(retryKey, /customerStreetAddress: customerStreetAddress\.trim\(\)/);
+  assert.match(retryKey, /customerSuburb: customerSuburb\.trim\(\)/);
+  assert.match(retryKey, /customerState: customerState\.trim\(\)/);
+  assert.match(retryKey, /postcode: postcode\.trim\(\)/);
+  assert.doesNotMatch(retryKey, /resolvedAddressState/);
+  assert.match(retryKey, /addressState: planSnapshot\.addressState/);
+
+  const submittedPayload = enquiryForm.match(/body: JSON\.stringify\(\{[\s\S]*?\n\s*\}\),\n\s*\}\);/)?.[0] || "";
+  assert.match(submittedPayload, /customerFirstName,/);
+  assert.match(submittedPayload, /customerLastName,/);
+  assert.doesNotMatch(submittedPayload, /\n\s*name,/);
+  assert.match(submittedPayload, /customerUnitNumber,/);
+  assert.match(submittedPayload, /customerStreetAddress,/);
+  assert.match(submittedPayload, /customerSuburb,/);
+  assert.match(submittedPayload, /customerState,/);
+  assert.match(submittedPayload, /postcode,/);
+  assert.match(submittedPayload, /address: shareAddress/);
+  assert.doesNotMatch(submittedPayload, /resolvedAddressState/);
+});
+
+test("successful submission opens an accessible four-way next-step gateway", () => {
+  assert.match(enquiryForm, /<dialog/);
+  assert.match(enquiryForm, /aria-labelledby="public-plan-next-steps-title"/);
+  assert.match(enquiryForm, /dialog\.showModal\(\)/);
+  assert.match(enquiryForm, /gatewayFirstActionRef\.current\?\.focus\(\)/);
+  assert.match(enquiryForm, /onCancel=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?closeGateway\(\);/);
+  assert.match(enquiryForm, /aria-label="Close next steps"/);
+  assert.match(enquiryForm, /href="\/compare\?from=home-plan"/);
+  assert.match(enquiryForm, /href="\/gas-compare\?from=home-plan"/);
+  assert.match(enquiryForm, /href="\/calculator"/);
+  assert.match(enquiryForm, /href=\{planHref\}/);
+  assert.equal(enquiryForm.match(/className=\{styles\.gatewayActions\}/g)?.length, 1);
+  assert.doesNotMatch(enquiryForm, /[\u2013\u2014]/);
 });
 
 test("the enquiry handoff keeps independent plan actions available without implying a transaction", () => {

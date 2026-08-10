@@ -477,6 +477,8 @@ function comparisonDetails_(payload) {
 function enquiryDetails_(payload) {
   return {
     enquiry: payload.enquiry || "",
+    customerFirstName: payload.customerFirstName || "",
+    customerLastName: payload.customerLastName || "",
     projectCategories: payload.projectCategories || [],
     propertyType: payload.propertyType || "",
     propertyRelationship: payload.propertyRelationship || "",
@@ -485,7 +487,12 @@ function enquiryDetails_(payload) {
     projectStage: payload.projectStage || "",
     timeframe: payload.timeframe || "",
     preferredContact: payload.preferredContact || "",
+    customerUnitNumber: payload.customerUnitNumber || "",
+    customerStreetAddress: payload.customerStreetAddress || "",
+    customerSuburb: payload.customerSuburb || "",
+    customerState: payload.customerState || "",
     projectNotes: payload.projectNotes || "",
+    tradeSharing: payload.tradeSharing || null,
     partnerType: payload.partnerType || "",
     businessName: payload.businessName || "",
     businessWebsite: payload.businessWebsite || "",
@@ -657,7 +664,7 @@ function acknowledgementContent_(payload) {
     return intro
       + summaryGrid_(projectRows_(payload))
       + notice_("Your personalised plan is attached", "The PDF contains your private home energy roadmap, quick wins, preparation checks and trusted resources. It is emailed only to you and is not included in the trade enquiry.")
-      + notice_("Your matching request is being processed", "Your email, postcode, selected service and any message you wrote will be shared with all approved TLink trades that service your area. Your name and phone are shared only if you selected them. Your private plan PDF is not shared with trades. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
+      + notice_("Your matching request is being processed", "Your email, postcode, selected services and any message you wrote will be shared with all approved TLink trades that service your area. Your name, phone and full service address are shared only when you selected each one. Your private plan PDF is not shared with trades. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
   }
   if (payload.eventType === "direct_trade.project") {
     return intro
@@ -683,8 +690,8 @@ function acknowledgementText_(payload) {
     lines.push(
       "",
       "Your personalised home energy plan PDF is attached and remains customer-only.",
-      "Your email, postcode, selected service and any message you wrote will be shared with all approved TLink trades that service your area.",
-      "Your name and phone are shared only if you selected them. Your private plan PDF is not shared with trades.",
+      "Your email, postcode, selected services and any message you wrote will be shared with all approved TLink trades that service your area.",
+      "Your name, phone and full service address are shared only when you selected each one. Your private plan PDF is not shared with trades.",
       "This acknowledgement is not a quote or installation booking.",
     );
   } else {
@@ -768,6 +775,7 @@ function projectRows_(payload) {
   const triage = payload.directTradeTriage || {};
   return compactRows_([
     ["Services", listLabels_(payload.projectCategories, categoryLabel_)],
+    ["Service address", serviceAddress_(payload)],
     ["Location", location_(payload)],
     ["Property", propertyLabel_(payload.propertyType)],
     ["Customer role", relationshipLabel_(payload.propertyRelationship)],
@@ -1023,6 +1031,15 @@ function receivedAt_(payload) {
 
 function location_(payload) {
   return [payload.postcode, stateLabel_(payload.state)].filter(Boolean).join(", ");
+}
+
+function serviceAddress_(payload) {
+  const street = [payload.customerUnitNumber, payload.customerStreetAddress]
+    .filter(Boolean)
+    .join(" ");
+  return [street, payload.customerSuburb, payload.customerState, payload.postcode]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function installedCost_(payload) {

@@ -509,7 +509,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     wallConstruction,
     floorConstruction,
   ]);
-  const accountProjectHref = `/account/projects/new?${selectionParams.toString()}`;
+  const printablePlanHref = `/plan/print?${selectionParams.toString()}`;
   const firstActionItem = plan.items.find((item) => Boolean(item.href));
   const enquiryInterests = suggestedPlanInterests(plan.items);
   const enquiryPropertyContext = {
@@ -825,6 +825,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
           ) : null}
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
             <PublicPlanEnquiryForm
+              planHref={printablePlanHref}
               suggestedInterests={enquiryInterests}
               planSnapshot={{
                 goals,
@@ -837,16 +838,9 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 propertyContext: enquiryPropertyContext,
               }}
             />
-            <div className="planner-result-account-option">
-              <div>
-                <strong>Want to save the full plan first?</strong>
-                <p>Create a free private account to keep these answers and continue later. An account is not required to enquire.</p>
-              </div>
-              <a href={accountProjectHref}>Create a free account</a>
-            </div>
           </section>
           <div className="planner-result-actions">
-            <a className="planner-primary-result" href={`/plan/print?${selectionParams.toString()}`}>Open my printable plan</a>
+            <a className="planner-primary-result" href={printablePlanHref}>Open my printable plan</a>
             <button type="button" className="planner-reset" onClick={() => goToStep(0)}>Edit my answers</button>
             <button type="button" className="planner-reset" onClick={resetPlan}>Start over</button>
           </div>

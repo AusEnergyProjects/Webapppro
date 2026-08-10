@@ -1,4 +1,5 @@
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
+import { resolveAddressLocalityTuple } from "./address-localities.mjs";
 import {
   isPublicPlanEnquiry,
   isPublicPlanSubmissionId,
@@ -38,6 +39,16 @@ const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
 
 function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function cleanSingleLine(value, maxLength) {
+  return typeof value === "string"
+    ? value
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, maxLength)
+    : "";
 }
 
 function cleanNumber(value, minimum = 0, maximum = 100000000) {
@@ -98,14 +109,14 @@ function publicPlanTradeSharing(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "Choose which contact details matching trades may receive." };
   }
-  const allowedKeys = new Set(["email", "postcode", "name", "phone"]);
+  const allowedKeys = new Set(["email", "postcode", "name", "phone", "address"]);
   if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
     return { ok: false, error: "The trade sharing selection contained an unsupported field." };
   }
   if (value.email !== true || value.postcode !== true) {
     return { ok: false, error: "Email and postcode must be shared so matching trades can respond." };
   }
-  for (const key of ["name", "phone"]) {
+  for (const key of ["name", "phone", "address"]) {
     if (typeof value[key] !== "boolean") {
       return { ok: false, error: "Choose each optional trade sharing preference." };
     }
@@ -117,6 +128,7 @@ function publicPlanTradeSharing(value) {
       postcode: true,
       name: value.name,
       phone: value.phone,
+      address: value.address,
     },
   };
 }
@@ -131,12 +143,21 @@ export function validateLeadPayload(raw) {
     return { ok: false, error: "Unknown enquiry type." };
   }
 
-  const name = cleanText(raw.name, 120);
+  const suppliedName = cleanText(raw.name, 120);
   const email = cleanText(raw.email, 254).toLowerCase();
   const phone = cleanText(raw.phone, 40);
+  const customerFirstName = cleanSingleLine(raw.customerFirstName, 60);
+  const customerLastName = cleanSingleLine(raw.customerLastName, 60);
+  const customerUnitNumber = cleanSingleLine(raw.customerUnitNumber, 40);
+  const customerStreetAddress = cleanSingleLine(raw.customerStreetAddress, 140);
+  const customerSuburb = cleanSingleLine(raw.customerSuburb, 80);
+  const customerState = cleanSingleLine(raw.customerState, 3).toUpperCase();
   const enquiry = cleanText(raw.enquiry, 80);
   const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
-  if (!name) return { ok: false, error: "Please enter your name." };
+  const name = publicPlanEnquiry
+    ? [customerFirstName, customerLastName].filter(Boolean).join(" ")
+    : suppliedName;
+  if (!publicPlanEnquiry && !name) return { ok: false, error: "Please enter your name." };
   if (email && !EMAIL_RE.test(email)) return { ok: false, error: "Please enter a valid email address." };
   if (submissionType === 'comparison' && !email) return { ok: false, error: "An email address is required for comparison results." };
   if (submissionType === 'upgrade' && !email && !phone) return { ok: false, error: "Please enter an email address or phone number." };
@@ -174,11 +195,23 @@ export function validateLeadPayload(raw) {
     : [])].slice(0, 8);
   if (publicPlanEnquiry) {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    if (!customerFirstName) return { ok: false, error: "Please enter your first name." };
+    if (!customerLastName) return { ok: false, error: "Please enter your last name." };
     if (!email) return { ok: false, error: "Please enter an email address." };
     if (!phone) return { ok: false, error: "Please enter a phone number for Australian Energy Assessments records." };
+    if (!customerStreetAddress) return { ok: false, error: "Please enter the property's street address for Australian Energy Assessments records." };
+    if (!customerSuburb) return { ok: false, error: "Please choose the property's suburb." };
+    if (!customerState) return { ok: false, error: "Please choose the property's suburb and state." };
     if (!postcode) return { ok: false, error: "Please enter the property's postcode." };
-    if (!residentialStateFromPostcode(postcode)) return { ok: false, error: "Please enter a valid Australian postcode." };
-    if (projectCategories.length !== 1) return { ok: false, error: "Please choose one upgrade to discuss first." };
+    const addressLocality = resolveAddressLocalityTuple({
+      postcode,
+      suburb: customerSuburb,
+      state: customerState,
+    });
+    if (!addressLocality) {
+      return { ok: false, error: "Choose a suburb and state listed for this postcode." };
+    }
+    if (!projectCategories.length) return { ok: false, error: "Please choose at least one service." };
     const submissionId = cleanText(raw.submissionId, 64);
     if (!isPublicPlanSubmissionId(submissionId)) {
       return { ok: false, error: "Start a new home plan enquiry and try again." };
@@ -196,6 +229,8 @@ export function validateLeadPayload(raw) {
     if (!tradeSharing.ok) return tradeSharing;
     raw = {
       ...raw,
+      customerSuburb: addressLocality.suburb,
+      customerState: addressLocality.state,
       planSnapshot: planSnapshot.value,
       projectNotes,
       tradeSharing: tradeSharing.value,
@@ -235,8 +270,14 @@ export function validateLeadPayload(raw) {
         submissionId: cleanText(raw.submissionId, 64),
         submittedAt: new Date().toISOString(),
         name,
+        customerFirstName,
+        customerLastName,
         email,
         phone,
+        customerUnitNumber,
+        customerStreetAddress,
+        customerSuburb: raw.customerSuburb,
+        customerState: raw.customerState,
         website: cleanText(raw.website, 200),
         clientStartedAt: cleanNumber(raw.clientStartedAt, 0, Number.MAX_SAFE_INTEGER),
         consent: {

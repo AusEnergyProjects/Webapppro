@@ -66,7 +66,13 @@ async function deliveryContext(deliveryId: string) {
       public_contact.notice_version public_contact_notice_version,
       public_contact.consent_purpose public_contact_consent_purpose,
       public_contact.disclosed_fields public_contact_disclosed_fields,
-      public_contact.customer_name public_customer_name,
+      trim(public_contact.customer_first_name || ' ' || public_contact.customer_last_name) public_customer_name,
+      CASE WHEN public_contact.customer_first_name <> '' THEN 1 ELSE 0 END public_contact_has_first_name,
+      CASE WHEN public_contact.customer_last_name <> '' THEN 1 ELSE 0 END public_contact_has_last_name,
+      CASE WHEN public_contact.customer_street_address <> ''
+        AND public_contact.customer_suburb <> ''
+        AND public_contact.customer_address_state <> ''
+        THEN 1 ELSE 0 END public_contact_has_address,
       public_contact.postcode public_contact_postcode,
       public_contact.customer_message public_customer_message,
       CASE WHEN public_contact.customer_email <> '' THEN 1 ELSE 0 END public_contact_has_email,
@@ -134,6 +140,7 @@ function ineligibility(context: DeliveryRow) {
       "customer_name",
       "customer_email",
       "customer_phone",
+      "customer_address",
       "postcode",
       "service_categories",
       "customer_message",
@@ -141,9 +148,11 @@ function ineligibility(context: DeliveryRow) {
     const hasEmail = Number(context.public_contact_has_email || 0) === 1;
     const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
     const hasMessage = Boolean(text(context.public_customer_message, 500));
+    const hasAddress = Number(context.public_contact_has_address || 0) === 1;
     const sharesName = disclosedFields.includes("customer_name");
     const sharesPhone = disclosedFields.includes("customer_phone");
     const sharesMessage = disclosedFields.includes("customer_message");
+    const sharesAddress = disclosedFields.includes("customer_address");
     if (
       context.public_contact_status !== "active"
       || context.public_contact_notice_version !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
@@ -156,9 +165,14 @@ function ineligibility(context: DeliveryRow) {
       || !disclosedFields.includes("postcode")
       || !disclosedFields.includes("service_categories")
       || !hasEmail
-      || (sharesName && !text(context.public_customer_name, 120))
+      || (sharesName && (
+        Number(context.public_contact_has_first_name || 0) !== 1
+        || Number(context.public_contact_has_last_name || 0) !== 1
+        || !text(context.public_customer_name, 120)
+      ))
       || (sharesPhone && !hasPhone)
       || (sharesMessage && !hasMessage)
+      || (sharesAddress && !hasAddress)
       || disclosedFields.some((field) => !allowedFields.has(field))
     ) return "The public enquiry contact consent is unavailable or no longer current.";
   }

@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/ComparatorChrome";
 import { TLinkHeader } from "@/components/TLinkChrome";
@@ -28,12 +27,12 @@ const standards = [
   {
     number: "04",
     title: "Matching is open to approved trades",
-    text: "A consented enquiry is shown to every active verified installer whose recorded capability and service area match the requested work and postcode. Payment does not buy placement, exclusivity or guaranteed work, and businesses outside the governed match cannot see the lead.",
+    text: "A consented enquiry is shown to every active platform-approved installer whose recorded services and active service area match at least one requested service and the postcode. Payment does not buy placement, exclusivity or guaranteed work, and businesses outside the governed match cannot see the lead.",
   },
   {
     number: "05",
     title: "Households control what is shared",
-    text: "Submitting a trade enquiry is the household's explicit release of the name, chosen contact details, postcode, selected service and optional message to all verified matching trades. The full home plan, street address, bills, meter data and documents stay private unless the household separately chooses to share them.",
+    text: "Submitting a trade enquiry releases the email, postcode, selected services and any written message to all approved matching trades. The household independently chooses whether those trades also receive the name, phone or full property address. Australian Energy Assessments keeps the unit number, street address, suburb, state and postcode in the protected administration record. The full home plan, PDF, bills, meter data and documents stay private.",
   },
   {
     number: "06",
@@ -90,8 +89,7 @@ export default function DirectTradeStandardsPage() {
             TLink is designed to shorten the path between a
             household, qualified installers and reputable product suppliers.
             Participation is reviewed, matching is based on project fit and the
-            household receives structured scope and price options inside its
-            private account.
+            household receives a clear path to compare suitable responses.
           </p>
         </div>
         <aside>
@@ -213,13 +211,14 @@ export default function DirectTradeStandardsPage() {
           <span>Choose your path</span>
           <h2>Use the standards before making a connection</h2>
           <p>
-            Households can create a free private project. Installers and
-            suppliers can create a business profile for direct review.
+            Households can build a plan and contact matching trades without an
+            account. Installers and suppliers can create a business profile for
+            direct review.
           </p>
         </div>
         <div>
-          <a className="btn" href="/account/projects/new">
-            Create a private project
+          <a className="btn" href="/plan">
+            Build my home energy plan
           </a>
           <a className="btn ghost" href="/direct-trade/partners">
             Trade and supplier participation

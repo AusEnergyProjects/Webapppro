@@ -145,31 +145,71 @@ function publicTradeContact(row: Record<string, unknown>) {
   );
   const email = String(row.public_customer_email || "").trim().toLowerCase();
   const postcode = String(row.public_contact_postcode || "").trim();
+  const firstName = disclosedFields.has("customer_name")
+    ? String(row.public_customer_first_name || "").trim()
+    : "";
+  const lastName = disclosedFields.has("customer_name")
+    ? String(row.public_customer_last_name || "").trim()
+    : "";
+  const name = [firstName, lastName].filter(Boolean).join(" ");
+  const phone = disclosedFields.has("customer_phone")
+    ? String(row.public_customer_phone || "").trim()
+    : "";
+  const addressLine1 = disclosedFields.has("customer_address")
+    ? String(row.public_customer_street_address || "").trim()
+    : "";
+  const addressLine2 = disclosedFields.has("customer_address")
+    ? String(row.public_customer_unit_number || "").trim()
+    : "";
+  const suburb = disclosedFields.has("customer_address")
+    ? String(row.public_customer_suburb || "").trim()
+    : "";
+  const sharedAddressState = disclosedFields.has("customer_address")
+    ? String(row.public_customer_address_state || "").trim()
+    : "";
+  const message = disclosedFields.has("customer_message")
+    ? String(row.public_customer_message || "").trim()
+    : "";
+  const allowedFields = new Set([
+    "customer_name",
+    "customer_email",
+    "customer_phone",
+    "customer_address",
+    "postcode",
+    "service_categories",
+    "customer_message",
+  ]);
   if (
     !disclosedFields.has("customer_email")
     || !disclosedFields.has("postcode")
     || !disclosedFields.has("service_categories")
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     || !/^\d{4}$/.test(postcode)
+    || (disclosedFields.has("customer_name") && (!firstName || !lastName))
+    || (disclosedFields.has("customer_phone") && !phone)
+    || (disclosedFields.has("customer_address") && (
+      !addressLine1
+      || !suburb
+      || !sharedAddressState
+      || sharedAddressState !== String(row.state || "").trim()
+    ))
+    || (disclosedFields.has("customer_message") && !message)
+    || [...disclosedFields].some((field) => !allowedFields.has(field))
   ) return null;
   return {
-    name: disclosedFields.has("customer_name")
-      ? String(row.public_customer_name || "")
-      : "",
+    name,
+    firstName,
+    lastName,
     email,
-    phone: disclosedFields.has("customer_phone")
-      ? String(row.public_customer_phone || "")
-      : "",
-    addressLine1: "",
-    addressLine2: "",
-    suburb: "",
-    addressState: row.state,
+    phone,
+    addressLine1,
+    addressLine2,
+    suburb,
+    addressState: sharedAddressState,
     postcode,
     grantedAt: row.public_contact_granted_at,
     noticeVersion: row.public_contact_notice_version,
-    message: disclosedFields.has("customer_message")
-      ? String(row.public_customer_message || "")
-      : "",
+    message,
     releaseScope: "all_qualified_trades",
   };
 }
@@ -266,9 +306,14 @@ export async function GET(request: Request) {
     r.notice_version contact_notice_version, r.granted_at contact_granted_at,
     public_contact.id public_contact_release_id,
     public_contact.disclosed_fields public_contact_disclosed_fields,
-    public_contact.customer_name public_customer_name,
+    public_contact.customer_first_name public_customer_first_name,
+    public_contact.customer_last_name public_customer_last_name,
     public_contact.customer_email public_customer_email,
     public_contact.customer_phone public_customer_phone,
+    public_contact.customer_unit_number public_customer_unit_number,
+    public_contact.customer_street_address public_customer_street_address,
+    public_contact.customer_suburb public_customer_suburb,
+    public_contact.customer_address_state public_customer_address_state,
     public_contact.postcode public_contact_postcode,
     public_contact.customer_message public_customer_message,
     public_contact.notice_version public_contact_notice_version,

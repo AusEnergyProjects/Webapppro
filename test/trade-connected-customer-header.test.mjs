@@ -55,7 +55,12 @@ test("authorised customer identity is the first expanded lead section", () => {
   );
   assert.match(
     leadList,
-    /className="dashboard-connected-customer-contact-grid"[\s\S]*aria-label=\{`Contact details for \$\{releasedCustomerContact\.name\}`\}/,
+    /const customerDisplayName = releasedCustomerName[\s\S]*\|\| opportunity\.title[\s\S]*\|\| "Customer enquiry"/,
+  );
+  assert.match(leadList, /<h3>\{customerDisplayName\}<\/h3>/);
+  assert.match(
+    leadList,
+    /aria-label=\{`Contact details for \$\{customerDisplayName\}`\}/,
   );
 });
 
@@ -87,7 +92,7 @@ test("released contact details have one authoritative block", () => {
 test("collapsed details stay hidden and connected leads retain the contact boundary", () => {
   assert.match(
     leadList,
-    /\{releasedCustomerContact\s*\? releasedCustomerContact\.name\s*: opportunity\.title\}/,
+    /const releasedCustomerName =\s*releasedCustomerContact\?\.name\.trim\(\) \|\| ""/,
   );
   const compactSummary = leadList.slice(
     leadList.indexOf('className="dashboard-opportunity-compact-summary"'),
