@@ -20,8 +20,10 @@ import {
   customerPlanReportCopy,
   customerPlanReportLayout,
 } from "./customer-plan-report-design.mjs";
+import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
-export const CUSTOMER_PLAN_REPORT_VERSION = "2026-07-29-premium-report-v3";
+export const CUSTOMER_PLAN_REPORT_VERSION =
+  "2026-08-10-personalised-report-v4";
 export const INSTALLER_ENQUIRY_PACK_VERSION =
   "2026-07-31-installer-enquiry-pack-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
@@ -47,6 +49,22 @@ const allowedGuideHrefs = new Set([
   "/guides/project-preparation#room-comfort",
   "/guides/project-preparation#urgent-replacement",
   "/guides/solar",
+]);
+
+const trustedPlanResourceHrefs = new Set([
+  "/plan",
+  "/rebates",
+  "/calculator",
+  "/compare",
+  "/gas-compare",
+  "/assessments",
+  "https://www.energy.gov.au/households",
+  "https://www.energy.gov.au/households/quick-wins",
+  "https://www.energy.gov.au/rebates",
+  "https://www.homeenergyrating.gov.au/",
+  "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
+  "https://www.yourhome.gov.au/passive-design/introduction",
+  "https://www.yourhome.gov.au/passive-design/insulation",
 ]);
 
 const evidenceSourceLabels = new Map([
@@ -88,6 +106,22 @@ const boundedText = (value, maximum = 800) => (
     ? value.trim().replace(/\s+/g, " ").slice(0, maximum)
     : ""
 );
+
+const boundedSentenceText = (value, maximum = 800) => {
+  const normalized = boundedText(value, maximum + 1_200);
+  if (normalized.length <= maximum) return normalized;
+  const candidate = normalized.slice(0, maximum);
+  const sentenceEnd = Math.max(
+    candidate.lastIndexOf(". "),
+    candidate.lastIndexOf("? "),
+    candidate.lastIndexOf("! "),
+  );
+  if (sentenceEnd >= Math.floor(maximum * 0.55)) {
+    return candidate.slice(0, sentenceEnd + 1).trim();
+  }
+  const wordEnd = candidate.lastIndexOf(" ");
+  return `${candidate.slice(0, wordEnd > 0 ? wordEnd : maximum).trim().replace(/[,:;]$/, "")}.`;
+};
 
 const boundedStringList = (value, maximumItems = 6, maximumLength = 240) => (
   Array.isArray(value)
@@ -160,6 +194,24 @@ function professionalReviewProjection(value) {
 function safeGuideHref(value) {
   const href = boundedText(value, 180);
   return allowedGuideHrefs.has(href) ? href : "";
+}
+
+function safePlanResourceHref(value) {
+  const href = boundedText(value, 260);
+  return trustedPlanResourceHrefs.has(href) ? href : "";
+}
+
+function safePlanResources(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.slice(0, 16).flatMap((resource) => {
+    const href = safePlanResourceHref(resource?.href);
+    const label = boundedText(resource?.label, 160);
+    const description = boundedText(resource?.description, 360);
+    if (!href || !label || seen.has(href)) return [];
+    seen.add(href);
+    return [{ label, description, href }];
+  }).slice(0, 10);
 }
 
 function safeGuidance(value) {
@@ -402,7 +454,7 @@ export function createCustomerPlanDocument(
       id: boundedText(safeItem.id, 80),
       stage: boundedText(safeItem.stage, 100),
       title: boundedText(safeItem.title, 180),
-      description: boundedText(safeItem.text, 900),
+      description: boundedSentenceText(safeItem.text, 900),
       completed: completedIds.has(safeItem.id),
       guideLabel: href ? boundedText(safeItem.action, 120) : "",
       guideHref: href,
@@ -428,7 +480,7 @@ export function createCustomerPlanDocument(
         id: boundedText(item.id, 80),
         category: boundedText(item.category, 100),
         title: boundedText(item.title, 180),
-        description: boundedText(item.text, 900),
+        description: boundedSentenceText(item.text, 900),
       }))
     : [];
   return {
@@ -761,7 +813,7 @@ export function createCustomerPlanReportView(document) {
       id: boundedText(action?.id, 80) || `report-action-${index + 1}`,
       stage: boundedText(action?.stage, 100),
       title: boundedText(action?.title, 180),
-      description: boundedText(action?.description || action?.text, 900),
+      description: boundedSentenceText(action?.description || action?.text, 900),
       completed: action?.completed === true,
       priority: priorityIndexes.has(index),
       guideLabel: guideHref
@@ -907,6 +959,8 @@ export function createCustomerPlanReportView(document) {
     summary: boundedText(document?.summary, 480),
     preparedDate: boundedText(document?.preparedDate, 20),
     displayDate,
+    preparedFor: boundedText(document?.preparedFor, 120),
+    customerSummary: boundedText(document?.customerSummary, 220),
     copy: customerPlanReportCopy,
     planningSnapshot,
     climate: climate?.label || climate?.summary ? climate : null,
@@ -930,11 +984,156 @@ export function createCustomerPlanReportView(document) {
       "Use appropriately licensed trades for regulated electrical, plumbing, gas and building work.",
       "Compare written scopes, inclusions, exclusions, warranties and current official incentives before committing.",
     ],
+    resources: safePlanResources(document?.resources),
     privacyNote: boundedText(document?.privacyNote, 700)
       || "Private account details and customer-written notes are not included in this shared copy.",
     adviceBoundary: boundedText(document?.adviceBoundary, 700)
       || "This plan is independent general guidance, not a quote, product endorsement, site assessment or savings promise.",
   };
+}
+
+function publicPlanResourceSet() {
+  return [
+    {
+      label: "Review or update your AEA home energy plan",
+      description: "Return to the private, no-account planner when your home, priorities or equipment change.",
+      href: "/plan",
+    },
+    {
+      label: "Find current rebates and support",
+      description: "Use the AEA government rebate finder, then confirm the current official program rules before signing a quote.",
+      href: "/rebates",
+    },
+    {
+      label: "Estimate certificate and rebate value",
+      description: "Use the AEA calculator for an indicative estimate based on the selected activity, product and location.",
+      href: "/calculator",
+    },
+    {
+      label: "Compare electricity plans",
+      description: "Use the AEA independent comparator to check current electricity options against your household usage.",
+      href: "/compare",
+    },
+    {
+      label: "Prepare for an independent assessment",
+      description: "See the AEA assessment path when a site-specific review would make the next decision clearer.",
+      href: "/assessments",
+    },
+    {
+      label: "Australian Government household energy hub",
+      description: "Independent national guidance for household energy use, comfort and upgrade planning.",
+      href: "https://www.energy.gov.au/households",
+    },
+    {
+      label: "Australian Government quick wins",
+      description: "Practical low-cost and no-cost actions for energy use and comfort.",
+      href: "https://www.energy.gov.au/households/quick-wins",
+    },
+    {
+      label: "Find official rebates",
+      description: "Search the Australian Government rebate directory and verify eligibility with the administering program.",
+      href: "https://www.energy.gov.au/rebates",
+    },
+    {
+      label: "Understand an existing-home energy rating",
+      description: "Official guidance on measuring the energy efficiency of an existing Australian home.",
+      href: "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
+    },
+    {
+      label: "Your Home passive design guide",
+      description: "Australian Government guidance on climate-responsive home design, comfort and efficiency.",
+      href: "https://www.yourhome.gov.au/passive-design/introduction",
+    },
+  ];
+}
+
+function publicPlanHomeDetails(propertyContext) {
+  const source = propertyContext
+    && typeof propertyContext === "object"
+    && !Array.isArray(propertyContext)
+    ? propertyContext
+    : {};
+  return [
+    optionLabel(customerProjectOptions.storeys, source.storeys),
+    optionLabel(customerProjectOptions.floorAreas, source.floorArea),
+    optionLabel(customerProjectOptions.occupants || [], source.occupants),
+    optionLabel(customerProjectOptions.sharedWalls || [], source.sharedWalls),
+  ].filter(Boolean);
+}
+
+/**
+ * Recompute a customer-only public planner report from a normalized selection.
+ * Raw plan items, customer notes and client-authored report text are never used.
+ */
+export function createPublicPlanCustomerReportView({
+  snapshot,
+  name,
+  postcode,
+  projectCategories = [],
+  preparedAt = new Date().toISOString(),
+}) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new TypeError("A normalized public plan snapshot is required.");
+  }
+  const safePostcode = /^\d{4}$/.test(String(postcode || ""))
+    ? String(postcode)
+    : "";
+  const postcodeState = residentialStateFromPostcode(safePostcode) || "";
+  const addressState = postcodeState || boundedText(snapshot.addressState, 4);
+  const propertyContext = {
+    ...(snapshot.propertyContext || {}),
+    approvalContext: boundedText(snapshot.approvalContext, 40),
+  };
+  const plan = createCustomerProjectPlan({
+    goals: snapshot.goals,
+    pace: snapshot.pace,
+    situation: snapshot.situation,
+    approvalContext: snapshot.approvalContext,
+    budgetRange: snapshot.budgetRange,
+    postcode: safePostcode,
+    addressState,
+    features: snapshot.features,
+    propertyContext,
+  });
+  const document = createCustomerPlanDocument({
+    goals: snapshot.goals,
+    pace: snapshot.pace,
+    household_situation: snapshot.situation,
+    property_context: propertyContext,
+    existing_features: snapshot.features,
+    service_categories: projectCategories,
+    budget_range: snapshot.budgetRange,
+    postcode: safePostcode,
+    address_state: addressState,
+    property_type: boundedText(snapshot.propertyContext?.propertyType, 40)
+      || "house",
+    plan_snapshot: plan,
+  }, { preparedAt });
+  const preparedFor = boundedText(name, 120);
+  const propertyLabel = optionLabel(
+    customerProjectOptions.propertyTypes,
+    snapshot.propertyContext?.propertyType,
+    "Home",
+  );
+  const summaryParts = [
+    propertyLabel,
+    safePostcode ? `postcode ${safePostcode}` : "",
+    addressState,
+  ].filter(Boolean);
+  document.heading = preparedFor
+    ? `${preparedFor}'s home energy plan`
+    : "Your personalised home energy plan";
+  document.preparedFor = preparedFor;
+  document.customerSummary = summaryParts.join(" | ");
+  document.overview = {
+    ...document.overview,
+    propertyType: propertyLabel,
+    state: addressState || "Not recorded",
+    homeDetails: publicPlanHomeDetails(snapshot.propertyContext),
+  };
+  document.resources = publicPlanResourceSet();
+  document.privacyNote = "This personalised copy is emailed only to the customer. It includes the customer's name, postcode and bounded planner selections. It excludes street address, contact details, bills, meter identifiers, usage files, account records, uploaded documents and private trade notes.";
+  return createCustomerPlanReportView(document);
 }
 
 const CUSTOMER_PLAN_EMAIL_HTML_MAX_BYTES = 88_000;

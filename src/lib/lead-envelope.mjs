@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import { buildDirectTradeTriage } from "./direct-trade-matching.mjs";
 import { buildParticipantApplicationReview } from "./direct-trade-participants.mjs";
@@ -40,11 +41,60 @@ function referenceDate(isoDate) {
     .replaceAll("-", "");
 }
 
+function publicPlanReference(submissionId) {
+  const match = /^(\d{8})\.([0-9a-f-]{36})$/i.exec(String(submissionId || ""));
+  if (!match) return "";
+  const suffix = match[2].replaceAll("-", "").slice(0, 16).toUpperCase();
+  return `AEA-${match[1]}-${suffix}`;
+}
+
+function canonicalFingerprintValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map(canonicalFingerprintValue)
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalFingerprintValue(value[key])]),
+    );
+  }
+  return value;
+}
+
+export function publicPlanSubmissionFingerprint(payload) {
+  const core = canonicalFingerprintValue({
+    submissionType: payload?.submissionType || "",
+    enquiry: payload?.enquiry || "",
+    name: payload?.name || "",
+    email: payload?.email || "",
+    phone: payload?.phone || "",
+    postcode: payload?.postcode || "",
+    projectCategories: payload?.projectCategories || [],
+    projectNotes: payload?.projectNotes || "",
+    planSnapshot: payload?.planSnapshot || null,
+    consent: {
+      accepted: payload?.consent?.accepted === true,
+      purpose: payload?.consent?.purpose || "",
+      noticeVersion: payload?.consent?.noticeVersion || "",
+    },
+  });
+  return createHash("sha256").update(JSON.stringify(core)).digest("hex");
+}
+
 export function createLeadEnvelope(payload, options = {}) {
+  const leadPayload = { ...(payload || {}) };
+  const publicPlanEnquiry = isPublicPlanEnquiry(leadPayload.enquiry);
+  const submissionFingerprint = publicPlanEnquiry
+    ? publicPlanSubmissionFingerprint(leadPayload)
+    : "";
+  delete leadPayload.planSnapshot;
   const submittedAt =
-    payload.submittedAt ||
+    leadPayload.submittedAt ||
     (options.now ? options.now() : new Date()).toISOString();
-  const eventType = leadEventType(payload);
+  const eventType = leadEventType(leadPayload);
   if (!EVENT_TYPES.has(eventType))
     throw new Error("Unsupported lead event type.");
   const createId = options.createId || (() => crypto.randomUUID());
@@ -52,52 +102,56 @@ export function createLeadEnvelope(payload, options = {}) {
     .replaceAll("-", "")
     .slice(0, 10)
     .toUpperCase();
-  const reference = `AEA-${referenceDate(submittedAt)}-${suffix}`;
-  const inferredState = residentialStateFromPostcode(payload.postcode);
-  const publicPlanEnquiry = isPublicPlanEnquiry(payload.enquiry);
+  const inferredPublicReference = isPublicPlanEnquiry(leadPayload.enquiry)
+    ? publicPlanReference(leadPayload.submissionId)
+    : "";
+  const reference = inferredPublicReference
+    || `AEA-${referenceDate(submittedAt)}-${suffix}`;
+  const inferredState = residentialStateFromPostcode(leadPayload.postcode);
   const directTradeTriage =
     publicPlanEnquiry
       ? {
-          version: "public-home-plan-contact-1",
-          status: "hold_for_authority_review",
+          version: "public-home-plan-open-matching-2",
+          status: "automatic_verified_area_allocation",
           priority: "standard_allocation",
-          autoSend: false,
-          reviewFlags: ["property_authority_unconfirmed"],
+          autoSend: true,
+          reviewFlags: [],
           contactConsentReceipt: {
             accepted: true,
-            purpose: payload.consent?.purpose || "",
-            noticeVersion: payload.consent?.noticeVersion || "",
-            grantedAt: payload.consent?.grantedAt || "",
+            purpose: leadPayload.consent?.purpose || "",
+            noticeVersion: leadPayload.consent?.noticeVersion || "",
+            grantedAt: leadPayload.consent?.grantedAt || "",
           },
           matchCriteria: {
-            state: payload.state || inferredState || "",
-            postcode: payload.postcode || "",
-            capabilities: [],
-            participantStatus: "manual_review_required",
-            credentials: "manual_review_required",
+            state: leadPayload.state || inferredState || "",
+            postcode: leadPayload.postcode || "",
+            capabilities: leadPayload.projectCategories || [],
+            participantStatus: "active_verified",
+            credentials: "verified_current",
           },
           quoteEvidence: [],
         }
       : eventType === "direct_trade.project"
       ? buildDirectTradeTriage({
-          ...payload,
-          state: payload.state || inferredState || "",
+          ...leadPayload,
+          state: leadPayload.state || inferredState || "",
         })
       : null;
   const participantReview =
     eventType === "direct_trade.partner"
-      ? buildParticipantApplicationReview(payload)
+      ? buildParticipantApplicationReview(leadPayload)
       : null;
 
   return {
-    ...payload,
-    schemaVersion: "6",
+    ...leadPayload,
+    schemaVersion: "7",
     eventType,
     reference,
     submittedAt,
-    state: payload.state || inferredState || "",
+    state: leadPayload.state || inferredState || "",
     source: "aea-energy-web",
     ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
+    ...(publicPlanEnquiry ? { submissionFingerprint } : {}),
     ...(directTradeTriage ? { directTradeTriage } : {}),
     ...(participantReview ? { participantReview } : {}),
   };

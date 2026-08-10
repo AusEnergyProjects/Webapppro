@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { PointerEvent } from "react";
+import { HolographicEnergyField } from "@/components/HolographicEnergyField";
 
 export type PlannerJourneyStage = "understand" | "home" | "direction" | "plan";
 
@@ -94,6 +95,21 @@ const focusLabels: Record<PlannerHomeFocus, string> = {
   ev: "Electric vehicle",
 };
 
+const focusPositions: Record<PlannerHomeFocus, readonly [number, number]> = {
+  overview: [0.67, 0.52],
+  comfort: [0.56, 0.33],
+  insulation: [0.68, 0.14],
+  windows: [0.56, 0.43],
+  ventilation: [0.69, 0.3],
+  "heating-cooling": [0.5, 0.31],
+  "hot-water": [0.56, 0.72],
+  cooking: [0.79, 0.5],
+  electrical: [0.78, 0.21],
+  solar: [0.72, 0.09],
+  battery: [0.51, 0.77],
+  ev: [0.88, 0.77],
+};
+
 export function PlannerHomeJourney({
   stage,
   progress,
@@ -105,6 +121,7 @@ export function PlannerHomeJourney({
   const activeStage = stages[stageIndex];
   const safeProgress = boundedProgress(progress);
   const activeFocus = homeFocus(focusKey, stage);
+  const [focusX, focusY] = focusPositions[activeFocus];
 
   function moveScene(event: PointerEvent<HTMLElement>) {
     if (
@@ -171,6 +188,12 @@ export function PlannerHomeJourney({
 
       <div className="planner-home-journey-scene" aria-hidden="true">
         <div className="planner-home-journey-depth">
+          <HolographicEnergyField
+            className="planner-home-energy-field"
+            focusX={focusX}
+            focusY={focusY}
+            intensity={stage === "plan" ? 1.3 : 1.08}
+          />
           <Image
             src="/aea-immersive-home-journey.png"
             alt=""
@@ -181,6 +204,9 @@ export function PlannerHomeJourney({
           />
           <span className="planner-home-orbit planner-home-orbit-one" />
           <span className="planner-home-orbit planner-home-orbit-two" />
+          <span className="planner-home-scan-plane" />
+          <span className="planner-home-readout planner-home-readout-stage">Stage {String(stageIndex + 1).padStart(2, "0")}</span>
+          <span className="planner-home-readout planner-home-readout-progress">Model {safeProgress}%</span>
           <span className="planner-home-focus-marker">{focusLabels[activeFocus]}</span>
           <span className="planner-home-hotspot planner-home-hotspot-comfort">Comfort</span>
           <span className="planner-home-hotspot planner-home-hotspot-systems">Systems</span>

@@ -1,4 +1,33 @@
+import { createHmac } from "node:crypto";
+
 const MAX_BODY_BYTES = 64 * 1024;
+const WEBHOOK_SIGNING_SECRET_MIN_LENGTH = 32;
+
+function base64Url(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+export function createSignedLeadWebhookEnvelope(
+  payload,
+  secret,
+  { now = () => new Date() } = {},
+) {
+  if (typeof secret !== "string" || secret.length < WEBHOOK_SIGNING_SECRET_MIN_LENGTH) {
+    throw new Error("LEAD_WEBHOOK_SIGNING_UNCONFIGURED");
+  }
+  const sentAt = now().toISOString();
+  const encodedPayload = base64Url(JSON.stringify(payload));
+  const signature = createHmac("sha256", secret)
+    .update(`${sentAt}.${encodedPayload}`)
+    .digest("base64url");
+  return {
+    schemaVersion: "1",
+    eventType: "lead.webhook",
+    sentAt,
+    payload: encodedPayload,
+    signature,
+  };
+}
 
 function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
@@ -35,6 +64,8 @@ export function createLeadPostHandler({
   recordLeadIncident,
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
+  prepareLeadEnvelope,
+  createOpportunityFromLead,
   env = process.env,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -87,7 +118,7 @@ export function createLeadPostHandler({
       return respond({ ok: false, error: result.error }, 400, "validation_rejected");
     }
 
-    const payload = createLeadEnvelope(result.value);
+    let payload = createLeadEnvelope(result.value);
     const metrics = { submissionType: payload.submissionType };
     if (payload.website) {
       return respond({ ok: true, filtered: true }, 200, "bot_filtered", metrics);
@@ -137,10 +168,21 @@ export function createLeadPostHandler({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      if (typeof prepareLeadEnvelope === "function") {
+        payload = await prepareLeadEnvelope({
+          request,
+          validatedPayload: result.value,
+          envelope: payload,
+        });
+      }
+      const signedWebhookEnvelope = createSignedLeadWebhookEnvelope(
+        payload,
+        env.AEA_LEAD_WEBHOOK_SIGNING_SECRET,
+      );
       const response = await fetchImpl(webhook, {
         method: "POST",
         headers: { "Content-Type": "text/plain; charset=utf-8" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(signedWebhookEnvelope),
         cache: "no-store",
         signal: controller.signal,
       });
@@ -148,17 +190,48 @@ export function createLeadPostHandler({
       if (!response.ok || acknowledgement.trim() !== "ok") {
         throw new Error("Lead processor did not acknowledge delivery.");
       }
+      if (publicPlanEnquiry && typeof createOpportunityFromLead === "function") {
+        const marketplacePayload = { ...payload };
+        delete marketplacePayload.customerPlanDelivery;
+        try {
+          await createOpportunityFromLead(marketplacePayload);
+        } catch (error) {
+          await recordLeadIncident(
+            "platform.lead_marketplace_preparation_failed",
+            "Public enquiry matching was not prepared",
+            "The private processor received the enquiry, but the matching opportunity could not be prepared. No customer details are included in this alert.",
+            "high",
+          );
+          return respond({
+            ok: false,
+            received: true,
+            reference: payload.reference,
+            planEmailSent: Boolean(payload.customerPlanDelivery),
+            error: "Your enquiry was received, but trade matching is not yet prepared. Retry trade matching with the same request and reference.",
+          }, 502, "marketplace_preparation_failed", {
+            ...metrics,
+            errorType: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+      }
       await resolveSystemAdminNotifications({
         eventTypes: [
           "platform.lead_delivery_unconfigured",
           "platform.lead_delivery_failed",
+          "platform.lead_marketplace_preparation_failed",
           "platform.lead_rate_limit_unavailable",
         ],
         entityType: "platform_service",
         entityId: "comparison_lead_delivery",
         note: "A public enquiry was delivered successfully and the service recovered.",
       }).catch(() => null);
-      return respond({ ok: true, reference: payload.reference }, 200, "delivered", metrics);
+      return respond({
+        ok: true,
+        reference: payload.reference,
+        ...(publicPlanEnquiry
+          ? { planEmailSent: Boolean(payload.customerPlanDelivery) }
+          : {}),
+      }, 200, "delivered", metrics);
     } catch (error) {
       await recordLeadIncident(
         "platform.lead_delivery_failed",

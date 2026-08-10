@@ -18,6 +18,8 @@ const OPS_REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 const OPS_ADMIN_ALERT_PROPERTY_PREFIX = "AEA_ADMIN_ALERT_V1_";
 const OPS_ADMIN_ALERT_MAX_AGE_MS = 10 * 60 * 1000;
 const OPS_ADMIN_ALERT_DEDUPE_MS = 90 * 24 * 60 * 60 * 1000;
+const LEAD_WEBHOOK_MAX_AGE_MS = 10 * 60 * 1000;
+const LEAD_WEBHOOK_MAX_PAYLOAD_CHARS = 3000000;
 
 // Existing column positions are preserved. New operational fields are appended.
 const HEADERS = [
@@ -164,9 +166,10 @@ function column_(name) {
 
 function doPost(e) {
   try {
-    const payload = JSON.parse(e.postData.contents);
+    const envelope = JSON.parse(e.postData.contents);
+    if (envelope.eventType === "admin.notification") return handleAdminNotification_(envelope);
+    const payload = verifyLeadWebhookEnvelope_(envelope);
     if (payload.eventType === "webhook.delivery_probe" && payload.test === true) return out_("ok");
-    if (payload.eventType === "admin.notification") return handleAdminNotification_(payload);
     if (payload.website) return out_("ok");
 
     const eventType = eventType_(payload);
@@ -180,6 +183,24 @@ function doPost(e) {
   } catch (error) {
     return out_("error: " + error.message);
   }
+}
+
+function verifyLeadWebhookEnvelope_(envelope) {
+  if (!envelope || envelope.schemaVersion !== "1" || envelope.eventType !== "lead.webhook") throw new Error("Invalid lead webhook envelope");
+  const sentAt = String(envelope.sentAt || "");
+  const sentAtMs = new Date(sentAt).getTime();
+  if (!sentAtMs || Math.abs(Date.now() - sentAtMs) > LEAD_WEBHOOK_MAX_AGE_MS) throw new Error("Expired lead webhook envelope");
+  const encodedPayload = String(envelope.payload || "");
+  const signature = String(envelope.signature || "");
+  if (!new RegExp("^[A-Za-z0-9_-]{20," + LEAD_WEBHOOK_MAX_PAYLOAD_CHARS + "}$").test(encodedPayload) || !/^[A-Za-z0-9_-]{43}$/.test(signature)) throw new Error("Invalid lead webhook signature");
+  const secret = PropertiesService.getScriptProperties().getProperty("AEA_LEAD_WEBHOOK_SIGNING_SECRET") || "";
+  if (secret.length < 32) throw new Error("Lead webhook signing is not configured");
+  const expected = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(sentAt + "." + encodedPayload, secret)).replace(/=+$/, "");
+  if (!constantTimeEqual_(signature, expected)) throw new Error("Invalid lead webhook signature");
+  const decoded = Utilities.newBlob(Utilities.base64DecodeWebSafe(encodedPayload)).getDataAsString();
+  const payload = JSON.parse(decoded);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid lead webhook payload");
+  return payload;
 }
 
 function handleAdminNotification_(envelope) {
@@ -313,11 +334,102 @@ function handleComparison_(payload) {
 function handleEnquiry_(payload) {
   if (!payload.name || (!payload.email && !payload.phone)) return out_("need name and email or phone");
   if (payload.email && !validEmail_(payload.email)) return out_("bad email");
+  const submissionFingerprint = publicPlanSubmissionFingerprint_(payload);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error("Enquiry delivery is busy");
+  try {
+    let record = leadRecordByReference_(payload.reference);
+    if (submissionFingerprint && record && record.details.submissionFingerprint !== submissionFingerprint) {
+      throw new Error("Enquiry reference does not match its original submission");
+    }
+    if (record && !record.details.deliveryState) return out_("ok");
+    const customerPlanAttachment = payload.email && !(record && record.details.deliveryState.customerAcknowledged)
+      ? customerPlanAttachment_(payload)
+      : null;
+    if (!record) {
+      const details = enquiryDetails_(payload);
+      if (submissionFingerprint) details.submissionFingerprint = submissionFingerprint;
+      details.deliveryState = {
+        customerAcknowledged: !payload.email,
+        internalNotified: false,
+      };
+      const rowNumber = writeLead_(payload, { details: details });
+      record = { rowNumber: rowNumber, details: details };
+    }
+    if (payload.email && !record.details.deliveryState.customerAcknowledged) {
+      sendCustomerAcknowledgement_(payload, customerPlanAttachment);
+      record.details.deliveryState.customerAcknowledged = true;
+      saveLeadDetails_(record.rowNumber, record.details);
+    }
+    if (!record.details.deliveryState.internalNotified) {
+      sendInternalEnquiry_(payload);
+      record.details.deliveryState.internalNotified = true;
+      saveLeadDetails_(record.rowNumber, record.details);
+    }
+    return out_("ok");
+  } finally {
+    lock.releaseLock();
+  }
+}
 
-  writeLead_(payload, { details: enquiryDetails_(payload) });
-  if (payload.email) sendCustomerAcknowledgement_(payload);
-  sendInternalEnquiry_(payload);
-  return out_("ok");
+function publicPlanSubmissionFingerprint_(payload) {
+  if (payload.sourceJourney !== "public-home-energy-plan") return "";
+  const fingerprint = String(payload.submissionFingerprint || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error("Public plan submission fingerprint is invalid");
+  return fingerprint;
+}
+
+function leadRecordByReference_(reference) {
+  if (!validReference_(reference)) return null;
+  const sheet = sheet_();
+  syncHeaders_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const match = sheet
+    .getRange(2, column_("Reference"), lastRow - 1, 1)
+    .createTextFinder(reference)
+    .matchEntireCell(true)
+    .matchCase(true)
+    .findNext();
+  if (!match) return null;
+  const rowNumber = match.getRow();
+  let details = {};
+  try {
+    details = JSON.parse(String(sheet.getRange(rowNumber, column_("Details")).getValue() || "{}"));
+  } catch (error) {
+    details = {};
+  }
+  return { rowNumber: rowNumber, details: details };
+}
+
+function saveLeadDetails_(rowNumber, details) {
+  sheet_().getRange(rowNumber, column_("Details")).setValue(JSON.stringify(details || {}));
+}
+
+function customerPlanAttachment_(payload) {
+  if (payload.sourceJourney !== "public-home-energy-plan" || !payload.email) return null;
+  const delivery = payload.customerPlanDelivery;
+  if (!delivery || delivery.version !== "customer-only-home-plan-pdf-v1") throw new Error("Customer plan PDF is missing");
+  if (delivery.mimeType !== "application/pdf" || delivery.encoding !== "base64") throw new Error("Customer plan PDF type is invalid");
+  const filename = String(delivery.filename || "");
+  if (!/^personalised-home-energy-plan-\d{4}-\d{2}-\d{2}\.pdf$/.test(filename)) throw new Error("Customer plan PDF filename is invalid");
+  const content = String(delivery.content || "");
+  if (!content || content.length > 2000000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) throw new Error("Customer plan PDF encoding is invalid");
+  const bytes = Utilities.base64Decode(content);
+  const byteLength = Number(delivery.byteLength);
+  if (!Number.isInteger(byteLength) || byteLength < 20000 || byteLength > 1500000 || bytes.length !== byteLength) throw new Error("Customer plan PDF size is invalid");
+  if ((bytes[0] & 255) !== 37 || (bytes[1] & 255) !== 80 || (bytes[2] & 255) !== 68 || (bytes[3] & 255) !== 70 || (bytes[4] & 255) !== 45) throw new Error("Customer plan PDF signature is invalid");
+  const tail = bytes.slice(Math.max(0, bytes.length - 32)).map(function(value) { return String.fromCharCode(value & 255); }).join("");
+  if (tail.indexOf("%%EOF") < 0) throw new Error("Customer plan PDF is incomplete");
+  const expectedHash = String(delivery.sha256 || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(expectedHash) || digestBytesHex_(bytes) !== expectedHash) throw new Error("Customer plan PDF integrity check failed");
+  return Utilities.newBlob(bytes, "application/pdf", filename);
+}
+
+function digestBytesHex_(bytes) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes).map(function(byte) {
+    return ((byte & 255) + 256).toString(16).slice(1);
+  }).join("");
 }
 
 function writeLead_(payload, options) {
@@ -344,6 +456,7 @@ function writeLead_(payload, options) {
   setRow_(row, "Details", JSON.stringify(options.details || {}));
   setRow_(row, "UnsubscribeToken", options.unsubscribeToken || "");
   sheet.appendRow(row);
+  return sheet.getLastRow();
 }
 
 function setRow_(row, header, value) {
@@ -512,7 +625,7 @@ function sendFollowUpEmail_(payload, unsubscribeToken) {
   });
 }
 
-function sendCustomerAcknowledgement_(payload) {
+function sendCustomerAcknowledgement_(payload, customerPlanAttachment) {
   const content = acknowledgementContent_(payload);
   const title = acknowledgementTitle_(payload);
   const subject = acknowledgementSubject_(payload);
@@ -522,6 +635,7 @@ function sendCustomerAcknowledgement_(payload) {
     subject: subject,
     body: acknowledgementText_(payload),
     htmlBody: wrap_(title, "REQUEST RECEIVED", content, { reference: payload.reference }),
+    attachments: customerPlanAttachment ? [customerPlanAttachment] : [],
   });
 }
 
@@ -538,6 +652,12 @@ function acknowledgementContent_(payload) {
       + summaryGrid_(gasRows_(payload))
       + notice_("Indicative scenario", "The saving and installed cost are the values entered or modelled in the tool. Actual performance, tariffs, site conditions, product selection, rebates and quotes can change the outcome.")
       + paragraph_("We will review the request before connecting it with a suitable direct trade option.");
+  }
+  if (payload.sourceJourney === "public-home-energy-plan") {
+    return intro
+      + summaryGrid_(projectRows_(payload))
+      + notice_("Your personalised plan is attached", "The PDF contains your private home energy roadmap, quick wins, preparation checks and trusted resources. It is emailed only to you and is not included in the trade enquiry.")
+      + notice_("Your matching request is being processed", "You asked us to share your name, chosen email or phone, postcode, selected service and optional message with every active, verified matching trade servicing the area. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
   }
   if (payload.eventType === "direct_trade.project") {
     return intro
@@ -559,7 +679,17 @@ function acknowledgementText_(payload) {
     "Request: " + eventLabel_(payload),
   ];
   if (payload.postcode) lines.push("Location: " + payload.postcode + (payload.state ? ", " + stateLabel_(payload.state) : ""));
-  lines.push("", "We will review the information before responding. This acknowledgement is not a quote or installation booking.", "", BRAND_PHONE + " | " + BRAND_SITE);
+  if (payload.sourceJourney === "public-home-energy-plan") {
+    lines.push(
+      "",
+      "Your personalised home energy plan PDF is attached and remains customer-only.",
+      "Your request to share the consented contact and enquiry details with matching trades is being processed.",
+      "This acknowledgement is not a quote or installation booking.",
+    );
+  } else {
+    lines.push("", "We will review the information before responding. This acknowledgement is not a quote or installation booking.");
+  }
+  lines.push("", BRAND_PHONE + " | " + BRAND_SITE);
   return lines.join("\n");
 }
 
@@ -648,12 +778,16 @@ function projectRows_(payload) {
     ["Triage status", triageStatusLabel_(triage.status)],
     ["Review priority", triagePriorityLabel_(triage.priority)],
     ["Review flags", listLabels_(triage.reviewFlags, triageFlagLabel_)],
-    ["Privacy-safe allocation", triage.autoSend === false ? "Held for authority review." : "On. Up to six eligible installers; contact details remain withheld."],
+    ["Trade matching", payload.sourceJourney === "public-home-energy-plan"
+      ? "Open to every active, verified matching trade servicing the area. Only the consented contact and enquiry fields are shared."
+      : triage.autoSend === false
+        ? "Held for authority review."
+        : "Privacy-safe matching is active; customer contact details remain withheld until release is authorised."],
   ]);
 }
 
 function triageStatusLabel_(value) {
-  const labels = { automatic_privacy_safe_allocation: "Privacy-safe installer allocation active", hold_for_authority_review: "Hold until property authority is reviewed" };
+  const labels = { automatic_privacy_safe_allocation: "Privacy-safe installer allocation active", automatic_verified_area_allocation: "Open matching to active verified trades", hold_for_authority_review: "Hold until property authority is reviewed" };
   return labels[value] || value;
 }
 
@@ -777,20 +911,22 @@ function servicePage_(title, message) {
 }
 
 function sendMail_(message) {
-  MailApp.sendEmail({
+  const options = {
     to: message.to,
     name: BRAND,
     replyTo: message.replyTo || REPLY_TO,
     subject: message.subject,
     body: message.body,
     htmlBody: message.htmlBody,
-  });
+  };
+  if (message.attachments && message.attachments.length) options.attachments = message.attachments;
+  MailApp.sendEmail(options);
 }
 
 function internalAction_(payload) {
   if (payload.eventType === "electricity.upgrade") return "Review the electricity comparison and scenario assumptions, then respond using the preferred contact details.";
   if (payload.eventType === "gas.upgrade") return "Review the gas usage and electrification estimate, then confirm site, product, rebate and trade requirements.";
-  if (payload.sourceJourney === "public-home-energy-plan") return "Review the selected upgrade and basic contact details, then respond before making any trade connection.";
+  if (payload.sourceJourney === "public-home-energy-plan") return "The customer consented to open matching. Confirm the active verified trade allocations for the selected service area without exposing the customer-only plan PDF.";
   if (payload.eventType === "direct_trade.project") return "Qualify the scope, authority, location, timing and trade capability before making a connection.";
   return "Review business credentials, coverage, capability, insurance and product support before discussing participation.";
 }
@@ -798,7 +934,7 @@ function internalAction_(payload) {
 function acknowledgementTitle_(payload) {
   if (payload.eventType === "electricity.upgrade") return "We received your electricity upgrade enquiry";
   if (payload.eventType === "gas.upgrade") return "We received your gas upgrade enquiry";
-  if (payload.sourceJourney === "public-home-energy-plan") return "We received your home energy upgrade enquiry";
+  if (payload.sourceJourney === "public-home-energy-plan") return "Your personalised home energy plan is attached";
   if (payload.eventType === "direct_trade.project") return "Your Direct Trade project brief is in";
   return "Your participation enquiry is in";
 }

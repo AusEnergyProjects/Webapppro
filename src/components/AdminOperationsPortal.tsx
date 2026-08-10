@@ -867,7 +867,7 @@ export function AdminOperationsPortal() {
                   <span>End-to-end assurance</span>
                   <h2 id="ecosystem-check-title">Ecosystem walkthrough</h2>
                   <p>
-                    Run a read-only check across demo customers, six-installer matching,
+                    Run a read-only check across demo customers, verified-trade distribution,
                     wholesaler catalogue visibility, installer responses and structured quotes.
                     This check never sends a new lead or exposes household information.
                   </p>

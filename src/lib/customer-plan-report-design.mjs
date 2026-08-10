@@ -1,5 +1,5 @@
 export const CUSTOMER_PLAN_REPORT_DESIGN_VERSION =
-  "2026-07-30-tech-presentation-design-v2";
+  "2026-08-10-personalised-report-design-v3";
 
 export const customerPlanReportColors = Object.freeze({
   navy: "#063448",

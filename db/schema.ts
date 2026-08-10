@@ -1168,6 +1168,8 @@ export const tradeOpportunities = sqliteTable("trade_opportunities", {
   index("trade_opportunities_state_idx").on(table.state, table.status, table.updatedAt, table.id),
   index("trade_opportunities_title_nocase_idx").on(sql`${table.title} COLLATE NOCASE`, table.updatedAt, table.id),
   index("trade_opportunities_expiry_idx").on(table.status, table.expiresAt, table.id),
+  uniqueIndex("trade_opportunities_source_reference_idx")
+    .on(table.sourceReference).where(sql`${table.sourceReference} <> ''`),
 ]);
 
 export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", {
@@ -1190,8 +1192,34 @@ export const tradeOpportunityMatches = sqliteTable("trade_opportunity_matches", 
 }, (table) => [
   uniqueIndex("trade_opportunity_matches_unique_idx").on(table.opportunityId, table.firebaseUid),
   index("trade_opportunity_matches_owner_idx").on(table.firebaseUid, table.updatedAt),
+  index("trade_opportunity_matches_firebase_matched_idx").on(table.firebaseUid, table.matchedAt),
+  index("trade_opportunity_matches_firebase_status_opportunity_idx")
+    .on(table.firebaseUid, table.status, table.opportunityId),
   index("trade_opportunity_matches_opportunity_idx").on(table.opportunityId),
   index("trade_opportunity_matches_status_idx").on(table.status),
+]);
+
+export const publicTradeLeadContactReleases = sqliteTable("public_trade_lead_contact_releases", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  status: text("status").notNull().default("active"),
+  noticeVersion: text("notice_version").notNull(),
+  consentPurpose: text("consent_purpose").notNull(),
+  disclosedFields: text("disclosed_fields").notNull().default("[]"),
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email").notNull().default(""),
+  customerPhone: text("customer_phone").notNull().default(""),
+  postcode: text("postcode").notNull(),
+  customerMessage: text("customer_message").notNull().default(""),
+  grantedAt: text("granted_at").notNull(),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_trade_lead_contact_releases_opportunity_idx").on(table.opportunityId),
+  uniqueIndex("public_trade_lead_contact_releases_source_idx").on(table.sourceReference),
+  index("public_trade_lead_contact_releases_status_idx").on(table.status, table.updatedAt),
 ]);
 
 export const customerOpportunityDispatchJobs = sqliteTable("customer_opportunity_dispatch_jobs", {

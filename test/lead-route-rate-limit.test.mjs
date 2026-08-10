@@ -21,5 +21,5 @@ test("lead route uses the D1 limiter and trusted proxy client addresses", () => 
   assert.match(route, /createLeadEnvelope/);
   assert.match(route, /acknowledgement\.trim\(\) !== "ok"/);
   assert.doesNotMatch(route, /startedTooQuickly|< 1200/);
-  assert.doesNotMatch(route, /rateBuckets|new Map\(\)/);
+  assert.doesNotMatch(route, /rateBuckets|leadRateBuckets|rateLimit(?:er)?State\s*=\s*new Map/);
 });

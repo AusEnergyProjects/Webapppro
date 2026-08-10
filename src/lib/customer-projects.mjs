@@ -16,7 +16,7 @@ export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
 export const CUSTOMER_CONTACT_RELEASE_NOTICE_VERSION = "2026-07-18";
 export const CUSTOMER_CONTACT_RELEASE_FIELDS = ["name", "email", "phone", "service_address"];
-export const CUSTOMER_PLAN_VERSION = "2026-08-10-quick-wins-home-systems-v7";
+export const CUSTOMER_PLAN_VERSION = "2026-08-10-home-context-v8";
 export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-15",
   "2026-07-29-home-advisor",
@@ -27,6 +27,7 @@ export const CUSTOMER_LEGACY_PLAN_VERSIONS = [
   "2026-07-30-roadmap-context-v4",
   "2026-07-31-trade-enquiry-home-systems-v5",
   "2026-08-09-guided-home-systems-v6",
+  "2026-08-10-quick-wins-home-systems-v7",
 ];
 export const CUSTOMER_ADVISOR_PROFILE_VERSION = "2026-07-31-advisor-profile-v5";
 export const CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION =
@@ -81,14 +82,15 @@ export const customerHomeFeatureSections = [
       },
       {
         id: "wall-insulation",
-        label: "Wall insulation",
-        help: "Plans, invoices or an earlier assessment may be more reliable than guessing from the wall surface.",
+        label: "Insulation in walls that face outdoors",
+        help: "Count external walls only. Party walls shared with another home are recorded separately in Home basics. Plans, invoices or an earlier assessment are more reliable than guessing from the wall surface.",
         mode: "single",
         unknownValue: "wall-insulation-unknown",
         options: [
-          ["wall-insulation-none", "No wall insulation that I know of"],
-          ["wall-insulation-limited", "Some, old, patchy or probably inadequate"],
-          ["wall-insulation-well", "Well insulated or recently upgraded"],
+          ["wall-insulation-none", "No external wall insulation that I know of"],
+          ["wall-insulation-limited", "Some external walls are insulated, or coverage may be old or patchy"],
+          ["wall-insulation-well", "External walls are well insulated or recently upgraded"],
+          ["wall-insulation-not-applicable", "No walls face outdoors because they all adjoin other dwellings"],
           ["wall-insulation-unknown", "Not sure"],
         ],
       },
@@ -494,7 +496,7 @@ export const customerProjectOptions = {
   ],
   propertyTypes: [
     ["house", "Detached house"],
-    ["townhouse", "Townhouse or terrace"],
+    ["townhouse", "Townhouse, terrace, villa or duplex"],
     ["apartment", "Apartment or unit"],
     ["rural", "Rural home"],
     ["new-build", "New build or major renovation"],
@@ -557,6 +559,19 @@ export const customerProjectOptions = {
     ["100_199", "100 to 199 m2"],
     ["200_299", "200 to 299 m2"],
     ["300_plus", "300 m2 or more"],
+    ["not_sure", "Not sure"],
+  ],
+  occupants: [
+    ["one", "One person"],
+    ["two", "Two people"],
+    ["three_four", "Three or four people"],
+    ["five_plus", "Five or more people"],
+    ["not_sure", "Not sure"],
+  ],
+  sharedWalls: [
+    ["none", "No walls shared with another dwelling"],
+    ["one_side", "One side shared with another dwelling"],
+    ["two_plus_sides", "Two or more sides shared with other dwellings"],
     ["not_sure", "Not sure"],
   ],
   roofTypes: [
@@ -686,6 +701,8 @@ const budgets = new Set(customerProjectOptions.budgets.map(([value]) => value));
 const storeys = new Set(customerProjectOptions.storeys.map(([value]) => value));
 const ageBands = new Set(customerProjectOptions.ageBands.map(([value]) => value));
 const floorAreas = new Set(customerProjectOptions.floorAreas.map(([value]) => value));
+const occupants = new Set(customerProjectOptions.occupants.map(([value]) => value));
+const sharedWalls = new Set(customerProjectOptions.sharedWalls.map(([value]) => value));
 const roofTypes = new Set(customerProjectOptions.roofTypes.map(([value]) => value));
 const switchboards = new Set(customerProjectOptions.switchboards.map(([value]) => value));
 const accessConstraints = new Set(customerProjectOptions.accessConstraints.map(([value]) => value));
@@ -750,6 +767,7 @@ const homeFeatureFactRules = new Map([
       "wall-insulation-none",
       "wall-insulation-limited",
       "wall-insulation-well",
+      "wall-insulation-not-applicable",
     ]),
     unknown: new Set(["wall-insulation-unknown"]),
   }],
@@ -2228,17 +2246,21 @@ function propertyContextRecommendation(
     ? propertyContext
     : {};
   const fields = [
+    ["propertyType", customerProjectOptions.propertyTypes],
     ["storeys", customerProjectOptions.storeys],
-    ["ageBand", customerProjectOptions.ageBands],
     ["floorArea", customerProjectOptions.floorAreas],
+    ["occupants", customerProjectOptions.occupants],
+    ["sharedWalls", customerProjectOptions.sharedWalls],
+    ["ageBand", customerProjectOptions.ageBands],
     ["roofType", customerProjectOptions.roofTypes],
     ["switchboard", customerProjectOptions.switchboards],
   ];
   if (!fields.some(([key]) => typeof context[key] === "string" && context[key])) {
     return null;
   }
-  const recorded = fields.map(([key, options]) =>
-    label(options, context[key], "Not recorded"));
+  const recorded = fields
+    .filter(([key]) => typeof context[key] === "string" && context[key])
+    .map(([key, options]) => label(options, context[key]));
   const electricalWork = selectedGoals.some((goal) =>
     ["move-from-gas", "add-solar-storage", "replace-now"].includes(goal))
     || selectedServices.some((category) =>
@@ -2247,12 +2269,25 @@ function propertyContextRecommendation(
   const roofWork = selectedGoals.includes("add-solar-storage")
     || selectedServices.some((category) =>
       ["solar", "insulation"].includes(category));
+  const establishedContextKeys = new Set([
+    "storeys",
+    "ageBand",
+    "floorArea",
+    "roofType",
+    "switchboard",
+  ]);
   const unknownFields = fields
-    .filter(([key]) => !context[key] || context[key] === "not_sure")
+    .filter(([key]) => (
+      context[key] === "not_sure"
+      || (establishedContextKeys.has(key) && !context[key])
+    ))
     .map(([key]) => ({
+      propertyType: "home type",
       storeys: "home height",
-      ageBand: "home age",
       floorArea: "floor area",
+      occupants: "household size",
+      sharedWalls: "shared walls",
+      ageBand: "home age",
       roofType: "roof covering",
       switchboard: "switchboard type",
     })[key]);
@@ -2297,6 +2332,21 @@ function propertyContextRecommendation(
   ) {
     notes.push(
       "Height and floor area can change safe access, zoning and site-specific sizing questions.",
+    );
+  }
+  if (["townhouse", "apartment"].includes(context.propertyType)) {
+    notes.push(
+      "Treat walls facing outdoors separately from party walls shared with neighbouring dwellings when checking insulation and permissions.",
+    );
+  }
+  if (["one_side", "two_plus_sides"].includes(context.sharedWalls)) {
+    notes.push(
+      "The recorded shared walls are not external heat-loss surfaces. Confirm the remaining external wall construction before insulation work is scoped.",
+    );
+  }
+  if (context.occupants && context.occupants !== "not_sure") {
+    notes.push(
+      "Household size helps frame hot-water demand and occupied-zone needs, but actual routines and usage still need confirmation before sizing equipment.",
     );
   }
   if (!notes.length) {
@@ -2653,9 +2703,18 @@ function createAdvisorPlan({
     features,
     serviceCategories: selectedServices,
     propertyContext: {
+      ...(propertyContext.propertyType
+        ? { propertyType: propertyContext.propertyType }
+        : {}),
       storeys: propertyContext.storeys,
-      ageBand: propertyContext.ageBand,
       floorArea: propertyContext.floorArea,
+      ...(propertyContext.occupants
+        ? { occupants: propertyContext.occupants }
+        : {}),
+      ...(propertyContext.sharedWalls
+        ? { sharedWalls: propertyContext.sharedWalls }
+        : {}),
+      ageBand: propertyContext.ageBand,
       roofType: propertyContext.roofType,
       switchboard: propertyContext.switchboard,
     },
@@ -2754,6 +2813,17 @@ function prepareCustomerProjectPlan(input = {}) {
     ...(input.propertyContext && typeof input.propertyContext === "object"
       ? input.propertyContext
       : {}),
+    propertyType: input.propertyContext?.propertyType ?? input.propertyType,
+    storeys: input.propertyContext?.storeys ?? input.storeys,
+    floorArea: input.propertyContext?.floorArea ?? input.floorArea,
+    occupants:
+      input.propertyContext?.occupants
+      ?? input.occupants
+      ?? input.householdSize,
+    sharedWalls:
+      input.propertyContext?.sharedWalls
+      ?? input.sharedWalls
+      ?? input.dwellingConnection,
     approvalContext,
   });
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
@@ -2994,12 +3064,83 @@ export function buildAnonymizedOpportunity(project, projectId) {
   };
 }
 
+function normalizePropertyType(value) {
+  if (propertyTypes.has(value)) return value;
+  return new Map([
+    ["detached", "house"],
+    ["detached_house", "house"],
+    ["attached", "townhouse"],
+    ["semi_detached", "townhouse"],
+    ["duplex", "townhouse"],
+    ["villa", "townhouse"],
+    ["terrace", "townhouse"],
+    ["unit", "apartment"],
+  ]).get(value) || "";
+}
+
+function normalizeStoreys(value) {
+  if (storeys.has(value)) return value;
+  return new Map([
+    ["1", "single"],
+    ["one", "single"],
+    ["one_storey", "single"],
+    ["2", "two"],
+    ["two_storey", "two"],
+    ["3", "three_plus"],
+    ["three", "three_plus"],
+    ["3_plus", "three_plus"],
+  ]).get(String(value || "").toLowerCase()) || "";
+}
+
+function normalizeFloorArea(value) {
+  if (floorAreas.has(value)) return value;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  if (numeric < 100) return "under_100";
+  if (numeric < 200) return "100_199";
+  if (numeric < 300) return "200_299";
+  return "300_plus";
+}
+
+function normalizeOccupants(value) {
+  if (occupants.has(value)) return value;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric <= 0) return "";
+  if (numeric === 1) return "one";
+  if (numeric === 2) return "two";
+  if (numeric <= 4) return "three_four";
+  return "five_plus";
+}
+
+function normalizeSharedWalls(value) {
+  if (sharedWalls.has(value)) return value;
+  return new Map([
+    ["detached", "none"],
+    ["one", "one_side"],
+    ["one_shared_side", "one_side"],
+    ["multiple", "two_plus_sides"],
+    ["two_plus", "two_plus_sides"],
+    ["multiple_shared_sides", "two_plus_sides"],
+    ["apartment_unit", "two_plus_sides"],
+  ]).get(value) || "";
+}
+
 export function buildInstallerPropertyContext(value = {}) {
   const supplied = value && typeof value === "object" ? value : {};
+  const propertyType = normalizePropertyType(supplied.propertyType);
+  const occupantCount = normalizeOccupants(
+    supplied.occupants ?? supplied.householdSize,
+  );
+  const sharedWallCount = normalizeSharedWalls(
+    supplied.sharedWalls ?? supplied.dwellingConnection,
+  );
   return {
-    storeys: storeys.has(supplied.storeys) ? supplied.storeys : "",
+    ...(propertyType ? { propertyType } : {}),
+    storeys: normalizeStoreys(supplied.storeys),
     ageBand: ageBands.has(supplied.ageBand) ? supplied.ageBand : "",
-    floorArea: floorAreas.has(supplied.floorArea) ? supplied.floorArea : "",
+    floorArea: normalizeFloorArea(supplied.floorArea),
+    ...(occupantCount ? { occupants: occupantCount } : {}),
+    ...(sharedWallCount ? { sharedWalls: sharedWallCount } : {}),
     roofType: roofTypes.has(supplied.roofType) ? supplied.roofType : "",
     switchboard: switchboards.has(supplied.switchboard) ? supplied.switchboard : "",
     approvalContext: approvalContexts.has(supplied.approvalContext)

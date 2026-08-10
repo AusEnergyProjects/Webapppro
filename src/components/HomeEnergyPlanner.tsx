@@ -53,6 +53,11 @@ type InitialPlannerSelection = {
   budgetRange: string;
   addressState: string;
   features: string[];
+  propertyType: string;
+  storeys: string;
+  floorArea: string;
+  occupants: string;
+  sharedWalls: string;
 };
 type HomeFeatureQuestion = {
   id: string;
@@ -64,7 +69,7 @@ type HomeFeatureSection = {
   questions: HomeFeatureQuestion[];
 };
 type PlannerStep =
-  | { id: "situation" | "goals" | "apartment" | "budget" | "pace" | "location"; label: string }
+  | { id: "situation" | "goals" | "shared-property" | "home-basics" | "budget" | "pace" | "location"; label: string }
   | { id: "features"; label: string; featureSection: string; featureQuestion: string }
   | { id: "result"; label: string };
 
@@ -73,6 +78,11 @@ const customerProjectOptions = rawCustomerProjectOptions as unknown as {
   paces: Option[];
   situations: Option[];
   budgets: Option[];
+  propertyTypes: Option[];
+  storeys: Option[];
+  floorAreas: Option[];
+  occupants: Option[];
+  sharedWalls: Option[];
   states: string[];
 };
 
@@ -90,7 +100,8 @@ const plannerFeatureSteps = customerHomeFeatureSections.flatMap((section) =>
 
 const plannerStepsBeforeFeatures: PlannerStep[] = [
   { id: "situation", label: "Your home" },
-  { id: "apartment", label: "Apartment" },
+  { id: "shared-property", label: "Shared property" },
+  { id: "home-basics", label: "Home basics" },
   { id: "goals", label: "Priorities" },
 ];
 
@@ -153,7 +164,12 @@ function initialPlannerStep(selection: InitialPlannerSelection) {
     && selection.approvalContext === "not_sure"
     && selection.budgetRange === "not_set"
     && !selection.addressState
-    && selection.features.length === 0;
+    && selection.features.length === 0
+    && !selection.propertyType
+    && !selection.storeys
+    && !selection.floorArea
+    && !selection.occupants
+    && !selection.sharedWalls;
   return isDefault ? 0 : plannerSteps.length - 1;
 }
 
@@ -165,6 +181,11 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
   const [budgetRange, setBudgetRange] = useState(initialSelection.budgetRange);
   const [addressState, setAddressState] = useState(initialSelection.addressState);
   const [features, setFeatures] = useState(initialSelection.features);
+  const [propertyType, setPropertyType] = useState(initialSelection.propertyType);
+  const [storeys, setStoreys] = useState(initialSelection.storeys);
+  const [floorArea, setFloorArea] = useState(initialSelection.floorArea);
+  const [occupants, setOccupants] = useState(initialSelection.occupants);
+  const [sharedWalls, setSharedWalls] = useState(initialSelection.sharedWalls);
   const [stepIndex, setStepIndex] = useState(() => initialPlannerStep(initialSelection));
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const hasChangedStep = useRef(false);
@@ -201,8 +222,28 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
       budgetRange,
       addressState,
       features,
+      propertyContext: {
+        propertyType,
+        storeys,
+        floorArea,
+        occupants,
+        sharedWalls,
+      },
     }) as CustomerPlan,
-    [goals, pace, situation, approvalContext, budgetRange, addressState, features],
+    [
+      goals,
+      pace,
+      situation,
+      approvalContext,
+      budgetRange,
+      addressState,
+      features,
+      propertyType,
+      storeys,
+      floorArea,
+      occupants,
+      sharedWalls,
+    ],
   );
 
   const selectionParams = useMemo(() => {
@@ -215,19 +256,37 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     appendValues(params, "goal", goals);
     appendValues(params, "feature", features);
     if (addressState) params.set("addressState", addressState);
+    if (propertyType) params.set("propertyType", propertyType);
+    if (storeys) params.set("storeys", storeys);
+    if (floorArea) params.set("floorArea", floorArea);
+    if (occupants) params.set("occupants", occupants);
+    if (sharedWalls) params.set("sharedWalls", sharedWalls);
     return params;
-  }, [goals, pace, situation, approvalContext, budgetRange, addressState, features]);
+  }, [
+    goals,
+    pace,
+    situation,
+    approvalContext,
+    budgetRange,
+    addressState,
+    features,
+    propertyType,
+    storeys,
+    floorArea,
+    occupants,
+    sharedWalls,
+  ]);
   const accountProjectHref = `/account/projects/new?${selectionParams.toString()}`;
   const firstActionItem = plan.items.find((item) => Boolean(item.href));
   const enquiryInterests = suggestedPlanInterests(plan.items);
 
-  const apartmentAnswer = approvalContext === "strata"
+  const sharedPropertyAnswer = approvalContext === "strata"
     ? "yes"
     : approvalContext === "none"
       ? "no"
       : "not_sure";
 
-  function setApartmentAnswer(value: string) {
+  function setSharedPropertyAnswer(value: string) {
     setApprovalContext(value === "yes" ? "strata" : value === "no" ? "none" : "not_sure");
   }
 
@@ -251,6 +310,11 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     setBudgetRange("not_set");
     setAddressState("");
     setFeatures([]);
+    setPropertyType("");
+    setStoreys("");
+    setFloorArea("");
+    setOccupants("");
+    setSharedWalls("");
     goToStep(0);
   }
 
@@ -308,18 +372,63 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               </>
             ) : null}
 
-            {currentStep.id === "apartment" ? (
+            {currentStep.id === "shared-property" ? (
               <>
                 <span className="planner-step-eyebrow">Building approvals</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>Do you live in an apartment complex?</h2>
-                <p>If yes, the plan will flag external units, common property and other changes that may need building manager, body corporate or owners corporation approval.</p>
+                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>Does the home have strata, a body corporate, an owners corporation or shared common property?</h2>
+                <p>This can apply to apartments, units, townhouses, villas, duplexes and other housing complexes. It helps flag roofs, external walls, gardens, services and equipment locations that may need approval.</p>
                 <div className="planner-choice-grid planner-choice-grid-compact">
-                  {[["yes", "Yes"], ["no", "No"], ["not_sure", "Not sure"]].map(([value, label]) => (
-                    <label className={apartmentAnswer === value ? "selected" : ""} key={value}>
-                      <input type="radio" name="planner-apartment" checked={apartmentAnswer === value} onChange={() => setApartmentAnswer(value)} />
+                  {[["yes", "Yes, or it is likely"], ["no", "No, not that I know of"], ["not_sure", "Not sure"]].map(([value, label]) => (
+                    <label className={sharedPropertyAnswer === value ? "selected" : ""} key={value}>
+                      <input type="radio" name="planner-shared-property" checked={sharedPropertyAnswer === value} onChange={() => setSharedPropertyAnswer(value)} />
                       <span>{label}</span>
                     </label>
                   ))}
+                </div>
+              </>
+            ) : null}
+
+            {currentStep.id === "home-basics" ? (
+              <>
+                <span className="planner-step-eyebrow">Optional home basics</span>
+                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>A few broad details help scale the plan</h2>
+                <p>Choose what you know. These broad ranges help frame access, external walls, hot water and zoning without asking for names, ages or a full address.</p>
+                <div className="planner-home-basics-grid">
+                  <label>
+                    <span>Type of home</span>
+                    <select aria-label="Type of home" value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
+                      <option value="">Skip this detail</option>
+                      {customerProjectOptions.propertyTypes.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Storeys inside your home</span>
+                    <select aria-label="Storeys inside your home" value={storeys} onChange={(event) => setStoreys(event.target.value)}>
+                      <option value="">Skip this detail</option>
+                      {customerProjectOptions.storeys.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Approximate internal floor area</span>
+                    <select aria-label="Approximate internal floor area" value={floorArea} onChange={(event) => setFloorArea(event.target.value)}>
+                      <option value="">Skip this detail</option>
+                      {customerProjectOptions.floorAreas.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>People who usually live here</span>
+                    <select aria-label="People who usually live here" value={occupants} onChange={(event) => setOccupants(event.target.value)}>
+                      <option value="">Skip this detail</option>
+                      {customerProjectOptions.occupants.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Walls shared with another dwelling</span>
+                    <select aria-label="Walls shared with another dwelling" value={sharedWalls} onChange={(event) => setSharedWalls(event.target.value)}>
+                      <option value="">Skip this detail</option>
+                      {customerProjectOptions.sharedWalls.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                    </select>
+                  </label>
                 </div>
               </>
             ) : null}
@@ -433,7 +542,25 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
             </section>
           ) : null}
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
-            <PublicPlanEnquiryForm suggestedInterests={enquiryInterests} />
+            <PublicPlanEnquiryForm
+              suggestedInterests={enquiryInterests}
+              planSnapshot={{
+                goals,
+                pace,
+                situation,
+                approvalContext,
+                budgetRange,
+                addressState,
+                features,
+                propertyContext: {
+                  propertyType,
+                  storeys,
+                  floorArea,
+                  occupants,
+                  sharedWalls,
+                },
+              }}
+            />
             <div className="planner-result-account-option">
               <div>
                 <strong>Want to save the full plan first?</strong>

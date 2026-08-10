@@ -13,6 +13,7 @@ import {
 } from "pdf-lib";
 import {
   createCustomerPlanReportView,
+  createPublicPlanCustomerReportView,
 } from "../src/lib/customer-plan-document.mjs";
 import {
   CUSTOMER_PLAN_PDF_CONTRAST_COLORS,
@@ -89,8 +90,12 @@ const actions = Array.from({ length: 18 }, (_, index) => ({
   guideHref: "/guides/project-preparation#evidence-first",
 }));
 
-const report = createCustomerPlanReportView({
-  heading: "Your independent home energy plan",
+// Exercise maximum repeated-card structure separately from the representative
+// public customer artifact rendered below.
+createCustomerPlanReportView({
+  heading: "Jamie Customer's home energy plan",
+  preparedFor: "Jamie Customer",
+  customerSummary: "Townhouse or terrace | postcode 3000 | VIC",
   planTitle: "A clear, staged roadmap for this home at 22 °C",
   summary:
     "Start with the safest useful checks, then spend only where the evidence supports it.",
@@ -130,9 +135,58 @@ const report = createCustomerPlanReportView({
     "Private account details and customer-written notes are not included in this shared copy.",
   adviceBoundary:
     "This is independent general guidance, not a quote, rating or savings promise.",
+  resources: [
+    { label: "Review the AEA home energy plan", description: "Update the plan when the home or priorities change.", href: "/plan" },
+    { label: "Find current rebates", description: "Check government support and official eligibility rules.", href: "/rebates" },
+    { label: "Estimate rebate value", description: "Prepare an indicative scheme estimate.", href: "/calculator" },
+    { label: "Compare electricity plans", description: "Compare current electricity options.", href: "/compare" },
+    { label: "Prepare for an assessment", description: "Understand the independent assessment path.", href: "/assessments" },
+    { label: "Australian Government household hub", description: "National household energy guidance.", href: "https://www.energy.gov.au/households" },
+    { label: "Australian Government quick wins", description: "Low-cost and no-cost actions.", href: "https://www.energy.gov.au/households/quick-wins" },
+    { label: "Official rebate finder", description: "Search current government rebates.", href: "https://www.energy.gov.au/rebates" },
+    { label: "Existing-home energy ratings", description: "Official existing-home rating guidance.", href: "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes" },
+    { label: "Your Home passive design guide", description: "Official climate-responsive design guidance.", href: "https://www.yourhome.gov.au/passive-design/introduction" },
+  ],
 });
 
-const bytes = await createCustomerPlanPdfBytes(report, pdfFonts);
+const representativeReport = createPublicPlanCustomerReportView({
+  name: "Jamie Customer",
+  postcode: "3000",
+  projectCategories: ["heating-cooling"],
+  preparedAt: "2026-08-10T04:05:06.000Z",
+  snapshot: {
+    goals: ["lower-bills", "improve-comfort"],
+    pace: "staged",
+    situation: "owner",
+    approvalContext: "strata",
+    budgetRange: "2_10k",
+    addressState: "VIC",
+    features: [
+      "reverse-cycle",
+      "ceiling-insulation-unknown",
+      "draughty-doors",
+      "open-chimney",
+    ],
+    propertyContext: {
+      propertyType: "townhouse",
+      storeys: "two",
+      floorArea: "100_199",
+      occupants: "three_four",
+      sharedWalls: "one_side",
+    },
+  },
+});
+assert.match(representativeReport.customerSummary, /Townhouse/);
+assert.match(
+  representativeReport.planningSnapshot.find((item) => item.label === "Home details")?.value || "",
+  /Two storeys.*100 to 199 m2.*Three or four people.*One side shared/,
+);
+assert.ok(representativeReport.actions.length >= 8);
+assert.ok(representativeReport.actions.every((item) => !/^Clear home energy step/.test(item.title)));
+assert.match(representativeReport.privacyNote, /emailed only to the customer/i);
+assert.doesNotMatch(representativeReport.privacyNote, /shared copy/i);
+
+const bytes = await createCustomerPlanPdfBytes(representativeReport, pdfFonts);
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, bytes);
 
@@ -145,7 +199,7 @@ const unsupportedScriptGate = [
 for (const [script, character] of unsupportedScriptGate) {
   await assert.rejects(
     createCustomerPlanPdfBytes(
-      { ...report, planTitle: `Unsupported ${script} check ${character}` },
+      { ...representativeReport, planTitle: `Unsupported ${script} check ${character}` },
       pdfFonts,
     ),
     (error) =>

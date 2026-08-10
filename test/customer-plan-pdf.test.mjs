@@ -13,6 +13,7 @@ import {
 } from "pdf-lib";
 import {
   createCustomerPlanReportView,
+  createPublicPlanCustomerReportView,
 } from "../src/lib/customer-plan-document.mjs";
 import {
   AEA_BRANDMARK_PNG_DATA_URI,
@@ -42,6 +43,10 @@ const PDF_FONTS = {
 };
 const PDF_ROUTE_SOURCE = readFileSync(
   new URL("../src/app/api/customer-plan-pdf/route.ts", import.meta.url),
+  "utf8",
+);
+const PUBLIC_LEAD_ROUTE_SOURCE = readFileSync(
+  new URL("../src/app/api/leads/route.js", import.meta.url),
   "utf8",
 );
 const PDF_SOURCE = readFileSync(
@@ -370,7 +375,7 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-07-31-tagged-plan-pdf-v6",
+    "2026-08-10-personalised-plan-pdf-v7",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -568,10 +573,11 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
     for (const reference of annotations.asArray()) {
       const annotation = pdf.context.lookup(reference, PDFDict);
       const action = annotation.lookup(PDFName.of("A"), PDFDict);
-      urls.push(action.get(PDFName.of("URI")).decodeText());
+      const url = action.get(PDFName.of("URI")).decodeText();
+      urls.push(url);
       assert.match(
         annotation.get(PDFName.of("Contents")).decodeText(),
-        /guidance/i,
+        url.endsWith("/guides/heating") ? /guidance/i : /trusted resource/i,
       );
       assert.ok(
         annotation.lookup(PDFName.of("StructParent"), PDFNumber).asNumber()
@@ -580,9 +586,11 @@ test("direct plan PDF keeps friendly guide labels clickable", async () => {
     }
   }
 
-  assert.deepEqual(urls, [
+  assert.deepEqual(new Set(urls), new Set([
     "https://compare.ausenergyassessments.com/guides/heating",
-  ]);
+    "https://compare.ausenergyassessments.com/plan",
+    "https://compare.ausenergyassessments.com/assessments",
+  ]));
 });
 
 test("direct plan PDF filename is fixed, dated and independent of private fields", () => {
@@ -605,6 +613,51 @@ test("direct plan PDF filename is fixed, dated and independent of private fields
   for (const canary of privateCanaries) {
     assert.doesNotMatch(fileName, new RegExp(canary, "i"));
   }
+});
+
+test("personalised customer PDF includes the named home summary and trusted official resource links", async () => {
+  const report = normalizedReport({
+    heading: "Jamie Customer's home energy plan",
+    preparedFor: "Jamie Customer",
+    customerSummary: "Townhouse or terrace | postcode 3000 | VIC",
+    resources: [
+      {
+        label: "Review the AEA home energy plan",
+        description: "Update the plan when the home changes.",
+        href: "/plan",
+      },
+      {
+        label: "Australian Government household energy hub",
+        description: "Independent national household energy guidance.",
+        href: "https://www.energy.gov.au/households",
+      },
+    ],
+  });
+  const bytes = await createPdf(report);
+  const pdf = await PDFDocument.load(bytes);
+  const text = extractedPdfText(pdf);
+  const urls = [];
+  for (const page of pdf.getPages()) {
+    const annotations = page.node.lookupMaybe(PDFName.of("Annots"), PDFArray);
+    if (!annotations) continue;
+    for (const reference of annotations.asArray()) {
+      const annotation = pdf.context.lookup(reference, PDFDict);
+      const action = annotation.lookup(PDFName.of("A"), PDFDict);
+      urls.push(action.get(PDFName.of("URI")).decodeText());
+    }
+  }
+  assert.match(text, /Prepared for Jamie Customer/);
+  assert.match(text, /Townhouse or terrace \| postcode 3000 \| VIC/);
+  assert.match(text, /Trusted tools and official information/);
+  assert.match(text, /Turn this roadmap into a clear first conversation/);
+  assert.match(text, /Prepare once for an assessor or trade/);
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/plan"));
+  assert.ok(urls.includes("https://compare.ausenergyassessments.com/assessments"));
+  assert.ok(urls.includes("https://www.energy.gov.au/households"));
+  assert.equal(
+    customerPlanPdfFileName(report),
+    "personalised-home-energy-plan-2026-07-29.pdf",
+  );
 });
 
 test("direct plan PDF accepts common adviser names, temperatures and smart punctuation", async () => {
@@ -680,6 +733,50 @@ test("direct plan PDF rejects unsupported scripts instead of corrupting visible 
       },
     );
   }
+});
+
+test("public enquiry PDF uses a neutral supported cover label when only the customer name is unsupported", async () => {
+  const reportInput = {
+    postcode: "3000",
+    projectCategories: ["heating-cooling"],
+    preparedAt: "2026-08-10T04:05:06.000Z",
+    snapshot: {
+      goals: ["lower-bills", "improve-comfort"],
+      pace: "staged",
+      situation: "owner",
+      approvalContext: "none",
+      budgetRange: "2_10k",
+      addressState: "VIC",
+      features: ["reverse-cycle"],
+      propertyContext: {
+        propertyType: "townhouse",
+        storeys: "two",
+        floorArea: "100_199",
+        occupants: "three_four",
+        sharedWalls: "one_side",
+      },
+    },
+  };
+  const namedReport = createPublicPlanCustomerReportView({
+    ...reportInput,
+    name: "张伟",
+  });
+  await assert.rejects(
+    createPdf(namedReport),
+    (error) => error instanceof CustomerPlanPdfUnsupportedTextError,
+  );
+
+  const neutralReport = createPublicPlanCustomerReportView({
+    ...reportInput,
+    name: "Customer",
+  });
+  const bytes = await createPdf(neutralReport);
+  const text = extractedPdfText(await PDFDocument.load(bytes));
+  assert.match(text, /Prepared for Customer/);
+  assert.doesNotMatch(text, /张伟/u);
+  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /error instanceof CustomerPlanPdfUnsupportedTextError/);
+  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /name: "Customer"/);
+  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /The real name remains in the private enquiry/);
 });
 
 test("PDF route returns a clear unsupported-text response", () => {

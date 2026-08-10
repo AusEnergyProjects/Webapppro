@@ -23,6 +23,23 @@ export type PublicPlanUpgradeInterest =
   | "ev-charging"
   | "other";
 
+export type PublicPlanSnapshot = {
+  goals: string[];
+  pace: string;
+  situation: string;
+  approvalContext: string;
+  budgetRange: string;
+  addressState: string;
+  features: string[];
+  propertyContext?: {
+    propertyType?: string;
+    storeys?: string;
+    floorArea?: string;
+    occupants?: string;
+    sharedWalls?: string;
+  };
+};
+
 const INTEREST_LABELS: Record<PublicPlanUpgradeInterest, string> = {
   assessment: "An independent home energy assessment",
   solar: "Rooftop solar",
@@ -40,6 +57,7 @@ const INTEREST_LABELS: Record<PublicPlanUpgradeInterest, string> = {
 type PublicPlanEnquiryFormProps = {
   initialPostcode?: string;
   suggestedInterests?: readonly string[];
+  planSnapshot: PublicPlanSnapshot;
   className?: string;
 };
 
@@ -47,6 +65,7 @@ type SubmissionStatus =
   | { kind: "idle"; message: "" }
   | { kind: "sending"; message: string }
   | { kind: "error"; message: string }
+  | { kind: "received"; message: string; reference: string }
   | { kind: "success"; message: string; reference: string };
 
 function firstAllowedInterest(
@@ -57,9 +76,63 @@ function firstAllowedInterest(
   return (suggested as PublicPlanUpgradeInterest | undefined) ?? "assessment";
 }
 
+function createSubmissionId() {
+  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `${date}.${crypto.randomUUID()}`;
+}
+
+function submissionCoreKey({
+  name,
+  email,
+  phone,
+  postcode,
+  interest,
+  message,
+  planSnapshot,
+}: {
+  name: string;
+  email: string;
+  phone: string;
+  postcode: string;
+  interest: PublicPlanUpgradeInterest;
+  message: string;
+  planSnapshot: PublicPlanSnapshot;
+}) {
+  return JSON.stringify({
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    phone: phone.trim(),
+    postcode: postcode.trim(),
+    interest,
+    message: message.trim(),
+    planSnapshot: {
+      goals: [...planSnapshot.goals].sort(),
+      pace: planSnapshot.pace,
+      situation: planSnapshot.situation,
+      approvalContext: planSnapshot.approvalContext,
+      budgetRange: planSnapshot.budgetRange,
+      addressState: planSnapshot.addressState,
+      features: [...planSnapshot.features].sort(),
+      propertyContext: {
+        propertyType: planSnapshot.propertyContext?.propertyType || "",
+        storeys: planSnapshot.propertyContext?.storeys || "",
+        floorArea: planSnapshot.propertyContext?.floorArea || "",
+        occupants: planSnapshot.propertyContext?.occupants || "",
+        sharedWalls: planSnapshot.propertyContext?.sharedWalls || "",
+      },
+    },
+    consent: {
+      accepted: true,
+      purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+      noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    },
+  });
+}
+
 export function PublicPlanEnquiryForm({
   initialPostcode = "",
   suggestedInterests,
+  planSnapshot,
   className = "",
 }: PublicPlanEnquiryFormProps) {
   const [name, setName] = useState("");
@@ -73,9 +146,15 @@ export function PublicPlanEnquiryForm({
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState<SubmissionStatus>({ kind: "idle", message: "" });
   const startedAt = useRef(0);
+  const submissionId = useRef("");
+  const consentGrantedAt = useRef("");
+  const lastAttemptCore = useRef("");
 
   useEffect(() => {
     startedAt.current = Date.now();
+    submissionId.current = createSubmissionId();
+    consentGrantedAt.current = "";
+    lastAttemptCore.current = "";
   }, []);
 
   function reset() {
@@ -83,6 +162,22 @@ export function PublicPlanEnquiryForm({
     setConsent(false);
     setMessage("");
     startedAt.current = Date.now();
+    submissionId.current = createSubmissionId();
+    consentGrantedAt.current = "";
+    lastAttemptCore.current = "";
+  }
+
+  function changeConsent(accepted: boolean) {
+    setConsent(accepted);
+    if (accepted) {
+      consentGrantedAt.current = new Date().toISOString();
+      return;
+    }
+    consentGrantedAt.current = "";
+    if (lastAttemptCore.current) {
+      submissionId.current = createSubmissionId();
+      lastAttemptCore.current = "";
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -95,19 +190,36 @@ export function PublicPlanEnquiryForm({
       setStatus({ kind: "error", message: "Enter a valid Australian postcode." });
       return;
     }
-    if (!consent) {
+    if (!consent || !consentGrantedAt.current) {
       setStatus({ kind: "error", message: "Confirm that we may use these details to respond to this enquiry." });
       return;
     }
 
     setStatus({ kind: "sending", message: "Sending your enquiry..." });
     try {
+      if (!submissionId.current) {
+        submissionId.current = createSubmissionId();
+      }
+      const currentCore = submissionCoreKey({
+        name,
+        email,
+        phone,
+        postcode,
+        interest,
+        message,
+        planSnapshot,
+      });
+      if (lastAttemptCore.current && lastAttemptCore.current !== currentCore) {
+        submissionId.current = createSubmissionId();
+      }
+      lastAttemptCore.current = currentCore;
       const response = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           submissionType: "upgrade",
           enquiry: PUBLIC_PLAN_ENQUIRY_KIND,
+          submissionId: submissionId.current,
           clientStartedAt: startedAt.current,
           website,
           name,
@@ -116,11 +228,12 @@ export function PublicPlanEnquiryForm({
           postcode,
           projectCategories: [interest],
           projectNotes: message,
+          planSnapshot,
           consent: {
             accepted: true,
             purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
             noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-            grantedAt: new Date().toISOString(),
+            grantedAt: consentGrantedAt.current,
           },
         }),
       });
@@ -129,16 +242,30 @@ export function PublicPlanEnquiryForm({
         filtered?: boolean;
         error?: string;
         reference?: string;
+        planEmailSent?: boolean;
+        received?: boolean;
       };
       if (result.filtered) {
         throw new Error("We could not verify this enquiry. Refresh the page and try again, or call 1300 241 149.");
       }
       if (!response.ok || !result.ok) {
+        if (result.received) {
+          setStatus({
+            kind: "received",
+            message: result.planEmailSent
+              ? "Your enquiry and private plan PDF email were safely received, but trade matching is not prepared yet. Retry trade matching with this same request."
+              : "Your enquiry was safely received, but trade matching is not prepared yet. Retry trade matching with this same request.",
+            reference: result.reference || "",
+          });
+          return;
+        }
         throw new Error(result.error || "Your enquiry could not be delivered. Please try again.");
       }
       setStatus({
         kind: "success",
-        message: "Your enquiry is in. We will use the details you supplied to respond. This did not create an account.",
+        message: result.planEmailSent
+          ? "Your enquiry is ready for matching trades and your personalised home plan PDF has been emailed to you. This did not create an account."
+          : "Your enquiry is ready for matching trades. No PDF was sent because you chose phone only. This did not create an account.",
         reference: result.reference || "",
       });
     } catch (caught) {
@@ -189,14 +316,14 @@ export function PublicPlanEnquiryForm({
             <input className={styles.control} required autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={postcode} onChange={(event) => setPostcode(event.target.value.replace(/\D/g, "").slice(0, 4))} />
           </label>
           <label className={styles.field}>
-            <span className={styles.labelRow}>Email <span className={styles.optional}>email or phone required</span></span>
+            <span className={styles.labelRow}>Email <span className={styles.optional}>recommended for your PDF</span></span>
             <input className={styles.control} type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="public-plan-contact-hint" />
           </label>
           <label className={styles.field}>
             <span className={styles.labelRow}>Phone <span className={styles.optional}>email or phone required</span></span>
             <input className={styles.control} type="tel" autoComplete="tel" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} aria-describedby="public-plan-contact-hint" />
           </label>
-          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">You can provide either contact method or both.</p>
+          <p className={`${styles.hint} ${styles.full}`} id="public-plan-contact-hint">You can provide either contact method or both. Add an email address to receive your personalised plan PDF.</p>
           <label className={`${styles.field} ${styles.full}`}>
             <span className={styles.labelRow}>What would you like help with first?</span>
             <select className={styles.control} value={interest} onChange={(event) => setInterest(event.target.value as PublicPlanUpgradeInterest)}>
@@ -216,22 +343,27 @@ export function PublicPlanEnquiryForm({
         </div>
 
         <label className={styles.consent}>
-          <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-          <span>I agree that Australian Energy Assessments may use these details to contact me about this upgrade enquiry.</span>
+          <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => changeConsent(event.target.checked)} />
+          <span>I agree that Australian Energy Assessments may share my name, chosen email or phone, postcode, selected service and optional message with every active, verified matching trade that services this area. My full plan and PDF stay private and are emailed only to me.</span>
         </label>
 
         <details className={styles.privacy}>
           <summary>What is sent with this enquiry?</summary>
-          <p>Only the fields shown above are sent. Your plan answers, account data, energy usage, meter identifiers and uploaded files are not included. We review the request before sharing anything with a trade.</p>
+          <p>Matching trades receive only the contact and enquiry fields named in the consent above. Your full plan, PDF, street address, bills, energy usage, meter identifiers, account data and uploaded files are not shared with trades.</p>
         </details>
 
         <div className={styles.actions}>
           <button className={styles.submit} type="submit" disabled={status.kind === "sending"}>
-            {status.kind === "sending" ? "Sending..." : "Enquire about this upgrade"}
+            {status.kind === "sending"
+              ? "Sending..."
+              : status.kind === "received"
+                ? "Retry trade matching"
+                : "Enquire about this upgrade"}
           </button>
           {status.message && (
             <p className={status.kind === "error" ? styles.error : styles.status} role={status.kind === "error" ? "alert" : "status"}>
               {status.message}
+              {status.kind === "received" && status.reference ? ` Reference ${status.reference}.` : ""}
             </p>
           )}
         </div>

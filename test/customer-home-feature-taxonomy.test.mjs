@@ -791,7 +791,7 @@ test("the public planner uses the accessible shared intake and bounded query han
 });
 
 test("the taxonomy release is versioned and the previous plan remains migratable", () => {
-  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-quick-wins-home-systems-v7");
+  assert.equal(CUSTOMER_PLAN_VERSION, "2026-08-10-home-context-v8");
   assert.equal(
     CUSTOMER_ADVISOR_PROFILE_VERSION,
     "2026-07-31-advisor-profile-v5",
@@ -799,6 +799,12 @@ test("the taxonomy release is versioned and the previous plan remains migratable
   assert.equal(
     CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
       "2026-08-09-guided-home-systems-v6",
+    ),
+    true,
+  );
+  assert.equal(
+    CUSTOMER_LEGACY_PLAN_VERSIONS.includes(
+      "2026-08-10-quick-wins-home-systems-v7",
     ),
     true,
   );

@@ -185,7 +185,7 @@ const resetProfessionalReviewDeclaration = (
 const PROJECT_REVISION_CONFLICT_MESSAGE =
   "This plan was updated in another tab. Your unsaved edits are still here.";
 
-const customerProjectOptions = rawCustomerProjectOptions as {
+const customerProjectOptions = rawCustomerProjectOptions as unknown as {
   goals: Option[];
   paces: Option[];
   situations: Option[];

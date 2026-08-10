@@ -24,7 +24,7 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "AEA protected opportunities keep household identity and exact address behind the authorised marketplace boundary. A trade business receives direct customer contact information only when the customer contacted that business directly or an authorised workflow permits the handoff. Wholesalers do not receive household lead details.",
+    body: "AEA protected opportunities keep the full home plan, exact street address, bills, meter data and uploaded documents behind the authorised marketplace boundary. When a household explicitly submits a trade enquiry, the consent screen names the basic contact fields that will be released to every active verified trade whose service area and capability match the selected work. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",

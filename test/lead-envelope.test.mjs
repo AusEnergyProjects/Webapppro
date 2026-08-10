@@ -47,7 +47,7 @@ test("lead envelopes add one reference and infer state without adding contact da
       createId: () => "12345678-abcd-4000-8000-123456789abc",
     },
   );
-  assert.equal(envelope.schemaVersion, "6");
+  assert.equal(envelope.schemaVersion, "7");
   assert.equal(envelope.eventType, "gas.upgrade");
   assert.equal(envelope.reference, "AEA-20260714-12345678AB");
   assert.equal(envelope.state, "VIC");
@@ -67,7 +67,7 @@ test("Direct Trade partner envelopes begin a non-automatic participant review", 
   assert.equal(envelope.participantReview.publicListing, false);
 });
 
-test("Direct Trade project envelopes hold unconfirmed authority before allocation", () => {
+test("Direct Trade project envelopes preserve review flags while allowing privacy-safe allocation", () => {
   const envelope = createLeadEnvelope(
     {
       ...base,
@@ -80,8 +80,16 @@ test("Direct Trade project envelopes hold unconfirmed authority before allocatio
     },
     { createId: () => "12345678-abcd-4000-8000-123456789abc" },
   );
-  assert.equal(envelope.directTradeTriage.status, "hold_for_authority_review");
-  assert.equal(envelope.directTradeTriage.autoSend, false);
+  assert.equal(
+    envelope.directTradeTriage.status,
+    "automatic_privacy_safe_allocation",
+  );
+  assert.equal(envelope.directTradeTriage.autoSend, true);
+  assert.ok(
+    envelope.directTradeTriage.reviewFlags.includes(
+      "property_authority_unconfirmed",
+    ),
+  );
   assert.equal(envelope.directTradeTriage.matchCriteria.state, "VIC");
 });
 

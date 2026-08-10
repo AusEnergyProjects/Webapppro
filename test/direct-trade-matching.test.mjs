@@ -5,6 +5,7 @@ import {
   createQuoteEvidenceChecklist,
   evaluateQuoteEvidence,
   matchDirectTradeParticipants,
+  selectEveryQualifiedTradeRecipient,
 } from "../src/lib/direct-trade-matching.mjs";
 
 const project = {
@@ -40,13 +41,76 @@ test("project triage produces automatic privacy-safe allocation criteria", () =>
   assert.ok(triage.quoteEvidence.some((item) => item.id === "battery-design"));
 });
 
-test("triage holds planning-only projects for authority review", () => {
+test("consented planning-only enquiries retain the authority flag without blocking distribution", () => {
   const triage = buildDirectTradeTriage({
     ...project,
     propertyRelationship: "planning-only",
   });
-  assert.equal(triage.status, "hold_for_authority_review");
+  assert.equal(triage.status, "automatic_privacy_safe_allocation");
+  assert.equal(triage.autoSend, true);
   assert.ok(triage.reviewFlags.includes("property_authority_unconfirmed"));
+});
+
+test("open distribution selects every qualified trade once and excludes every rejected trade", () => {
+  const matching = Array.from({ length: 50 }, (_, index) => ({
+    ...participantEvidence,
+    id: `qualified-${index}`,
+    businessName: `Qualified Trade ${index}`,
+    serviceStates: ["VIC"],
+    capabilities: ["solar", "battery"],
+    postcodePrefixes: ["30"],
+  }));
+  const reviewed = matchDirectTradeParticipants(
+    project,
+    [
+      ...matching,
+      { ...matching[0] },
+      {
+        ...participantEvidence,
+        id: "outside-area",
+        serviceStates: ["NSW"],
+        capabilities: ["solar", "battery"],
+      },
+      {
+        ...participantEvidence,
+        id: "capability-mismatch",
+        serviceStates: ["VIC"],
+        capabilities: ["solar"],
+      },
+      {
+        ...participantEvidence,
+        id: "not-verified",
+        businessVerified: false,
+        serviceStates: ["VIC"],
+        capabilities: ["solar", "battery"],
+      },
+      {
+        ...participantEvidence,
+        id: "not-platform-approved",
+        status: "submitted",
+        serviceStates: ["VIC"],
+        capabilities: ["solar", "battery"],
+      },
+      {
+        ...participantEvidence,
+        id: "disabled",
+        status: "suspended",
+        serviceStates: ["VIC"],
+        capabilities: ["solar", "battery"],
+      },
+    ],
+    { now: new Date("2026-07-14T01:00:00.000Z") },
+  );
+  const recipients = selectEveryQualifiedTradeRecipient(reviewed);
+  const recipientIds = recipients.map((candidate) => candidate.participantId);
+  assert.equal(recipients.length, matching.length);
+  assert.equal(new Set(recipientIds).size, matching.length);
+  assert.deepEqual(recipientIds.sort(), matching.map(({ id }) => id).sort());
+  assert.equal(recipientIds.includes("outside-area"), false);
+  assert.equal(recipientIds.includes("capability-mismatch"), false);
+  assert.equal(recipientIds.includes("not-verified"), false);
+  assert.equal(recipientIds.includes("not-platform-approved"), false);
+  assert.equal(recipientIds.includes("disabled"), false);
 });
 
 test("participant matching excludes unverified, uncovered and partial capability records", () => {

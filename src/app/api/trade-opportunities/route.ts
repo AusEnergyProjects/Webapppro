@@ -20,6 +20,10 @@ import {
   CUSTOMER_MATCHING_NOTICE_VERSION,
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
+import {
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "@/lib/public-plan-enquiry.mjs";
 import { createInstallerEnquiryPack } from "@/lib/customer-plan-document.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
@@ -224,6 +228,14 @@ export async function GET(request: Request) {
     r.address_line_1 contact_address_line_1, r.address_line_2 contact_address_line_2,
     r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
     r.notice_version contact_notice_version, r.granted_at contact_granted_at,
+    public_contact.id public_contact_release_id,
+    public_contact.customer_name public_customer_name,
+    public_contact.customer_email public_customer_email,
+    public_contact.customer_phone public_customer_phone,
+    public_contact.postcode public_contact_postcode,
+    public_contact.customer_message public_customer_message,
+    public_contact.notice_version public_contact_notice_version,
+    public_contact.granted_at public_contact_granted_at,
     p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
     p.goal customer_goal, p.goals customer_goals, p.pace customer_pace,
     p.postcode customer_postcode, p.address_state customer_address_state,
@@ -261,9 +273,33 @@ export async function GET(request: Request) {
     LEFT JOIN customer_project_quotes q ON q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
     LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = m.id
       AND r.installer_uid = m.firebase_uid AND r.status = 'active'
+    LEFT JOIN public_trade_lead_contact_releases public_contact
+      ON public_contact.opportunity_id = o.id
+        AND public_contact.status = 'active'
+        AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+        AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+        AND datetime(public_contact.granted_at) IS NOT NULL
+        AND public_contact.withdrawn_at = ''
+        AND public_contact.postcode = o.postcode
     LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM public_trade_lead_contact_releases any_public_contact
+          WHERE any_public_contact.opportunity_id = o.id
+        )
+        OR (
+          public_contact.id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM trade_accounts current_public_trade_account
+            WHERE current_public_trade_account.firebase_uid = m.firebase_uid
+              AND current_public_trade_account.partner_type = 'installer'
+              AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
+          )
+        )
+      )
       AND (
         p.id IS NULL OR EXISTS (
           SELECT 1 FROM customer_consent_receipts matching_consent
@@ -374,6 +410,21 @@ export async function GET(request: Request) {
           postcode: row.contact_postcode,
           grantedAt: row.contact_granted_at,
           noticeVersion: row.contact_notice_version,
+          message: "",
+          releaseScope: "shortlisted_installer",
+        } : row.public_contact_release_id ? {
+          name: row.public_customer_name,
+          email: row.public_customer_email,
+          phone: row.public_customer_phone,
+          addressLine1: "",
+          addressLine2: "",
+          suburb: "",
+          addressState: row.state,
+          postcode: row.public_contact_postcode,
+          grantedAt: row.public_contact_granted_at,
+          noticeVersion: row.public_contact_notice_version,
+          message: row.public_customer_message,
+          releaseScope: "all_qualified_trades",
         } : null,
         evidence,
         arrivalProposal: row.arrival_proposal_id ? {
@@ -736,7 +787,31 @@ export async function PATCH(request: Request) {
       400,
     );
   const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
-    WHERE m.id = ? AND m.firebase_uid = ? AND o.status = 'open' AND o.expires_at > ?`)
+    WHERE m.id = ? AND m.firebase_uid = ? AND o.status = 'open' AND o.expires_at > ?
+      AND (
+        NOT EXISTS (
+          SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
+          WHERE any_public_contact.opportunity_id = o.id
+        )
+        OR (
+          EXISTS (
+            SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
+            WHERE active_public_contact.opportunity_id = o.id
+              AND active_public_contact.status = 'active'
+              AND active_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+              AND active_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+              AND datetime(active_public_contact.granted_at) IS NOT NULL
+              AND active_public_contact.withdrawn_at = ''
+              AND active_public_contact.postcode = o.postcode
+          )
+          AND EXISTS (
+            SELECT 1 FROM trade_accounts current_public_trade_account
+            WHERE current_public_trade_account.firebase_uid = m.firebase_uid
+              AND current_public_trade_account.partner_type = 'installer'
+              AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
+          )
+        )
+      )`)
     .bind(matchId, user.uid, now).first<{ status: string; opportunity_id: string; title: string }>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const transitions: Record<string, Set<string>> = {
@@ -750,7 +825,35 @@ export async function PATCH(request: Request) {
     .prepare(
       `UPDATE trade_opportunity_matches SET status = ?, partner_note = '', updated_at = ?
     WHERE id = ? AND firebase_uid = ? AND status = ?
-      AND opportunity_id IN (SELECT id FROM trade_opportunities WHERE status = 'open' AND expires_at > ?)`,
+      AND opportunity_id IN (
+        SELECT available_opportunity.id
+        FROM trade_opportunities available_opportunity
+        WHERE available_opportunity.status = 'open' AND available_opportunity.expires_at > ?
+          AND (
+            NOT EXISTS (
+              SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
+              WHERE any_public_contact.opportunity_id = available_opportunity.id
+            )
+            OR (
+              EXISTS (
+                SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
+                WHERE active_public_contact.opportunity_id = available_opportunity.id
+                  AND active_public_contact.status = 'active'
+                  AND active_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+                  AND active_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                  AND datetime(active_public_contact.granted_at) IS NOT NULL
+                  AND active_public_contact.withdrawn_at = ''
+                  AND active_public_contact.postcode = available_opportunity.postcode
+              )
+              AND EXISTS (
+                SELECT 1 FROM trade_accounts current_public_trade_account
+                WHERE current_public_trade_account.firebase_uid = trade_opportunity_matches.firebase_uid
+                  AND current_public_trade_account.partner_type = 'installer'
+                  AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
+              )
+            )
+          )
+      )`,
     )
     .bind(status, now, matchId, user.uid, current.status, now)
     .run();

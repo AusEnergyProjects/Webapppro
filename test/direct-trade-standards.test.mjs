@@ -34,7 +34,7 @@ test("standards separate free platform access from licensing and scheme approval
 test("matching and funding rules do not permit paid ranking claims", () => {
   assert.match(
     standards,
-    /Payment does not buy higher placement, exclusivity or guaranteed work/,
+    /Payment does not buy placement, exclusivity or guaranteed work/,
   );
   assert.match(
     standards,
@@ -42,25 +42,27 @@ test("matching and funding rules do not permit paid ranking claims", () => {
   );
   assert.match(
     standards,
-    /Postcode distance, the installer service radius, capability, verification, availability and recent allocation load guide the selection/,
+    /every active verified installer whose recorded capability and service area match/,
   );
 });
 
-test("standards enforce anonymised matching and household-controlled contact release", () => {
-  assert.match(standards, /Households control each contact release/);
-  assert.match(standards, /respond through structured platform controls/);
+test("standards enforce open qualified matching and household-controlled contact release", () => {
+  assert.match(standards, /Households control what is shared/);
+  assert.match(standards, /selected service and optional message to all verified matching trades/);
   assert.match(
     standards,
-    /remain unavailable unless the household separately releases them to that exact verified installer/,
+    /full home plan, street address, bills, meter data and documents stay private/,
   );
+  assert.match(standards, /Property photos and documents are shared only when the household explicitly approves/);
   assert.match(standards, /Wholesalers manage products and pricing only/);
   assert.match(standards, /never see household opportunities or customer contact/);
   assert.match(opportunities, /suburb: matchingLocality\.suburb/);
   assert.match(opportunities, /postcode: matchingLocality\.postcode/);
   assert.match(opportunities, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(opportunities, /distanceBand: distanceBand\(row\.distance_metres\)/);
-  assert.match(opportunities, /customer_project_contact_releases/);
-  assert.match(opportunities, /r\.installer_uid = m\.firebase_uid AND r\.status = 'active'/);
+  assert.match(opportunities, /public_trade_lead_contact_releases/);
+  assert.match(opportunities, /public_contact\.status = 'active'/);
+  assert.match(opportunities, /m\.firebase_uid = \?/);
   assert.match(opportunities, /Wholesalers cannot access or respond to household opportunities/);
 });
 
@@ -69,7 +71,7 @@ test("standards cover structured quote evidence, customer choice and participant
   assert.match(standards, /Certificate or rebate assumptions shown separately/);
   assert.match(
     standards,
-    /Shortlisting alone does not release contact details/,
+    /Submitting the enquiry releases only the contact fields named in the consent/,
   );
   assert.match(opportunities, /action === "submit_quote"/);
   assert.match(opportunities, /INSERT INTO customer_project_quotes/);

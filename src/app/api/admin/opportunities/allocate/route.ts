@@ -15,8 +15,13 @@ export async function POST(request: Request) {
     try {
       const result = await allocateNearestInstallers(opportunityId, admin.uid);
       await writeAdminAudit(admin, "opportunity.allocate", "trade_opportunity", opportunityId,
-        `Allocated ${result.allocated.length} eligible installers using proximity and recent allocation load.`,
-        { activeCount: result.activeCount, eligibleCount: result.eligibleCount, maximumVisible: 6 });
+        `Distributed the opportunity to ${result.allocated.length} newly eligible service-area installers.`,
+        {
+          activeCount: result.activeCount,
+          eligibleCount: result.eligibleCount,
+          alreadyAllocatedCount: result.alreadyAllocatedCount,
+          distributionPolicy: "all_verified_service_area_installers",
+        });
       return adminJson({ ok: true, ...result });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";

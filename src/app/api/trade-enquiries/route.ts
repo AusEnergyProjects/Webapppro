@@ -1,8 +1,16 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
-import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
+import {
+  requireVerifiedTradeAccess,
+  TradeAccessError,
+  verifiedTradeAccountPredicate,
+} from "@/lib/trade-access-server";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
+import {
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "@/lib/public-plan-enquiry.mjs";
 
 export const runtime = "edge";
 
@@ -10,6 +18,36 @@ const ENQUIRY_STATUSES = new Set(["new", "contacted", "site_visit", "quote_requi
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
+  ${enquiryAlias}.source_type <> 'tlink_marketplace'
+  OR NOT EXISTS (
+    SELECT 1
+    FROM trade_opportunity_matches identified_public_match
+    JOIN public_trade_lead_contact_releases identified_public_release
+      ON identified_public_release.opportunity_id = identified_public_match.opportunity_id
+    WHERE identified_public_match.id = ${enquiryAlias}.opportunity_match_id
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM trade_opportunity_matches current_public_match
+    JOIN trade_opportunities current_public_opportunity
+      ON current_public_opportunity.id = current_public_match.opportunity_id
+    JOIN trade_accounts current_public_account
+      ON current_public_account.firebase_uid = current_public_match.firebase_uid
+    JOIN public_trade_lead_contact_releases current_public_release
+      ON current_public_release.opportunity_id = current_public_opportunity.id
+    WHERE current_public_match.id = ${enquiryAlias}.opportunity_match_id
+      AND current_public_match.firebase_uid = ${enquiryAlias}.firebase_uid
+      AND current_public_release.status = 'active'
+      AND current_public_release.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+      AND current_public_release.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+      AND datetime(current_public_release.granted_at) IS NOT NULL
+      AND current_public_release.withdrawn_at = ''
+      AND current_public_release.postcode = current_public_opportunity.postcode
+      AND current_public_account.partner_type = 'installer'
+      AND ${verifiedTradeAccountPredicate("current_public_account")}
+  )
+)`;
 
 async function installerIdentity(request: Request) {
   const access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
@@ -38,8 +76,9 @@ function parseRow(row: Record<string, unknown>) {
 }
 
 async function ownedEnquiry(uid: string, id: string) {
-  const row = await getD1().prepare(`SELECT * FROM trade_crm_enquiries
-    WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`).bind(id, uid).first<Record<string, unknown>>();
+  const row = await getD1().prepare(`SELECT enquiry.* FROM trade_crm_enquiries enquiry
+    WHERE enquiry.id = ? AND enquiry.firebase_uid = ? AND enquiry.record_status = 'active'
+      AND ${currentPublicMarketplaceAccessSql("enquiry")}`).bind(id, uid).first<Record<string, unknown>>();
   if (!row) throw new Error("ENQUIRY_NOT_FOUND");
   return row;
 }
@@ -83,10 +122,11 @@ export async function GET(request: Request) {
     const status = cleanAdminText(url.searchParams.get("status"), 30);
     const source = cleanAdminText(url.searchParams.get("source"), 40);
     const search = cleanAdminText(url.searchParams.get("search"), 120).toLowerCase();
-    const rows = await db.prepare(`SELECT * FROM trade_crm_enquiries WHERE firebase_uid = ? AND record_status = 'active'
-      AND (? = '' OR status = ?) AND (? = '' OR source_type = ?)
-      AND (? = '' OR LOWER(first_name || ' ' || last_name || ' ' || business_name || ' ' || email || ' ' || phone || ' ' || description || ' ' || source_reference) LIKE '%' || ? || '%')
-      ORDER BY CASE status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 WHEN 'site_visit' THEN 2 WHEN 'quote_required' THEN 3 WHEN 'quoted' THEN 4 WHEN 'booked' THEN 5 ELSE 6 END, updated_at DESC LIMIT 250`)
+    const rows = await db.prepare(`SELECT enquiry.* FROM trade_crm_enquiries enquiry WHERE enquiry.firebase_uid = ? AND enquiry.record_status = 'active'
+      AND ${currentPublicMarketplaceAccessSql("enquiry")}
+      AND (? = '' OR enquiry.status = ?) AND (? = '' OR enquiry.source_type = ?)
+      AND (? = '' OR LOWER(enquiry.first_name || ' ' || enquiry.last_name || ' ' || enquiry.business_name || ' ' || enquiry.email || ' ' || enquiry.phone || ' ' || enquiry.description || ' ' || enquiry.source_reference) LIKE '%' || ? || '%')
+      ORDER BY CASE enquiry.status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 WHEN 'site_visit' THEN 2 WHEN 'quote_required' THEN 3 WHEN 'quoted' THEN 4 WHEN 'booked' THEN 5 ELSE 6 END, enquiry.updated_at DESC LIMIT 250`)
       .bind(uid, status, status, source, source, search, search).all<Record<string, unknown>>();
     return adminJson({ ok: true, enquiries: parseRows(rows) });
   } catch (error) { return errorResponse(error); }

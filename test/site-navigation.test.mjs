@@ -10,6 +10,7 @@ const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
+const holographicField = read("../src/components/HolographicEnergyField.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
@@ -187,14 +188,19 @@ test("number fields avoid browser-specific black stepper controls", () => {
   assert.match(styles, /body input\[type="number"\]::\-webkit-inner-spin-button,[\s\S]*\-webkit-appearance: none/);
 });
 
-test("homepage uses an accessible lightweight spatial journey with a reduced-motion boundary", () => {
+test("homepage uses an accessible progressive holographic journey with a reduced-motion boundary", () => {
   assert.match(guide, /CustomerJourneyScene/);
   assert.match(customerScene, /aria-labelledby="customer-journey-title"/);
   assert.match(customerScene, /Understand/);
   assert.match(customerScene, /Prioritise/);
   assert.match(customerScene, /Take action/);
   assert.match(customerScene, /prefers-reduced-motion: reduce/);
-  assert.doesNotMatch(customerScene, /<canvas|WebGL|from ["']three["']/);
+  assert.match(customerScene, /HolographicEnergyField/);
+  assert.match(holographicField, /<canvas/);
+  assert.match(holographicField, /prefers-reduced-motion: reduce/);
+  assert.match(holographicField, /ResizeObserver/);
+  assert.match(holographicField, /devicePixelRatio/);
+  assert.doesNotMatch(holographicField, /WebGL|from ["']three["']|video/i);
   assert.match(styles, /@supports \(animation-timeline: view\(\)\)/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.customer-scene-home/);
 });
@@ -212,7 +218,9 @@ test("the generated whole-home scene is visible and drives the planner room jour
   assert.match(plannerJourney, /hot-water/);
   assert.match(plannerJourney, /battery/);
   assert.match(plannerJourney, /aria-label="Home planning journey"/);
-  assert.doesNotMatch(plannerJourney, /<canvas|WebGL|from ["']three["']/);
+  assert.match(plannerJourney, /HolographicEnergyField/);
+  assert.match(plannerJourney, /focusPositions/);
+  assert.doesNotMatch(plannerJourney, /WebGL|from ["']three["']/);
   assert.match(styles, /\.planner-home-journey\[data-focus="insulation"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="windows"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="ventilation"\]/);
@@ -299,10 +307,13 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /What would make the biggest difference/);
   assert.match(planner, /type="checkbox"/);
   assert.match(planner, /Do you own or rent the home/);
-  assert.match(planner, /Do you live in an apartment complex\?/);
-  assert.match(planner, /body corporate or owners corporation approval/);
+  assert.match(planner, /Does the home have strata, a body corporate, an owners corporation or shared common property\?/);
+  assert.match(planner, /other housing complexes/);
+  assert.match(planner, /equipment locations that may need approval/);
+  assert.match(planner, /Approximate internal floor area/);
+  assert.match(planner, /Walls shared with another dwelling/);
   assert.match(planner, /What investment range feels comfortable for the first stage/);
-  assert.match(plannerRoute, /One question at a time/);
+  assert.match(plannerRoute, /One clear step at a time/);
   assert.match(planner, /HomeFeatureIntake/);
   assert.match(planner, /sectionId=\{currentStep\.featureSection\}/);
   assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
@@ -354,8 +365,8 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.doesNotMatch(styles, /background-attachment: fixed/);
   assert.match(styles, /@media print \{/);
   assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
-  assert.match(styles, /\.planner-page \{ max-width: 1560px;/);
-  assert.match(styles, /\.planner-layout \{[^}]*max-width: 1380px;/);
+  assert.match(styles, /\.planner-page \{ max-width: var\(--layout-max\);/);
+  assert.match(styles, /\.planner-layout \{[^}]*max-width: 100%;/);
   assert.match(styles, /@media \(min-width: 980px\) \{[\s\S]*\.planner-results \.planner-roadmap-list \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(styles, /\.planner-result-decision \{[^}]*grid-template-columns:/);
   assert.match(styles, /\.planner-quick-wins-grid \{[^}]*grid-template-columns:/);

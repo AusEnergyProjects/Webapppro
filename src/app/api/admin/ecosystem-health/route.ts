@@ -39,7 +39,8 @@ export async function GET(request: Request) {
           SUM(CASE WHEN opportunity_id != '' THEN 1 ELSE 0 END) submitted
           FROM customer_projects WHERE COALESCE(is_synthetic, 0) = 1`).first<CountRow>(),
         db.prepare(`SELECT COUNT(*) total,
-          SUM(CASE WHEN match_count >= 6 THEN 1 ELSE 0 END) six_matched
+          SUM(CASE WHEN match_count > 0 THEN 1 ELSE 0 END) distributed,
+          SUM(match_count) allocations
           FROM (
             SELECT o.id, COUNT(m.id) match_count
             FROM trade_opportunities o
@@ -71,7 +72,8 @@ export async function GET(request: Request) {
       projects: number(projects, "total"),
       submittedProjects: number(projects, "submitted"),
       opportunities: number(opportunities, "total"),
-      sixMatchedOpportunities: number(opportunities, "six_matched"),
+      distributedOpportunities: number(opportunities, "distributed"),
+      opportunityAllocations: number(opportunities, "allocations"),
       products: number(products, "total"),
       liveProducts: number(products, "live"),
       positiveResponses: number(responses, "positive"),
@@ -97,11 +99,11 @@ export async function GET(request: Request) {
       },
       {
         key: "matching",
-        label: "Six-installer allocation",
+        label: "Verified-trade distribution",
         passed:
           counts.opportunities > 0 &&
-          counts.sixMatchedOpportunities === counts.opportunities,
-        detail: `${counts.sixMatchedOpportunities} of ${counts.opportunities} opportunities reached six installers`,
+          counts.distributedOpportunities === counts.opportunities,
+        detail: `${counts.opportunityAllocations} allocations across ${counts.distributedOpportunities} of ${counts.opportunities} opportunities`,
       },
       {
         key: "catalogue",

@@ -174,17 +174,11 @@ export function buildDirectTradeTriage(project) {
         ? "quote_ready_allocation"
         : "standard_allocation";
 
-  const heldForAuthority = reviewFlags.includes(
-    "property_authority_unconfirmed",
-  );
-
   return {
     version: "direct-trade-triage-2",
-    status: heldForAuthority
-      ? "hold_for_authority_review"
-      : "automatic_privacy_safe_allocation",
+    status: "automatic_privacy_safe_allocation",
     priority,
-    autoSend: !heldForAuthority,
+    autoSend: true,
     reviewFlags,
     matchCriteria: {
       state: canonicalState(project?.state),
@@ -195,6 +189,23 @@ export function buildDirectTradeTriage(project) {
     },
     quoteEvidence: createQuoteEvidenceChecklist(project),
   };
+}
+
+export function selectEveryQualifiedTradeRecipient(candidates) {
+  const seen = new Set();
+  return (Array.isArray(candidates) ? candidates : []).filter((candidate) => {
+    if (
+      !candidate
+      || candidate.eligibleForReview === false
+      || candidate.autoSend === false
+    ) return false;
+    const recipientId = String(
+      candidate.firebaseUid || candidate.participantId || "",
+    );
+    if (!recipientId || seen.has(recipientId)) return false;
+    seen.add(recipientId);
+    return true;
+  });
 }
 
 function participantRejection(project, participant, options) {

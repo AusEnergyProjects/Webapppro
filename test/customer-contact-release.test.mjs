@@ -115,8 +115,9 @@ test("interfaces name the recipient and explain withdrawal limits", () => {
   assert.match(installerUi, /Customer-authorised contact/);
   assert.match(
     installerUi,
-    /opportunity\.matchStatus === "connected"\s*\? opportunity\.customerContact\s*: null/,
+    /const releasedCustomerContact = opportunity\.customerContact/,
   );
+  assert.match(installerUi, /releaseScope === "all_qualified_trades"/);
   assert.match(installerUi, /releasedCustomerContact\.phone/);
   assert.doesNotMatch(`${customerUi}\n${installerUi}\n${accountRoute}\n${projectsRoute}\n${opportunitiesRoute}`, /[\u2013\u2014]/);
 });

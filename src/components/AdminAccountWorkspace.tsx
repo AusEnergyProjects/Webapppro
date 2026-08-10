@@ -22,15 +22,18 @@ type VerificationReview = {
   id: string; abn: string; legal_entity_name: string; decision: string; review_method: string;
   source_reference: string; note: string; reviewed_by_uid: string; reviewed_at: string;
 };
+type VerificationDocument = {
+  id: string; category: string; file_name: string; size_bytes: number; expiry_date: string; status: string;
+};
 type AccountDetail = {
-  account: Account; documents: Record<string, unknown>[]; notes: Record<string, unknown>[]; matches: Record<string, unknown>[];
+  account: Account; documents: VerificationDocument[]; notes: Record<string, unknown>[]; matches: Record<string, unknown>[];
   reviews: VerificationReview[];
   entitlements: { verified: boolean; accessLabel: string; features: Record<FeatureKey, boolean> };
 };
 type AccountCounts = { total: number; approvedAccess: number; reviewRequired: number; suspended: number };
 type AdminApiResult = {
   accounts?: Account[]; counts?: Partial<AccountCounts>; pagination?: Partial<ListPagination>; preferences?: WorkspaceListPreferences;
-  saved?: boolean; account?: Account; documents?: Record<string, unknown>[]; notes?: Record<string, unknown>[];
+  saved?: boolean; reviewId?: string; account?: Account; documents?: VerificationDocument[]; notes?: Record<string, unknown>[];
   matches?: Record<string, unknown>[]; reviews?: VerificationReview[]; entitlements?: AccountDetail["entitlements"];
 };
 
@@ -41,7 +44,6 @@ const capabilityLabels: Record<string, string> = {
   "hot-water": "Hot water", "draught-proofing": "Draught-proofing", insulation: "Insulation", glazing: "Glazing",
   "window-coverings": "Blinds, shutters and external shading", "ev-charging": "EV charging", other: "Other energy upgrades",
 };
-
 
 export type AdminAccountWorkspaceProps = {
   api: (path: string, init?: RequestInit) => Promise<AdminApiResult>;
@@ -100,7 +102,14 @@ export function AdminAccountWorkspace({ api, role, setStatus, onCounts, target, 
       const result = await api(`/api/admin/accounts?uid=${encodeURIComponent(uid)}`);
       if (!result.account || !result.entitlements) throw new Error("Business account details were unavailable.");
       const reviews = result.reviews || [];
-      setSelectedAccount({ account: result.account, documents: result.documents || [], notes: result.notes || [], matches: result.matches || [], reviews, entitlements: result.entitlements });
+      setSelectedAccount({
+        account: result.account,
+        documents: result.documents || [],
+        notes: result.notes || [],
+        matches: result.matches || [],
+        reviews,
+        entitlements: result.entitlements,
+      });
       setLegalEntityName(reviews[0]?.legal_entity_name || result.account.businessName);
       setReviewMethod(reviews[0]?.review_method || "official_abr_lookup");
       setAccountNote(""); setStatus("");

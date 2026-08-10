@@ -1261,7 +1261,7 @@ test("product search and calculation pin product, date, postcode and source snap
     postcode: "3000",
     productKey: "cer-ashp:1",
     unitQuantity: "2",
-  });
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
   assert.deepEqual(waterHeaterQuote.perUnitOutput, { quantity: "16", unit: "STC" });
   assert.deepEqual(waterHeaterQuote.output, { quantity: "32", unit: "STC" });
   assert.equal(waterHeaterQuote.unitQuantity, "2");
@@ -1276,7 +1276,7 @@ test("product search and calculation pin product, date, postcode and source snap
     installationDate: "2026-08-08",
     postcode: "3000",
     ratedCapacityKw: "6.6",
-  });
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
   assert.deepEqual(pv.output, { quantity: "39", unit: "STC" });
   assert.equal(pv.resolution.zoneRating, "1.185");
   assert.match(pv.resolvedReceiptHash, /^sha256:[a-f0-9]{64}$/);

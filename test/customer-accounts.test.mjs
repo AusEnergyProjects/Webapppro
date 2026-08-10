@@ -171,7 +171,8 @@ test("account projects bypass the bounded public plan contact relay and use expl
   assert.match(publicLeadRoute, /isPublicPlanEnquiry/);
   assert.match(publicLeadRoute, /raw\?\.submissionType !== "comparison" && !publicPlanEnquiry/);
   assert.match(publicLeadRoute, /This type of upgrade project must be created inside a free private customer account/);
-  assert.doesNotMatch(publicLeadRoute, /createOpportunityFromLead/);
+  assert.match(publicLeadRoute, /createOpportunityFromLead/);
+  assert.match(publicLeadRoute, /preparePublicPlanLeadEnvelope/);
 });
 
 test("installer responses stay anonymous until an exact customer-authorised match release", () => {

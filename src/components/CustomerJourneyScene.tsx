@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { PointerEvent } from "react";
+import { HolographicEnergyField } from "@/components/HolographicEnergyField";
 
 const journeyStages = [
   { number: "01", title: "Understand", text: "Tell us what matters at home." },
@@ -39,6 +40,12 @@ export function CustomerJourneyScene() {
       aria-labelledby="customer-journey-title"
     >
       <div className="customer-scene-volume" aria-hidden="true">
+        <HolographicEnergyField
+          className="customer-scene-energy-field"
+          focusX={0.7}
+          focusY={0.53}
+          intensity={1.08}
+        />
         <span className="customer-scene-halo customer-scene-halo-one" />
         <span className="customer-scene-halo customer-scene-halo-two" />
         <span className="customer-scene-grid" />
@@ -59,6 +66,9 @@ export function CustomerJourneyScene() {
             priority
           />
         </div>
+        <span className="customer-scene-scan" />
+        <span className="customer-scene-data customer-scene-data-live">Live home model</span>
+        <span className="customer-scene-data customer-scene-data-private">Private by design</span>
         <span className="customer-scene-signal customer-scene-signal-comfort">Comfort</span>
         <span className="customer-scene-signal customer-scene-signal-energy">Energy</span>
         <span className="customer-scene-signal customer-scene-signal-action">Action</span>

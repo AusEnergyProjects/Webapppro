@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 const standards = [
   {
     number: "01",
-    title: "Business and credential review",
-    text: "Confirm the legal business identity, relevant trade licence or registration, service area and appropriate insurance before activating an installer for that work type.",
+    title: "Platform business approval",
+    text: "TLink confirms the legal business identity and ABN before activating free trade access. Approved trades remain responsible for every licence, registration, insurance and safety obligation that applies to their work.",
   },
   {
     number: "02",
@@ -27,18 +27,18 @@ const standards = [
   },
   {
     number: "04",
-    title: "Matching is limited and fair",
-    text: "An opportunity is shown to no more than six eligible installers. Postcode distance, the installer service radius, capability, verification, availability and recent allocation load guide the selection. Payment does not buy higher placement, exclusivity or guaranteed work.",
+    title: "Matching is open to approved trades",
+    text: "A consented enquiry is shown to every active verified installer whose recorded capability and service area match the requested work and postcode. Payment does not buy placement, exclusivity or guaranteed work, and businesses outside the governed match cannot see the lead.",
   },
   {
     number: "05",
-    title: "Households control each contact release",
-    text: "Installers review an anonymised scope and respond through structured platform controls. Customer names, emails, phone numbers and street addresses remain unavailable unless the household separately releases them to that exact verified installer after shortlisting its option.",
+    title: "Households control what is shared",
+    text: "Submitting a trade enquiry is the household's explicit release of the name, chosen contact details, postcode, selected service and optional message to all verified matching trades. The full home plan, street address, bills, meter data and documents stay private unless the household separately chooses to share them.",
   },
   {
     number: "06",
     title: "Evidence follows its stated boundary",
-    text: "Customer-approved property photos and documents are shared with every verified installer allocated to the enquiry so they can quote. Every download is authorised against that exact allocation and recorded.",
+    text: "Property photos and documents are shared only when the household explicitly approves that evidence for the enquiry. Every recipient and download remains tied to an exact verified allocation and recorded.",
   },
   {
     number: "07",
@@ -58,7 +58,7 @@ const standards = [
   {
     number: "10",
     title: "Households stay in control",
-    text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract. Shortlisting alone does not release contact details.",
+    text: "A response is not an instruction to buy. Households can compare structured options, confirm credentials with the issuing authority and decline without creating an installation contract. Submitting the enquiry releases only the contact fields named in the consent and does not accept a quote or authorise installation work.",
   },
 ];
 

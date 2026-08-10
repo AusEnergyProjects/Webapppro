@@ -12,10 +12,10 @@ const leadList = dashboard.slice(
   dashboard.indexOf("No leads match these filters"),
 );
 
-test("connected released customer identity is the first expanded lead section", () => {
+test("authorised customer identity is the first expanded lead section", () => {
   assert.match(
     leadList,
-    /const releasedCustomerContact =\s*opportunity\.matchStatus === "connected"\s*\? opportunity\.customerContact\s*: null;/,
+    /const releasedCustomerContact = opportunity\.customerContact;/,
   );
 
   const headingPosition = leadList.indexOf(
@@ -76,17 +76,15 @@ test("released contact details have one authoritative block", () => {
     (leadList.match(/<dt>Email<\/dt>/g) || []).length,
     1,
   );
-  assert.equal(
-    (leadList.match(/<dt>Service address<\/dt>/g) || []).length,
-    1,
-  );
+  assert.match(leadList, /releaseScope === "all_qualified_trades" \? "Service area" : "Service address"/);
+  assert.match(leadList, /Customer message/);
   assert.doesNotMatch(
     leadList,
     /className="dashboard-contact-allowance released"/,
   );
 });
 
-test("collapsed and unconnected leads remain privacy safe", () => {
+test("collapsed details stay hidden and connected leads retain the contact boundary", () => {
   assert.match(
     leadList,
     /\{releasedCustomerContact\s*\? releasedCustomerContact\.name\s*: opportunity\.title\}/,
@@ -101,6 +99,6 @@ test("collapsed and unconnected leads remain privacy safe", () => {
   );
   assert.match(
     leadList,
-    /releasedCustomerContact \? null : opportunity\.matchStatus === "connected"/,
+    /opportunity\.matchStatus === "connected" && !releasedCustomerContact/,
   );
 });

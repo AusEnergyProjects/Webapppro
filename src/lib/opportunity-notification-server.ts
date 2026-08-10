@@ -9,6 +9,10 @@ import {
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
 import {
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "@/lib/public-plan-enquiry.mjs";
+import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
   serviceReminderRetryAt,
@@ -53,6 +57,22 @@ async function deliveryContext(deliveryId: string) {
       opportunity.suburb opportunity_suburb, opportunity.postcode opportunity_postcode,
       opportunity.state, opportunity.timing, opportunity.expires_at,
       opportunity.created_at opportunity_created_at, opportunity.status opportunity_status,
+      CASE
+        WHEN public_contact.id IS NOT NULL THEN 'public_plan_enquiry'
+        WHEN project.id IS NOT NULL THEN 'customer_project'
+        ELSE 'legacy_marketplace'
+      END notification_source,
+      public_contact.status public_contact_status,
+      public_contact.notice_version public_contact_notice_version,
+      public_contact.consent_purpose public_contact_consent_purpose,
+      public_contact.disclosed_fields public_contact_disclosed_fields,
+      public_contact.customer_name public_customer_name,
+      public_contact.postcode public_contact_postcode,
+      public_contact.customer_message public_customer_message,
+      CASE WHEN public_contact.customer_email <> '' THEN 1 ELSE 0 END public_contact_has_email,
+      CASE WHEN public_contact.customer_phone <> '' THEN 1 ELSE 0 END public_contact_has_phone,
+      public_contact.granted_at public_contact_granted_at,
+      public_contact.withdrawn_at public_contact_withdrawn_at,
       matching_locality_consent.purpose matching_consent_purpose,
       matching_locality_consent.notice_version matching_notice_version,
       matching_locality_consent.granted_at matching_granted_at,
@@ -82,6 +102,8 @@ async function deliveryContext(deliveryId: string) {
     JOIN trade_accounts account ON account.firebase_uid = assignment.firebase_uid
     LEFT JOIN customer_projects project ON project.opportunity_id = opportunity.id
       AND opportunity.source_reference = 'customer-project:' || project.id
+    LEFT JOIN public_trade_lead_contact_releases public_contact
+      ON public_contact.opportunity_id = opportunity.id
     LEFT JOIN customer_consent_receipts matching_locality_consent
       ON matching_locality_consent.id = (
         SELECT locality_consent.id
@@ -105,6 +127,38 @@ function ineligibility(context: DeliveryRow) {
   }
   if (!String(context.consent_at || "") || !Boolean(context.email_opportunities)) {
     return "Opportunity email consent is not active.";
+  }
+  if (context.notification_source === "public_plan_enquiry") {
+    const disclosedFields = list(context.public_contact_disclosed_fields);
+    const allowedFields = new Set([
+      "customer_name",
+      "customer_email",
+      "customer_phone",
+      "postcode",
+      "service_categories",
+      "customer_message",
+    ]);
+    const hasEmail = Number(context.public_contact_has_email || 0) === 1;
+    const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
+    const hasMessage = Boolean(text(context.public_customer_message, 500));
+    if (
+      context.public_contact_status !== "active"
+      || context.public_contact_notice_version !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
+      || context.public_contact_consent_purpose !== PUBLIC_PLAN_CONSENT_PURPOSE
+      || !Number.isFinite(Date.parse(String(context.public_contact_granted_at || "")))
+      || Boolean(String(context.public_contact_withdrawn_at || ""))
+      || !text(context.public_customer_name, 120)
+      || !/^\d{4}$/.test(text(context.public_contact_postcode, 4))
+      || text(context.public_contact_postcode, 4) !== text(context.opportunity_postcode, 4)
+      || !disclosedFields.includes("customer_name")
+      || !disclosedFields.includes("postcode")
+      || !disclosedFields.includes("service_categories")
+      || (!hasEmail && !hasPhone)
+      || hasEmail !== disclosedFields.includes("customer_email")
+      || hasPhone !== disclosedFields.includes("customer_phone")
+      || hasMessage !== disclosedFields.includes("customer_message")
+      || disclosedFields.some((field) => !allowedFields.has(field))
+    ) return "The public enquiry contact consent is unavailable or no longer current.";
   }
   if (context.opportunity_status !== "open") {
     return "The opportunity is no longer open.";
@@ -189,20 +243,31 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const idempotencyKey = previousAttempts > 0
     ? storedIdempotencyKey
     : await opportunityNotificationIdempotencyKey(String(context.match_id));
-  const matchingLocality = matchingLocalityDisclosure({
-    suburb: context.opportunity_suburb,
-    postcode: context.opportunity_postcode,
-    state: context.state,
-  }, {
-    purpose: context.matching_consent_purpose,
-    noticeVersion: context.matching_notice_version,
-    grantedAt: context.matching_granted_at,
-    withdrawnAt: context.matching_withdrawn_at,
-  });
+  const publicPlanEnquiry = context.notification_source === "public_plan_enquiry";
+  const matchingLocality = publicPlanEnquiry
+    ? {
+        suburb: "",
+        postcode: text(context.public_contact_postcode, 4),
+        state: text(context.state, 3),
+      }
+    : matchingLocalityDisclosure({
+        suburb: context.opportunity_suburb,
+        postcode: context.opportunity_postcode,
+        state: context.state,
+      }, {
+        purpose: context.matching_consent_purpose,
+        noticeVersion: context.matching_notice_version,
+        grantedAt: context.matching_granted_at,
+        withdrawnAt: context.matching_withdrawn_at,
+      });
   const draft = previousAttempts > 0
     ? { subject: storedSubject, body: storedBody }
     : opportunityNotificationDraft({
       businessName: String(context.business_name || ""),
+      sourceKind: String(context.notification_source || "legacy_marketplace") as
+        "customer_project" | "public_plan_enquiry" | "legacy_marketplace",
+      customerName: String(context.public_customer_name || ""),
+      customerMessage: String(context.public_customer_message || ""),
       suburb: matchingLocality.suburb,
       postcode: matchingLocality.postcode,
       state: matchingLocality.state,
@@ -242,6 +307,25 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
           AND current_account.consent_at <> ''
           AND current_account.partner_type = 'installer'
           AND ${verifiedTradeAccountPredicate("current_account")}
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM public_trade_lead_contact_releases any_public_contact
+              WHERE any_public_contact.opportunity_id = current_opportunity.id
+            )
+            OR (
+              EXISTS (
+                SELECT 1
+                FROM public_trade_lead_contact_releases current_public_contact
+                WHERE current_public_contact.opportunity_id = current_opportunity.id
+                  AND current_public_contact.status = 'active'
+                  AND current_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+                  AND current_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                  AND datetime(current_public_contact.granted_at) IS NOT NULL
+                  AND current_public_contact.withdrawn_at = ''
+              )
+            )
+          )
       )`)
     .bind(
       attempts,

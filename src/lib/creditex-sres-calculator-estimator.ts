@@ -356,6 +356,7 @@ function quoteEstimate(
 export async function estimateCreditexSresQuote(
   db: D1Database,
   requestValue: unknown,
+  options: { now?: Date } = {},
 ): Promise<CreditexSresQuoteEstimate> {
   if (!isRecord(requestValue) || requestValue.estimatePurpose !== "quote") {
     requestError("Choose the quote estimate purpose.");
@@ -450,7 +451,7 @@ export async function estimateCreditexSresQuote(
           installationDate: requestValue.installationDate,
           postcode: requestValue.postcode,
           productKey: item.productKey,
-        });
+        }, options);
         return {
           ...item,
           estimate: creditexRepeatRegisteredWaterHeaterQuote(
@@ -476,6 +477,7 @@ export async function estimateCreditexSresQuote(
     const perUnitEstimate = await estimateCreditexStcsFromRegistry(
       db,
       registryRequest,
+      options,
     );
     const estimate = creditexRepeatRegisteredWaterHeaterQuote(
       perUnitEstimate,

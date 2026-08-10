@@ -194,7 +194,7 @@ test("operations UI covers accounts, evidence, projects, access and audit", () =
   assert.match(accountWorkspace, /Partner and wholesaler accounts/);
   assert.match(accountWorkspace, /Protected download/);
   assert.match(opportunityWorkspace, /Create an opportunity/);
-  assert.match(opportunityWorkspace, /Allocate nearest eligible installers/);
+  assert.match(opportunityWorkspace, /Send to every eligible service-area trade/);
   assert.match(catalogueWorkspace, /Product catalogue and availability/);
   assert.match(enquiryWorkspace, /Installer product enquiries/);
   assert.match(portal, /Leads and opportunities/);
@@ -297,7 +297,10 @@ test("the ecosystem walkthrough is read only, privacy safe and checks every plat
   assert.match(ecosystemHealthRoute, /requireAdminIdentity\(request\)/);
   assert.match(ecosystemHealthRoute, /sameOrigin\(request\)/);
   assert.match(ecosystemHealthRoute, /COALESCE\((?:a\.)?is_synthetic, 0\) = 1/);
-  assert.match(ecosystemHealthRoute, /match_count >= 6/);
+  assert.match(ecosystemHealthRoute, /match_count > 0/);
+  assert.match(ecosystemHealthRoute, /SUM\(match_count\) allocations/);
+  assert.match(ecosystemHealthRoute, /Verified-trade distribution/);
+  assert.doesNotMatch(ecosystemHealthRoute, /six[-_ ]installer|six_matched/i);
   assert.match(ecosystemHealthRoute, /listing_status = 'published'/);
   assert.match(ecosystemHealthRoute, /customer_project_quotes/);
   assert.doesNotMatch(ecosystemHealthRoute, /export async function POST|export async function PATCH/);

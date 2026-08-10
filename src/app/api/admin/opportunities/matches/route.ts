@@ -10,10 +10,9 @@ import {
 import { parseJsonList } from "@/lib/admin-server";
 import {
   canonicalMarketplaceState,
-  MAX_VISIBLE_INSTALLERS,
+  qualifyingServiceArea,
   syncMarketplaceEnquiries,
 } from "@/lib/opportunity-server";
-import { postcodeDistanceKm } from "@/lib/postcode-distance";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
@@ -66,7 +65,16 @@ export async function POST(request: Request) {
       db
         .prepare(
           `SELECT firebase_uid, business_name, account_status, partner_type, verification_status, availability_status,
-        postcode, service_base_postcode, service_radius_km, service_states, capabilities
+        postcode, service_base_postcode, service_radius_km, service_states, capabilities,
+        COALESCE((
+          SELECT json_group_array(json_object(
+            'postcode', service_area.postcode,
+            'radiusKm', service_area.radius_km
+          ))
+          FROM trade_account_service_areas service_area
+          WHERE service_area.firebase_uid = trade_accounts.firebase_uid
+            AND service_area.record_status = 'active'
+        ), '[]') active_service_areas
         FROM trade_accounts WHERE firebase_uid = ?`,
         )
         .bind(firebaseUid)
@@ -115,7 +123,9 @@ export async function POST(request: Request) {
         },
         409,
       );
-    const serviceStates = parseJsonList(account.service_states);
+    const serviceStates = parseJsonList(account.service_states)
+      .map(canonicalMarketplaceState)
+      .filter(Boolean);
     const categories = parseJsonList(opportunity.service_categories);
     const capabilities = parseJsonList(account.capabilities);
     const matchedCategories = categories.filter((item) =>
@@ -132,21 +142,16 @@ export async function POST(request: Request) {
         },
         409,
       );
-    const distanceKm = postcodeDistanceKm(
-      String(account.service_base_postcode || account.postcode),
-      String(opportunity.postcode),
-    );
-    if (
-      distanceKm === null ||
-      distanceKm > Number(account.service_radius_km || 50)
-    )
+    const serviceArea = qualifyingServiceArea(account, String(opportunity.postcode));
+    if (!serviceArea)
       return adminJson(
         {
           ok: false,
-          error: "The opportunity is outside this installer’s service radius.",
+          error: "The opportunity is outside this installer's service radius.",
         },
         409,
       );
+    const distanceKm = serviceArea.distanceKm;
     const recipients = await db
       .prepare(
         `SELECT COUNT(*) count FROM trade_opportunity_matches
@@ -154,21 +159,6 @@ export async function POST(request: Request) {
       )
       .bind(opportunityId)
       .first<{ count: number }>();
-    const existing = await db
-      .prepare(
-        "SELECT id FROM trade_opportunity_matches WHERE opportunity_id = ? AND firebase_uid = ?",
-      )
-      .bind(opportunityId, firebaseUid)
-      .first();
-    if (!existing && Number(recipients?.count || 0) >= MAX_VISIBLE_INSTALLERS)
-      return adminJson(
-        {
-          ok: false,
-          error:
-            "This opportunity has already reached its six-installer visibility limit.",
-        },
-        409,
-      );
     const now = new Date().toISOString();
     await db
       .prepare(

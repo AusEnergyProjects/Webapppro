@@ -119,6 +119,8 @@ type DashboardOpportunity = {
     addressState: string;
     postcode: string;
     grantedAt: string;
+    message: string;
+    releaseScope: "shortlisted_installer" | "all_qualified_trades";
   };
   evidence: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; sharingScope: "allocated-installers" }>;
   arrivalProposal: null | {
@@ -1537,7 +1539,7 @@ export function DirectTradeDashboard() {
                       Privacy-safe scopes matched to this business
                     </h2>
                     <p>
-                      At most six eligible installers ever see a scope.
+                      Every active verified installer whose capability and service area match can see the scope.
                       Household identity, street and unit address, and contact
                       details stay outside the trade workspace during matching. A
                       customer can later release them to this exact business
@@ -1613,10 +1615,7 @@ export function DirectTradeDashboard() {
                         const isExpanded = expandedOpportunityMatchIds.has(
                           opportunity.matchId,
                         );
-                        const releasedCustomerContact =
-                          opportunity.matchStatus === "connected"
-                            ? opportunity.customerContact
-                            : null;
+                        const releasedCustomerContact = opportunity.customerContact;
                         const detailId = `opportunity-details-${opportunity.matchId}`;
                         const toggleId = `opportunity-toggle-${opportunity.matchId}`;
                         const customerIdentityId =
@@ -1693,8 +1692,9 @@ export function DirectTradeDashboard() {
                                       {releasedCustomerContact.name}
                                     </h4>
                                     <p>
-                                      Contact details were released to this exact
-                                      installer match on{" "}
+                                      {releasedCustomerContact.releaseScope === "all_qualified_trades"
+                                        ? "The customer consented to share these details with every verified matching trade on "
+                                        : "Contact details were released to this exact installer match on "}
                                       {new Date(
                                         releasedCustomerContact.grantedAt,
                                       ).toLocaleString("en-AU")}
@@ -1705,24 +1705,24 @@ export function DirectTradeDashboard() {
                                     className="dashboard-connected-customer-contact-grid"
                                     aria-label={`Contact details for ${releasedCustomerContact.name}`}
                                   >
-                                    <div>
+                                    {releasedCustomerContact.phone && <div>
                                       <dt>Phone</dt>
                                       <dd>
                                         <a href={`tel:${releasedCustomerContact.phone}`}>
                                           {releasedCustomerContact.phone}
                                         </a>
                                       </dd>
-                                    </div>
-                                    <div>
+                                    </div>}
+                                    {releasedCustomerContact.email && <div>
                                       <dt>Email</dt>
                                       <dd>
                                         <a href={`mailto:${releasedCustomerContact.email}`}>
                                           {releasedCustomerContact.email}
                                         </a>
                                       </dd>
-                                    </div>
+                                    </div>}
                                     <div>
-                                      <dt>Service address</dt>
+                                      <dt>{releasedCustomerContact.releaseScope === "all_qualified_trades" ? "Service area" : "Service address"}</dt>
                                       <dd>
                                         {[
                                           releasedCustomerContact.addressLine1,
@@ -1735,6 +1735,10 @@ export function DirectTradeDashboard() {
                                           .join(", ")}
                                       </dd>
                                     </div>
+                                    {releasedCustomerContact.message && <div>
+                                      <dt>Customer message</dt>
+                                      <dd>{releasedCustomerContact.message}</dd>
+                                    </div>}
                                   </dl>
                                 </>
                               )}
@@ -1794,8 +1798,7 @@ export function DirectTradeDashboard() {
                           {opportunity.platformOnly && !opportunity.enquiryPack && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}
                           <div className="dashboard-opportunity-tags">
                             <span>
-                              Allocation {opportunity.allocationRank} of 6
-                              maximum
+                              Qualified trade allocation {opportunity.allocationRank}
                             </span>
                             <span>
                               Expires{" "}
@@ -1816,7 +1819,7 @@ export function DirectTradeDashboard() {
                               </span>
                             ))}
                           </div>
-                          {releasedCustomerContact ? null : opportunity.matchStatus === "connected" ? (
+                          {opportunity.matchStatus === "connected" && !releasedCustomerContact ? (
                             <div className="dashboard-contact-allowance">
                               <div>
                                 <strong>Platform coordination active</strong>
@@ -1825,7 +1828,7 @@ export function DirectTradeDashboard() {
                                 </span>
                               </div>
                             </div>
-                          ) : (
+                          ) : opportunity.matchStatus === "connected" ? null : (
                             <div className="dashboard-opportunity-actions">
                               <button
                                 type="button"

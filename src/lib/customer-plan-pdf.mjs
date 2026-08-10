@@ -29,7 +29,7 @@ import {
 } from "./customer-plan-pdf-tags.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-07-31-tagged-plan-pdf-v6";
+  "2026-08-10-personalised-plan-pdf-v7";
 export const CUSTOMER_PLAN_PDF_CONTRAST_COLORS = Object.freeze({
   oceanBlue: "#006da6",
   muted: "#536c78",
@@ -256,6 +256,7 @@ function requiredReport(value) {
     ["questions", 12],
     ["decisionBasis", 24],
     ["beforeTrade", 24],
+    ["resources", 10],
   ]) {
     if (!Array.isArray(value[field]) || value[field].length > maximum) {
       throw new TypeError(
@@ -364,10 +365,23 @@ function xmlText(value, maximum = 500) {
 export function customerPlanPdfFileName(report) {
   const normalizedReport = requiredReport(report);
   const preparedDate = reportDate(normalizedReport.preparedDate);
+  const prefix = normalizedReport.preparedFor
+    ? "personalised-home-energy-plan"
+    : "home-energy-plan";
   return preparedDate
-    ? `home-energy-plan-${preparedDate}.pdf`
-    : "home-energy-plan.pdf";
+    ? `${prefix}-${preparedDate}.pdf`
+    : `${prefix}.pdf`;
 }
+
+const TRUSTED_EXTERNAL_REPORT_URLS = new Set([
+  "https://www.energy.gov.au/households",
+  "https://www.energy.gov.au/households/quick-wins",
+  "https://www.energy.gov.au/rebates",
+  "https://www.homeenergyrating.gov.au/",
+  "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
+  "https://www.yourhome.gov.au/passive-design/introduction",
+  "https://www.yourhome.gov.au/passive-design/insulation",
+]);
 
 function absoluteGuideHref(value) {
   const supplied = normalizedText(value, 240).trim();
@@ -375,7 +389,11 @@ function absoluteGuideHref(value) {
   try {
     const origin = new URL(CUSTOMER_PLAN_PUBLIC_ORIGIN);
     const resolved = new URL(supplied, origin);
-    return resolved.origin === origin.origin ? resolved.toString() : "";
+    const resolvedUrl = resolved.toString();
+    return resolved.origin === origin.origin
+      || TRUSTED_EXTERNAL_REPORT_URLS.has(resolvedUrl)
+      ? resolvedUrl
+      : "";
   } catch {
     return "";
   }
@@ -923,6 +941,42 @@ export async function createCustomerPlanPdfBytes(
     }, {
       actualText: report.summary,
     });
+
+    const customerLine = [
+      report.preparedFor
+        ? `Prepared for ${normalizedText(report.preparedFor, 120)}`
+        : "",
+      normalizedText(report.customerSummary, 220),
+    ].filter(Boolean).join(" | ");
+    if (customerLine) {
+      const customerLines = linesFor(customerLine, {
+        font: bold,
+        size: 8.7,
+        width: CONTENT_WIDTH - 32,
+        lineHeight: 11,
+        color: palette.white,
+      }).slice(0, 2);
+      pdfTags.artifact(page, () => {
+        drawRoundedRectangle(page, {
+          x: MARGIN,
+          y: 322,
+          width: CONTENT_WIDTH,
+          height: 36,
+          radius: 9,
+          color: palette.white,
+          opacity: 0.09,
+          borderColor: palette.aqua,
+          borderWidth: 0.7,
+          borderOpacity: 0.42,
+        });
+      });
+      pdfTags.mark(page, "P", () => {
+        drawLines(customerLines, {
+          x: MARGIN + 16,
+          startY: customerLines.length > 1 ? 344 : 338,
+        });
+      }, { actualText: customerLine });
+    }
 
     pdfTags.artifact(page, () => {
       page.drawLine({
@@ -1864,6 +1918,149 @@ export async function createCustomerPlanPdfBytes(
     }
   }
 
+  function drawResourceGrid(resources) {
+    const gap = 12;
+    const cellWidth = (CONTENT_WIDTH - gap) / 2;
+    for (let index = 0; index < resources.length; index += 2) {
+      const pair = resources.slice(index, index + 2);
+      const prepared = pair.flatMap((resource) => {
+        const safeHref = absoluteGuideHref(resource?.href);
+        if (!safeHref) return [];
+        const sourceLabel = safeHref.startsWith(CUSTOMER_PLAN_PUBLIC_ORIGIN)
+          ? "AEA PLANNING TOOL"
+          : "OFFICIAL RESOURCE";
+        const labelLines = linesFor(sourceLabel, {
+          font: bold,
+          size: 6.8,
+          width: cellWidth - 36,
+          lineHeight: 9,
+          color: palette.oceanBlue,
+        });
+        const titleLines = linesFor(resource?.label, {
+          font: bold,
+          size: 12.4,
+          width: cellWidth - 36,
+          lineHeight: 15.2,
+          color: palette.navy,
+        });
+        const bodyLines = linesFor(resource?.description, {
+          font: regular,
+          size: 9.2,
+          width: cellWidth - 36,
+          lineHeight: 13.2,
+          color: palette.body,
+        });
+        const linkLabel = "Open trusted resource";
+        const linkLines = linesFor(linkLabel, {
+          font: bold,
+          size: 8.8,
+          width: cellWidth - 36,
+          lineHeight: 11.5,
+          color: palette.greenDark,
+        });
+        return [{
+          resource,
+          safeHref,
+          sourceLabel,
+          labelLines,
+          titleLines,
+          bodyLines,
+          linkLabel,
+          linkLines,
+        }];
+      });
+      const rowHeight = Math.max(
+        ...prepared.map((card) =>
+          measureLines(card.labelLines)
+            + PDF_LAYOUT.labelTitleGap
+            + measureLines(card.titleLines)
+            + PDF_LAYOUT.titleBodyGap
+            + measureLines(card.bodyLines)
+            + PDF_LAYOUT.bodyLinkGap
+            + measureLines(card.linkLines)
+            + (PDF_LAYOUT.panelPaddingY * 2)
+        ),
+        140,
+      );
+      ensureSpace(rowHeight + gap, "Trusted resources");
+      const bottom = y - rowHeight;
+      prepared.forEach((card, pairIndex) => {
+        const x = MARGIN + (pairIndex * (cellWidth + gap));
+        pdfTags.artifact(page, () => {
+          drawRoundedRectangle(page, {
+            x,
+            y: bottom,
+            width: cellWidth,
+            height: rowHeight,
+            radius: PDF_LAYOUT.compactRadius,
+            color: palette.paper,
+            borderColor: palette.line,
+            borderWidth: 0.7,
+          });
+          drawRoundedRectangle(page, {
+            x: x + 12,
+            y: y - 5,
+            width: cellWidth - 24,
+            height: 5,
+            radius: 2.5,
+            color: pairIndex === 0 ? palette.teal : palette.electricBlue,
+          });
+        });
+        let cursor = y - PDF_LAYOUT.panelPaddingY;
+        pdfTags.mark(page, "P", () => {
+          cursor = drawLines(card.labelLines, {
+            x: x + 18,
+            startY: cursor,
+            characterSpacing: 0.45,
+          });
+        }, { actualText: card.sourceLabel });
+        cursor -= PDF_LAYOUT.labelTitleGap;
+        pdfTags.mark(page, "H3", () => {
+          cursor = drawLines(card.titleLines, {
+            x: x + 18,
+            startY: cursor,
+          });
+        }, { actualText: card.resource?.label });
+        cursor -= PDF_LAYOUT.titleBodyGap;
+        pdfTags.mark(page, "P", () => {
+          cursor = drawLines(card.bodyLines, {
+            x: x + 18,
+            startY: cursor,
+          });
+        }, { actualText: card.resource?.description });
+        cursor -= PDF_LAYOUT.bodyLinkGap;
+        const linkTop = cursor;
+        const linkStructure = pdfTags.mark(page, "Link", () => {
+          cursor = drawLines(card.linkLines, {
+            x: x + 18,
+            startY: cursor,
+          });
+        }, { actualText: card.linkLabel });
+        const linkWidth = Math.max(...card.linkLines.map((line) =>
+          line.font.widthOfTextAtSize(line.text, line.size)
+        ));
+        pdfTags.artifact(page, () => {
+          page.drawLine({
+            start: { x: x + 18, y: linkTop - 2 },
+            end: { x: x + 18 + linkWidth, y: linkTop - 2 },
+            thickness: 0.5,
+            color: palette.greenDark,
+          });
+        });
+        addLinkAnnotation({
+          x: x + 18,
+          y: cursor + 1,
+          width: linkWidth,
+          height: measureLines(card.linkLines) + 6,
+          href: card.safeHref,
+          label: card.linkLabel,
+          structure: linkStructure,
+        });
+      });
+      y = bottom - gap;
+    }
+  }
+
   addCoverPage();
   addContentPage(copy.snapshotEyebrow || "Home snapshot");
   pdfTags.beginSection(copy.snapshotTitle || "Your plan in one view");
@@ -2018,6 +2215,17 @@ export async function createCustomerPlanPdfBytes(
     bullets: report.beforeTrade,
     tone: "mint",
   });
+  if (report.resources.length) {
+    pageSection = "Trusted resources";
+    ensureSpace(250, pageSection);
+    pdfTags.beginSection("Trusted resources and useful links");
+    drawSectionHeading(
+      "Useful next steps",
+      "Trusted tools and official information",
+      "Use these independent tools and government sources to check the plan, current support and next decisions.",
+    );
+    drawResourceGrid(report.resources);
+  }
   pdfTags.beginSection(
     copy.privacyTitle || "Useful detail without exposing private information",
   );
@@ -2032,8 +2240,15 @@ export async function createCustomerPlanPdfBytes(
   });
 
   const closingAction = planComplete ? null : priorityActions[0];
+  pageSection = "What to do next";
+  ensureSpace(560, pageSection);
   pdfTags.beginSection(
     closingAction?.title || "Plan progress",
+  );
+  drawSectionHeading(
+    "What to do next",
+    "Turn this roadmap into a clear first conversation",
+    "Use the first move below, take this report with you and confirm site-specific details before committing to work.",
   );
   drawInfoPanel({
     eyebrow: closingAction ? "Your next move" : "Plan progress",
@@ -2046,6 +2261,28 @@ export async function createCustomerPlanPdfBytes(
     body: report.changeBoundary,
     tone: "dark",
   });
+  drawInfoPanel({
+    eyebrow: "Have these ready",
+    title: "Prepare once for an assessor or trade",
+    bullets: [
+      "This report and the home details marked for checking.",
+      "Safe, clear photos of existing equipment, model labels and the switchboard where relevant.",
+      "Any written owner, agent, strata or owners-corporation approval and the preferred project stage.",
+    ],
+    tone: "mint",
+  });
+  drawResourceGrid([
+    {
+      label: "Review or update your home energy plan",
+      description: "Return when priorities, equipment or known home details change.",
+      href: "/plan",
+    },
+    {
+      label: "Prepare for an independent assessment",
+      description: "Use the AEA assessment path or call 1300 241 149 when a site-specific review would help.",
+      href: "/assessments",
+    },
+  ]);
 
   pages.forEach((currentPage, index) => {
     pdfTags.artifact(currentPage, () => {

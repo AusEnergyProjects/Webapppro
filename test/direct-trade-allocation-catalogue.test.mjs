@@ -26,8 +26,10 @@ const customerBrief = read("../src/components/DirectTradeProjectBrief.tsx");
 const stripeWebhook = read("../src/app/api/stripe/webhook/route.ts");
 const access = read("../src/app/direct-trade/access/page.tsx");
 
-test("opportunity allocation is capped, proximity based and load balanced", () => {
-  assert.match(opportunityServer, /MAX_VISIBLE_INSTALLERS = 6/);
+test("opportunity allocation reaches every qualified trade and preserves deterministic ranking", () => {
+  assert.doesNotMatch(opportunityServer, /MAX_VISIBLE_INSTALLERS/);
+  assert.match(opportunityServer, /selectEveryQualifiedTradeRecipient/);
+  assert.match(opportunityServer, /D1_ALLOCATION_WRITE_BATCH_SIZE/);
   assert.match(opportunityServer, /Math\.floor\(distanceKm \/ 10\)/);
   assert.match(
     opportunityServer,
@@ -37,6 +39,8 @@ test("opportunity allocation is capped, proximity based and load balanced", () =
   assert.match(opportunityServer, /fairnessLoad - right\.fairnessLoad/);
   assert.match(opportunityServer, /service_radius_km/);
   assert.match(opportunityServer, /verifiedTradeAccountPredicate\("a"\)/);
+  assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities\)/);
+  assert.doesNotMatch(opportunityServer, /trade_capability|verified_service_categories|CAPABILITY_REVIEW/);
   assert.match(
     opportunityServer,
     /availability_status IN \('open', 'limited'\)/,
@@ -45,20 +49,18 @@ test("opportunity allocation is capped, proximity based and load balanced", () =
   assert.match(opportunityServer, /automatic-lead-intake/);
   assert.match(
     opportunityServer,
-    /directTradeTriage\?\.autoSend === false\s+\? "draft" : "open"/,
+    /directTradeTriage\?\.autoSend === false[\s\S]+public-home-energy-plan[\s\S]+!contactRelease[\s\S]+\? "draft"[\s\S]+: "open"/,
   );
 });
 
-test("household opportunity exposure, platform response and expiry have hard server limits", () => {
+test("household opportunity distribution is deduplicated while response and expiry retain hard limits", () => {
   assert.match(opportunityServer, /DEFAULT_CONNECTED_INSTALLERS = 3/);
   assert.match(opportunityServer, /OPPORTUNITY_LIFETIME_DAYS = 30/);
   assert.match(opportunityServer, /status = 'expired'/);
   assert.match(opportunityServer, /const lifetimeRecipientCount = existing\.results\.length/);
-  assert.match(
-    opportunityServer,
-    /MAX_VISIBLE_INSTALLERS - lifetimeRecipientCount/,
-  );
+  assert.doesNotMatch(opportunityServer, /openSlots|maximumVisible/);
   assert.match(opportunityServer, /!previouslyMatched\.has/);
+  assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(partnerRoute, /action === "record_contact"/);
   assert.match(partnerRoute, /Customer details appear only after that customer releases them to this exact match/);
   assert.match(partnerRoute, /action === "submit_quote"/);
@@ -69,14 +71,18 @@ test("household opportunity exposure, platform response and expiry have hard ser
   assert.match(partnerRoute, /notice_version = '\$\{CUSTOMER_MATCHING_NOTICE_VERSION\}'/);
   assert.match(partnerRoute, /distanceBand: distanceBand/);
   assert.match(partnerRoute, /This opportunity response cannot be reversed/);
-  assert.match(adminMatches, /reached its six-installer visibility limit/);
+  assert.doesNotMatch(adminMatches, /six-installer visibility limit|MAX_VISIBLE_INSTALLERS/);
   assert.match(adminMatches, /progress to platform coordination/);
   assert.match(adminMatches, /reached its platform coordination limit/);
   assert.match(adminMatches, /verifiedTradeAccountPredicate\("a"\)/);
   assert.match(adminMatches, /installer_access_approved/);
-  assert.match(standards, /no more than six eligible installers/i);
-  assert.match(standards, /Households control each contact release/i);
-  assert.match(standards, /respond through structured platform controls/i);
+  assert.match(adminMatches, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
+  assert.match(adminMatches, /account\.account_status !== "active"/);
+  assert.match(adminMatches, /account\.verification_status !== "approved"/);
+  assert.match(adminMatches, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
+  assert.doesNotMatch(adminMatches, /trade_capability|capability_review/);
+  assert.match(standards, /Households control what is shared/i);
+  assert.match(standards, /selected service and optional message to all verified matching trades/i);
   assert.match(
     customerBrief,
     /customer-controlled connection/i,

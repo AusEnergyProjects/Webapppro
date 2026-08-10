@@ -3,6 +3,9 @@ export const OPPORTUNITY_INBOX_URL =
 
 type OpportunityNotificationDraftInput = {
   businessName: string;
+  sourceKind?: "customer_project" | "public_plan_enquiry" | "legacy_marketplace";
+  customerName?: string;
+  customerMessage?: string;
   suburb: string;
   postcode: string;
   state: string;
@@ -98,6 +101,29 @@ export function opportunityNotificationDraft(input: OpportunityNotificationDraft
   const location = broadLocation(input.suburb, input.postcode, input.state);
   const services = serviceLabels(input.matchedCategories);
   const timing = TIMING_LABELS[bounded(input.timing, 40)] || "Planning";
+  if (input.sourceKind === "public_plan_enquiry") {
+    const customerName = bounded(input.customerName, 120) || "Customer enquiry";
+    const customerMessage = bounded(input.customerMessage, 500);
+    const postcode = broadPostcode(input.postcode);
+    const subject = `New TLink customer enquiry in ${postcode || broadState(input.state)}`
+      .slice(0, 160);
+    const body = [
+      `Hello ${businessName},`,
+      "",
+      "A customer chose to share a matched energy upgrade enquiry with your verified business.",
+      "",
+      `Customer: ${customerName}`,
+      `Postcode: ${postcode || "Check the signed-in workspace"}`,
+      `Selected ${services.length === 1 ? "service" : "services"}: ${services.join(", ")}`,
+      `Timing: ${timing}`,
+      ...(customerMessage ? [`Customer message: ${customerMessage}`] : []),
+      "",
+      `Review the enquiry and contact details: ${OPPORTUNITY_INBOX_URL}`,
+      "",
+      "Only the contact details named in the customer's consent are available after sign-in. The customer's private home plan is not shared with trades.",
+    ].join("\n");
+    return { subject, body: body.slice(0, 1800) };
+  }
   const evidenceCount = Math.max(
     0,
     Math.min(999, Math.floor(Number(input.customerSharedEvidenceCount) || 0)),

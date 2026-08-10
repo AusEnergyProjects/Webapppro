@@ -240,7 +240,7 @@ test("plans without a valid professional review retain the exact household evide
   const report = createCustomerPlanReportView(document);
 
   assert.equal(CUSTOMER_PLAN_DOCUMENT_VERSION, "2026-07-29-plan-document-v2");
-  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-07-29-premium-report-v3");
+  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-08-10-personalised-report-v4");
   assert.equal(document.version, CUSTOMER_PLAN_DOCUMENT_VERSION);
   assert.equal(report.version, CUSTOMER_PLAN_REPORT_VERSION);
   assert.equal(document.professionalReview, null);
@@ -385,7 +385,7 @@ test("plan email HTML is escaped, inline styled and has a complete plain-text al
   assert.equal(CUSTOMER_PLAN_EMAIL_SUBJECT, "Your home energy plan is ready");
   assert.equal(
     CUSTOMER_PLAN_REPORT_DESIGN_VERSION,
-    "2026-07-30-tech-presentation-design-v2",
+    "2026-08-10-personalised-report-design-v3",
   );
   assert.match(
     html,

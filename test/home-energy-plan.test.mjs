@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildInstallerPropertyContext,
   createCustomerProjectPlan,
   customerHomeFeatureSections,
+  customerProjectOptions,
 } from "../src/lib/customer-projects.mjs";
 
 test("the public quick plan combines multiple goals through the canonical advisor engine", () => {
@@ -157,4 +159,71 @@ test("legacy space-heat-pump answers normalize to reverse-cycle while other syst
   const supply = plan.items.find((item) => item.id === "electrical-supply-check");
   assert.match(supply.title, /reported two-phase/i);
   assert.match(supply.text, /has not been verified/i);
+});
+
+test("wall insulation stays specific to external walls while shared walls are recorded separately", () => {
+  const wallQuestion = customerHomeFeatureSections
+    .flatMap((section) => section.questions)
+    .find((question) => question.id === "wall-insulation");
+  assert.ok(wallQuestion);
+  assert.match(wallQuestion.label, /walls that face outdoors/i);
+  assert.match(wallQuestion.help, /party walls.*Home basics/i);
+  assert.ok(wallQuestion.options.some(([value, label]) => (
+    value === "wall-insulation-not-applicable"
+    && /all adjoin other dwellings/i.test(label)
+  )));
+  assert.doesNotMatch(JSON.stringify(wallQuestion), /\u2013|\u2014/);
+});
+
+test("compact home basics normalize saved values and refine the canonical plan context", () => {
+  const normalized = buildInstallerPropertyContext({
+    propertyType: "duplex",
+    storeys: "2",
+    floorArea: 175,
+    householdSize: 4,
+    dwellingConnection: "one_shared_side",
+  });
+  assert.deepEqual(normalized, {
+    propertyType: "townhouse",
+    storeys: "two",
+    ageBand: "",
+    floorArea: "100_199",
+    occupants: "three_four",
+    sharedWalls: "one_side",
+    roofType: "",
+    switchboard: "",
+    approvalContext: "none",
+    accessConstraints: [],
+  });
+
+  const plan = createCustomerProjectPlan({
+    goals: ["improve-comfort"],
+    situation: "owner",
+    approvalContext: "strata",
+    propertyContext: normalized,
+  });
+  assert.equal(
+    customerProjectOptions.propertyTypes.find(([value]) => value === "townhouse")?.[1],
+    "Townhouse, terrace, villa or duplex",
+  );
+  assert.deepEqual(
+    {
+      propertyType: plan.propertyContext.propertyType,
+      storeys: plan.propertyContext.storeys,
+      floorArea: plan.propertyContext.floorArea,
+      occupants: plan.propertyContext.occupants,
+      sharedWalls: plan.propertyContext.sharedWalls,
+    },
+    {
+      propertyType: "townhouse",
+      storeys: "two",
+      floorArea: "100_199",
+      occupants: "three_four",
+      sharedWalls: "one_side",
+    },
+  );
+  const context = plan.items.find((item) => item.id === "home-planning-context");
+  assert.ok(context);
+  assert.match(context.text, /party walls shared with neighbouring dwellings/i);
+  assert.match(context.text, /hot-water demand and occupied-zone needs/i);
 });

@@ -1,6 +1,8 @@
 import { australianStateLabel, canonicalAustralianState, postcodeMatchesState, residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import {
   isPublicPlanEnquiry,
+  isPublicPlanSubmissionId,
+  normalizePublicPlanSnapshot,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "./public-plan-enquiry.mjs";
@@ -114,7 +116,7 @@ export function validateLeadPayload(raw) {
 
   const consent = raw.consent;
   const consentPurpose = cleanText(consent?.purpose, 160);
-  const consentVersion = cleanText(consent?.noticeVersion, 40);
+  const consentVersion = cleanText(consent?.noticeVersion, 64);
   const consentGrantedAt = cleanText(consent?.grantedAt, 40);
   if (!consent || consent.accepted !== true || !consentPurpose || !consentVersion || !Number.isFinite(Date.parse(consentGrantedAt))) {
     return { ok: false, error: "Please confirm that we may use your details for this request." };
@@ -148,12 +150,19 @@ export function validateLeadPayload(raw) {
     if (!postcode) return { ok: false, error: "Please enter the property's postcode." };
     if (!residentialStateFromPostcode(postcode)) return { ok: false, error: "Please enter a valid Australian postcode." };
     if (projectCategories.length !== 1) return { ok: false, error: "Please choose one upgrade to discuss first." };
+    const submissionId = cleanText(raw.submissionId, 64);
+    if (!isPublicPlanSubmissionId(submissionId)) {
+      return { ok: false, error: "Start a new home plan enquiry and try again." };
+    }
     const phoneDigits = phone.replace(/\D/g, "");
     if (phone && (
       !PUBLIC_PLAN_PHONE_RE.test(phone)
       || phoneDigits.length < 8
       || phoneDigits.length > 15
     )) return { ok: false, error: "Please enter a valid phone number." };
+    const planSnapshot = normalizePublicPlanSnapshot(raw.planSnapshot);
+    if (!planSnapshot.ok) return planSnapshot;
+    raw = { ...raw, planSnapshot: planSnapshot.value };
   }
   if (enquiry === "direct-trade-project") {
     if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
@@ -186,6 +195,7 @@ export function validateLeadPayload(raw) {
       ok: true,
       value: {
         submissionType,
+        submissionId: cleanText(raw.submissionId, 64),
         submittedAt: new Date().toISOString(),
         name,
         email,
@@ -204,6 +214,7 @@ export function validateLeadPayload(raw) {
         projectCategories,
         preferredContact: email && phone ? "either" : email ? "email" : "phone",
         projectNotes: cleanText(raw.projectNotes, 500),
+        planSnapshot: raw.planSnapshot,
       },
     };
   }

@@ -57,6 +57,13 @@ export default async function HomeEnergyPlanPage({
     budgetRange: suppliedBudget,
     addressState: suppliedState,
     features: suppliedFeatures,
+    propertyContext: {
+      propertyType: value(params.propertyType),
+      storeys: value(params.storeys),
+      floorArea: value(params.floorArea),
+      occupants: value(params.occupants),
+      sharedWalls: value(params.sharedWalls),
+    },
   });
   const validBudgets = new Set(
     customerProjectOptions.budgets.map(([optionValue]) => optionValue),
@@ -68,7 +75,7 @@ export default async function HomeEnergyPlanPage({
       <header className="planner-hero">
         <div>
           <span>Private home energy planning</span>
-          <h1>One question at a time. Your plan starts here.</h1>
+          <h1>One clear step at a time. Your plan starts here.</h1>
           <p>
             No account, address, bill, postcode, meter identifier or contact
             details are needed. Answer what you know, skip the rest and see an
@@ -89,6 +96,11 @@ export default async function HomeEnergyPlanPage({
             ? suppliedState
             : "",
           features: plan.features,
+          propertyType: plan.propertyContext.propertyType || "",
+          storeys: plan.propertyContext.storeys || "",
+          floorArea: plan.propertyContext.floorArea || "",
+          occupants: plan.propertyContext.occupants || "",
+          sharedWalls: plan.propertyContext.sharedWalls || "",
         }}
       />
       <SiteFooter>

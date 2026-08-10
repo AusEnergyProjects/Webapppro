@@ -17,8 +17,8 @@ import {
 } from "../src/lib/customer-projects.mjs";
 import {
   matchedServiceCategories,
-  selectInstallerCandidatesForCoverage,
 } from "../src/lib/trade-service-matching.mjs";
+import { selectEveryQualifiedTradeRecipient } from "../src/lib/direct-trade-matching.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0081_customer_project_advisor.sql");
@@ -606,9 +606,9 @@ test("split fabric work remains precise through opportunity matching and trade w
   assert.match(tradeWorkOrdersRoute, /JSON\.stringify\(serviceCategories\)/);
 });
 
-test("automatic allocation reserves capacity for every eligible requested trade", () => {
+test("automatic allocation includes every unique qualified service-area trade", () => {
   const candidates = [
-    ...Array.from({ length: 6 }, (_, index) => ({
+    ...Array.from({ length: 7 }, (_, index) => ({
       firebaseUid: `solar-${index}`,
       matchedCategories: ["solar"],
     })),
@@ -616,19 +616,21 @@ test("automatic allocation reserves capacity for every eligible requested trade"
       firebaseUid: "glazing-specialist",
       matchedCategories: ["glazing"],
     },
+    {
+      firebaseUid: "unqualified",
+      matchedCategories: ["solar"],
+      eligibleForReview: false,
+    },
   ];
-  const selected = selectInstallerCandidatesForCoverage(
-    candidates,
-    ["solar", "glazing"],
-    6,
-  );
-  assert.equal(selected.length, 6);
+  const selected = selectEveryQualifiedTradeRecipient(candidates);
+  assert.equal(selected.length, 8);
   assert.ok(selected.some((candidate) => candidate.firebaseUid === "glazing-specialist"));
   assert.deepEqual(
     new Set(selected.flatMap((candidate) => candidate.matchedCategories)),
     new Set(["solar", "glazing"]),
   );
-  assert.match(opportunityServer, /selectInstallerCandidatesForCoverage/);
+  assert.doesNotMatch(selected.map((candidate) => candidate.firebaseUid).join("|"), /unqualified/);
+  assert.match(opportunityServer, /selectEveryQualifiedTradeRecipient/);
 });
 
 test("tenure and strata approval remain independent advisor inputs", () => {
