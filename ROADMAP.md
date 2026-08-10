@@ -1887,7 +1887,7 @@ heater estimates to mixed approved products without weakening compliance.
   animation. Signed-in dashboard QA was unavailable because both live browser
   sessions presented the sign-in boundary; no signed-in v301 QA is claimed.
 
-## Released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
+## Prior released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
 
 Status: exact executable application commit
 `f797ab7ee447bc31d66b5760f6613e46f107e97d` is pushed to the GitHub branch and
@@ -1954,6 +1954,102 @@ consented and independent from account creation.
   the form was 297.6 pixels wide and navigation was 325.6 pixels wide. The
   browser showed no warnings or errors. No lead was submitted during QA and the
   viewport was reset afterward.
+
+## Released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
+
+Status: exact executable application commit
+`59ea305f9a45d1e4c22b354af2e211d22fe11358` is pushed to the GitHub branch and
+Sites internal `main`, and is released as Sites version 303 through deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
+`https://compare.ausenergyassessments.com`. Sites version 302 is historical.
+
+### Outcome
+
+Give a household a clearer property-specific journey, a useful personalised
+report and one consented path to every matching platform-approved trade, without
+requiring an account or adding a second trade-qualification system.
+
+### Released scope
+
+- Keep the public header, journey, question card, result and enquiry surfaces on
+  one responsive width contract. Add a reduced-motion-aware holographic energy
+  field to the customer experience while the professional trade workspace stays
+  static.
+- Ask for property type, storeys, approximate internal floor area, occupants and
+  shared walls. Treat apartments, units, townhouses, villas, duplexes, strata,
+  body corporate, owners corporation and shared common property as one clear
+  approval context, while external-wall insulation remains a separate fact.
+- Generate the customer plan from report contract
+  `2026-08-10-personalised-report-v4`, design contract
+  `2026-08-10-personalised-report-design-v3` and PDF contract
+  `2026-08-10-personalised-plan-pdf-v7`. The customer email attaches the
+  personalised report with a cover, property context, priorities, quick wins and
+  useful AEA and government resources.
+- Convert a consented no-account enquiry into one idempotent public opportunity
+  and private contact-release record. Platform approval is authoritative. Every
+  active platform-approved installer with a declared matching service and state
+  and any active matching service area receives the opportunity. There is no
+  six-trade cap and no separate capability-qualification subsystem.
+- Recheck active platform approval and current customer consent before contact
+  disclosure or notification. Manual assignment uses the same platform-approval,
+  service, state and area contract.
+- Sign the Google Apps Script relay and health probe, reject stale or invalid
+  signatures, preserve one stable submission identity across retries and dedupe
+  repeated delivery before downstream effects.
+- Add forward migration `0126_public_trade_lead_contact_release.sql` only. The
+  migration chain ends at `0126`; no separate per-service approval migration or
+  table exists.
+
+### Release and validation evidence
+
+- Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
+  SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
+  and 405 tar entries. It is ignored release staging and is removed after the
+  release record is committed.
+- Saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+  has Sites content hash
+  `sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`.
+  Sites stored 37,160,960 bytes across 391 files. Provider identity is
+  `info294029--aea-energy-comparison`.
+- Google Apps Script version 11 deployment
+  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+  was deployed on 10 August 2026 at 14:34. The prior version 10 deployment is
+  archived. Its deployment identity is
+  `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`.
+- The signed `runOperationalHealthCheck` completed at 14:44:49 with overall
+  status `healthy`: site HTTP 200, electricity HTTP 200, gas HTTP 200 and
+  `lead_delivery` HTTP 200 for probe
+  `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. Both installed Apps Script triggers
+  `sendFollowUps` and `runOperationalHealthCheck` reported 0% error.
+- Production migration preflight found 210 opportunities, 210 non-empty source
+  references and 0 duplicate source references before migration `0126`. After
+  deployment, the refreshed signed-in owner Database console reported 239
+  application tables and confirmed `public_trade_lead_contact_releases` is
+  present.
+- Full `npm.cmd run validate` passed on the exact application source. Independent
+  release review returned SHIP with no P0 or P1 issue.
+- Live custom-domain desktop QA found one consistent width across the header,
+  introduction, home journey, progress and question surfaces with no visible
+  clipping, and the holographic home rendered. The flow showed the exact shared
+  property wording, all five Home basics fields and separate external-wall and
+  shared-party-wall context. A sample townhouse plan completed with 8 ordered
+  steps, Quick wins, printable plan, prominent no-account `Ask about an upgrade`
+  form and the optional free-account path.
+- The Sites control plane recheck kept deployment
+  `appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20.
+  `compare.ausenergyassessments.com` remained active with an active provider and
+  SSL.
+- Independent live reviewer returned SHIP with no P0 or P1 issue. At an effective
+  1,309 by 818 desktop viewport, header, hero, planner and results aligned at x82
+  with 1,132-pixel width; scroll width and client width were both 1,295 pixels.
+  At an effective 355 by 767 mobile viewport, the same surfaces aligned at x14
+  with 313-pixel width; scroll width and client width were both 341 pixels. The
+  holographic home remained visible and safely clipped, selects were 284 pixels,
+  and enquiry fields and action stacked without overflow. Production also
+  confirmed separate open-wall-vent and open-unused-chimney choices, no
+  heat-pump-space option, no-account enquiry first, optional account creation and
+  personalised Quick wins. No real customer lead was submitted.
 
 ### Controlled source limit
 

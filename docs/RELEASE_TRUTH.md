@@ -148,10 +148,14 @@ This is the only current implementation and release-status document. The [dated 
 | Historical immersive customer journey application source | `bc4096d61cb493e819555d72113d0c77d45a1653` on `codex/sites-custom-domain-migration` | Exact executable source for milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49`; historical Sites version 301 |
 | Historical Sites version 301 release archive identity | `.openai/site-release-bc4096d.tar.gz` | 9,823,592 compressed bytes; SHA-256 `5ae1990b73dd2fd54bebfc5182b8a1616fc0a51afd925ecd09cfd726eebc01a3`; 399 tar entries; 385 files; all 126 migrations |
 | Historical Sites version 301 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e` | Exact Sites version 301 built from `bc4096d61cb493e819555d72113d0c77d45a1653`; 385 files; 35,328,000 bytes; content hash `sha256:3bbab6b63c31708d6b9ded69b50da11e31d45ff75557d82823d3b12fc4a02e3b`; deployment `appgdep_6a7898485dd48191acb31466092b5fe8` succeeded with environment revision 19 |
-| Current immersive plan action handoff application source | `f797ab7ee447bc31d66b5760f6613e46f107e97d` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch and Sites internal `main` for milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` |
-| Current release archive identity | `.openai/site-release-f797ab7.tar.gz` | 11,484,967 compressed bytes; SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`; 402 tar entries; all 126 migrations |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd` | Exact Sites version 302 built from `f797ab7ee447bc31d66b5760f6613e46f107e97d`; 388 files; 37,048,320 bytes; content hash `sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300` |
-| Current executable application identity | Sites version 302 from `f797ab7ee447bc31d66b5760f6613e46f107e97d` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a790aefc05c8191b4a03f72181f7031` succeeded; environment revision 19; provider identity `info294029--aea-energy-comparison` |
+| Historical immersive plan action handoff application source | `f797ab7ee447bc31d66b5760f6613e46f107e97d` on `codex/sites-custom-domain-migration` | Exact executable source for milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50`; historical Sites version 302 |
+| Historical Sites version 302 release archive identity | `.openai/site-release-f797ab7.tar.gz` | 11,484,967 compressed bytes; SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`; 402 tar entries; all 126 migrations |
+| Historical Sites version 302 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd` | Exact Sites version 302 built from `f797ab7ee447bc31d66b5760f6613e46f107e97d`; 388 files; 37,048,320 bytes; content hash `sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`; deployment `appgdep_6a790aefc05c8191b4a03f72181f7031` succeeded with environment revision 19 |
+| Current personalised plan and open trade lead application source | `59ea305f9a45d1e4c22b354af2e211d22fe11358` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub branch and Sites internal `main` for milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` |
+| Current release archive identity | `.openai/site-release-59ea305.tar.gz` | 11,501,890 bytes; SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`; 405 tar entries; ignored release staging removed after this release record is committed |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9` | Exact Sites version 303 built from `59ea305f9a45d1e4c22b354af2e211d22fe11358`; 391 files; 37,160,960 bytes; content hash `sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32` |
+| Current executable application identity | Sites version 303 from `59ea305f9a45d1e4c22b354af2e211d22fe11358` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded; environment revision 20; provider identity `info294029--aea-energy-comparison` |
+| Current Google Apps Script relay identity | Version 11 deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Deployed 10 August 2026 at 14:34; prior version 10 archived; signed health and lead-delivery probe healthy at 14:44:49 |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -168,12 +172,115 @@ from exact application source `c9fb34115209c0ea0a1fc02ee2095250458c256f`
 is historical. Sites version 300 from exact corrective source
 `ca3d84a497258426c7ab34c87e8059df1cba2a27` is historical. Sites version 301
 from exact source `bc4096d61cb493e819555d72113d0c77d45a1653` is historical. Sites version
-302 from exact source `f797ab7ee447bc31d66b5760f6613e46f107e97d` is current. Signed-out
-desktop and mobile customer-plan QA is verified below. GEMS-backed calculators
+302 from exact source `f797ab7ee447bc31d66b5760f6613e46f107e97d` is historical. Sites version
+303 from exact source `59ea305f9a45d1e4c22b354af2e211d22fe11358` is current. Signed operational
+health and lead-delivery QA plus customer-facing desktop and mobile version-303
+acceptance are verified below. GEMS-backed calculators
 remain fail-closed after an unresolved reviewed official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current immersive plan action handoff release
+## Current personalised plan and open trade lead release
+
+Milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` is released from exact
+executable application commit `59ea305f9a45d1e4c22b354af2e211d22fe11358`,
+pushed to the GitHub branch and Sites internal `main`, as Sites version 303.
+Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+has content hash
+`sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`
+across 391 stored files and 37,160,960 stored bytes. Deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded with environment revision
+20 under provider identity `info294029--aea-energy-comparison` at
+`https://compare.ausenergyassessments.com` and
+`https://aea-energy-comparison.info294029.chatgpt.site`.
+
+Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
+SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
+and 405 tar entries. It is ignored release staging and is removed after this
+release record is committed.
+
+The public header, journey, question card, result and enquiry use one responsive
+width contract. A reduced-motion-aware holographic energy field adds depth to
+the customer experience while the professional trade workspace remains static.
+The home intake records property type, storeys, approximate internal floor area,
+occupants and shared walls. One plain-language approval question covers
+apartments, units, townhouses, villas, duplexes, strata, body corporate, owners
+corporation and shared common property. External-wall insulation remains a
+separate fact and is not inferred from party walls.
+
+The customer plan email attaches a personalised report with a cover, property
+context, priorities, quick wins and useful AEA and government resources. The
+exact report identity is `2026-08-10-personalised-report-v4`, the design identity
+is `2026-08-10-personalised-report-design-v3` and the PDF identity is
+`2026-08-10-personalised-plan-pdf-v7`.
+
+A consented no-account enquiry creates one idempotent public opportunity and one
+private contact-release record. Platform approval is authoritative. Every active
+platform-approved installer with a declared matching service and state and any
+active matching service area is included. There is no six-trade cap and no
+separate capability-qualification subsystem. Contact disclosure and notification
+recheck current platform approval and consent. Manual assignment applies the
+same platform-approval, service, state and service-area boundary.
+
+Forward migration `0126_public_trade_lead_contact_release.sql` adds the private
+contact-release ledger and the unique non-empty opportunity source-reference
+contract. The production preflight found 210 opportunities, 210 non-empty source
+references and 0 duplicate source references. After deployment, the refreshed
+signed-in owner Database console reported 239 application tables and confirmed
+that `public_trade_lead_contact_releases` is present. The migration chain ends at
+`0126`; there is no per-service approval migration or table.
+
+The Google Apps Script relay uses a signed, freshness-bounded envelope and one
+stable submission identity across retries. Repeated delivery is deduplicated
+before downstream effects. Version 11 deployment
+`AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+was deployed on 10 August 2026 at 14:34. Legacy version 10 deployment
+`AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
+is archived, leaving signed version 11 active.
+
+The signed `runOperationalHealthCheck` completed at 14:44:49 with overall status
+`healthy`: site HTTP 200, electricity HTTP 200, gas HTTP 200 and
+`lead_delivery` HTTP 200 for probe
+`910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. The installed `sendFollowUps` and
+`runOperationalHealthCheck` triggers were present with 0% error.
+
+Full `npm.cmd run validate` passed on the exact application source. Independent
+release review returned SHIP with no P0 or P1 issue.
+
+Live custom-domain desktop QA confirmed consistent-width header, introduction,
+home journey, progress and question surfaces with no visible clipping, and the
+holographic home rendered. The flow reached the exact shared-property question,
+showed property type, storeys, floor area, occupants and shared walls, and built
+a sample townhouse plan successfully. The result contained 8 ordered steps,
+Quick wins, a printable plan, the prominent no-account `Ask about an upgrade`
+form and the optional free-account path. Its context states that shared party
+walls are not external heat-loss surfaces.
+
+The Sites control plane recheck kept deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20,
+last updated `2026-08-10T04:40:04Z`. The custom domain
+`compare.ausenergyassessments.com` remained active with an active provider and
+SSL.
+
+Independent live reviewer returned SHIP with no P0 or P1 issue. At an effective
+1,309 by 818 desktop viewport, header, hero, planner and results aligned at x82
+with 1,132-pixel width; scroll width and client width were both 1,295 pixels. The
+holographic canvas measured 943 by 415 pixels and its home image 854 by 376
+pixels. At an effective 355 by 767 mobile viewport, the same surfaces aligned at
+x14 with 313-pixel width; scroll width and client width were both 341 pixels. The
+holographic home remained visible and safely clipped, selects measured 284
+pixels, and 189 by 46-pixel enquiry fields plus the 189 by 74-pixel action stacked
+without overflow. Production confirmed separate open-wall-vent and
+open-unused-chimney choices, no heat-pump-space option, no-account enquiry first,
+optional account creation and personalised Quick wins. No real customer lead was
+submitted.
+
+Independent review noted one non-blocking P2: administrator allocation after
+consent withdrawal can retain an inaccessible internal match. Current customer
+contact remains hidden and no notification is sent. This does not broaden trade
+access or change the authoritative platform-approval gate.
+
+## Prior immersive plan action handoff release
 
 Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is released from exact
 executable application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`,
@@ -1742,7 +1849,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 302 is:
+The current verified deployed topology for Sites version 303 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -1800,7 +1907,6 @@ The audit recommends withdrawing the generic Database Console because broad cata
   from 7,500 to 7,499; GEMS-backed calculators remain
   `OFFICIAL_PRODUCT_REGISTRY_STALE` until resolved.
 - Recovery of legacy issued documents whose exact retained PDF bytes cannot be proven; the current contract fails closed and requires a new revision.
-- One authorised live lead-delivery monitor run confirming the milestone-44 20-second relay and 25-second outer-monitor timeout relationship against the Google Workspace relay.
 - Provider credentials and sender approval for the deployed Resend integration.
 - Independent hosted row counts for customer-project activity events and deliveries, quote-submission ledger entries and one-business contact claims.
 - Delivered rendering and clipping acceptance in controlled non-customer Gmail and Outlook inboxes.

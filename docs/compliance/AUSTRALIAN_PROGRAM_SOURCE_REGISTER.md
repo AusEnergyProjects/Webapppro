@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 302, every GEMS-backed pathway fails closed while the
+availability. In version 303, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,34 +72,51 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is released from exact
-application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`, pushed to the GitHub
-branch and Sites internal `main`, as Sites version 302 through deployment
-`appgdep_6a790aefc05c8191b4a03f72181f7031` with environment revision 19 at
+Milestone `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` is released from exact
+application commit `59ea305f9a45d1e4c22b354af2e211d22fe11358`, pushed to the GitHub
+branch and Sites internal `main`, as Sites version 303 through deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
 `https://compare.ausenergyassessments.com` and
 `https://aea-energy-comparison.info294029.chatgpt.site`.
 
-The generated home image is visible on the public home and planner. A semantic
-four-stage journey uses progressive CSS 3D and pointer depth without WebGL,
-canvas or video and respects reduced-motion preferences. Shared navigation and
-result widths are responsive without changing the static trade workspace.
+The public header, home journey, question card, plan result and enquiry now share
+one responsive width contract. A reduced-motion-aware holographic energy field
+adds customer-facing depth while the professional trade workspace remains
+static. Property context records property type, storeys, approximate internal
+floor area, occupants and shared walls. One approval question covers apartments,
+units, townhouses, villas, duplexes, strata, body corporate, owners corporation
+and shared common property. External-wall insulation remains separate from party
+walls.
 
-The planner separates `Open wall vents` from `Open or unused chimney or flue`
-and has no duplicate `Heat-pump space heating` option. Results expose `Start
-here`, answer-specific `Quick wins`, a no-account basic enquiry and a distinct
-`Create free account` action. Quick wins are conditional on the answers and can
-cover filters and controls, layers and electric throws, ventilation and
-moisture, hot-water routines, appliance timing, solar load shifting, EV
-charging, fans and shading.
+The customer email attaches a personalised plan with a cover, property context,
+priorities, quick wins and useful AEA and government resources. Its exact report,
+design and PDF identities are `2026-08-10-personalised-report-v4`,
+`2026-08-10-personalised-report-design-v3` and
+`2026-08-10-personalised-plan-pdf-v7`.
 
-The public enquiry accepts only name, email and/or phone, postcode, one interest,
-an optional message and explicit consent. It does not send plan answers, NMI,
-interval data, usage, budget, address or account data. It remains
-`hold_for_authority_review` with `autoSend: false`. Timing alone no longer
-filters a valid request, and filtered traffic cannot be reported to the customer
-as received. The Google Apps Script relay source was updated, but its hosted
-deployment remains unverified. No lead was submitted during QA and no
-customer-shareable rebate receipt was added.
+A consented no-account enquiry creates one idempotent public opportunity and one
+private contact-release record. Platform approval is authoritative. Every active
+platform-approved installer with a declared matching service and state and any
+active matching service area is included. There is no six-trade cap and no
+separate capability-qualification subsystem. Contact release, notification and
+manual assignment recheck platform approval, service, state, service area and
+current consent.
+
+Google Apps Script version 11 deployment
+`AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+is active. Legacy version 10 deployment
+`AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
+is archived. The signed `runOperationalHealthCheck` completed at 14:44:49 on 10
+August 2026 with site, electricity, gas and `lead_delivery` HTTP 200 and status
+`healthy` for probe `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. The installed
+`sendFollowUps` and `runOperationalHealthCheck` triggers reported 0% error. No
+real customer lead was submitted during release verification.
+
+Milestone `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` is historical Sites version 302
+from exact application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`
+through deployment `appgdep_6a790aefc05c8191b4a03f72181f7031`. It introduced
+the earlier semantic four-stage plan journey, quick wins and basic enquiry but
+kept the hosted relay and open trade distribution unverified.
 
 Milestone `AEA-IMMERSIVE-CUSTOMER-JOURNEY-49` is historical Sites version 301
 from exact application commit `bc4096d61cb493e819555d72113d0c77d45a1653`
@@ -139,18 +156,53 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The Sites version 302 saved-version identity is
+The Sites version 303 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+with content hash
+`sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`
+across 391 stored files and 37,160,960 stored bytes. Provider identity is
+`info294029--aea-energy-comparison`.
+
+Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
+SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
+and 405 tar entries. It is ignored release staging and is removed after this
+release record is committed.
+
+Production migration preflight found 210 opportunities, 210 non-empty source
+references and 0 duplicate source references. The refreshed signed-in owner
+Database console reported 239 application tables and confirmed that
+`public_trade_lead_contact_releases` is present after deployment. Migration
+`0126_public_trade_lead_contact_release.sql` is therefore applied. The chain ends
+at `0126`; no separate per-service approval migration exists.
+
+Full `npm.cmd run validate` passed before deployment. Independent release review
+returned SHIP with no remaining P0 or P1 issue.
+
+Live custom-domain desktop QA confirmed consistent-width customer surfaces, the
+holographic home, exact shared-property wording, all five Home basics fields and
+a completed sample townhouse plan with 8 ordered steps, Quick wins, printable
+plan, no-account enquiry and optional free-account path. Independent live review
+also returned SHIP with no P0 or P1 issue. At effective 1,309 by 818 desktop and
+355 by 767 mobile viewports, scroll width equalled client width at 1,295 and 341
+pixels respectively. The mobile customer surfaces aligned to 313 pixels and the
+holographic home remained visible and safely clipped. Production confirmed the
+separate open-wall-vent and open-unused-chimney choices, no heat-pump-space
+option, no-account enquiry first and personalised Quick wins. No real customer
+lead was submitted.
+
+The Sites control plane recheck kept deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20,
+updated `2026-08-10T04:40:04Z`. The custom domain remained active with an active
+provider and SSL.
+
+Historical Sites version 302 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
 with content hash
 `sha256:1e2af6133642887179c6887212801973a49006bf9a4f76a3f98d9eb3daf06300`
 across 388 stored files and 37,048,320 stored bytes. Local archive
 `.openai/site-release-f797ab7.tar.gz` is 11,484,967 compressed bytes with
 SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`,
-402 tar entries and all 126 migrations. Provider identity is
-`info294029--aea-energy-comparison`.
-
-Full `npm.cmd run validate` passed before deployment. Independent release review
-found no remaining P0 or P1 issue.
+402 tar entries and all 126 migrations.
 
 Historical Sites version 301 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_57a5cb197f548191a5ef29ab9c99f59e`
@@ -170,7 +222,7 @@ across 384 files and 33,607,680 bytes. Local archive
 `a2df1764b0850d46f8088ddd8fe6e8c422d6072f9560df08d43fdba81f82a79a`,
 398 entries and all 126 migrations.
 
-Signed-out version-302 desktop QA measured equal 1,407-pixel client and scroll
+Historical signed-out version-302 desktop QA measured equal 1,407-pixel client and scroll
 widths with all navigation visible. The decoded home image was 1,253 pixels wide
 and the `/plan` image was 1,313 pixels wide. The semantic flow, `Start here`,
 `Quick wins`, no-account enquiry and distinct account action were present. Live
@@ -250,8 +302,8 @@ Current product evidence is deliberately split by authority and permission:
 - the released official TESSA D17 to D20 automatic registry implementation
   parsed 746 live
   source rows, comprising 663 `Active` and 83 `Cancelled`, under source SHA-256
-  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0` and is
-  remains activated and current in version 302;
+  `3770ac57885bbd968e35e25c67b4546e9ff6d4325c63cf4c4592a9b5da0178b0` and
+  remains activated and current in version 303;
 - the current Synergy supported-solutions page parses 2,024 rows under a
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and

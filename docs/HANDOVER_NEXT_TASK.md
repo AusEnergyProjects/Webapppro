@@ -1,14 +1,14 @@
 # Next task handover
 
-Status: `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50` released and live
+Status: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51` released and live
 
 Prepared: 10 August 2026
 
-Milestone ID: `AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50`
+Milestone ID: `AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `bc4096d61cb493e819555d72113d0c77d45a1653`
+Previous production application source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
 
 Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
 
@@ -20,17 +20,19 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Current production source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
+Current production source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
 
-Released application source: `f797ab7ee447bc31d66b5760f6613e46f107e97d`
+Released application source: `59ea305f9a45d1e4c22b354af2e211d22fe11358`
 
-Current production: Sites version 302 from application commit `f797ab7ee447bc31d66b5760f6613e46f107e97d`
+Current production: Sites version 303 from application commit `59ea305f9a45d1e4c22b354af2e211d22fe11358`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_33c4dd63992481919b3d760cee8831fd`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
 
-Deployment: `appgdep_6a790aefc05c8191b4a03f72181f7031`
+Deployment: `appgdep_6a7955e575008191b9cd07b1beff2df9`
 
-Release archive: `.openai/site-release-f797ab7.tar.gz`, 11,484,967 compressed bytes, SHA-256 `291686F6352979EBE7C9E342BFB20BF67FBE0D3796BB68A6B3A530391333AFD2`, 402 tar entries and 126 migrations
+Release archive: `.openai/site-release-59ea305.tar.gz`, 11,501,890 bytes, SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11` and 405 tar entries; ignored release staging removed after the release record is committed
+
+Sites stored release: 391 files, 37,160,960 bytes and content SHA-256 `65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`; migration chain through `0126_public_trade_lead_contact_release.sql`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -40,9 +42,111 @@ Internal compliance URL: `https://compare.ausenergyassessments.com/creditex/comp
 
 Sites provider identity: `info294029--aea-energy-comparison`
 
-Environment revision: 19
+Environment revision: 20
 
-## Released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
+## Released milestone: AEA-PERSONALISED-PLAN-OPEN-TRADE-LEADS-51
+
+Status: exact executable application commit
+`59ea305f9a45d1e4c22b354af2e211d22fe11358` is pushed to the GitHub branch and
+Sites internal `main`, and released as Sites version 303 through deployment
+`appgdep_6a7955e575008191b9cd07b1beff2df9` with environment revision 20 at
+`https://compare.ausenergyassessments.com`.
+
+The saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_83ae907840f48191844403ab5575a1d9`
+with Sites content hash
+`sha256:65b5aa69eb0d4087d9cd3fb0b56fb0febdfb9972cd78b50c5f25cc9f5a680e32`.
+Sites stored 37,160,960 bytes across 391 files under provider identity
+`info294029--aea-energy-comparison`.
+
+Local archive `.openai/site-release-59ea305.tar.gz` is 11,501,890 bytes with
+SHA-256 `8fd77af8de6264dc3b8ea662851d3f4451c0315aa188b756a3e8380984c02a11`
+and 405 tar entries. It is ignored release staging and is removed after this
+release record is committed.
+
+### Released outcome
+
+Give households one clear property-specific plan and report, then make a
+consented no-account enquiry available to every matching platform-approved trade
+without adding a second approval system.
+
+### Released capability
+
+- Public customer surfaces share one responsive width contract and use a
+  reduced-motion-aware holographic energy field. The professional trade
+  workspace remains static.
+- Home context records property type, storeys, approximate internal floor area,
+  occupants and shared walls. The approval question now covers apartments,
+  units, townhouses, villas, duplexes, strata, body corporate, owners corporation
+  and shared common property. External-wall insulation remains a separate fact.
+- The customer email attaches a personalised report with cover, property
+  context, priorities, quick wins and useful AEA and government resources. Its
+  exact identities are `2026-08-10-personalised-report-v4`,
+  `2026-08-10-personalised-report-design-v3` and
+  `2026-08-10-personalised-plan-pdf-v7`.
+- A consented no-account enquiry creates one idempotent public opportunity and
+  private contact-release record. Platform approval is authoritative. Every
+  active platform-approved installer with a declared matching service and state
+  and any active matching service area is included. There is no six-trade cap
+  and no separate capability-qualification subsystem.
+- Contact disclosure, notification and manual assignment recheck the same active
+  platform approval, service, state, area and current-consent boundary.
+- The lead relay and probe use signed, fresh envelopes and one stable submission
+  identity across retries. Repeated delivery is deduplicated before downstream
+  effects.
+- Forward migration `0126_public_trade_lead_contact_release.sql` adds the contact
+  release and unique non-empty opportunity source-reference contracts. The
+  migration chain ends at `0126` and contains no per-service approval migration.
+
+### Validation and operational QA
+
+- Full `npm.cmd run validate` passed on the exact application source. Independent
+  release review returned SHIP with no P0 or P1 issue.
+- Production preflight found 210 opportunities, 210 non-empty source references
+  and 0 duplicates before migration `0126`. The refreshed signed-in owner
+  Database console then reported 239 application tables and confirmed
+  `public_trade_lead_contact_releases` is present.
+- Google Apps Script version 11 deployment
+  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+  was deployed on 10 August 2026 at 14:34. Prior version 10 deployment
+  `AKfycbwstZJE6asc39Mtbw1uEN_IE0osNOqcHvRV-Ope-AKfOgooEXMVHr5Hff2gHPXSv308`
+  is archived.
+- The signed `runOperationalHealthCheck` completed at 14:44:49 with status
+  `healthy`: site HTTP 200, electricity HTTP 200, gas HTTP 200 and
+  `lead_delivery` HTTP 200 for probe
+  `910bf1b2-1b7d-4ad5-951f-7f71ffdc79ed`. Installed `sendFollowUps` and
+  `runOperationalHealthCheck` triggers reported 0% error.
+- Live custom-domain desktop QA confirmed consistent-width header, introduction,
+  home journey, progress and question surfaces with no visible clipping, and the
+  holographic home rendered. The flow exposed the shared-property question, all
+  five Home basics fields and separate party-wall context. A sample townhouse
+  produced 8 ordered steps, Quick wins, printable plan, the prominent no-account
+  `Ask about an upgrade` form and an optional free-account path.
+- The Sites control plane recheck kept deployment
+  `appgdep_6a7955e575008191b9cd07b1beff2df9` succeeded at environment revision 20.
+  The custom domain remained active with an active provider and SSL.
+- Independent live reviewer returned SHIP with no P0 or P1 issue. At an effective
+  1,309 by 818 desktop viewport, header, hero, planner and results aligned at x82
+  with 1,132-pixel width; scroll width and client width were both 1,295 pixels.
+  At an effective 355 by 767 mobile viewport, the same surfaces aligned at x14
+  with 313-pixel width; scroll width and client width were both 341 pixels. The
+  holographic home stayed visible and safely clipped, selects were 284 pixels,
+  and 189-pixel enquiry fields and action stacked without overflow. Production
+  confirmed separate open-wall-vent and open-unused-chimney choices, no
+  heat-pump-space option, no-account enquiry first, optional account creation and
+  personalised Quick wins. No real customer lead was submitted.
+
+### Exact remaining source and delivery limits
+
+- GEMS remains fail-closed pending authorised read-only R2 access and an exact
+  comparison of the held 7,500-to-7,499 row change.
+- The release proves signed relay acceptance, not end-user inbox presentation or
+  a real customer lead submission.
+- Independent review noted one non-blocking P2: administrator allocation after
+  consent withdrawal can retain an inaccessible internal match. Current contact
+  data stays hidden and no notification is sent.
+
+## Previous released milestone: AEA-IMMERSIVE-PLAN-ACTION-HANDOFF-50
 
 Status: exact executable application commit
 `f797ab7ee447bc31d66b5760f6613e46f107e97d` is pushed to the GitHub branch and
