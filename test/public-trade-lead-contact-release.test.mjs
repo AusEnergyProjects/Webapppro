@@ -453,10 +453,11 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);
   assert.match(tradeRoute, /WHERE m\.firebase_uid = \?/);
-  assert.match(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
-  assert.match(tradeRoute, /publicPlanContactReleaseConsentSql\("public_contact"\)/);
+  assert.match(tradeRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.doesNotMatch(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
   assert.doesNotMatch(tradeRoute, /publicPlanContactReleaseAccessSql\("(?:public_contact|active_public_contact)"\)/);
-  assert.match(tradeRoute, /publicTradeContactForMatchedLead\(row\)/);
+  assert.match(tradeRoute, /JOIN public_trade_lead_contact_releases public_contact[\s\S]*public_contact\.opportunity_id = o\.id/);
+  assert.match(tradeRoute, /publicTradeContactForMatchedLead\(item\)/);
   assert.match(tradeLeadAccess, /export function publicTradeContactForMatchedLead\(/);
   assert.match(tradeLeadAccess, /publicPlanContactReleaseDisclosedFieldsAreValid\(/);
   assert.match(tradeLeadAccess, /const firstName = disclosed\.has\("customer_name"\)/);
@@ -472,8 +473,8 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(tradeLeadAccess, /!addressLine1/);
   assert.match(tradeLeadAccess, /!suburb/);
   assert.match(tradeLeadAccess, /!addressState/);
-  assert.match(tradeRoute, /row\.public_contact_release_id && !publicContact/);
-  assert.match(tradeRoute, /current\.public_contact_release_id && !publicTradeContactForMatchedLead\(current\)/);
+  assert.match(tradeRoute, /publicReleaseMatches\.has\(matchId\) && !publicLeadContext/);
+  assert.match(tradeRoute, /currentPublicContact && !publicTradeContactForMatchedLead\(currentPublicContact\)/);
   assert.match(tradeEnquiriesRoute, /currentPublicMarketplaceAccessSql/);
   assert.match(tradeEnquiriesRoute, /publicPlanContactReleaseAccessSql\("current_public_release"\)/);
   assert.match(tradeEnquiriesRoute, /verifiedTradeAccountPredicate\("current_public_account"\)/);

@@ -21,7 +21,6 @@ import {
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
 import {
-  publicPlanContactReleaseConsentSql,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -42,6 +41,12 @@ import {
   customerProjectActivityStatements,
 } from "@/lib/customer-project-activity-notification-server";
 import { customerProjectQuoteId } from "@/lib/customer-project-activity-notifications";
+import {
+  arrivalProposalForMatchedLead,
+  customerProjectContactForMatchedLead,
+  customerProjectContextMatchesBase,
+  platformQuoteForMatchedLead,
+} from "@/lib/trade-opportunity-read-projection.mjs";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
@@ -221,117 +226,53 @@ export async function GET(request: Request) {
   }
   const requestedMatchId = matchParameters[0]?.trim() || "";
   await expireStaleOpportunities();
-  const rows = await db
-    .prepare(
-      `SELECT m.id match_id, m.status match_status, m.matched_categories,
-    m.distance_metres, m.allocation_rank, m.contact_attempt_count, m.last_contact_at, m.connected_at, m.matched_at, m.updated_at,
-    o.id, o.title, o.project_type, o.suburb opportunity_suburb,
-    o.postcode opportunity_postcode, o.state, o.service_categories, o.priority, o.timing, o.summary, o.status,
-    o.contact_limit, o.maximum_connected_installers, o.expires_at, o.source_reference,
-    q.id quote_id, q.product_list_id, q.inclusions quote_inclusions, q.product_snapshot,
-    q.product_subtotal_cents_ex_gst, q.labour_cents_ex_gst, q.other_cents_ex_gst, q.total_cents_ex_gst,
-    q.quote_type, q.start_window, q.duration_weeks, q.workmanship_warranty_years, q.status quote_status,
-    q.customer_decision, q.submitted_at quote_submitted_at,
-    q.submission_revision quote_submission_revision,
-    r.id contact_release_id, r.customer_name, r.customer_email, r.customer_phone,
-    r.address_line_1 contact_address_line_1, r.address_line_2 contact_address_line_2,
-    r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
-    r.notice_version contact_notice_version, r.granted_at contact_granted_at,
-    public_contact.id public_contact_release_id,
-    public_contact.status public_contact_status,
-    public_contact.source_reference public_contact_source_reference,
-    public_contact.withdrawn_at public_contact_withdrawn_at,
-    public_contact.disclosed_fields public_contact_disclosed_fields,
-    public_contact.customer_first_name public_customer_first_name,
-    public_contact.customer_last_name public_customer_last_name,
-    public_contact.customer_email public_customer_email,
-    public_contact.customer_phone public_customer_phone,
-    public_contact.customer_unit_number public_customer_unit_number,
-    public_contact.customer_street_address public_customer_street_address,
-    public_contact.customer_suburb public_customer_suburb,
-    public_contact.customer_address_state public_customer_address_state,
-    public_contact.postcode public_contact_postcode,
-    public_contact.customer_message public_customer_message,
-    public_contact.notice_version public_contact_notice_version,
-    public_contact.consent_purpose public_contact_consent_purpose,
-    public_contact.granted_at public_contact_granted_at,
-    public_quote_preparation.id public_quote_preparation_id,
-    public_quote_preparation.question_answers public_quote_answers,
-    public_quote_preparation.photo_prompt_ids public_quote_photo_prompt_ids,
-    public_quote_preparation.expected_photo_count public_quote_expected_photo_count,
-    p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
-    p.goal customer_goal, p.goals customer_goals, p.pace customer_pace,
-    p.postcode customer_postcode, p.address_state customer_address_state,
-    matching_locality_consent.purpose matching_consent_purpose,
-    matching_locality_consent.notice_version matching_notice_version,
-    matching_locality_consent.granted_at matching_granted_at,
-    matching_locality_consent.withdrawn_at matching_withdrawn_at,
-    p.property_type customer_property_type, p.household_situation customer_household_situation,
-    p.existing_features customer_existing_features,
-    p.service_categories customer_service_categories, p.budget_range customer_budget_range,
-    p.advisor_profile customer_advisor_profile, p.plan_snapshot customer_plan_snapshot,
-    p.completed_plan_items customer_completed_plan_items,
-    p.updated_at customer_project_updated_at,
-    ap.id arrival_proposal_id, ap.status arrival_status, ap.windows arrival_windows,
-    ap.installer_note arrival_installer_note, ap.selected_window arrival_selected_window,
-    ap.crm_work_order_id arrival_crm_work_order_id, ap.crm_appointment_id arrival_crm_appointment_id,
-    ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
-    ap.revision arrival_revision, ap.proposed_at arrival_proposed_at, ap.selected_at arrival_selected_at
-    FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
-    LEFT JOIN customer_projects p ON p.opportunity_id = o.id
-      AND o.source_reference = 'customer-project:' || p.id
-    LEFT JOIN customer_consent_receipts matching_locality_consent
-      ON matching_locality_consent.id = (
-        SELECT locality_consent.id
-        FROM customer_consent_receipts locality_consent
-        WHERE locality_consent.project_id = p.id
-          AND locality_consent.firebase_uid = p.firebase_uid
-          AND locality_consent.purpose = 'anonymized_installer_matching'
-          AND locality_consent.notice_version = '${CUSTOMER_MATCHING_NOTICE_VERSION}'
-          AND locality_consent.granted_at <> ''
-          AND locality_consent.withdrawn_at = ''
-        ORDER BY locality_consent.granted_at DESC, locality_consent.id DESC
-        LIMIT 1
-      )
-    LEFT JOIN customer_project_quotes q ON q.opportunity_match_id = m.id AND q.installer_uid = m.firebase_uid
-    LEFT JOIN customer_project_contact_releases r ON r.opportunity_match_id = m.id
-      AND r.installer_uid = m.firebase_uid AND r.status = 'active'
-    LEFT JOIN public_trade_lead_contact_releases public_contact
-      ON public_contact.opportunity_id = o.id
-        AND public_contact.source_reference = o.source_reference
-        AND public_contact.status = 'active'
-        AND ${publicPlanContactReleaseConsentSql("public_contact")}
-        AND datetime(public_contact.granted_at) IS NOT NULL
-        AND public_contact.withdrawn_at = ''
-        AND public_contact.postcode = o.postcode
-    LEFT JOIN public_trade_lead_quote_preparations public_quote_preparation
-      ON public_quote_preparation.opportunity_id = o.id
-        AND public_quote_preparation.source_reference = o.source_reference
-        AND public_quote_preparation.status = 'active'
-        AND public_quote_preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
-        AND public_quote_preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
-        AND datetime(public_quote_preparation.granted_at) IS NOT NULL
-        AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-        AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
-    LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
-    WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
-      AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND (
-        NOT EXISTS (
-          SELECT 1
-          FROM public_trade_lead_contact_releases any_public_contact
-          WHERE any_public_contact.opportunity_id = o.id
-        )
-        OR (
-          public_contact.id IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM trade_accounts current_public_trade_account
-            WHERE current_public_trade_account.firebase_uid = m.firebase_uid
-              AND current_public_trade_account.partner_type = 'installer'
-              AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
+  const boundedLeadMatchesSql = `WITH authoritative_matches AS (
+      SELECT bounded_match.id match_id,
+        bounded_match.opportunity_id opportunity_id,
+        bounded_match.firebase_uid installer_uid,
+        bounded_match.matched_categories matched_categories,
+        bounded_opportunity.source_reference source_reference
+      FROM trade_opportunity_matches bounded_match
+      JOIN trade_opportunities bounded_opportunity
+        ON bounded_opportunity.id = bounded_match.opportunity_id
+      LEFT JOIN customer_projects bounded_project
+        ON bounded_project.opportunity_id = bounded_opportunity.id
+        AND bounded_opportunity.source_reference = 'customer-project:' || bounded_project.id
+      WHERE bounded_match.firebase_uid = ?
+        AND (? = '' OR bounded_match.id = ?)
+        AND bounded_opportunity.status IN ('open', 'paused')
+        AND bounded_match.status IN ('offered', 'viewed', 'interested', 'connected')
+        AND (
+          bounded_project.id IS NULL OR EXISTS (
+            SELECT 1 FROM customer_consent_receipts bounded_matching_consent
+            WHERE bounded_matching_consent.project_id = bounded_project.id
+              AND bounded_matching_consent.firebase_uid = bounded_project.firebase_uid
+              AND bounded_matching_consent.purpose = 'anonymized_installer_matching'
+              AND bounded_matching_consent.withdrawn_at = ''
           )
         )
-      )
+      ORDER BY CASE bounded_match.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
+        WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
+        bounded_match.updated_at DESC, bounded_match.id ASC
+      LIMIT 100
+    )`;
+  const baseLeadStatement = db.prepare(`SELECT
+      m.id match_id, m.firebase_uid installer_uid, m.status match_status,
+      m.matched_categories, m.distance_metres, m.allocation_rank,
+      m.contact_attempt_count, m.last_contact_at, m.connected_at,
+      m.matched_at, m.updated_at,
+      o.id, o.title, o.project_type, o.suburb opportunity_suburb,
+      o.postcode opportunity_postcode, o.state, o.service_categories,
+      o.priority, o.timing, o.summary, o.status, o.contact_limit,
+      o.expires_at, o.source_reference,
+      p.id customer_project_id, p.firebase_uid customer_uid
+    FROM trade_opportunity_matches m
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    LEFT JOIN customer_projects p ON p.opportunity_id = o.id
+      AND o.source_reference = 'customer-project:' || p.id
+    WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
+      AND o.status IN ('open', 'paused')
+      AND m.status IN ('offered', 'viewed', 'interested', 'connected')
       AND (
         p.id IS NULL OR EXISTS (
           SELECT 1 FROM customer_consent_receipts matching_consent
@@ -341,61 +282,273 @@ export async function GET(request: Request) {
             AND matching_consent.withdrawn_at = ''
         )
       )
-    ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1 WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END, m.updated_at DESC
-    LIMIT 100`,
-    )
-    .bind(user.uid, requestedMatchId, requestedMatchId)
-    .all<Record<string, unknown>>();
-  const evidenceRows = await db.prepare(`SELECT e.id, e.project_id, e.category, e.content_type,
-      e.size_bytes, e.created_at, e.fact_keys, e.sharing_scope,
-      m.id opportunity_match_id
-    FROM customer_project_evidence e
-    JOIN customer_projects p ON p.id = e.project_id AND p.firebase_uid = e.customer_uid
+    ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
+      WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
+      m.updated_at DESC, m.id ASC
+    LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
+  const projectContextStatement = db.prepare(`SELECT
+      m.id project_match_id, p.id customer_project_id, p.firebase_uid customer_uid,
+      p.property_context, p.goal customer_goal, p.goals customer_goals,
+      p.pace customer_pace, p.postcode customer_postcode,
+      p.address_state customer_address_state, p.property_type customer_property_type,
+      p.household_situation customer_household_situation,
+      p.existing_features customer_existing_features,
+      p.service_categories customer_service_categories,
+      p.budget_range customer_budget_range, p.advisor_profile customer_advisor_profile,
+      p.plan_snapshot customer_plan_snapshot,
+      p.completed_plan_items customer_completed_plan_items,
+      p.updated_at customer_project_updated_at
+    FROM customer_projects p
     JOIN trade_opportunity_matches m ON m.opportunity_id = p.opportunity_id AND m.firebase_uid = ?
-    JOIN trade_opportunities o ON o.id = m.opportunity_id
-      AND o.source_reference = 'customer-project:' || p.id
-    WHERE e.status = 'active' AND e.sharing_scope = 'allocated-installers'
       AND (? = '' OR m.id = ?)
+    JOIN trade_opportunities o ON o.id = p.opportunity_id
+      AND o.source_reference = 'customer-project:' || p.id
+    WHERE o.status IN ('open', 'paused')
       AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND o.status IN ('open', 'paused')
+      AND EXISTS (
+        SELECT 1 FROM customer_consent_receipts matching_consent
+        WHERE matching_consent.project_id = p.id
+          AND matching_consent.firebase_uid = p.firebase_uid
+          AND matching_consent.purpose = 'anonymized_installer_matching'
+          AND matching_consent.withdrawn_at = ''
+      )
+    ORDER BY CASE m.status WHEN 'offered' THEN 0 WHEN 'viewed' THEN 1
+      WHEN 'interested' THEN 2 WHEN 'connected' THEN 3 ELSE 4 END,
+      m.updated_at DESC, m.id ASC
+    LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
+  const matchingLocalityStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT
+      authorized_match.match_id locality_match_id,
+      receipt.purpose matching_consent_purpose,
+      receipt.notice_version matching_notice_version,
+      receipt.granted_at matching_granted_at,
+      receipt.withdrawn_at matching_withdrawn_at
+    FROM authoritative_matches authorized_match
+    JOIN trade_opportunities o ON o.id = authorized_match.opportunity_id
+    JOIN customer_projects p ON p.opportunity_id = o.id
+      AND o.source_reference = 'customer-project:' || p.id
+    JOIN customer_consent_receipts receipt ON receipt.project_id = p.id
+      AND receipt.firebase_uid = p.firebase_uid
+    WHERE receipt.purpose = 'anonymized_installer_matching'
+      AND receipt.notice_version = '${CUSTOMER_MATCHING_NOTICE_VERSION}'
+      AND receipt.granted_at <> '' AND receipt.withdrawn_at = ''
+    ORDER BY receipt.granted_at DESC, receipt.id DESC`).bind(
+    user.uid,
+    requestedMatchId,
+    requestedMatchId,
+  );
+  const quoteStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT
+      authorized_match.match_id quote_match_id,
+      q.id quote_id, q.project_id quote_project_id,
+      q.opportunity_id quote_opportunity_id,
+      q.opportunity_match_id quote_opportunity_match_id,
+      q.installer_uid quote_installer_uid, q.product_list_id,
+      q.inclusions quote_inclusions, q.product_snapshot,
+      q.product_subtotal_cents_ex_gst, q.labour_cents_ex_gst,
+      q.other_cents_ex_gst, q.total_cents_ex_gst, q.quote_type,
+      q.start_window, q.duration_weeks, q.workmanship_warranty_years,
+      q.status quote_status, q.customer_decision,
+      q.submitted_at quote_submitted_at,
+      q.submission_revision quote_submission_revision
+    FROM authoritative_matches authorized_match
+    JOIN customer_project_quotes q
+      ON q.opportunity_match_id = authorized_match.match_id
+      AND q.installer_uid = authorized_match.installer_uid`).bind(
+    user.uid,
+    requestedMatchId,
+    requestedMatchId,
+  );
+  const customerContactStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT
+      authorized_match.match_id contact_match_id,
+      r.id contact_release_id,
+      r.project_id contact_project_id, r.opportunity_id contact_opportunity_id,
+      r.opportunity_match_id contact_opportunity_match_id,
+      r.quote_id contact_quote_id, r.customer_uid contact_customer_uid,
+      r.installer_uid contact_installer_uid, r.status contact_release_status,
+      r.notice_version contact_notice_version,
+      r.disclosed_fields contact_disclosed_fields,
+      r.customer_name, r.customer_email, r.customer_phone,
+      r.address_line_1 contact_address_line_1,
+      r.address_line_2 contact_address_line_2, r.suburb contact_suburb,
+      r.address_state contact_address_state, r.postcode contact_postcode,
+      r.granted_at contact_granted_at, r.withdrawn_at contact_withdrawn_at
+    FROM authoritative_matches authorized_match
+    JOIN customer_project_contact_releases r
+      ON r.opportunity_match_id = authorized_match.match_id
+      AND r.installer_uid = authorized_match.installer_uid`).bind(
+    user.uid,
+    requestedMatchId,
+    requestedMatchId,
+  );
+  const arrivalStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT
+      authorized_match.match_id arrival_match_id,
+      ap.id arrival_proposal_id,
+      ap.project_id arrival_project_id, ap.quote_id arrival_quote_id,
+      ap.opportunity_match_id arrival_opportunity_match_id,
+      ap.customer_uid arrival_customer_uid, ap.installer_uid arrival_installer_uid,
+      ap.status arrival_status, ap.windows arrival_windows,
+      ap.installer_note arrival_installer_note,
+      ap.selected_window arrival_selected_window,
+      ap.crm_work_order_id arrival_crm_work_order_id,
+      ap.crm_appointment_id arrival_crm_appointment_id,
+      ap.preparation_acknowledged_at arrival_preparation_acknowledged_at,
+      ap.revision arrival_revision, ap.proposed_at arrival_proposed_at,
+      ap.selected_at arrival_selected_at, ap.withdrawn_at arrival_withdrawn_at
+    FROM authoritative_matches authorized_match
+    JOIN customer_project_arrival_proposals ap
+      ON ap.opportunity_match_id = authorized_match.match_id
+      AND ap.installer_uid = authorized_match.installer_uid`).bind(
+    user.uid,
+    requestedMatchId,
+    requestedMatchId,
+  );
+  const publicLeadContextStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT
+      authorized_match.match_id opportunity_match_id, o.source_reference,
+      o.postcode opportunity_postcode, o.state,
+      public_contact.id public_contact_release_id,
+      public_contact.status public_contact_status,
+      public_contact.source_reference public_contact_source_reference,
+      public_contact.withdrawn_at public_contact_withdrawn_at,
+      public_contact.disclosed_fields public_contact_disclosed_fields,
+      public_contact.customer_first_name public_customer_first_name,
+      public_contact.customer_last_name public_customer_last_name,
+      public_contact.customer_email public_customer_email,
+      public_contact.customer_phone public_customer_phone,
+      public_contact.customer_unit_number public_customer_unit_number,
+      public_contact.customer_street_address public_customer_street_address,
+      public_contact.customer_suburb public_customer_suburb,
+      public_contact.customer_address_state public_customer_address_state,
+      public_contact.postcode public_contact_postcode,
+      public_contact.customer_message public_customer_message,
+      public_contact.notice_version public_contact_notice_version,
+      public_contact.consent_purpose public_contact_consent_purpose,
+      public_contact.granted_at public_contact_granted_at,
+      public_quote_preparation.id public_quote_preparation_id,
+      public_quote_preparation.question_answers public_quote_answers
+    FROM authoritative_matches authorized_match
+    JOIN trade_opportunities o ON o.id = authorized_match.opportunity_id
+    JOIN public_trade_lead_contact_releases public_contact
+      ON public_contact.opportunity_id = o.id
+    LEFT JOIN public_trade_lead_quote_preparations public_quote_preparation
+      ON public_quote_preparation.opportunity_id = o.id
+        AND public_quote_preparation.source_reference = o.source_reference
+        AND public_quote_preparation.status = 'active'
+        AND public_quote_preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
+        AND public_quote_preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
+        AND datetime(public_quote_preparation.granted_at) IS NOT NULL
+        AND public_quote_preparation.withdrawn_at = ''
+        AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+        AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+    ORDER BY public_contact.granted_at DESC, public_contact.id DESC`).bind(
+    user.uid,
+    requestedMatchId,
+    requestedMatchId,
+  );
+  const evidenceStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT e.id, e.project_id, e.category, e.content_type,
+      e.size_bytes, e.created_at, e.fact_keys, e.sharing_scope,
+      authorized_match.match_id opportunity_match_id
+    FROM authoritative_matches authorized_match
+    JOIN customer_projects p
+      ON p.opportunity_id = authorized_match.opportunity_id
+      AND authorized_match.source_reference = 'customer-project:' || p.id
+    JOIN customer_project_evidence e ON e.project_id = p.id AND e.customer_uid = p.firebase_uid
+    WHERE e.status = 'active' AND e.sharing_scope = 'allocated-installers'
       AND EXISTS (
         SELECT 1 FROM customer_consent_receipts consent
         WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
           AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
       )
-    ORDER BY e.created_at DESC`)
-    .bind(user.uid, requestedMatchId, requestedMatchId)
-    .all<Record<string, unknown>>();
-  const publicPhotoRows = await db.prepare(`SELECT photo.id, photo.prompt_id,
+    ORDER BY e.created_at DESC`).bind(user.uid, requestedMatchId, requestedMatchId);
+  const publicPhotoStatement = db.prepare(`${boundedLeadMatchesSql}
+    SELECT photo.id, photo.prompt_id,
       photo.prompt_label, photo.service_categories, photo.content_type,
-      photo.size_bytes, photo.created_at, m.id opportunity_match_id,
-      m.matched_categories
-    FROM public_trade_lead_quote_photos photo
+      photo.size_bytes, photo.created_at,
+      authorized_match.match_id opportunity_match_id,
+      authorized_match.matched_categories
+    FROM authoritative_matches authorized_match
+    JOIN public_trade_lead_quote_photos photo
+      ON photo.opportunity_id = authorized_match.opportunity_id
     JOIN public_trade_lead_quote_preparations preparation
       ON preparation.opportunity_id = photo.opportunity_id
       AND preparation.status = 'active'
       AND preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
       AND preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
       AND datetime(preparation.granted_at) IS NOT NULL
-    JOIN trade_opportunity_matches m
-      ON m.opportunity_id = photo.opportunity_id AND m.firebase_uid = ?
-    JOIN trade_opportunities o
-      ON o.id = m.opportunity_id AND o.source_reference = preparation.source_reference
+      AND preparation.withdrawn_at = ''
     JOIN public_trade_lead_contact_releases contact
-      ON contact.opportunity_id = o.id
-      AND contact.source_reference = o.source_reference
+      ON contact.opportunity_id = authorized_match.opportunity_id
+      AND contact.source_reference = authorized_match.source_reference
+      AND preparation.source_reference = authorized_match.source_reference
       AND contact.status = 'active'
       AND contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
       AND contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
       AND datetime(contact.granted_at) IS NOT NULL
       AND contact.withdrawn_at = ''
     WHERE photo.status = 'active'
-      AND (? = '' OR m.id = ?)
-      AND m.status IN ('offered', 'viewed', 'interested', 'connected')
-      AND o.status IN ('open', 'paused')
-    ORDER BY photo.created_at DESC`)
-    .bind(user.uid, requestedMatchId, requestedMatchId)
-    .all<Record<string, unknown>>();
+    ORDER BY photo.created_at DESC`).bind(user.uid, requestedMatchId, requestedMatchId);
+  const [
+    rows,
+    projectRows,
+    localityRows,
+    quoteRows,
+    customerContactRows,
+    arrivalRows,
+    publicLeadContextRows,
+    evidenceRows,
+    publicPhotoRows,
+  ] = await db.batch<Record<string, unknown>>([
+    baseLeadStatement,
+    projectContextStatement,
+    matchingLocalityStatement,
+    quoteStatement,
+    customerContactStatement,
+    arrivalStatement,
+    publicLeadContextStatement,
+    evidenceStatement,
+    publicPhotoStatement,
+  ]);
+  const projectByMatch = new Map<string, Record<string, unknown>>();
+  for (const item of projectRows.results) {
+    const matchId = String(item.project_match_id || "");
+    if (matchId && !projectByMatch.has(matchId)) projectByMatch.set(matchId, item);
+  }
+  const localityByMatch = new Map<string, Record<string, unknown>>();
+  for (const item of localityRows.results) {
+    const matchId = String(item.locality_match_id || "");
+    if (matchId && !localityByMatch.has(matchId)) localityByMatch.set(matchId, item);
+  }
+  const quoteByMatch = new Map<string, Record<string, unknown>>();
+  for (const item of quoteRows.results) {
+    const matchId = String(item.quote_match_id || "");
+    if (matchId && !quoteByMatch.has(matchId)) quoteByMatch.set(matchId, item);
+  }
+  const customerContactByMatch = new Map<string, Record<string, unknown>>();
+  for (const item of customerContactRows.results) {
+    const matchId = String(item.contact_match_id || "");
+    if (matchId && !customerContactByMatch.has(matchId)) customerContactByMatch.set(matchId, item);
+  }
+  const arrivalByMatch = new Map<string, Record<string, unknown>>();
+  for (const item of arrivalRows.results) {
+    const matchId = String(item.arrival_match_id || "");
+    if (matchId && !arrivalByMatch.has(matchId)) arrivalByMatch.set(matchId, item);
+  }
+  const publicReleaseMatches = new Set<string>();
+  const publicLeadContextByMatch = new Map<string, Record<string, unknown>>();
+  const publicContactByMatch = new Map<string, NonNullable<ReturnType<typeof publicTradeContactForMatchedLead>>>();
+  for (const item of publicLeadContextRows.results) {
+    const matchId = String(item.opportunity_match_id || "");
+    if (!matchId || publicReleaseMatches.has(matchId)) continue;
+    publicReleaseMatches.add(matchId);
+    const contact = publicTradeContactForMatchedLead(item);
+    if (!contact) continue;
+    publicLeadContextByMatch.set(matchId, item);
+    publicContactByMatch.set(matchId, contact);
+  }
   const evidenceByMatch = new Map<string, Array<Record<string, unknown>>>();
   for (const item of evidenceRows.results) {
     const matchId = String(item.opportunity_match_id || "");
@@ -418,12 +571,45 @@ export async function GET(request: Request) {
   }
   return json({
     ok: true,
-    opportunities: rows.results.flatMap((row: Record<string, unknown>) => {
-      const sharedEvidence = evidenceByMatch.get(String(row.match_id || "")) || [];
-      const publicPhotos = publicPhotosByMatch.get(String(row.match_id || "")) || [];
+    opportunities: rows.results.flatMap((baseRow: Record<string, unknown>) => {
+      const matchId = String(baseRow.match_id || "");
+      const publicLeadContext = publicLeadContextByMatch.get(matchId);
+      if (publicReleaseMatches.has(matchId) && !publicLeadContext) return [];
+      const publicContact = publicContactByMatch.get(matchId) || null;
+      const platformOnly = String(baseRow.source_reference || "")
+        .startsWith("customer-project:");
+      const projectContext = projectByMatch.get(matchId) || null;
+      if (platformOnly && !customerProjectContextMatchesBase(baseRow, projectContext)) return [];
+      const quoteContext = platformQuoteForMatchedLead(
+        baseRow,
+        projectContext,
+        quoteByMatch.get(matchId),
+      );
+      const customerContact = customerProjectContactForMatchedLead(
+        baseRow,
+        projectContext,
+        quoteContext,
+        customerContactByMatch.get(matchId),
+      );
+      const arrivalContext = arrivalProposalForMatchedLead(
+        baseRow,
+        projectContext,
+        quoteContext,
+        arrivalByMatch.get(matchId),
+      );
+      const row = {
+        ...baseRow,
+        ...(projectContext || {}),
+        ...(localityByMatch.get(matchId) || {}),
+        ...(quoteContext || {}),
+        ...(customerContact ? customerContactByMatch.get(matchId) : {}),
+        ...(arrivalContext || {}),
+      };
+      const sharedEvidence = evidenceByMatch.get(matchId) || [];
+      const publicPhotos = publicPhotosByMatch.get(matchId) || [];
       const matchedCategories = strictPublicPlanQuoteServiceCategories(row.matched_categories);
       const quoteAnswers = publicPlanQuoteAnswersForMatchedCategories(
-        row.public_quote_answers,
+        publicLeadContext?.public_quote_answers,
         matchedCategories,
       );
       const matchingLocality = matchingLocalityDisclosure({
@@ -457,10 +643,6 @@ export async function GET(request: Request) {
         promptLabel: String(item.prompt_label || ""),
         downloadHref: `/api/public-plan-quote-preparation?download=${encodeURIComponent(String(item.id || ""))}`,
       })));
-      const platformOnly = String(row.source_reference || "")
-        .startsWith("customer-project:");
-      const publicContact = publicTradeContactForMatchedLead(row);
-      if (row.public_contact_release_id && !publicContact) return [];
       return [{
         matchId: row.match_id,
         matchStatus: row.match_status,
@@ -490,7 +672,7 @@ export async function GET(request: Request) {
         enquiryPack: platformOnly
           ? installerEnquiryPack(row, sharedEvidence)
           : null,
-        quotePreparation: row.public_quote_preparation_id
+        quotePreparation: publicLeadContext?.public_quote_preparation_id
           && (quoteAnswers.length || publicPhotos.length) ? {
           answers: quoteAnswers,
           expectedPhotoCount: publicPhotos.length,
@@ -499,20 +681,7 @@ export async function GET(request: Request) {
         approvedSharedFileCount: evidence.length,
         opportunityStatus: row.status,
         platformOnly,
-        customerContact: row.contact_release_id ? {
-          name: row.customer_name,
-          email: row.customer_email,
-          phone: row.customer_phone,
-          addressLine1: row.contact_address_line_1,
-          addressLine2: row.contact_address_line_2,
-          suburb: row.contact_suburb,
-          addressState: row.contact_address_state,
-          postcode: row.contact_postcode,
-          grantedAt: row.contact_granted_at,
-          noticeVersion: row.contact_notice_version,
-          message: "",
-          releaseScope: "shortlisted_installer",
-        } : publicContact,
+        customerContact: row.contact_release_id ? customerContact : publicContact,
         evidence,
         arrivalProposal: row.arrival_proposal_id ? {
           id: row.arrival_proposal_id,
@@ -873,7 +1042,14 @@ export async function PATCH(request: Request) {
       { ok: false, error: "Choose a valid opportunity response." },
       400,
     );
-  const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title, o.state,
+  const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title, o.source_reference
+    FROM trade_opportunity_matches m
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    WHERE m.id = ? AND m.firebase_uid = ?
+      AND o.status = 'open' AND o.expires_at > ?`)
+    .bind(matchId, user.uid, now).first<Record<string, unknown>>();
+  if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+  const currentPublicContact = await db.prepare(`SELECT
       public_contact.id public_contact_release_id,
       public_contact.status public_contact_status,
       public_contact.source_reference public_contact_source_reference,
@@ -892,38 +1068,39 @@ export async function PATCH(request: Request) {
       public_contact.notice_version public_contact_notice_version,
       public_contact.consent_purpose public_contact_consent_purpose,
       public_contact.granted_at public_contact_granted_at,
-      o.source_reference, o.postcode opportunity_postcode
+      public_contact.updated_at public_contact_updated_at,
+      o.source_reference, o.postcode opportunity_postcode, o.state
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
-    LEFT JOIN public_trade_lead_contact_releases public_contact
+    JOIN public_trade_lead_contact_releases public_contact
       ON public_contact.opportunity_id = o.id
-        AND public_contact.source_reference = o.source_reference
-        AND public_contact.status = 'active'
-        AND ${publicPlanContactReleaseConsentSql("public_contact")}
-        AND datetime(public_contact.granted_at) IS NOT NULL
-        AND public_contact.withdrawn_at = ''
-        AND public_contact.postcode = o.postcode
-    WHERE m.id = ? AND m.firebase_uid = ? AND o.status = 'open' AND o.expires_at > ?
-      AND (
-        NOT EXISTS (
-          SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
-          WHERE any_public_contact.opportunity_id = o.id
-        )
-        OR (
-          public_contact.id IS NOT NULL
+    WHERE m.id = ? AND m.firebase_uid = ?
+    ORDER BY public_contact.granted_at DESC, public_contact.id DESC
+    LIMIT 1`)
+    .bind(matchId, user.uid).first<Record<string, unknown>>();
+  if (currentPublicContact && !publicTradeContactForMatchedLead(currentPublicContact)) {
+    return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+  }
+  const projectSourceReference = String(current.source_reference || "");
+  const isCustomerProject = projectSourceReference.startsWith("customer-project:");
+  const currentProjectConsent = isCustomerProject
+    ? await db.prepare(`SELECT p.id customer_project_id, p.firebase_uid customer_uid
+        FROM customer_projects p
+        WHERE p.opportunity_id = ? AND ? = 'customer-project:' || p.id
           AND EXISTS (
-            SELECT 1 FROM trade_accounts current_public_trade_account
-            WHERE current_public_trade_account.firebase_uid = m.firebase_uid
-              AND current_public_trade_account.partner_type = 'installer'
-              AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
+            SELECT 1 FROM customer_consent_receipts current_matching_consent
+            WHERE current_matching_consent.project_id = p.id
+              AND current_matching_consent.firebase_uid = p.firebase_uid
+              AND current_matching_consent.purpose = 'anonymized_installer_matching'
+              AND current_matching_consent.withdrawn_at = ''
           )
-        )
-      )`)
-    .bind(matchId, user.uid, now).first<Record<string, unknown>>();
-  if (
-    !current
-    || (current.public_contact_release_id && !publicTradeContactForMatchedLead(current))
-  ) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+        LIMIT 1`)
+      .bind(current.opportunity_id, projectSourceReference)
+      .first<Record<string, unknown>>()
+    : null;
+  if (isCustomerProject && (!currentProjectConsent || currentPublicContact)) {
+    return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+  }
   const transitions: Record<string, Set<string>> = {
     offered: new Set(["viewed", "interested", "declined"]),
     viewed: new Set(["interested", "declined"]),
@@ -932,41 +1109,109 @@ export async function PATCH(request: Request) {
   const currentStatus = String(current.status || "");
   if (currentStatus === status) return json({ ok: true });
   if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
-  const result = await db
-    .prepare(
-      `UPDATE trade_opportunity_matches SET status = ?, partner_note = '', updated_at = ?
-    WHERE id = ? AND firebase_uid = ? AND status = ?
-      AND opportunity_id IN (
-        SELECT available_opportunity.id
-        FROM trade_opportunities available_opportunity
-        WHERE available_opportunity.status = 'open' AND available_opportunity.expires_at > ?
-          AND (
-            NOT EXISTS (
+  const result = currentPublicContact
+    ? await db.prepare(`UPDATE trade_opportunity_matches
+        SET status = ?, partner_note = '', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
+          AND EXISTS (
+            SELECT 1 FROM trade_opportunities available_opportunity
+            JOIN public_trade_lead_contact_releases active_public_contact
+              ON active_public_contact.opportunity_id = available_opportunity.id
+            WHERE available_opportunity.id = ?
+              AND available_opportunity.status = 'open'
+              AND available_opportunity.expires_at > ?
+              AND available_opportunity.source_reference = ?
+              AND available_opportunity.postcode = ?
+              AND available_opportunity.state = ?
+              AND active_public_contact.id = ?
+              AND active_public_contact.source_reference = available_opportunity.source_reference
+              AND active_public_contact.status = 'active'
+              AND active_public_contact.withdrawn_at = ''
+              AND active_public_contact.postcode = available_opportunity.postcode
+              AND active_public_contact.disclosed_fields = ?
+              AND active_public_contact.updated_at = ?
+          )`)
+      .bind(
+        status,
+        now,
+        matchId,
+        user.uid,
+        currentStatus,
+        current.opportunity_id,
+        current.opportunity_id,
+        now,
+        currentPublicContact.source_reference,
+        currentPublicContact.opportunity_postcode,
+        currentPublicContact.state,
+        currentPublicContact.public_contact_release_id,
+        currentPublicContact.public_contact_disclosed_fields,
+        currentPublicContact.public_contact_updated_at,
+      )
+      .run()
+    : currentProjectConsent
+      ? await db.prepare(`UPDATE trade_opportunity_matches
+          SET status = ?, partner_note = '', updated_at = ?
+          WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
+            AND EXISTS (
+              SELECT 1 FROM trade_opportunities available_opportunity
+              JOIN customer_projects current_project
+                ON current_project.opportunity_id = available_opportunity.id
+              JOIN customer_consent_receipts current_matching_consent
+                ON current_matching_consent.project_id = current_project.id
+                AND current_matching_consent.firebase_uid = current_project.firebase_uid
+              WHERE available_opportunity.id = ?
+                AND available_opportunity.status = 'open'
+                AND available_opportunity.expires_at > ?
+                AND available_opportunity.source_reference = ?
+                AND current_project.id = ?
+                AND current_project.firebase_uid = ?
+                AND current_matching_consent.purpose = 'anonymized_installer_matching'
+                AND current_matching_consent.withdrawn_at = ''
+            )
+            AND NOT EXISTS (
               SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
-              WHERE any_public_contact.opportunity_id = available_opportunity.id
-            )
-            OR (
-              EXISTS (
-                SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
-                WHERE active_public_contact.opportunity_id = available_opportunity.id
-                  AND active_public_contact.status = 'active'
-                  AND ${publicPlanContactReleaseConsentSql("active_public_contact")}
-                  AND datetime(active_public_contact.granted_at) IS NOT NULL
-                  AND active_public_contact.withdrawn_at = ''
-                  AND active_public_contact.postcode = available_opportunity.postcode
-              )
-              AND EXISTS (
-                SELECT 1 FROM trade_accounts current_public_trade_account
-                WHERE current_public_trade_account.firebase_uid = trade_opportunity_matches.firebase_uid
-                  AND current_public_trade_account.partner_type = 'installer'
-                  AND ${verifiedTradeAccountPredicate("current_public_trade_account")}
-              )
-            )
+              WHERE any_public_contact.opportunity_id = ?
+            )`)
+        .bind(
+          status,
+          now,
+          matchId,
+          user.uid,
+          currentStatus,
+          current.opportunity_id,
+          current.opportunity_id,
+          now,
+          projectSourceReference,
+          currentProjectConsent.customer_project_id,
+          currentProjectConsent.customer_uid,
+          current.opportunity_id,
+        )
+        .run()
+      : await db.prepare(`UPDATE trade_opportunity_matches
+        SET status = ?, partner_note = '', updated_at = ?
+        WHERE id = ? AND firebase_uid = ? AND status = ? AND opportunity_id = ?
+          AND EXISTS (
+            SELECT 1 FROM trade_opportunities available_opportunity
+            WHERE available_opportunity.id = ?
+              AND available_opportunity.status = 'open'
+              AND available_opportunity.expires_at > ?
           )
-      )`,
-    )
-    .bind(status, now, matchId, user.uid, currentStatus, now)
-    .run();
+          AND NOT EXISTS (
+            SELECT 1 FROM public_trade_lead_contact_releases any_public_contact
+            WHERE any_public_contact.opportunity_id = ?
+          )`)
+      .bind(
+        status,
+        now,
+        matchId,
+        user.uid,
+        currentStatus,
+        current.opportunity_id,
+        current.opportunity_id,
+        now,
+        current.opportunity_id,
+      )
+      .run();
   if (!result.meta.changes)
     return json(
       { ok: false, error: "The opportunity could not be updated." },
