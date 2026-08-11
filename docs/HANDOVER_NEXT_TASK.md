@@ -1,14 +1,16 @@
 # Next task handover
 
-Status: `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` released and live
+Status: `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` released and live
 
 Prepared: 11 August 2026
 
-Milestone ID: `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53`
+Milestone ID: `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Previous production application source: `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`
+Previous production application source: `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a`
+
+Historical Sites version 308 source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
 
 Historical v305 corrective source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
 
@@ -22,21 +24,21 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Milestone application source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
+Milestone application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Current production source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
+Current production source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Released application source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
+Released application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Current production: Sites version 308 from application commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
+Current production: Sites version 310 from application commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`
 
-Deployment: `appgdep_6a79e3700444819191ac709f0bd509c6`
+Deployment: `appgdep_6a7a78c959908191a2fbd39fc247dfc2`
 
-Sites stored release: 392 files, 38,696,960 bytes and content SHA-256 `881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`
+Sites stored release: 392 files, 38,727,680 bytes and content SHA-256 `c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`
 
-Local release package: 392 entries, 11,903,586 bytes and SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`
+Migration inventory: all 128 migrations
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -48,11 +50,81 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53
+## Released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
 
 Status: exact executable application commit
+`481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` is pushed to the GitHub working
+branch and Sites internal `main`, and released as current Sites version 310.
+
+The current saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`.
+Deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` succeeded with environment
+revision 20 at `https://compare.ausenergyassessments.com`. Sites stored 392 files
+and 38,727,680 bytes with content hash
+`sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`.
+The release contains all 128 migrations.
+
+### Released outcome
+
+The VEU product picker is current again, scheduled refresh no longer depends on
+an unprovisioned fifth trigger, and water-heater quote estimates now apply the
+official per-activity rounding point and Schedule 4 premises-history limits.
+
+### Released capability
+
+- The VEU daily refresh is gated at 07:25 Australia/Sydney inside the provisioned
+  minute scheduler. The separate fifth trigger is removed and the 48-hour
+  accepted-snapshot freshness boundary still fails closed.
+- Current snapshot `ce79c9dc-63e8-4c27-9f4e-ee7961b423ba` contains 75,492 rows,
+  was refreshed at `2026-08-11T00:09:32.316Z` and binds source SHA-256
+  `1fb51867a4de9b2ee306f1cc943c1444b6351b3b2c19ef3041f48c59cc3278b6`.
+- Victorian Energy Efficiency Target Act 2007 section 18(1A) rounds each
+  separately eligible prescribed activity independently and rounds an exact half
+  up. Two separately eligible activities worth 7.5 VEECs each therefore produce
+  16 VEECs, not 15.
+- Victorian Energy Efficiency Target Regulations 2018 Authorised Version 020
+  Schedule 4 limits prior plus current relevant water-heater products to two at
+  residential premises from 10 June 2019 and five at non-residential premises
+  from 31 May 2023. A required fail-closed prior-count field and server validation
+  enforce the limit for identical and mixed models.
+- Water Heating and Space Heating and Cooling Activity Guide version 3.20 keeps
+  in-line additional-storage and manifold-connected systems ineligible.
+- Certificate actions remain disabled. This release did not create, submit,
+  trade or settle a certificate.
+
+### Validation and operational QA
+
+- Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+  1,897 tests with 1,887 passed, 10 intentional skips and 0 failures,
+  `db:check`, the customer-plan PDF audit, production build and Sites bundle
+  audit.
+- The focused combined regression set passed 80 of 80, the estimate-route set
+  passed 21 of 21 and the independent release review passed 104 of 104.
+  `git diff --check` passed.
+- `/api/health` returned HTTP 200. Activity 3C official-product search returned
+  HTTP 200 with `ok: true`, 421 matches and first result AGM Energy `AGMHP270W`.
+  Signed-in visual QA confirmed enabled brand and model pickers with no stale
+  error. Recent Worker error logs were empty.
+- The production SRES water-heater endpoint returned `ok: true` and current
+  registry `cer_sres_swh` with 16,758 records. Snapshot
+  `950e1b99-3914-47d2-9ff8-39964ebdcb5d` was activated at
+  `2026-08-10T23:51:08.395Z` with combined source SHA-256
+  `cbe27670e022c9da0dfc9e4af243330e0f1e2170732e9d046dc559793d2e28de`.
+  That count matches the expected version 58 total; the live projection did not
+  expose a version or publication date.
+
+### Exact remaining source and delivery limits
+
+- GEMS remains fail-closed pending exact reconciliation of the retained
+  7,500-row source against the reviewed 7,499-row candidate.
+- Scheduled execution is implemented and source-tested; the next natural
+  scheduled VEU activation should be retained as operational evidence.
+
+## Previous released milestone: AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53
+
+Status: historical exact executable application commit
 `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` is pushed to the GitHub working
-branch and Sites internal `main`, and released as current Sites version 308.
+branch and Sites internal `main`, and released as historical Sites version 308.
 
 The current saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`.
@@ -861,11 +933,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Run a usability and accessibility pilot for the expanded planner and guided electricity and gas comparators, then fix measured friction.
-2. Verify saved-account and legacy snapshot parity across planner restore, account handoff, report and print flows.
-3. Add consent-safe journey analytics for planner and comparator abandonment and completion without collecting private plan or meter data.
-4. Reconcile the exact GEMS 7,500-to-7,499 source change against authorised retained bytes.
-5. Implement the next governed mixed-product calculator contracts only where current official formulas and approved product data support them.
+1. Add proactive registry-freshness alerts and one admin recovery view for VEU, SRES, NSW and GEMS before quote surfaces fail closed.
+2. Run and retain controlled live quote QA across VEU residential/non-residential Schedule 4 boundaries, including mixed models and exact rounding receipts, without creating certificates.
+3. Verify the production CER solar-water-heater/ASHP v58 manifest after the next forced or scheduled refresh, retaining release metadata and source hashes.
+4. Reconcile the retained GEMS 7,500-to-7,499 row change against exact prior/current source bytes before treating it as a source removal.
+5. Implement the next governed mixed-product contracts only where complete current source, eligibility and formula evidence exists.
 
 ## Previous released milestone
 

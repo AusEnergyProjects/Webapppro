@@ -49,7 +49,7 @@ executable templates, and keeps 160 blocked or non-executable. Certificate
 actions enabled remain 0. The sealed coverage hash is
 `sha256:35e5ff0ff2bacff2504305a30be71c8b38ebe285f33d729bb842c364df124347`.
 That sealed count describes implemented formula coverage, not current registry
-availability. In version 308, every GEMS-backed pathway fails closed while the
+availability. In current version 310, every GEMS-backed pathway fails closed while the
 reviewed official-row decrease leaves the registry
 `OFFICIAL_PRODUCT_REGISTRY_STALE`.
 
@@ -72,52 +72,51 @@ VEU accepts dates from 30 June 2026 onward subject to the selected product's
 effective window. SRES accepts dates through 2030. NSW and local programs use
 their official effective windows.
 
-Current milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` is released from
-exact executable commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`, pushed to
-the GitHub working branch and Sites internal `main`, as Sites version 308 through
-deployment `appgdep_6a79e3700444819191ac709f0bd509c6` with environment
-revision 20 under provider identity `info294029--aea-energy-comparison` at
-`https://compare.ausenergyassessments.com` and
-`https://aea-energy-comparison.info294029.chatgpt.site`.
+Current milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` is released from
+exact executable commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`, pushed to
+the GitHub working branch and Sites internal `main`, as Sites version 310 through
+deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` with environment
+revision 20 at `https://compare.ausenergyassessments.com`.
 
-The public enquiry separates first and last name, then uses postcode to offer an
-exact suburb and state before street address and optional unit number. Customers
-can select any of 11 services or select all. Every active platform-approved
-TLink trade with a matching declared service and service area is eligible for
-the handoff; there is no six-trade cap.
+The VEU product picker failed closed because its separate fifth scheduled
+trigger was not executed. The VEU refresh now runs from the provisioned minute
+scheduler behind one 07:25 Australia/Sydney daily gate. The 48-hour stale-source
+boundary is retained.
 
-Australian Energy Assessments retains the complete address for its private CRM
-record. Email and postcode support trade replies; the household separately
-controls whether trades receive name, phone and street address. The public
-enquiry has no customer-account prompt. A successful response opens a native
-gateway to electricity comparison, gas comparison, the rebate calculator and
-the printable plan.
+Current VEU snapshot `ce79c9dc-63e8-4c27-9f4e-ee7961b423ba` contains 75,492
+rows, was refreshed at `2026-08-11T00:09:32.316Z` and binds source SHA-256
+`1fb51867a4de9b2ee306f1cc943c1444b6351b3b2c19ef3041f48c59cc3278b6`.
+Victorian Energy Efficiency Target Act 2007 section 18(1A) requires each
+separately eligible prescribed activity to be rounded independently and rounds
+an exact half up. Two separately eligible 7.5-VEEC activities therefore return
+16 VEECs, not 15.
 
-Additive migration `0127_public_trade_lead_customer_address.sql` adds split
-identity and structured address fields while retaining the legacy combined name.
-The release package contains all 128 migrations through `0127`. Plan-result
-next-step actions use readable light-mint surfaces with dark text and a
-full-width mobile layout.
+Victorian Energy Efficiency Target Regulations 2018 Authorised Version 020
+Schedule 4 limits prior plus current relevant water-heater products to two at
+residential premises from 10 June 2019 and five at non-residential premises from
+31 May 2023. The calculator requires a fail-closed prior-count answer and applies
+the cap across identical and mixed models. Water Heating and Space Heating and
+Cooling Activity Guide version 3.20 keeps in-line additional-storage and
+manifold-connected systems ineligible.
 
 Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
-1,882 tests with 1,872 passed, 10 intentional skips and 0 failures, `db:check`,
-the customer-plan PDF audit, production build and Sites bundle audit.
-`/api/health` returned HTTP 200. Postcode `3000` resolved Melbourne, VIC; `0872`
-exposed valid NT, SA and WA locality tuples; invalid `9999` returned the expected
-HTTP 400. Worker outcomes were clean apart from that deliberate 400 validation
-probe.
+1,897 tests with 1,887 passed, 10 intentional skips and 0 failures, `db:check`,
+the customer-plan PDF audit, production build and Sites bundle audit. The focused
+combined set passed 80 of 80, the estimate-route set passed 21 of 21 and the
+independent release review passed 104 of 104. `git diff --check` passed.
 
-Live DOM QA confirmed first and last name, postcode to suburb/state to
-street/unit progression, all 11 services, privacy toggles and no account prompt.
-Fresh production assets are `HomeEnergyPlanner-BCCDCklm.js` and
-`HomeEnergyPlanner-DMhDf6y_.css`. Browser QA opened the native gateway with a
-temporary client-side successful-response mock, so no real lead was sent, and
-verified its four exact destinations and 390-pixel layout.
+Live `/api/health` returned HTTP 200. Activity 3C official-product search
+returned HTTP 200 with `ok: true`, 421 matches and first result AGM Energy
+`AGMHP270W`. Signed-in visual QA confirmed enabled brand and model pickers with
+no stale error. Recent Worker error logs were empty. No certificate was created,
+submitted, traded or settled.
 
-The exact committed Apps Script relay source was saved in the existing project
-and an update of the existing deployment to version 14 was initiated. Hosted v14
-identity and signed lead delivery remain unverified because hosted secrets are
-redacted and no local test token exists. This is unverified, not failed.
+Historical milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` is Sites
+version 308 from exact executable commit
+`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` through deployment
+`appgdep_6a79e3700444819191ac709f0bd509c6`. Its structured customer enquiry,
+address, service-selection and next-step gateway capabilities remain deployed
+under current version 310.
 
 Historical milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52` is Sites
 version 307 from exact executable commit
@@ -232,14 +231,21 @@ licensed credentials and an accepted activated snapshot. BESS3 and BESS4 remain
 blocked because the available licensed CEC contract does not supply the exact
 Rule-required maximum rated AC inverter output.
 
-The current Sites version 308 saved-version identity is
+The current Sites version 310 saved-version identity is
+`appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`
+with content hash
+`sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`
+across 392 stored files and 38,727,680 stored bytes. Deployment
+`appgdep_6a7a78c959908191a2fbd39fc247dfc2` identifies exact commit
+`481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` and environment revision 20.
+
+Historical Sites version 308 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075`
 with content hash
 `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`
-across 392 stored files and 38,696,960 stored bytes. The local release package
-contained 392 entries, was 11,903,586 bytes and had SHA-256
-`f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`.
-Provider identity is `info294029--aea-energy-comparison`.
+across 392 stored files and 38,696,960 stored bytes. Deployment
+`appgdep_6a79e3700444819191ac709f0bd509c6` identifies exact commit
+`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`; v308 is superseded by v310.
 
 Historical Sites version 307 saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8`
@@ -385,7 +391,7 @@ with content hash
 and deployment `appgdep_6a786857458c8191ae557d2c2f0f2694`.
 
 The active production snapshot contains exactly 75,492 Public Visible rows:
-64,715 `Approved` and 10,777 `Legacy`. The released catalogue contains 32 VEU
+64,712 `Approved` and 10,780 `Legacy`. The released catalogue contains 32 VEU
 definitions, with 30 aggregate codes formula-ready. Twenty-seven expose an
 executable estimate path: 21 fully available aggregate families plus six
 enforced partial subsets. The fully available codes are `3`, `13`, `15`, `17`,
@@ -395,8 +401,13 @@ enforced partial subsets. The fully available codes are `3`, `13`, `15`, `17`,
 
 Current product evidence is deliberately split by authority and permission:
 
-- 16,684 CER registered solar-water-heater and air-source-heat-pump rows are in
-  the dedicated SRES registry;
+- 16,758 CER registered solar-water-heater and air-source-heat-pump rows are in
+  the dedicated SRES registry. Current snapshot
+  `950e1b99-3914-47d2-9ff8-39964ebdcb5d` was activated at
+  `2026-08-10T23:51:08.395Z` with combined source SHA-256
+  `cbe27670e022c9da0dfc9e4af243330e0f1e2170732e9d046dc559793d2e28de`.
+  The total matches the expected version 58 register, but the live projection
+  did not expose a version or publication date;
 - the last accepted GEMS projection contained 31,418 rows from 11 official
   data.gov.au resources. The current refresh detected the reviewed
   `gems-commercial-refrigerators` decrease from 7,500 to 7,499 rows. The accepted
@@ -422,7 +433,7 @@ Current product evidence is deliberately split by authority and permission:
   controlled-manual contract, while Horizon Power has no supported unattended
   feed; and
 - the active VEU Public Registry projection contains exactly 75,492 Public
-  Visible rows: 64,715 `Approved` and 10,777 `Legacy`. Its embedded interface is
+  Visible rows: 64,712 `Approved` and 10,780 `Legacy`. Its embedded interface is
   treated as a monitored official source, not represented as a supported public
   API.
 
@@ -435,16 +446,13 @@ activation completed with all 75,492 rows. Failed, stale, drifted, incomplete,
 overlapping or custody-invalid refreshes fail closed. Product-controlled formula
 values are derived server-side and cannot be replaced by caller-entered values.
 
-The optimized production VEU refresh POST succeeded with HTTP 200 under request
-and Ray identifier `a2821aca0bc9b95b`, using 70.404 seconds wall time and 3.748
-seconds CPU time. The current projection still contains 75,492 rows and the UI
-reports snapshot prefix `78853aad-a77...`; the full snapshot identifier is not
-claimed. The earlier pre-optimization HTTP 503 was the expected fail-closed
-result at the resource boundary. Subsequent product GET requests returned HTTP
-200. Exact version-297 source `11f4721b678425a4294e95c631e0d37d3fab0ffd`
-is pushed to GitHub and the Sites managed source branch. Its deployment retained
-the sealed 56-of-216 calculation coverage result and active 75,492-row registry
-projection.
+Current production snapshot `ce79c9dc-63e8-4c27-9f4e-ee7961b423ba` activated
+all 75,492 rows from source SHA-256
+`1fb51867a4de9b2ee306f1cc943c1444b6351b3b2c19ef3041f48c59cc3278b6`.
+Activity 3C product GET returned HTTP 200 with `ok: true`, 421 matches and first
+result AGM Energy `AGMHP270W`. The VEU refresh runs from the provisioned minute
+scheduler behind a 07:25 Australia/Sydney daily gate, while the 48-hour
+accepted-snapshot freshness boundary remains fail-closed.
 
 Signed-in trade QA used future date 17 August 2026. A 6.6 kW SRES solar-PV quote
 for postcode 3000 returned 39 STCs. A VEU Activity 6 scenario (xi) quote for ERS
@@ -719,9 +727,9 @@ Authoritative instruments:
 
 Current public guidance and mandatory consumer documents:
 
-- [Water Heating and Space Heating and Cooling Activity Guide, Version 3.17](https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.17%20-%2020250901.pdf),
-  effective 1 September 2025. It predates Version 25 and cannot independently
-  establish the 30 September 2026 branch;
+- [Water Heating and Space Heating and Cooling Activity Guide, Version 3.20](https://www.esc.vic.gov.au/sites/default/files/documents/C%2021%2028378%20%20FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.20%20-%2020260415.pdf),
+  current reviewed guidance for this release. It keeps in-line additional-storage
+  and manifold-connected systems outside the eligible water-heater path;
 - [Obligations and Program Guide for Accredited Persons, Version 3.8](https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Obligations%20and%20Program%20Guide%20for%20Accredited%20Persons%20-%20V%203.8%20-%2020260324.pdf),
   published 24 March 2026;
 - [VEET Code of Conduct Guideline, Version 1.3](https://www.esc.vic.gov.au/sites/default/files/documents/PBL%20-%20VEU%20code%20of%20conduct%20-%20Code%20of%20Conduct%20Guideline%201.3%2020240801.pdf),
@@ -746,8 +754,12 @@ These live sources require effective-dated snapshots or exports with source
 timestamps and fail-closed rechecks. A saved landing-page URL is not an
 authoritative participant, accreditation, suspension or product record.
 
-The public product source observed on 9 August 2026 contained exactly 75,492
-rows: 64,715 `Approved` and 10,777 `Legacy`. Product eligibility is determined
+The public product source activated on 11 August 2026 contained exactly 75,492
+rows: 64,712 `Approved` and 10,780 `Legacy`. Snapshot
+`ce79c9dc-63e8-4c27-9f4e-ee7961b423ba` was refreshed at
+`2026-08-11T00:09:32.316Z` from source SHA-256
+`1fb51867a4de9b2ee306f1cc943c1444b6351b3b2c19ef3041f48c59cc3278b6`.
+Product eligibility is determined
 for the installation date, not from a current-status label alone. Only a
 category-matched `Approved` row inside its inclusive declared effective window
 or a `Legacy` row inside its exact closed inclusive start and end dates can
@@ -762,8 +774,8 @@ live 64 MB acquisition, exact-byte R2 replay, validation and D1 activation
 completed with all 75,492 rows. The guarded refresh uses schema, count,
 source-status, effective-date, custody, freshness and reviewed count-decrease
 checks before any replacement snapshot can activate. The optimized production
-refresh POST completed as recorded above. This register does not claim that the
-next automatic scheduled production run has completed.
+refresh completed as recorded above. The next natural scheduled production
+activation has not yet been retained as separate operational evidence.
 
 Unavailable provider-portal artefacts:
 

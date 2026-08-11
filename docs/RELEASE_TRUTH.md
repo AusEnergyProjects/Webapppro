@@ -161,10 +161,13 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 306 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df` | Exact Sites version 306 built from `c75ff7bb4355f2f74bc9996527900c3d515ab85e`; 391 files; 37,744,640 bytes; content hash `sha256:61319a3fa5e852f5f8c9edbe8fe94a1508e612147a5252907d477e9da5084fd8`; deployment `appgdep_6a79aa88b3088191af653a395a2501a1` succeeded with environment revision 20 |
 | Historical complete guided journey application source | `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` on `codex/sites-custom-domain-migration` | Exact executable source for historical Sites version 307 and milestone `AEA-COMPLETE-GUIDED-HOME-ENERGY-JOURNEY-52`; superseded by version 308 |
 | Historical Sites version 307 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_cd22401f7e1c819197951851476ec4d8` | Exact Sites version 307 built from `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`; 391 files; 37,744,640 bytes; content hash `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`; deployment `appgdep_6a79b1799b988191a1ac6ac58888e134` |
-| Current structured customer enquiry gateway application source | `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub working branch and Sites internal `main` for milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` |
-| Current Sites version 308 release package | Local package supplied to Sites | 392 entries; 11,903,586 bytes; SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`; all 128 migrations through additive `0127_public_trade_lead_customer_address.sql` |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075` | Exact Sites version 308 built from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`; 392 files; 38,696,960 bytes; content hash `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57` |
-| Current executable application identity | Sites version 308 from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` at `https://compare.ausenergyassessments.com` and `https://aea-energy-comparison.info294029.chatgpt.site` | Deployment `appgdep_6a79e3700444819191ac709f0bd509c6` succeeded; environment revision 20; provider identity `info294029--aea-energy-comparison` |
+| Historical structured customer enquiry gateway application source | `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` on `codex/sites-custom-domain-migration` | Exact executable source for historical Sites version 308 and milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` |
+| Historical Sites version 308 release package | Local package supplied to Sites | 392 entries; 11,903,586 bytes; SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`; all 128 migrations through additive `0127_public_trade_lead_customer_address.sql` |
+| Historical Sites version 308 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075` | Exact Sites version 308 built from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`; 392 files; 38,696,960 bytes; content hash `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`; deployment `appgdep_6a79e3700444819191ac709f0bd509c6` |
+| Historical governed-source and lead-delivery application source | `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a` on `codex/sites-custom-domain-migration` | Exact predecessor application source for historical Sites version 309; superseded by the VEU registry and water-heater correction |
+| Current VEU registry, rounding and water-heater limits application source | `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub working branch and Sites internal `main` for milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` |
+| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8` | Exact Sites version 310 built from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`; 392 files; 38,727,680 bytes; content hash `sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`; all 128 migrations |
+| Current executable application identity | Sites version 310 from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` succeeded; environment revision 20 |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Exact committed relay source saved and the existing deployment update to version 14 was initiated; hosted v14 identity and signed lead-delivery probe remain unverified; no real lead was submitted |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -189,17 +192,77 @@ and corrective Sites version 305 from
 `79f7e2e5be14464410ba40a749453c7473b22d4d` are historical. Sites version 306
 from `c75ff7bb4355f2f74bc9996527900c3d515ab85e` completed the guided customer
 journey. Mobile-header corrective Sites version 307 from
-`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd` is historical and superseded by
-current Sites version 308 from structured customer enquiry gateway source
-`ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`. Public health, structured-locality
-and customer-plan PDF acceptance are verified below. Hosted Apps Script v14
-signed lead delivery remains unverified. GEMS-backed calculators remain
-fail-closed after an unresolved reviewed official-row decrease.
+`6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`, structured-enquiry Sites version
+308 from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` and predecessor Sites version
+309 from `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a` are historical. Current Sites
+version 310 is exact VEU registry, rounding and water-heater limits source
+`481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`. Public health, VEU Activity 3C
+product search, the signed-in product picker and current SRES water-heater
+registry are verified below. GEMS-backed calculators remain fail-closed after an
+unresolved reviewed official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current structured customer enquiry gateway release
+## Current VEU registry, rounding and water-heater limits release
 
-Milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` is released from exact
+Milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` is released from exact
+executable application commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`,
+pushed to the GitHub working branch and Sites internal `main`.
+
+Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`
+and deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` identify Sites
+version 310 from that exact source. Deployment succeeded with environment
+revision 20 at `https://compare.ausenergyassessments.com`. Sites stored 392 files
+and 38,727,680 bytes with content hash
+`sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`.
+The release contains all 128 migrations.
+
+The production stale error was caused by a separate fifth VEU scheduled trigger
+that was not being executed. The VEU refresh now runs from the provisioned minute
+scheduler behind a 07:25 Australia/Sydney daily gate. The 48-hour
+accepted-snapshot freshness check is retained and still fails closed.
+
+Current VEU snapshot `ce79c9dc-63e8-4c27-9f4e-ee7961b423ba` contains 75,492
+rows, was refreshed at `2026-08-11T00:09:32.316Z` and binds source SHA-256
+`1fb51867a4de9b2ee306f1cc943c1444b6351b3b2c19ef3041f48c59cc3278b6`.
+Victorian Energy Efficiency Target Act 2007 section 18(1A) requires each
+separately eligible prescribed activity to be rounded independently and rounds
+an exact half up. Two separately eligible 7.5-VEEC activities therefore return
+16 VEECs, not 15; raw activity values are not combined before rounding.
+
+Victorian Energy Efficiency Target Regulations 2018 Authorised Version 020
+Schedule 4 limits prior plus current relevant water-heater products to two at a
+residential premises from 10 June 2019 and five at a non-residential premises
+from 31 May 2023. The calculator now requires a fail-closed prior-count answer
+and enforces each premises limit across identical and mixed-model groups. Water
+Heating and Space Heating and Cooling Activity Guide version 3.20 keeps in-line
+additional-storage and manifold-connected systems outside the eligible estimate
+path.
+
+Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+1,897 tests with 1,887 passed, 10 intentional skips and 0 failures, `db:check`,
+the customer-plan PDF audit, production build and Sites bundle audit. The focused
+combined set passed 80 of 80, the estimate-route set passed 21 of 21 and the
+independent release review passed 104 of 104. `git diff --check` passed.
+
+Live `/api/health` returned HTTP 200. Activity 3C official-product search
+returned HTTP 200 with `ok: true`, 421 matches and first result AGM Energy
+`AGMHP270W`. Signed-in visual QA confirmed enabled brand and model pickers with
+no stale error. The Worker errors-only query returned zero events.
+
+The production SRES water-heater endpoint returned `ok: true` and current
+registry `cer_sres_swh` with 16,758 records. Snapshot
+`950e1b99-3914-47d2-9ff8-39964ebdcb5d` was activated at
+`2026-08-10T23:51:08.395Z` with combined source SHA-256
+`cbe27670e022c9da0dfc9e4af243330e0f1e2170732e9d046dc559793d2e28de`.
+That count matches the expected version 58 total, but the live projection did
+not expose a version or publication date.
+
+No certificate was created, submitted, traded or settled during this release.
+
+## Prior structured customer enquiry gateway release
+
+Milestone `AEA-STRUCTURED-CUSTOMER-ENQUIRY-GATEWAY-53` was released from exact
 executable application commit `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`,
 pushed to the GitHub working branch and Sites internal `main`.
 
@@ -270,7 +333,7 @@ environment revision 20 under provider identity
 `https://aea-energy-comparison.info294029.chatgpt.site`. Sites stored 391 files
 and 37,744,640 bytes with content hash
 `sha256:77467b54e8262afe476a5f57460b15da11d5b5b6b286e9d54bbdfeda74c69806`.
-Version 307 is superseded by current version 308.
+Version 307 was superseded by historical version 308.
 
 Historical Sites version 306 saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_60682607e5148191aa5351d3716bd9df`
@@ -2005,7 +2068,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 308 is:
+The current verified deployed topology for Sites version 310 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
