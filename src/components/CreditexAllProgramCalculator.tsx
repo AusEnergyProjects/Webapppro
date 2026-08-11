@@ -1,11 +1,18 @@
 "use client";
 
 import {
+  useCallback,
+  useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type FormEvent,
 } from "react";
+import {
+  CERTIFICATE_CODES,
+  type CertificateCode,
+} from "@/lib/certificate-prices";
 import { todayIso } from "@/lib/date-picker";
 import {
   CREDITEX_LOCAL_PROGRAM_DEFINITIONS,
@@ -42,6 +49,190 @@ type Api = (
   init?: RequestInit,
   options?: { requestTimeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
+
+type CreditexLatestEstimateAction =
+  | { type: "accept"; estimate: TradeRebateEstimateSummary }
+  | { type: "invalidate" };
+
+export function creditexLatestEstimateReducer(
+  _current: TradeRebateEstimateSummary | null,
+  action: CreditexLatestEstimateAction,
+) {
+  return action.type === "accept" ? action.estimate : null;
+}
+
+type CreditexCertificateGrossValue = {
+  code: CertificateCode;
+  certificateCount: number;
+  unitPriceCents: number;
+  grossValueCents: number;
+  tradedOn: string;
+  datasetAsOf: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceCheckedAt: string;
+};
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function certificateCode(value: string): value is CertificateCode {
+  return (CERTIFICATE_CODES as readonly string[]).includes(value);
+}
+
+function validDate(value: string) {
+  return value.length > 0 && Number.isFinite(Date.parse(value));
+}
+
+export function creditexCertificateGrossValue(
+  datasetValue: unknown,
+  codeValue: string,
+  certificateCountValue: string | null | undefined,
+): CreditexCertificateGrossValue | null {
+  if (!certificateCode(codeValue)) return null;
+  if (!certificateCountValue || !/^\d+$/.test(certificateCountValue)) {
+    return null;
+  }
+  const certificateCount = Number(certificateCountValue);
+  if (!Number.isSafeInteger(certificateCount) || certificateCount < 0) {
+    return null;
+  }
+
+  const dataset = objectValue(datasetValue);
+  const source = objectValue(dataset?.source);
+  if (!dataset || !source || source.status !== "current") return null;
+  const certificate = Array.isArray(dataset.certificates)
+    ? dataset.certificates
+      .map(objectValue)
+      .find((item) => item?.code === codeValue)
+    : null;
+  const latest = objectValue(certificate?.latest);
+  const unitPriceCents = Number(latest?.priceCents);
+  if (
+    !latest
+    || !Number.isSafeInteger(unitPriceCents)
+    || unitPriceCents <= 0
+  ) {
+    return null;
+  }
+
+  const grossValueCents = certificateCount * unitPriceCents;
+  const tradedOn = String(latest.tradedOn || "");
+  const datasetAsOf = String(dataset.asOf || "");
+  const sourceName = String(source.name || "");
+  const sourceUrl = String(source.url || "");
+  const sourceCheckedAt = String(source.lastCheckedAt || "");
+  if (
+    !Number.isSafeInteger(grossValueCents)
+    || !validDate(tradedOn)
+    || !validDate(datasetAsOf)
+    || !sourceName
+    || !/^https:\/\//.test(sourceUrl)
+    || !validDate(sourceCheckedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    code: codeValue,
+    certificateCount,
+    unitPriceCents,
+    grossValueCents,
+    tradedOn,
+    datasetAsOf,
+    sourceName,
+    sourceUrl,
+    sourceCheckedAt,
+  };
+}
+
+function certificateMoney(cents: number) {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+function certificateDate(value: string, includeTime = false) {
+  const date = new Date(includeTime ? value : `${value}T00:00:00Z`);
+  return date.toLocaleString("en-AU", includeTime
+    ? { dateStyle: "medium", timeStyle: "short" }
+    : { dateStyle: "medium", timeZone: "UTC" });
+}
+
+function useCreditexCertificatePriceDataset(api: Api) {
+  const [dataset, setDataset] = useState<unknown>(null);
+  useEffect(() => {
+    let active = true;
+    api("/api/certificate-prices")
+      .then((result) => {
+        if (active) setDataset(result);
+      })
+      .catch(() => {
+        if (active) setDataset(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
+  return dataset;
+}
+
+function CreditexCertificateGrossValueResult({
+  dataset,
+  estimate,
+}: {
+  dataset: unknown;
+  estimate: TradeRebateEstimateSummary | null;
+}) {
+  const value = creditexCertificateGrossValue(
+    dataset,
+    estimate?.unit || "",
+    estimate?.quantity,
+  );
+  if (!value) return null;
+
+  return (
+    <section
+      className={styles.estimateResult}
+      aria-live="polite"
+      aria-label="Estimated gross certificate value"
+    >
+      <header>
+        <div>
+          <span>Latest reported certificate value</span>
+          <strong>
+            {value.certificateCount.toLocaleString("en-AU")} {value.code}
+            {" "}x {certificateMoney(value.unitPriceCents)}
+            {" "}= {certificateMoney(value.grossValueCents)} gross*
+          </strong>
+        </div>
+        <b>Estimate only</b>
+      </header>
+      <div className={styles.estimateResolution}>
+        <span>
+          Latest reported trade {certificateDate(value.tradedOn)}.
+          Dataset as of {certificateDate(value.datasetAsOf, true)}.
+        </span>
+        <small>
+          Source checked {certificateDate(value.sourceCheckedAt, true)}: <a
+            href={value.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+          >{value.sourceName}</a>.
+        </small>
+        <small>
+          *Gross certificate value before registration, audit, compliance,
+          processing and other fees. The actual customer rebate will be lower.
+        </small>
+      </div>
+    </section>
+  );
+}
 
 type LocalEstimate = {
   programCode: string;
@@ -189,10 +380,12 @@ function CreditexLocalProgramCalculator({
   api,
   program,
   onEstimate,
+  onEstimateInvalidated,
 }: {
   api: Api;
   program: CreditexLocalProgramDefinition;
   onEstimate?: (estimate: LocalEstimate) => void;
+  onEstimateInvalidated?: () => void;
 }) {
   const firstActivity = program.activities[0];
   const [activityCode, setActivityCode] = useState(firstActivity.activityCode);
@@ -224,6 +417,7 @@ function CreditexLocalProgramCalculator({
     setEstimate(null);
     setError("");
     setBusy(false);
+    onEstimateInvalidated?.();
   }
 
   function updateActivity(nextCode: string) {
@@ -244,6 +438,7 @@ function CreditexLocalProgramCalculator({
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    onEstimateInvalidated?.();
     const requestVersion = requestRef.current + 1;
     requestRef.current = requestVersion;
     setBusy(true);
@@ -506,9 +701,14 @@ export function CreditexAllProgramCalculator({
   const [registryRefreshBusy, setRegistryRefreshBusy] = useState(false);
   const [registryRefreshNotice, setRegistryRefreshNotice] = useState("");
   const [registryRefreshError, setRegistryRefreshError] = useState("");
-  const [latestEstimate, setLatestEstimate] = useState<
-    TradeRebateEstimateSummary | null
-  >(null);
+  const [latestEstimate, dispatchLatestEstimate] = useReducer(
+    creditexLatestEstimateReducer,
+    null,
+  );
+  const invalidateLatestEstimate = useCallback(() => {
+    dispatchLatestEstimate({ type: "invalidate" });
+  }, []);
+  const certificatePriceDataset = useCreditexCertificatePriceDataset(api);
   const program = localProgram(programCode);
   const governedProgram = programCode === "VEU"
     || programCode === "NSW-PDRS-2026"
@@ -520,12 +720,15 @@ export function CreditexAllProgramCalculator({
   );
 
   function acceptSresEstimate(estimate: CreditexSresEstimateResult) {
-    setLatestEstimate({
-      programCode: "SRES",
-      activityCode: estimate.technology,
-      activityTitle: estimate.officialSourceTitle || "SRES upgrade",
-      quantity: estimate.output.quantity,
-      unit: estimate.output.unit,
+    dispatchLatestEstimate({
+      type: "accept",
+      estimate: {
+        programCode: "SRES",
+        activityCode: estimate.technology,
+        activityTitle: estimate.officialSourceTitle || "SRES upgrade",
+        quantity: estimate.output.quantity,
+        unit: estimate.output.unit,
+      },
     });
   }
 
@@ -535,27 +738,34 @@ export function CreditexAllProgramCalculator({
       ?? estimate.output.unroundedTonnes
       ?? "";
     if (!quantity) return;
-    setLatestEstimate({
-      programCode,
-      activityCode: estimate.activityCode,
-      activityTitle: estimate.activityTitle,
-      quantity,
-      unit: estimate.output.unit,
+    dispatchLatestEstimate({
+      type: "accept",
+      estimate: {
+        programCode,
+        activityCode: estimate.activityCode,
+        activityTitle: estimate.activityTitle,
+        quantity,
+        unit: estimate.output.unit,
+      },
     });
   }
 
   function acceptLocalEstimate(estimate: LocalEstimate) {
-    setLatestEstimate({
-      programCode: estimate.programCode,
-      activityCode: estimate.activityCode,
-      activityTitle: estimate.activityTitle,
-      quantity: estimate.output.quantity,
-      unit: estimate.output.unit,
+    dispatchLatestEstimate({
+      type: "accept",
+      estimate: {
+        programCode: estimate.programCode,
+        activityCode: estimate.activityCode,
+        activityTitle: estimate.activityTitle,
+        quantity: estimate.output.quantity,
+        unit: estimate.output.unit,
+      },
     });
   }
 
   async function refreshAutomaticProductRegistry() {
     if (!registryRefreshContract) return;
+    invalidateLatestEstimate();
     setRegistryRefreshBusy(true);
     setRegistryRefreshNotice("");
     setRegistryRefreshError("");
@@ -596,7 +806,7 @@ export function CreditexAllProgramCalculator({
             disabled={registryRefreshBusy}
             onChange={(event) => {
               setProgramCode(event.target.value);
-              setLatestEstimate(null);
+              invalidateLatestEstimate();
               setRegistryRefreshNotice("");
               setRegistryRefreshError("");
             }}
@@ -640,6 +850,7 @@ export function CreditexAllProgramCalculator({
           api={api}
           role={role}
           onEstimate={acceptSresEstimate}
+          onEstimateInvalidated={invalidateLatestEstimate}
         />
       ) : governedProgram ? (
         <CreditexGovernedProgramCalculator
@@ -647,6 +858,7 @@ export function CreditexAllProgramCalculator({
           api={api}
           programCode={governedProgram}
           onEstimate={acceptGovernedEstimate}
+          onEstimateInvalidated={invalidateLatestEstimate}
         />
       ) : program ? (
         <CreditexLocalProgramCalculator
@@ -654,8 +866,13 @@ export function CreditexAllProgramCalculator({
           api={api}
           program={program}
           onEstimate={acceptLocalEstimate}
+          onEstimateInvalidated={invalidateLatestEstimate}
         />
       ) : null}
+      <CreditexCertificateGrossValueResult
+        dataset={certificatePriceDataset}
+        estimate={latestEstimate}
+      />
       {role === "trade" && documentDraftOwnerUid && latestEstimate && (
         <TradeRebateEstimateAction
           key={`${latestEstimate.programCode}:${latestEstimate.activityCode}:${latestEstimate.quantity}:${latestEstimate.unit}`}

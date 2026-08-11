@@ -312,7 +312,7 @@ test("lead card opens the complete plan and represents every returned shared fil
   assert.match(styles, /\.dashboard-enquiry-thumbnails img/);
 });
 
-test("lead summaries show the protected suburb and postcode without customer contact details", () => {
+test("lead summaries explain both public-plan consent and protected customer-account projects", () => {
   assert.match(dashboard, /function opportunityBroadLocation/);
   assert.match(dashboard, /opportunity\.suburb, opportunity\.postcode/);
   assert.match(
@@ -321,7 +321,11 @@ test("lead summaries show the protected suburb and postcode without customer con
   );
   assert.match(
     dashboard,
-    /Household identity, street and unit address, and contact[\s\S]*details stay outside the trade workspace during matching/,
+    /Public-plan enquiries include the email, postcode, message and any optional name, phone or address the customer agreed to share with every eligible matched trade/,
+  );
+  assert.match(
+    dashboard,
+    /Customer-account project contact and street details stay protected until the customer chooses this business/,
   );
   assert.match(
     dashboard,

@@ -41,6 +41,174 @@ before(async () => {
   );
 });
 
+test("all certificate programs use only current latest reported trades", () => {
+  const dataset = {
+    asOf: "2026-08-11T08:30:00.000Z",
+    source: {
+      name: "Demand Manager reported trades",
+      url: "https://www.demandmanager.com.au/certificate-prices/",
+      lastCheckedAt: "2026-08-11T08:00:00.000Z",
+      status: "current",
+    },
+    certificates: [
+      { code: "STC", latest: { tradedOn: "2026-08-08", priceCents: 3950 } },
+      { code: "VEEC", latest: { tradedOn: "2026-08-11", priceCents: 8250 } },
+      { code: "ESC", latest: { tradedOn: "2026-08-10", priceCents: 3125 } },
+      { code: "PRC", latest: { tradedOn: "2026-08-09", priceCents: 215 } },
+    ],
+  };
+
+  assert.deepEqual(
+    allProgramModule.creditexCertificateGrossValue(dataset, "STC", "12"),
+    {
+      code: "STC",
+      certificateCount: 12,
+      unitPriceCents: 3950,
+      grossValueCents: 47400,
+      tradedOn: "2026-08-08",
+      datasetAsOf: dataset.asOf,
+      sourceName: dataset.source.name,
+      sourceUrl: dataset.source.url,
+      sourceCheckedAt: dataset.source.lastCheckedAt,
+    },
+  );
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(dataset, "VEEC", "15")
+      .grossValueCents,
+    123750,
+  );
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(dataset, "ESC", "20")
+      .grossValueCents,
+    62500,
+  );
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(dataset, "PRC", "8")
+      .grossValueCents,
+    1720,
+  );
+
+  assert.equal(allProgramModule.creditexCertificateGrossValue({
+    ...dataset,
+    source: { ...dataset.source, status: "stale" },
+  }, "VEEC", "15"), null);
+  assert.equal(allProgramModule.creditexCertificateGrossValue({
+    ...dataset,
+    certificates: dataset.certificates.filter(({ code }) => code !== "VEEC"),
+  }, "VEEC", "15"), null);
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(dataset, "AUD", "15"),
+    null,
+  );
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(dataset, "VEEC", "15.5"),
+    null,
+  );
+
+  const source = fs.readFileSync(
+    "src/components/CreditexAllProgramCalculator.tsx",
+    "utf8",
+  );
+  assert.match(source, /api\("\/api\/certificate-prices"\)/);
+  assert.match(source, /CERTIFICATE_CODES/);
+  assert.match(source, /Latest reported trade/);
+  assert.match(source, /Dataset as of/);
+  assert.match(source, /Gross certificate value before registration, audit, compliance,/);
+  assert.match(source, /actual customer rebate will be lower/);
+  assert.doesNotMatch(
+    fs.readFileSync(
+      "src/components/CreditexGovernedProgramCalculator.tsx",
+      "utf8",
+    ),
+    /\/api\/certificate-prices/,
+  );
+});
+
+test("input invalidation clears stale certificate value and trade action state", () => {
+  const dataset = {
+    asOf: "2026-08-11T08:30:00.000Z",
+    source: {
+      name: "Demand Manager reported trades",
+      url: "https://www.demandmanager.com.au/certificate-prices/",
+      lastCheckedAt: "2026-08-11T08:00:00.000Z",
+      status: "current",
+    },
+    certificates: [
+      { code: "STC", latest: { tradedOn: "2026-08-08", priceCents: 3950 } },
+    ],
+  };
+  const accepted = {
+    programCode: "SRES",
+    activityCode: "solar_pv",
+    activityTitle: "Rooftop solar",
+    quantity: "12",
+    unit: "STC",
+  };
+
+  let latest = allProgramModule.creditexLatestEstimateReducer(null, {
+    type: "accept",
+    estimate: accepted,
+  });
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(
+      dataset,
+      latest.unit,
+      latest.quantity,
+    ).grossValueCents,
+    47400,
+  );
+  assert.equal(Boolean("trade-owner" && latest), true);
+
+  latest = allProgramModule.creditexLatestEstimateReducer(latest, {
+    type: "invalidate",
+  });
+  assert.equal(latest, null);
+  assert.equal(
+    allProgramModule.creditexCertificateGrossValue(
+      dataset,
+      latest?.unit || "",
+      latest?.quantity,
+    ),
+    null,
+  );
+  assert.equal(Boolean("trade-owner" && latest), false);
+
+  const allProgramSource = fs.readFileSync(
+    "src/components/CreditexAllProgramCalculator.tsx",
+    "utf8",
+  );
+  const governedSource = fs.readFileSync(
+    "src/components/CreditexGovernedProgramCalculator.tsx",
+    "utf8",
+  );
+  const sresSource = fs.readFileSync(
+    "src/components/CreditexSresCalculator.tsx",
+    "utf8",
+  );
+  assert.equal(
+    allProgramSource.match(/onEstimateInvalidated=\{invalidateLatestEstimate\}/g)?.length,
+    3,
+  );
+  assert.match(
+    allProgramSource,
+    /function invalidate\(\)[\s\S]*?onEstimateInvalidated\?\.\(\)/,
+  );
+  assert.match(
+    governedSource,
+    /async function calculate[\s\S]*?invalidate\(\)[\s\S]*?requestVersion/,
+  );
+  assert.match(governedSource, /onEstimateInvalidated\?\.\(\)/);
+  assert.match(
+    sresSource,
+    /async function calculate[\s\S]*?invalidateEstimate\(\)[\s\S]*?requestVersion/,
+  );
+  assert.match(sresSource, /onEstimateInvalidated\?\.\(\)/);
+  assert.match(
+    allProgramSource,
+    /role === "trade" && documentDraftOwnerUid && latestEstimate/,
+  );
+});
+
 test("BESS2 asks for the onboarding date while every other NSW activity keeps the installation date", () => {
   const activities = nswCatalogueModule.CREDITEX_NSW_PROGRAM_DEFINITIONS
     .flatMap((program) => program.activities);
@@ -281,7 +449,6 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
       ">Model<",
       ">Postcode<",
       ">Premises type<",
-      ">Previous VEU water-heating products at this property<",
       ">Eligibility and evidence<",
       ">Calculate rebate estimate<",
     ];
@@ -298,7 +465,10 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
     assert.match(html, /Approved systems at this property/);
     assert.match(html, /Systems using this model/);
     assert.match(html, /Add another approved model/);
-    assert.match(html, /max="1"/);
+    assert.match(html, /aria-pressed="true">1 system/);
+    assert.match(html, />2 systems<\/button>/);
+    assert.match(html, /Estimate assumes no earlier VEU-funded water-heater upgrades/);
+    assert.doesNotMatch(html, /Previous VEU water-heating products at this property/);
     assert.doesNotMatch(html, /type="date"[^>]*max=/);
     assert.match(html, /<button type="submit" disabled="">Calculate rebate estimate<\/button>/);
     assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
@@ -373,7 +543,7 @@ test("VEU mixed water-heater drafts fail closed and apply the Schedule 4 residen
   const priorInput = activity.inputDefinitions.find(
     ({ key }) => key === "prior_relevant_period_water_heater_products",
   );
-  assert.equal(priorInput.defaultValue, "not_confirmed");
+  assert.equal(priorInput.defaultValue, "0");
   assert.equal(
     priorInput.options.find(({ value }) => value === "5").label,
     "5 or more",
@@ -388,14 +558,18 @@ test("VEU mixed water-heater drafts fail closed and apply the Schedule 4 residen
   assert.match(source, /delete visibleInputs\.unit_quantity/);
 });
 
-test("VEU water-heater quote explains per-activity rounding and excludes in-line systems", () => {
+test("VEU water-heater quote combines exact reductions once and hides scheme history", () => {
   const source = fs.readFileSync(
     "src/components/CreditexGovernedProgramCalculator.tsx",
     "utf8",
   );
-  assert.match(source, /Each system is treated as its own prescribed/);
-  assert.match(source, /rounded to whole VEECs before the property total/);
-  assert.match(source, /including a manifold system/);
+  assert.match(source, /reductions for every system in this upgrade are added/);
+  assert.match(source, /total is rounded once/);
+  assert.match(source, /definition\.key === "prior_relevant_period_water_heater_products"/);
+  assert.match(source, /VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION = "0"/);
+  assert.match(source, /Estimate assumes no earlier VEU-funded water-heater upgrades/);
+  assert.match(source, /connected in-line/);
+  assert.doesNotMatch(source, /Each system is treated as its own prescribed/);
   assert.doesNotMatch(source, /Unrounded estimate, regulator confirmation required/);
 });
 

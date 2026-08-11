@@ -160,6 +160,7 @@ export type CreditexVeuWaterHeaterItemDraft = {
 };
 
 const VEU_WATER_HEATER_ACTIVITY_CODES = ["1C", "1D", "3C", "3D"] as const;
+const VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION = "0";
 
 function initialVeuWaterHeaterItems(): CreditexVeuWaterHeaterItemDraft[] {
   return [{ id: "water-heater-item-1", unitQuantity: "1", product: null }];
@@ -268,6 +269,9 @@ function traceOutput(
 }
 
 function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
+  const waterHeaterEstimate = (
+    VEU_WATER_HEATER_ACTIVITY_CODES as readonly string[]
+  ).includes(estimate.activityCode);
   return (
     <section className={styles.estimateResult} aria-live="polite">
       <header>
@@ -281,11 +285,6 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
         <div className={styles.estimateResolution}>
           {estimate.propertyItems.map((item) => {
             const product = item.approvedProducts[0];
-            const perUnit = item.output.perUnit || item.output;
-            const perUnitQuantity = perUnit.wholeCertificates
-              ?? `${perUnit.unroundedTonnes} unrounded`;
-            const itemQuantity = item.output.wholeCertificates
-              ?? `${item.output.unroundedTonnes} unrounded`;
             return (
               <span key={item.itemNumber}>
                 <strong>
@@ -293,10 +292,13 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
                     .filter(Boolean)
                     .join(" ")}
                 </strong>
-                {perUnitQuantity} VEEC per system x {item.unitQuantity} = {itemQuantity} VEEC
+                {item.unitQuantity} {item.unitQuantity === "1"
+                  ? "system"
+                  : "systems"} included
               </span>
             );
           })}
+          <span>All systems are added before the upgrade total is rounded once.</span>
         </div>
       ) : estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
         <div className={styles.estimateResolution}>
@@ -309,11 +311,18 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
           ))}
           {estimate.output.unitQuantity && estimate.output.perUnit && (
             <span>
-              {estimate.output.perUnit.wholeCertificates
-                ?? estimate.output.perUnit.unroundedTonnes} VEEC per system x {estimate.output.unitQuantity} systems
+              {estimate.output.unitQuantity} systems included. Their combined
+              result is rounded once.
             </span>
           )}
         </div>
+      )}
+      {waterHeaterEstimate && (
+        <p>
+          Assumes no earlier VEU-funded water-heater upgrades at this property.
+          An accredited provider confirms property history and final eligibility
+          before certificate creation.
+        </p>
       )}
       <details>
         <summary>Calculation details</summary>
@@ -351,10 +360,12 @@ function CreditexNswCalculator({
   api,
   program,
   onEstimate,
+  onEstimateInvalidated,
 }: {
   api: Api;
   program: CreditexNswProgramDefinition;
   onEstimate?: (estimate: CreditexGovernedEstimate) => void;
+  onEstimateInvalidated?: () => void;
 }) {
   const firstActivity = program.activities[0];
   const [activityCode, setActivityCode] = useState<string>(firstActivity.activityCode);
@@ -403,6 +414,7 @@ function CreditexNswCalculator({
     setEstimate(null);
     setError("");
     setBusy(false);
+    onEstimateInvalidated?.();
   }
 
   function chooseActivity(nextCode: string) {
@@ -421,11 +433,11 @@ function CreditexNswCalculator({
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    invalidate();
     const requestVersion = requestRef.current + 1;
     requestRef.current = requestVersion;
     setBusy(true);
     setError("");
-    setEstimate(null);
     try {
       const result = await api("/api/creditex/program-estimates", {
         method: "POST",
@@ -652,6 +664,9 @@ export function creditexVeuQuoteInputVisible(
   inputs: Record<string, string>,
 ) {
   if (!veuVisibleInput(definition, inputs)) return false;
+  if (definition.key === "prior_relevant_period_water_heater_products") {
+    return false;
+  }
   if (
     inputs.configuration === "multi"
     && (
@@ -955,9 +970,11 @@ function resetVeuApprovedProductInputs(
 function CreditexVeuCalculator({
   api,
   onEstimate,
+  onEstimateInvalidated,
 }: {
   api: Api;
   onEstimate?: (estimate: CreditexGovernedEstimate) => void;
+  onEstimateInvalidated?: () => void;
 }) {
   const firstActivity = CREDITEX_VEU_ACTIVITY_DEFINITIONS[0];
   const [activityCode, setActivityCode] = useState<string>(firstActivity.activityCode);
@@ -1009,7 +1026,7 @@ function CreditexVeuCalculator({
   const waterHeaterUnitTotal = creditexVeuWaterHeaterQuoteUnitTotal(
     waterHeaterItems,
     inputs.premises,
-    inputs.prior_relevant_period_water_heater_products,
+    VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION,
   );
   const productEvidence = useMemo(
     () => creditexVeuProductEvidenceState(
@@ -1050,7 +1067,8 @@ function CreditexVeuCalculator({
     setEstimate(null);
     setError("");
     setBusy(false);
-  }, []);
+    onEstimateInvalidated?.();
+  }, [onEstimateInvalidated]);
 
   const clearProductEvidence = useCallback((issue = "") => {
     invalidate();
@@ -1129,18 +1147,22 @@ function CreditexVeuCalculator({
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    invalidate();
     const requestVersion = requestRef.current + 1;
     requestRef.current = requestVersion;
     setBusy(true);
     setError("");
-    setEstimate(null);
     try {
       const visibleInputs: Record<string, unknown> = Object.fromEntries(
         activity.inputDefinitions
           .filter((definition) => veuVisibleInput(definition, inputs))
           .map((definition) => [definition.key, inputs[definition.key]]),
       );
-      if (waterHeaterActivity) delete visibleInputs.unit_quantity;
+      if (waterHeaterActivity) {
+        delete visibleInputs.unit_quantity;
+        visibleInputs.prior_relevant_period_water_heater_products =
+          VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION;
+      }
       if (activity.activityCode === "6" && inputs.configuration === "multi") {
         delete visibleInputs.rated_heating_capacity_kw;
         delete visibleInputs.rated_cooling_capacity_kw;
@@ -1527,17 +1549,23 @@ function CreditexVeuCalculator({
           <fieldset className={styles.officialProductPicker}>
             <legend>Approved systems at this property</legend>
             <p>
-              Add each approved model once and enter how many separately eligible
-              replacements use it. Each system is treated as its own prescribed
-              activity and rounded to whole VEECs before the property total is
-              added. Do not enter systems connected in-line with another storage
-              tank or hot-water system, including a manifold system. Schedule 4
-              allows no more than 2 Part 1 or Part 3 products at a home, or 5 at
-              non-residential premises, including products installed earlier in
-              the applicable relevant period.
+              Choose each approved model and the number being installed. Exact
+              reductions for every system in this upgrade are added before the
+              total is rounded once. Do not include systems connected in-line
+              with another tank or hot-water system.
             </p>
-            {waterHeaterItems.map((item, index) => (
-              <fieldset key={item.id}>
+            {waterHeaterItems.map((item, index) => {
+              const selectedQuantity = /^\d+$/.test(item.unitQuantity)
+                ? Number(item.unitQuantity)
+                : 0;
+              const otherSystemTotal = waterHeaterUnitTotal.total
+                - selectedQuantity;
+              const maximumForThisModel = Math.max(
+                1,
+                waterHeaterUnitTotal.remaining - otherSystemTotal,
+              );
+              return (
+                <fieldset key={item.id}>
                 <legend>Approved product {index + 1}</legend>
                 <CreditexOfficialProductPicker
                   key={`${activity.activityCode}:${date}:${item.id}:${productPickerRevision}`}
@@ -1569,20 +1597,39 @@ function CreditexVeuCalculator({
                     }
                   }}
                 />
-                <label>
-                  Systems using this model
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]+"
-                    min="1"
-                    max={Math.max(1, waterHeaterUnitTotal.remaining)}
-                    required
-                    value={item.unitQuantity}
-                    onChange={(event) => updateWaterHeaterItem(item.id, {
-                      unitQuantity: event.target.value.replace(/\D/g, "").slice(0, 2),
-                    })}
-                  />
-                </label>
+                {inputs.premises === "residential" ? (
+                  <fieldset aria-label="Systems using this model">
+                    <legend>Systems using this model</legend>
+                    {[1, 2].map((quantity) => (
+                      <button
+                        key={quantity}
+                        type="button"
+                        aria-pressed={item.unitQuantity === String(quantity)}
+                        disabled={quantity > maximumForThisModel}
+                        onClick={() => updateWaterHeaterItem(item.id, {
+                          unitQuantity: String(quantity),
+                        })}
+                      >
+                        {quantity} {quantity === 1 ? "system" : "systems"}
+                      </button>
+                    ))}
+                  </fieldset>
+                ) : (
+                  <label>
+                    Systems using this model
+                    <input
+                      inputMode="numeric"
+                      pattern="[0-9]+"
+                      min="1"
+                      max={maximumForThisModel}
+                      required
+                      value={item.unitQuantity}
+                      onChange={(event) => updateWaterHeaterItem(item.id, {
+                        unitQuantity: event.target.value.replace(/\D/g, "").slice(0, 1),
+                      })}
+                    />
+                  </label>
+                )}
                 {waterHeaterItems.length > 1 && (
                   <button
                     type="button"
@@ -1591,8 +1638,9 @@ function CreditexVeuCalculator({
                     Remove this model
                   </button>
                 )}
-              </fieldset>
-            ))}
+                </fieldset>
+              );
+            })}
             <button
               type="button"
               disabled={
@@ -1605,14 +1653,15 @@ function CreditexVeuCalculator({
               Add another approved model
             </button>
             <p aria-live="polite">
-              {waterHeaterUnitTotal.prior === null
-                ? `Confirm how many earlier VEU water-heating products were installed at this property from ${waterHeaterUnitTotal.relevantPeriodStartsOn}.`
-                : waterHeaterUnitTotal.remaining === 0
-                  ? `The Schedule 4 limit is already reached: ${waterHeaterUnitTotal.prior} prior products of ${waterHeaterUnitTotal.limit} allowed at this property.`
-                  : waterHeaterUnitTotal.complete
-                    ? `Current job: ${waterHeaterUnitTotal.total} of ${waterHeaterUnitTotal.remaining} remaining products. Property total after this job: ${waterHeaterUnitTotal.prior + waterHeaterUnitTotal.total} of ${waterHeaterUnitTotal.limit}.`
-                    : `Choose an approved model and keep this job within the ${waterHeaterUnitTotal.remaining} products remaining under Schedule 4. Current job quantity: ${waterHeaterUnitTotal.total}.`}
+              {waterHeaterUnitTotal.complete
+                ? `${waterHeaterUnitTotal.total} of ${waterHeaterUnitTotal.limit} systems selected for this upgrade.`
+                : `Choose an approved model and between 1 and ${waterHeaterUnitTotal.limit} systems for this upgrade.`}
             </p>
+            <small>
+              Estimate assumes no earlier VEU-funded water-heater upgrades at
+              this property. An accredited provider confirms property history
+              and final eligibility before certificate creation.
+            </small>
           </fieldset>
         )}
         {activity.activityCode === "6" && inputs.configuration === "multi" && (
@@ -1797,13 +1846,21 @@ export function CreditexGovernedProgramCalculator({
   api,
   programCode,
   onEstimate,
+  onEstimateInvalidated,
 }: {
   api: Api;
   programCode: "VEU" | "NSW-PDRS-2026" | "NSW-ESS-2026";
   onEstimate?: (estimate: CreditexGovernedEstimate) => void;
+  onEstimateInvalidated?: () => void;
 }) {
   if (programCode === "VEU") {
-    return <CreditexVeuCalculator api={api} onEstimate={onEstimate} />;
+    return (
+      <CreditexVeuCalculator
+        api={api}
+        onEstimate={onEstimate}
+        onEstimateInvalidated={onEstimateInvalidated}
+      />
+    );
   }
   const program = nswProgram(programCode);
   return program ? (
@@ -1811,6 +1868,7 @@ export function CreditexGovernedProgramCalculator({
       api={api}
       program={program}
       onEstimate={onEstimate}
+      onEstimateInvalidated={onEstimateInvalidated}
     />
   ) : null;
 }

@@ -26,6 +26,7 @@ import {
   PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES,
   PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
   publicPlanQuotePhotoPromptsForServices,
+  publicPlanQuotePlanFactsForSnapshot,
   publicPlanQuoteQuestionsForSnapshot,
 } from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./PublicPlanEnquiryForm.module.css";
@@ -454,24 +455,13 @@ export function PublicPlanEnquiryForm({
     );
     setInterests(nextInterests);
     setQuoteAnswers((current) => {
-      const next = Object.fromEntries(
+      return Object.fromEntries(
         Object.entries(current).filter(([questionId]) => allowedQuestionIds.has(questionId)),
       );
-      if (includeKnownPlanAnswers) {
-        for (const question of visibleQuestions) {
-          if (
-            question.defaultAnswer
-            && !Object.prototype.hasOwnProperty.call(current, question.id)
-          ) {
-            next[question.id] = question.defaultAnswer;
-          }
-        }
-      }
-      return next;
     });
     setQuotePhotos((current) => current.filter((selection) =>
       allowedPromptIds.has(selection.promptId)));
-    if (!visibleQuestions.some((question) => question.defaultAnswer)) {
+    if (!publicPlanQuotePlanFactsForSnapshot(nextInterests, planSnapshot).length) {
       setIncludeKnownPlanAnswers(false);
     }
   }
@@ -487,22 +477,7 @@ export function PublicPlanEnquiryForm({
   }
 
   function changeKnownPlanAnswerSharing(include: boolean) {
-    const knownQuestions = publicPlanQuoteQuestionsForSnapshot(interests, planSnapshot)
-      .filter((question) => question.defaultAnswer);
     setIncludeKnownPlanAnswers(include);
-    setQuoteAnswers((current) => {
-      const next = { ...current };
-      for (const question of knownQuestions) {
-        if (include) {
-          if (!Object.prototype.hasOwnProperty.call(current, question.id)) {
-            next[question.id] = question.defaultAnswer;
-          }
-        } else if (next[question.id] === question.defaultAnswer) {
-          delete next[question.id];
-        }
-      }
-      return next;
-    });
   }
 
   function changePostcode(nextPostcode: string) {
@@ -818,13 +793,22 @@ export function PublicPlanEnquiryForm({
       if (!submissionId.current) {
         submissionId.current = createSubmissionId();
       }
-      const preparedQuoteAnswers = publicPlanQuoteQuestionsForSnapshot(
+      const preparedInteractiveAnswers = publicPlanQuoteQuestionsForSnapshot(
         interests,
         planSnapshot,
       )
         .flatMap((question) => quoteAnswers[question.id]
           ? [{ questionId: question.id, answer: quoteAnswers[question.id] }]
           : []);
+      const preparedQuoteAnswers = [
+        ...preparedInteractiveAnswers,
+        ...(includeKnownPlanAnswers
+          ? publicPlanQuotePlanFactsForSnapshot(interests, planSnapshot).map((fact) => ({
+            questionId: fact.questionId,
+            answer: fact.answer,
+          }))
+          : []),
+      ];
       const selectedPhotoPromptIds = publicPlanQuotePhotoPromptsForServices(interests)
         .map((prompt) => prompt.id)
         .filter((promptId) => quotePhotos.some((selection) =>
@@ -973,10 +957,12 @@ export function PublicPlanEnquiryForm({
   const allInterestsSelected = interests.length === INTEREST_OPTIONS.length;
   const serviceSelectionInvalid = submitAttempted && interests.length === 0;
   const quoteQuestions = publicPlanQuoteQuestionsForSnapshot(interests, planSnapshot);
-  const knownPlanQuoteQuestions = quoteQuestions.filter((question) => question.defaultAnswer);
+  const knownPlanFacts = publicPlanQuotePlanFactsForSnapshot(interests, planSnapshot);
   const quotePhotoPrompts = publicPlanQuotePhotoPromptsForServices(interests);
   const answeredQuoteQuestionCount = quoteQuestions.filter((question) =>
     Boolean(quoteAnswers[question.id])).length;
+  const sharedQuoteDetailCount = answeredQuoteQuestionCount
+    + (includeKnownPlanAnswers ? knownPlanFacts.length : 0);
   const showLocalityStates = new Set(localities.map((locality) => locality.state)).size > 1;
   const selectedLocalityValue = customerSuburb && customerState
     ? localityOptionValue({ suburb: customerSuburb, state: customerState })
@@ -1290,57 +1276,61 @@ export function PublicPlanEnquiryForm({
             <span className={styles.labelRow}>Anything we should know? <span className={styles.optional}>optional</span></span>
             <textarea className={styles.control} maxLength={500} rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="For example, the system has stopped working or you want to plan the upgrade in stages." />
           </label>
-          <details className={`${styles.quotePreparation} ${styles.full}`}>
+          <details className={`${styles.quotePreparation} ${styles.full}`} open>
             <summary>
               <span>
                 <strong>Help trades prepare a desktop quote</strong>
-                <small>Optional. Answer what you know and add useful photos, or skip this section.</small>
+                <small>Optional. We only ask for details that are not already in your plan.</small>
               </span>
               <span className={styles.quotePreparationCount}>
-                {answeredQuoteQuestionCount} answers, {quotePhotos.length} photos
+                {sharedQuoteDetailCount} details, {quotePhotos.length} photos
               </span>
             </summary>
             <div className={styles.quotePreparationBody}>
               <header className={styles.quotePreparationHeader}>
                 <div>
                   <span className={styles.eyebrow}>Quote preparation</span>
-                  <h4>One useful set of details for every selected service</h4>
+                  <h4>A short head start for matching trades</h4>
                 </div>
-                <span>{quoteQuestions.length} deduplicated questions</span>
+                <span>{quoteQuestions.length} short optional {quoteQuestions.length === 1 ? "question" : "questions"}</span>
               </header>
               <p>
-                Shared questions appear once even when several services need the same answer. Leaving any answer or photo blank will not stop the enquiry.
+                Skip anything you do not know. Blank answers and missing photos will not stop the enquiry.
               </p>
-              {knownPlanQuoteQuestions.length ? (
-                <label className={styles.knownPlanAnswerChoice}>
-                  <input
-                    checked={includeKnownPlanAnswers}
-                    onChange={(event) => changeKnownPlanAnswerSharing(event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span>
-                    <strong>Use {knownPlanQuoteQuestions.length} known {knownPlanQuoteQuestions.length === 1 ? "answer" : "answers"} from my private plan</strong>
-                    <small>The exact suggestions are marked below. Review, change or skip each one before sending.</small>
-                  </span>
-                </label>
+              {knownPlanFacts.length ? (
+                <div className={styles.knownPlanFactSharing}>
+                  <label className={styles.knownPlanFactChoice}>
+                    <input
+                      checked={includeKnownPlanAnswers}
+                      onChange={(event) => changeKnownPlanAnswerSharing(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>Share {knownPlanFacts.length} relevant details already recorded in my home plan</strong>
+                      <small>This avoids asking you for the same information again. Your full plan stays private.</small>
+                    </span>
+                  </label>
+                  {includeKnownPlanAnswers ? (
+                    <ul className={styles.knownPlanFactList} aria-label="Home plan details that will be shared">
+                      {knownPlanFacts.map((fact) => (
+                        <li key={fact.questionId}>
+                          <strong>{fact.label}</strong>
+                          <span>{fact.answer}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
               ) : null}
               <div className={styles.quoteQuestionGrid}>
                 {quoteQuestions.map((question) => (
                   <label className={styles.quoteQuestion} key={question.id}>
                     <span>{question.label}</span>
-                    {question.answerSource === "private-plan" ? (
-                      <small className={styles.carriedPlanFact}>
-                        {includeKnownPlanAnswers
-                          ? `Carried from your private plan: ${question.defaultAnswer}. Change it or choose Skip before sharing.`
-                          : `Suggested from your private plan: ${question.defaultAnswer}. It is not shared unless you use the control above or choose an answer yourself.`}
-                      </small>
-                    ) : (
-                      <small>
-                        For {question.services
-                          .map((service) => INTEREST_LABELS[service as PublicPlanUpgradeInterest])
-                          .join(", ")}
-                      </small>
-                    )}
+                    <small>
+                      For {question.services
+                        .map((service) => INTEREST_LABELS[service as PublicPlanUpgradeInterest])
+                        .join(", ")}
+                    </small>
                     <select
                       className={styles.control}
                       value={quoteAnswers[question.id] || ""}
@@ -1359,9 +1349,9 @@ export function PublicPlanEnquiryForm({
               </div>
               <section className={styles.quotePhotos} aria-labelledby="public-plan-quote-photos-title">
                 <div>
-                  <h4 id="public-plan-quote-photos-title">Photos that can reduce follow-up questions</h4>
+                  <h4 id="public-plan-quote-photos-title">Useful wide photos</h4>
                   <p>
-                        Use your camera or choose existing JPEG or PNG images. Up to {PUBLIC_PLAN_QUOTE_MAX_FILES} photos, 8 MB each and 48 MB total.
+                    Start with the whole appliance, work area or equipment. Close-up labels are secondary. Use your camera or choose JPEG or PNG images, up to {PUBLIC_PLAN_QUOTE_MAX_FILES} photos.
                   </p>
                 </div>
                 <div className={styles.quotePhotoGrid}>
@@ -1421,7 +1411,7 @@ export function PublicPlanEnquiryForm({
 
         <fieldset className={styles.shareChoices}>
           <legend>Choose what matching trades can see</legend>
-          <p>Your email, postcode, selected services, message and any optional quote answers or photos are included so trades can reply and understand what you need. Known plan answers are included only when you select the quote-preparation control above.</p>
+          <p>Your email, postcode, selected services, message and any optional quote details or photos are included so trades can reply and understand what you need. Relevant facts from your plan are included only when you choose to share the read-only summary above.</p>
           <label>
             <input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} />
             <span>Also share my first and last name</span>
@@ -1442,12 +1432,12 @@ export function PublicPlanEnquiryForm({
 
         <label className={styles.consent}>
           <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => changeConsent(event.target.checked)} />
-          <span>I agree that Australian Energy Assessments may send this enquiry to all approved TLink trades that service my area. Trades receive my email, postcode, selected services, message and any quote answers or photos I chose to add. This includes known plan answers only when I selected the quote-preparation control above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
+          <span>I agree that Australian Energy Assessments may send this enquiry to all approved TLink trades that service my area. Trades receive my email, postcode, selected services, message and any quote details or photos I chose to add. Relevant home plan facts are included only when I selected the read-only summary above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
         </label>
 
         <details className={styles.privacy}>
           <summary>What is sent with this enquiry?</summary>
-          <p>Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services, message and any optional quote answers or photos you deliberately added. Known answers from your private plan are included only when you select the quote-preparation control and can be changed or skipped before sending. Your first and last name, phone and full property address are included only when you choose to share them. Quote photos have location metadata removed, stay in private storage and are not attached to email. Your full plan, PDF, bills, energy usage, meter identifiers and account data are not shared with trades.</p>
+          <p>Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services, message and any optional quote details or photos you deliberately added. Relevant facts from your private plan are included as a read-only summary only when you select that sharing control. Your first and last name, phone and full property address are included only when you choose to share them. Quote photos have location metadata removed, stay in private storage and are not attached to email. Your full plan, PDF, bills, energy usage, meter identifiers and account data are not shared with trades.</p>
         </details>
 
         <div className={styles.actions}>

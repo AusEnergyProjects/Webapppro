@@ -657,6 +657,7 @@ export function DirectTradeDashboard() {
   );
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
+  const [opportunityLoadError, setOpportunityLoadError] = useState("");
   const [opportunityNavigationStatus, setOpportunityNavigationStatus] =
     useState("");
   const [leadSearch, setLeadSearch] = useState("");
@@ -751,6 +752,7 @@ export function DirectTradeDashboard() {
     setOpportunities([]);
     setOpportunityBusy("");
     setOpportunityStatus("");
+    setOpportunityLoadError("");
     setOpportunityNavigationStatus("");
     setLeadSearch("");
     setLeadStatusFilter("");
@@ -874,6 +876,7 @@ export function DirectTradeDashboard() {
     if (!user || !profile || profile.partnerType === "supplier" || !profile.entitlements?.features?.installer_leads) return;
     const controller = new AbortController();
     let active = true;
+    setOpportunityLoadError("");
     const identityRevision = protectedIdentityRevision.current;
     const identityIsCurrent = () => (
       protectedIdentityRevision.current === identityRevision
@@ -884,9 +887,14 @@ export function DirectTradeDashboard() {
     })).then(async (response) => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Leads could not be loaded.");
-      if (active && identityIsCurrent()) setOpportunities(result.opportunities || []);
+      if (active && identityIsCurrent()) {
+        setOpportunities(result.opportunities || []);
+        setOpportunityLoadError("");
+      }
     }).catch((loadError) => {
-      if (active && identityIsCurrent() && !controller.signal.aborted) setOpportunityStatus(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
+      if (active && identityIsCurrent() && !controller.signal.aborted) {
+        setOpportunityLoadError(loadError instanceof Error ? loadError.message : "Leads could not be loaded.");
+      }
     });
     return () => { active = false; controller.abort(); };
   }, [profile, user]);
@@ -1683,11 +1691,7 @@ export function DirectTradeDashboard() {
                       Privacy-safe scopes matched to this business
                     </h2>
                     <p>
-                      Every active verified installer whose capability and service area match can see the scope.
-                      Household identity, street and unit address, and contact
-                      details stay outside the trade workspace during matching. A
-                      customer can later release them to this exact business
-                      after choosing to get in touch.
+                      Public-plan enquiries include the email, postcode, message and any optional name, phone or address the customer agreed to share with every eligible matched trade. Customer-account project contact and street details stay protected until the customer chooses this business.
                     </p>
                   </div>
                   {opportunityNavigationStatus && (
@@ -1710,6 +1714,12 @@ export function DirectTradeDashboard() {
                     </div>
                   ) : opportunities.length ? (
                     <>
+                      {opportunityLoadError && (
+                        <div className="dashboard-settings-status dashboard-opportunity-load-warning" role="status">
+                          <strong>Some leads may be missing</strong>
+                          <p>The full lead inbox could not be loaded. {opportunityLoadError}</p>
+                        </div>
+                      )}
                       <div className="dashboard-lead-filters" aria-label="Lead filters">
                         <label>
                           <span>Search</span>
@@ -2063,6 +2073,11 @@ export function DirectTradeDashboard() {
                       })}
                     </div> : <div className="dashboard-empty-state"><strong>No leads match these filters</strong><p>Clear one or more filters to return to the full opportunity inbox.</p></div>}
                     </>
+                  ) : opportunityLoadError ? (
+                    <div className="dashboard-empty-state" role="alert">
+                      <strong>Leads could not be loaded</strong>
+                      <p>{opportunityLoadError}</p>
+                    </div>
                   ) : (
                     <div className="dashboard-empty-state">
                       <strong>No opportunities assigned</strong>

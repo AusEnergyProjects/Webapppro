@@ -298,10 +298,12 @@ export function CreditexSresCalculator({
   api,
   role,
   onEstimate,
+  onEstimateInvalidated,
 }: {
   api: Api;
   role: "admin" | "case_manager" | "reviewer" | "auditor" | "trade" | "public";
   onEstimate?: (estimate: CreditexSresEstimateResult) => void;
+  onEstimateInvalidated?: () => void;
 }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [productCascade, dispatchProductCascade] = useReducer(
@@ -338,7 +340,8 @@ export function CreditexSresCalculator({
     setEstimate(null);
     setEstimateError("");
     setEstimateBusy(false);
-  }, []);
+    onEstimateInvalidated?.();
+  }, [onEstimateInvalidated]);
 
   function updateForm(updater: (current: FormState) => FormState) {
     invalidateEstimate();
@@ -577,9 +580,9 @@ export function CreditexSresCalculator({
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    invalidateEstimate();
     setEstimateBusy(true);
     setEstimateError("");
-    setEstimate(null);
     const requestVersion = estimateRequestRef.current + 1;
     estimateRequestRef.current = requestVersion;
     const common = form.technology === "solar_battery"

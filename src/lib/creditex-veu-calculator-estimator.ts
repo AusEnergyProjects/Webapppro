@@ -25,7 +25,7 @@ import {
 export const CREDITEX_VEU_ESTIMATE_SCHEMA =
   "creditex-veu-deterministic-estimate/v1" as const;
 export const CREDITEX_VEU_ESTIMATOR_VERSION =
-  "creditex-veu-exact-rational-engine/2026-08-11" as const;
+  "creditex-veu-exact-rational-engine/2026-08-11.2" as const;
 
 const CREDITEX_VEU_ROUNDING_SOURCE = {
   version: "Authorised version 023",
@@ -40,7 +40,7 @@ const CREDITEX_VEU_WATER_HEATING_GUIDE_SOURCE = {
   publishedOn: "2026-04-15",
   url: "https://www.esc.vic.gov.au/sites/default/files/documents/C%2021%2028378%20%20FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.20%20-%2020260415.pdf",
   title: "Water Heating and Space Heating and Cooling Activity Guide",
-  pages: "printed pages 10 and 47",
+  pages: "printed pages 4 and 47",
 } as const;
 
 const CREDITEX_VEU_WATER_HEATER_QUANTITY_SOURCE = {
@@ -4191,11 +4191,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   const totalResult = repeatedSystems
     ? multiply(execution.result, unitPreparation.quantity)
     : execution.result;
-  const wholeCertificates = repeatedSystems
-    ? String(
-      BigInt(perUnitWholeCertificates) * unitPreparation.quantity.numerator,
-    )
-    : perUnitWholeCertificates;
+  const wholeCertificates = roundCreditexVeuWholeCertificates(totalResult);
   const presentation = decimalPresentation(totalResult);
   const perUnitPresentation = decimalPresentation(execution.result);
   const trace = repeatedSystems
@@ -4205,7 +4201,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
           "unit_quantity",
           "Identical systems",
           unitPreparation.quantityText,
-          "calculate each identical approved system separately",
+          "multiply the exact unrounded reduction by the installed quantity",
           unitPreparation.quantity,
           "systems",
         ),
@@ -4213,7 +4209,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
           "multi_unit_total",
           "Total governed reduction",
           `${perUnitPresentation.decimal} tCO2-e per system`,
-          `under VEET Act 2007 s 18, round each separately eligible prescribed activity to whole VEECs before multiplying by ${unitPreparation.quantityText}`,
+          `combine the exact reduction for all ${unitPreparation.quantityText} products installed in this prescribed activity, then round the activity total once under VEET Act 2007 s 18`,
           totalResult,
         ),
       ]
@@ -4426,7 +4422,6 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
   const firstSchedule4Limit = waterHeaterSchedule4LimitFromEstimate(first, 1);
   let totalUnits = 0;
   let totalResult = ZERO;
-  let wholeCertificates = BigInt(0);
   const propertyItems = items.map((item, index) => {
     const quantity = decimalInput(
       { unit_quantity: item.unitQuantity },
@@ -4493,7 +4488,7 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
           itemResult,
         ) !== 0
         || item.estimate.output.wholeCertificates
-          !== String(BigInt(perUnit.wholeCertificates) * BigInt(quantityText))
+          !== roundCreditexVeuWholeCertificates(itemResult)
       ) {
         fail(
           "VEU_REQUEST_INVALID",
@@ -4505,7 +4500,6 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
       totalResult,
       itemResult,
     );
-    wholeCertificates += BigInt(item.estimate.output.wholeCertificates);
     return {
       itemNumber: String(index + 1),
       selectedProductId: requiredString(
@@ -4520,11 +4514,12 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
     };
   });
   const presentation = decimalPresentation(totalResult);
+  const wholeCertificates = roundCreditexVeuWholeCertificates(totalResult);
   const output = {
     unroundedTonnes: presentation.decimal,
     unroundedDecimalStatus: presentation.status,
     exactFraction: exactFraction(totalResult),
-    wholeCertificates: String(wholeCertificates),
+    wholeCertificates,
     roundingStatus: "nearest_whole_applied" as const,
     unit: "VEEC" as const,
     unitQuantity: String(totalUnits),
@@ -4534,7 +4529,7 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
       `water_heater_item_${item.itemNumber}`,
       `Approved model ${item.itemNumber}`,
       `${item.output.perUnit?.unroundedTonnes ?? item.output.unroundedTonnes} tCO2-e per system x ${item.unitQuantity}`,
-      "calculate each separately eligible prescribed activity independently, round it to whole VEECs under VEET Act 2007 s 18, then multiply by its installed quantity",
+      "add this model group's exact unrounded reduction to the prescribed activity total",
       parsedExactFraction(
         item.output.exactFraction,
         `Water-heater group ${item.itemNumber}`,
@@ -4544,7 +4539,7 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
       "property_total",
       "Property total",
       `${propertyItems.length} approved model group${propertyItems.length === 1 ? "" : "s"}; ${totalUnits} systems`,
-      "add the independently governed totals for every approved product group",
+      "combine every model group's exact reduction, then round the prescribed activity total once under VEET Act 2007 s 18",
       totalResult,
     ),
   ];
@@ -4583,7 +4578,7 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
   const receiptBase = {
     schemaVersion: CREDITEX_VEU_ESTIMATE_SCHEMA,
     estimatorVersion: CREDITEX_VEU_ESTIMATOR_VERSION,
-    contract: "creditex-veu-mixed-water-heater-property-quote/v1",
+    contract: "creditex-veu-mixed-water-heater-property-quote/v2",
     activityCode: first.activityCode,
     formulaKey: first.formulaKey,
     installationDate: first.installationDate,
@@ -4602,7 +4597,7 @@ export function aggregateCreditexVeuWaterHeaterQuotes(
     propertyItems,
     status: "estimate_only_compliance_reconciliation_required",
     certificateActionEnabled: false,
-    operatorMessage: "Potential property rebate estimate only. Every separately eligible prescribed activity was checked and rounded independently for the installation date and its own governed values. Validate every installed unit and all activity evidence before any certificate action.",
+    operatorMessage: "Potential property rebate estimate only. Exact reductions for every product in this prescribed activity were combined and the activity total was rounded once. Confirm the property history, every installed product and all activity evidence before certificate creation.",
     inputHash: sha256(inputSnapshot),
     traceHash: sha256(trace),
     outputHash: sha256(output),

@@ -21,11 +21,11 @@ import {
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
 import {
-  publicPlanContactReleaseAccessSql,
-  publicPlanContactReleaseDisclosedFieldsAreValid,
+  publicPlanContactReleaseConsentSql,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
+import { publicTradeContactForMatchedLead } from "@/lib/public-trade-lead-access.mjs";
 import {
   PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
@@ -147,74 +147,6 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-function publicTradeContact(row: Record<string, unknown>) {
-  if (!row.public_contact_release_id) return null;
-  const disclosedFields = new Set(
-    parseJsonList(row.public_contact_disclosed_fields),
-  );
-  if (!publicPlanContactReleaseDisclosedFieldsAreValid(
-    row.public_contact_notice_version,
-    row.public_contact_consent_purpose,
-    [...disclosedFields],
-  )) return null;
-  const email = String(row.public_customer_email || "").trim().toLowerCase();
-  const postcode = String(row.public_contact_postcode || "").trim();
-  const firstName = disclosedFields.has("customer_name")
-    ? String(row.public_customer_first_name || "").trim()
-    : "";
-  const lastName = disclosedFields.has("customer_name")
-    ? String(row.public_customer_last_name || "").trim()
-    : "";
-  const name = [firstName, lastName].filter(Boolean).join(" ");
-  const phone = disclosedFields.has("customer_phone")
-    ? String(row.public_customer_phone || "").trim()
-    : "";
-  const addressLine1 = disclosedFields.has("customer_address")
-    ? String(row.public_customer_street_address || "").trim()
-    : "";
-  const addressLine2 = disclosedFields.has("customer_address")
-    ? String(row.public_customer_unit_number || "").trim()
-    : "";
-  const suburb = disclosedFields.has("customer_address")
-    ? String(row.public_customer_suburb || "").trim()
-    : "";
-  const sharedAddressState = disclosedFields.has("customer_address")
-    ? String(row.public_customer_address_state || "").trim()
-    : "";
-  const message = disclosedFields.has("customer_message")
-    ? String(row.public_customer_message || "").trim()
-    : "";
-  if (
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    || !/^\d{4}$/.test(postcode)
-    || (disclosedFields.has("customer_name") && (!firstName || !lastName))
-    || (disclosedFields.has("customer_phone") && !phone)
-    || (disclosedFields.has("customer_address") && (
-      !addressLine1
-      || !suburb
-      || !sharedAddressState
-      || sharedAddressState !== String(row.state || "").trim()
-    ))
-    || (disclosedFields.has("customer_message") && !message)
-  ) return null;
-  return {
-    name,
-    firstName,
-    lastName,
-    email,
-    phone,
-    addressLine1,
-    addressLine2,
-    suburb,
-    addressState: sharedAddressState,
-    postcode,
-    grantedAt: row.public_contact_granted_at,
-    noticeVersion: row.public_contact_notice_version,
-    message,
-    releaseScope: "all_qualified_trades",
-  };
-}
-
 function tradeAccessCode(error: unknown) {
   return error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
 }
@@ -306,6 +238,9 @@ export async function GET(request: Request) {
     r.suburb contact_suburb, r.address_state contact_address_state, r.postcode contact_postcode,
     r.notice_version contact_notice_version, r.granted_at contact_granted_at,
     public_contact.id public_contact_release_id,
+    public_contact.status public_contact_status,
+    public_contact.source_reference public_contact_source_reference,
+    public_contact.withdrawn_at public_contact_withdrawn_at,
     public_contact.disclosed_fields public_contact_disclosed_fields,
     public_contact.customer_first_name public_customer_first_name,
     public_contact.customer_last_name public_customer_last_name,
@@ -365,7 +300,7 @@ export async function GET(request: Request) {
       ON public_contact.opportunity_id = o.id
         AND public_contact.source_reference = o.source_reference
         AND public_contact.status = 'active'
-        AND ${publicPlanContactReleaseAccessSql("public_contact")}
+        AND ${publicPlanContactReleaseConsentSql("public_contact")}
         AND datetime(public_contact.granted_at) IS NOT NULL
         AND public_contact.withdrawn_at = ''
         AND public_contact.postcode = o.postcode
@@ -483,7 +418,7 @@ export async function GET(request: Request) {
   }
   return json({
     ok: true,
-    opportunities: rows.results.map((row: Record<string, unknown>) => {
+    opportunities: rows.results.flatMap((row: Record<string, unknown>) => {
       const sharedEvidence = evidenceByMatch.get(String(row.match_id || "")) || [];
       const publicPhotos = publicPhotosByMatch.get(String(row.match_id || "")) || [];
       const matchedCategories = strictPublicPlanQuoteServiceCategories(row.matched_categories);
@@ -524,8 +459,9 @@ export async function GET(request: Request) {
       })));
       const platformOnly = String(row.source_reference || "")
         .startsWith("customer-project:");
-      const publicContact = publicTradeContact(row);
-      return {
+      const publicContact = publicTradeContactForMatchedLead(row);
+      if (row.public_contact_release_id && !publicContact) return [];
+      return [{
         matchId: row.match_id,
         matchStatus: row.match_status,
         matchedCategories,
@@ -592,7 +528,7 @@ export async function GET(request: Request) {
           selectedAt: row.arrival_selected_at,
         } : null,
         quote: platformQuoteResponse(row),
-      };
+      }];
     }),
   });
 }
@@ -937,7 +873,36 @@ export async function PATCH(request: Request) {
       { ok: false, error: "Choose a valid opportunity response." },
       400,
     );
-  const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
+  const current = await db.prepare(`SELECT m.status, m.opportunity_id, o.title, o.state,
+      public_contact.id public_contact_release_id,
+      public_contact.status public_contact_status,
+      public_contact.source_reference public_contact_source_reference,
+      public_contact.withdrawn_at public_contact_withdrawn_at,
+      public_contact.disclosed_fields public_contact_disclosed_fields,
+      public_contact.customer_first_name public_customer_first_name,
+      public_contact.customer_last_name public_customer_last_name,
+      public_contact.customer_email public_customer_email,
+      public_contact.customer_phone public_customer_phone,
+      public_contact.customer_unit_number public_customer_unit_number,
+      public_contact.customer_street_address public_customer_street_address,
+      public_contact.customer_suburb public_customer_suburb,
+      public_contact.customer_address_state public_customer_address_state,
+      public_contact.postcode public_contact_postcode,
+      public_contact.customer_message public_customer_message,
+      public_contact.notice_version public_contact_notice_version,
+      public_contact.consent_purpose public_contact_consent_purpose,
+      public_contact.granted_at public_contact_granted_at,
+      o.source_reference, o.postcode opportunity_postcode
+    FROM trade_opportunity_matches m
+    JOIN trade_opportunities o ON o.id = m.opportunity_id
+    LEFT JOIN public_trade_lead_contact_releases public_contact
+      ON public_contact.opportunity_id = o.id
+        AND public_contact.source_reference = o.source_reference
+        AND public_contact.status = 'active'
+        AND ${publicPlanContactReleaseConsentSql("public_contact")}
+        AND datetime(public_contact.granted_at) IS NOT NULL
+        AND public_contact.withdrawn_at = ''
+        AND public_contact.postcode = o.postcode
     WHERE m.id = ? AND m.firebase_uid = ? AND o.status = 'open' AND o.expires_at > ?
       AND (
         NOT EXISTS (
@@ -945,15 +910,7 @@ export async function PATCH(request: Request) {
           WHERE any_public_contact.opportunity_id = o.id
         )
         OR (
-          EXISTS (
-            SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
-            WHERE active_public_contact.opportunity_id = o.id
-              AND active_public_contact.status = 'active'
-              AND ${publicPlanContactReleaseAccessSql("active_public_contact")}
-              AND datetime(active_public_contact.granted_at) IS NOT NULL
-              AND active_public_contact.withdrawn_at = ''
-              AND active_public_contact.postcode = o.postcode
-          )
+          public_contact.id IS NOT NULL
           AND EXISTS (
             SELECT 1 FROM trade_accounts current_public_trade_account
             WHERE current_public_trade_account.firebase_uid = m.firebase_uid
@@ -962,15 +919,19 @@ export async function PATCH(request: Request) {
           )
         )
       )`)
-    .bind(matchId, user.uid, now).first<{ status: string; opportunity_id: string; title: string }>();
-  if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
+    .bind(matchId, user.uid, now).first<Record<string, unknown>>();
+  if (
+    !current
+    || (current.public_contact_release_id && !publicTradeContactForMatchedLead(current))
+  ) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const transitions: Record<string, Set<string>> = {
     offered: new Set(["viewed", "interested", "declined"]),
     viewed: new Set(["interested", "declined"]),
     interested: new Set(["declined"]),
   };
-  if (current.status === status) return json({ ok: true });
-  if (!transitions[current.status]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
+  const currentStatus = String(current.status || "");
+  if (currentStatus === status) return json({ ok: true });
+  if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
   const result = await db
     .prepare(
       `UPDATE trade_opportunity_matches SET status = ?, partner_note = '', updated_at = ?
@@ -989,7 +950,7 @@ export async function PATCH(request: Request) {
                 SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
                 WHERE active_public_contact.opportunity_id = available_opportunity.id
                   AND active_public_contact.status = 'active'
-                  AND ${publicPlanContactReleaseAccessSql("active_public_contact")}
+                  AND ${publicPlanContactReleaseConsentSql("active_public_contact")}
                   AND datetime(active_public_contact.granted_at) IS NOT NULL
                   AND active_public_contact.withdrawn_at = ''
                   AND active_public_contact.postcode = available_opportunity.postcode
@@ -1004,18 +965,18 @@ export async function PATCH(request: Request) {
           )
       )`,
     )
-    .bind(status, now, matchId, user.uid, current.status, now)
+    .bind(status, now, matchId, user.uid, currentStatus, now)
     .run();
   if (!result.meta.changes)
     return json(
       { ok: false, error: "The opportunity could not be updated." },
       404,
     );
-  await syncMarketplaceEnquiries(db, current.opportunity_id, user.uid);
+  await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
   if (status === "declined") {
     if (current.opportunity_id)
       await allocateNearestInstallers(
-        current.opportunity_id,
+        String(current.opportunity_id),
         "automatic-decline-refill",
       ).catch(() => null);
   }
@@ -1025,13 +986,13 @@ export async function PATCH(request: Request) {
     category: "response",
     priority: status === "interested" ? "high" : status === "declined" ? "normal" : "low",
     title: status === "interested" ? "Installer is interested in a lead" : status === "declined" ? "Installer declined a lead" : "Installer viewed a lead",
-    summary: `${String(account.business_name || "An installer").slice(0, 160)} marked ${String(current.title).slice(0, 160)} as ${status}.`,
+    summary: `${String(account.business_name || "An installer").slice(0, 160)} marked ${String(current.title || "").slice(0, 160)} as ${status}.`,
     entityType: "trade_opportunity_match",
     entityId: matchId,
     actorType: "installer",
     actorUid: user.uid,
     requiresAction: status === "interested",
-    metadata: { opportunityId: current.opportunity_id, status },
+    metadata: { opportunityId: String(current.opportunity_id || ""), status },
     occurredAt: now,
   });
   return json({ ok: true });

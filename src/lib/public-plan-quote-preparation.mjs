@@ -113,130 +113,22 @@ const QUESTION_DEFINITIONS = Object.freeze([
     options: ["As soon as practical", "Within 3 months", "Within 6 months", "Planning for later", "Not sure"],
   },
   {
-    id: "site-access",
-    label: "Can the work area be reached easily and safely?",
-    services: ["assessment", "solar", "insulation", "glazing", "window-coverings", "other"],
-    options: ["Yes", "Limited access", "Access needs arranging", "Not sure"],
-  },
-  {
-    id: "switchboard",
-    label: "What type of switchboard is installed?",
-    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
-    options: ["Modern circuit breakers", "Older fuse board", "Recently upgraded", "Not sure"],
-  },
-  {
-    id: "roof-details",
-    label: "What is the main roof covering and condition?",
+    id: "solar-scope",
+    label: "What should the solar quote cover?",
     services: ["solar"],
-    options: ["Metal and sound", "Tile and sound", "Repairs may be needed", "Flat or unusual roof", "Not sure"],
+    options: ["A new system", "Add to an existing system", "Replace an existing system", "Need advice"],
   },
   {
-    id: "existing-solar",
-    label: "What solar system is already installed?",
+    id: "battery-priority",
+    label: "What matters most for the battery quote?",
     services: ["battery"],
-    options: ["No solar", "Solar under 5 kW", "Solar 5 to 10 kW", "Solar over 10 kW", "Not sure"],
+    options: ["Use more solar and lower bills", "Backup important circuits", "Both bill savings and backup", "Need advice"],
   },
   {
-    id: "battery-goal-location",
-    label: "What matters most for the battery and where could it go?",
-    services: ["battery"],
-    options: ["Use more solar, suitable outdoor wall", "Backup power, suitable outdoor wall", "Garage or utility area", "Location needs advice", "Not sure"],
-  },
-  {
-    id: "existing-heating-equipment",
-    label: "What heating or cooling equipment is installed now?",
+    id: "heating-coverage",
+    label: "How much of the home should the heating or cooling quote cover?",
     services: ["heating-cooling"],
-    options: ["Gas", "Electric resistance", "Heat pump or reverse cycle", "Wood or another fuel", "Nothing installed", "Not sure"],
-  },
-  {
-    id: "existing-hot-water-equipment",
-    label: "What hot-water system is installed now?",
-    services: ["hot-water"],
-    options: ["Gas", "Electric resistance", "Heat pump", "Solar hot water", "Other", "Not sure"],
-  },
-  {
-    id: "existing-other-equipment",
-    label: "What equipment or fuel is involved in this other upgrade?",
-    services: ["other"],
-    options: ["Gas", "Electric resistance", "Heat pump or reverse cycle", "Wood or another fuel", "Nothing installed", "Not sure"],
-  },
-  {
-    id: "heating-scope",
-    label: "Which areas need heating or cooling, and what is wrong now?",
-    services: ["heating-cooling"],
-    options: ["One main room", "Several rooms", "Whole home", "Replace a failed system", "Need advice"],
-  },
-  {
-    id: "hot-water-location",
-    label: "Where is the current hot-water unit and is there clear space nearby?",
-    services: ["hot-water"],
-    options: ["Outside with clear space", "Outside with limited space", "Inside", "Roof mounted", "Not sure"],
-  },
-  {
-    id: "draught-locations",
-    label: "Where are the noticeable draughts?",
-    services: ["draught-proofing"],
-    options: ["External doors", "Windows", "Exhaust fans or vents", "Chimney or fireplace", "Several areas", "Not sure"],
-  },
-  {
-    id: "fixed-ventilation",
-    label: "Are any openings required for ventilation or an unflued gas appliance?",
-    services: ["draught-proofing"],
-    options: ["Yes", "No", "There is an open fireplace or chimney", "Not sure"],
-  },
-  {
-    id: "insulation-area",
-    label: "Which insulation area needs attention?",
-    services: ["insulation"],
-    options: ["Ceiling or roof", "External walls", "Underfloor", "Several areas", "Not sure"],
-  },
-  {
-    id: "insulation-known",
-    label: "What is known about the existing insulation?",
-    services: ["insulation"],
-    options: ["No insulation in known areas", "Old, thin or patchy in known areas", "Well insulated or recently upgraded", "Mixed or varies by area", "Plans or rating available", "Not sure"],
-  },
-  {
-    id: "window-construction",
-    label: "What best describes the windows being considered?",
-    services: ["glazing", "window-coverings"],
-    options: ["Single glazing, aluminium frame", "Single glazing, timber or uPVC frame", "Double glazing", "Mixed windows", "Not sure"],
-  },
-  {
-    id: "window-priority",
-    label: "What is the main window problem and approximate scope?",
-    services: ["glazing"],
-    options: ["Winter heat loss", "Summer heat gain", "Noise or condensation", "One or two windows", "Several rooms", "Whole home", "Not sure"],
-  },
-  {
-    id: "shading-access",
-    label: "Can shading be fitted outside, or must it stay inside?",
-    services: ["window-coverings"],
-    options: ["Outside is possible", "Inside only", "Body corporate or strata approval may apply", "Not sure"],
-  },
-  {
-    id: "ev-needs",
-    label: "What vehicle and charging speed are you planning for?",
-    services: ["ev-charging"],
-    options: ["Plug-in hybrid or slow overnight charging", "Single EV home charger", "Higher-speed or future second EV", "Vehicle not chosen", "Not sure"],
-  },
-  {
-    id: "ev-parking",
-    label: "Where is the parking space compared with the switchboard?",
-    services: ["ev-charging"],
-    options: ["Same garage or nearby", "Across the house", "Detached garage or carport", "Shared or strata parking", "Not sure"],
-  },
-  {
-    id: "assessment-concerns",
-    label: "What should the assessor focus on first?",
-    services: ["assessment"],
-    options: ["High bills", "Comfort or draughts", "Electrification plan", "Solar, battery or rebates", "Whole-home advice", "Not sure"],
-  },
-  {
-    id: "assessment-records",
-    label: "What useful records are available?",
-    services: ["assessment"],
-    options: ["Recent energy bills", "Plans or previous assessment", "Appliance details", "Several records", "None or not sure"],
+    options: ["One main room", "Several rooms", "Whole home", "Need advice"],
   },
   {
     id: "other-scope",
@@ -248,63 +140,51 @@ const QUESTION_DEFINITIONS = Object.freeze([
 
 const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
   {
-    id: "solar-equipment-label",
-    label: "Existing solar inverter or equipment label",
-    hint: "Take a clear close photo showing the brand, model and rating plate.",
-    services: ["solar"],
+    id: "assessment-overview",
+    label: "Wide views of the home or areas you want assessed",
+    hint: "Stand back and show the whole room, wall or outdoor area so the assessor can understand the layout.",
+    services: ["assessment"],
   },
   {
-    id: "battery-equipment-label",
-    label: "Existing solar inverter or battery label",
-    hint: "Take a clear close photo showing the brand, model and rating plate.",
-    services: ["battery"],
+    id: "roof-wide",
+    label: "Wide view of the roof from ground level",
+    hint: "Show the main roof faces, shade and any existing solar. Do not climb onto the roof.",
+    services: ["solar", "insulation"],
   },
   {
-    id: "heating-equipment-label",
-    label: "Existing heating or cooling equipment label",
-    hint: "Take a clear close photo showing the brand, model and rating plate.",
-    services: ["heating-cooling"],
+    id: "switchboard-front",
+    label: "Full switchboard from the front",
+    hint: "Show the whole switchboard from a safe standing position with only its normal hinged door open. Do not remove covers or touch wiring.",
+    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
   },
   {
-    id: "hot-water-equipment-label",
-    label: "Existing hot-water system label",
-    hint: "Take a clear close photo showing the brand, model and rating plate.",
-    services: ["hot-water"],
-  },
-  {
-    id: "ev-equipment-label",
-    label: "Existing charger or proposed charger label",
-    hint: "Take a clear close photo showing the brand, model and rating plate when available.",
-    services: ["ev-charging"],
-  },
-  {
-    id: "other-equipment-label",
-    label: "Existing equipment label for this upgrade",
-    hint: "Take a clear close photo showing the brand, model and rating plate when available.",
-    services: ["other"],
+    id: "solar-battery-equipment-wide",
+    label: "Wide view of inverter, solar and battery equipment",
+    hint: "Show the whole inverter, battery or other solar equipment and the surrounding wall or work area. A close label photo is optional after the wide view.",
+    services: ["solar", "battery"],
   },
   {
     id: "battery-installation-area",
     label: "Wide view of the proposed battery area",
-    hint: "Stand back so the equipment location, nearby walls, doors and clearances are visible.",
+    hint: "Stand back so the equipment location, nearby walls, doors and clearances are visible. Add a close label only as an optional second photo.",
     services: ["battery"],
   },
   {
     id: "heating-installation-area",
-    label: "Wide view of the heating or cooling area",
-    hint: "Show the proposed indoor and outdoor equipment locations and nearby clearances.",
+    label: "Wide views of the heating and cooling equipment and rooms",
+    hint: "Show the whole indoor and outdoor units, the room or duct outlets, and nearby clearances. Add a close label only as an optional second photo.",
     services: ["heating-cooling"],
   },
   {
     id: "hot-water-installation-area",
-    label: "Wide view around the hot-water system",
-    hint: "Show the current unit, nearby walls, doors, pipework and clearances.",
+    label: "Wide view of the whole hot-water system and surrounding space",
+    hint: "Show the full unit, nearby walls, doors, pipework and clearances. Add a close label only as an optional second photo.",
     services: ["hot-water"],
   },
   {
     id: "ev-installation-area",
-    label: "Wide view of the parking and charger area",
-    hint: "Show the parking position, proposed charger wall and cable path where possible.",
+    label: "Wide view of the parking space and proposed charger area",
+    hint: "Show the parking position, full wall area and likely cable path. A close charger label is optional after the wide photo.",
     services: ["ev-charging"],
   },
   {
@@ -314,21 +194,9 @@ const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
     services: ["other"],
   },
   {
-    id: "switchboard-front",
-    label: "Switchboard with the door open from the front",
-    hint: "Photograph only from a safe standing position. Do not remove covers or touch wiring.",
-    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
-  },
-  {
-    id: "roof-wide",
-    label: "Wide photo of the roof from ground level",
-    hint: "Show the main roof faces, shade and any existing solar. Do not climb onto the roof.",
-    services: ["solar", "insulation"],
-  },
-  {
     id: "draught-area",
-    label: "Door, window, vent or chimney where the draught is felt",
-    hint: "Include one close view and one wider view if useful.",
+    label: "Wide view of the door, window, vent or chimney area",
+    hint: "Show the whole opening and surrounding wall or floor. A close view of a visible gap is optional after the wide photo.",
     services: ["draught-proofing"],
   },
   {
@@ -339,15 +207,9 @@ const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
   },
   {
     id: "representative-window",
-    label: "Representative window, frame and surrounding wall",
-    hint: "Show the full window plus a close view of the frame or gap.",
+    label: "Full window and surrounding wall",
+    hint: "Stand back so the whole window, frame, wall and any existing blind or shade are visible. A close gap photo is optional.",
     services: ["glazing", "window-coverings"],
-  },
-  {
-    id: "assessment-overview",
-    label: "Home or area you most want assessed",
-    hint: "A few wide photos can help the assessor understand the layout before visiting.",
-    services: ["assessment"],
   },
 ]);
 
@@ -426,48 +288,101 @@ export function publicPlanQuoteQuestionsForServices(services) {
     }));
 }
 
-function knownPlanFact(value) {
-  return Boolean(
-    typeof value === "string" && value.trim() && value.trim() !== "not_sure",
-  );
+const SWITCHBOARD_LABELS = Object.freeze({
+  modern_breakers: "Modern circuit breakers",
+  older_fuses: "Older fuse board",
+  recent_upgrade: "Recently upgraded",
+});
+const ROOF_TYPE_LABELS = Object.freeze({
+  metal: "Metal roof covering",
+  tile: "Concrete or terracotta roof tiles",
+  flat: "Membrane or another flat-roof covering",
+  mixed: "Mixed roof coverings",
+});
+const ROOF_FORM_LABELS = Object.freeze({
+  pitched: "Pitched or sloping roof",
+  flat_low_pitch: "Flat or low-pitch roof",
+  mixed: "Mixed roof forms",
+});
+const ROOF_CONDITION_LABELS = Object.freeze({
+  good: "No known roof damage",
+  weathered: "Older or weathered roof",
+  known_issue: "Known roof leak, damage or condition issue",
+});
+const HEATING_COOLING_LABELS = Object.freeze([
+  ["reverse-cycle", "Reverse-cycle air conditioning"],
+  ["gas-heating", "Gas space or ducted heating"],
+  ["hydronic-heating", "Hydronic heating"],
+  ["wood-heating", "Wood fire or wood heater"],
+  ["electric-resistance-heating", "Electric panel, portable or resistance heating"],
+  ["evaporative-cooling", "Evaporative cooling"],
+  ["fans-only", "Ceiling or portable fans"],
+  ["heating-cooling-none", "No fixed heating or cooling"],
+]);
+const HOT_WATER_LABELS = Object.freeze([
+  ["gas-storage-hot-water", "Gas storage hot water"],
+  ["gas-continuous-flow-hot-water", "Continuous-flow gas hot water"],
+  ["gas-hot-water-type-unknown", "Gas hot water, type not known"],
+  ["heat-pump-hot-water", "Heat-pump hot water"],
+  ["electric-storage-hot-water", "Electric storage hot water"],
+  ["electric-instant-hot-water", "Instantaneous electric hot water"],
+  ["solar-hot-water", "Solar hot water"],
+  ["electric-gas-boosted-hot-water", "Electric hot water with gas booster"],
+  ["hot-water-other", "Another hot-water type"],
+]);
+const INSULATION_LABELS = Object.freeze([
+  ["ceiling-insulation-none", "Ceiling: none known"],
+  ["ceiling-insulation-limited", "Ceiling: old, thin or patchy"],
+  ["ceiling-insulation-well", "Ceiling: well insulated or recently upgraded"],
+  ["ceiling-insulation-not-applicable", "Ceiling: another dwelling above"],
+  ["wall-insulation-none", "External walls: none known"],
+  ["wall-insulation-limited", "External walls: some, old or patchy"],
+  ["wall-insulation-well", "External walls: well insulated or recently upgraded"],
+  ["floor-insulation-none", "Underfloor: none known"],
+  ["floor-insulation-limited", "Underfloor: some, old or patchy"],
+  ["floor-insulation-well", "Underfloor: well insulated or recently upgraded"],
+  ["floor-insulation-not-applicable", "Underfloor: slab or another dwelling below"],
+]);
+const SOLAR_LABELS = Object.freeze([
+  ["solar", "Rooftop solar installed"],
+  ["solar-none", "No rooftop solar"],
+]);
+const BATTERY_LABELS = Object.freeze([
+  ["battery", "Home battery installed"],
+  ["battery-none", "No home battery"],
+]);
+
+function labelsFromFeatures(features, definitions) {
+  return definitions.flatMap(([feature, label]) => features.has(feature) ? [label] : []);
 }
 
-const KNOWN_INSULATION_FEATURES = new Set([
-  "ceiling-insulation-none",
-  "ceiling-insulation-limited",
-  "ceiling-insulation-well",
-  "ceiling-insulation-not-applicable",
-  "wall-insulation-none",
-  "wall-insulation-limited",
-  "wall-insulation-well",
-  "floor-insulation-none",
-  "floor-insulation-limited",
-  "floor-insulation-well",
-  "floor-insulation-not-applicable",
-]);
-const KNOWN_HEATING_COOLING_FEATURES = new Set([
-  "reverse-cycle",
-  "gas-heating",
-  "hydronic-heating",
-  "wood-heating",
-  "electric-resistance-heating",
-  "evaporative-cooling",
-  "fans-only",
-  "heating-cooling-none",
-]);
-const KNOWN_HOT_WATER_FEATURES = new Set([
-  "gas-storage-hot-water",
-  "gas-continuous-flow-hot-water",
-  "gas-hot-water-type-unknown",
-  "heat-pump-hot-water",
-  "electric-storage-hot-water",
-  "electric-instant-hot-water",
-  "solar-hot-water",
-  "electric-gas-boosted-hot-water",
-  "hot-water-other",
-]);
+function compactKnownFacts(labels) {
+  const unique = [...new Set(labels.filter(Boolean))];
+  if (!unique.length) return "";
+  const kept = [];
+  for (const label of unique) {
+    const remaining = unique.length - kept.length;
+    const candidate = [...kept, label].join("; ");
+    if (candidate.length + (remaining > 1 ? 14 : 0) > 160) break;
+    kept.push(label);
+  }
+  const omitted = unique.length - kept.length;
+  return `${kept.join("; ")}${omitted ? `; plus ${omitted} more` : ""}`.slice(0, 160);
+}
 
-export function publicPlanQuoteQuestionsForSnapshot(services, planSnapshot) {
+function addKnownPlanFact(output, selectedServices, definition) {
+  const services = definition.services.filter((service) => selectedServices.has(service));
+  const answer = compactKnownFacts(definition.answers);
+  if (!services.length || !answer) return;
+  output.push({
+    questionId: definition.questionId,
+    label: definition.label,
+    answer,
+    services,
+  });
+}
+
+export function publicPlanQuotePlanFactsForSnapshot(services, planSnapshot) {
   const selectedServices = selectedServiceSet(services);
   const propertyContext = planSnapshot && typeof planSnapshot === "object"
     && planSnapshot.propertyContext && typeof planSnapshot.propertyContext === "object"
@@ -478,88 +393,59 @@ export function publicPlanQuoteQuestionsForSnapshot(services, planSnapshot) {
       ? planSnapshot.features.filter((value) => typeof value === "string")
       : [],
   );
-  const defaults = new Map();
-  const switchboardDefaults = {
-    modern_breakers: "Modern circuit breakers",
-    older_fuses: "Older fuse board",
-    recent_upgrade: "Recently upgraded",
-  };
-  if (knownPlanFact(propertyContext.switchboard)) {
-    const answer = switchboardDefaults[propertyContext.switchboard];
-    if (answer) defaults.set("switchboard", answer);
-  }
-  const roofDefault = propertyContext.roofCondition === "known_issue"
-    ? "Repairs may be needed"
-    : propertyContext.roofType === "flat"
-      ? "Flat or unusual roof"
-      : propertyContext.roofCondition === "good" && propertyContext.roofType === "metal"
-        ? "Metal and sound"
-        : propertyContext.roofCondition === "good" && propertyContext.roofType === "tile"
-          ? "Tile and sound"
-          : "";
-  if (roofDefault) defaults.set("roof-details", roofDefault);
+  const facts = [];
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-switchboard",
+    label: "Switchboard already recorded in the home plan",
+    answers: [SWITCHBOARD_LABELS[propertyContext.switchboard]],
+    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-roof",
+    label: "Roof already recorded in the home plan",
+    answers: [
+      ROOF_TYPE_LABELS[propertyContext.roofType],
+      ROOF_FORM_LABELS[propertyContext.roofForm],
+      ROOF_CONDITION_LABELS[propertyContext.roofCondition],
+    ],
+    services: ["solar", "insulation"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-heating-cooling",
+    label: "Heating and cooling already recorded in the home plan",
+    answers: labelsFromFeatures(features, HEATING_COOLING_LABELS),
+    services: ["heating-cooling"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-hot-water",
+    label: "Hot water already recorded in the home plan",
+    answers: labelsFromFeatures(features, HOT_WATER_LABELS),
+    services: ["hot-water"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-insulation",
+    label: "Insulation already recorded in the home plan",
+    answers: labelsFromFeatures(features, INSULATION_LABELS),
+    services: ["insulation"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-solar",
+    label: "Rooftop solar already recorded in the home plan",
+    answers: labelsFromFeatures(features, SOLAR_LABELS),
+    services: ["solar"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-battery",
+    label: "Home battery already recorded in the home plan",
+    answers: labelsFromFeatures(features, BATTERY_LABELS),
+    services: ["battery"],
+  });
+  return facts;
+}
 
-  const insulationFacts = [...features]
-    .filter((feature) => KNOWN_INSULATION_FEATURES.has(feature));
-  const insulationKinds = new Set(insulationFacts.map((feature) =>
-    feature.endsWith("-none")
-      ? "none"
-      : feature.endsWith("-limited")
-        ? "limited"
-        : feature.endsWith("-well")
-          ? "well"
-          : "not-applicable"));
-  const insulationDefault = insulationKinds.size > 1
-    ? "Mixed or varies by area"
-    : insulationKinds.has("none")
-      ? "No insulation in known areas"
-      : insulationKinds.has("limited")
-        ? "Old, thin or patchy in known areas"
-        : insulationKinds.has("well")
-          ? "Well insulated or recently upgraded"
-          : "";
-  if (insulationDefault) defaults.set("insulation-known", insulationDefault);
-  if (selectedServices.has("battery") && features.has("solar-none")) {
-    defaults.set("existing-solar", "No solar");
-  }
-  if (selectedServices.has("heating-cooling")) {
-    const answers = new Set([...features].flatMap((feature) => {
-      if (!KNOWN_HEATING_COOLING_FEATURES.has(feature)) return [];
-      if (feature === "gas-heating") return ["Gas"];
-      if (feature === "electric-resistance-heating") return ["Electric resistance"];
-      if (feature === "reverse-cycle") return ["Heat pump or reverse cycle"];
-      if (feature === "wood-heating") return ["Wood or another fuel"];
-      if (feature === "heating-cooling-none") return ["Nothing installed"];
-      return [];
-    }));
-    if (answers.size === 1) {
-      defaults.set("existing-heating-equipment", [...answers][0]);
-    }
-  }
-  if (selectedServices.has("hot-water")) {
-    const answers = new Set([...features].flatMap((feature) => {
-      if (!KNOWN_HOT_WATER_FEATURES.has(feature)) return [];
-      if (feature.startsWith("gas-")) return ["Gas"];
-      if (["electric-storage-hot-water", "electric-instant-hot-water"].includes(feature)) {
-        return ["Electric resistance"];
-      }
-      if (feature === "heat-pump-hot-water") return ["Heat pump"];
-      if (["solar-hot-water", "electric-gas-boosted-hot-water"].includes(feature)) {
-        return ["Solar hot water"];
-      }
-      if (feature === "hot-water-other") return ["Other"];
-      return [];
-    }));
-    if (answers.size === 1) {
-      defaults.set("existing-hot-water-equipment", [...answers][0]);
-    }
-  }
-  return publicPlanQuoteQuestionsForServices(services)
-    .map((question) => ({
-      ...question,
-      defaultAnswer: defaults.get(question.id) || "",
-      answerSource: defaults.has(question.id) ? "private-plan" : "quote-preparation",
-    }));
+export function publicPlanQuoteQuestionsForSnapshot(services, _planSnapshot) {
+  void _planSnapshot;
+  return publicPlanQuoteQuestionsForServices(services);
 }
 
 export function publicPlanQuotePhotoPromptsForServices(services) {
@@ -600,7 +486,14 @@ export function normalizePublicPlanQuotePreparation(raw, services, planSnapshot 
     services,
     planSnapshot,
   );
-  const allowedQuestions = new Set(allowedQuestionDefinitions.map((item) => item.id));
+  const allowedPlanFacts = publicPlanQuotePlanFactsForSnapshot(services, planSnapshot);
+  const allowedPlanFactById = new Map(
+    allowedPlanFacts.map((item) => [item.questionId, item]),
+  );
+  const allowedQuestions = new Set([
+    ...allowedQuestionDefinitions.map((item) => item.id),
+    ...allowedPlanFacts.map((item) => item.questionId),
+  ]);
   const suppliedAnswers = new Map();
   if (!Array.isArray(raw.answers)) {
     return { ok: false, error: "The quote preparation answers could not be read." };
@@ -620,12 +513,16 @@ export function normalizePublicPlanQuotePreparation(raw, services, planSnapshot 
       return { ok: false, error: "A quote preparation answer did not match the selected services." };
     }
     const definition = questionById.get(questionId);
-    if (!definition?.options.includes(answer)) {
+    const planFact = allowedPlanFactById.get(questionId);
+    if (
+      (!definition || !definition.options.includes(answer))
+      && (!planFact || planFact.answer !== answer)
+    ) {
       return { ok: false, error: "Choose one of the available quote preparation answers." };
     }
     suppliedAnswers.set(questionId, answer);
   }
-  const answers = allowedQuestionDefinitions.flatMap((definition) => {
+  const interactiveAnswers = allowedQuestionDefinitions.flatMap((definition) => {
     const answer = suppliedAnswers.get(definition.id);
     return answer
       ? [{
@@ -636,6 +533,9 @@ export function normalizePublicPlanQuotePreparation(raw, services, planSnapshot 
       }]
       : [];
   });
+  const planFactAnswers = allowedPlanFacts.filter((fact) =>
+    suppliedAnswers.get(fact.questionId) === fact.answer);
+  const answers = [...interactiveAnswers, ...planFactAnswers];
 
   const allowedPrompts = new Set(
     publicPlanQuotePhotoPromptsForServices(services).map((item) => item.id),

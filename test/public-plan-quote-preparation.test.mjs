@@ -17,8 +17,8 @@ import {
   publicPlanQuoteCategoryIntersection,
   publicPlanQuotePhotoReplayDecision,
   publicPlanQuotePhotoPromptsForServices,
+  publicPlanQuotePlanFactsForSnapshot,
   publicPlanQuoteQuestionsForServices,
-  publicPlanQuoteQuestionsForSnapshot,
   publicPlanQuoteUploadKeyHashMatches,
   publicPlanQuoteUploadRateDecision,
   publicPlanQuoteWithdrawalDecision,
@@ -95,24 +95,58 @@ function pngChunk(type, data) {
   return chunk;
 }
 
-test("each public service has three or four concise questions and combined services deduplicate globally", () => {
+test("quote preparation stays materially shorter than the plan and deduplicates globally", () => {
   for (const service of SERVICES) {
     const questions = publicPlanQuoteQuestionsForServices([service]);
-    assert.ok(questions.length >= 3 && questions.length <= 4, `${service} has ${questions.length} questions`);
+    assert.ok(questions.length >= 1 && questions.length <= 2, `${service} has ${questions.length} questions`);
     assert.equal(new Set(questions.map((question) => question.id)).size, questions.length);
     assert.ok(questions.every((question) => question.label.length <= 80));
   }
 
   const combined = publicPlanQuoteQuestionsForServices(SERVICES);
+  assert.ok(combined.length <= 5, `all services have ${combined.length} questions`);
   assert.equal(new Set(combined.map((question) => question.id)).size, combined.length);
   for (const service of SERVICES) {
     const serviceIds = publicPlanQuoteQuestionsForServices([service]).map((question) => question.id);
     assert.ok(serviceIds.every((id) => combined.some((question) => question.id === id)));
   }
+  const removedRepeatQuestions = new Set([
+    "switchboard",
+    "roof-details",
+    "existing-solar",
+    "existing-heating-equipment",
+    "existing-hot-water-equipment",
+    "heating-scope",
+    "draught-locations",
+    "fixed-ventilation",
+    "insulation-area",
+    "insulation-known",
+    "window-construction",
+    "window-priority",
+    "shading-access",
+    "ev-needs",
+    "ev-parking",
+    "assessment-concerns",
+    "assessment-records",
+  ]);
+  assert.ok(combined.every((question) => !removedRepeatQuestions.has(question.id)));
+
+  const screenshotServices = [
+    "assessment",
+    "solar",
+    "heating-cooling",
+    "hot-water",
+    "draught-proofing",
+    "insulation",
+    "glazing",
+    "window-coverings",
+    "ev-charging",
+  ];
+  assert.equal(publicPlanQuoteQuestionsForServices(screenshotServices).length, 3);
 });
 
-test("known plan facts stay visible as exact editable suggestions instead of being silently shared or asked from scratch", () => {
-  const questions = publicPlanQuoteQuestionsForSnapshot([
+test("known plan facts become an exact read-only summary and preserve multi-system heating", () => {
+  const facts = publicPlanQuotePlanFactsForSnapshot([
     "solar",
     "battery",
     "insulation",
@@ -122,39 +156,63 @@ test("known plan facts stay visible as exact editable suggestions instead of bei
     propertyContext: {
       switchboard: "modern_breakers",
       roofType: "metal",
+      roofForm: "pitched",
       roofCondition: "good",
     },
     features: [
       "solar-none",
+      "battery",
       "wall-insulation-well",
+      "reverse-cycle",
       "gas-heating",
+      "evaporative-cooling",
       "heat-pump-hot-water",
     ],
   });
-  const suggestions = Object.fromEntries(questions
-    .filter((question) => question.defaultAnswer)
-    .map((question) => [question.id, question]));
-  assert.equal(suggestions.switchboard.defaultAnswer, "Modern circuit breakers");
-  assert.equal(suggestions["roof-details"].defaultAnswer, "Metal and sound");
-  assert.equal(suggestions["existing-solar"].defaultAnswer, "No solar");
-  assert.equal(suggestions["insulation-known"].defaultAnswer, "Well insulated or recently upgraded");
-  assert.equal(suggestions["existing-heating-equipment"].defaultAnswer, "Gas");
-  assert.equal(suggestions["existing-hot-water-equipment"].defaultAnswer, "Heat pump");
-  assert.ok(Object.values(suggestions).every((question) =>
-    question.answerSource === "private-plan"));
+  const byId = Object.fromEntries(facts.map((fact) => [fact.questionId, fact]));
+  assert.equal(byId["known-plan-switchboard"].answer, "Modern circuit breakers");
+  assert.equal(
+    byId["known-plan-roof"].answer,
+    "Metal roof covering; Pitched or sloping roof; No known roof damage",
+  );
+  assert.equal(byId["known-plan-solar"].answer, "No rooftop solar");
+  assert.equal(byId["known-plan-battery"].answer, "Home battery installed");
+  assert.deepEqual(byId["known-plan-solar"].services, ["solar"]);
+  assert.deepEqual(byId["known-plan-battery"].services, ["battery"]);
+  assert.equal(
+    byId["known-plan-insulation"].answer,
+    "External walls: well insulated or recently upgraded",
+  );
+  assert.equal(
+    byId["known-plan-heating-cooling"].answer,
+    "Reverse-cycle air conditioning; Gas space or ducted heating; Evaporative cooling",
+  );
+  assert.equal(byId["known-plan-hot-water"].answer, "Heat-pump hot water");
+  assert.deepEqual(
+    publicPlanQuoteAnswersForMatchedCategories(facts, ["solar"])
+      .filter((fact) => fact.questionId.startsWith("known-plan-solar") || fact.questionId.startsWith("known-plan-battery"))
+      .map((fact) => fact.questionId),
+    ["known-plan-solar"],
+  );
+  assert.deepEqual(
+    publicPlanQuoteAnswersForMatchedCategories(facts, ["battery"])
+      .filter((fact) => fact.questionId.startsWith("known-plan-solar") || fact.questionId.startsWith("known-plan-battery"))
+      .map((fact) => fact.questionId),
+    ["known-plan-battery"],
+  );
 
-  const notSure = publicPlanQuoteQuestionsForSnapshot(["solar"], {
+  const notSure = publicPlanQuotePlanFactsForSnapshot(["solar"], {
     propertyContext: { switchboard: "not_sure", roofType: "metal", roofCondition: "not_sure" },
   });
-  assert.equal(notSure.find((question) => question.id === "switchboard").defaultAnswer, "");
-  assert.equal(notSure.find((question) => question.id === "roof-details").defaultAnswer, "");
+  assert.equal(notSure.some((fact) => fact.questionId === "known-plan-switchboard"), false);
+  assert.equal(notSure.find((fact) => fact.questionId === "known-plan-roof").answer, "Metal roof covering");
 });
 
 test("quote preparation normalises deterministic answers and rejects mismatched, duplicate or excessive input", () => {
   const services = ["hot-water", "battery"];
   const questions = publicPlanQuoteQuestionsForServices(services);
   const prompts = publicPlanQuotePhotoPromptsForServices(services);
-  const suppliedAnswers = [questions[2], questions[0]].map((question) => ({
+  const suppliedAnswers = [questions.at(-1), questions[0]].map((question) => ({
     questionId: question.id,
     answer: question.options[0],
   }));
@@ -221,33 +279,72 @@ test("quote preparation normalises deterministic answers and rejects mismatched,
     expectedPhotoCount: 1,
     uploadKeyHash: "not-a-hash",
   }, services).ok, false);
+  const planSnapshot = {
+    propertyContext: { switchboard: "modern_breakers" },
+    features: ["solar-none"],
+  };
+  const planFact = publicPlanQuotePlanFactsForSnapshot(["battery"], planSnapshot)[0];
   const carried = normalizePublicPlanQuotePreparation({
     ...base,
-    answers: [{ questionId: "switchboard", answer: "Modern circuit breakers" }],
-  }, ["battery"], { propertyContext: { switchboard: "modern_breakers" } });
+    answers: [{ questionId: planFact.questionId, answer: planFact.answer }],
+  }, ["battery"], planSnapshot);
   assert.equal(carried.ok, true);
   assert.deepEqual(carried.value.answers.map((answer) => answer.answer), ["Modern circuit breakers"]);
+  assert.equal(normalizePublicPlanQuotePreparation({
+    ...base,
+    answers: [{ questionId: planFact.questionId, answer: "Altered plan fact" }],
+  }, ["battery"], planSnapshot).ok, false);
 });
 
-test("hot-water and heating use service-specific equipment and location photos plus the shared switchboard view", () => {
+test("hot-water and heating prioritise wide context photos plus the full switchboard view", () => {
   assert.deepEqual(
     publicPlanQuotePhotoPromptsForServices(["hot-water"]).map((prompt) => prompt.id),
-    ["hot-water-equipment-label", "hot-water-installation-area", "switchboard-front"],
+    ["switchboard-front", "hot-water-installation-area"],
   );
   assert.deepEqual(
     publicPlanQuotePhotoPromptsForServices(["heating-cooling"]).map((prompt) => prompt.id),
-    ["heating-equipment-label", "heating-installation-area", "switchboard-front"],
+    ["switchboard-front", "heating-installation-area"],
+  );
+  assert.deepEqual(
+    publicPlanQuotePhotoPromptsForServices(["ev-charging"]).map((prompt) => prompt.id),
+    ["switchboard-front", "ev-installation-area"],
+  );
+  assert.deepEqual(
+    publicPlanQuotePhotoPromptsForServices(["solar"]).map((prompt) => prompt.id),
+    ["roof-wide", "switchboard-front", "solar-battery-equipment-wide"],
+  );
+  assert.deepEqual(
+    publicPlanQuotePhotoPromptsForServices(["battery"]).map((prompt) => prompt.id),
+    ["switchboard-front", "solar-battery-equipment-wide", "battery-installation-area"],
   );
   const combined = publicPlanQuotePhotoPromptsForServices(["hot-water", "heating-cooling"]);
   assert.equal(new Set(combined.map((prompt) => prompt.id)).size, combined.length);
   assert.deepEqual(
-    combined.find((prompt) => prompt.id === "hot-water-equipment-label").services,
+    combined.find((prompt) => prompt.id === "hot-water-installation-area").services,
     ["hot-water"],
   );
   assert.deepEqual(
-    combined.find((prompt) => prompt.id === "heating-equipment-label").services,
+    combined.find((prompt) => prompt.id === "heating-installation-area").services,
     ["heating-cooling"],
   );
+  assert.match(combined.find((prompt) => prompt.id === "switchboard-front").label, /Full switchboard/);
+  assert.match(
+    combined.find((prompt) => prompt.id === "switchboard-front").hint,
+    /normal hinged door open\. Do not remove covers or touch wiring/,
+  );
+  const equipmentPrompt = publicPlanQuotePhotoPromptsForServices([
+    "solar",
+    "battery",
+    "heating-cooling",
+    "hot-water",
+    "ev-charging",
+  ]).find((prompt) => prompt.id === "solar-battery-equipment-wide");
+  assert.deepEqual(equipmentPrompt.services, ["solar", "battery"]);
+  assert.deepEqual(publicPlanQuoteCategoryIntersection(
+    equipmentPrompt.services,
+    ["heating-cooling", "hot-water", "ev-charging"],
+  ), []);
+  assert.ok(combined.every((prompt) => !prompt.id.endsWith("equipment-label")));
 });
 
 test("quote answers and photo categories are minimised to each exact matched service and malformed categories fail closed", () => {
@@ -551,17 +648,22 @@ test("the public form progressively renders mobile capture, explicit sharing con
   const css = read("../src/components/PublicPlanEnquiryForm.module.css");
   assert.match(form, /Help trades prepare a desktop quote/);
   assert.match(form, /publicPlanQuoteQuestionsForSnapshot\(interests, planSnapshot\)/);
-  assert.match(form, /Use \{knownPlanQuoteQuestions\.length\} known/);
-  assert.match(form, /Suggested from your private plan/);
-  assert.match(form, /known plan answers are included only when you select/i);
+  assert.match(form, /publicPlanQuotePlanFactsForSnapshot\(interests, planSnapshot\)/);
+  assert.match(form, /<details className=\{`\$\{styles\.quotePreparation\} \$\{styles\.full\}`\} open>/);
+  assert.match(form, /Share \{knownPlanFacts\.length\} relevant details already recorded in my home plan/);
+  assert.match(form, /className=\{styles\.knownPlanFactList\}/);
+  assert.match(form, /Relevant home plan facts are included only when I selected the read-only summary above/);
   assert.match(form, /setIncludeKnownPlanAnswers\(include\)/);
+  assert.doesNotMatch(form, /What type of switchboard is installed|What is the main roof covering and condition|What heating or cooling equipment is installed now|What hot-water system is installed now|Which areas need heating or cooling, and what is wrong now|Where are the noticeable draughts|Are any openings required for ventilation or an unflued gas appliance|What useful records are available|What should the assessor focus on first/);
+  assert.match(form, /Useful wide photos/);
+  assert.match(form, /Close-up labels are secondary/);
   assert.match(form, /accept="image\/jpeg,image\/png"/);
   assert.doesNotMatch(form, /image\/webp|WebP/);
   assert.match(form, /aria-label=\{`Add photos: \$\{prompt\.label\}`\}/);
   assert.match(form, /aria-describedby=\{hintId\}/);
   assert.match(form, /capture="environment"[\s\S]*multiple[\s\S]*type="file"/);
   assert.match(form, /const retained = quotePhotos/);
-  assert.match(form, /quote answers or photos I chose to add/);
+  assert.match(form, /quote details or photos I chose to add/);
   assert.match(form, /full plan and PDF stay private/);
   assert.match(form, /never attached to email|not attached to email/);
   assert.doesNotMatch(form, /uploaded files are not shared with trades/);

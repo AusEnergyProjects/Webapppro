@@ -336,8 +336,8 @@ test("the public component sends the visible contact fields and bounded plan sel
   assert.match(component, /Also share my first and last name/);
   assert.match(component, /Also share my phone number/);
   assert.doesNotMatch(component, /shareMessage|Also share my optional message/);
-  assert.match(component, /email, postcode, selected services, message and any optional quote answers or photos are included/i);
-  assert.match(component, /message and any quote answers or photos I chose to add/i);
+  assert.match(component, /email, postcode, selected services, message and any optional quote details or photos are included/i);
+  assert.match(component, /message and any quote details or photos I chose to add/i);
   assert.match(component, /Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records/i);
   assert.match(component, /full plan and PDF stay private and are emailed only to me/i);
   assert.match(component, /lastAttemptCore\.current !== currentCore/);

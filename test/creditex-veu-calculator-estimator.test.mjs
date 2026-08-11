@@ -784,20 +784,16 @@ test("Schedule 4 water-heater limits require prior property history and enforce 
   );
 });
 
-test("VEU rounds each prescribed activity before adding repeated-system totals", () => {
+test("VEU rounds the combined prescribed-activity reduction once", () => {
   const exactHalf = { numerator: 15n, denominator: 2n };
   const belowHalf = { numerator: 7_485_408n, denominator: 1_000_000n };
 
-  const exactHalfPerActivity = roundCreditexVeuWholeCertificates(exactHalf);
-  const belowHalfPerActivity = roundCreditexVeuWholeCertificates(belowHalf);
-  assert.equal(exactHalfPerActivity, "8");
-  assert.equal(String(BigInt(exactHalfPerActivity) * 2n), "16");
+  assert.equal(roundCreditexVeuWholeCertificates(exactHalf), "8");
   assert.equal(
     roundCreditexVeuWholeCertificates({ numerator: 15n, denominator: 1n }),
     "15",
   );
-  assert.equal(belowHalfPerActivity, "7");
-  assert.equal(String(BigInt(belowHalfPerActivity) * 2n), "14");
+  assert.equal(roundCreditexVeuWholeCertificates(belowHalf), "7");
   assert.equal(
     roundCreditexVeuWholeCertificates({
       numerator: 14_970_816n,
@@ -807,7 +803,7 @@ test("VEU rounds each prescribed activity before adding repeated-system totals",
   );
 });
 
-test("Part 3 rounds each separately eligible prescribed activity before adding the property total", () => {
+test("Part 3 combines repeated systems before rounding the prescribed activity", () => {
   const baseInputs = {
     climate_zone: "5",
     bs2021_gj_per_year: "3.5",
@@ -826,17 +822,61 @@ test("Part 3 rounds each separately eligible prescribed activity before adding t
   assert.equal(perUnit.output.unroundedTonnes, "7.494165");
   assert.equal(perUnit.output.wholeCertificates, "7");
   assert.equal(quote.output.unroundedTonnes, "14.98833");
-  assert.equal(quote.output.wholeCertificates, "14");
-  assert.notEqual(quote.output.wholeCertificates, "15");
+  assert.equal(quote.output.wholeCertificates, "15");
+  assert.notEqual(quote.output.wholeCertificates, "14");
   assert.match(
     quote.trace.find(({ key }) => key === "multi_unit_total").operation,
-    /round each separately eligible prescribed activity/,
+    /round the activity total once/,
   );
   assert.ok(quote.supportingSources.some((source) => (
-    source.version === "3.20"
+      source.version === "3.20"
       && source.title === "Water Heating and Space Heating and Cooling Activity Guide"
-      && source.pages === "printed pages 10 and 47"
+      && source.pages === "printed pages 4 and 47"
   )));
+});
+
+test("mixed water-heater models sum exact reductions before one activity rounding", () => {
+  const baseInputs = {
+    climate_zone: "5",
+    bs2021_gj_per_year: "3.5",
+    be2021_gj_per_year: "0",
+    ...waterHeaterEligibility(true),
+    unit_quantity: "1",
+  };
+  const first = estimateCreditexVeu({
+    activityCode: "3C",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: baseInputs,
+    product: product("VEU", "3C", { productId: "VEU-WH-MIXED-A" }),
+  });
+  const second = estimateCreditexVeu({
+    activityCode: "3C",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: baseInputs,
+    product: product("VEU", "3C", { productId: "VEU-WH-MIXED-B" }),
+  });
+  const property = aggregateCreditexVeuWaterHeaterQuotes([
+    { selectedProductId: "official:mixed-a", unitQuantity: "1", estimate: first },
+    { selectedProductId: "official:mixed-b", unitQuantity: "1", estimate: second },
+  ]);
+
+  assert.equal(first.output.unroundedTonnes, "7.494165");
+  assert.equal(second.output.unroundedTonnes, "7.494165");
+  assert.equal(first.output.wholeCertificates, "7");
+  assert.equal(second.output.wholeCertificates, "7");
+  assert.equal(property.output.unroundedTonnes, "14.98833");
+  assert.equal(property.output.wholeCertificates, "15");
+  assert.notEqual(
+    property.output.wholeCertificates,
+    String(BigInt(first.output.wholeCertificates)
+      + BigInt(second.output.wholeCertificates)),
+  );
+  assert.match(
+    property.trace.at(-1).operation,
+    /round the prescribed activity total once/,
+  );
 });
 
 test("mixed VEU water-heater quotes preserve per-model arithmetic and one property total", () => {
