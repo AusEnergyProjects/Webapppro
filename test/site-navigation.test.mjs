@@ -379,6 +379,10 @@ test("integrated planner is private, ordered and responsive", () => {
     styles,
     /@media \(max-width: 520px\)[\s\S]*\.planner-quick-wins-grid article > a \{ width: 100%; \}/,
   );
+  assert.match(
+    styles,
+    /@media \(max-width: 520px\)[\s\S]*\.planner-results \{ padding: 12px; \}[\s\S]*\.planner-result-decision \{[^}]*padding: 10px;/,
+  );
   assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
   assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);

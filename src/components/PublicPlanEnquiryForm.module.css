@@ -111,7 +111,10 @@ textarea.control {
 .secondaryAction:focus-visible,
 .gatewayClose:focus-visible,
 .gatewayActions a:focus-visible,
-.privacy summary:focus-visible {
+.privacy summary:focus-visible,
+.quotePreparation summary:focus-visible,
+.photoPicker input:focus-visible,
+.selectedPhotoList button:focus-visible {
   outline: 3px solid #23c9aa;
   outline-offset: 2px;
 }
@@ -281,6 +284,259 @@ textarea.control {
   font-weight: 850;
 }
 
+.quotePreparation {
+  background: linear-gradient(145deg, #edf9f6, #fafffd);
+  border: 1px solid #9fd6c9;
+  border-radius: 16px;
+  color: #173f46;
+  overflow: hidden;
+}
+
+.quotePreparation > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  list-style-position: inside;
+  padding: 0.95rem;
+}
+
+.quotePreparation > summary::marker {
+  color: #078465;
+}
+
+.quotePreparation > summary > span:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.quotePreparation > summary strong {
+  color: #0b5148;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.quotePreparation > summary small {
+  color: #557377;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.quotePreparationCount {
+  background: #d7f7ee;
+  border: 1px solid #a4ddcf;
+  border-radius: 999px;
+  color: #075e4d;
+  flex: 0 0 auto;
+  font-size: 0.875rem;
+  font-weight: 850;
+  line-height: 1.4;
+  padding: 0.45rem 0.65rem;
+}
+
+.quotePreparationBody {
+  border-top: 1px solid #b9ded5;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.quotePreparationBody > p,
+.quotePhotos p {
+  color: #557377;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.quotePreparationHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.quotePreparationHeader h4,
+.quotePhotos h4 {
+  color: #0b3a40;
+  font-size: 1rem;
+  line-height: 1.3;
+  margin: 0.25rem 0 0;
+}
+
+.quotePreparationHeader > span {
+  color: #176c5c;
+  font-size: 0.875rem;
+  font-weight: 850;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.knownPlanAnswerChoice {
+  align-items: center;
+  background: #e7f8f2;
+  border: 1px solid #8bcfbd;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.8rem;
+}
+
+.knownPlanAnswerChoice input {
+  accent-color: #078465;
+  flex: 0 0 auto;
+  height: 1.35rem;
+  margin: 0;
+  width: 1.35rem;
+}
+
+.knownPlanAnswerChoice > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.knownPlanAnswerChoice strong {
+  color: #0b5148;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.knownPlanAnswerChoice small {
+  color: #35675f;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.quoteQuestionGrid,
+.quotePhotoGrid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quoteQuestion,
+.quotePhotoPrompt {
+  background: #ffffff;
+  border: 1px solid #beded6;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.78rem;
+}
+
+.quoteQuestion > span,
+.quotePhotoPrompt strong {
+  color: #173f46;
+  font-size: 0.9375rem;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.quoteQuestion > small {
+  color: #607b7f;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.quoteQuestion > .carriedPlanFact {
+  color: #075e4d;
+  font-weight: 750;
+}
+
+.quoteQuestion .control {
+  font-size: 1rem;
+  min-height: 2.75rem;
+}
+
+.quotePhotos {
+  border-top: 1px solid #b9ded5;
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 1rem;
+}
+
+.quotePhotoPrompt > div {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.photoPicker {
+  align-items: center;
+  background: #e4faf3;
+  border: 1px solid #79c8b5;
+  border-radius: 10px;
+  color: #075e4d;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.9375rem;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 2.75rem;
+  overflow: hidden;
+  padding: 0.65rem;
+  position: relative;
+}
+
+.photoPicker input {
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.selectedPhotoList {
+  display: grid;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.selectedPhotoList li {
+  align-items: center;
+  background: #f3faf8;
+  border-radius: 8px;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+}
+
+.selectedPhotoList span {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedPhotoList button {
+  background: transparent;
+  border: 0;
+  color: #9f2722;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 850;
+  line-height: 1.4;
+  min-height: 2.75rem;
+  min-width: 4.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.quotePhotos .quotePhotoPrivacy,
+.uploadPrivacyNote {
+  color: #246458;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .shareChoices {
   background: #f7fcfb;
   border: 1px solid #c5e5dc;
@@ -442,6 +698,15 @@ textarea.control {
   margin: 0;
 }
 
+.withdrawalStatus {
+  background: #eefaf6;
+  border: 1px solid #9bd2c5;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 0.7rem 0.8rem;
+}
+
 .reference {
   background: #def8ef;
   border-radius: 8px;
@@ -542,6 +807,21 @@ textarea.control {
 }
 
 @container (max-width: 34rem) {
+  .root {
+    border-radius: 16px;
+    padding: 0.75rem;
+  }
+
+  .addressFields,
+  .serviceChoices {
+    padding: 0.75rem;
+  }
+
+  .quotePreparation > summary,
+  .quotePreparationBody {
+    padding: 0.75rem;
+  }
+
   .header {
     display: grid;
   }
@@ -556,6 +836,8 @@ textarea.control {
 
   .serviceGrid,
   .addressGrid,
+  .quoteQuestionGrid,
+  .quotePhotoGrid,
   .gatewayActions {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -566,6 +848,27 @@ textarea.control {
 
   .full {
     grid-column: auto;
+  }
+
+  .quotePreparation > summary,
+  .quotePreparationHeader {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .quotePreparationCount,
+  .quotePreparationHeader > span {
+    justify-self: start;
+    text-align: left;
+  }
+
+  .quotePreparation > summary {
+    min-height: 2.75rem;
+  }
+
+  .photoPicker,
+  .selectedPhotoList button {
+    min-height: 2.75rem;
   }
 
   .submit,

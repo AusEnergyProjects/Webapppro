@@ -80,6 +80,7 @@ export function publicPlanSubmissionFingerprint(payload) {
     projectCategories: payload?.projectCategories || [],
     projectNotes: payload?.projectNotes || "",
     tradeSharing: payload?.tradeSharing || null,
+    quotePreparation: payload?.quotePreparation || null,
     planSnapshot: payload?.planSnapshot || null,
     consent: {
       accepted: payload?.consent?.accepted === true,

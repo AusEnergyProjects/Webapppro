@@ -165,9 +165,11 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 308 release package | Local package supplied to Sites | 392 entries; 11,903,586 bytes; SHA-256 `f9ce016769722f6b47d17107ec2d3d1ab0670a8afea3007a3ec5d0e117a859c8`; all 128 migrations through additive `0127_public_trade_lead_customer_address.sql` |
 | Historical Sites version 308 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_d5eaf4c6b458819187a105747dfc6075` | Exact Sites version 308 built from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`; 392 files; 38,696,960 bytes; content hash `sha256:881c057c42808490cc7d354c6c0e8a349a17fcb774e201d5cd302f9c7ed19e57`; deployment `appgdep_6a79e3700444819191ac709f0bd509c6` |
 | Historical governed-source and lead-delivery application source | `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a` on `codex/sites-custom-domain-migration` | Exact predecessor application source for historical Sites version 309; superseded by the VEU registry and water-heater correction |
-| Current VEU registry, rounding and water-heater limits application source | `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub working branch and Sites internal `main` for milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` |
-| Current saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8` | Exact Sites version 310 built from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`; 392 files; 38,727,680 bytes; content hash `sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`; all 128 migrations |
-| Current executable application identity | Sites version 310 from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` succeeded; environment revision 20 |
+| Current release-candidate source baseline | `b33f7f49f9b57645d8d5594d2550df87352824b1` on `codex/sites-custom-domain-migration` | Milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` is implemented and locally validated; exact release commit pending |
+| Proposed executable application identity | Sites version 311 | Saved-version identity, deployment identity and live custom-domain verification pending |
+| Historical VEU registry, rounding and water-heater limits application source | `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` on `codex/sites-custom-domain-migration` | Exact executable source pushed to the GitHub working branch and Sites internal `main` for milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` |
+| Historical Sites version 310 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8` | Exact Sites version 310 built from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`; 392 files; 38,727,680 bytes; content hash `sha256:c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`; all 128 migrations |
+| Current verified production baseline pending version 311 activation | Sites version 310 from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7a78c959908191a2fbd39fc247dfc2` succeeded; environment revision 20 |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Exact committed relay source saved and the existing deployment update to version 14 was initiated; hosted v14 identity and signed lead-delivery probe remain unverified; no real lead was submitted |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -194,15 +196,80 @@ from `c75ff7bb4355f2f74bc9996527900c3d515ab85e` completed the guided customer
 journey. Mobile-header corrective Sites version 307 from
 `6df3fab3c9eaca55445cf1c3f16e58b276aae6fd`, structured-enquiry Sites version
 308 from `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0` and predecessor Sites version
-309 from `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a` are historical. Current Sites
-version 310 is exact VEU registry, rounding and water-heater limits source
-`481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`. Public health, VEU Activity 3C
-product search, the signed-in product picker and current SRES water-heater
-registry are verified below. GEMS-backed calculators remain fail-closed after an
-unresolved reviewed official-row decrease.
+309 from `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a` are historical. Sites version
+310 from exact VEU registry, rounding and water-heater limits source
+`481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` is the current verified production
+baseline and historical release checkpoint until proposed Sites version 311 is
+activated. Milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` is
+implemented on branch `codex/sites-custom-domain-migration` from base HEAD
+`b33f7f49f9b57645d8d5594d2550df87352824b1`; its exact release commit,
+saved-version identity, deployment identity and live verification are pending.
+GEMS-backed calculators remain fail-closed after an unresolved reviewed
+official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current VEU registry, rounding and water-heater limits release
+## Current practical plan, trade email and quote preparation release candidate
+
+Milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` is implemented and
+locally validated on `codex/sites-custom-domain-migration`, based on repository
+HEAD `b33f7f49f9b57645d8d5594d2550df87352824b1`. Sites version 311 is the
+proposed release. The exact committed application source, saved-version identity,
+deployment identity and live verification remain pending. Until activation,
+Sites version 310 remains the current verified production baseline.
+
+Every active approved match must own one unique durable notification delivery
+before lead matching is reported as successful. Exact opportunity batches drain
+after the request and from successful health checks, signed-in trade polling and
+the minute scheduler. Provider failures retry after 5 minutes, 30 minutes, 2
+hours, 4 hours, 8 hours, 16 hours and then daily until the provider accepts the
+message, the customer withdraws consent or the trade is no longer eligible. The
+public-plan notification does not depend on an optional account email preference,
+but every send rechecks active platform approval, current consent, selected
+service and service area, active opportunity and match, current email,
+suppression and idempotency.
+
+Email attachment and post-submit gateway download use one canonical customer PDF
+generator and are byte-identical for the same plan inputs. The audited fixture is
+a tagged 24-page report with embedded fonts, semantic lists, 48 checked links and
+no active content. Plain-language immediate, better and long-term action tiers
+cover draughts, moisture, ventilation, glazing, shading, heating, cooling, hot
+water, cooking, solar, batteries, electric vehicles and assessment preparation.
+Gas replacement guidance is conditional and recommends efficient affordable
+electric alternatives without making product, price or savings claims.
+
+The public enquiry exposes optional three-to-four-question preparation packs for
+all 11 services, deduplicates only genuinely shared questions and requires an
+explicit customer opt-in before known private plan facts are reused. Relevant
+mobile and desktop file controls accept JPEG and PNG images. Answers and photos
+remain optional and a photo-only retry cannot resubmit the base lead.
+
+Private quote answers and stripped photo derivatives are held in D1 and R2,
+never exposed through a public URL or email attachment, and are accessible only
+to exact active matches for the relevant selected service. Customer withdrawal
+blocks access immediately. Bounded tombstone cleanup removes retained R2 objects
+after upload failure or withdrawal. Additive migration
+`0128_public_plan_quote_preparation.sql` owns answer, file, grant, withdrawal and
+cleanup state; the packaged inventory contains all 129 migrations through
+`0128`. The mobile enquiry padding correction keeps the form readable without
+horizontal document overflow.
+
+Before that bounded padding correction, `npm.cmd run validate` passed typecheck,
+warning-free lint, integration, 1,924 tests with 1,914 passed, 10 intentional
+skips and 0 failures, `db:check`, the customer-plan PDF audit, production build
+and Sites bundle audit. After the correction, the focused set passed 32 of 32,
+followed by typecheck, warning-free lint, production build and a Sites bundle
+audit containing all 129 migrations. Independent release review found no P0 or
+P1 issue. Final post-correction full validation is being rerun before release.
+
+Local desktop and 355-pixel mobile QA confirmed the optional preparation pack,
+service-specific questions and file controls, readable form and zero horizontal
+document overflow. No new real customer lead was submitted for visual QA.
+Release completion still requires the exact release commit, Sites version 311
+saved-version and deployment identities, live custom-domain health and responsive
+checks, and provider-accepted email evidence for the known pending matched-trade
+delivery without a duplicate send.
+
+## Prior VEU registry, rounding and water-heater limits release
 
 Milestone `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` is released from exact
 executable application commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`,

@@ -7,10 +7,16 @@ import { matchedServiceCategories } from "@/lib/trade-service-matching.mjs";
 import { selectEveryQualifiedTradeRecipient } from "@/lib/direct-trade-matching.mjs";
 import { closestQualifyingTradeServiceArea } from "@/lib/trade-service-area-matching.mjs";
 import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
+import { ensureOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
 import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
+import {
+  PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+  PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
+  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+} from "@/lib/public-plan-quote-preparation.mjs";
 
 export const DEFAULT_CONNECTED_INSTALLERS = 3;
 export const DEFAULT_CONTACT_LIMIT = 2;
@@ -193,6 +199,18 @@ type DirectTradeLead = {
     phone?: boolean;
     address?: boolean;
   };
+  quotePreparation?: {
+    version?: string;
+    answers?: Array<{
+      questionId?: string;
+      label?: string;
+      answer?: string;
+      services?: string[];
+    }>;
+    photoPromptIds?: string[];
+    expectedPhotoCount?: number;
+    uploadKeyHash?: string;
+  };
   timeframe?: string;
   directTradeTriage?: {
     status?: string;
@@ -205,6 +223,85 @@ type DirectTradeLead = {
     };
   };
 };
+
+type PublicQuoteConsentReceipt = {
+  accepted?: boolean;
+  purpose?: string;
+  noticeVersion?: string;
+  grantedAt?: string;
+};
+
+async function persistPublicQuotePreparation(
+  db: D1Database,
+  opportunityId: string,
+  sourceReference: string,
+  preparation: DirectTradeLead["quotePreparation"],
+  consent: PublicQuoteConsentReceipt | undefined,
+  createdAt: string,
+) {
+  if (!preparation || preparation.version !== PUBLIC_PLAN_QUOTE_PREPARATION_VERSION) {
+    return;
+  }
+  const answers = Array.isArray(preparation.answers) ? preparation.answers : [];
+  const photoPromptIds = Array.isArray(preparation.photoPromptIds)
+    ? preparation.photoPromptIds
+    : [];
+  const expectedPhotoCount = Number(preparation.expectedPhotoCount || 0);
+  const uploadKeyHash = String(preparation.uploadKeyHash || "");
+  const grantedAt = String(consent?.grantedAt || "");
+  if (
+    consent?.accepted !== true
+    || consent.noticeVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
+    || consent.purpose !== PUBLIC_PLAN_CONSENT_PURPOSE
+    || !Number.isFinite(Date.parse(grantedAt))
+  ) {
+    throw new Error("PUBLIC_QUOTE_PREPARATION_CONSENT_REQUIRED");
+  }
+  const canonicalGrantedAt = new Date(grantedAt).toISOString();
+  const answersJson = JSON.stringify(answers);
+  const promptIdsJson = JSON.stringify(photoPromptIds);
+  await db.prepare(`INSERT INTO public_trade_lead_quote_preparations
+    (id, opportunity_id, source_reference, status, version, question_answers,
+     photo_prompt_ids, expected_photo_count, upload_key_hash, notice_version,
+     consent_purpose, granted_at, created_at, updated_at)
+    VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING`)
+    .bind(
+      crypto.randomUUID(),
+      opportunityId,
+      sourceReference,
+      PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+      answersJson,
+      promptIdsJson,
+      expectedPhotoCount,
+      uploadKeyHash,
+      PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
+      PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+      canonicalGrantedAt,
+      createdAt,
+      createdAt,
+    )
+    .run();
+  const stored = await db.prepare(`SELECT *
+    FROM public_trade_lead_quote_preparations
+    WHERE opportunity_id = ? AND source_reference = ? LIMIT 1`)
+    .bind(opportunityId, sourceReference)
+    .first<Record<string, unknown>>();
+  if (
+    !stored
+    || stored.status !== "active"
+    || stored.version !== PUBLIC_PLAN_QUOTE_PREPARATION_VERSION
+    || stored.question_answers !== answersJson
+    || stored.photo_prompt_ids !== promptIdsJson
+    || Number(stored.expected_photo_count) !== expectedPhotoCount
+    || stored.upload_key_hash !== uploadKeyHash
+    || stored.notice_version !== PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION
+    || stored.consent_purpose !== PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE
+    || stored.granted_at !== canonicalGrantedAt
+  ) {
+    throw new Error("OPPORTUNITY_SOURCE_REFERENCE_MISMATCH");
+  }
+}
 
 function publicContactRelease(payload: DirectTradeLead) {
   if (payload.sourceJourney !== "public-home-energy-plan") return null;
@@ -360,6 +457,16 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
     noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
   });
+  if (payload.sourceJourney === "public-home-energy-plan") {
+    await persistPublicQuotePreparation(
+      db,
+      stored.id,
+      reference,
+      payload.quotePreparation,
+      payload.directTradeTriage?.contactConsentReceipt,
+      createdAt,
+    );
+  }
   const allocation =
     stored.status === "open" && stored.contactIsCurrent
       ? await allocateNearestInstallers(stored.id, "automatic-lead-intake")
@@ -547,6 +654,7 @@ export async function allocateNearestInstallers(
   if (allocated.length || existing.results.length) {
     await syncMarketplaceEnquiries(db, opportunityId);
   }
+  await ensureOpportunityNotificationDeliveries(opportunityId);
   return {
     allocated,
     activeCount: activeCount + allocated.length,

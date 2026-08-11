@@ -26,6 +26,10 @@ test("the public plan offers one clear no-account enquiry without promoting an a
   assert.match(planner, /planHref=\{printablePlanHref\}/);
   assert.doesNotMatch(planner, /planner-result-account-option/);
   assert.doesNotMatch(planner, /Create a free account/);
+  assert.match(
+    enquiryStyles,
+    /@container \(max-width: 34rem\) \{[\s\S]*\.root \{[\s\S]*padding: 0\.75rem;[\s\S]*\.addressFields,[\s\S]*\.serviceChoices \{[\s\S]*padding: 0\.75rem;[\s\S]*\.quotePreparation > summary,[\s\S]*\.quotePreparationBody \{[\s\S]*padding: 0\.75rem;/,
+  );
 });
 
 test("the optional enquiry preserves every supported planner selection without double entry", () => {
@@ -167,6 +171,14 @@ test("successful submission opens an accessible four-way next-step gateway", () 
   assert.match(enquiryForm, /href="\/gas-compare\?from=home-plan"/);
   assert.match(enquiryForm, /href="\/calculator"/);
   assert.match(enquiryForm, /href=\{planHref\}/);
+  assert.match(enquiryForm, /downloadPublicPlanPdf\(input\)/);
+  assert.match(enquiryForm, /onClick=\{downloadSubmittedPlan\}/);
+  assert.match(enquiryForm, /name: \[customerFirstName\.trim\(\), customerLastName\.trim\(\)\]/);
+  assert.match(enquiryForm, /projectCategories: \[\.\.\.interests\]/);
+  assert.match(enquiryForm, /successfulPdfInput\.current = \{/);
+  assert.match(enquiryForm, /preparedAtFromReference/);
+  assert.match(enquiryForm, /Download the same PDF prepared for your email/);
+  assert.doesNotMatch(enquiryForm, /new URLSearchParams\(\{[^}]*customerFirstName/);
   assert.equal(enquiryForm.match(/className=\{styles\.gatewayActions\}/g)?.length, 1);
   assert.doesNotMatch(enquiryForm, /[\u2013\u2014]/);
 });

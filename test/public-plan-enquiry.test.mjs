@@ -176,7 +176,7 @@ test("public plan validation keeps only the bounded canonicalizable snapshot and
   assert.deepEqual(Object.keys(result.value).sort(), [
     "clientStartedAt", "consent", "customerFirstName", "customerLastName", "customerState", "customerStreetAddress", "customerSuburb", "customerUnitNumber",
     "email", "enquiry", "name", "phone", "postcode",
-    "planSnapshot", "preferredContact", "projectCategories", "projectNotes", "submissionType", "submittedAt", "tradeSharing",
+    "planSnapshot", "preferredContact", "projectCategories", "projectNotes", "quotePreparation", "submissionType", "submittedAt", "tradeSharing",
     "submissionId", "upgrades", "website",
   ].sort());
   assert.equal(result.value.planSnapshot.propertyContext.propertyType, "townhouse");
@@ -291,12 +291,15 @@ test("the public component sends the visible contact fields and bounded plan sel
   const submittedSharing = component.match(
     /body: JSON\.stringify\(\{[\s\S]*?tradeSharing:\s*\{([\s\S]*?)\},\s*planSnapshot,/,
   )?.[1] || "";
+  const submittedPayloadBeforeQuotePreparation = component.match(
+    /body: JSON\.stringify\(\{([\s\S]*?)quotePreparation:/,
+  )?.[1] || "";
   assert.match(component, /fetch\("\/api\/leads"/);
   assert.match(component, /submissionType: "upgrade"/);
   assert.match(component, /projectCategories: interests/);
   assert.match(component, /customerFirstName/);
   assert.match(component, /customerLastName/);
-  assert.doesNotMatch(component, /\bname,\s*$/m);
+  assert.doesNotMatch(submittedPayloadBeforeQuotePreparation, /^\s*name,\s*$/m);
   assert.match(component, /customerUnitNumber/);
   assert.match(component, /customerStreetAddress/);
   assert.match(component, /customerSuburb/);
@@ -325,8 +328,8 @@ test("the public component sends the visible contact fields and bounded plan sel
   assert.match(component, /Also share my first and last name/);
   assert.match(component, /Also share my phone number/);
   assert.doesNotMatch(component, /shareMessage|Also share my optional message/);
-  assert.match(component, /email, postcode, selected services and any message you write are included/i);
-  assert.match(component, /any message I wrote/i);
+  assert.match(component, /email, postcode, selected services, message and any optional quote answers or photos are included/i);
+  assert.match(component, /message and any quote answers or photos I chose to add/i);
   assert.match(component, /Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records/i);
   assert.match(component, /full plan and PDF stay private and are emailed only to me/i);
   assert.match(component, /lastAttemptCore\.current !== currentCore/);
@@ -363,6 +366,8 @@ function requestHandler({
     isPublicPlanEnquiry,
     prepareLeadEnvelope,
     createOpportunityFromLead,
+    opportunityNotificationDispatchHeader:
+      "X-AEA-Opportunity-Notification-Dispatch",
     env: {
       AEA_LEAD_WEBHOOK_URL: "https://processor.example/leads",
       AEA_LEAD_WEBHOOK_SIGNING_SECRET: LEAD_SIGNING_SECRET,
@@ -389,6 +394,7 @@ test("an immediately submitted valid public plan enquiry prepares customer deliv
     createOpportunityFromLead: async (payload) => {
       assert.equal(acknowledged, true);
       opportunity = payload;
+      return { id: "opportunity-public-plan-1" };
     },
   });
   const payload = validPlanEnquiry({ clientStartedAt: Date.now() });
@@ -408,6 +414,10 @@ test("an immediately submitted valid public plan enquiry prepares customer deliv
   assert.equal(result.planEmailSent, true);
   assert.equal(result.filtered, undefined);
   assert.match(result.reference, /^AEA-/);
+  assert.equal(
+    response.headers.get("X-AEA-Opportunity-Notification-Dispatch"),
+    "opportunity-public-plan-1",
+  );
   assert.equal(delivery.url, "https://processor.example/leads");
   const deliveredPayload = signedWebhookPayload(delivery.init);
   assert.equal(deliveredPayload.sourceJourney, "public-home-energy-plan");
@@ -436,6 +446,26 @@ test("a post-ack opportunity failure reports the safe receipt and offers an idem
   assert.match(result.reference, /^AEA-/);
   assert.equal(result.planEmailSent, false);
   assert.match(result.error, /retry trade matching with the same request/i);
+});
+
+test("a durable notification enqueue failure cannot be reported as successful trade matching", async () => {
+  const handler = requestHandler({
+    fetchImpl: async () => new Response("ok", { status: 200 }),
+    createOpportunityFromLead: async () => {
+      throw new Error("OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE");
+    },
+  });
+  const response = await handler(new Request("https://compare.example/api/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(validPlanEnquiry()),
+  }));
+  const result = await response.json();
+  assert.equal(response.status, 502);
+  assert.equal(result.ok, false);
+  assert.equal(result.received, true);
+  assert.equal(response.headers.has("X-AEA-Opportunity-Notification-Dispatch"), false);
+  assert.match(result.error, /trade matching is not yet prepared/i);
 });
 
 test("the same received enquiry can retry marketplace preparation without changing its relay identity", async () => {

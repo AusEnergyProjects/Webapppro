@@ -5,21 +5,53 @@ import type {
 const MAX_REPORT_BYTES = 96_000;
 const DOWNLOAD_URL_REVOKE_DELAY_MS = 1_000;
 
+export type PublicPlanPdfInput = {
+  snapshot: {
+    goals: string[];
+    pace: string;
+    situation: string;
+    approvalContext: string;
+    budgetRange: string;
+    addressState: string;
+    features: string[];
+    propertyContext?: {
+      propertyType?: string;
+      storeys?: string;
+      ageBand?: string;
+      floorArea?: string;
+      occupants?: string;
+      sharedWalls?: string;
+      roofType?: string;
+      roofColour?: string;
+      roofForm?: string;
+      roofCondition?: string;
+      switchboard?: string;
+      wallConstruction?: string;
+      floorConstruction?: string;
+    };
+  };
+  name: string;
+  postcode: string;
+  projectCategories: string[];
+  preparedAt: string;
+};
+
 function responseFileName(response: Response) {
   const disposition = response.headers.get("content-disposition") || "";
   const match = /filename="([a-z0-9-]+\.pdf)"/i.exec(disposition);
   return match?.[1] || "home-energy-plan.pdf";
 }
 
-export async function downloadCustomerPlanPdf(
-  report: CustomerPlanReportView,
+async function downloadPdf(
+  field: "report" | "publicPlan",
+  value: CustomerPlanReportView | PublicPlanPdfInput,
 ): Promise<void> {
-  const serializedReport = JSON.stringify(report);
+  const serializedReport = JSON.stringify(value);
   if (
     new TextEncoder().encode(serializedReport).byteLength > MAX_REPORT_BYTES
   ) {
     throw new Error(
-      "This plan is too large to download. Remove some custom steps and try again.",
+      "This plan is too large to download. Review the planner answers and try again.",
     );
   }
   const response = await fetch("/api/customer-plan-pdf", {
@@ -27,7 +59,7 @@ export async function downloadCustomerPlanPdf(
     headers: {
       "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
     },
-    body: new URLSearchParams({ report: serializedReport }),
+    body: new URLSearchParams({ [field]: serializedReport }),
   });
   if (!response.ok) {
     const message = (await response.text()).trim().slice(0, 240);
@@ -59,4 +91,16 @@ export async function downloadCustomerPlanPdf(
     () => URL.revokeObjectURL(objectUrl),
     DOWNLOAD_URL_REVOKE_DELAY_MS,
   );
+}
+
+export async function downloadCustomerPlanPdf(
+  report: CustomerPlanReportView,
+): Promise<void> {
+  await downloadPdf("report", report);
+}
+
+export async function downloadPublicPlanPdf(
+  input: PublicPlanPdfInput,
+): Promise<void> {
+  await downloadPdf("publicPlan", input);
 }

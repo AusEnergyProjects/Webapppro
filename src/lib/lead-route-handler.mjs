@@ -66,6 +66,7 @@ export function createLeadPostHandler({
   isPublicPlanEnquiry,
   prepareLeadEnvelope,
   createOpportunityFromLead,
+  opportunityNotificationDispatchHeader = "",
   env = process.env,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -190,11 +191,13 @@ export function createLeadPostHandler({
       if (!response.ok || acknowledgement.trim() !== "ok") {
         throw new Error("Lead processor did not acknowledge delivery.");
       }
+      let opportunityNotificationId = "";
       if (publicPlanEnquiry && typeof createOpportunityFromLead === "function") {
         const marketplacePayload = { ...payload };
         delete marketplacePayload.customerPlanDelivery;
         try {
-          await createOpportunityFromLead(marketplacePayload);
+          const createdOpportunity = await createOpportunityFromLead(marketplacePayload);
+          opportunityNotificationId = String(createdOpportunity?.id || "").trim();
         } catch (error) {
           await recordLeadIncident(
             "platform.lead_marketplace_preparation_failed",
@@ -231,7 +234,9 @@ export function createLeadPostHandler({
         ...(publicPlanEnquiry
           ? { planEmailSent: Boolean(payload.customerPlanDelivery) }
           : {}),
-      }, 200, "delivered", metrics);
+      }, 200, "delivered", metrics, opportunityNotificationId && opportunityNotificationDispatchHeader
+        ? { [opportunityNotificationDispatchHeader]: opportunityNotificationId }
+        : {});
     } catch (error) {
       await recordLeadIncident(
         "platform.lead_delivery_failed",

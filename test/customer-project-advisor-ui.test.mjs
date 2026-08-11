@@ -17,6 +17,8 @@ const planPdf = read("../src/lib/customer-plan-pdf.mjs");
 const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
 const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
 const planPdfRoute = read("../src/app/api/customer-plan-pdf/route.ts");
+const publicPlanPdf = read("../src/lib/public-plan-customer-pdf.mjs");
+const publicPlanPrintPage = read("../src/app/plan/print/page.tsx");
 const planEmailRoute = read("../src/app/api/customer-project-plan-email/route.ts");
 const photoCapture = read("../src/components/CustomerProjectPhotoCapture.tsx");
 const installerRequestDialog = read(
@@ -315,7 +317,8 @@ test("plan email saves before delivery while PDF download is mutation-free and s
   assert.match(planPdfClient, /await fetch\("\/api\/customer-plan-pdf"/);
   assert.match(planPdfClient, /method: "POST"/);
   assert.match(planPdfClient, /application\/x-www-form-urlencoded/);
-  assert.match(planPdfClient, /body: new URLSearchParams\(\{ report: serializedReport \}\)/);
+  assert.match(planPdfClient, /body: new URLSearchParams\(\{ \[field\]: serializedReport \}\)/);
+  assert.match(planPdfClient, /downloadPublicPlanPdf/);
   assert.match(planPdfClient, /if \(!response\.ok\)/);
   assert.match(planPdfClient, /response\.headers\.get\("content-type"\)/);
   assert.match(planPdfClient, /const blob = await response\.blob\(\)/);
@@ -330,11 +333,17 @@ test("plan email saves before delivery while PDF download is mutation-free and s
   );
   assert.match(
     planPdfRoute,
-    /createCustomerPlanPdfBytes\(\s*report,\s*await loadCustomerPlanPdfFonts\(\),\s*\)/,
+    /createPublicPlanCustomerPdfBundle\(\s*canonicalPublicPlanInput\(pdfSource\.value\),\s*fonts,\s*\)/,
   );
+  assert.match(planPdfRoute, /bytes = await createCustomerPlanPdfBytes\(report, fonts\)/);
   assert.match(planPdfRoute, /Content-Disposition/);
   assert.match(planPdfRoute, /application\/pdf/);
   assert.match(planPdfRoute, /"Cache-Control": "no-store"/);
+  assert.match(publicPlanPdf, /createPublicPlanCustomerReportView\(input\)/);
+  assert.match(publicPlanPdf, /createCustomerPlanPdfBytes\(report, fonts\)/);
+  assert.match(planPdfRoute, /pdfSource\.kind === "publicPlan"/);
+  assert.match(publicPlanPrintPage, /createPublicPlanCustomerReportView\(\{/);
+  assert.doesNotMatch(publicPlanPrintPage, /createCustomerPlanReportView/);
   assert.match(planPdfButton, /const download = async \(\) =>/);
   assert.match(planPdfButton, /await downloadCustomerPlanPdf\(report\)/);
   assert.match(installerDashboard, /await downloadCustomerPlanPdf\(report\)/);

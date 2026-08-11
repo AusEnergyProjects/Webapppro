@@ -67,10 +67,10 @@ test("the customer print route preserves bounded home context in the report and 
     printPage,
     /const homeDetails = \[[\s\S]*customerProjectOptions\.storeys[\s\S]*customerProjectOptions\.floorAreas[\s\S]*customerProjectOptions\.occupants[\s\S]*customerProjectOptions\.sharedWalls[\s\S]*customerProjectOptions\.ageBands[\s\S]*customerProjectOptions\.roofTypes[\s\S]*customerProjectOptions\.roofColours[\s\S]*customerProjectOptions\.roofForms[\s\S]*customerProjectOptions\.roofConditions[\s\S]*customerProjectOptions\.switchboards[\s\S]*customerProjectOptions\.wallConstructions[\s\S]*customerProjectOptions\.floorConstructions[\s\S]*\]\.filter\(Boolean\)/,
   );
-  assert.match(printPage, /propertyType: propertyType \|\| "Home"/);
-  assert.match(printPage, /homeDetails,/);
-  assert.match(printPage, /homeFacts: \{/);
-  assert.doesNotMatch(printPage, /propertyType: "Home"/);
+  assert.match(printPage, /createPublicPlanCustomerReportView\(\{/);
+  assert.match(printPage, /propertyContext: plan\.propertyContext/);
+  assert.match(printPage, /features: plan\.features/);
+  assert.doesNotMatch(printPage, /createCustomerPlanReportView/);
 });
 
 test("the report preview is pure, bounded and semantically ordered", () => {

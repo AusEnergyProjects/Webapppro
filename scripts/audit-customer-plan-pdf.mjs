@@ -181,8 +181,13 @@ createCustomerPlanReportView({
 const representativeReport = createPublicPlanCustomerReportView({
   name: "Jamie Customer",
   postcode: "3000",
-  projectCategories: ["heating-cooling"],
-  preparedAt: "2026-08-10T04:05:06.000Z",
+  projectCategories: [
+    "heating-cooling",
+    "hot-water",
+    "draught-proofing",
+    "glazing",
+  ],
+  preparedAt: "2026-08-11T04:05:06.000Z",
   snapshot: {
     goals: ["lower-bills", "improve-comfort"],
     pace: "staged",
@@ -192,9 +197,13 @@ const representativeReport = createPublicPlanCustomerReportView({
     addressState: "VIC",
     features: [
       "reverse-cycle",
+      "gas-heating",
+      "gas-storage-hot-water",
+      "gas-cooking",
+      "single-glazing",
+      "draughty",
       "ceiling-insulation-unknown",
-      "draughty-doors",
-      "open-chimney",
+      "open-unused-chimney",
     ],
     propertyContext: {
       propertyType: "townhouse",
@@ -238,6 +247,8 @@ assert.ok(representativeReport.actions.every((item) => (
   && item.sequence
   && item.safety
 )));
+assert.equal(representativeReport.electrificationMoves.length, 3);
+assert.ok(representativeReport.actions.some((item) => item.solutionOptions.length === 3));
 assert.match(representativeReport.privacyNote, /emailed only to the customer/i);
 assert.doesNotMatch(representativeReport.privacyNote, /shared copy/i);
 
@@ -305,6 +316,7 @@ assert.equal(
   "Document",
 );
 assert.ok(parentTreeNumbers.size() >= pdf.getPageCount() * 2);
+assert.ok(pdf.getPageCount() <= 28, `representative report has ${pdf.getPageCount()} pages`);
 assert.equal(
   metadata.dict.lookup(PDFName.of("Subtype"), PDFName).decodeText(),
   "XML",
@@ -322,13 +334,22 @@ assert.equal(pdf.catalog.has(PDFName.of("OpenAction")), false);
 assert.equal(pdf.catalog.has(PDFName.of("AA")), false);
 assert.equal(pdf.catalog.has(PDFName.of("AcroForm")), false);
 assert.match(taggedText, /Australian Energy Assessments/);
-assert.match(taggedText, /WHAT TO DO/);
-assert.match(taggedText, /WHY IT MATTERS/);
-assert.match(taggedText, /WHY THIS APPLIES TO YOUR HOME/);
-assert.match(taggedText, /CONFIRM BEFORE QUOTING/);
-assert.match(taggedText, /QUOTE AND EVIDENCE CHECKLIST/);
-assert.match(taggedText, /SEQUENCE AND DEPENDENCIES/);
-assert.match(taggedText, /SAFETY BOUNDARY/);
+assert.match(taggedText, /WHAT THIS MEANS/);
+assert.match(taggedText, /WHY IT HELPS/);
+assert.match(taggedText, /WHY IT IS IN YOUR PLAN/);
+assert.match(taggedText, /CHECK FIRST/);
+assert.match(taggedText, /WHAT TO ASK FOR/);
+assert.match(taggedText, /WHEN TO DO IT/);
+assert.match(taggedText, /SAFETY/);
+assert.match(taggedText, /YOUR ELECTRIFICATION PATH/);
+assert.match(taggedText, /Try now:/);
+assert.match(taggedText, /Better fix:/);
+assert.match(taggedText, /Long-term upgrade:/);
+assert.match(taggedText, /bubble wrap or (?:purpose-made )?shrink film/i);
+assert.match(taggedText, /little or no direct sun/i);
+assert.match(taggedText, /low-e or solar-control film/i);
+assert.match(taggedText, /clear acrylic secondary panel/i);
+assert.match(taggedText, /full double glazing/i);
 assert.doesNotMatch(taggedText, /\bAEA\b/);
 assert.doesNotMatch(taggedText, /Questions that could|Home details to check/i);
 for (const foreground of [

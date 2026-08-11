@@ -1,4 +1,8 @@
 import { allocateNearestInstallers } from "@/lib/opportunity-server";
+import {
+  drainOpportunityNotificationDeliveriesForOpportunity,
+  prepareOpportunityNotificationDeliveriesForManualRetry,
+} from "@/lib/opportunity-notification-server";
 import { adminError, adminJson, cleanAdminText, requireAdminIdentity, sameOrigin, writeAdminAudit } from "@/lib/admin-server";
 
 export const runtime = "edge";
@@ -14,6 +18,10 @@ export async function POST(request: Request) {
     if (!opportunityId) return adminJson({ ok: false, error: "Choose an open opportunity." }, 400);
     try {
       const result = await allocateNearestInstallers(opportunityId, admin.uid);
+      const notificationRecovery =
+        await prepareOpportunityNotificationDeliveriesForManualRetry(opportunityId);
+      const notificationDelivery =
+        await drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId });
       await writeAdminAudit(admin, "opportunity.allocate", "trade_opportunity", opportunityId,
         `Distributed the opportunity to ${result.allocated.length} newly eligible service-area installers.`,
         {
@@ -21,8 +29,10 @@ export async function POST(request: Request) {
           eligibleCount: result.eligibleCount,
           alreadyAllocatedCount: result.alreadyAllocatedCount,
           distributionPolicy: "all_verified_service_area_installers",
+          notificationRecovery,
+          notificationDelivery,
         });
-      return adminJson({ ok: true, ...result });
+      return adminJson({ ok: true, ...result, notificationRecovery, notificationDelivery });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       if (code === "OPPORTUNITY_NOT_FOUND") return adminJson({ ok: false, error: "Opportunity not found." }, 404);

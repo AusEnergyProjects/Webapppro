@@ -10,15 +10,13 @@ import {
   resolveSystemAdminNotifications,
 } from "@/lib/admin-notifications";
 import { createOpportunityFromLead } from "@/lib/opportunity-server";
+import { OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER } from "@/lib/opportunity-notification-server";
 import { isPublicPlanEnquiry } from "@/lib/public-plan-enquiry.mjs";
 import {
-  createPublicPlanCustomerReportView,
-} from "@/lib/customer-plan-document.mjs";
-import {
   CustomerPlanPdfUnsupportedTextError,
-  createCustomerPlanPdfBytes,
   customerPlanPdfFileName,
 } from "@/lib/customer-plan-pdf.mjs";
+import { createPublicPlanCustomerPdfBundle } from "@/lib/public-plan-customer-pdf.mjs";
 import {
   CustomerPlanPdfFontError,
   loadCustomerPlanPdfFonts,
@@ -69,34 +67,16 @@ export async function preparePublicPlanLeadEnvelope({
   try {
     const reportInput = {
       snapshot: validatedPayload.planSnapshot,
+      name: validatedPayload.name,
       postcode: validatedPayload.postcode,
       projectCategories: validatedPayload.projectCategories,
       preparedAt: envelope.submittedAt,
     };
-    let report = createPublicPlanCustomerReportView({
-      ...reportInput,
-      name: validatedPayload.name,
-    });
     const fonts = await loadCustomerPlanPdfFonts();
-    let bytes;
-    try {
-      bytes = await createCustomerPlanPdfBytes(report, fonts);
-    } catch (error) {
-      const nameCharacters = new Set(Array.from(validatedPayload.name || ""));
-      const displayNameOnly = error instanceof CustomerPlanPdfUnsupportedTextError
-        && error.unsupportedCharacters.length > 0
-        && error.unsupportedCharacters.every((character) => nameCharacters.has(character));
-      if (!displayNameOnly) throw error;
-      report = createPublicPlanCustomerReportView({
-        ...reportInput,
-        name: "Customer",
-      });
-      report = {
-        ...report,
-        privacyNote: "This personalised copy is emailed only to the customer and uses a neutral cover label because the current PDF font cannot display every character in the customer's name. The real name remains in the private enquiry. The PDF excludes street address, contact details, bills, meter identifiers, usage files, account records, uploaded documents and private trade notes.",
-      };
-      bytes = await createCustomerPlanPdfBytes(report, fonts);
-    }
+    const { report, bytes } = await createPublicPlanCustomerPdfBundle(
+      reportInput,
+      fonts,
+    );
     if (bytes.byteLength < 20_000 || bytes.byteLength > MAX_CUSTOMER_PLAN_PDF_BYTES) {
       throw new Error("CUSTOMER_PLAN_PDF_SIZE_INVALID");
     }
@@ -146,5 +126,6 @@ export const POST = createLeadPostHandler({
   isPublicPlanEnquiry,
   prepareLeadEnvelope: preparePublicPlanLeadEnvelope,
   createOpportunityFromLead,
+  opportunityNotificationDispatchHeader: OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER,
   timeoutMs: LEAD_PROCESSOR_TIMEOUT_MS,
 });

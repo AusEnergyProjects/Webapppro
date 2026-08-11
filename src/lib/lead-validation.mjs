@@ -7,6 +7,10 @@ import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "./public-plan-enquiry.mjs";
+import {
+  normalizePublicPlanQuotePreparation,
+  PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+} from "./public-plan-quote-preparation.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PUBLIC_PLAN_PHONE_RE = /^[+\d()\s.-]+$/;
@@ -227,6 +231,20 @@ export function validateLeadPayload(raw) {
     const projectNotes = cleanText(raw.projectNotes, 500);
     const tradeSharing = publicPlanTradeSharing(raw.tradeSharing);
     if (!tradeSharing.ok) return tradeSharing;
+    const quotePreparation = normalizePublicPlanQuotePreparation(
+      raw.quotePreparation === undefined
+        ? {
+          version: PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+          answers: [],
+          photoPromptIds: [],
+          expectedPhotoCount: 0,
+          uploadKeyHash: "",
+        }
+        : raw.quotePreparation,
+      projectCategories,
+      planSnapshot.value,
+    );
+    if (!quotePreparation.ok) return quotePreparation;
     raw = {
       ...raw,
       customerSuburb: addressLocality.suburb,
@@ -234,6 +252,7 @@ export function validateLeadPayload(raw) {
       planSnapshot: planSnapshot.value,
       projectNotes,
       tradeSharing: tradeSharing.value,
+      quotePreparation: quotePreparation.value,
     };
   }
   if (enquiry === "direct-trade-project") {
@@ -293,6 +312,7 @@ export function validateLeadPayload(raw) {
         preferredContact: email && phone ? "either" : email ? "email" : "phone",
         projectNotes: cleanText(raw.projectNotes, 500),
         tradeSharing: raw.tradeSharing,
+        quotePreparation: raw.quotePreparation,
         planSnapshot: raw.planSnapshot,
       },
     };

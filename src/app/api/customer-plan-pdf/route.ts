@@ -7,11 +7,16 @@ import {
   CustomerPlanPdfFontError,
   loadCustomerPlanPdfFonts,
 } from "@/lib/customer-plan-pdf-fonts";
+import { createPublicPlanCustomerPdfBundle } from "@/lib/public-plan-customer-pdf.mjs";
+import {
+  isPublicPlanUpgradeInterest,
+} from "@/lib/public-plan-enquiry.mjs";
 
 export const runtime = "edge";
 
 const MAX_BODY_BYTES = 320_000;
 const MAX_REPORT_BYTES = 96_000;
+const MAX_PUBLIC_PLAN_BYTES = 48_000;
 
 function messageResponse(message: string, status: number) {
   return new Response(message, {
@@ -36,7 +41,11 @@ function sameOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin;
 }
 
-async function requestReport(request: Request): Promise<unknown> {
+type PdfRequestSource =
+  | { kind: "report"; value: unknown }
+  | { kind: "publicPlan"; value: unknown };
+
+async function requestPdfSource(request: Request): Promise<PdfRequestSource> {
   const contentType = request.headers.get("content-type") || "";
   if (!contentType.startsWith("application/x-www-form-urlencoded")) {
     throw new Error("INVALID_CONTENT_TYPE");
@@ -52,18 +61,56 @@ async function requestReport(request: Request): Promise<unknown> {
   if (new TextEncoder().encode(source).byteLength > MAX_BODY_BYTES) {
     throw new Error("BODY_TOO_LARGE");
   }
-  const serializedReport = new URLSearchParams(source).get("report") || "";
-  if (
-    !serializedReport
-    || new TextEncoder().encode(serializedReport).byteLength > MAX_REPORT_BYTES
-  ) {
+  const params = new URLSearchParams(source);
+  const serializedReport = params.get("report") || "";
+  const serializedPublicPlan = params.get("publicPlan") || "";
+  if (Boolean(serializedReport) === Boolean(serializedPublicPlan)) {
+    throw new Error("INVALID_REPORT");
+  }
+  const serialized = serializedPublicPlan || serializedReport;
+  const maximum = serializedPublicPlan
+    ? MAX_PUBLIC_PLAN_BYTES
+    : MAX_REPORT_BYTES;
+  if (new TextEncoder().encode(serialized).byteLength > maximum) {
     throw new Error("INVALID_REPORT");
   }
   try {
-    return JSON.parse(serializedReport) as unknown;
+    return {
+      kind: serializedPublicPlan ? "publicPlan" : "report",
+      value: JSON.parse(serialized) as unknown,
+    };
   } catch {
     throw new Error("INVALID_REPORT");
   }
+}
+
+function canonicalPublicPlanInput(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("INVALID_REPORT");
+  }
+  const source = value as Record<string, unknown>;
+  if (
+    !source.snapshot
+    || typeof source.snapshot !== "object"
+    || Array.isArray(source.snapshot)
+  ) {
+    throw new Error("INVALID_REPORT");
+  }
+  const projectCategories = Array.isArray(source.projectCategories)
+    ? source.projectCategories
+      .filter((category): category is string =>
+        typeof category === "string" && isPublicPlanUpgradeInterest(category))
+      .slice(0, 12)
+    : [];
+  return {
+    snapshot: source.snapshot as Record<string, unknown>,
+    name: typeof source.name === "string" ? source.name : "",
+    postcode: typeof source.postcode === "string" ? source.postcode : "",
+    projectCategories,
+    preparedAt: typeof source.preparedAt === "string"
+      ? source.preparedAt
+      : new Date().toISOString(),
+  };
 }
 
 export async function POST(request: Request) {
@@ -71,9 +118,9 @@ export async function POST(request: Request) {
     return messageResponse("The PDF request origin was not accepted.", 403);
   }
 
-  let report: unknown;
+  let pdfSource: PdfRequestSource;
   try {
-    report = await requestReport(request);
+    pdfSource = await requestPdfSource(request);
   } catch (error) {
     if (error instanceof Error && error.message === "BODY_TOO_LARGE") {
       return messageResponse("The PDF request was too large.", 413);
@@ -82,10 +129,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const bytes = await createCustomerPlanPdfBytes(
-      report,
-      await loadCustomerPlanPdfFonts(),
-    );
+    const fonts = await loadCustomerPlanPdfFonts();
+    let report;
+    let bytes;
+    if (pdfSource.kind === "publicPlan") {
+      ({ report, bytes } = await createPublicPlanCustomerPdfBundle(
+        canonicalPublicPlanInput(pdfSource.value),
+        fonts,
+      ));
+    } else {
+      report = pdfSource.value;
+      bytes = await createCustomerPlanPdfBytes(report, fonts);
+    }
     const fileName = customerPlanPdfFileName(report);
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);

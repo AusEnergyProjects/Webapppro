@@ -1,12 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import {
+  downloadPublicPlanPdf,
+  type PublicPlanPdfInput,
+} from "@/lib/customer-plan-pdf-client";
 import {
   isPublicPlanUpgradeInterest,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
   PUBLIC_PLAN_ENQUIRY_KIND,
 } from "@/lib/public-plan-enquiry.mjs";
+import {
+  PUBLIC_PLAN_QUOTE_ALLOWED_TYPES,
+  PUBLIC_PLAN_QUOTE_MAX_FILE_BYTES,
+  PUBLIC_PLAN_QUOTE_MAX_FILES,
+  PUBLIC_PLAN_QUOTE_MAX_IMAGE_DIMENSION,
+  PUBLIC_PLAN_QUOTE_MAX_IMAGE_PIXELS,
+  PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES,
+  PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+  publicPlanQuotePhotoPromptsForServices,
+  publicPlanQuoteQuestionsForSnapshot,
+} from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./PublicPlanEnquiryForm.module.css";
 
 export type PublicPlanUpgradeInterest =
@@ -72,9 +93,17 @@ type PublicPlanEnquiryFormProps = {
 type SubmissionStatus =
   | { kind: "idle"; message: "" }
   | { kind: "sending"; message: string }
+  | { kind: "uploading"; message: string; reference: string }
+  | { kind: "photos_pending"; message: string; reference: string }
   | { kind: "error"; message: string }
   | { kind: "received"; message: string; reference: string }
   | { kind: "success"; message: string; reference: string };
+
+type QuoteWithdrawalStatus =
+  | { kind: "idle"; message: ""; cleanupPending: 0 }
+  | { kind: "removing"; message: string; cleanupPending: 0 }
+  | { kind: "removed"; message: string; cleanupPending: number }
+  | { kind: "error"; message: string; cleanupPending: 0 };
 
 type LocalityLookupStatus = "idle" | "loading" | "ready" | "error";
 
@@ -88,6 +117,41 @@ type AddressLocalitiesResponse = {
   postcode?: unknown;
   localities?: unknown;
   error?: unknown;
+};
+
+type QuotePhotoSelection = {
+  clientUploadId: string;
+  promptId: string;
+  file: File;
+};
+
+async function browserImageDimensions(file: File) {
+  if (typeof window.createImageBitmap === "function") {
+    try {
+      const bitmap = await window.createImageBitmap(file);
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    } catch {
+      return null;
+    }
+  }
+  return new Promise<{ width: number; height: number } | null>((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+    const finish = (dimensions: { width: number; height: number } | null) => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(dimensions);
+    };
+    image.onload = () => finish({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => finish(null);
+    image.src = objectUrl;
+  });
+}
+
+type QuotePreparationAnswer = {
+  questionId: string;
+  answer: string;
 };
 
 function localityOptionValue(locality: AddressLocality) {
@@ -113,6 +177,25 @@ function createSubmissionId() {
   return `${date}.${crypto.randomUUID()}`;
 }
 
+function createQuoteUploadKey() {
+  return crypto.randomUUID();
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function preparedAtFromReference(reference: string, fallback: string) {
+  const match = /(?:^|-)\s*(\d{4})(\d{2})(\d{2})(?:-|$)/.exec(reference);
+  return match ? `${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z` : fallback;
+}
+
 function submissionCoreKey({
   customerFirstName,
   customerLastName,
@@ -126,6 +209,8 @@ function submissionCoreKey({
   interests,
   message,
   tradeSharing,
+  quoteAnswers,
+  quotePhotos,
   planSnapshot,
 }: {
   customerFirstName: string;
@@ -144,6 +229,8 @@ function submissionCoreKey({
     phone: boolean;
     address: boolean;
   };
+  quoteAnswers: QuotePreparationAnswer[];
+  quotePhotos: QuotePhotoSelection[];
   planSnapshot: PublicPlanSnapshot;
 }) {
   return JSON.stringify({
@@ -159,6 +246,18 @@ function submissionCoreKey({
     interests: [...interests].sort(),
     message: message.trim(),
     tradeSharing,
+    quoteAnswers: [...quoteAnswers]
+      .sort((left, right) => left.questionId.localeCompare(right.questionId)),
+    quotePhotos: quotePhotos
+      .map((selection) => ({
+        clientUploadId: selection.clientUploadId,
+        promptId: selection.promptId,
+        name: selection.file.name,
+        type: selection.file.type,
+        size: selection.file.size,
+        lastModified: selection.file.lastModified,
+      }))
+      .sort((left, right) => left.clientUploadId.localeCompare(right.clientUploadId)),
     planSnapshot: {
       goals: [...planSnapshot.goals].sort(),
       pace: planSnapshot.pace,
@@ -214,6 +313,10 @@ export function PublicPlanEnquiryForm({
   const [interests, setInterests] = useState<PublicPlanUpgradeInterest[]>(() =>
     initialAllowedInterests(suggestedInterests));
   const [message, setMessage] = useState("");
+  const [quoteAnswers, setQuoteAnswers] = useState<Record<string, string>>({});
+  const [includeKnownPlanAnswers, setIncludeKnownPlanAnswers] = useState(false);
+  const [quotePhotos, setQuotePhotos] = useState<QuotePhotoSelection[]>([]);
+  const [quotePhotoError, setQuotePhotoError] = useState("");
   const [shareName, setShareName] = useState(false);
   const [sharePhone, setSharePhone] = useState(false);
   const [shareAddress, setShareAddress] = useState(false);
@@ -221,11 +324,24 @@ export function PublicPlanEnquiryForm({
   const [consent, setConsent] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
+  const [gatewayPlanDownloadBusy, setGatewayPlanDownloadBusy] = useState(false);
+  const [gatewayPlanDownloadError, setGatewayPlanDownloadError] = useState("");
+  const [quoteWithdrawal, setQuoteWithdrawal] = useState<QuoteWithdrawalStatus>({
+    kind: "idle",
+    message: "",
+    cleanupPending: 0,
+  });
+  const [sharedQuotePackPrepared, setSharedQuotePackPrepared] = useState(false);
   const [status, setStatus] = useState<SubmissionStatus>({ kind: "idle", message: "" });
   const startedAt = useRef(0);
   const submissionId = useRef("");
+  const quoteUploadKey = useRef("");
+  const uploadedQuotePhotoIds = useRef(new Set<string>());
+  const acceptedLeadReference = useRef("");
+  const acceptedLeadSuccessMessage = useRef("");
   const consentGrantedAt = useRef("");
   const lastAttemptCore = useRef("");
+  const successfulPdfInput = useRef<PublicPlanPdfInput | null>(null);
   const gatewayDialogRef = useRef<HTMLDialogElement>(null);
   const gatewayFirstActionRef = useRef<HTMLAnchorElement>(null);
   const gatewayReopenRef = useRef<HTMLButtonElement>(null);
@@ -233,6 +349,10 @@ export function PublicPlanEnquiryForm({
   useEffect(() => {
     startedAt.current = Date.now();
     submissionId.current = createSubmissionId();
+    quoteUploadKey.current = createQuoteUploadKey();
+    uploadedQuotePhotoIds.current = new Set();
+    acceptedLeadReference.current = "";
+    acceptedLeadSuccessMessage.current = "";
     consentGrantedAt.current = "";
     lastAttemptCore.current = "";
   }, []);
@@ -302,25 +422,87 @@ export function PublicPlanEnquiryForm({
     setStatus({ kind: "idle", message: "" });
     setConsent(false);
     setMessage("");
+    setQuoteAnswers({});
+    setIncludeKnownPlanAnswers(false);
+    setQuotePhotos([]);
+    setQuotePhotoError("");
     setShareName(false);
     setSharePhone(false);
     setShareAddress(false);
     setSubmitAttempted(false);
     setGatewayOpen(false);
+    setGatewayPlanDownloadBusy(false);
+    setGatewayPlanDownloadError("");
+    setQuoteWithdrawal({ kind: "idle", message: "", cleanupPending: 0 });
+    successfulPdfInput.current = null;
     startedAt.current = Date.now();
     submissionId.current = createSubmissionId();
+    quoteUploadKey.current = createQuoteUploadKey();
+    uploadedQuotePhotoIds.current = new Set();
+    acceptedLeadReference.current = "";
+    acceptedLeadSuccessMessage.current = "";
+    setSharedQuotePackPrepared(false);
     consentGrantedAt.current = "";
     lastAttemptCore.current = "";
   }
 
+  function changeInterests(nextInterests: PublicPlanUpgradeInterest[]) {
+    const visibleQuestions = publicPlanQuoteQuestionsForSnapshot(nextInterests, planSnapshot);
+    const allowedQuestionIds = new Set(visibleQuestions.map((question) => question.id));
+    const allowedPromptIds = new Set(
+      publicPlanQuotePhotoPromptsForServices(nextInterests).map((prompt) => prompt.id),
+    );
+    setInterests(nextInterests);
+    setQuoteAnswers((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([questionId]) => allowedQuestionIds.has(questionId)),
+      );
+      if (includeKnownPlanAnswers) {
+        for (const question of visibleQuestions) {
+          if (
+            question.defaultAnswer
+            && !Object.prototype.hasOwnProperty.call(current, question.id)
+          ) {
+            next[question.id] = question.defaultAnswer;
+          }
+        }
+      }
+      return next;
+    });
+    setQuotePhotos((current) => current.filter((selection) =>
+      allowedPromptIds.has(selection.promptId)));
+    if (!visibleQuestions.some((question) => question.defaultAnswer)) {
+      setIncludeKnownPlanAnswers(false);
+    }
+  }
+
   function toggleInterest(interest: PublicPlanUpgradeInterest) {
-    setInterests((current) => current.includes(interest)
-      ? current.filter((value) => value !== interest)
-      : [...current, interest]);
+    changeInterests(interests.includes(interest)
+      ? interests.filter((value) => value !== interest)
+      : [...interests, interest]);
   }
 
   function toggleAllInterests(selectAll: boolean) {
-    setInterests(selectAll ? INTEREST_OPTIONS.map(([value]) => value) : []);
+    changeInterests(selectAll ? INTEREST_OPTIONS.map(([value]) => value) : []);
+  }
+
+  function changeKnownPlanAnswerSharing(include: boolean) {
+    const knownQuestions = publicPlanQuoteQuestionsForSnapshot(interests, planSnapshot)
+      .filter((question) => question.defaultAnswer);
+    setIncludeKnownPlanAnswers(include);
+    setQuoteAnswers((current) => {
+      const next = { ...current };
+      for (const question of knownQuestions) {
+        if (include) {
+          if (!Object.prototype.hasOwnProperty.call(current, question.id)) {
+            next[question.id] = question.defaultAnswer;
+          }
+        } else if (next[question.id] === question.defaultAnswer) {
+          delete next[question.id];
+        }
+      }
+      return next;
+    });
   }
 
   function changePostcode(nextPostcode: string) {
@@ -339,6 +521,209 @@ export function PublicPlanEnquiryForm({
     setCustomerState(selected?.state || "");
   }
 
+  async function chooseQuotePhotos(promptId: string, selectedFiles: FileList | null) {
+    const files = Array.from(selectedFiles || []);
+    if (!files.length) return;
+    const retained = quotePhotos;
+    const invalidType = files.find((file) =>
+      !PUBLIC_PLAN_QUOTE_ALLOWED_TYPES.includes(file.type));
+    if (invalidType) {
+      setQuotePhotoError("Choose JPEG or PNG photos only.");
+      return;
+    }
+    const invalidSize = files.find((file) =>
+      file.size <= 0 || file.size > PUBLIC_PLAN_QUOTE_MAX_FILE_BYTES);
+    if (invalidSize) {
+      setQuotePhotoError("Each quote photo must be no larger than 8 MB.");
+      return;
+    }
+    for (const file of files) {
+      const dimensions = await browserImageDimensions(file);
+      if (!dimensions) {
+        setQuotePhotoError("One selected photo could not be read. Choose a valid JPEG or PNG image.");
+        return;
+      }
+      if (
+        dimensions.width <= 0
+        || dimensions.height <= 0
+        || dimensions.width > PUBLIC_PLAN_QUOTE_MAX_IMAGE_DIMENSION
+        || dimensions.height > PUBLIC_PLAN_QUOTE_MAX_IMAGE_DIMENSION
+        || dimensions.width * dimensions.height > PUBLIC_PLAN_QUOTE_MAX_IMAGE_PIXELS
+      ) {
+        setQuotePhotoError("Choose a photo no larger than 8,192 pixels on either side or 25 megapixels.");
+        return;
+      }
+    }
+    const next = [
+      ...retained,
+      ...files.map((file) => ({
+        clientUploadId: `quote.${crypto.randomUUID()}`,
+        promptId,
+        file,
+      })),
+    ];
+    if (next.length > PUBLIC_PLAN_QUOTE_MAX_FILES) {
+      setQuotePhotoError(`Choose no more than ${PUBLIC_PLAN_QUOTE_MAX_FILES} quote photos in total.`);
+      return;
+    }
+    if (next.reduce((total, selection) => total + selection.file.size, 0)
+      > PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES) {
+      setQuotePhotoError("The selected quote photos must total no more than 48 MB.");
+      return;
+    }
+    setQuotePhotos(next);
+    setQuotePhotoError("");
+  }
+
+  function removeQuotePhoto(clientUploadId: string) {
+    setQuotePhotos((current) => current.filter((selection) =>
+      selection.clientUploadId !== clientUploadId));
+    setQuotePhotoError("");
+  }
+
+  function finishAcceptedEnquiry(reference: string) {
+    setStatus({
+      kind: "success",
+      message: acceptedLeadSuccessMessage.current,
+      reference,
+    });
+    setGatewayOpen(true);
+  }
+
+  async function uploadRemainingQuotePhotos(reference: string) {
+    const remaining = quotePhotos.filter((selection) =>
+      !uploadedQuotePhotoIds.current.has(selection.clientUploadId));
+    if (!remaining.length) {
+      finishAcceptedEnquiry(reference);
+      return;
+    }
+    setStatus({
+      kind: "uploading",
+      message: `Your enquiry is received. Securely preparing ${remaining.length} selected ${remaining.length === 1 ? "photo" : "photos"} for matched trades...`,
+      reference,
+    });
+    try {
+      for (const selection of remaining) {
+        const form = new FormData();
+        form.set("sourceReference", reference);
+        form.set("uploadKey", quoteUploadKey.current);
+        form.set("clientUploadId", selection.clientUploadId);
+        form.set("promptId", selection.promptId);
+        form.set("file", selection.file, selection.file.name);
+        const response = await fetch("/api/public-plan-quote-preparation", {
+          method: "POST",
+          headers: {
+            "X-Quote-Source-Reference": reference,
+            "X-Quote-Upload-Key": quoteUploadKey.current,
+          },
+          body: form,
+        });
+        const result = await response.json().catch(() => ({})) as {
+          ok?: boolean;
+          error?: string;
+        };
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || "A selected quote photo could not be uploaded.");
+        }
+        uploadedQuotePhotoIds.current.add(selection.clientUploadId);
+        const remainingCount = quotePhotos.length - uploadedQuotePhotoIds.current.size;
+        setStatus({
+          kind: "uploading",
+          message: remainingCount > 0
+            ? `${uploadedQuotePhotoIds.current.size} of ${quotePhotos.length} selected photos are ready. Uploading ${remainingCount} more...`
+            : "All selected quote photos are ready for matched trades.",
+          reference,
+        });
+      }
+      finishAcceptedEnquiry(reference);
+    } catch (error) {
+      const readyCount = uploadedQuotePhotoIds.current.size;
+      setStatus({
+        kind: "photos_pending",
+        message: `Your enquiry was sent and ${readyCount} of ${quotePhotos.length} selected photos are ready. ${error instanceof Error ? error.message : "The remaining photos could not be uploaded."} Retry the remaining photos without sending the enquiry again.`,
+        reference,
+      });
+    }
+  }
+
+  function retryQuotePhotoUploads() {
+    const reference = acceptedLeadReference.current;
+    if (!reference || status.kind !== "photos_pending") return;
+    void uploadRemainingQuotePhotos(reference);
+  }
+
+  async function removeSharedQuotePack(confirmRemoval = true) {
+    const reference = acceptedLeadReference.current;
+    if (!reference || !quoteUploadKey.current) {
+      setQuoteWithdrawal({
+        kind: "error",
+        message: "The private removal reference is not available. Call 1300 241 149 with your enquiry reference.",
+        cleanupPending: 0,
+      });
+      return;
+    }
+    if (
+      confirmRemoval
+      && !window.confirm(
+        "Remove the optional quote answers and photos from matched trades? Your enquiry and contact details will remain sent.",
+      )
+    ) {
+      return;
+    }
+    setQuoteWithdrawal({
+      kind: "removing",
+      message: "Removing shared quote details and photos...",
+      cleanupPending: 0,
+    });
+    try {
+      const response = await fetch("/api/public-plan-quote-preparation", {
+        method: "DELETE",
+        headers: {
+          "X-Quote-Source-Reference": reference,
+          "X-Quote-Upload-Key": quoteUploadKey.current,
+        },
+      });
+      const result = await response.json().catch(() => ({})) as {
+        ok?: boolean;
+        error?: string;
+        cleanupPending?: number;
+      };
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || "The shared quote details could not be removed.");
+      }
+      const cleanupPending = Number.isSafeInteger(result.cleanupPending)
+        ? Math.max(0, Number(result.cleanupPending))
+        : 0;
+      uploadedQuotePhotoIds.current = new Set();
+      setSharedQuotePackPrepared(false);
+      setQuoteAnswers({});
+      setIncludeKnownPlanAnswers(false);
+      setQuotePhotos([]);
+      setQuotePhotoError("");
+      setStatus({
+        kind: "success",
+        message: "Your enquiry remains sent. Optional quote details and photos are no longer available to matched trades.",
+        reference,
+      });
+      setGatewayOpen(false);
+      setQuoteWithdrawal({
+        kind: "removed",
+        message: cleanupPending
+          ? "Trade access stopped immediately. Retry private photo cleanup below."
+          : "Shared quote details and photos were removed. Your enquiry remains sent.",
+        cleanupPending,
+      });
+    } catch (error) {
+      setQuoteWithdrawal({
+        kind: "error",
+        message: error instanceof Error
+          ? error.message
+          : "The shared quote details could not be removed. Try again.",
+        cleanupPending: 0,
+      });
+    }
+  }
+
   function closeGateway() {
     const dialog = gatewayDialogRef.current;
     if (dialog?.open && typeof dialog.close === "function") {
@@ -347,6 +732,27 @@ export function PublicPlanEnquiryForm({
     }
     setGatewayOpen(false);
     gatewayReopenRef.current?.focus();
+  }
+
+  async function downloadSubmittedPlan(
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) {
+    event.preventDefault();
+    const input = successfulPdfInput.current;
+    if (!input || gatewayPlanDownloadBusy) return;
+    setGatewayPlanDownloadBusy(true);
+    setGatewayPlanDownloadError("");
+    try {
+      await downloadPublicPlanPdf(input);
+    } catch (error) {
+      setGatewayPlanDownloadError(
+        error instanceof Error
+          ? error.message
+          : "Your personalised plan could not be downloaded. Please try again.",
+      );
+    } finally {
+      setGatewayPlanDownloadBusy(false);
+    }
   }
 
   function changeConsent(accepted: boolean) {
@@ -412,6 +818,17 @@ export function PublicPlanEnquiryForm({
       if (!submissionId.current) {
         submissionId.current = createSubmissionId();
       }
+      const preparedQuoteAnswers = publicPlanQuoteQuestionsForSnapshot(
+        interests,
+        planSnapshot,
+      )
+        .flatMap((question) => quoteAnswers[question.id]
+          ? [{ questionId: question.id, answer: quoteAnswers[question.id] }]
+          : []);
+      const selectedPhotoPromptIds = publicPlanQuotePhotoPromptsForServices(interests)
+        .map((prompt) => prompt.id)
+        .filter((promptId) => quotePhotos.some((selection) =>
+          selection.promptId === promptId));
       const currentCore = submissionCoreKey({
         customerFirstName,
         customerLastName,
@@ -429,12 +846,26 @@ export function PublicPlanEnquiryForm({
           phone: sharePhone,
           address: shareAddress,
         },
+        quoteAnswers: preparedQuoteAnswers,
+        quotePhotos,
         planSnapshot,
       });
       if (lastAttemptCore.current && lastAttemptCore.current !== currentCore) {
         submissionId.current = createSubmissionId();
+        quoteUploadKey.current = createQuoteUploadKey();
+        uploadedQuotePhotoIds.current = new Set();
       }
       lastAttemptCore.current = currentCore;
+      const uploadKeyHash = await sha256Hex(quoteUploadKey.current);
+      const publicPlanPdfInput: PublicPlanPdfInput = {
+        snapshot: planSnapshot,
+        name: [customerFirstName.trim(), customerLastName.trim()]
+          .filter(Boolean)
+          .join(" "),
+        postcode,
+        projectCategories: [...interests],
+        preparedAt: new Date().toISOString(),
+      };
       const response = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -461,6 +892,13 @@ export function PublicPlanEnquiryForm({
             name: shareName,
             phone: sharePhone,
             address: shareAddress,
+          },
+          quotePreparation: {
+            version: PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
+            answers: preparedQuoteAnswers,
+            photoPromptIds: selectedPhotoPromptIds,
+            expectedPhotoCount: quotePhotos.length,
+            uploadKeyHash,
           },
           planSnapshot,
           consent: {
@@ -495,14 +933,32 @@ export function PublicPlanEnquiryForm({
         }
         throw new Error(result.error || "Your enquiry could not be delivered. Please try again.");
       }
-      setStatus({
-        kind: "success",
-        message: result.planEmailSent
-          ? "Your enquiry is ready for matching trades and your personalised home plan PDF has been emailed to you. This did not create an account."
-          : "Your enquiry is ready for matching trades. Your private plan PDF could not be emailed, so you can still download it here. This did not create an account.",
-        reference: result.reference || "",
-      });
-      setGatewayOpen(true);
+      const reference = result.reference || "";
+      acceptedLeadReference.current = reference;
+      setSharedQuotePackPrepared(preparedQuoteAnswers.length > 0 || quotePhotos.length > 0);
+      acceptedLeadSuccessMessage.current = result.planEmailSent
+        ? "Your enquiry is ready for matching trades and your personalised home plan PDF has been emailed to you. This did not create an account."
+        : "Your enquiry is ready for matching trades. Your private plan PDF could not be emailed, so you can still download it here. This did not create an account.";
+      successfulPdfInput.current = {
+        ...publicPlanPdfInput,
+        preparedAt: preparedAtFromReference(
+          reference,
+          publicPlanPdfInput.preparedAt,
+        ),
+      };
+      if (quotePhotos.length) {
+        if (!reference) {
+          setStatus({
+            kind: "photos_pending",
+            message: "Your enquiry was sent, but its private photo reference was not returned. Call 1300 241 149 with your email address so we can help without resending the enquiry.",
+            reference: "",
+          });
+          return;
+        }
+        await uploadRemainingQuotePhotos(reference);
+        return;
+      }
+      finishAcceptedEnquiry(reference);
     } catch (caught) {
       setStatus({
         kind: "error",
@@ -516,10 +972,67 @@ export function PublicPlanEnquiryForm({
   const rootClassName = [styles.root, className].filter(Boolean).join(" ");
   const allInterestsSelected = interests.length === INTEREST_OPTIONS.length;
   const serviceSelectionInvalid = submitAttempted && interests.length === 0;
+  const quoteQuestions = publicPlanQuoteQuestionsForSnapshot(interests, planSnapshot);
+  const knownPlanQuoteQuestions = quoteQuestions.filter((question) => question.defaultAnswer);
+  const quotePhotoPrompts = publicPlanQuotePhotoPromptsForServices(interests);
+  const answeredQuoteQuestionCount = quoteQuestions.filter((question) =>
+    Boolean(quoteAnswers[question.id])).length;
   const showLocalityStates = new Set(localities.map((locality) => locality.state)).size > 1;
   const selectedLocalityValue = customerSuburb && customerState
     ? localityOptionValue({ suburb: customerSuburb, state: customerState })
     : "";
+
+  if (status.kind === "uploading" || status.kind === "photos_pending") {
+    return (
+      <section className={rootClassName} aria-labelledby="public-plan-photo-upload-title">
+        <div className={styles.success}>
+          <span className={styles.eyebrow}>Enquiry received</span>
+          <h3 className={styles.title} id="public-plan-photo-upload-title">
+            {status.kind === "uploading"
+              ? "Preparing your quote photos"
+              : "Your enquiry is safe. Some photos still need attention."}
+          </h3>
+          <p role={status.kind === "photos_pending" ? "alert" : "status"}>{status.message}</p>
+          {status.reference && <p className={styles.reference}>Reference {status.reference}</p>}
+          <div className={styles.successActions}>
+            {status.kind === "photos_pending" && status.reference ? (
+              <button className={styles.reset} type="button" onClick={retryQuotePhotoUploads}>
+                Retry remaining photos
+              </button>
+            ) : null}
+            {status.kind === "photos_pending" ? (
+              <button className={styles.secondaryAction} type="button" onClick={reset}>
+                Start another enquiry
+              </button>
+            ) : null}
+            {status.kind === "photos_pending" && sharedQuotePackPrepared ? (
+              <button
+                className={styles.secondaryAction}
+                disabled={quoteWithdrawal.kind === "removing"}
+                type="button"
+                onClick={() => void removeSharedQuotePack()}
+              >
+                {quoteWithdrawal.kind === "removing"
+                  ? "Removing shared quote details..."
+                  : "Remove shared quote details and photos"}
+              </button>
+            ) : null}
+          </div>
+          {quoteWithdrawal.message ? (
+            <p
+              className={styles.withdrawalStatus}
+              role={quoteWithdrawal.kind === "error" ? "alert" : "status"}
+            >
+              {quoteWithdrawal.message}
+            </p>
+          ) : null}
+          <p className={styles.uploadPrivacyNote}>
+            The enquiry is not sent again during a photo retry. Photos are stripped of location metadata, stay out of email and are available only after an approved matched trade signs in.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   if (status.kind === "success") {
     return (
@@ -539,7 +1052,29 @@ export function PublicPlanEnquiryForm({
               Choose what to do next
             </button>
             <button className={styles.secondaryAction} type="button" onClick={reset}>Send another enquiry</button>
+            {(sharedQuotePackPrepared || quoteWithdrawal.cleanupPending > 0) ? (
+              <button
+                className={styles.secondaryAction}
+                disabled={quoteWithdrawal.kind === "removing"}
+                type="button"
+                onClick={() => void removeSharedQuotePack(quoteWithdrawal.kind !== "removed")}
+              >
+                {quoteWithdrawal.kind === "removing"
+                  ? "Removing shared quote details..."
+                  : quoteWithdrawal.cleanupPending > 0
+                    ? "Retry private photo cleanup"
+                    : "Remove shared quote details and photos"}
+              </button>
+            ) : null}
           </div>
+          {quoteWithdrawal.message ? (
+            <p
+              className={styles.withdrawalStatus}
+              role={quoteWithdrawal.kind === "error" ? "alert" : "status"}
+            >
+              {quoteWithdrawal.message}
+            </p>
+          ) : null}
         </div>
         <dialog
           aria-describedby="public-plan-next-steps-description"
@@ -585,11 +1120,22 @@ export function PublicPlanEnquiryForm({
               <strong>Use the rebate calculator</strong>
               <span>Estimate relevant rebates and certificates</span>
             </a>
-            <a href={planHref}>
-              <strong>View my plan</strong>
-              <span>Open the printable plan and PDF download</span>
+            <a
+              aria-disabled={gatewayPlanDownloadBusy}
+              href={planHref}
+              onClick={downloadSubmittedPlan}
+            >
+              <strong>
+                {gatewayPlanDownloadBusy
+                  ? "Preparing my plan..."
+                  : "View my personalised plan"}
+              </strong>
+              <span>Download the same PDF prepared for your email</span>
             </a>
           </nav>
+          {gatewayPlanDownloadError && (
+            <p role="alert">{gatewayPlanDownloadError}</p>
+          )}
         </dialog>
       </section>
     );
@@ -603,7 +1149,7 @@ export function PublicPlanEnquiryForm({
           <h3 className={styles.title} id="public-plan-enquiry-title">Ask about an upgrade</h3>
           <p className={styles.intro}>No account needed. Tell us what you want help with and how to contact you.</p>
         </div>
-        <span className={styles.badge}>About 1 minute</span>
+        <span className={styles.badge}>About 1 minute + optional quote details</span>
       </header>
 
       <form className={styles.form} onSubmit={submit}>
@@ -744,11 +1290,138 @@ export function PublicPlanEnquiryForm({
             <span className={styles.labelRow}>Anything we should know? <span className={styles.optional}>optional</span></span>
             <textarea className={styles.control} maxLength={500} rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="For example, the system has stopped working or you want to plan the upgrade in stages." />
           </label>
+          <details className={`${styles.quotePreparation} ${styles.full}`}>
+            <summary>
+              <span>
+                <strong>Help trades prepare a desktop quote</strong>
+                <small>Optional. Answer what you know and add useful photos, or skip this section.</small>
+              </span>
+              <span className={styles.quotePreparationCount}>
+                {answeredQuoteQuestionCount} answers, {quotePhotos.length} photos
+              </span>
+            </summary>
+            <div className={styles.quotePreparationBody}>
+              <header className={styles.quotePreparationHeader}>
+                <div>
+                  <span className={styles.eyebrow}>Quote preparation</span>
+                  <h4>One useful set of details for every selected service</h4>
+                </div>
+                <span>{quoteQuestions.length} deduplicated questions</span>
+              </header>
+              <p>
+                Shared questions appear once even when several services need the same answer. Leaving any answer or photo blank will not stop the enquiry.
+              </p>
+              {knownPlanQuoteQuestions.length ? (
+                <label className={styles.knownPlanAnswerChoice}>
+                  <input
+                    checked={includeKnownPlanAnswers}
+                    onChange={(event) => changeKnownPlanAnswerSharing(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>Use {knownPlanQuoteQuestions.length} known {knownPlanQuoteQuestions.length === 1 ? "answer" : "answers"} from my private plan</strong>
+                    <small>The exact suggestions are marked below. Review, change or skip each one before sending.</small>
+                  </span>
+                </label>
+              ) : null}
+              <div className={styles.quoteQuestionGrid}>
+                {quoteQuestions.map((question) => (
+                  <label className={styles.quoteQuestion} key={question.id}>
+                    <span>{question.label}</span>
+                    {question.answerSource === "private-plan" ? (
+                      <small className={styles.carriedPlanFact}>
+                        {includeKnownPlanAnswers
+                          ? `Carried from your private plan: ${question.defaultAnswer}. Change it or choose Skip before sharing.`
+                          : `Suggested from your private plan: ${question.defaultAnswer}. It is not shared unless you use the control above or choose an answer yourself.`}
+                      </small>
+                    ) : (
+                      <small>
+                        For {question.services
+                          .map((service) => INTEREST_LABELS[service as PublicPlanUpgradeInterest])
+                          .join(", ")}
+                      </small>
+                    )}
+                    <select
+                      className={styles.control}
+                      value={quoteAnswers[question.id] || ""}
+                      onChange={(event) => setQuoteAnswers((current) => ({
+                        ...current,
+                        [question.id]: event.target.value,
+                      }))}
+                    >
+                      <option value="">Skip this question</option>
+                      {question.options.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <section className={styles.quotePhotos} aria-labelledby="public-plan-quote-photos-title">
+                <div>
+                  <h4 id="public-plan-quote-photos-title">Photos that can reduce follow-up questions</h4>
+                  <p>
+                        Use your camera or choose existing JPEG or PNG images. Up to {PUBLIC_PLAN_QUOTE_MAX_FILES} photos, 8 MB each and 48 MB total.
+                  </p>
+                </div>
+                <div className={styles.quotePhotoGrid}>
+                  {quotePhotoPrompts.map((prompt) => {
+                    const selectedForPrompt = quotePhotos.filter((selection) =>
+                      selection.promptId === prompt.id);
+                    const hintId = `public-plan-photo-hint-${prompt.id}`;
+                    return (
+                      <article className={styles.quotePhotoPrompt} key={prompt.id}>
+                        <div>
+                          <strong>{prompt.label}</strong>
+                          <p id={hintId}>{prompt.hint}</p>
+                        </div>
+                        <label className={styles.photoPicker}>
+                          <span>{selectedForPrompt.length ? "Add more photos" : "Add photos"}</span>
+                          <input
+                                accept="image/jpeg,image/png"
+                            aria-describedby={hintId}
+                            aria-label={`Add photos: ${prompt.label}`}
+                            capture="environment"
+                            multiple
+                            type="file"
+                            onChange={(event) => {
+                              void chooseQuotePhotos(prompt.id, event.currentTarget.files);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                        {selectedForPrompt.length ? (
+                          <ul className={styles.selectedPhotoList}>
+                            {selectedForPrompt.map((selection) => (
+                              <li key={selection.clientUploadId}>
+                                <span>{selection.file.name}</span>
+                                <button
+                                  aria-label={`Remove ${selection.file.name}`}
+                                  onClick={() => removeQuotePhoto(selection.clientUploadId)}
+                                  type="button"
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+                {quotePhotoError ? <p className={styles.serviceError} role="alert">{quotePhotoError}</p> : null}
+                <p className={styles.quotePhotoPrivacy}>
+                  Selected photos are stripped of location metadata before private storage. They are never attached to email and only approved trades matched to this enquiry can open them after signing in.
+                </p>
+              </section>
+            </div>
+          </details>
         </div>
 
         <fieldset className={styles.shareChoices}>
           <legend>Choose what matching trades can see</legend>
-          <p>Your email, postcode, selected services and any message you write are included so trades can reply and understand what you need.</p>
+          <p>Your email, postcode, selected services, message and any optional quote answers or photos are included so trades can reply and understand what you need. Known plan answers are included only when you select the quote-preparation control above.</p>
           <label>
             <input type="checkbox" checked={shareName} onChange={(event) => setShareName(event.target.checked)} />
             <span>Also share my first and last name</span>
@@ -769,12 +1442,12 @@ export function PublicPlanEnquiryForm({
 
         <label className={styles.consent}>
           <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => changeConsent(event.target.checked)} />
-          <span>I agree that Australian Energy Assessments may send this enquiry to all approved TLink trades that service my area. Trades receive my email, postcode, selected services and any message I wrote, plus my name, phone or full property address only if I selected them above. My full plan and PDF stay private and are emailed only to me.</span>
+          <span>I agree that Australian Energy Assessments may send this enquiry to all approved TLink trades that service my area. Trades receive my email, postcode, selected services, message and any quote answers or photos I chose to add. This includes known plan answers only when I selected the quote-preparation control above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
         </label>
 
         <details className={styles.privacy}>
           <summary>What is sent with this enquiry?</summary>
-          <p>Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services and any message you wrote. Your first and last name, phone and full property address are included only when you choose to share them. Your full plan, PDF, bills, energy usage, meter identifiers, account data and uploaded files are not shared with trades.</p>
+          <p>Australian Energy Assessments keeps the full enquiry, including your first and last name, unit, street, suburb and state, for its records. Matching trades receive your email, postcode, selected services, message and any optional quote answers or photos you deliberately added. Known answers from your private plan are included only when you select the quote-preparation control and can be changed or skipped before sending. Your first and last name, phone and full property address are included only when you choose to share them. Quote photos have location metadata removed, stay in private storage and are not attached to email. Your full plan, PDF, bills, energy usage, meter identifiers and account data are not shared with trades.</p>
         </details>
 
         <div className={styles.actions}>

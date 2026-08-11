@@ -31,7 +31,7 @@ test("every worker response receives baseline browser security headers", () => {
   assert.match(worker, /const handled = await handler\.fetch/);
   assert.match(
     worker,
-    /secureResponse\(queueBackgroundDispatches\(handled, ctx\), request\)/,
+    /secureResponse\(queueBackgroundDispatches\(handled, ctx, request\), request\)/,
   );
 });
 

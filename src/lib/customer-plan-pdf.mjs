@@ -29,7 +29,7 @@ import {
 } from "./customer-plan-pdf-tags.mjs";
 
 export const CUSTOMER_PLAN_PDF_VERSION =
-  "2026-08-10-personalised-plan-pdf-v7";
+  "2026-08-11-personalised-plan-pdf-v9";
 export const CUSTOMER_PLAN_PDF_CONTRAST_COLORS = Object.freeze({
   oceanBlue: "#006da6",
   muted: "#536c78",
@@ -264,6 +264,17 @@ function requiredReport(value) {
       );
     }
   }
+  if (
+    value.electrificationMoves !== undefined
+    && (
+      !Array.isArray(value.electrificationMoves)
+      || value.electrificationMoves.length > 3
+    )
+  ) {
+    throw new TypeError(
+      "A bounded privacy-filtered customer plan report is required.",
+    );
+  }
   return value;
 }
 
@@ -471,6 +482,9 @@ export async function createCustomerPlanPdfBytes(
   suppliedFonts,
 ) {
   const report = requiredReport(suppliedReport);
+  const electrificationMoves = Array.isArray(report.electrificationMoves)
+    ? report.electrificationMoves
+    : [];
   const fontBytes = requiredPdfFonts(suppliedFonts);
   const copy = report.copy || {};
   const priorityActions = Array.isArray(report.priorityActions)
@@ -1681,17 +1695,22 @@ export async function createCustomerPlanPdfBytes(
         height: measureLines(labelLines) + 3 + measureLines(bodyLines),
       };
     };
-    const listBlock = (label, values) => {
+    const listBlock = (
+      label,
+      values,
+      width = columnWidth,
+      maximumItems = 3,
+    ) => {
       const items = (Array.isArray(values) ? values : [])
-        .map((value) => normalizedText(value, 260))
+        .map((value) => normalizedText(value, 460))
         .filter(Boolean)
-        .slice(0, 3)
+        .slice(0, maximumItems)
         .map((actualText) => ({
           actualText,
           lines: linesFor(actualText, {
             font: regular,
             size: 8.05,
-            width: columnWidth - 17,
+            width: width - 17,
             lineHeight: 10.9,
             color: bodyColor,
           }),
@@ -1700,7 +1719,7 @@ export async function createCustomerPlanPdfBytes(
       const labelLines = linesFor(label, {
         font: bold,
         size: 6.7,
-        width: columnWidth,
+        width,
         lineHeight: 8.7,
         color: labelColor,
       });
@@ -1716,34 +1735,46 @@ export async function createCustomerPlanPdfBytes(
       };
     };
     const whatToDo = paragraphBlock(
-      "WHAT TO DO",
+      "WHAT THIS MEANS",
       action?.whatToDo || action?.description,
     );
+    const solutionOptions = listBlock(
+      "OPTIONS FROM SIMPLE TO LONG-TERM",
+      (Array.isArray(action?.solutionOptions) ? action.solutionOptions : [])
+        .map((option) => {
+          const label = normalizedText(option?.label, 80);
+          const description = normalizedText(option?.description, 420);
+          return label && description ? `${label}: ${description}` : "";
+        })
+        .filter(Boolean),
+      contentWidth,
+      6,
+    );
     const whyItMatters = paragraphBlock(
-      "WHY IT MATTERS",
+      "WHY IT HELPS",
       action?.whyItMatters,
       columnWidth,
     );
     const householdReason = paragraphBlock(
-      "WHY THIS APPLIES TO YOUR HOME",
+      "WHY IT IS IN YOUR PLAN",
       action?.householdReason,
       columnWidth,
     );
     const confirmations = listBlock(
-      "CONFIRM BEFORE QUOTING",
+      "CHECK FIRST",
       action?.confirmBeforeWork,
     );
     const quoteChecklist = listBlock(
-      "QUOTE AND EVIDENCE CHECKLIST",
+      "WHAT TO ASK FOR",
       action?.quoteChecklist,
     );
     const sequence = paragraphBlock(
-      "SEQUENCE AND DEPENDENCIES",
+      "WHEN TO DO IT",
       action?.sequence,
       columnWidth,
     );
     const safety = paragraphBlock(
-      "SAFETY BOUNDARY",
+      "SAFETY",
       action?.safety,
       columnWidth,
     );
@@ -1793,6 +1824,7 @@ export async function createCustomerPlanPdfBytes(
     const contentHeight = headerHeight
       + 15
       + (whatToDo?.height || 0)
+      + (solutionOptions ? 13 + solutionOptions.height : 0)
       + 13
       + rowHeight(whyItMatters, householdReason)
       + 13
@@ -1962,6 +1994,10 @@ export async function createCustomerPlanPdfBytes(
 
     cursor -= 15;
     cursor = drawParagraphBlock(whatToDo, contentX, cursor);
+    if (solutionOptions) {
+      cursor -= 13;
+      cursor = drawListBlock(solutionOptions, contentX, cursor);
+    }
     cursor -= 13;
     cursor = drawPair(
       whyItMatters,
@@ -2338,6 +2374,26 @@ export async function createCustomerPlanPdfBytes(
     body: readiness.body,
     tone: "mint",
   });
+
+  if (electrificationMoves.length) {
+    pageSection = "Electrification path";
+    ensureSpace(430, pageSection);
+    pdfTags.beginSection("Your practical electrification path");
+    drawSectionHeading(
+      "YOUR ELECTRIFICATION PATH",
+      "Practical ways to move from the gas appliances you recorded",
+      "These choices appear because your answers include gas heating, hot water or cooking. They show a staged direction, not a product endorsement, fixed price or savings promise.",
+    );
+    electrificationMoves.forEach((move) => {
+      drawInfoPanel({
+        eyebrow: "EFFICIENT ELECTRIC ALTERNATIVE",
+        title: move.title,
+        body: move.summary,
+        bullets: [`Check first: ${move.checkFirst}`],
+        tone: "mint",
+      });
+    });
+  }
 
   if (priorityActions.length) {
     if (pages.length === 1 || y < 500) {

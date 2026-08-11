@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
@@ -28,6 +29,9 @@ import {
 import {
   CUSTOMER_PROFESSIONAL_REVIEW_DECLARATION_VERSION,
 } from "../src/lib/customer-projects.mjs";
+import {
+  createPublicPlanCustomerPdfBundle,
+} from "../src/lib/public-plan-customer-pdf.mjs";
 
 const A4_WIDTH_POINTS = 595.28;
 const A4_HEIGHT_POINTS = 841.89;
@@ -379,7 +383,7 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
 
   assert.equal(
     CUSTOMER_PLAN_PDF_VERSION,
-    "2026-08-10-personalised-plan-pdf-v7",
+    "2026-08-11-personalised-plan-pdf-v9",
   );
   assert.equal(
     Buffer.from(bytes.subarray(0, 5)).toString("ascii"),
@@ -399,6 +403,13 @@ test("direct plan PDF bytes load as an A4 document with useful metadata", async 
   const content = decodedPdfContent(pdf);
   assert.match(content, /\bW\s+n\b/, "rounded panels should use clipping paths");
   assert.match(content, /\bc\b/, "rounded panels should use curved corners");
+});
+
+test("legacy normalized reports without electrification moves still download", async () => {
+  const report = normalizedReport();
+  delete report.electrificationMoves;
+  const pdf = await PDFDocument.load(await createPdf(report));
+  assertEveryPageIsA4(pdf);
 });
 
 test("direct plan PDF small blue and muted copy meets WCAG AA contrast", () => {
@@ -657,13 +668,13 @@ test("personalised customer PDF includes the named home summary and trusted offi
   assert.match(text, /Trusted tools and official information/);
   assert.match(text, /Turn this roadmap into a clear first conversation/);
   assert.match(text, /Prepare once for an assessor or trade/);
-  assert.match(text, /WHAT TO DO/);
-  assert.match(text, /WHY IT MATTERS/);
-  assert.match(text, /WHY THIS APPLIES TO YOUR HOME/);
-  assert.match(text, /CONFIRM BEFORE QUOTING/);
-  assert.match(text, /QUOTE AND EVIDENCE CHECKLIST/);
-  assert.match(text, /SEQUENCE AND DEPENDENCIES/);
-  assert.match(text, /SAFETY BOUNDARY/);
+  assert.match(text, /WHAT THIS MEANS/);
+  assert.match(text, /WHY IT HELPS/);
+  assert.match(text, /WHY IT IS IN YOUR PLAN/);
+  assert.match(text, /CHECK FIRST/);
+  assert.match(text, /WHAT TO ASK FOR/);
+  assert.match(text, /WHEN TO DO IT/);
+  assert.match(text, /SAFETY/);
   assert.doesNotMatch(text, /\bAEA\b/);
   assert.doesNotMatch(text, /Questions that could|Home details to check/i);
   assert.ok(urls.includes("https://compare.ausenergyassessments.com/calculator"));
@@ -676,6 +687,85 @@ test("personalised customer PDF includes the named home summary and trusted offi
     customerPlanPdfFileName(report),
     "personalised-home-energy-plan-2026-07-29.pdf",
   );
+});
+
+test("canonical public plan input produces byte-identical email and post-submit PDFs with plain staged options", async () => {
+  assert.match(
+    PUBLIC_LEAD_ROUTE_SOURCE,
+    /preparedAt:\s*envelope\.submittedAt/,
+    "the emailed attachment must use the canonical lead envelope date",
+  );
+  const input = {
+    name: "Jamie Customer",
+    postcode: "3000",
+    projectCategories: [
+      "heating-cooling",
+      "hot-water",
+      "draught-proofing",
+      "glazing",
+    ],
+    snapshot: {
+      goals: ["lower-bills", "improve-comfort", "move-from-gas"],
+      pace: "staged",
+      situation: "owner",
+      approvalContext: "none",
+      budgetRange: "2_10k",
+      addressState: "VIC",
+      features: [
+        "draughty",
+        "single-glazing",
+        "gas-heating",
+        "gas-storage-hot-water",
+        "gas-cooking",
+      ],
+      propertyContext: {
+        propertyType: "townhouse",
+        storeys: "two",
+        floorArea: "100_199",
+        occupants: "three_four",
+        sharedWalls: "one_side",
+      },
+    },
+  };
+  const emailReport = createPublicPlanCustomerReportView({
+    ...input,
+    // /api/leads uses the server envelope timestamp for the emailed attachment.
+    preparedAt: "2026-08-11T23:59:59.900Z",
+  });
+  const postSubmitReport = createPublicPlanCustomerReportView({
+    ...input,
+    // The post-success gateway recovers the same UTC date from the lead reference.
+    preparedAt: "2026-08-11T00:00:00.000Z",
+  });
+  assert.deepEqual(postSubmitReport, emailReport);
+
+  const emailBytes = await createPdf(emailReport);
+  const postSubmitBytes = await createPdf(postSubmitReport);
+  assert.deepEqual(Buffer.from(postSubmitBytes), Buffer.from(emailBytes));
+  assert.equal(
+    createHash("sha256").update(postSubmitBytes).digest("hex"),
+    createHash("sha256").update(emailBytes).digest("hex"),
+  );
+
+  const pdf = await PDFDocument.load(emailBytes);
+  assert.ok(pdf.getPageCount() <= 28, `representative report has ${pdf.getPageCount()} pages`);
+  const text = extractedPdfText(pdf);
+  assert.match(text, /YOUR ELECTRIFICATION PATH/);
+  assert.match(text, /reverse-cycle air conditioner/i);
+  assert.match(text, /heat-pump hot-water system/i);
+  assert.match(text, /portable (?:single-zone )?induction/i);
+  assert.match(text, /OPTIONS FROM SIMPLE TO LONG-TERM/);
+  assert.match(text, /Try now:/);
+  assert.match(text, /Better fix:/);
+  assert.match(text, /Long-term upgrade:/);
+  assert.match(text, /bubble wrap or (?:purpose-made )?shrink film/i);
+  assert.match(text, /little or no direct sun/i);
+  assert.match(text, /cut-to-fit reflective shade/i);
+  assert.match(text, /low-e or solar-control film/i);
+  assert.match(text, /clear acrylic secondary panel/i);
+  assert.match(text, /durable secondary glazing with full double glazing/i);
+  assert.doesNotMatch(text, /Renshade/i);
+  assert.doesNotMatch(text, /\bAEA\b/);
 });
 
 test("direct plan PDF accepts common adviser names, temperatures and smart punctuation", async () => {
@@ -753,7 +843,7 @@ test("direct plan PDF rejects unsupported scripts instead of corrupting visible 
   }
 });
 
-test("public enquiry PDF uses a neutral supported cover label when only the customer name is unsupported", async () => {
+test("emailed and post-submit public enquiry PDFs share the same neutral cover fallback", async () => {
   const reportInput = {
     postcode: "3000",
     projectCategories: ["heating-cooling"],
@@ -775,26 +865,34 @@ test("public enquiry PDF uses a neutral supported cover label when only the cust
       },
     },
   };
-  const namedReport = createPublicPlanCustomerReportView({
+  const inputWithUnsupportedName = {
     ...reportInput,
     name: "张伟",
-  });
-  await assert.rejects(
-    createPdf(namedReport),
-    (error) => error instanceof CustomerPlanPdfUnsupportedTextError,
+  };
+  const emailed = await createPublicPlanCustomerPdfBundle(
+    inputWithUnsupportedName,
+    PDF_FONTS,
   );
-
-  const neutralReport = createPublicPlanCustomerReportView({
-    ...reportInput,
-    name: "Customer",
-  });
-  const bytes = await createPdf(neutralReport);
-  const text = extractedPdfText(await PDFDocument.load(bytes));
+  const postSubmit = await createPublicPlanCustomerPdfBundle(
+    inputWithUnsupportedName,
+    PDF_FONTS,
+  );
+  assert.deepEqual(emailed.report, postSubmit.report);
+  assert.deepEqual(Buffer.from(emailed.bytes), Buffer.from(postSubmit.bytes));
+  assert.equal(
+    createHash("sha256").update(emailed.bytes).digest("hex"),
+    createHash("sha256").update(postSubmit.bytes).digest("hex"),
+  );
+  const text = extractedPdfText(await PDFDocument.load(emailed.bytes));
   assert.match(text, /Prepared for Customer/);
   assert.doesNotMatch(text, /张伟/u);
-  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /error instanceof CustomerPlanPdfUnsupportedTextError/);
-  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /name: "Customer"/);
-  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /The real name remains in the private enquiry/);
+  assert.match(
+    emailed.report.privacyNote,
+    /real name remains in the private enquiry/i,
+  );
+  for (const source of [PUBLIC_LEAD_ROUTE_SOURCE, PDF_ROUTE_SOURCE]) {
+    assert.match(source, /createPublicPlanCustomerPdfBundle/);
+  }
 });
 
 test("PDF route returns a clear unsupported-text response", () => {

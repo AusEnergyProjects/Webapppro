@@ -5,7 +5,9 @@ import {
 import {
   DownloadCustomerPlanPdfButton,
 } from "@/components/DownloadCustomerPlanPdfButton";
-import { createCustomerPlanReportView } from "@/lib/customer-plan-document.mjs";
+import {
+  createPublicPlanCustomerReportView,
+} from "@/lib/customer-plan-document.mjs";
 import {
   buildInstallerPropertyContext,
   createCustomerProjectPlan,
@@ -223,65 +225,18 @@ export default async function PrintableHomeEnergyPlanPage({
     optionLabel(customerProjectOptions.paces, plan.pace),
     addressState,
   ].filter(Boolean);
-  const report = createCustomerPlanReportView({
-    heading: "Your independent home energy plan",
-    planTitle: plan.title,
-    summary: plan.summary,
-    preparedDate: new Date().toISOString().slice(0, 10),
-    overview: {
-      goals: plan.goals
-        .map((item) => optionLabel(customerProjectOptions.goals, item))
-        .filter(Boolean),
-      propertyType: propertyType || "Home",
-      tenure: optionLabel(customerProjectOptions.situations, plan.situation)
-        || "Not recorded",
-      approval: optionLabel(
-        customerProjectOptions.approvalContexts,
-        plan.approvalContext,
-      ) || "Not recorded",
-      pace: optionLabel(customerProjectOptions.paces, plan.pace)
-        || "Not recorded",
-      budget: optionLabel(customerProjectOptions.budgets, budgetRange)
-        || "Not recorded",
-      state: addressState || "Not recorded",
-      homeDetails,
-      homeFacts: {
-        storeys: optionLabel(customerProjectOptions.storeys, plan.propertyContext.storeys),
-        ageBand: optionLabel(customerProjectOptions.ageBands, plan.propertyContext.ageBand || ""),
-        floorArea: optionLabel(customerProjectOptions.floorAreas, plan.propertyContext.floorArea),
-        occupants: optionLabel(customerProjectOptions.occupants, plan.propertyContext.occupants || ""),
-        sharedWalls: optionLabel(customerProjectOptions.sharedWalls, plan.propertyContext.sharedWalls || ""),
-        roofType: optionLabel(customerProjectOptions.roofTypes, plan.propertyContext.roofType || ""),
-        roofColour: optionLabel(customerProjectOptions.roofColours, plan.propertyContext.roofColour || ""),
-        roofForm: optionLabel(customerProjectOptions.roofForms, plan.propertyContext.roofForm || ""),
-        roofCondition: optionLabel(customerProjectOptions.roofConditions, plan.propertyContext.roofCondition || ""),
-        switchboard: optionLabel(customerProjectOptions.switchboards, plan.propertyContext.switchboard || ""),
-        wallConstruction: optionLabel(customerProjectOptions.wallConstructions, plan.propertyContext.wallConstruction || ""),
-        floorConstruction: optionLabel(customerProjectOptions.floorConstructions, plan.propertyContext.floorConstruction || ""),
-      },
+  const report = createPublicPlanCustomerReportView({
+    snapshot: {
+      goals: plan.goals,
+      pace: plan.pace,
+      situation: plan.situation,
+      approvalContext: plan.approvalContext,
+      budgetRange,
+      addressState,
+      features: plan.features,
+      propertyContext: plan.propertyContext,
     },
-    evidence: null,
-    existingFeatures: plan.features,
-    climate: null,
-    questions: plan.nextQuestions,
-    everydayActions: plan.everydayActions.map((action) => ({
-      ...action,
-      description: action.text,
-    })),
-    everydayActionsBoundary: plan.everydayActionsBoundary,
-    actions: plan.items.map((item, index) => ({
-      number: index + 1,
-      id: item.id,
-      stage: item.stage,
-      title: item.title,
-      description: item.text,
-      completed: false,
-      guideLabel: item.action,
-      guideHref: item.href,
-      guidance: item.guidance,
-    })),
-    privacyNote: "This public copy includes only the planning choices shown in this roadmap. It does not contain account, address, meter or private project records.",
-    adviceBoundary: "This plan is independent general guidance. It is not a quote, product endorsement, home energy rating, equipment sizing result or savings promise. Confirm safety, permissions, suitability and current incentives before committing to work.",
+    preparedAt: new Date().toISOString(),
   });
 
   return (

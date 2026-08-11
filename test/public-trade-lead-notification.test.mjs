@@ -92,7 +92,8 @@ test("every inserted match has one durable queued notification and the minute dr
   assert.match(migration, /AFTER INSERT ON `trade_opportunity_matches`/);
   assert.match(migration, /INSERT OR IGNORE INTO `trade_opportunity_notification_deliveries`/);
   assert.match(deliveryServer, /SET status = 'failed'.*next_attempt_at = \?/s);
-  assert.match(deliveryServer, /serviceReminderRetryAt\(attempts\)/);
+  assert.match(deliveryServer, /opportunityNotificationRetryAt\(attempts\)/);
+  assert.doesNotMatch(deliveryServer, /MAX_ATTEMPTS|attempts < \?/);
   assert.match(worker, /const NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);
   assert.match(worker, /drainOpportunityNotificationDeliveries\(\)/);
 });

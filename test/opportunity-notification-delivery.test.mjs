@@ -12,6 +12,16 @@ import {
 import {
   serviceReminderProviderConfiguration,
 } from "../src/lib/service-reminder-delivery.ts";
+import {
+  OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL,
+  OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL,
+  OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL,
+  OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL,
+  opportunityNotificationFailureAudit,
+  opportunityNotificationRetryAt,
+  shouldDrainOpportunityNotificationBacklog,
+  takeOpportunityNotificationDispatch,
+} from "../src/lib/opportunity-notification-retry.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0087_trade_opportunity_notifications.sql");
@@ -19,6 +29,7 @@ const schema = read("../db/schema.ts");
 const deliveryServer = read("../src/lib/opportunity-notification-server.ts");
 const opportunityServer = read("../src/lib/opportunity-server.ts");
 const manualMatches = read("../src/app/api/admin/opportunities/matches/route.ts");
+const manualAllocation = read("../src/app/api/admin/opportunities/allocate/route.ts");
 const resendCallback = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const worker = read("../worker/index.ts");
 const vite = read("../vite.config.ts");
@@ -108,6 +119,135 @@ test("Resend submit does not wait for a webhook secret when send credentials are
     deliveryServer,
     /!provider\.email\.configured \|\| !provider\.email\.callbacks/,
   );
+  assert.match(deliveryServer, /status <> 'waiting_for_channel' OR \? = 1/);
+  assert.match(deliveryServer, /retryWaitingForChannel/);
+});
+
+test("transient failures through attempt three remain due for a later successful claim", () => {
+  const startedAt = Date.parse("2026-08-11T00:00:00.000Z");
+  const expectedMinutes = [5, 30, 120, 240, 480, 960, 1_440, 1_440];
+  expectedMinutes.forEach((minutes, index) => {
+    assert.equal(
+      opportunityNotificationRetryAt(index + 1, startedAt),
+      new Date(startedAt + minutes * 60 * 1000).toISOString(),
+    );
+  });
+
+  const db = new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE delivery (
+    id text PRIMARY KEY,
+    status text NOT NULL,
+    attempts integer NOT NULL,
+    next_attempt_at text NOT NULL
+  )`);
+  const thirdRetryAt = opportunityNotificationRetryAt(3, startedAt);
+  db.prepare("INSERT INTO delivery VALUES ('delivery-1', 'failed', 3, ?)")
+    .run(thirdRetryAt);
+  const due = db.prepare(`SELECT id FROM delivery
+    WHERE status IN (${OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL})
+      AND (next_attempt_at = '' OR next_attempt_at <= ?)`);
+  assert.equal(due.get(new Date(Date.parse(thirdRetryAt) - 1).toISOString()), undefined);
+  assert.equal(due.get(thirdRetryAt).id, "delivery-1");
+  assert.equal(
+    db.prepare(`UPDATE delivery SET status = 'sending', attempts = attempts + 1,
+      next_attempt_at = '' WHERE id = 'delivery-1' AND status = 'failed' AND attempts = 3`)
+      .run().changes,
+    1,
+  );
+  assert.equal(
+    db.prepare("UPDATE delivery SET status = 'sent' WHERE id = 'delivery-1' AND status = 'sending'")
+      .run().changes,
+    1,
+  );
+  const sent = db.prepare("SELECT status, attempts FROM delivery WHERE id = 'delivery-1'").get();
+  assert.equal(sent.status, "sent");
+  assert.equal(sent.attempts, 4);
+  assert.equal(opportunityNotificationFailureAudit(3).eventType, "provider_attempt_failed");
+  assert.equal(opportunityNotificationFailureAudit(4).eventType, "provider_retry_escalated");
+  db.close();
+
+  assert.doesNotMatch(deliveryServer, /MAX_ATTEMPTS|attempts < \?/);
+  assert.match(deliveryServer, /opportunityNotificationRetryAt\(attempts\)/);
+});
+
+test("successful health probes trigger bounded backlog recovery without hot looping failures", () => {
+  assert.equal(shouldDrainOpportunityNotificationBacklog({
+    method: "GET",
+    pathname: "/api/health",
+    responseOk: true,
+  }), true);
+  assert.equal(shouldDrainOpportunityNotificationBacklog({
+    method: "GET",
+    pathname: "/api/health",
+    responseOk: false,
+  }), false);
+  assert.equal(shouldDrainOpportunityNotificationBacklog({
+    method: "POST",
+    pathname: "/api/health",
+    responseOk: true,
+  }), false);
+  assert.equal(shouldDrainOpportunityNotificationBacklog({
+    method: "GET",
+    pathname: "/plan",
+    responseOk: true,
+  }), false);
+  assert.match(worker, /shouldDrainOpportunityNotificationBacklog/);
+  assert.match(deliveryServer, /next_attempt_at = '' OR next_attempt_at <= \?/);
+});
+
+test("the exact dispatch hook is removed before the response reaches the browser", async () => {
+  const headerName = "X-AEA-Opportunity-Notification-Dispatch";
+  const dispatch = takeOpportunityNotificationDispatch(new Response("accepted", {
+    status: 202,
+    headers: {
+      [headerName]: "opportunity-1",
+      "X-Public-Header": "kept",
+    },
+  }), headerName);
+  assert.equal(dispatch.opportunityId, "opportunity-1");
+  assert.equal(dispatch.response.status, 202);
+  assert.equal(dispatch.response.headers.has(headerName), false);
+  assert.equal(dispatch.response.headers.get("X-Public-Header"), "kept");
+  assert.equal(await dispatch.response.text(), "accepted");
+  assert.match(worker, /takeOpportunityNotificationDispatch/);
+});
+
+test("manual exact recovery makes exhausted transient rows immediately claimable and preserves terminal rows", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE delivery (
+    id text PRIMARY KEY,
+    status text NOT NULL,
+    attempts integer NOT NULL,
+    next_attempt_at text NOT NULL
+  )`);
+  const insert = db.prepare("INSERT INTO delivery VALUES (?, ?, ?, ?)");
+  insert.run("failed", "failed", 9, "2026-08-12T00:00:00.000Z");
+  insert.run("channel", "waiting_for_channel", 0, "");
+  insert.run("suppressed", "suppressed", 2, "");
+  insert.run("bounced", "bounced", 1, "");
+  insert.run("sent", "sent", 1, "");
+  const result = db.prepare(`UPDATE delivery SET status = 'pending', next_attempt_at = ''
+    WHERE status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})`).run();
+  assert.equal(result.changes, 2);
+  const recovered = db.prepare(
+    "SELECT status, attempts, next_attempt_at FROM delivery WHERE id = 'failed'",
+  ).get();
+  assert.equal(recovered.status, "pending");
+  assert.equal(recovered.attempts, 9);
+  assert.equal(recovered.next_attempt_at, "");
+  assert.deepEqual(
+    db.prepare("SELECT id, status FROM delivery WHERE id IN ('suppressed', 'bounced', 'sent') ORDER BY id")
+      .all().map((row) => ({ id: row.id, status: row.status })),
+    [
+      { id: "bounced", status: "bounced" },
+      { id: "sent", status: "sent" },
+      { id: "suppressed", status: "suppressed" },
+    ],
+  );
+  db.close();
+
+  assert.match(manualAllocation, /prepareOpportunityNotificationDeliveriesForManualRetry\(opportunityId\)/);
+  assert.match(deliveryServer, /manual_retry_requested/);
 });
 
 test("zero-attempt public emails skipped by the old optional preference are safely requeued", () => {
@@ -163,6 +303,74 @@ test("new automatic or manual match inserts atomically enqueue exactly once and 
     .run("manual-match", "opportunity-1", "installer-2", "2026-07-31T00:02:00.000Z", "2026-07-31T00:02:00.000Z");
   assert.equal(db.prepare("SELECT COUNT(*) total FROM trade_opportunity_notification_deliveries").get().total, 2);
   assert.equal(db.prepare("SELECT COUNT(DISTINCT match_id) total FROM trade_opportunity_notification_deliveries").get().total, 2);
+  db.prepare(`INSERT INTO trade_opportunity_matches
+    (id, opportunity_id, firebase_uid, status, matched_at, updated_at)
+    VALUES (?, ?, ?, 'offered', ?, ?)`)
+    .run("third-match", "opportunity-1", "installer-3", "2026-07-31T00:03:00.000Z", "2026-07-31T00:03:00.000Z");
+  const coverage = db.prepare(`SELECT COUNT(*) match_count,
+      COUNT(delivery.id) delivery_count,
+      COUNT(DISTINCT delivery.match_id) unique_recipient_count
+      FROM trade_opportunity_matches assignment
+      LEFT JOIN trade_opportunity_notification_deliveries delivery ON delivery.match_id = assignment.id
+      WHERE assignment.opportunity_id = 'opportunity-1'`).get();
+  assert.equal(coverage.match_count, 3);
+  assert.equal(coverage.delivery_count, 3);
+  assert.equal(coverage.unique_recipient_count, 3);
+  db.close();
+});
+
+test("coverage repair dynamically inserts only a missing active-match delivery", () => {
+  const db = notificationDatabase();
+  const now = "2026-08-11T00:00:00.000Z";
+  const insertMatch = db.prepare(`INSERT INTO trade_opportunity_matches
+    (id, opportunity_id, firebase_uid, status, matched_at, updated_at)
+    VALUES (?, 'opportunity-repair', ?, 'offered', ?, ?)`);
+  insertMatch.run("repair-match-1", "installer-1", now, now);
+  insertMatch.run("repair-match-2", "installer-2", now, now);
+  db.prepare("DELETE FROM trade_opportunity_notification_deliveries WHERE match_id = 'repair-match-2'")
+    .run();
+
+  const repair = db.prepare(OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL);
+  assert.equal(repair.run(now, "opportunity-repair").changes, 1);
+  assert.equal(repair.run(now, "opportunity-repair").changes, 0);
+  const coverage = db.prepare(`SELECT COUNT(*) match_count,
+      COUNT(delivery.id) delivery_count,
+      COUNT(DISTINCT delivery.match_id) unique_delivery_count
+    FROM trade_opportunity_matches assignment
+    LEFT JOIN trade_opportunity_notification_deliveries delivery ON delivery.match_id = assignment.id
+    WHERE assignment.opportunity_id = 'opportunity-repair'`).get();
+  assert.equal(coverage.match_count, 2);
+  assert.equal(coverage.delivery_count, 2);
+  assert.equal(coverage.unique_delivery_count, 2);
+
+  const selectedByTwoDrains = db.prepare(`SELECT id, status, attempts
+    FROM trade_opportunity_notification_deliveries
+    WHERE status IN (${OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL})
+    ORDER BY id`).all();
+  const claim = db.prepare(`UPDATE trade_opportunity_notification_deliveries
+    SET status = 'sending', attempts = ?, next_attempt_at = ''
+    WHERE ${OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL}`);
+  let providerSendCount = 0;
+  for (const row of selectedByTwoDrains) {
+    const claimed = claim.run(row.attempts + 1, row.id, row.status, row.attempts);
+    if (claimed.changes) {
+      providerSendCount += 1;
+      db.prepare("UPDATE trade_opportunity_notification_deliveries SET status = 'sent' WHERE id = ?")
+        .run(row.id);
+    }
+  }
+  for (const staleRow of selectedByTwoDrains) {
+    assert.equal(
+      claim.run(staleRow.attempts + 1, staleRow.id, staleRow.status, staleRow.attempts).changes,
+      0,
+    );
+  }
+  assert.equal(providerSendCount, 2);
+  assert.equal(
+    db.prepare(`SELECT COUNT(*) pending FROM trade_opportunity_notification_deliveries
+      WHERE status IN (${OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL})`).get().pending,
+    0,
+  );
   db.close();
 });
 
@@ -239,7 +447,7 @@ test("dispatch rechecks authoritative access, consent, current email and live of
     "trade_opportunity_email_suppressions"]) {
     assert.match(deliveryServer, new RegExp(boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(deliveryServer, /status = 'sending'[\s\S]*AND status = \? AND attempts = \?/);
+  assert.match(deliveryServer, /OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL/);
   assert.match(deliveryServer, /datetime\(current_opportunity\.created_at, '\+30 days'\) > \?/);
   assert.match(deliveryServer, /current_account\.availability_status IN \('open', 'limited'\)/);
   assert.match(deliveryServer, /previousAttempts > 0/);
@@ -247,7 +455,7 @@ test("dispatch rechecks authoritative access, consent, current email and live of
   assert.match(deliveryServer, /storedEmailHash !== emailHash/);
   assert.match(deliveryServer, /sendServiceReminderProviderMessage/);
   assert.match(deliveryServer, /messageType: "trade_opportunity"/);
-  assert.match(deliveryServer, /serviceReminderRetryAt/);
+  assert.match(deliveryServer, /opportunityNotificationRetryAt/);
   assert.match(deliveryServer, /status = 'failed'/);
 });
 
@@ -270,7 +478,7 @@ test("notification location comes from the consented opportunity snapshot withou
   );
 });
 
-test("allocation paths only write matches while the database trigger owns durable enqueue", () => {
+test("allocation writes matches while the trigger and coverage repair own durable enqueue", () => {
   assert.match(opportunityServer, /INSERT INTO trade_opportunity_matches/);
   assert.match(manualMatches, /INSERT INTO trade_opportunity_matches/);
   assert.match(manualMatches, /ON CONFLICT\(opportunity_id, firebase_uid\) DO UPDATE/);
@@ -296,6 +504,40 @@ test("minute delivery drain is separate from the existing daily maintenance cron
   assert.match(worker, /controller\.cron === DAILY_MAINTENANCE_CRON/);
   assert.match(worker, /const NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);
   assert.match(worker, /const DAILY_MAINTENANCE_CRON = "15 20 \* \* \*"/);
+});
+
+test("public lead responses dispatch exact opportunity notifications without exposing the private handoff header", () => {
+  assert.match(worker, /takeOpportunityNotificationDispatch/);
+  assert.match(
+    worker,
+    /ctx\.waitUntil\([\s\S]*drainOpportunityNotificationDeliveriesForOpportunity\(\{ opportunityId \}\)/,
+  );
+  assert.match(
+    deliveryServer,
+    /export async function drainOpportunityNotificationDeliveriesForOpportunity/,
+  );
+  assert.match(deliveryServer, /while \(true\)/);
+  assert.match(deliveryServer, /if \(result\.attempted < batchSize\) break/);
+  assert.doesNotMatch(deliveryServer, /batch < \d+/);
+  assert.match(opportunityServer, /await ensureOpportunityNotificationDeliveries\(opportunityId\)/);
+  assert.match(deliveryServer, /OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE/);
+  assert.match(worker, /shouldDrainOpportunityNotificationBacklog/);
+  assert.match(worker, /Opportunity notification backlog delivery failed\./);
+  assert.match(worker, /Opportunity notification delivery remains pending\./);
+  assert.match(worker, /Opportunity notification backlog remains pending\./);
+});
+
+test("authenticated manual allocation safely recovers already-enqueued notifications for one opportunity", () => {
+  assert.match(
+    manualAllocation,
+    /drainOpportunityNotificationDeliveriesForOpportunity\(\{ opportunityId \}\)/,
+  );
+  assert.match(
+    manualAllocation,
+    /prepareOpportunityNotificationDeliveriesForManualRetry\(opportunityId\)/,
+  );
+  assert.match(manualAllocation, /requireAdminIdentity\(request, \["owner", "admin"\]\)/);
+  assert.match(manualAllocation, /notificationDelivery/);
 });
 
 test("opportunity notification sources avoid prohibited dash characters", () => {

@@ -24,6 +24,13 @@ import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
+import {
+  PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
+  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+  publicPlanQuoteAnswersForMatchedCategories,
+  publicPlanQuoteCategoryIntersection,
+  strictPublicPlanQuoteServiceCategories,
+} from "@/lib/public-plan-quote-preparation.mjs";
 import { createInstallerEnquiryPack } from "@/lib/customer-plan-document.mjs";
 import { normaliseArrivalWindows, parseArrivalWindows } from "@/lib/customer-project-arrivals.mjs";
 import { adminNotificationStatement, createAdminNotification } from "@/lib/admin-notifications";
@@ -318,6 +325,10 @@ export async function GET(request: Request) {
     public_contact.customer_message public_customer_message,
     public_contact.notice_version public_contact_notice_version,
     public_contact.granted_at public_contact_granted_at,
+    public_quote_preparation.id public_quote_preparation_id,
+    public_quote_preparation.question_answers public_quote_answers,
+    public_quote_preparation.photo_prompt_ids public_quote_photo_prompt_ids,
+    public_quote_preparation.expected_photo_count public_quote_expected_photo_count,
     p.id customer_project_id, p.firebase_uid customer_uid, p.property_context,
     p.goal customer_goal, p.goals customer_goals, p.pace customer_pace,
     p.postcode customer_postcode, p.address_state customer_address_state,
@@ -357,12 +368,20 @@ export async function GET(request: Request) {
       AND r.installer_uid = m.firebase_uid AND r.status = 'active'
     LEFT JOIN public_trade_lead_contact_releases public_contact
       ON public_contact.opportunity_id = o.id
+        AND public_contact.source_reference = o.source_reference
         AND public_contact.status = 'active'
         AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
         AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
         AND datetime(public_contact.granted_at) IS NOT NULL
         AND public_contact.withdrawn_at = ''
         AND public_contact.postcode = o.postcode
+    LEFT JOIN public_trade_lead_quote_preparations public_quote_preparation
+      ON public_quote_preparation.opportunity_id = o.id
+        AND public_quote_preparation.source_reference = o.source_reference
+        AND public_quote_preparation.status = 'active'
+        AND public_quote_preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
+        AND public_quote_preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
+        AND datetime(public_quote_preparation.granted_at) IS NOT NULL
     LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
@@ -416,6 +435,36 @@ export async function GET(request: Request) {
     ORDER BY e.created_at DESC`)
     .bind(user.uid, requestedMatchId, requestedMatchId)
     .all<Record<string, unknown>>();
+  const publicPhotoRows = await db.prepare(`SELECT photo.id, photo.prompt_id,
+      photo.prompt_label, photo.service_categories, photo.content_type,
+      photo.size_bytes, photo.created_at, m.id opportunity_match_id,
+      m.matched_categories
+    FROM public_trade_lead_quote_photos photo
+    JOIN public_trade_lead_quote_preparations preparation
+      ON preparation.opportunity_id = photo.opportunity_id
+      AND preparation.status = 'active'
+      AND preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
+      AND preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
+      AND datetime(preparation.granted_at) IS NOT NULL
+    JOIN trade_opportunity_matches m
+      ON m.opportunity_id = photo.opportunity_id AND m.firebase_uid = ?
+    JOIN trade_opportunities o
+      ON o.id = m.opportunity_id AND o.source_reference = preparation.source_reference
+    JOIN public_trade_lead_contact_releases contact
+      ON contact.opportunity_id = o.id
+      AND contact.source_reference = o.source_reference
+      AND contact.status = 'active'
+      AND contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+      AND contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+      AND datetime(contact.granted_at) IS NOT NULL
+      AND contact.withdrawn_at = ''
+    WHERE photo.status = 'active'
+      AND (? = '' OR m.id = ?)
+      AND m.status IN ('offered', 'viewed', 'interested', 'connected')
+      AND o.status IN ('open', 'paused')
+    ORDER BY photo.created_at DESC`)
+    .bind(user.uid, requestedMatchId, requestedMatchId)
+    .all<Record<string, unknown>>();
   const evidenceByMatch = new Map<string, Array<Record<string, unknown>>>();
   for (const item of evidenceRows.results) {
     const matchId = String(item.opportunity_match_id || "");
@@ -424,10 +473,28 @@ export async function GET(request: Request) {
     current.push(item);
     evidenceByMatch.set(matchId, current);
   }
+  const publicPhotosByMatch = new Map<string, Array<Record<string, unknown>>>();
+  for (const item of publicPhotoRows.results) {
+    const matchId = String(item.opportunity_match_id || "");
+    const visibleCategories = publicPlanQuoteCategoryIntersection(
+      item.service_categories,
+      item.matched_categories,
+    );
+    if (!matchId || !visibleCategories.length) continue;
+    const current = publicPhotosByMatch.get(matchId) || [];
+    current.push({ ...item, service_categories: visibleCategories });
+    publicPhotosByMatch.set(matchId, current);
+  }
   return json({
     ok: true,
     opportunities: rows.results.map((row: Record<string, unknown>) => {
       const sharedEvidence = evidenceByMatch.get(String(row.match_id || "")) || [];
+      const publicPhotos = publicPhotosByMatch.get(String(row.match_id || "")) || [];
+      const matchedCategories = strictPublicPlanQuoteServiceCategories(row.matched_categories);
+      const quoteAnswers = publicPlanQuoteAnswersForMatchedCategories(
+        row.public_quote_answers,
+        matchedCategories,
+      );
       const matchingLocality = matchingLocalityDisclosure({
         suburb: row.opportunity_suburb,
         postcode: row.opportunity_postcode,
@@ -439,21 +506,33 @@ export async function GET(request: Request) {
         withdrawnAt: row.matching_withdrawn_at,
       });
       const evidence = sharedEvidence.map((item: Record<string, unknown>) => ({
-        id: item.id,
-        category: item.category,
+        id: String(item.id || ""),
+        category: String(item.category || ""),
         fileName: installerEvidenceName(item),
-        contentType: item.content_type,
+        contentType: String(item.content_type || ""),
         sizeBytes: Number(item.size_bytes || 0),
-        createdAt: item.created_at,
+        createdAt: String(item.created_at || ""),
         sharingScope: "allocated-installers",
-      }));
+        promptLabel: "",
+        downloadHref: `/api/customer-project-evidence?download=${encodeURIComponent(String(item.id || ""))}`,
+      })).concat(publicPhotos.map((item: Record<string, unknown>) => ({
+        id: String(item.id || ""),
+        category: "quote-photo",
+        fileName: "customer-quote-photo",
+        contentType: String(item.content_type || ""),
+        sizeBytes: Number(item.size_bytes || 0),
+        createdAt: String(item.created_at || ""),
+        sharingScope: "allocated-installers",
+        promptLabel: String(item.prompt_label || ""),
+        downloadHref: `/api/public-plan-quote-preparation?download=${encodeURIComponent(String(item.id || ""))}`,
+      })));
       const platformOnly = String(row.source_reference || "")
         .startsWith("customer-project:");
       const publicContact = publicTradeContact(row);
       return {
         matchId: row.match_id,
         matchStatus: row.match_status,
-        matchedCategories: parseJsonList(row.matched_categories),
+        matchedCategories,
         distanceBand: distanceBand(row.distance_metres),
         allocationRank: Number(row.allocation_rank || 0),
         contactAttemptCount: Number(row.contact_attempt_count || 0),
@@ -479,6 +558,12 @@ export async function GET(request: Request) {
         enquiryPack: platformOnly
           ? installerEnquiryPack(row, sharedEvidence)
           : null,
+        quotePreparation: row.public_quote_preparation_id
+          && (quoteAnswers.length || publicPhotos.length) ? {
+          answers: quoteAnswers,
+          expectedPhotoCount: publicPhotos.length,
+          availablePhotoCount: publicPhotos.length,
+        } : null,
         approvedSharedFileCount: evidence.length,
         opportunityStatus: row.status,
         platformOnly,

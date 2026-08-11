@@ -2066,7 +2066,80 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
+## Release candidate milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
+
+Status: implementation and local validation are complete on
+`codex/sites-custom-domain-migration`, based on repository HEAD `b33f7f49`.
+Sites version 311 is the proposed release. Its exact release commit,
+saved-version identity, deployment identity and live verification remain pending.
+The current verified production baseline remains historical Sites version 310
+from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` until version 311 is activated.
+
+### Outcome
+
+Make a public plan enquiry useful enough for a desktop quote, guarantee one
+durable email delivery for every active approved matched trade, and give the
+customer the same practical plain-language plan in email and the post-submit
+gateway without weakening privacy or requiring an account.
+
+### Implemented scope
+
+- Each active approved trade match must own one unique durable notification
+  delivery before lead matching is reported as successful. Exact opportunity
+  batches drain after a lead request and from health, signed-in trade polling and
+  the minute scheduler. Provider failures retain the delivery and retry after 5
+  minutes, 30 minutes, 2 hours, 4 hours, 8 hours, 16 hours and then daily until
+  accepted, withdrawn or no longer eligible.
+- The public-plan notification path does not depend on an optional account email
+  preference. Every send still rechecks current platform approval, consent,
+  matching service and service area, current email, opportunity and match state,
+  suppression and idempotency.
+- Email attachment and post-submit gateway download use one canonical customer
+  PDF generator. For the same plan inputs they are byte-identical. The audited
+  fixture is a tagged 24-page report with embedded fonts, semantic lists, 48
+  checked links and no active content.
+- Practical plan actions use plain-language immediate, better and long-term
+  choices across draughts, moisture, ventilation, glazing, shading, heating,
+  cooling, hot water, cooking, solar, batteries, electric vehicles and
+  assessment preparation. Gas replacement advice is conditional and recommends
+  efficient affordable electric alternatives without claiming product or savings
+  outcomes.
+- The enquiry offers optional three-to-four-question preparation packs for all
+  11 services, deduplicates only genuinely shared questions and lets the customer
+  explicitly reuse known private plan facts. Mobile and desktop photo controls
+  request service-relevant JPEG or PNG images without making answers or photos a
+  condition of the base lead.
+- Private quote answers and stripped photo derivatives are stored in D1 and R2,
+  never exposed through a public URL or email attachment, and are available only
+  to exact active matches for the relevant selected service. Withdrawal blocks
+  access immediately; bounded tombstone cleanup removes retained R2 objects after
+  failure or withdrawal.
+- Additive migration `0128_public_plan_quote_preparation.sql` owns the quote-pack
+  answers, files, grants, withdrawal and cleanup state. The packaged inventory is
+  all 129 migrations through `0128`.
+- The mobile enquiry surface has corrected horizontal padding and retains its
+  readable, no-overflow one-column layout.
+
+### Validation and pending release gates
+
+- The pre-padding `npm.cmd run validate` gate passed typecheck, warning-free
+  lint, integration, 1,924 tests with 1,914 passed, 10 intentional skips and 0
+  failures, `db:check`, the customer-plan PDF audit, production build and Sites
+  bundle audit.
+- After the bounded mobile-padding correction, its focused set passed 32 of 32,
+  followed by typecheck, warning-free lint, production build and the Sites bundle
+  audit containing all 129 migrations. Independent release review found no P0 or
+  P1 issue. The final post-correction full validation gate is being rerun before
+  release.
+- Local desktop and 355-pixel mobile QA confirm the optional preparation pack,
+  service-specific questions and file controls, readable customer form and no
+  horizontal document overflow. No new real lead was submitted for visual QA.
+- Release completion requires the exact committed source, Sites version 311
+  saved-version and deployment identities, live custom-domain health and
+  responsive checks, and provider-accepted email evidence for the known pending
+  matched-trade delivery without a duplicate send.
+
+## Previous released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
 
 Status: exact executable application commit
 `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` is pushed to
@@ -2279,11 +2352,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Add proactive registry-freshness alerts and one admin recovery view for VEU, SRES, NSW and GEMS before quote surfaces fail closed.
-2. Run and retain controlled live quote QA across VEU residential/non-residential Schedule 4 boundaries, including mixed models and exact rounding receipts, without creating certificates.
-3. Verify the production CER solar-water-heater/ASHP v58 manifest after the next forced or scheduled refresh, retaining release metadata and source hashes.
-4. Reconcile the retained GEMS 7,500-to-7,499 row change against exact prior/current source bytes before treating it as a source removal.
-5. Implement the next governed mixed-product contracts only where complete current source, eligibility and formula evidence exists.
+1. Delivery operations view and alerts for provider acceptance, bounce, backlog and recovery.
+2. Structured trade quote responses built from the service-specific preparation pack.
+3. No-account customer status and consent link for trade responses and cross-session withdrawal.
+4. Later quote-pack additions and reminders without creating another lead.
+5. Privacy-safe funnel analytics from plan to provider-accepted trade email and trade response.
 
 ## Global stop conditions
 

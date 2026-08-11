@@ -8,6 +8,7 @@ import {
   CUSTOMER_PLAN_REPORT_VERSION,
   createCustomerPlanDocument,
   createCustomerPlanReportView,
+  createPublicPlanCustomerReportView,
   customerPlanDocumentHtml,
   customerPlanDocumentText,
   isSingleEmailAddress,
@@ -143,6 +144,35 @@ function occurrenceCount(value, needle) {
   return value.split(needle).length - 1;
 }
 
+function publicPlanReport({
+  features = [],
+  goals = ["lower-bills", "improve-comfort"],
+  projectCategories = [],
+} = {}) {
+  return createPublicPlanCustomerReportView({
+    name: "Jamie Customer",
+    postcode: "3000",
+    projectCategories,
+    preparedAt: "2026-08-11T04:05:06.000Z",
+    snapshot: {
+      goals,
+      pace: "staged",
+      situation: "owner",
+      approvalContext: "none",
+      budgetRange: "2_10k",
+      addressState: "VIC",
+      features,
+      propertyContext: {
+        propertyType: "house",
+        storeys: "one",
+        floorArea: "100_199",
+        occupants: "three_four",
+        sharedWalls: "none",
+      },
+    },
+  });
+}
+
 test("shareable plan is server-derived, ordered and excludes private project content", () => {
   const document = createCustomerPlanDocument(row, {
     preparedAt: "2026-07-29T10:00:00.000Z",
@@ -235,6 +265,120 @@ test("the customer report shows structured home facts and considered work withou
   assert.doesNotMatch(text, /^Priorities:/m);
 });
 
+test("plain-language action tiers stay conditional, practical and safe across budgets", () => {
+  const humidReport = publicPlanReport({
+    goals: ["lower-bills", "improve-comfort", "healthier-home"],
+    features: [
+      "condensation-moisture",
+      "evaporative-ducts",
+      "evaporative-cooling",
+      "external-shading-none",
+      "comfort-too-hot",
+      "single-glazing",
+      "draughty",
+      "ceiling-insulation-unknown",
+    ],
+  });
+  const moisture = humidReport.actions.find((action) =>
+    action.id === "moisture-ventilation"
+  );
+  const glazing = humidReport.actions.find((action) =>
+    action.id === "windows-glazing"
+  );
+  const controls = humidReport.everydayActions.find((action) =>
+    action.id === "use-existing-controls"
+  );
+  assert.deepEqual(
+    moisture?.solutionOptions.map((option) => option.label),
+    ["Try now", "Better fix", "Long-term upgrade"],
+  );
+  const moistureText = JSON.stringify({
+    options: moisture?.solutionOptions,
+    everyday: humidReport.everydayActions.find((action) =>
+      action.id === "moisture-safe-routine"
+    ),
+  });
+  assert.match(moistureText, /fix or report leaks/i);
+  assert.match(moistureText, /humidity meter shows humidity (?:remains|stays) high/i);
+  assert.match(moistureText, /does not replace|not a substitute/i);
+  assert.match(moistureText, /outdoor humidity, smoke, weather and security/i);
+  assert.match(controls?.description || "", /manufacturer-approved/i);
+  assert.match(controls?.description || "", /reopen every outlet before cooling/i);
+
+  const glazingText = JSON.stringify(glazing?.solutionOptions || []);
+  assert.match(glazingText, /awning, external blind or deciduous planting/i);
+  assert.match(glazingText, /roots, drainage, services, wind and bushfire clearances/i);
+  assert.match(glazingText, /winter sun/i);
+
+  const dryReport = publicPlanReport({
+    goals: ["healthier-home"],
+    features: ["kitchen-exhaust-fan", "reverse-cycle"],
+  });
+  const dryMoisture = dryReport.actions.find((action) =>
+    action.id === "moisture-ventilation"
+  );
+  const dryPracticalText = JSON.stringify({
+    options: dryMoisture?.solutionOptions,
+    everyday: dryReport.everydayActions,
+  });
+  assert.doesNotMatch(dryPracticalText, /dehumidifier/i);
+  assert.doesNotMatch(dryPracticalText, /outlet covers|reopen every outlet/i);
+});
+
+test("energy-system recommendations use the same three-level plain-language pattern", () => {
+  const gasReport = publicPlanReport({
+    goals: ["move-from-gas"],
+    features: [
+      "gas-heating",
+      "gas-storage-hot-water",
+      "gas-cooking",
+    ],
+  });
+  const batteryReport = publicPlanReport({
+    goals: ["add-solar-storage"],
+    features: ["solar"],
+  });
+  const evReport = publicPlanReport({
+    goals: ["lower-bills"],
+    features: ["ev"],
+  });
+  const assessmentReport = publicPlanReport({
+    goals: ["prepare-renovation"],
+  });
+  const systemActions = [
+    ...gasReport.actions.filter((action) =>
+      ["heating", "hot-water", "cooking"].includes(action.id)
+    ),
+    batteryReport.actions.find((action) => action.id === "battery"),
+    evReport.actions.find((action) => action.id === "ev"),
+    assessmentReport.actions.find((action) => action.id === "assessment"),
+  ].filter(Boolean);
+  assert.equal(systemActions.length, 6);
+  for (const action of systemActions) {
+    assert.deepEqual(
+      action.solutionOptions.map((option) => option.label),
+      ["Try now", "Better fix", "Long-term upgrade"],
+      `${action.id} should use the shared plain-language tier pattern`,
+    );
+  }
+  assert.match(
+    evReport.actions.find((action) => action.id === "ev")
+      ?.solutionOptions.map((option) => option.description).join(" ") || "",
+    /extension lead|licensed electrician|fixed charger/i,
+  );
+
+  const everydayReport = publicPlanReport({
+    goals: ["lower-bills"],
+    features: ["lighting-mixed", "pool-and-spa-installed"],
+  });
+  const everydayById = new Map(
+    everydayReport.everydayActions.map((action) => [action.id, action]),
+  );
+  assert.match(everydayById.get("appliance-routines")?.description || "", /full loads.*cold washes/i);
+  assert.match(everydayById.get("lighting-routine")?.description || "", /task lamp.*LED/i);
+  assert.match(everydayById.get("pool-spa-routine")?.description || "", /cover.*filtration/i);
+});
+
 test("plans without a valid professional review retain the exact household evidence boundary", () => {
   const document = createCustomerPlanDocument(row, {
     preparedAt: "2026-07-29T10:00:00.000Z",
@@ -242,7 +386,7 @@ test("plans without a valid professional review retain the exact household evide
   const report = createCustomerPlanReportView(document);
 
   assert.equal(CUSTOMER_PLAN_DOCUMENT_VERSION, "2026-07-29-plan-document-v2");
-  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-08-10-professional-personalised-report-v5");
+  assert.equal(CUSTOMER_PLAN_REPORT_VERSION, "2026-08-11-professional-personalised-report-v7");
   assert.equal(document.version, CUSTOMER_PLAN_DOCUMENT_VERSION);
   assert.equal(report.version, CUSTOMER_PLAN_REPORT_VERSION);
   assert.equal(document.professionalReview, null);

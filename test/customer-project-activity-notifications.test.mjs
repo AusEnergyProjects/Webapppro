@@ -534,7 +534,7 @@ test("worker strips the activity header, dispatches immediately and retains the 
     worker,
     /ctx\.waitUntil\([\s\S]*drainCustomerProjectActivityDeliveries\(\{ deliveryId \}\)/,
   );
-  assert.match(worker, /queueBackgroundDispatches\(handled, ctx\)/);
+  assert.match(worker, /queueBackgroundDispatches\(handled, ctx, request\)/);
   assert.match(worker, /const NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);
   assert.match(
     worker,

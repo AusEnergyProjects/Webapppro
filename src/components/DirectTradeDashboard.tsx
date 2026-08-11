@@ -106,6 +106,16 @@ type DashboardOpportunity = {
     privacyNote: string;
     adviceBoundary: string;
   };
+  quotePreparation: null | {
+    answers: Array<{
+      questionId: string;
+      label: string;
+      answer: string;
+      services: string[];
+    }>;
+    expectedPhotoCount: number;
+    availablePhotoCount: number;
+  };
   approvedSharedFileCount: number;
   opportunityStatus: string;
   platformOnly: boolean;
@@ -122,7 +132,17 @@ type DashboardOpportunity = {
     message: string;
     releaseScope: "shortlisted_installer" | "all_qualified_trades";
   };
-  evidence: Array<{ id: string; category: string; fileName: string; contentType: string; sizeBytes: number; createdAt: string; sharingScope: "allocated-installers" }>;
+  evidence: Array<{
+    id: string;
+    category: string;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    createdAt: string;
+    sharingScope: "allocated-installers";
+    promptLabel: string;
+    downloadHref: string;
+  }>;
   arrivalProposal: null | {
     id: string;
     status: "proposed" | "selected" | "direct_contact" | "withdrawn";
@@ -463,6 +483,126 @@ function EnquiryPack({
         Customer identity, contact details, street and unit address, private
         notes, room details and evidence filenames remain withheld.
       </small>
+    </section>
+  );
+}
+
+function PublicQuotePreparation({
+  opportunity,
+  photoUrls,
+  photosVisible,
+  photoBusy,
+  photoError,
+  downloadBusy,
+  onTogglePhotos,
+  onDownload,
+}: {
+  opportunity: DashboardOpportunity;
+  photoUrls: Record<string, string>;
+  photosVisible: boolean;
+  photoBusy: boolean;
+  photoError: string;
+  downloadBusy: string;
+  onTogglePhotos: () => void;
+  onDownload: (item: DashboardOpportunity["evidence"][number]) => void;
+}) {
+  const preparation = opportunity.quotePreparation;
+  if (!preparation) return null;
+  const photos = opportunity.evidence.filter((item) =>
+    item.category === "quote-photo" && item.contentType.startsWith("image/")
+  );
+  return (
+    <section className="dashboard-enquiry-pack dashboard-public-quote-preparation" aria-label="Desktop quote preparation">
+      <div className="dashboard-enquiry-pack-heading">
+        <div>
+          <span>Customer-prepared quote details</span>
+          <h4>Review before preparing a desktop quote</h4>
+          <p>
+            These optional answers and photos were supplied once with the
+            enquiry to reduce follow-up questions. Confirm site conditions
+            before treating them as final scope evidence.
+          </p>
+        </div>
+        <strong>
+          {preparation.answers.length} answer{preparation.answers.length === 1 ? "" : "s"}
+          {" | "}{photos.length} photo{photos.length === 1 ? "" : "s"}
+        </strong>
+      </div>
+
+      {preparation.answers.length > 0 ? (
+        <dl className="dashboard-public-quote-answers">
+          {preparation.answers.map((item) => (
+            <div key={item.questionId}>
+              <dt>{item.label}</dt>
+              <dd>{item.answer}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>No optional quote questions were answered.</p>
+      )}
+
+      <div className="dashboard-enquiry-evidence">
+        <div className="dashboard-enquiry-evidence-heading">
+          <div>
+            <span>Private quote photos</span>
+            <strong>
+              {photos.length
+                ? `${photos.length} protected photo${photos.length === 1 ? "" : "s"} available`
+                : preparation.expectedPhotoCount
+                  ? "Selected photos have not finished uploading"
+                  : "No quote photos were selected"}
+            </strong>
+          </div>
+          {photos.length > 0 && (
+            <button type="button" disabled={photoBusy} onClick={onTogglePhotos}>
+              {photoBusy
+                ? "Opening quote photos..."
+                : photosVisible
+                  ? "Hide quote photos"
+                  : `Show quote photos (${photos.length})`}
+            </button>
+          )}
+        </div>
+        <p>
+          Photos are stored privately and are available only to active,
+          approved TLink trades matched to this exact enquiry. Every download
+          is authorised and recorded.
+        </p>
+        {photosVisible && photos.length > 0 && (
+          <div className="dashboard-enquiry-thumbnails">
+            {photos.map((item) => (
+              <article key={item.id}>
+                {photoUrls[item.id] ? (
+                  // Authenticated evidence is exposed as a short-lived object URL.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrls[item.id]}
+                    alt={item.promptLabel || "Customer-shared quote photo"}
+                  />
+                ) : (
+                  <div className="dashboard-enquiry-thumbnail-unavailable">
+                    Preview unavailable. The protected download may still be available.
+                  </div>
+                )}
+                <div>
+                  <span>Customer-shared quoting photo</span>
+                  <strong>{item.promptLabel || "Quote preparation photo"}</strong>
+                  <small>{Math.max(1, Math.round(item.sizeBytes / 1024))} KB</small>
+                </div>
+                <button
+                  type="button"
+                  disabled={downloadBusy === item.id}
+                  onClick={() => onDownload(item)}
+                >
+                  Protected download
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+        {photoError && <p className="dashboard-enquiry-evidence-error" role="alert">{photoError}</p>}
+      </div>
     </section>
   );
 }
@@ -1072,8 +1212,10 @@ export function DirectTradeDashboard() {
       const missingPhotos = photos.filter((item) => !nextUrls[item.id]);
       const results = await Promise.allSettled(missingPhotos.map(async (item) => {
         if (!requestIsCurrent()) return null;
+        const downloadHref = item.downloadHref
+          || `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`;
         const response = await fetch(
-          `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`,
+          downloadHref,
           {
             headers: { Authorization: `Bearer ${token}` },
             cache: "no-store",
@@ -1236,7 +1378,9 @@ export function DirectTradeDashboard() {
     setOpportunityBusy(item.id); setOpportunityStatus("Preparing protected customer evidence...");
     try {
       const token = await activeUser.getIdToken();
-      const response = await fetch(`/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`, {
+      const downloadHref = item.downloadHref
+        || `/api/customer-project-evidence?download=${encodeURIComponent(item.id)}`;
+      const response = await fetch(downloadHref, {
         headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
       });
       if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || "The project file could not be downloaded."); }
@@ -1794,6 +1938,18 @@ export function DirectTradeDashboard() {
                               onDownload={(item) => void downloadOpportunityEvidence(item)}
                               onOpenPlan={() => void openInstallerPlan(opportunity)}
                               onDownloadPlan={() => void downloadInstallerPlan(opportunity)}
+                            />
+                          )}
+                          {!opportunity.platformOnly && opportunity.quotePreparation && (
+                            <PublicQuotePreparation
+                              opportunity={opportunity}
+                              photoUrls={evidencePhotoUrls[opportunity.matchId] || {}}
+                              photosVisible={Boolean(visibleEvidenceMatches[opportunity.matchId])}
+                              photoBusy={evidencePhotoBusy === opportunity.matchId}
+                              photoError={evidencePhotoErrors[opportunity.matchId] || ""}
+                              downloadBusy={opportunityBusy}
+                              onTogglePhotos={() => void toggleOpportunityPhotos(opportunity)}
+                              onDownload={(item) => void downloadOpportunityEvidence(item)}
                             />
                           )}
                           {opportunity.platformOnly && !opportunity.enquiryPack && Object.keys(opportunity.propertyContext || {}).length > 0 && <dl className="dashboard-property-context"><div><dt>Storeys</dt><dd>{String(opportunity.propertyContext.storeys || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Home age</dt><dd>{String(opportunity.propertyContext.ageBand || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Floor area</dt><dd>{String(opportunity.propertyContext.floorArea || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Roof</dt><dd>{String(opportunity.propertyContext.roofType || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Switchboard</dt><dd>{String(opportunity.propertyContext.switchboard || "not confirmed").replaceAll("_", " ")}</dd></div><div><dt>Approval context</dt><dd>{String(opportunity.propertyContext.approvalContext || "none noted").replaceAll("_", " ")}</dd></div><div><dt>Site considerations</dt><dd>{Array.isArray(opportunity.propertyContext.accessConstraints) && opportunity.propertyContext.accessConstraints.length > 0 ? opportunity.propertyContext.accessConstraints.map((item) => String(item).replaceAll("_", " ")).join(", ") : "none noted"}</dd></div></dl>}

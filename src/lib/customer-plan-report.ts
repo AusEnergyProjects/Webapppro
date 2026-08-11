@@ -11,6 +11,10 @@ export type CustomerPlanReportAction = {
   quoteChecklist: string[];
   sequence: string;
   safety: string;
+  solutionOptions: Array<{
+    label: string;
+    description: string;
+  }>;
   completed: boolean;
   priority: boolean;
   guideLabel: string;
@@ -102,6 +106,12 @@ export type CustomerPlanReportView = {
     outcome: string;
   }>;
   everydayActionsBoundary: string;
+  electrificationMoves: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    checkFirst: string;
+  }>;
   questions: Array<{
     number: number;
     prompt: string;

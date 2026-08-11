@@ -1,5 +1,6 @@
 import handler from "vinext/server/app-router-entry";
 import { getD1 } from "../db";
+import { getCustomerProjectEvidenceBucket } from "../src/lib/customer-project-evidence-bucket";
 import { dispatchAdminNotificationDeliveries } from "../src/lib/admin-notification-delivery";
 import { syncCertificatePriceHistory } from "../src/lib/certificate-prices-server";
 import {
@@ -10,7 +11,19 @@ import {
   CUSTOMER_PROJECT_ACTIVITY_DISPATCH_HEADER,
   drainCustomerProjectActivityDeliveries,
 } from "../src/lib/customer-project-activity-notification-server";
-import { drainOpportunityNotificationDeliveries } from "../src/lib/opportunity-notification-server";
+import {
+  OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER,
+  drainOpportunityNotificationDeliveries,
+  drainOpportunityNotificationDeliveriesForOpportunity,
+} from "../src/lib/opportunity-notification-server";
+import {
+  shouldDrainOpportunityNotificationBacklog,
+  takeOpportunityNotificationDispatch,
+} from "../src/lib/opportunity-notification-retry";
+import {
+  drainPublicPlanQuotePhotoCleanup,
+  shouldDrainPublicPlanQuotePhotoCleanup,
+} from "../src/lib/public-plan-quote-photo-cleanup";
 import {
   syncCerSresProductRegistry,
   type CreditexSresArtifactStore,
@@ -122,12 +135,92 @@ function queueCustomerProjectActivityDispatch(
   });
 }
 
-function queueBackgroundDispatches(
+function queueOpportunityNotificationDispatch(
   response: Response,
   ctx: ExecutionContext,
 ) {
+  const dispatch = takeOpportunityNotificationDispatch(
+    response,
+    OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER,
+  );
+  const { opportunityId } = dispatch;
+  if (!opportunityId) return response;
+  ctx.waitUntil(
+    drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId })
+      .then((result) => {
+        if (result.failed > 0 || result.waitingForChannel > 0) {
+          console.error("Opportunity notification delivery remains pending.", {
+            attempted: result.attempted,
+            failed: result.failed,
+            waitingForChannel: result.waitingForChannel,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "Opportunity notification delivery failed.",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      }),
+  );
+  return dispatch.response;
+}
+
+function queueBackgroundDispatches(
+  response: Response,
+  ctx: ExecutionContext,
+  request: Request,
+) {
+  const url = new URL(request.url);
+  const drainsNotificationBacklog = shouldDrainOpportunityNotificationBacklog({
+    method: request.method,
+    pathname: url.pathname,
+    responseOk: response.ok,
+  });
+  if (drainsNotificationBacklog) {
+    ctx.waitUntil(
+      drainOpportunityNotificationDeliveries()
+        .then((result) => {
+          if (result.failed > 0 || result.waitingForChannel > 0) {
+            console.error("Opportunity notification backlog remains pending.", {
+              attempted: result.attempted,
+              failed: result.failed,
+              waitingForChannel: result.waitingForChannel,
+            });
+          }
+        })
+        .catch((error) => {
+          console.error(
+            "Opportunity notification backlog delivery failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+        }),
+    );
+  }
+  if (shouldDrainPublicPlanQuotePhotoCleanup({
+    method: request.method,
+    pathname: url.pathname,
+    responseOk: response.ok,
+  })) {
+    ctx.waitUntil(
+      drainPublicPlanQuotePhotoCleanup({
+        db: getD1(),
+        bucket: getCustomerProjectEvidenceBucket(),
+      })
+        .then(() => undefined)
+        .catch((error) => {
+          console.error(
+            "Public quote photo cleanup failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+        }),
+    );
+  }
   return queueCustomerProjectActivityDispatch(
-    queueCustomerOpportunityDispatch(response, ctx),
+    queueOpportunityNotificationDispatch(
+      queueCustomerOpportunityDispatch(response, ctx),
+      ctx,
+    ),
     ctx,
   );
 }
@@ -166,7 +259,7 @@ const worker = {
 
     if (!isCacheablePageRequest(request)) {
       const handled = await handler.fetch(request, env as never, ctx as never);
-      return secureResponse(queueBackgroundDispatches(handled, ctx), request);
+      return secureResponse(queueBackgroundDispatches(handled, ctx, request), request);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
@@ -176,7 +269,7 @@ const worker = {
     }
 
     const handled = await handler.fetch(request, env as never, ctx as never);
-    const response = secureResponse(queueBackgroundDispatches(handled, ctx), request);
+    const response = secureResponse(queueBackgroundDispatches(handled, ctx, request), request);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
@@ -197,6 +290,12 @@ const worker = {
         }),
         dispatchAdminNotificationDeliveries().catch((error) => {
           console.error("Admin notification delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        drainPublicPlanQuotePhotoCleanup({
+          db: getD1(),
+          bucket: getCustomerProjectEvidenceBucket(),
+        }).catch((error) => {
+          console.error("Public quote photo cleanup failed.", error instanceof Error ? error.message : "Unknown error");
         }),
       );
     }

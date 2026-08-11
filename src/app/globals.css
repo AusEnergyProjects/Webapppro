@@ -5772,6 +5772,8 @@ body input[type="number"]::-webkit-outer-spin-button {
   .planner-home-focus-marker { font-size: .44rem; padding: 6px 8px; }
   .planner-quick-wins-grid { grid-template-columns: 1fr; }
   .planner-quick-wins-grid article > a { width: 100%; }
+  .planner-results { padding: 12px; }
+  .planner-result-decision { gap: 12px; margin-top: 14px; padding: 10px; }
 }
 @media (max-width: 360px) {
   .start-hero-planner { min-height: 680px; padding: 28px 22px 250px; }

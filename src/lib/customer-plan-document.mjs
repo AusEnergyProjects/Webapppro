@@ -23,7 +23,7 @@ import {
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 export const CUSTOMER_PLAN_DOCUMENT_VERSION = "2026-07-29-plan-document-v2";
 export const CUSTOMER_PLAN_REPORT_VERSION =
-  "2026-08-10-professional-personalised-report-v5";
+  "2026-08-11-professional-personalised-report-v7";
 export const INSTALLER_ENQUIRY_PACK_VERSION =
   "2026-07-31-installer-enquiry-pack-v1";
 export const CUSTOMER_PLAN_EMAIL_SUBJECT = "Your home energy plan is ready";
@@ -67,6 +67,8 @@ const trustedPlanResourceHrefs = new Set([
   "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
   "https://www.homeenergyrating.gov.au/resources/existing-homes-technical-note",
   "https://www.homeenergyrating.gov.au/households/existing-homes/measuring-energy-efficiency-existing-homes",
+  "https://www.climatechoices.act.gov.au/energy/energy-efficiency/window-glazing-or-treatments",
+  "https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/building-or-renovating/build-for-energy-efficiency/key-principles-of-energy-efficient-design/windows-and-shading/window-glazing",
   "https://www.yourhome.gov.au/passive-design/introduction",
   "https://www.yourhome.gov.au/passive-design/insulation",
 ]);
@@ -507,17 +509,465 @@ function reportActionFamily(item) {
   if (/rebate|certificate|finance|incentive/.test(haystack)) return "incentives";
   if (/climate|postcode|local conditions/.test(haystack)) return "climate";
   if (/budget|highest-value constraint|stage the work/.test(haystack)) return "budget";
-  if (/switchboard|electrical|supply|circuit/.test(haystack)) return "electrical";
-  if (/draught|insulation|fabric|moisture|ventilation/.test(haystack)) return "fabric";
   if (/window|glazing|shade/.test(haystack)) return "windows";
+  if (/draught|insulation|fabric|moisture|ventilation/.test(haystack)) return "fabric";
   if (/heating|cooling|reverse-cycle|hydronic|wood-heating/.test(haystack)) return "heating";
   if (/hot-water|hot water/.test(haystack)) return "hotWater";
   if (/cooking|cooktop|induction/.test(haystack)) return "cooking";
+  if (/\bev\b|vehicle|charging/.test(haystack)) return "ev";
   if (/battery|storage/.test(haystack)) return "battery";
   if (/solar/.test(haystack)) return "solar";
-  if (/\bev\b|vehicle|charging/.test(haystack)) return "ev";
+  if (/switchboard|electrical|supply|circuit/.test(haystack)) return "electrical";
   if (/assessment|assessor|rating/.test(haystack)) return "assessment";
   return "planning";
+}
+
+function safeSolutionOptions(value) {
+  return (Array.isArray(value) ? value : [])
+    .slice(0, 6)
+    .flatMap((option) => {
+      const source = option && typeof option === "object" && !Array.isArray(option)
+        ? option
+        : {};
+      const label = boundedText(source.label, 80);
+      const description = boundedSentenceText(source.description, 420);
+      return label && description ? [{ label, description }] : [];
+    });
+}
+
+function solutionOptionsForAction(item, family, existingFeatures = []) {
+  const features = new Set(
+    (Array.isArray(existingFeatures) ? existingFeatures : [])
+      .map((value) => boundedText(value, 80))
+      .filter(Boolean),
+  );
+  const itemText = `${item?.id || ""} ${item?.title || ""}`.toLowerCase();
+  const hasFeature = (...values) => values.some((value) => features.has(value));
+  const hasMoistureConcern = hasFeature("condensation-moisture");
+  const hasEvaporativeOutlets = hasFeature(
+    "evaporative-ducts",
+    "evaporative-cooling",
+  );
+  const needsExternalShade = /shade|window covering/.test(itemText)
+    || hasFeature("comfort-too-hot", "external-shading-none");
+
+  if (/lighting/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Use daylight and a task lamp where comfortable, and switch off lights in empty rooms.",
+      },
+      {
+        label: "Better fix",
+        description: "Replace the most-used old lamps with compatible quality LEDs first. Check dimmers, transformers and enclosed fittings before buying.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "When fittings need replacement, compare an efficient layout with suitable controls or sensors. Use a licensed electrician for fixed wiring.",
+      },
+    ];
+  }
+  if (/appliance|standby|fridge|freezer|laundry|dishwasher/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Run full loads, use cold washes or economy cycles when suitable, line-dry where practical and turn off genuinely unused standby loads.",
+      },
+      {
+        label: "Better fix",
+        description: "Clean accessible filters, check fridge and freezer door seals and keep the ventilation clearances in the appliance instructions.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Replace equipment when needed, not by default. Compare the government energy label, suitable size, running cost and repairability before buying.",
+      },
+    ];
+  }
+  if (/pool|spa/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Use a suitable cover and review heating and pump schedules without reducing required filtration, sanitation or safety checks.",
+      },
+      {
+        label: "Better fix",
+        description: "Have water balance, filters, pipework and pump settings checked so the existing system runs only as long as safely required.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "When equipment is due for replacement, compare a correctly sized efficient pump and, if heating is needed, suitable solar or heat-pump options.",
+      },
+    ];
+  }
+  if (family === "fabric" && /moisture|condensation|mould/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Fix or report leaks, use working kitchen and bathroom exhaust fans, and wipe condensation. Briefly air the space only when outdoor humidity, smoke, weather and security make it suitable.",
+      },
+      {
+        label: "Better fix",
+        description: hasMoistureConcern
+          ? "After moisture sources are controlled, use a suitable dehumidifier only if a humidity meter shows humidity stays high or condensation persists. It does not replace leak or ventilation repairs."
+          : "Repair ineffective exhaust fans, ducting, leaks or drainage first. Check that wet areas clear after use before making the home more airtight.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: hasEvaporativeOutlets
+          ? "Have persistent damp, cold surfaces and ventilation checked. In winter, close or cover evaporative outlets only with a system-suitable, manufacturer-approved method, keep required combustion ventilation clear, and reopen every outlet before use."
+          : "Have persistent damp, cold surfaces and ventilation checked so the moisture source, insulation and any mechanical ventilation are treated as one problem.",
+      },
+    ];
+  }
+  if (family === "fabric" && /draught|air leakage|seal/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Use a door snake at a confirmed unwanted door gap. This suits renters and is easy to remove, but it must not cover a fixed vent, flue, chimney, exhaust path or fire exit.",
+      },
+      {
+        label: "Better fix",
+        description: "Adjust a loose latch, replace worn weather strip, or use flexible caulk on a confirmed stationary crack. Ask for permission before attaching anything in a rental or on shared property.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Have a trade fit a mechanical or drop seal, threshold or frame repair. Replace a badly warped opening only when repair cannot solve it, with egress and weatherproofing checked.",
+      },
+    ];
+  }
+  if (family === "fabric" && /insulation|building shell|fabric/.test(itemText)) {
+    return [
+      {
+        label: "Try now",
+        description: "Use plans, invoices, an earlier assessment or a safe visual check to identify what is already installed. Do not enter a roof or subfloor just to answer this question.",
+      },
+      {
+        label: "Better fix",
+        description: "Ask a qualified installer to correct confirmed gaps, compression or displaced insulation while preserving electrical, moisture, fire and ventilation clearances.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Add or replace suitable insulation after construction, access, moisture and R-value checks. Coordinate it when roofing, linings or floors are already being opened.",
+      },
+    ];
+  }
+  if (family === "windows") {
+    if (needsExternalShade) {
+      return [
+        {
+          label: "Try now",
+          description: "Close suitable coverings before unwanted summer sun reaches the glass, and open them for useful winter sun. A safe removable shade can test the problem area first.",
+        },
+        {
+          label: "Better fix",
+          description: "Compare an awning, external blind or deciduous planting that shades summer sun but preserves useful winter sun. Check permission, mature roots, drainage, services, wind and bushfire clearances.",
+        },
+        {
+          label: "Long-term upgrade",
+          description: "Coordinate durable external shade with window seals, close-fitting internal coverings and glazing only where heat, glare or comfort evidence supports the extra work.",
+        },
+      ];
+    }
+    return [
+      {
+        label: "Try now",
+        description: "For a suitable single-glazed window, compare removable bubble wrap or shrink film, or a cut-to-fit reflective shade. Bubble wrap suits little or no direct sun. Protect views, ventilation and egress; check permission, condensation and surface fit.",
+      },
+      {
+        label: "Better fix",
+        description: "Compare compatible low-e or solar-control film with a fitted clear acrylic secondary panel. A magnetic panel may stay removable. Check winter sun, glass-breakage risk, seals, warranty, views, condensation, cleaning and egress.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Compare durable secondary glazing with full double glazing in a suitable, preferably thermally improved frame. Include opening operation, seals, drainage, shade, ventilation, egress, approvals and make-good.",
+      },
+    ];
+  }
+  if (family === "heating" && features.has("gas-heating")) {
+    return [
+      {
+        label: "Try now",
+        description: "Maintain the existing gas system and required ventilation while planning. Improve controls, draughts, insulation and the most uncomfortable occupied rooms first.",
+      },
+      {
+        label: "Better fix",
+        description: "Compare a correctly sized efficient reverse-cycle air conditioner for the main occupied zone. This can be staged without promising that one unit will suit the whole home.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Compare a zoned electric design after room loads are understood. Price circuits, outdoor units, condensate, controls, gas disconnection and make-good before removing working equipment.",
+      },
+    ];
+  }
+  if (
+    family === "heating"
+    && hasEvaporativeOutlets
+    && (
+      /evaporative/.test(itemText)
+      || !hasFeature(
+        "reverse-cycle",
+        "gas-heating",
+        "hydronic-heating",
+        "wood-heating",
+        "electric-resistance-heating",
+      )
+    )
+  ) {
+    return [
+      {
+        label: "Try now",
+        description: "Use fans or evaporative cooling only when outdoor heat, humidity, smoke and the system instructions make them suitable. Clean accessible filters as directed.",
+      },
+      {
+        label: "Better fix",
+        description: "Service worn controls, pads, ducts or seals. Weatherise ceiling outlets in winter only with a suitable approved cover or damper, and reopen them before cooling.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "If comfort is still poor, compare a right-sized efficient reverse-cycle system after shade, insulation, draughts, electrical capacity and room needs are understood.",
+      },
+    ];
+  }
+  if (family === "heating") {
+    return [
+      {
+        label: "Try now",
+        description: "Heat or cool occupied rooms first, use timers and zoning already fitted, clean accessible filters as directed and use fans when they improve comfort.",
+      },
+      {
+        label: "Better fix",
+        description: "Service faults and improve confirmed draughts, insulation, shade and window coverings before deciding the capacity of new equipment.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Compare a right-sized efficient reverse-cycle design for the rooms used, including zoning, circuits, outdoor units, condensate, controls and commissioning.",
+      },
+    ];
+  }
+  if (family === "hotWater" && [...features].some((feature) => [
+    "gas-storage-hot-water",
+    "gas-continuous-flow-hot-water",
+    "gas-hot-water-type-unknown",
+    "electric-gas-boosted-hot-water",
+  ].includes(feature))) {
+    return [
+      {
+        label: "Try now",
+        description: "Record the existing unit, household demand and a possible tank location now so an emergency failure does not force a rushed like-for-like gas replacement.",
+      },
+      {
+        label: "Better fix",
+        description: "Compare a right-sized heat-pump hot-water system, including its climate suitability, noise, condensate, recovery, backup operation, timer or tariff and available space.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Scope plumbing, drainage, electrical supply, commissioning and gas disconnection. If a heat-pump location is unsuitable, compare correctly sized electric storage and tariff implications.",
+      },
+    ];
+  }
+  if (family === "hotWater") {
+    return [
+      {
+        label: "Try now",
+        description: "Take shorter showers where suitable, use cold laundry cycles and run full loads. Do not lower storage temperature or disable safety cycles.",
+      },
+      {
+        label: "Better fix",
+        description: "Repair leaks, compare a compatible water-efficient showerhead and use only supported timers or tariff controls.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Before failure, compare a right-sized heat-pump or other efficient electric system with space, noise, recovery, plumbing, electrical and tariff needs confirmed.",
+      },
+    ];
+  }
+  if (family === "cooking" && (
+    features.has("gas-cooking") || features.has("mixed-cooking")
+  )) {
+    return [
+      {
+        label: "Try now",
+        description: "A suitable portable single-zone induction cooker can test compatible cookware and cooking preferences on an outlet confirmed suitable for the appliance. Keep safe ventilation and follow its instructions.",
+      },
+      {
+        label: "Better fix",
+        description: "Compare an induction cooktop and efficient electric oven sized for the household, with the required circuit, isolation, ventilation and bench clearances confirmed before purchase.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Where needed, include switchboard work, a new circuit, bench or cabinetry changes, safe gas disconnection, removal, testing and make-good in one written scope.",
+      },
+    ];
+  }
+  if (family === "cooking") {
+    return [
+      {
+        label: "Try now",
+        description: "Use lids, match cookware to the cooking zone and heat only the water or oven space needed. Keep effective kitchen exhaust working.",
+      },
+      {
+        label: "Better fix",
+        description: "Maintain seals, controls and ventilation. Replace a failing small appliance with a suitable efficient size rather than heating more space than needed.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "When fixed cooking equipment is due, compare induction and an efficient electric oven after cookware, circuit, isolation, ventilation and bench fit are confirmed.",
+      },
+    ];
+  }
+  if (family === "electrical") {
+    return [
+      {
+        label: "Try now",
+        description: "List the large electrical loads already used and planned. Take only a safe front-on switchboard photo without removing a cover.",
+      },
+      {
+        label: "Better fix",
+        description: "Have a licensed electrician confirm supply, protection and spare circuit capacity before equipment is purchased.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Coordinate any switchboard or supply work once across hot water, cooking, heating, solar, battery and vehicle charging plans.",
+      },
+    ];
+  }
+  if (family === "solar") {
+    return [
+      {
+        label: "Try now",
+        description: features.has("solar")
+          ? "Use supported timers to move flexible loads into safe solar hours, then check the monitoring data before changing the system."
+          : "Collect interval use, note daytime loads and future electric appliances, and observe roof shade safely from ground level.",
+      },
+      {
+        label: "Better fix",
+        description: "Have roof condition, usable area, shade, switchboard, metering, network limits and the proposed layout checked before comparing quotes.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Size solar around verified use and planned electrification, then require the final layout, equipment, monitoring, warranties and network work in writing.",
+      },
+    ];
+  }
+  if (family === "battery") {
+    return [
+      {
+        label: "Try now",
+        description: "Choose the main goal first: solar self-use, bill shifting, backup or resilience. Review interval use and tariff details before choosing a size.",
+      },
+      {
+        label: "Better fix",
+        description: "Compare usable capacity, continuous and peak power, reserve settings, compatible equipment, location, monitoring and operating warranty.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Install only after solar, future electric loads, backup circuits, network rules, switchboard work, clearances and emergency information are coordinated.",
+      },
+    ];
+  }
+  if (family === "ev") {
+    return [
+      {
+        label: "Try now",
+        description: "Set the daily distance and charging window. Use only the vehicle maker's supported lead and a suitable outlet, never an extension lead for routine charging.",
+      },
+      {
+        label: "Better fix",
+        description: "Have a licensed electrician check the parking location, cable route, circuit, protection, supply capacity and load-management options.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Coordinate a compliant fixed charger with solar, tariffs, hot water, heating, battery plans and other household peak loads.",
+      },
+    ];
+  }
+  if (family === "assessment") {
+    return [
+      {
+        label: "Try now",
+        description: "List the rooms and decisions that matter, then gather bills, plans, invoices and safe photos already available.",
+      },
+      {
+        label: "Better fix",
+        description: "Ask for a targeted review of the unresolved comfort, moisture, equipment or sequencing question before requesting product quotes.",
+      },
+      {
+        label: "Long-term upgrade",
+        description: "Use a site-specific assessment when several major measures interact or when formal ratings, sizing or persistent building problems affect the decision.",
+      },
+    ];
+  }
+  return [];
+}
+
+function practicalEverydayActionDescription(item, existingFeatures = []) {
+  const features = new Set(
+    (Array.isArray(existingFeatures) ? existingFeatures : [])
+      .map((value) => boundedText(value, 80))
+      .filter(Boolean),
+  );
+  const id = boundedText(item?.id, 80);
+  const source = boundedSentenceText(item?.text, 900);
+  if (id === "moisture-safe-routine") {
+    const measuredHumidity = features.has("condensation-moisture")
+      ? " If a humidity meter shows humidity remains high, or condensation persists after the source is controlled, a suitable dehumidifier can help dry the affected room. It is not a substitute for fixing leaks, drainage or ineffective ventilation."
+      : "";
+    return boundedSentenceText(
+      "Fix or report leaks and use working exhaust fans while cooking, showering or doing laundry. Briefly open suitable opposite windows or doors only when outdoor humidity, smoke, weather and security make it safe, then close them when conditions become less helpful."
+        + measuredHumidity
+        + " Keep fixed vents, flues, chimneys and required exhaust paths clear.",
+      900,
+    );
+  }
+  if (
+    id === "use-existing-controls"
+    && (features.has("evaporative-ducts") || features.has("evaporative-cooling"))
+  ) {
+    return boundedSentenceText(
+      `${source} In winter, close built-in dampers or fit only manufacturer-approved, system-suitable outlet covers. Confirm the opening is not required combustion ventilation, and remove covers or reopen every outlet before cooling is used.`,
+      900,
+    );
+  }
+  return source;
+}
+
+function electrificationMovesForFeatures(existingFeatures = []) {
+  const features = new Set(
+    (Array.isArray(existingFeatures) ? existingFeatures : [])
+      .map((value) => boundedText(value, 80))
+      .filter(Boolean),
+  );
+  const moves = [];
+  if (features.has("gas-heating")) {
+    moves.push({
+      id: "gas-heating-to-reverse-cycle",
+      title: "Gas heating: compare a staged reverse-cycle replacement",
+      summary: "A correctly sized efficient reverse-cycle air conditioner is the usual electric alternative to compare. A lower-cost first stage can serve the main occupied zone; a later whole-home design can add zones after draughts, insulation and windows are understood.",
+      checkFirst: "Keep the current system and required ventilation safe until a licensed team confirms room loads, electrical capacity, equipment locations, condensate and gas disconnection.",
+    });
+  }
+  if ([...features].some((feature) => [
+    "gas-storage-hot-water",
+    "gas-continuous-flow-hot-water",
+    "gas-hot-water-type-unknown",
+    "electric-gas-boosted-hot-water",
+  ].includes(feature))) {
+    moves.push({
+      id: "gas-hot-water-to-heat-pump",
+      title: "Gas hot water: plan a heat-pump hot-water option before failure",
+      summary: "Compare a right-sized heat-pump hot-water system against the household's demand, climate, available space, noise and tariff. Planning early reduces the chance of a rushed like-for-like gas replacement after a breakdown.",
+      checkFirst: "Have licensed trades confirm plumbing, drainage, condensate, electrical capacity, recovery and backup operation, safe gas disconnection, commissioning and current incentive eligibility.",
+    });
+  }
+  if (features.has("gas-cooking") || features.has("mixed-cooking")) {
+    moves.push({
+      id: "gas-cooking-to-induction",
+      title: "Gas cooking: try induction, then scope a permanent change",
+      summary: "A suitable portable induction cooker can be a low-commitment trial. If it suits the household, compare a permanent induction cooktop and efficient electric oven rather than replacing gas with gas by default.",
+      checkFirst: "Confirm cookware, circuit and switchboard capacity, isolation, ventilation, bench or cabinetry fit, safe gas disconnection and make-good before purchasing fixed equipment.",
+    });
+  }
+  return moves.slice(0, 3);
 }
 
 function actionReportLinks(item, family) {
@@ -560,7 +1010,7 @@ function actionReportLinks(item, family) {
   return links.slice(0, 3);
 }
 
-function enrichedReportAction(item, index, completedIds) {
+function enrichedReportAction(item, index, completedIds, existingFeatures = []) {
   const safeItem = privacySafeControlledItem(item);
   const family = reportActionFamily(safeItem);
   const blueprint = actionReportBlueprints[family] || actionReportBlueprints.planning;
@@ -588,6 +1038,11 @@ function enrichedReportAction(item, index, completedIds) {
       420,
     ),
     safety: boundedSentenceText(blueprint.safety, 360),
+    solutionOptions: solutionOptionsForAction(
+      safeItem,
+      family,
+      existingFeatures,
+    ),
     completed: completedIds.has(safeItem.id),
     guideLabel: safeGuideHref(safeItem.href)
       ? boundedText(safeItem.action, 120)
@@ -820,7 +1275,7 @@ export function createCustomerPlanDocument(
     planItems: controlledItems,
   });
   const actions = controlledItems.map((item, index) =>
-    enrichedReportAction(item, index, completedIds)
+    enrichedReportAction(item, index, completedIds, existingFeatures)
   );
   const goalLabels = goals
     .map((goal) => optionLabel(customerProjectOptions.goals, goal))
@@ -834,7 +1289,10 @@ export function createCustomerPlanDocument(
         id: boundedText(item.id, 80),
         category: boundedText(item.category, 100),
         title: boundedText(item.title, 180),
-        description: boundedSentenceText(item.text, 900),
+        description: practicalEverydayActionDescription(
+          item,
+          existingFeatures,
+        ),
         outcome: everydayActionOutcomeById.get(item.id) || "A practical low-cost action that can be tried before fixed work.",
       }))
     : [];
@@ -988,6 +1446,7 @@ export function createCustomerPlanDocument(
       700,
     ),
     actions,
+    electrificationMoves: electrificationMovesForFeatures(existingFeatures),
     questions: [],
     permissionSections: permissionPack.sections
       .map((section) => ({
@@ -1250,6 +1709,11 @@ export function createCustomerPlanReportView(document) {
       href: guideHref,
       action: action?.guideLabel || action?.action,
     }, index, completedIds);
+    const solutionOptions = safeSolutionOptions(
+      Array.isArray(action?.solutionOptions) && action.solutionOptions.length
+        ? action.solutionOptions
+        : enriched.solutionOptions,
+    );
     const confirmBeforeWork = uniqueReportText([
       ...boundedStringList(action?.confirmBeforeWork, 3, 220),
       ...enriched.confirmBeforeWork,
@@ -1289,6 +1753,7 @@ export function createCustomerPlanReportView(document) {
         420,
       ),
       safety: boundedSentenceText(action?.safety || enriched.safety, 360),
+      solutionOptions,
       completed: action?.completed === true,
       priority: priorityIndexes.has(index),
       guideLabel: guideHref
@@ -1454,6 +1919,22 @@ export function createCustomerPlanReportView(document) {
   );
   const professionalPresentation =
     customerPlanProfessionalPresentation(professionalReview);
+  const electrificationMoves = (Array.isArray(document?.electrificationMoves)
+    ? document.electrificationMoves
+    : [])
+    .slice(0, 3)
+    .flatMap((move) => {
+      const source = move && typeof move === "object" && !Array.isArray(move)
+        ? move
+        : {};
+      const id = boundedText(source.id, 80);
+      const title = boundedText(source.title, 180);
+      const summary = boundedSentenceText(source.summary, 520);
+      const checkFirst = boundedSentenceText(source.checkFirst, 420);
+      return id && title && summary && checkFirst
+        ? [{ id, title, summary, checkFirst }]
+        : [];
+    });
   return {
     version: CUSTOMER_PLAN_REPORT_VERSION,
     designVersion: CUSTOMER_PLAN_REPORT_DESIGN_VERSION,
@@ -1480,6 +1961,7 @@ export function createCustomerPlanReportView(document) {
       document?.everydayActionsBoundary,
       700,
     ) || CUSTOMER_EVERYDAY_ACTIONS_BOUNDARY,
+    electrificationMoves,
     actions,
     priorityActions: actions.filter((action) => action.priority),
     laterActions: actions.filter((action) => !action.priority),
@@ -1545,6 +2027,11 @@ function publicPlanResourceSet() {
       href: "https://www.energy.gov.au/households/insulation-and-draught-proofing",
     },
     {
+      label: "Victorian Government window glazing guide",
+      description: "Official plain-language guidance on window heat flow, retrofit secondary glazing and full glazing replacement.",
+      href: "https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/building-or-renovating/build-for-energy-efficiency/key-principles-of-energy-efficient-design/windows-and-shading/window-glazing",
+    },
+    {
       label: "NatHERS Guidance Note for existing homes - July 2026",
       description: "Current official guidance for assessors undertaking a NatHERS existing-home assessment. This self-reported plan is not that assessment.",
       href: "https://www.homeenergyrating.gov.au/resources/existing-homes-guidance-note",
@@ -1582,11 +2069,19 @@ function publicPlanHomeDetails(propertyContext) {
 /**
  * Recompute a customer-only public planner report from a normalized selection.
  * Raw plan items, customer notes and client-authored report text are never used.
+ *
+ * @param {{
+ *   snapshot: Record<string, any>,
+ *   name?: string,
+ *   postcode?: string,
+ *   projectCategories?: string[],
+ *   preparedAt?: string,
+ * }} input
  */
 export function createPublicPlanCustomerReportView({
   snapshot,
-  name,
-  postcode,
+  name = "",
+  postcode = "",
   projectCategories = [],
   preparedAt = new Date().toISOString(),
 }) {

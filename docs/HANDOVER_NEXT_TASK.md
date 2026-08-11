@@ -1,12 +1,24 @@
 # Next task handover
 
-Status: `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54` released and live
+Status: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` implemented and locally validated; proposed Sites version 311 release pending exact live identities
 
 Prepared: 11 August 2026
 
-Milestone ID: `CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54`
+Milestone ID: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55`
 
 Working branch: `codex/sites-custom-domain-migration`
+
+Milestone source baseline: `b33f7f49f9b57645d8d5594d2550df87352824b1`
+
+Exact release commit: pending final validation and commit
+
+Current production application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
+
+Current production: historical Sites version 310 remains live until proposed Sites version 311 is activated
+
+Proposed production: Sites version 311, saved-version and deployment identities pending
+
+Migration inventory: all 129 migrations through `0128_public_plan_quote_preparation.sql`
 
 Previous production application source: `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a`
 
@@ -24,13 +36,13 @@ Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
 
 Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
-Milestone application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
+Previous milestone application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
 Current production source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
 Released application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Current production: Sites version 310 from application commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
+Historical Sites version 310 checkpoint: application commit `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
 Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`
 
@@ -38,7 +50,7 @@ Deployment: `appgdep_6a7a78c959908191a2fbd39fc247dfc2`
 
 Sites stored release: 392 files, 38,727,680 bytes and content SHA-256 `c238b3125d74473df101491648c78308402fcbefc846d8ea72f95006a81864f3`
 
-Migration inventory: all 128 migrations
+Historical version 310 migration inventory: all 128 migrations
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -50,11 +62,79 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
+## Release candidate milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
+
+Status: implementation and local validation are complete on
+`codex/sites-custom-domain-migration`, based on repository HEAD
+`b33f7f49f9b57645d8d5594d2550df87352824b1`. Sites version 311 is proposed;
+its exact release commit, saved-version identity, deployment identity and live
+verification are pending.
+
+### Implemented outcome
+
+The no-account plan enquiry now prepares a useful desktop-quote pack, every
+active approved match owns a durable trade-email delivery, and email and gateway
+download use the same practical plain-language customer PDF.
+
+### Implemented capability
+
+- Lead matching is not reported as successful unless every active approved
+  match has one unique durable notification delivery. Exact opportunity batches
+  drain after lead requests and from health, signed-in trade polling and the
+  minute scheduler. Failed provider attempts retry after 5 minutes, 30 minutes,
+  2 hours, 4 hours, 8 hours, 16 hours and then daily until accepted, withdrawn
+  or no longer eligible.
+- Public-plan trade email does not depend on an optional account preference.
+  Every send still rechecks current platform approval, consent, selected service,
+  service area, active opportunity and match, current email, suppression and
+  idempotency.
+- Email attachment and post-submit plan download share one canonical generator
+  and are byte-identical for the same inputs. The audited fixture is a tagged
+  24-page PDF with embedded fonts, semantic lists, 48 checked links and no active
+  content.
+- Plain-language action tiers cover immediate, better and long-term options for
+  draughts, moisture, ventilation, glazing, shading, heating, cooling, hot water,
+  cooking, solar, batteries, electric vehicles and assessment preparation.
+  Conditional electrification guidance recommends efficient affordable electric
+  replacements for gas equipment without promising a product or saving.
+- All 11 services expose an optional three-to-four-question preparation pack.
+  Only genuinely shared questions are deduplicated, and known private plan facts
+  remain suggestions until the customer explicitly opts to reuse them.
+- Service-specific mobile and desktop controls accept JPEG and PNG images.
+  Answers and photos are optional and photo-only retry cannot resubmit the base
+  lead.
+- Private answers and stripped photo derivatives use D1 and R2, are never sent
+  by email or exposed through a public URL, and are available only to exact active
+  matches for the relevant service. Withdrawal blocks access immediately and
+  bounded tombstone cleanup removes retained objects after failure or withdrawal.
+- Additive migration `0128_public_plan_quote_preparation.sql` owns the quote-pack
+  answer, file, grant, withdrawal and cleanup state. The Sites bundle contains all
+  129 migrations. The mobile enquiry padding correction keeps the form readable
+  without horizontal overflow.
+
+### Validation and release work remaining
+
+- Before the small mobile-padding correction, `npm.cmd run validate` passed
+  typecheck, warning-free lint, integration, 1,924 tests with 1,914 passed, 10
+  intentional skips and 0 failures, `db:check`, the customer-plan PDF audit,
+  production build and Sites bundle audit.
+- After that bounded CSS correction, the focused set passed 32 of 32, followed by
+  typecheck, warning-free lint, production build and a 129-migration Sites bundle
+  audit. Independent release review found no P0 or P1 issue.
+- Local desktop and 355-pixel mobile QA confirmed the optional quote pack,
+  service-specific questions and file controls, readable form and zero document
+  overflow. No new real customer lead was submitted for visual QA.
+- Before release, rerun the final complete validation gate, record the exact
+  release commit, save and deploy proposed Sites version 311, verify live health
+  and responsive customer paths, and prove provider acceptance for the known
+  pending matched-trade delivery without a duplicate send.
+
+## Previous released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
 
 Status: exact executable application commit
 `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` is pushed to the GitHub working
-branch and Sites internal `main`, and released as current Sites version 310.
+branch and Sites internal `main`, and released as historical Sites version 310.
+It remains the verified production baseline until version 311 is activated.
 
 The current saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`.
@@ -933,11 +1013,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Add proactive registry-freshness alerts and one admin recovery view for VEU, SRES, NSW and GEMS before quote surfaces fail closed.
-2. Run and retain controlled live quote QA across VEU residential/non-residential Schedule 4 boundaries, including mixed models and exact rounding receipts, without creating certificates.
-3. Verify the production CER solar-water-heater/ASHP v58 manifest after the next forced or scheduled refresh, retaining release metadata and source hashes.
-4. Reconcile the retained GEMS 7,500-to-7,499 row change against exact prior/current source bytes before treating it as a source removal.
-5. Implement the next governed mixed-product contracts only where complete current source, eligibility and formula evidence exists.
+1. Delivery operations view and alerts for provider acceptance, bounce, backlog and recovery.
+2. Structured trade quote responses built from the service-specific preparation pack.
+3. No-account customer status and consent link for trade responses and cross-session withdrawal.
+4. Later quote-pack additions and reminders without creating another lead.
+5. Privacy-safe funnel analytics from plan to provider-accepted trade email and trade response.
 
 ## Previous released milestone
 

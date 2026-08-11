@@ -1228,6 +1228,83 @@ export const publicTradeLeadContactReleases = sqliteTable("public_trade_lead_con
   index("public_trade_lead_contact_releases_status_idx").on(table.status, table.updatedAt),
 ]);
 
+export const publicTradeLeadQuotePreparations = sqliteTable("public_trade_lead_quote_preparations", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  status: text("status").notNull().default("active"),
+  version: text("version").notNull(),
+  questionAnswers: text("question_answers").notNull().default("[]"),
+  photoPromptIds: text("photo_prompt_ids").notNull().default("[]"),
+  expectedPhotoCount: integer("expected_photo_count").notNull().default(0),
+  uploadKeyHash: text("upload_key_hash").notNull().default(""),
+  noticeVersion: text("notice_version").notNull(),
+  consentPurpose: text("consent_purpose").notNull(),
+  grantedAt: text("granted_at").notNull(),
+  withdrawnAt: text("withdrawn_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_trade_lead_quote_preparations_opportunity_idx").on(table.opportunityId),
+  uniqueIndex("public_trade_lead_quote_preparations_source_idx").on(table.sourceReference),
+  index("public_trade_lead_quote_preparations_status_idx").on(table.status, table.updatedAt),
+  check("public_trade_lead_quote_preparations_status_check", sql`${table.status} IN ('active', 'withdrawn')`),
+  check("public_trade_lead_quote_preparations_answers_check", sql`json_valid(${table.questionAnswers}) AND json_type(${table.questionAnswers}) = 'array'`),
+  check("public_trade_lead_quote_preparations_prompts_check", sql`json_valid(${table.photoPromptIds}) AND json_type(${table.photoPromptIds}) = 'array'`),
+  check("public_trade_lead_quote_preparations_count_check", sql`${table.expectedPhotoCount} >= 0 AND ${table.expectedPhotoCount} <= 12`),
+  check("public_trade_lead_quote_preparations_key_check", sql`${table.uploadKeyHash} = '' OR (length(${table.uploadKeyHash}) = 64 AND lower(${table.uploadKeyHash}) NOT GLOB '*[^0-9a-f]*')`),
+]);
+
+export const publicTradeLeadQuotePhotos = sqliteTable("public_trade_lead_quote_photos", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  clientUploadId: text("client_upload_id").notNull(),
+  promptId: text("prompt_id").notNull(),
+  promptLabel: text("prompt_label").notNull(),
+  serviceCategories: text("service_categories").notNull().default("[]"),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  objectKey: text("object_key").notNull(),
+  sha256: text("sha256").notNull(),
+  privacyStatus: text("privacy_status").notNull().default("metadata-stripped"),
+  status: text("status").notNull().default("pending"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_trade_lead_quote_photos_client_idx").on(table.opportunityId, table.clientUploadId),
+  uniqueIndex("public_trade_lead_quote_photos_object_idx").on(table.objectKey),
+  index("public_trade_lead_quote_photos_opportunity_idx").on(table.opportunityId, table.status, table.createdAt),
+  check("public_trade_lead_quote_photos_services_check", sql`json_valid(${table.serviceCategories}) AND json_type(${table.serviceCategories}) = 'array'`),
+  check("public_trade_lead_quote_photos_type_check", sql`${table.contentType} IN ('image/jpeg', 'image/png')`),
+  check("public_trade_lead_quote_photos_size_check", sql`${table.sizeBytes} > 0 AND ${table.sizeBytes} <= 8388608`),
+  check("public_trade_lead_quote_photos_hash_check", sql`length(${table.sha256}) = 64 AND lower(${table.sha256}) NOT GLOB '*[^0-9a-f]*'`),
+  check("public_trade_lead_quote_photos_status_check", sql`${table.status} IN ('pending', 'active', 'deleted', 'purged')`),
+]);
+
+export const publicTradeLeadQuotePhotoEvents = sqliteTable("public_trade_lead_quote_photo_events", {
+  id: text("id").primaryKey(),
+  photoId: text("photo_id").notNull(),
+  opportunityId: text("opportunity_id").notNull(),
+  matchId: text("match_id").notNull(),
+  installerUid: text("installer_uid").notNull(),
+  eventType: text("event_type").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("public_trade_lead_quote_photo_events_photo_idx").on(table.photoId, table.createdAt),
+  index("public_trade_lead_quote_photo_events_match_idx").on(table.matchId, table.createdAt),
+  check("public_trade_lead_quote_photo_events_type_check", sql`${table.eventType} = 'viewed'`),
+]);
+
+export const publicTradeLeadQuoteUploadLimits = sqliteTable("public_trade_lead_quote_upload_limits", {
+  clientSourceHash: text("client_source_hash").primaryKey(),
+  timestamps: text("timestamps").notNull().default("[]"),
+  version: integer("version").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+}, (table) => [
+  index("public_trade_lead_quote_upload_limits_updated_idx").on(table.updatedAt),
+  check("public_trade_lead_quote_upload_limits_timestamps_check", sql`json_valid(${table.timestamps}) AND json_type(${table.timestamps}) = 'array'`),
+]);
+
 export const customerOpportunityDispatchJobs = sqliteTable("customer_opportunity_dispatch_jobs", {
   id: text("id").primaryKey(),
   opportunityId: text("opportunity_id").notNull(),

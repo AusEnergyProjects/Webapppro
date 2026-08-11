@@ -17,8 +17,15 @@ import {
 import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
-  serviceReminderRetryAt,
 } from "@/lib/service-reminder-delivery";
+import {
+  OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL,
+  OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL,
+  OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL,
+  OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL,
+  opportunityNotificationFailureAudit,
+  opportunityNotificationRetryAt,
+} from "@/lib/opportunity-notification-retry";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 type DeliveryRow = Record<string, unknown>;
@@ -29,9 +36,16 @@ type DrainOptions = {
   fetchImpl?: typeof fetch;
 };
 
+type ExactOpportunityDrainOptions = {
+  opportunityId: string;
+  fetchImpl?: typeof fetch;
+};
+
+export const OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER =
+  "X-AEA-Opportunity-Notification-Dispatch";
+
 const CALLBACK_URL =
   "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
-const MAX_ATTEMPTS = 3;
 const LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS = [
   "Opportunity email consent is not active.",
   "Optional opportunity emails are disabled.",
@@ -271,6 +285,64 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
     ).run();
 }
 
+export async function ensureOpportunityNotificationDeliveries(
+  opportunityId: string,
+) {
+  const exactOpportunityId = text(opportunityId, 180);
+  if (!exactOpportunityId) throw new Error("OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE");
+  const db = getD1();
+  const now = new Date().toISOString();
+  await db.prepare(OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL)
+    .bind(now, exactOpportunityId)
+    .run();
+  const coverage = await db.prepare(`SELECT COUNT(*) active_match_count,
+      COUNT(delivery.id) delivery_count
+    FROM trade_opportunity_matches assignment
+    LEFT JOIN trade_opportunity_notification_deliveries delivery
+      ON delivery.match_id = assignment.id
+    WHERE assignment.opportunity_id = ?
+      AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')`)
+    .bind(exactOpportunityId)
+    .first<{ active_match_count: number; delivery_count: number }>();
+  const activeMatchCount = Number(coverage?.active_match_count || 0);
+  const deliveryCount = Number(coverage?.delivery_count || 0);
+  if (activeMatchCount !== deliveryCount) {
+    throw new Error("OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE");
+  }
+  return { activeMatchCount, deliveryCount };
+}
+
+export async function prepareOpportunityNotificationDeliveriesForManualRetry(
+  opportunityId: string,
+) {
+  const exactOpportunityId = text(opportunityId, 180);
+  if (!exactOpportunityId) throw new Error("OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE");
+  const db = getD1();
+  const now = new Date().toISOString();
+  const results = await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO trade_opportunity_notification_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      SELECT lower(hex(randomblob(16))), delivery.id, 'manual-retry:' || delivery.id || ':' || ?,
+        'manual_retry_requested', 'retry_scheduled',
+        'An owner or administrator requested an immediate retry.', ?, ?
+      FROM trade_opportunity_notification_deliveries delivery
+      JOIN trade_opportunity_matches assignment ON assignment.id = delivery.match_id
+      WHERE assignment.opportunity_id = ?
+        AND delivery.status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})`)
+      .bind(now, now, now, exactOpportunityId),
+    db.prepare(`UPDATE trade_opportunity_notification_deliveries
+      SET status = 'pending', eligibility_reason = '', next_attempt_at = '', updated_at = ?
+      WHERE status IN (${OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL})
+        AND EXISTS (
+          SELECT 1 FROM trade_opportunity_matches assignment
+          WHERE assignment.id = trade_opportunity_notification_deliveries.match_id
+            AND assignment.opportunity_id = ?
+        )`)
+      .bind(now, exactOpportunityId),
+  ]);
+  return { prepared: Number(results[1]?.meta.changes || 0) };
+}
+
 async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   const db = getD1();
   const context = await deliveryContext(String(row.id));
@@ -370,7 +442,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
     SET status = 'sending', attempts = ?, next_attempt_at = '', eligibility_reason = '',
       recipient_email_hash = ?, idempotency_key = ?, subject = ?, body = ?,
       last_attempt_at = ?, updated_at = ?
-    WHERE id = ? AND status = ? AND attempts = ?
+    WHERE ${OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL}
       AND NOT EXISTS (
         SELECT 1 FROM trade_opportunity_email_suppressions suppression
         WHERE suppression.email_hash = ?
@@ -479,10 +551,28 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
   } catch (error) {
     const failedAt = new Date().toISOString();
     const message = error instanceof Error ? text(error.message, 180) : "Provider delivery failed.";
-    await db.prepare(`UPDATE trade_opportunity_notification_deliveries
+    const audit = opportunityNotificationFailureAudit(attempts);
+    const failure = await db.prepare(`UPDATE trade_opportunity_notification_deliveries
       SET status = 'failed', failed_at = ?, last_error = ?, next_attempt_at = ?, updated_at = ?
       WHERE id = ? AND status = 'sending'`)
-      .bind(failedAt, message, serviceReminderRetryAt(attempts), failedAt, row.id).run();
+      .bind(failedAt, message, opportunityNotificationRetryAt(attempts), failedAt, row.id)
+      .run();
+    if (failure.meta.changes) {
+      await db.prepare(`INSERT OR IGNORE INTO trade_opportunity_notification_delivery_events
+        (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(
+          crypto.randomUUID(),
+          row.id,
+          `attempt-failed:${String(row.id)}:${attempts}`,
+          audit.eventType,
+          audit.providerStatus,
+          audit.summary,
+          failedAt,
+          failedAt,
+        )
+        .run();
+    }
     return { outcome: "failed" };
   }
 }
@@ -502,6 +592,7 @@ export async function drainOpportunityNotificationDeliveries({
     .bind(now, now, staleClaimCutoff).run();
   await recoverLegacyPublicOptionalEmailSkips(now);
   const boundedLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
+  const retryWaitingForChannel = serviceReminderProviderConfiguration().email.configured ? 1 : 0;
   const opportunityFilter = opportunityId
     ? ` AND EXISTS (
         SELECT 1 FROM trade_opportunity_matches assignment
@@ -511,15 +602,24 @@ export async function drainOpportunityNotificationDeliveries({
     : "";
   const statement = db.prepare(`SELECT id, status, attempts
     FROM trade_opportunity_notification_deliveries
-    WHERE status IN ('pending', 'failed', 'waiting_for_channel')
-      AND attempts < ?
+    WHERE status IN (${OPPORTUNITY_NOTIFICATION_RETRYABLE_STATUS_SQL})
       AND (next_attempt_at = '' OR next_attempt_at <= ?)
+      AND (status <> 'waiting_for_channel' OR ? = 1)
       ${opportunityFilter}
     ORDER BY enqueued_at, id
     LIMIT ?`);
   const rows = opportunityId
-    ? await statement.bind(MAX_ATTEMPTS, now, opportunityId, boundedLimit).all<DeliveryRow>()
-    : await statement.bind(MAX_ATTEMPTS, now, boundedLimit).all<DeliveryRow>();
+    ? await statement.bind(
+      now,
+      retryWaitingForChannel,
+      opportunityId,
+      boundedLimit,
+    ).all<DeliveryRow>()
+    : await statement.bind(
+      now,
+      retryWaitingForChannel,
+      boundedLimit,
+    ).all<DeliveryRow>();
   const outcomes = await Promise.all(rows.results.map((row) => dispatchDelivery(row, fetchImpl)));
   return {
     attempted: rows.results.length,
@@ -527,5 +627,44 @@ export async function drainOpportunityNotificationDeliveries({
     failed: outcomes.filter((item) => item.outcome === "failed").length,
     skipped: outcomes.filter((item) => item.outcome === "skipped").length,
     suppressed: outcomes.filter((item) => item.outcome === "suppressed").length,
+    waitingForChannel: outcomes.filter((item) => item.outcome === "waiting_for_channel").length,
   };
+}
+
+export async function drainOpportunityNotificationDeliveriesForOpportunity({
+  opportunityId,
+  fetchImpl = fetch,
+}: ExactOpportunityDrainOptions) {
+  const exactOpportunityId = text(opportunityId, 180);
+  if (!exactOpportunityId) {
+    return {
+      attempted: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      suppressed: 0,
+      waitingForChannel: 0,
+    };
+  }
+  const totals = {
+    attempted: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    suppressed: 0,
+    waitingForChannel: 0,
+  };
+  const batchSize = 20;
+  while (true) {
+    const result = await drainOpportunityNotificationDeliveries({
+      opportunityId: exactOpportunityId,
+      limit: batchSize,
+      fetchImpl,
+    });
+    for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+      totals[key] += result[key];
+    }
+    if (result.attempted < batchSize) break;
+  }
+  return totals;
 }
