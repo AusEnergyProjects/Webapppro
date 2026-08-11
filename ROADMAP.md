@@ -2066,14 +2066,17 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Release candidate milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
+## Released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
 
-Status: implementation and local validation are complete on
-`codex/sites-custom-domain-migration`, based on repository HEAD `b33f7f49`.
-Sites version 311 is the proposed release. Its exact release commit,
-saved-version identity, deployment identity and live verification remain pending.
-The current verified production baseline remains historical Sites version 310
-from `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` until version 311 is activated.
+Status: exact executable application commit
+`bf26fb818773ba3405da9aadae247427426da1bb` is pushed to
+`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
+released as current Sites version 313. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_d35174fb4bb8819191c52f086c134573`
+and deployment `appgdep_6a7b1720b67081919395c74e17195201` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
+`2026-08-11T12:36:44.594561Z` with environment revision 20. Custom-domain health was
+HTTP 200 at `2026-08-11T12:37:06.174Z`.
 
 ### Outcome
 
@@ -2120,24 +2123,40 @@ gateway without weakening privacy or requiring an account.
 - The mobile enquiry surface has corrected horizontal padding and retains its
   readable, no-overflow one-column layout.
 
-### Validation and pending release gates
+### Validation and release evidence
 
-- The pre-padding `npm.cmd run validate` gate passed typecheck, warning-free
-  lint, integration, 1,924 tests with 1,914 passed, 10 intentional skips and 0
-  failures, `db:check`, the customer-plan PDF audit, production build and Sites
-  bundle audit.
-- After the bounded mobile-padding correction, its focused set passed 32 of 32,
-  followed by typecheck, warning-free lint, production build and the Sites bundle
-  audit containing all 129 migrations. Independent release review found no P0 or
-  P1 issue. The final post-correction full validation gate is being rerun before
-  release.
-- Local desktop and 355-pixel mobile QA confirm the optional preparation pack,
-  service-specific questions and file controls, readable customer form and no
-  horizontal document overflow. No new real lead was submitted for visual QA.
-- Release completion requires the exact committed source, Sites version 311
-  saved-version and deployment identities, live custom-domain health and
-  responsive checks, and provider-accepted email evidence for the known pending
-  matched-trade delivery without a duplicate send.
+- Historical Sites version 311 was saved from exact milestone source
+  `ceac4486531995a11a566d224b6638c0678fb3d4` as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_59994c1e46e88191b01a512cbf0e1561`.
+  Its exact 393-file, 38,963,200-byte archive has content hash
+  `sha256:8e92e79fcf36f499aa58beab765420a8483a99a0b47412e9a2c222938bd0d832`.
+  The deployment ID was not retained in this handover.
+- Historical Sites version 312 from exact compatibility hotfix
+  `33e9c3e11cf933ea4e752f21781f66f6ec8c2c37` added exact stored version-4,
+  version-6 and version-7 contact-release validation and recovered zero-attempt
+  terminal consent skips. Saved version
+  `appgprj_6a550c378000819185caf094173422bb~appgver_922f83ef18c881918992e00a6d98df96`
+  deployed through `appgdep_6a7b13c66a6c819184d327dfda5cfcfc`, but production
+  D1 rejected the deep final claim with expression depth 100.
+- Version 313 keeps complete stored-release validation before claim and uses a
+  shallow exact-pair predicate in the atomic D1 claim. `npm.cmd run validate`
+  passed typecheck, warning-free full lint, 36 integration tests, 1,926 total
+  tests with 1,916 passed, 10 intentional skips and 0 failures, `db:check`
+  across all 129 migrations, the customer-plan PDF audit, production build and
+  Sites bundle audit. `git diff --check` passed.
+- The audited canonical PDF has 24 tagged pages, embedded fonts, semantic lists,
+  48 checked links and no active content. Email attachment and gateway download
+  remain byte-identical for the same inputs.
+- Live desktop and 355-pixel mobile QA confirmed the quote-preparation pack,
+  service-specific questions, camera or file controls, readable customer form
+  and no horizontal document overflow. The deployed bundle contains the four-way
+  customer next-step gateway. No new lead was submitted solely for visual QA.
+- Previously skipped delivery `bd53ebf192e525465b9026470b3ca5c5` was recovered
+  exactly once and reached `delivered` through Resend provider message
+  `a237b559-27c9-4ba1-a4f5-b9d4e582580f`, with `provider_accepted`, `email.sent`
+  and `email.delivered` evidence. Current-version-7 control delivery
+  `d8a7968ff3ff1e5fbad350ed8692796e` also reached `delivered` through provider
+  message `e81bbf1b-5c32-40f6-8395-aa6141187712`.
 
 ## Previous released milestone: CREDITEX-VEU-REGISTRY-ROUNDING-LIMITS-54
 
@@ -2355,8 +2374,8 @@ without weakening privacy, calculation authority or the static trade workspace.
 1. Delivery operations view and alerts for provider acceptance, bounce, backlog and recovery.
 2. Structured trade quote responses built from the service-specific preparation pack.
 3. No-account customer status and consent link for trade responses and cross-session withdrawal.
-4. Later quote-pack additions and reminders without creating another lead.
-5. Privacy-safe funnel analytics from plan to provider-accepted trade email and trade response.
+4. Later quote-pack additions and reminders without another lead.
+5. Privacy-safe funnel analytics plan -> provider-accepted email -> response.
 
 ## Global stop conditions
 
