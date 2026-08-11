@@ -2069,14 +2069,13 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 ## Released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
 
 Status: exact executable application commit
-`bf26fb818773ba3405da9aadae247427426da1bb` is pushed to
+`ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` is pushed to
 `origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
-released as current Sites version 313. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_d35174fb4bb8819191c52f086c134573`
-and deployment `appgdep_6a7b1720b67081919395c74e17195201` reconcile to that
+released as current Sites version 315. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
+and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` reconcile to that
 source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
-`2026-08-11T12:36:44.594561Z` with environment revision 20. Custom-domain health was
-HTTP 200 at `2026-08-11T12:37:06.174Z`.
+`2026-08-11T15:42:54.685549Z` with environment revision 20.
 
 ### Outcome
 
@@ -2112,6 +2111,21 @@ gateway without weakening privacy or requiring an account.
   explicitly reuse known private plan facts. Mobile and desktop photo controls
   request service-relevant JPEG or PNG images without making answers or photos a
   condition of the base lead.
+- The final enquiry is open by default and reuses known switchboard, roof,
+  hot-water, insulation, solar and multi-system heating facts instead of asking
+  for them again. The representative nine-service path fell from 19 questions to
+  three, the all-service path has at most five, and one selected service has one
+  or two. The summary keeps reverse-cycle air conditioning, gas ducted or space
+  heating and evaporative cooling together. Wide whole-appliance and work-area
+  photos are requested before labels; safe full-switchboard and inverter views
+  remain useful.
+- The certificate estimator uses a concise one-or-two-system quantity control,
+  assumes zero prior VEU-funded water heaters for the public estimate while
+  reserving final history checks for the accredited provider, combines raw
+  reductions within one prescribed activity before the final whole-certificate
+  rounding, and shows a current gross AUD value for supported certificate types.
+  Stale or missing price data fails closed and any changed input clears the prior
+  certificate and dollar result.
 - Private quote answers and stripped photo derivatives are stored in D1 and R2,
   never exposed through a public URL or email attachment, and are available only
   to exact active matches for the relevant selected service. Withdrawal blocks
@@ -2138,10 +2152,25 @@ gateway without weakening privacy or requiring an account.
   `appgprj_6a550c378000819185caf094173422bb~appgver_922f83ef18c881918992e00a6d98df96`
   deployed through `appgdep_6a7b13c66a6c819184d327dfda5cfcfc`, but production
   D1 rejected the deep final claim with expression depth 100.
-- Version 313 keeps complete stored-release validation before claim and uses a
-  shallow exact-pair predicate in the atomic D1 claim. `npm.cmd run validate`
-  passed typecheck, warning-free full lint, 36 integration tests, 1,926 total
-  tests with 1,916 passed, 10 intentional skips and 0 failures, `db:check`
+- Historical Sites version 313 from
+  `bf26fb818773ba3405da9aadae247427426da1bb` kept complete stored-release
+  validation before claim and used a shallow exact-pair predicate in the atomic
+  D1 claim.
+- Historical Sites version 314 from customer enquiry and calculator commit
+  `c1a62944078ace043b68bb23a37e924d3e91fefc` was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_a3a30ab242c0819184e4ec846fa5ef2c`
+  and deployed through `appgdep_6a7b30ccbc348191833216f9b4b41c02`. Live plan
+  and calculator checks passed, including multi-system heating retention,
+  streamlined quote preparation, input-result invalidation and a current gross
+  certificate value, but the signed-in Leads GET still returned HTTP 500. Version
+  314 is an intermediate release, not the current verified lead-workspace state.
+- Version 315 splits the trade-opportunity read into one atomic D1 batch of nine
+  bounded statements. The maximum conservative query budget is 54 against the
+  live limit of 100, no statement uses more than five joins, and the base read
+  returns a deterministic ordered set capped at 100. Exact-match, project-consent,
+  public-release, withdrawal, contact, quote and arrival guards remain fail-closed.
+- Final `npm.cmd run validate` passed typecheck, warning-free full lint, 1,936
+  total tests with 1,926 passed, 10 intentional skips and 0 failures, `db:check`
   across all 129 migrations, the customer-plan PDF audit, production build and
   Sites bundle audit. `git diff --check` passed.
 - The audited canonical PDF has 24 tagged pages, embedded fonts, semantic lists,
@@ -2151,6 +2180,17 @@ gateway without weakening privacy or requiring an account.
   service-specific questions, camera or file controls, readable customer form
   and no horizontal document overflow. The deployed bundle contains the four-way
   customer next-step gateway. No new lead was submitted solely for visual QA.
+- Live signed-in version-315 QA reloaded an existing expected match. The refresh,
+  load and false-empty errors were absent, and the workspace showed 10 matching
+  leads with the expected consented detail. The exact GET and safe UI reload
+  succeeded and the post-check Worker
+  errors-only query was empty. No mutating PATCH smoke was run and no lead status
+  was changed.
+- `/api/certificate-prices` remained current with `lastCheckedAt`
+  `2026-08-11T14:00:46.718Z`; the latest AUD gross inputs were STC 39.65, ESC
+  29.50, VEEC 82.25, PRC 2.80, LGC 8.00, ACCU 38.75 and SMC 38.40. The customer
+  view labels these as gross before registration, audit, compliance, processing
+  and other fees.
 - Previously skipped delivery `bd53ebf192e525465b9026470b3ca5c5` was recovered
   exactly once and reached `delivered` through Resend provider message
   `a237b559-27c9-4ba1-a4f5-b9d4e582580f`, with `provider_accepted`, `email.sent`

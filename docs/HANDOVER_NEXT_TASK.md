@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` released as current Sites version 313; next recommended milestone is delivery operations visibility and alerting
+Status: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` released as current Sites version 315; next recommended milestone is delivery operations visibility and alerting
 
 Prepared: 11 August 2026
 
@@ -10,15 +10,15 @@ Working branch: `codex/sites-custom-domain-migration`
 
 Milestone source baseline: `ceac4486531995a11a566d224b6638c0678fb3d4`
 
-Exact release commit: `bf26fb818773ba3405da9aadae247427426da1bb`
+Exact release commit: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Current production application source: `bf26fb818773ba3405da9aadae247427426da1bb`
+Current production application source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Current production: Sites version 313 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 315 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d35174fb4bb8819191c52f086c134573`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
 
-Current deployment: `appgdep_6a7b1720b67081919395c74e17195201`
+Current deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
 Migration inventory: all 129 migrations through `0128_public_plan_quote_preparation.sql`
 
@@ -40,19 +40,19 @@ Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
 
 Previous milestone application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
 
-Current production source: `bf26fb818773ba3405da9aadae247427426da1bb`
+Historical version 314 customer-enquiry and calculator source: `c1a62944078ace043b68bb23a37e924d3e91fefc`
 
-Released application source: `bf26fb818773ba3405da9aadae247427426da1bb`
+Current production source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Current Sites version 313 checkpoint: application commit `bf26fb818773ba3405da9aadae247427426da1bb`
+Released application source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d35174fb4bb8819191c52f086c134573`
+Current Sites version 315 checkpoint: application commit `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Deployment: `appgdep_6a7b1720b67081919395c74e17195201`
+Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
 
-Sites stored release: 393 files, 38,973,440 bytes and content SHA-256 `96d336879f45a3ce6f8980b507c51d21387bd05f7c09ac9eef9b6e693627771e`
+Deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current version 313 migration inventory: all 129 migrations
+Current version 315 migration inventory: all 129 migrations
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -66,13 +66,12 @@ Environment revision: 20
 
 ## Released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
 
-Status: exact application source `bf26fb818773ba3405da9aadae247427426da1bb`
-is pushed and released as current Sites version 313. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_d35174fb4bb8819191c52f086c134573`
-and deployment `appgdep_6a7b1720b67081919395c74e17195201` reconcile to that
+Status: exact application source `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
+is pushed and released as current Sites version 315. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
+and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` reconcile to that
 source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
-`2026-08-11T12:36:44.594561Z` with environment revision 20. Custom-domain health was
-HTTP 200 at `2026-08-11T12:37:06.174Z`.
+`2026-08-11T15:42:54.685549Z` with environment revision 20.
 
 ### Implemented outcome
 
@@ -104,9 +103,20 @@ download use the same practical plain-language customer PDF.
 - All 11 services expose an optional three-to-four-question preparation pack.
   Only genuinely shared questions are deduplicated, and known private plan facts
   remain suggestions until the customer explicitly opts to reuse them.
+- The final enquiry is open by default and avoids re-asking known planner facts.
+  Nine selected services require three short optional questions, all 11 require
+  at most five, and one service requires one or two. Multi-system heating keeps
+  reverse-cycle air conditioning, gas ducted or space heating and evaporative
+  cooling together instead of forcing one answer.
 - Service-specific mobile and desktop controls accept JPEG and PNG images.
   Answers and photos are optional and photo-only retry cannot resubmit the base
-  lead.
+  lead. Wide whole-appliance and work-area photos come before label close-ups;
+  safe full-switchboard and inverter views remain supported.
+- The public certificate estimate uses simple one-or-two-system quantity controls,
+  a zero prior-funded-product estimate assumption with final accredited-provider
+  checks, one final whole-certificate rounding point per prescribed activity and
+  a current gross AUD value for every supported certificate type. Missing or
+  stale price data fails closed and input changes clear stale results.
 - Private answers and stripped photo derivatives use D1 and R2, are never sent
   by email or exposed through a public URL, and are available only to exact active
   matches for the relevant service. Withdrawal blocks access immediately and
@@ -131,12 +141,23 @@ download use the same practical plain-language customer PDF.
   `appgprj_6a550c378000819185caf094173422bb~appgver_922f83ef18c881918992e00a6d98df96`
   deployed through `appgdep_6a7b13c66a6c819184d327dfda5cfcfc`, but production
   D1 rejected the deep final claim with expression depth 100.
-- Version 313 retains full stored-release validation before claiming and uses a
-  shallow exact-pair predicate in the final atomic D1 claim.
-- `npm.cmd run validate` passed typecheck, warning-free full lint, 36 integration
-  tests, 1,926 total tests with 1,916 passed, 10 intentional skips and 0
-  failures, `db:check` across all 129 migrations, the 24-page customer-plan PDF
-  audit, production build and Sites bundle audit. `git diff --check` passed.
+- Historical version 313 retains full stored-release validation before claiming
+  and uses a shallow exact-pair predicate in the final atomic D1 claim.
+- Historical version 314 from `c1a62944078ace043b68bb23a37e924d3e91fefc`
+  was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_a3a30ab242c0819184e4ec846fa5ef2c`
+  and deployed through `appgdep_6a7b30ccbc348191833216f9b4b41c02`. Its plan
+  and calculator checks passed, but the signed-in Leads GET still returned HTTP
+  500, so it is an intermediate release rather than the current live baseline.
+- Version 315 executes the trade-opportunity read as one atomic D1 batch of nine
+  bounded statements. Its maximum conservative budget is 54 against the live
+  limit of 100, no statement uses more than five joins, and the ordered base set
+  is deterministically capped at 100. Exact match, consent, public release,
+  withdrawal and downstream contact, quote and arrival guards remain fail-closed.
+- Final `npm.cmd run validate` passed typecheck, warning-free full lint, 1,936
+  total tests with 1,926 passed, 10 intentional skips and 0 failures, `db:check`
+  across all 129 migrations, the 24-page customer-plan PDF audit, production
+  build and Sites bundle audit. `git diff --check` passed.
 - The canonical email attachment and gateway download are byte-identical for the
   same inputs. The audited PDF has 24 tagged pages, embedded fonts, semantic
   lists, 48 checked links and no active content.
@@ -144,6 +165,15 @@ download use the same practical plain-language customer PDF.
   service-specific questions and camera or file controls, readable form and zero
   document overflow. The deployed bundle contains the four-way customer
   next-step gateway. No new lead was submitted solely for visual QA.
+- Live signed-in version-315 QA reloaded an existing expected match. The refresh,
+  load and false-empty errors were absent and 10 matching leads appeared with the
+  expected consented detail. The exact GET and safe UI reload succeeded and the
+  post-check Worker errors-only
+  query was empty. No mutating PATCH smoke was run and no lead status changed.
+- `/api/certificate-prices` was current at `2026-08-11T14:00:46.718Z`. The gross
+  AUD inputs were STC 39.65, ESC 29.50, VEEC 82.25, PRC 2.80, LGC 8.00, ACCU
+  38.75 and SMC 38.40, with explicit copy that registration, audit, compliance,
+  processing and other fees reduce the customer rebate.
 - Previously skipped delivery `bd53ebf192e525465b9026470b3ca5c5` was recovered
   exactly once and reached `delivered` through Resend provider message
   `a237b559-27c9-4ba1-a4f5-b9d4e582580f`, with `provider_accepted`, `email.sent`
@@ -156,7 +186,7 @@ download use the same practical plain-language customer PDF.
 Status: exact executable application commit
 `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7` is pushed to the GitHub working
 branch and Sites internal `main`, and released as historical Sites version 310.
-It was superseded by the version 311 to 313 release chain above.
+It was superseded by the version 311 to 315 release chain above.
 
 The historical saved-version identity is
 `appgprj_6a550c378000819185caf094173422bb~appgver_328bc0ff50648191abfb6cd0b6aafed8`.
