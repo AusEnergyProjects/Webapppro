@@ -8,8 +8,7 @@ import {
 } from "@/lib/trade-access-server";
 import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 import {
-  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-  PUBLIC_PLAN_CONSENT_PURPOSE,
+  publicPlanContactReleaseAccessSql,
 } from "@/lib/public-plan-enquiry.mjs";
 
 export const runtime = "edge";
@@ -39,8 +38,7 @@ const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
     WHERE current_public_match.id = ${enquiryAlias}.opportunity_match_id
       AND current_public_match.firebase_uid = ${enquiryAlias}.firebase_uid
       AND current_public_release.status = 'active'
-      AND current_public_release.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-      AND current_public_release.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+      AND ${publicPlanContactReleaseAccessSql("current_public_release")}
       AND datetime(current_public_release.granted_at) IS NOT NULL
       AND current_public_release.withdrawn_at = ''
       AND current_public_release.postcode = current_public_opportunity.postcode

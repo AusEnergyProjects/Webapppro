@@ -9,6 +9,7 @@ import { closestQualifyingTradeServiceArea } from "@/lib/trade-service-area-matc
 import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
 import { ensureOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
 import {
+  publicPlanContactReleaseAccessSql,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -81,8 +82,7 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
     LEFT JOIN public_trade_lead_contact_releases contact
       ON contact.opportunity_id = o.id
         AND contact.status = 'active'
-        AND contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-        AND contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+        AND ${publicPlanContactReleaseAccessSql("contact")}
         AND datetime(contact.granted_at) IS NOT NULL
         AND contact.withdrawn_at = ''
         AND contact.postcode = o.postcode

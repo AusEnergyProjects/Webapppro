@@ -11,8 +11,8 @@ import {
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
 import {
-  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-  PUBLIC_PLAN_CONSENT_PURPOSE,
+  publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
   sendServiceReminderProviderMessage,
@@ -46,9 +46,10 @@ export const OPPORTUNITY_NOTIFICATION_DISPATCH_HEADER =
 
 const CALLBACK_URL =
   "https://compare.ausenergyassessments.com/api/service-reminder-provider-events/resend";
-const LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS = [
+const RECOVERABLE_PUBLIC_EMAIL_SKIP_REASONS = [
   "Opportunity email consent is not active.",
   "Optional opportunity emails are disabled.",
+  "The public enquiry contact consent is unavailable or no longer current.",
 ] as const;
 
 function text(value: unknown, maximum: number) {
@@ -169,15 +170,6 @@ function ineligibility(context: DeliveryRow) {
   }
   if (context.notification_source === "public_plan_enquiry") {
     const disclosedFields = list(context.public_contact_disclosed_fields);
-    const allowedFields = new Set([
-      "customer_name",
-      "customer_email",
-      "customer_phone",
-      "customer_address",
-      "postcode",
-      "service_categories",
-      "customer_message",
-    ]);
     const hasEmail = Number(context.public_contact_has_email || 0) === 1;
     const hasPhone = Number(context.public_contact_has_phone || 0) === 1;
     const hasMessage = Boolean(text(context.public_customer_message, 500));
@@ -188,15 +180,15 @@ function ineligibility(context: DeliveryRow) {
     const sharesAddress = disclosedFields.includes("customer_address");
     if (
       context.public_contact_status !== "active"
-      || context.public_contact_notice_version !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION
-      || context.public_contact_consent_purpose !== PUBLIC_PLAN_CONSENT_PURPOSE
+      || !publicPlanContactReleaseDisclosedFieldsAreValid(
+        context.public_contact_notice_version,
+        context.public_contact_consent_purpose,
+        disclosedFields,
+      )
       || !Number.isFinite(Date.parse(String(context.public_contact_granted_at || "")))
       || Boolean(String(context.public_contact_withdrawn_at || ""))
       || !/^\d{4}$/.test(text(context.public_contact_postcode, 4))
       || text(context.public_contact_postcode, 4) !== text(context.opportunity_postcode, 4)
-      || !disclosedFields.includes("customer_email")
-      || !disclosedFields.includes("postcode")
-      || !disclosedFields.includes("service_categories")
       || !hasEmail
       || (sharesName && (
         Number(context.public_contact_has_first_name || 0) !== 1
@@ -206,7 +198,6 @@ function ineligibility(context: DeliveryRow) {
       || (sharesPhone && !hasPhone)
       || (sharesMessage && !hasMessage)
       || (sharesAddress && !hasAddress)
-      || disclosedFields.some((field) => !allowedFields.has(field))
     ) return "The public enquiry contact consent is unavailable or no longer current.";
   }
   if (context.opportunity_status !== "open") {
@@ -244,7 +235,7 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
     SET status = 'pending', eligibility_reason = '', next_attempt_at = '', updated_at = ?
     WHERE status = 'skipped'
       AND attempts = 0
-      AND eligibility_reason IN (?, ?)
+      AND eligibility_reason IN (?, ?, ?)
       AND EXISTS (
         SELECT 1
         FROM trade_opportunity_matches recovery_match
@@ -270,16 +261,16 @@ async function recoverLegacyPublicOptionalEmailSkips(now: string) {
           AND recovery_account.email <> ''
           AND ${verifiedTradeAccountPredicate("recovery_account")}
           AND recovery_public_contact.status = 'active'
-          AND recovery_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-          AND recovery_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+          AND ${publicPlanContactReleaseAccessSql("recovery_public_contact")}
           AND datetime(recovery_public_contact.granted_at) IS NOT NULL
           AND recovery_public_contact.withdrawn_at = ''
           AND recovery_public_contact.postcode = recovery_opportunity.postcode
       )`)
     .bind(
       now,
-      LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS[0],
-      LEGACY_PUBLIC_OPTIONAL_EMAIL_SKIP_REASONS[1],
+      RECOVERABLE_PUBLIC_EMAIL_SKIP_REASONS[0],
+      RECOVERABLE_PUBLIC_EMAIL_SKIP_REASONS[1],
+      RECOVERABLE_PUBLIC_EMAIL_SKIP_REASONS[2],
       now,
       now,
     ).run();
@@ -470,8 +461,8 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
               FROM public_trade_lead_contact_releases mandatory_public_email
               WHERE mandatory_public_email.opportunity_id = current_opportunity.id
                 AND mandatory_public_email.status = 'active'
-                AND mandatory_public_email.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-                AND mandatory_public_email.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                AND ${publicPlanContactReleaseAccessSql("mandatory_public_email")}
+                AND mandatory_public_email.postcode = current_opportunity.postcode
                 AND datetime(mandatory_public_email.granted_at) IS NOT NULL
                 AND mandatory_public_email.withdrawn_at = ''
             )
@@ -492,8 +483,8 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
                 FROM public_trade_lead_contact_releases current_public_contact
                 WHERE current_public_contact.opportunity_id = current_opportunity.id
                   AND current_public_contact.status = 'active'
-                  AND current_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-                  AND current_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                  AND ${publicPlanContactReleaseAccessSql("current_public_contact")}
+                  AND current_public_contact.postcode = current_opportunity.postcode
                   AND datetime(current_public_contact.granted_at) IS NOT NULL
                   AND current_public_contact.withdrawn_at = ''
               )

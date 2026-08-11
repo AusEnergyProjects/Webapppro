@@ -13,6 +13,129 @@ export const PUBLIC_PLAN_CONSENT_PURPOSE =
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-11-quote-preparation-sharing-notice-v7";
 
+const publicPlanContactReleaseRequiredFields = Object.freeze([
+  "customer_email",
+  "postcode",
+  "service_categories",
+]);
+
+const publicPlanContactReleasePolicies = Object.freeze([
+  Object.freeze({
+    noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_name",
+      "customer_phone",
+      "customer_address",
+      "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: "2026-08-10-structured-service-address-sharing-v6",
+    purpose:
+      "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan",
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_name",
+      "customer_phone",
+      "customer_address",
+      "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: "2026-08-10-customer-selected-trade-sharing-v4",
+    purpose:
+      "Share my email, postcode, service and any message I write with all approved TLink trades in my area, plus chosen name or phone, and email my private plan",
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_name",
+      "customer_phone",
+      "customer_message",
+    ]),
+  }),
+]);
+
+function publicPlanContactReleasePolicy(noticeVersion, purpose) {
+  return publicPlanContactReleasePolicies.find((policy) =>
+    policy.noticeVersion === noticeVersion && policy.purpose === purpose
+  ) || null;
+}
+
+function sqlLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function publicPlanContactReleaseAlias(value) {
+  const alias = String(value || "");
+  if (!/^[a-z_][a-z0-9_]*$/i.test(alias)) {
+    throw new Error("PUBLIC_PLAN_CONTACT_RELEASE_ALIAS_INVALID");
+  }
+  return alias;
+}
+
+export function isRecognizedPublicPlanContactReleaseConsent(
+  noticeVersion,
+  purpose,
+) {
+  return Boolean(publicPlanContactReleasePolicy(noticeVersion, purpose));
+}
+
+export function publicPlanContactReleaseDisclosedFieldsAreValid(
+  noticeVersion,
+  purpose,
+  disclosedFields,
+) {
+  const policy = publicPlanContactReleasePolicy(noticeVersion, purpose);
+  if (!policy || !Array.isArray(disclosedFields)) return false;
+  const uniqueFields = new Set(disclosedFields);
+  const allowedFields = new Set(policy.allowedDisclosedFields);
+  return uniqueFields.size === disclosedFields.length
+    && disclosedFields.every((field) => typeof field === "string" && allowedFields.has(field))
+    && publicPlanContactReleaseRequiredFields.every((field) => uniqueFields.has(field));
+}
+
+export function publicPlanContactReleaseAccessSql(releaseAlias) {
+  const alias = publicPlanContactReleaseAlias(releaseAlias);
+  const safeFields = `CASE
+    WHEN json_valid(${alias}.disclosed_fields) THEN CASE
+      WHEN json_type(${alias}.disclosed_fields) = 'array'
+        THEN ${alias}.disclosed_fields
+      ELSE '[]'
+    END
+    ELSE '[]'
+  END`;
+  const policySql = publicPlanContactReleasePolicies.map((policy) => `(
+    ${alias}.notice_version = ${sqlLiteral(policy.noticeVersion)}
+    AND ${alias}.consent_purpose = ${sqlLiteral(policy.purpose)}
+    AND NOT EXISTS (
+      SELECT 1 FROM json_each(${safeFields}) disclosed_policy_field
+      WHERE typeof(disclosed_policy_field.value) <> 'text'
+        OR disclosed_policy_field.value NOT IN (${policy.allowedDisclosedFields.map(sqlLiteral).join(", ")})
+    )
+  )`).join(" OR ");
+  const requiredSql = publicPlanContactReleaseRequiredFields.map((requiredField) => `EXISTS (
+    SELECT 1 FROM json_each(${safeFields}) required_disclosed_field
+    WHERE required_disclosed_field.value = ${sqlLiteral(requiredField)}
+  )`).join(" AND ");
+  return `(
+    json_valid(${alias}.disclosed_fields)
+    AND json_type(CASE WHEN json_valid(${alias}.disclosed_fields)
+      THEN ${alias}.disclosed_fields ELSE 'null' END) = 'array'
+    AND trim(${alias}.customer_email) <> ''
+    AND length(${alias}.postcode) = 4
+    AND ${alias}.postcode NOT GLOB '*[^0-9]*'
+    AND (${policySql})
+    AND ${requiredSql}
+    AND (
+      SELECT COUNT(*) FROM json_each(${safeFields}) disclosed_field_count
+    ) = (
+      SELECT COUNT(DISTINCT disclosed_unique_field.value)
+      FROM json_each(${safeFields}) disclosed_unique_field
+    )
+  )`;
+}
+
 export const PUBLIC_PLAN_SNAPSHOT_VERSION =
   "2026-08-10-complete-home-context-snapshot-v2";
 

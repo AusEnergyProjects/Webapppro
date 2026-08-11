@@ -154,6 +154,14 @@ test("public plan enquiries require private contact records, mandatory trade rou
     consent: { accepted: true, purpose: PUBLIC_PLAN_CONSENT_PURPOSE, noticeVersion: "old", grantedAt: new Date().toISOString() },
   })).error, /current contact notice/i);
   assert.match(validateLeadPayload(validPlanEnquiry({
+    consent: {
+      accepted: true,
+      purpose: "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan",
+      noticeVersion: "2026-08-10-structured-service-address-sharing-v6",
+      grantedAt: new Date().toISOString(),
+    },
+  })).error, /current contact notice/i);
+  assert.match(validateLeadPayload(validPlanEnquiry({
     consent: { accepted: true, purpose: PUBLIC_PLAN_CONSENT_PURPOSE, noticeVersion: "x".repeat(65), grantedAt: new Date().toISOString() },
   })).error, /current contact notice/i);
 });

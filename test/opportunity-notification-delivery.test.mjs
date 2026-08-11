@@ -13,6 +13,9 @@ import {
   serviceReminderProviderConfiguration,
 } from "../src/lib/service-reminder-delivery.ts";
 import {
+  publicPlanContactReleaseAccessSql,
+} from "../src/lib/public-plan-enquiry.mjs";
+import {
   OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL,
   OPPORTUNITY_NOTIFICATION_ENSURE_DELIVERIES_SQL,
   OPPORTUNITY_NOTIFICATION_MANUAL_RETRY_STATUS_SQL,
@@ -33,6 +36,11 @@ const manualAllocation = read("../src/app/api/admin/opportunities/allocate/route
 const resendCallback = read("../src/app/api/service-reminder-provider-events/resend/route.ts");
 const worker = read("../worker/index.ts");
 const vite = read("../vite.config.ts");
+const LEGACY_V6_NOTICE = "2026-08-10-structured-service-address-sharing-v6";
+const LEGACY_V6_PURPOSE =
+  "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan";
+const CONSENT_VERSION_SKIP_REASON =
+  "The public enquiry contact consent is unavailable or no longer current.";
 
 function notificationDatabase() {
   const db = new DatabaseSync(":memory:");
@@ -104,6 +112,14 @@ test("public plan opportunity email is mandatory despite the optional account pr
   assert.match(
     deliveryServer,
     /current_account\.email_opportunities = 1[\s\S]*OR EXISTS \([\s\S]*mandatory_public_email/,
+  );
+  assert.match(
+    deliveryServer,
+    /mandatory_public_email\.postcode = current_opportunity\.postcode/,
+  );
+  assert.match(
+    deliveryServer,
+    /current_public_contact\.postcode = current_opportunity\.postcode/,
   );
 });
 
@@ -254,6 +270,7 @@ test("zero-attempt public emails skipped by the old optional preference are safe
   for (const boundary of [
     "Opportunity email consent is not active.",
     "Optional opportunity emails are disabled.",
+    CONSENT_VERSION_SKIP_REASON,
     "status = 'skipped'",
     "attempts = 0",
     "recovery_match.status IN ('offered', 'viewed', 'interested', 'connected')",
@@ -262,6 +279,7 @@ test("zero-attempt public emails skipped by the old optional preference are safe
     "recovery_account.availability_status IN ('open', 'limited')",
     "verifiedTradeAccountPredicate(\"recovery_account\")",
     "recovery_public_contact.status = 'active'",
+    'publicPlanContactReleaseAccessSql("recovery_public_contact")',
     "recovery_public_contact.withdrawn_at = ''",
     "recovery_public_contact.postcode = recovery_opportunity.postcode",
   ]) {
@@ -280,6 +298,99 @@ test("zero-attempt public emails skipped by the old optional preference are safe
     drainIndex,
   );
   assert.ok(drainIndex > 0 && recoveryIndex > drainIndex && claimIndex > recoveryIndex);
+});
+
+test("a zero-attempt v6 consent-version skip is requeued while invalid or withdrawn releases stay terminal", () => {
+  const recoverySql = deliveryServer.match(
+    /async function recoverLegacyPublicOptionalEmailSkips[\s\S]*?prepare\(`([\s\S]*?)`\)\s*\.bind/,
+  )?.[1];
+  assert.ok(recoverySql, "legacy public skip recovery SQL must be extractable");
+  const executableSql = recoverySql
+    .replace(
+      '${verifiedTradeAccountPredicate("recovery_account")}',
+      "recovery_account.status = 'approved'",
+    )
+    .replace(
+      '${publicPlanContactReleaseAccessSql("recovery_public_contact")}',
+      publicPlanContactReleaseAccessSql("recovery_public_contact"),
+    );
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE trade_opportunity_notification_deliveries (
+      id text PRIMARY KEY, match_id text NOT NULL, status text NOT NULL,
+      eligibility_reason text NOT NULL, attempts integer NOT NULL,
+      next_attempt_at text NOT NULL, updated_at text NOT NULL
+    );
+    CREATE TABLE trade_opportunity_matches (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, firebase_uid text NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE trade_opportunities (
+      id text PRIMARY KEY, status text NOT NULL, expires_at text NOT NULL,
+      created_at text NOT NULL, postcode text NOT NULL
+    );
+    CREATE TABLE trade_accounts (
+      firebase_uid text PRIMARY KEY, partner_type text NOT NULL, consent_at text NOT NULL,
+      availability_status text NOT NULL, email text NOT NULL, status text NOT NULL
+    );
+    CREATE TABLE public_trade_lead_contact_releases (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, status text NOT NULL,
+      notice_version text NOT NULL, consent_purpose text NOT NULL,
+      disclosed_fields text NOT NULL, granted_at text NOT NULL,
+      withdrawn_at text NOT NULL, customer_email text NOT NULL, postcode text NOT NULL
+    );`);
+  const now = "2026-08-11T12:00:00.000Z";
+  database.prepare(`INSERT INTO trade_accounts
+    VALUES ('installer', 'installer', ?, 'open', 'trade@example.test', 'approved')`).run(now);
+  const insertOpportunity = database.prepare(
+    "INSERT INTO trade_opportunities VALUES (?, 'open', '2026-09-11T12:00:00.000Z', ?, '3000')",
+  );
+  const insertMatch = database.prepare(
+    "INSERT INTO trade_opportunity_matches VALUES (?, ?, 'installer', 'offered')",
+  );
+  const insertRelease = database.prepare(`INSERT INTO public_trade_lead_contact_releases
+    VALUES (?, ?, 'active', ?, ?, ?, ?, ?, 'customer@example.test', '3000')`);
+  const insertDelivery = database.prepare(`INSERT INTO trade_opportunity_notification_deliveries
+    VALUES (?, ?, 'skipped', ?, ?, '', ?)`);
+  const fields = JSON.stringify(["customer_email", "postcode", "service_categories"]);
+  const addCase = ({
+    id,
+    version = LEGACY_V6_NOTICE,
+    purpose = LEGACY_V6_PURPOSE,
+    withdrawnAt = "",
+    attempts = 0,
+  }) => {
+    const opportunityId = `opportunity-${id}`;
+    const matchId = `match-${id}`;
+    insertOpportunity.run(opportunityId, now);
+    insertMatch.run(matchId, opportunityId);
+    insertRelease.run(`release-${id}`, opportunityId, version, purpose, fields, now, withdrawnAt);
+    insertDelivery.run(id, matchId, CONSENT_VERSION_SKIP_REASON, attempts, now);
+  };
+  addCase({ id: "valid-v6" });
+  addCase({ id: "unknown-pair", version: "2026-08-10-unknown-v5" });
+  addCase({ id: "withdrawn-v6", withdrawnAt: now });
+  addCase({ id: "attempted-v6", attempts: 1 });
+
+  const result = database.prepare(executableSql).run(
+    now,
+    "Opportunity email consent is not active.",
+    "Optional opportunity emails are disabled.",
+    CONSENT_VERSION_SKIP_REASON,
+    now,
+    now,
+  );
+  assert.equal(result.changes, 1);
+  assert.deepEqual(
+    database.prepare("SELECT id, status FROM trade_opportunity_notification_deliveries ORDER BY id")
+      .all().map((row) => ({ id: row.id, status: row.status })),
+    [
+      { id: "attempted-v6", status: "skipped" },
+      { id: "unknown-pair", status: "skipped" },
+      { id: "valid-v6", status: "pending" },
+      { id: "withdrawn-v6", status: "skipped" },
+    ],
+  );
+  database.close();
 });
 
 test("new automatic or manual match inserts atomically enqueue exactly once and updates do not resend", () => {

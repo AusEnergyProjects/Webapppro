@@ -642,6 +642,8 @@ test("quote preparation persists once per source and is exposed only through sig
   const envelope = read("../src/lib/lead-envelope.mjs");
 
   assert.match(opportunity, /persistPublicQuotePreparation/);
+  assert.match(opportunity, /consent\.noticeVersion !== PUBLIC_PLAN_CONSENT_NOTICE_VERSION/);
+  assert.match(opportunity, /consent\.purpose !== PUBLIC_PLAN_CONSENT_PURPOSE/);
   assert.match(opportunity, /INSERT INTO public_trade_lead_quote_preparations[\s\S]*ON CONFLICT DO NOTHING/);
   assert.match(opportunity, /OPPORTUNITY_SOURCE_REFERENCE_MISMATCH/);
   assert.match(opportunity, /ensureOpportunityNotificationDeliveries\(opportunityId\)/);
@@ -653,6 +655,7 @@ test("quote preparation persists once per source and is exposed only through sig
   assert.match(tradeRoute, /publicPlanQuoteCategoryIntersection/);
   assert.match(tradeRoute, /m\.matched_categories/);
   assert.match(tradeRoute, /public_quote_preparation_id/);
+  assert.match(tradeRoute, /public_quote_preparation\.notice_version = '\$\{PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION\}'[\s\S]*public_contact\.notice_version = '\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}'/);
   assert.match(dashboard, /PublicQuotePreparation/);
   assert.match(dashboard, /item\.downloadHref/);
   assert.match(migration, /public_trade_lead_quote_preparations/);

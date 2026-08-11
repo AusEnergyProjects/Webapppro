@@ -56,13 +56,13 @@ test("public lead notification includes a shared name and the customer's written
   assert.doesNotMatch(draft.body, /Private suburb|jamie@example\.test|0400000000/i);
 });
 
-test("public notification dispatch rechecks the exact current consent and reads no private plan fields", () => {
+test("public notification dispatch rechecks an exact recognized consent pair and reads no private plan fields", () => {
   for (const boundary of [
     "public_trade_lead_contact_releases public_contact",
     "public_contact.notice_version public_contact_notice_version",
     "public_contact.consent_purpose public_contact_consent_purpose",
-    "PUBLIC_PLAN_CONSENT_NOTICE_VERSION",
-    "PUBLIC_PLAN_CONSENT_PURPOSE",
+    "publicPlanContactReleaseAccessSql",
+    "publicPlanContactReleaseDisclosedFieldsAreValid",
     "public_contact.withdrawn_at public_contact_withdrawn_at",
     "public_contact.disclosed_fields public_contact_disclosed_fields",
     "sourceKind:",
@@ -73,9 +73,6 @@ test("public notification dispatch rechecks the exact current consent and reads 
   assert.match(deliveryServer, /current_account\.partner_type = 'installer'/);
   assert.match(deliveryServer, /mandatory_public_email\.status = 'active'/);
   assert.match(deliveryServer, /mandatory_public_email\.withdrawn_at = ''/);
-  assert.match(deliveryServer, /!disclosedFields\.includes\("customer_email"\)/);
-  assert.match(deliveryServer, /!disclosedFields\.includes\("postcode"\)/);
-  assert.match(deliveryServer, /!disclosedFields\.includes\("service_categories"\)/);
   assert.match(deliveryServer, /const publicDisclosedFields = new Set/);
   assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_name"\)/);
   assert.match(deliveryServer, /publicDisclosedFields\.has\("customer_message"\)/);

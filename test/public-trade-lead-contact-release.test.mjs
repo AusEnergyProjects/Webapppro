@@ -3,9 +3,19 @@ import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import {
+  isRecognizedPublicPlanContactReleaseConsent,
+  publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseDisclosedFieldsAreValid,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
+
+const LEGACY_V4_NOTICE = "2026-08-10-customer-selected-trade-sharing-v4";
+const LEGACY_V4_PURPOSE =
+  "Share my email, postcode, service and any message I write with all approved TLink trades in my area, plus chosen name or phone, and email my private plan";
+const LEGACY_V6_NOTICE = "2026-08-10-structured-service-address-sharing-v6";
+const LEGACY_V6_PURPOSE =
+  "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const baseMigration = read("../drizzle/0126_public_trade_lead_contact_release.sql");
@@ -77,6 +87,10 @@ function marketplaceSyncSql() {
   )?.[1];
   assert.ok(sql, "marketplace sync SQL must be extractable for execution");
   return sql
+    .replace(
+      '${publicPlanContactReleaseAccessSql("contact")}',
+      publicPlanContactReleaseAccessSql("contact"),
+    )
     .replaceAll("${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}", PUBLIC_PLAN_CONSENT_NOTICE_VERSION)
     .replaceAll("${PUBLIC_PLAN_CONSENT_PURPOSE}", PUBLIC_PLAN_CONSENT_PURPOSE)
     .replace(
@@ -84,6 +98,57 @@ function marketplaceSyncSql() {
       "current_trade_account.status = 'approved'",
     );
 }
+
+test("stored public contact releases accept only exact v4, v6 and v7 policy-field pairs", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE releases (
+    id text PRIMARY KEY,
+    notice_version text NOT NULL,
+    consent_purpose text NOT NULL,
+    disclosed_fields text NOT NULL,
+    customer_email text NOT NULL DEFAULT 'customer@example.test',
+    postcode text NOT NULL DEFAULT '3000'
+  )`);
+  const insert = database.prepare(`INSERT INTO releases
+    (id, notice_version, consent_purpose, disclosed_fields) VALUES (?, ?, ?, ?)`);
+  const required = ["customer_email", "postcode", "service_categories"];
+  insert.run("v4-good", LEGACY_V4_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify([
+    ...required,
+    "customer_name",
+    "customer_phone",
+    "customer_message",
+  ]));
+  insert.run("v6-good", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, JSON.stringify([
+    ...required,
+    "customer_address",
+  ]));
+  insert.run("v7-good", PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE, JSON.stringify(required));
+  insert.run("wrong-purpose", LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify(required));
+  insert.run("unknown-version", "2026-08-10-unknown-v5", LEGACY_V6_PURPOSE, JSON.stringify(required));
+  insert.run("malformed-fields", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, "not-json");
+  insert.run("missing-services", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, JSON.stringify(required.slice(0, 2)));
+  insert.run("v4-address-overreach", LEGACY_V4_NOTICE, LEGACY_V4_PURPOSE, JSON.stringify([
+    ...required,
+    "customer_address",
+  ]));
+  insert.run("duplicate-field", LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE, JSON.stringify([
+    ...required,
+    "customer_email",
+  ]));
+
+  const eligible = database.prepare(`SELECT id FROM releases release
+    WHERE ${publicPlanContactReleaseAccessSql("release")} ORDER BY id`)
+    .all().map((row) => row.id);
+  assert.deepEqual(eligible, ["v4-good", "v6-good", "v7-good"]);
+  assert.equal(isRecognizedPublicPlanContactReleaseConsent(LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE), true);
+  assert.equal(isRecognizedPublicPlanContactReleaseConsent(LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE), false);
+  assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(
+    LEGACY_V4_NOTICE,
+    LEGACY_V4_PURPOSE,
+    [...required, "customer_address"],
+  ), false);
+  database.close();
+});
 
 test("a public contact release stores the private admin address without adding plan or usage data", () => {
   const database = new DatabaseSync(":memory:");
@@ -266,7 +331,7 @@ test("every allocated trade sees routing fields and written notes while name and
   database.close();
 });
 
-test("CRM lead projection keeps the admin address private until the customer opts to share it", () => {
+test("legacy v6 CRM lead projection remains eligible and keeps the address private until explicitly shared", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, source_reference text NOT NULL DEFAULT '', postcode text NOT NULL,
@@ -314,8 +379,8 @@ test("CRM lead projection keeps the admin address private until the customer opt
         '3000', 'Solar and battery help please.', '2026-08-10T04:00:00.000Z', '',
         '2026-08-10T04:00:00.000Z', '2026-08-10T04:00:00.000Z')`)
     .run(
-      PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-      PUBLIC_PLAN_CONSENT_PURPOSE,
+      LEGACY_V6_NOTICE,
+      LEGACY_V6_PURPOSE,
       JSON.stringify(["customer_email", "postcode", "service_categories", "customer_message"]),
     );
   const sync = database.prepare(marketplaceSyncSql());
@@ -375,12 +440,10 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);
   assert.match(tradeRoute, /WHERE m\.firebase_uid = \?/);
   assert.match(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
-  assert.match(tradeRoute, /public_contact\.notice_version = '\$\{PUBLIC_PLAN_CONSENT_NOTICE_VERSION\}'/);
+  assert.match(tradeRoute, /publicPlanContactReleaseAccessSql\("public_contact"\)/);
   assert.match(tradeRoute, /function publicTradeContact\(/);
   assert.match(tradeRoute, /parseJsonList\(row\.public_contact_disclosed_fields\)/);
-  assert.match(tradeRoute, /!disclosedFields\.has\("customer_email"\)/);
-  assert.match(tradeRoute, /!disclosedFields\.has\("postcode"\)/);
-  assert.match(tradeRoute, /!disclosedFields\.has\("service_categories"\)/);
+  assert.match(tradeRoute, /publicPlanContactReleaseDisclosedFieldsAreValid\(/);
   assert.match(tradeRoute, /const firstName = disclosedFields\.has\("customer_name"\)/);
   assert.match(tradeRoute, /const lastName = disclosedFields\.has\("customer_name"\)/);
   assert.match(tradeRoute, /const name = \[firstName, lastName\]\.filter\(Boolean\)\.join\(" "\)/);
@@ -395,12 +458,9 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(tradeRoute, /!suburb/);
   assert.match(tradeRoute, /!sharedAddressState/);
   assert.match(tradeEnquiriesRoute, /currentPublicMarketplaceAccessSql/);
+  assert.match(tradeEnquiriesRoute, /publicPlanContactReleaseAccessSql\("current_public_release"\)/);
   assert.match(tradeEnquiriesRoute, /verifiedTradeAccountPredicate\("current_public_account"\)/);
   assert.match(tradeEnquiriesRoute, /current_public_release\.withdrawn_at = ''/);
-  assert.match(tradeEnquiriesRoute, /json_valid\(current_public_release\.disclosed_fields\)/);
-  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'customer_email'/);
-  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'postcode'/);
-  assert.match(tradeEnquiriesRoute, /disclosed\.value = 'service_categories'/);
   assert.match(adminMatchesRoute, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
   assert.match(adminMatchesRoute, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(`${opportunityServer}\n${tradeRoute}\n${tradeEnquiriesRoute}\n${adminMatchesRoute}`, /trade_capability|capability_review|service qualification/i);

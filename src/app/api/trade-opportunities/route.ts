@@ -21,6 +21,8 @@ import {
   matchingLocalityDisclosure,
 } from "@/lib/customer-matching-locality.mjs";
 import {
+  publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseDisclosedFieldsAreValid,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
@@ -150,6 +152,11 @@ function publicTradeContact(row: Record<string, unknown>) {
   const disclosedFields = new Set(
     parseJsonList(row.public_contact_disclosed_fields),
   );
+  if (!publicPlanContactReleaseDisclosedFieldsAreValid(
+    row.public_contact_notice_version,
+    row.public_contact_consent_purpose,
+    [...disclosedFields],
+  )) return null;
   const email = String(row.public_customer_email || "").trim().toLowerCase();
   const postcode = String(row.public_contact_postcode || "").trim();
   const firstName = disclosedFields.has("customer_name")
@@ -177,20 +184,8 @@ function publicTradeContact(row: Record<string, unknown>) {
   const message = disclosedFields.has("customer_message")
     ? String(row.public_customer_message || "").trim()
     : "";
-  const allowedFields = new Set([
-    "customer_name",
-    "customer_email",
-    "customer_phone",
-    "customer_address",
-    "postcode",
-    "service_categories",
-    "customer_message",
-  ]);
   if (
-    !disclosedFields.has("customer_email")
-    || !disclosedFields.has("postcode")
-    || !disclosedFields.has("service_categories")
-    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     || !/^\d{4}$/.test(postcode)
     || (disclosedFields.has("customer_name") && (!firstName || !lastName))
     || (disclosedFields.has("customer_phone") && !phone)
@@ -201,7 +196,6 @@ function publicTradeContact(row: Record<string, unknown>) {
       || sharedAddressState !== String(row.state || "").trim()
     ))
     || (disclosedFields.has("customer_message") && !message)
-    || [...disclosedFields].some((field) => !allowedFields.has(field))
   ) return null;
   return {
     name,
@@ -324,6 +318,7 @@ export async function GET(request: Request) {
     public_contact.postcode public_contact_postcode,
     public_contact.customer_message public_customer_message,
     public_contact.notice_version public_contact_notice_version,
+    public_contact.consent_purpose public_contact_consent_purpose,
     public_contact.granted_at public_contact_granted_at,
     public_quote_preparation.id public_quote_preparation_id,
     public_quote_preparation.question_answers public_quote_answers,
@@ -370,8 +365,7 @@ export async function GET(request: Request) {
       ON public_contact.opportunity_id = o.id
         AND public_contact.source_reference = o.source_reference
         AND public_contact.status = 'active'
-        AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-        AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+        AND ${publicPlanContactReleaseAccessSql("public_contact")}
         AND datetime(public_contact.granted_at) IS NOT NULL
         AND public_contact.withdrawn_at = ''
         AND public_contact.postcode = o.postcode
@@ -382,6 +376,8 @@ export async function GET(request: Request) {
         AND public_quote_preparation.notice_version = '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}'
         AND public_quote_preparation.consent_purpose = '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}'
         AND datetime(public_quote_preparation.granted_at) IS NOT NULL
+        AND public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
+        AND public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
     LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id AND ap.installer_uid = m.firebase_uid
     WHERE m.firebase_uid = ? AND (? = '' OR m.id = ?)
       AND o.status IN ('open', 'paused') AND m.status IN ('offered', 'viewed', 'interested', 'connected')
@@ -953,8 +949,7 @@ export async function PATCH(request: Request) {
             SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
             WHERE active_public_contact.opportunity_id = o.id
               AND active_public_contact.status = 'active'
-              AND active_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-              AND active_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+              AND ${publicPlanContactReleaseAccessSql("active_public_contact")}
               AND datetime(active_public_contact.granted_at) IS NOT NULL
               AND active_public_contact.withdrawn_at = ''
               AND active_public_contact.postcode = o.postcode
@@ -994,8 +989,7 @@ export async function PATCH(request: Request) {
                 SELECT 1 FROM public_trade_lead_contact_releases active_public_contact
                 WHERE active_public_contact.opportunity_id = available_opportunity.id
                   AND active_public_contact.status = 'active'
-                  AND active_public_contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
-                  AND active_public_contact.consent_purpose = '${PUBLIC_PLAN_CONSENT_PURPOSE}'
+                  AND ${publicPlanContactReleaseAccessSql("active_public_contact")}
                   AND datetime(active_public_contact.granted_at) IS NOT NULL
                   AND active_public_contact.withdrawn_at = ''
                   AND active_public_contact.postcode = available_opportunity.postcode
