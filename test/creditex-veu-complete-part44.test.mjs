@@ -91,7 +91,14 @@ test("Part 44 derives RefElec from exact guide factors instead of a rounded coef
   assert.equal(reference.output.decimal, "14.5673325");
   assert.equal(result.inputSnapshot.referenceElectricityGjPerYear, "5826933/400000");
   assert.equal(result.inputSnapshot.applicationGuideVersion, "2.2");
-  assert.deepEqual(result.supportingSources, [CREDITEX_VEU_PART_44_APPLICATION_GUIDE]);
+  assert.deepEqual(result.supportingSources.slice(1), [CREDITEX_VEU_PART_44_APPLICATION_GUIDE]);
+  assert.deepEqual(result.supportingSources[0], {
+    version: "Authorised version 023",
+    publishedOn: "2025-07-01",
+    url: "https://content.legislation.vic.gov.au/sites/default/files/2025-07/07-70aa023-authorised.pdf",
+    title: "Victorian Energy Efficiency Target Act 2007",
+    pages: "section 18(1) and 18(1A), printed page 41",
+  });
 });
 
 test("Part 44 executes all three official emissions equations exactly", () => {

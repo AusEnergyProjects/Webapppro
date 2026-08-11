@@ -36,7 +36,6 @@ const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
 const SRES_REGISTRY_CRON = "5 13,14 * * *";
 const OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 * * *";
-const VEU_PRODUCT_REGISTRY_CRON = "25 20,21 * * *";
 const VEU_PRODUCT_REGISTRY_CODE = "veu-approved-products";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
@@ -271,8 +270,10 @@ const worker = {
         }),
       );
     }
+    // Keep the VEU refresh on the recurring scheduler so it does not depend on
+    // a separate cron event being provisioned by the hosting platform.
     if (
-      controller.cron === VEU_PRODUCT_REGISTRY_CRON
+      controller.cron === NOTIFICATION_DELIVERY_CRON
       && matchesAustralianRegulatorClock(controller.scheduledTime, 7, 25)
     ) {
       const db = getD1();

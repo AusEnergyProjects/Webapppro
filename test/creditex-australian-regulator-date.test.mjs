@@ -63,7 +63,7 @@ test("the Worker gates both UTC candidates against the Sydney regulator clock", 
   );
   assert.match(worker, /SRES_REGISTRY_CRON = "5 13,14 \* \* \*"/);
   assert.match(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 \* \* \*"/);
-  assert.match(worker, /VEU_PRODUCT_REGISTRY_CRON = "25 20,21 \* \* \*"/);
+  assert.doesNotMatch(worker, /VEU_PRODUCT_REGISTRY_CRON/);
   assert.match(
     worker,
     /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 5\)/,
@@ -74,7 +74,7 @@ test("the Worker gates both UTC candidates against the Sydney regulator clock", 
   );
   assert.match(
     worker,
-    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 7, 25\)/,
+    /controller\.cron === NOTIFICATION_DELIVERY_CRON[\s\S]*matchesAustralianRegulatorClock\(controller\.scheduledTime, 7, 25\)/,
   );
   assert.match(
     worker,

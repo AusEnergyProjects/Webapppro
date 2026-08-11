@@ -247,11 +247,11 @@ function requestVeuWaterHeaterQuoteItems(
   if (
     !Array.isArray(raw.waterHeaterItems)
     || raw.waterHeaterItems.length < 1
-    || raw.waterHeaterItems.length > 10
+    || raw.waterHeaterItems.length > 5
   ) {
     throw new CreditexVeuEstimateError(
       "VEU_REQUEST_INVALID",
-      "Add between 1 and 10 approved water-heater product groups.",
+      "Add between 1 and 5 approved water-heater product groups.",
     );
   }
   let totalUnits = 0;
@@ -288,17 +288,17 @@ function requestVeuWaterHeaterQuoteItems(
       );
     }
     const quantity = Number(item.unitQuantity);
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 5) {
       throw new CreditexVeuEstimateError(
         "VEU_INPUT_INVALID",
-        `Water-heater group ${index + 1} quantity must be from 1 to 10.`,
+        `Water-heater group ${index + 1} quantity must be from 1 to 5.`,
       );
     }
     totalUnits += quantity;
-    if (totalUnits > 10) {
+    if (totalUnits > 5) {
       throw new CreditexVeuEstimateError(
         "VEU_INPUT_INVALID",
-        "A mixed-model water-heater quote can include no more than 10 systems in total.",
+        "A mixed-model water-heater quote can include no more than 5 current systems. Schedule 4 may permit fewer after the premises history is included.",
       );
     }
     return { selectedProductId, unitQuantity: String(quantity) };

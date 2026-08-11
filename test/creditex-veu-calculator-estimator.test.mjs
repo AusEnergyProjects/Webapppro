@@ -8,6 +8,7 @@ import {
   aggregateCreditexVeuWaterHeaterQuotes,
   CreditexVeuEstimateError,
   estimateCreditexVeu,
+  roundCreditexVeuWholeCertificates,
 } from "../src/lib/creditex-veu-calculator-estimator.ts";
 
 const SNAPSHOT_HASH = `sha256:${"a".repeat(64)}`;
@@ -40,11 +41,17 @@ function estimate(activityCode, inputs, productEvidence, installationDate = "202
 }
 
 function waterHeaterEligibility(heatPump, overrides = {}) {
+  const premises = overrides.premises ?? "residential";
   return {
-    premises: "residential",
+    premises,
+    prior_relevant_period_water_heater_products: "0",
     incumbent_scenario_requirements_confirmed: "yes",
-    residential_consumer_fact_sheet_provided: "yes",
-    residential_suitability_and_sizing_advice_confirmed: "yes",
+    ...(premises === "residential"
+      ? {
+          residential_consumer_fact_sheet_provided: "yes",
+          residential_suitability_and_sizing_advice_confirmed: "yes",
+        }
+      : {}),
     no_additional_inline_storage_or_system_confirmed: "yes",
     decommissioning_and_disposal_confirmed: "yes",
     co_payment_per_installed_product_aud: "200",
@@ -622,7 +629,7 @@ test("Parts 1 and 3 quote mode shows per-system and repeated identical-system to
     climate_zone: "5",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
-    ...waterHeaterEligibility(true),
+    ...waterHeaterEligibility(true, { premises: "business" }),
   };
   const perUnit = estimate("1D", baseInputs, product("VEU", "1D"));
   const quote = estimateCreditexVeu({
@@ -672,6 +679,166 @@ test("Parts 1 and 3 quote mode shows per-system and repeated identical-system to
   }
 });
 
+test("Schedule 4 water-heater limits require prior property history and enforce the residential and non-residential totals", () => {
+  const formulaInputs = {
+    climate_zone: "5",
+    bs2021_gj_per_year: "1",
+    be2021_gj_per_year: "1",
+  };
+  const residential = waterHeaterEligibility(true);
+
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "3C",
+      installationDate: "2026-08-08",
+      estimatePurpose: "quote",
+      inputs: {
+        ...formulaInputs,
+        ...residential,
+        prior_relevant_period_water_heater_products: "not_confirmed",
+        unit_quantity: "1",
+      },
+      product: product("VEU", "3C"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_INPUT_INVALID"
+      && /cannot safely assume none/.test(error.message),
+  );
+
+  const twoAtAHome = estimateCreditexVeu({
+    activityCode: "3C",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: { ...formulaInputs, ...residential, unit_quantity: "2" },
+    product: product("VEU", "3C"),
+  });
+  assert.deepEqual(twoAtAHome.inputSnapshot.schedule4WaterHeaterProductLimit, {
+    premises: "residential",
+    relevantPeriodStartsOn: "2019-06-10",
+    priorInstalledProductCount: "0",
+    currentInstallationCount: "2",
+    propertyProductCountAfterCurrentInstallations: "2",
+    statutoryProductLimit: "2",
+  });
+  assert.ok(twoAtAHome.supportingSources.some((source) => (
+    source.version === "Authorised version 020"
+      && source.title === "Victorian Energy Efficiency Target Regulations 2018"
+      && /Schedule 4 clauses 1\(b\).+2\(1A\)/.test(source.pages)
+  )));
+
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "3C",
+      installationDate: "2026-08-08",
+      estimatePurpose: "quote",
+      inputs: {
+        ...formulaInputs,
+        ...residential,
+        prior_relevant_period_water_heater_products: "1",
+        unit_quantity: "2",
+      },
+      product: product("VEU", "3C"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE"
+      && /prior product plus 2 current installations would total 3/.test(error.message),
+  );
+
+  const fiveAtBusiness = estimateCreditexVeu({
+    activityCode: "3C",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: {
+      ...formulaInputs,
+      ...waterHeaterEligibility(true, { premises: "business" }),
+      unit_quantity: "5",
+    },
+    product: product("VEU", "3C"),
+  });
+  assert.equal(
+    fiveAtBusiness.inputSnapshot.schedule4WaterHeaterProductLimit.relevantPeriodStartsOn,
+    "2023-05-31",
+  );
+  assert.equal(
+    fiveAtBusiness.inputSnapshot.schedule4WaterHeaterProductLimit.statutoryProductLimit,
+    "5",
+  );
+  assert.throws(
+    () => estimateCreditexVeu({
+      activityCode: "3C",
+      installationDate: "2026-08-08",
+      estimatePurpose: "quote",
+      inputs: {
+        ...formulaInputs,
+        ...waterHeaterEligibility(true, {
+          premises: "business",
+          prior_relevant_period_water_heater_products: "1",
+        }),
+        unit_quantity: "5",
+      },
+      product: product("VEU", "3C"),
+    }),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE"
+      && /plus 5 current installations would total 6/.test(error.message),
+  );
+});
+
+test("VEU rounds each prescribed activity before adding repeated-system totals", () => {
+  const exactHalf = { numerator: 15n, denominator: 2n };
+  const belowHalf = { numerator: 7_485_408n, denominator: 1_000_000n };
+
+  const exactHalfPerActivity = roundCreditexVeuWholeCertificates(exactHalf);
+  const belowHalfPerActivity = roundCreditexVeuWholeCertificates(belowHalf);
+  assert.equal(exactHalfPerActivity, "8");
+  assert.equal(String(BigInt(exactHalfPerActivity) * 2n), "16");
+  assert.equal(
+    roundCreditexVeuWholeCertificates({ numerator: 15n, denominator: 1n }),
+    "15",
+  );
+  assert.equal(belowHalfPerActivity, "7");
+  assert.equal(String(BigInt(belowHalfPerActivity) * 2n), "14");
+  assert.equal(
+    roundCreditexVeuWholeCertificates({
+      numerator: 14_970_816n,
+      denominator: 1_000_000n,
+    }),
+    "15",
+  );
+});
+
+test("Part 3 rounds each separately eligible prescribed activity before adding the property total", () => {
+  const baseInputs = {
+    climate_zone: "5",
+    bs2021_gj_per_year: "3.5",
+    be2021_gj_per_year: "0",
+    ...waterHeaterEligibility(true),
+  };
+  const perUnit = estimate("3C", baseInputs, product("VEU", "3C"));
+  const quote = estimateCreditexVeu({
+    activityCode: "3C",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: { ...baseInputs, unit_quantity: "2" },
+    product: product("VEU", "3C"),
+  });
+
+  assert.equal(perUnit.output.unroundedTonnes, "7.494165");
+  assert.equal(perUnit.output.wholeCertificates, "7");
+  assert.equal(quote.output.unroundedTonnes, "14.98833");
+  assert.equal(quote.output.wholeCertificates, "14");
+  assert.notEqual(quote.output.wholeCertificates, "15");
+  assert.match(
+    quote.trace.find(({ key }) => key === "multi_unit_total").operation,
+    /round each separately eligible prescribed activity/,
+  );
+  assert.ok(quote.supportingSources.some((source) => (
+    source.version === "3.20"
+      && source.title === "Water Heating and Space Heating and Cooling Activity Guide"
+      && source.pages === "printed pages 10 and 47"
+  )));
+});
+
 test("mixed VEU water-heater quotes preserve per-model arithmetic and one property total", () => {
   const baseInputs = {
     geography: "metropolitan",
@@ -679,7 +846,7 @@ test("mixed VEU water-heater quotes preserve per-model arithmetic and one proper
     climate_zone: "5",
     bs2021_gj_per_year: "1",
     be2021_gj_per_year: "1",
-    ...waterHeaterEligibility(true),
+    ...waterHeaterEligibility(true, { premises: "business" }),
   };
   const first = estimateCreditexVeu({
     activityCode: "1D",
@@ -722,26 +889,6 @@ test("mixed VEU water-heater quotes preserve per-model arithmetic and one proper
   assert.match(property.receiptHash, /^sha256:[a-f0-9]{64}$/);
   assert.notEqual(property.receiptHash, first.receiptHash);
 
-  const unresolvedProperty = aggregateCreditexVeuWaterHeaterQuotes([{
-    selectedProductId: "official:wh-a",
-    unitQuantity: "2",
-    estimate: {
-      ...first,
-      status: "estimate_only_rounding_tie_unresolved",
-      output: {
-        ...first.output,
-        wholeCertificates: null,
-        roundingStatus: "exact_half_tie_requires_regulator_confirmation",
-        perUnit: {
-          ...first.output.perUnit,
-          wholeCertificates: null,
-        },
-      },
-    },
-  }]);
-  assert.equal(unresolvedProperty.output.wholeCertificates, null);
-  assert.match(unresolvedProperty.operatorMessage, /exact half-certificate tie/);
-
   assert.throws(
     () => aggregateCreditexVeuWaterHeaterQuotes([
       { selectedProductId: "official:wh-a", unitQuantity: "2", estimate: first },
@@ -749,6 +896,45 @@ test("mixed VEU water-heater quotes preserve per-model arithmetic and one proper
     ]),
     (error) => error instanceof CreditexVeuEstimateError
       && error.code === "VEU_INPUT_INVALID",
+  );
+});
+
+test("mixed VEU water-heater aggregation applies the Schedule 4 property limit across model groups", () => {
+  const baseInputs = {
+    geography: "metropolitan",
+    system_size: "small",
+    climate_zone: "5",
+    bs2021_gj_per_year: "1",
+    be2021_gj_per_year: "1",
+    ...waterHeaterEligibility(true, {
+      premises: "business",
+      prior_relevant_period_water_heater_products: "4",
+    }),
+    unit_quantity: "1",
+  };
+  const first = estimateCreditexVeu({
+    activityCode: "1D",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: baseInputs,
+    product: product("VEU", "1D", { productId: "VEU-WH-C" }),
+  });
+  const second = estimateCreditexVeu({
+    activityCode: "1D",
+    installationDate: "2026-08-08",
+    estimatePurpose: "quote",
+    inputs: { ...baseInputs, bs2021_gj_per_year: "2" },
+    product: product("VEU", "1D", { productId: "VEU-WH-D" }),
+  });
+
+  assert.throws(
+    () => aggregateCreditexVeuWaterHeaterQuotes([
+      { selectedProductId: "official:wh-c", unitQuantity: "1", estimate: first },
+      { selectedProductId: "official:wh-d", unitQuantity: "1", estimate: second },
+    ]),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE"
+      && /4 prior products plus 2 current installations exceed that limit/.test(error.message),
   );
 });
 
@@ -851,7 +1037,7 @@ test("fixed-product activities require exact Approved VEU Public Registry eviden
   );
 });
 
-test("an exact one-half VEEC tie is exposed unrounded and never guessed", () => {
+test("an exact one-half VEEC residual rounds up under VEET Act section 18(1A)", () => {
   const result = estimate(
     "46",
     { scenario: "46A" },
@@ -859,10 +1045,14 @@ test("an exact one-half VEEC tie is exposed unrounded and never guessed", () => 
   );
   assert.equal(result.output.exactFraction, "3/2");
   assert.equal(result.output.unroundedTonnes, "1.5");
-  assert.equal(result.output.wholeCertificates, null);
-  assert.equal(result.output.roundingStatus, "exact_half_tie_requires_regulator_confirmation");
-  assert.equal(result.status, "estimate_only_rounding_tie_unresolved");
+  assert.equal(result.output.wholeCertificates, "2");
+  assert.equal(result.output.roundingStatus, "nearest_whole_applied");
+  assert.equal(result.status, "estimate_only_compliance_reconciliation_required");
   assert.equal(result.certificateActionEnabled, false);
+  assert.ok(result.supportingSources.some((source) => (
+    source.title === "Victorian Energy Efficiency Target Act 2007"
+      && /18\(1A\)/.test(source.pages)
+  )));
 });
 
 test("product status, historical Legacy dates and source snapshot custody fail closed", () => {

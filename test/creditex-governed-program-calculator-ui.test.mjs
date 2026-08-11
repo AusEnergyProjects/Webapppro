@@ -281,6 +281,7 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
       ">Model<",
       ">Postcode<",
       ">Premises type<",
+      ">Previous VEU water-heating products at this property<",
       ">Eligibility and evidence<",
       ">Calculate rebate estimate<",
     ];
@@ -297,7 +298,7 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
     assert.match(html, /Approved systems at this property/);
     assert.match(html, /Systems using this model/);
     assert.match(html, /Add another approved model/);
-    assert.match(html, /max="10"/);
+    assert.match(html, /max="1"/);
     assert.doesNotMatch(html, /type="date"[^>]*max=/);
     assert.match(html, /<button type="submit" disabled="">Calculate rebate estimate<\/button>/);
     assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
@@ -318,19 +319,65 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
   assert.doesNotMatch(tradeHtml, /Refresh VEU-approved products/);
 });
 
-test("VEU mixed water-heater drafts require every approved model and cap the property at ten systems", () => {
+test("VEU mixed water-heater drafts fail closed and apply the Schedule 4 residential and non-residential limits", () => {
   const product = veuProduct({ productKind: "veu_water_heater" });
   assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
     { id: "one", unitQuantity: "2", product },
     { id: "two", unitQuantity: "3", product },
-  ]), { total: 5, complete: true });
+  ], "business", "0"), {
+    total: 5,
+    complete: true,
+    limit: 5,
+    prior: 0,
+    remaining: 5,
+    relevantPeriodStartsOn: "31 May 2023",
+  });
   assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
-    { id: "one", unitQuantity: "10", product },
+    { id: "one", unitQuantity: "5", product },
     { id: "two", unitQuantity: "1", product },
-  ]), { total: 11, complete: false });
+  ], "business", "0"), {
+    total: 6,
+    complete: false,
+    limit: 5,
+    prior: 0,
+    remaining: 5,
+    relevantPeriodStartsOn: "31 May 2023",
+  });
   assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
     { id: "one", unitQuantity: "2", product: null },
-  ]), { total: 2, complete: false });
+  ], "residential", "0"), {
+    total: 2,
+    complete: false,
+    limit: 2,
+    prior: 0,
+    remaining: 2,
+    relevantPeriodStartsOn: "10 June 2019",
+  });
+  assert.equal(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
+    { id: "one", unitQuantity: "2", product },
+  ], "residential", "1").complete, false);
+  assert.deepEqual(governedModule.creditexVeuWaterHeaterQuoteUnitTotal([
+    { id: "one", unitQuantity: "1", product },
+  ], "residential", "not_confirmed"), {
+    total: 1,
+    complete: false,
+    limit: 2,
+    prior: null,
+    remaining: 0,
+    relevantPeriodStartsOn: "10 June 2019",
+  });
+
+  const activity = veuCatalogueModule.CREDITEX_VEU_ACTIVITY_DEFINITIONS.find(
+    ({ activityCode }) => activityCode === "3C",
+  );
+  const priorInput = activity.inputDefinitions.find(
+    ({ key }) => key === "prior_relevant_period_water_heater_products",
+  );
+  assert.equal(priorInput.defaultValue, "not_confirmed");
+  assert.equal(
+    priorInput.options.find(({ value }) => value === "5").label,
+    "5 or more",
+  );
 
   const source = fs.readFileSync(
     path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
@@ -341,16 +388,15 @@ test("VEU mixed water-heater drafts require every approved model and cap the pro
   assert.match(source, /delete visibleInputs\.unit_quantity/);
 });
 
-test("VEU exact half-certificate ties are visibly labelled as unrounded", () => {
+test("VEU water-heater quote explains per-activity rounding and excludes in-line systems", () => {
   const source = fs.readFileSync(
     "src/components/CreditexGovernedProgramCalculator.tsx",
     "utf8",
   );
-  assert.match(
-    source,
-    /Unrounded estimate, regulator confirmation required/,
-  );
-  assert.match(source, /unrounded`/);
+  assert.match(source, /Each system is treated as its own prescribed/);
+  assert.match(source, /rounded to whole VEECs before the property total/);
+  assert.match(source, /including a manifold system/);
+  assert.doesNotMatch(source, /Unrounded estimate, regulator confirmation required/);
 });
 
 test("admin refresh selects only the program-specific governed registry", () => {

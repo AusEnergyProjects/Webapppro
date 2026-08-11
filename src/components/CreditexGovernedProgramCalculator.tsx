@@ -167,23 +167,43 @@ function initialVeuWaterHeaterItems(): CreditexVeuWaterHeaterItemDraft[] {
 
 export function creditexVeuWaterHeaterQuoteUnitTotal(
   items: readonly CreditexVeuWaterHeaterItemDraft[],
+  premises: string,
+  priorRelevantPeriodProducts: string,
 ) {
+  const premisesConfirmed = premises === "residential" || premises === "business";
+  const limit = premises === "business" ? 5 : 2;
+  const relevantPeriodStartsOn = premises === "business"
+    ? "31 May 2023"
+    : "10 June 2019";
+  const priorConfirmed = /^[0-5]$/.test(priorRelevantPeriodProducts);
+  const prior = priorConfirmed ? Number(priorRelevantPeriodProducts) : null;
+  const remaining = prior === null ? 0 : Math.max(0, limit - prior);
   let total = 0;
-  let complete = items.length > 0 && items.length <= 10;
+  let complete = premisesConfirmed
+    && priorConfirmed
+    && items.length > 0
+    && items.length <= limit;
   for (const item of items) {
     if (!/^\d+$/.test(item.unitQuantity)) {
       complete = false;
       continue;
     }
     const quantity = Number(item.unitQuantity);
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 5) {
       complete = false;
       continue;
     }
     total += quantity;
     if (!item.product) complete = false;
   }
-  return { total, complete: complete && total >= 1 && total <= 10 };
+  return {
+    total,
+    complete: complete && total >= 1 && total <= remaining,
+    limit,
+    prior,
+    remaining,
+    relevantPeriodStartsOn,
+  };
 }
 
 const INITIAL_PART_6_INDOOR_UNITS: CreditexPart6IndoorUnit[] = [{
@@ -248,18 +268,11 @@ function traceOutput(
 }
 
 function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
-  const unresolvedVeecTie = estimate.output.unit === "VEEC"
-    && estimate.output.wholeCertificates === null
-    && estimate.output.roundingStatus === "exact_half_tie_requires_regulator_confirmation";
   return (
     <section className={styles.estimateResult} aria-live="polite">
       <header>
         <div>
-          <span>{estimate.output.label || (
-            unresolvedVeecTie
-              ? "Unrounded estimate, regulator confirmation required"
-              : "Estimated whole certificates"
-          )}</span>
+          <span>{estimate.output.label || "Estimated whole certificates"}</span>
           <strong>{outputQuantity(estimate)} {estimate.output.unit}</strong>
         </div>
         <b>Estimate only</b>
@@ -995,6 +1008,8 @@ function CreditexVeuCalculator({
   ).includes(activity.activityCode);
   const waterHeaterUnitTotal = creditexVeuWaterHeaterQuoteUnitTotal(
     waterHeaterItems,
+    inputs.premises,
+    inputs.prior_relevant_period_water_heater_products,
   );
   const productEvidence = useMemo(
     () => creditexVeuProductEvidenceState(
@@ -1222,7 +1237,10 @@ function CreditexVeuCalculator({
   }
 
   function addWaterHeaterItem() {
-    if (!waterHeaterUnitTotal.complete || waterHeaterUnitTotal.total >= 10) return;
+    if (
+      !waterHeaterUnitTotal.complete
+      || waterHeaterUnitTotal.total >= waterHeaterUnitTotal.remaining
+    ) return;
     invalidate();
     waterHeaterItemIdRef.current += 1;
     setWaterHeaterItems((current) => [
@@ -1509,8 +1527,14 @@ function CreditexVeuCalculator({
           <fieldset className={styles.officialProductPicker}>
             <legend>Approved systems at this property</legend>
             <p>
-              Add each approved model once and enter how many of that model will
-              be installed. The property can include up to 10 systems in total.
+              Add each approved model once and enter how many separately eligible
+              replacements use it. Each system is treated as its own prescribed
+              activity and rounded to whole VEECs before the property total is
+              added. Do not enter systems connected in-line with another storage
+              tank or hot-water system, including a manifold system. Schedule 4
+              allows no more than 2 Part 1 or Part 3 products at a home, or 5 at
+              non-residential premises, including products installed earlier in
+              the applicable relevant period.
             </p>
             {waterHeaterItems.map((item, index) => (
               <fieldset key={item.id}>
@@ -1551,7 +1575,7 @@ function CreditexVeuCalculator({
                     inputMode="numeric"
                     pattern="[0-9]+"
                     min="1"
-                    max="10"
+                    max={Math.max(1, waterHeaterUnitTotal.remaining)}
                     required
                     value={item.unitQuantity}
                     onChange={(event) => updateWaterHeaterItem(item.id, {
@@ -1573,17 +1597,21 @@ function CreditexVeuCalculator({
               type="button"
               disabled={
                 !waterHeaterUnitTotal.complete
-                || waterHeaterUnitTotal.total >= 10
-                || waterHeaterItems.length >= 10
+                || waterHeaterUnitTotal.total >= waterHeaterUnitTotal.remaining
+                || waterHeaterItems.length >= waterHeaterUnitTotal.limit
               }
               onClick={addWaterHeaterItem}
             >
               Add another approved model
             </button>
             <p aria-live="polite">
-              {waterHeaterUnitTotal.complete
-                ? `Property total: ${waterHeaterUnitTotal.total} of 10 systems.`
-                : `Choose an approved model and valid quantity for every group. Current quantity: ${waterHeaterUnitTotal.total} of 10 systems.`}
+              {waterHeaterUnitTotal.prior === null
+                ? `Confirm how many earlier VEU water-heating products were installed at this property from ${waterHeaterUnitTotal.relevantPeriodStartsOn}.`
+                : waterHeaterUnitTotal.remaining === 0
+                  ? `The Schedule 4 limit is already reached: ${waterHeaterUnitTotal.prior} prior products of ${waterHeaterUnitTotal.limit} allowed at this property.`
+                  : waterHeaterUnitTotal.complete
+                    ? `Current job: ${waterHeaterUnitTotal.total} of ${waterHeaterUnitTotal.remaining} remaining products. Property total after this job: ${waterHeaterUnitTotal.prior + waterHeaterUnitTotal.total} of ${waterHeaterUnitTotal.limit}.`
+                    : `Choose an approved model and keep this job within the ${waterHeaterUnitTotal.remaining} products remaining under Schedule 4. Current job quantity: ${waterHeaterUnitTotal.total}.`}
             </p>
           </fieldset>
         )}
