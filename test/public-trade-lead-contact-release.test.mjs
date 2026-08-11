@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   isRecognizedPublicPlanContactReleaseConsent,
   publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseConsentSql,
   publicPlanContactReleaseDisclosedFieldsAreValid,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
@@ -140,6 +141,18 @@ test("stored public contact releases accept only exact v4, v6 and v7 policy-fiel
     WHERE ${publicPlanContactReleaseAccessSql("release")} ORDER BY id`)
     .all().map((row) => row.id);
   assert.deepEqual(eligible, ["v4-good", "v6-good", "v7-good"]);
+  const recognizedConsentPairs = database.prepare(`SELECT id FROM releases release
+    WHERE ${publicPlanContactReleaseConsentSql("release")} ORDER BY id`)
+    .all().map((row) => row.id);
+  assert.deepEqual(recognizedConsentPairs, [
+    "duplicate-field",
+    "malformed-fields",
+    "missing-services",
+    "v4-address-overreach",
+    "v4-good",
+    "v6-good",
+    "v7-good",
+  ]);
   assert.equal(isRecognizedPublicPlanContactReleaseConsent(LEGACY_V6_NOTICE, LEGACY_V6_PURPOSE), true);
   assert.equal(isRecognizedPublicPlanContactReleaseConsent(LEGACY_V6_NOTICE, LEGACY_V4_PURPOSE), false);
   assert.equal(publicPlanContactReleaseDisclosedFieldsAreValid(

@@ -12,6 +12,7 @@ import {
 } from "@/lib/customer-matching-locality.mjs";
 import {
   publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseConsentSql,
   publicPlanContactReleaseDisclosedFieldsAreValid,
 } from "@/lib/public-plan-enquiry.mjs";
 import {
@@ -461,7 +462,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
               FROM public_trade_lead_contact_releases mandatory_public_email
               WHERE mandatory_public_email.opportunity_id = current_opportunity.id
                 AND mandatory_public_email.status = 'active'
-                AND ${publicPlanContactReleaseAccessSql("mandatory_public_email")}
+                AND ${publicPlanContactReleaseConsentSql("mandatory_public_email")}
                 AND mandatory_public_email.postcode = current_opportunity.postcode
                 AND datetime(mandatory_public_email.granted_at) IS NOT NULL
                 AND mandatory_public_email.withdrawn_at = ''
@@ -483,7 +484,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
                 FROM public_trade_lead_contact_releases current_public_contact
                 WHERE current_public_contact.opportunity_id = current_opportunity.id
                   AND current_public_contact.status = 'active'
-                  AND ${publicPlanContactReleaseAccessSql("current_public_contact")}
+                  AND ${publicPlanContactReleaseConsentSql("current_public_contact")}
                   AND current_public_contact.postcode = current_opportunity.postcode
                   AND datetime(current_public_contact.granted_at) IS NOT NULL
                   AND current_public_contact.withdrawn_at = ''

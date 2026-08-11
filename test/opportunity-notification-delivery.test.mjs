@@ -14,6 +14,7 @@ import {
 } from "../src/lib/service-reminder-delivery.ts";
 import {
   publicPlanContactReleaseAccessSql,
+  publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
 import {
   OPPORTUNITY_NOTIFICATION_CLAIM_GUARD_SQL,
@@ -121,6 +122,22 @@ test("public plan opportunity email is mandatory despite the optional account pr
     deliveryServer,
     /current_public_contact\.postcode = current_opportunity\.postcode/,
   );
+  assert.match(
+    deliveryServer,
+    /publicPlanContactReleaseConsentSql\("mandatory_public_email"\)/,
+  );
+  assert.match(
+    deliveryServer,
+    /publicPlanContactReleaseConsentSql\("current_public_contact"\)/,
+  );
+  assert.doesNotMatch(
+    deliveryServer,
+    /publicPlanContactReleaseAccessSql\("(?:mandatory_public_email|current_public_contact)"\)/,
+  );
+  const finalConsentGuard = publicPlanContactReleaseConsentSql("current_public_contact");
+  assert.ok(finalConsentGuard.length < 1_200, "final consent guard must stay shallow for D1");
+  assert.equal((finalConsentGuard.match(/\bAND\b/g) || []).length, 3);
+  assert.equal((finalConsentGuard.match(/\bOR\b/g) || []).length, 2);
 });
 
 test("Resend submit does not wait for a webhook secret when send credentials are ready", () => {

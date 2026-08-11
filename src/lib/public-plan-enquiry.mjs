@@ -81,6 +81,14 @@ export function isRecognizedPublicPlanContactReleaseConsent(
   return Boolean(publicPlanContactReleasePolicy(noticeVersion, purpose));
 }
 
+export function publicPlanContactReleaseConsentSql(releaseAlias) {
+  const alias = publicPlanContactReleaseAlias(releaseAlias);
+  return `(${publicPlanContactReleasePolicies.map((policy) => `(
+    ${alias}.notice_version = ${sqlLiteral(policy.noticeVersion)}
+    AND ${alias}.consent_purpose = ${sqlLiteral(policy.purpose)}
+  )`).join(" OR ")})`;
+}
+
 export function publicPlanContactReleaseDisclosedFieldsAreValid(
   noticeVersion,
   purpose,
