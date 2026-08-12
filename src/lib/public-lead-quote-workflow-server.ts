@@ -11,11 +11,13 @@ import {
   type CustomerProjectEvidenceBucket,
 } from "@/lib/customer-project-evidence-bucket";
 import {
+  publicLeadAcceptedCrmCustomerName,
   publicLeadAcceptedDisclosure,
   publicLeadQuoteWorkflowIds,
   publicLeadQuoteWorkflowSnapshot,
 } from "@/lib/public-lead-quote-workflow.mjs";
 import { nextTlinkJobNumber } from "@/lib/trade-job-number-server";
+import { ensureTlinkSchemaGuards } from "@/lib/tlink-schema-guards";
 
 type Row = Record<string, unknown>;
 
@@ -309,6 +311,7 @@ export async function startPublicLeadQuoteWorkflow(
   now: string,
   expectedMatchStatus = "interested",
 ): Promise<PublicLeadQuoteWorkflow> {
+  await ensureTlinkSchemaGuards(db);
   const ids = publicLeadQuoteWorkflowIds(matchId);
   if (!ids) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_INVALID");
   const existing = await existingWorkflow(db, installerUid, matchId, ids);
@@ -375,6 +378,7 @@ export async function startPublicLeadQuoteWorkflow(
     .first<Row>();
   const snapshot = publicLeadQuoteWorkflowSnapshot(row);
   if (!row || !snapshot) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
+  const acceptedCrmName = publicLeadAcceptedCrmCustomerName(snapshot.contact);
   const incomplete = await db.prepare(`SELECT 1 found FROM trade_crm_customers WHERE id = ?
     UNION ALL SELECT 1 FROM trade_crm_customer_contacts WHERE id = ?
     UNION ALL SELECT 1 FROM trade_crm_service_sites WHERE id = ?
@@ -493,7 +497,7 @@ export async function startPublicLeadQuoteWorkflow(
        suburb, address_state, postcode, tags, private_notes, record_status, created_at, updated_at)
       VALUES (?, ?, ?, 'residential', ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, '', 'active', ?, ?)`)
       .bind(ids.customerId, installerUid, customerNumber,
-        snapshot.contact.firstName, snapshot.contact.lastName,
+        acceptedCrmName.firstName, acceptedCrmName.lastName,
         snapshot.contact.email, snapshot.contact.phone,
         snapshot.contact.addressLine1, snapshot.contact.addressLine2,
         snapshot.contact.suburb, snapshot.contact.addressState,
@@ -503,7 +507,7 @@ export async function startPublicLeadQuoteWorkflow(
        is_primary, record_status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'Released lead contact', ?, ?, 1, 'active', ?, ?)`)
       .bind(ids.contactId, installerUid, ids.customerId,
-        snapshot.contact.firstName, snapshot.contact.lastName,
+        acceptedCrmName.firstName, acceptedCrmName.lastName,
         snapshot.contact.email, snapshot.contact.phone, now, now),
     db.prepare(`INSERT OR IGNORE INTO trade_crm_service_sites
       (id, firebase_uid, customer_id, site_label, address_line_1, address_line_2,

@@ -46,6 +46,7 @@ import {
 } from "../src/lib/creditex-official-product-registry-server";
 import { matchesAustralianRegulatorClock } from "../src/lib/creditex-australian-regulator-date";
 import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
+import { ensureTlinkSchemaGuards } from "../src/lib/tlink-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
 import { drainTradeCrmJobMediaCleanup } from "../src/lib/trade-crm-job-media-cleanup";
@@ -340,6 +341,9 @@ const worker = {
     const redirect = canonicalHostRedirect(request);
     if (redirect) return redirect;
 
+    if (request.method === "GET" && new URL(request.url).pathname === "/api/health") {
+      await ensureTlinkSchemaGuards(getD1());
+    }
     if (!isCacheablePageRequest(request)) {
       const handled = await handler.fetch(request, env as never, ctx as never);
       return secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request);
@@ -363,6 +367,10 @@ const worker = {
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
       const teamMemberBucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
       tasks.push(
+        ensureTlinkSchemaGuards(getD1()).catch((error) => {
+          console.error("TLink schema guard installation failed.", error instanceof Error ? error.message : "Unknown error");
+          throw error;
+        }),
         drainCustomerOpportunityDispatchJobs().catch((error) => {
           console.error("Customer opportunity dispatch failed.", error instanceof Error ? error.message : "Unknown error");
         }),

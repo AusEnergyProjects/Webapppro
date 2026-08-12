@@ -59,58 +59,7 @@ SET can_manage_jobs = CASE WHEN role IN ('manager', 'coordinator') THEN 1 ELSE 0
   can_view_field_evidence = 1,
   can_manage_field_evidence = 1;
 --> statement-breakpoint
-CREATE TRIGGER `trade_team_members_permissions_insert_guard`
-BEFORE INSERT ON `trade_team_members`
-BEGIN
-  SELECT CASE WHEN
-    NEW.can_create_jobs NOT IN (0, 1) OR NEW.can_manage_jobs NOT IN (0, 1) OR NEW.can_assign_jobs NOT IN (0, 1)
-    OR NEW.can_view_customers NOT IN (0, 1) OR NEW.can_manage_customers NOT IN (0, 1)
-    OR NEW.can_view_quotes NOT IN (0, 1) OR NEW.can_manage_quotes NOT IN (0, 1) OR NEW.can_send_quotes NOT IN (0, 1)
-    OR NEW.can_view_invoices NOT IN (0, 1) OR NEW.can_manage_invoices NOT IN (0, 1)
-    OR NEW.can_view_price_book NOT IN (0, 1) OR NEW.can_manage_price_book NOT IN (0, 1)
-    OR NEW.can_apply_discounts NOT IN (0, 1)
-    OR NEW.can_reschedule_jobs NOT IN (0, 1) OR NEW.can_manage_team NOT IN (0, 1)
-    OR NEW.can_edit_team_permissions NOT IN (0, 1) OR NEW.can_view_field_evidence NOT IN (0, 1)
-    OR NEW.can_manage_field_evidence NOT IN (0, 1) OR NEW.can_run_reports NOT IN (0, 1)
-    OR NEW.can_search_customers NOT IN (0, 1)
-    OR (NEW.can_manage_customers = 1 AND NEW.can_view_customers = 0)
-    OR (NEW.can_manage_quotes = 1 AND NEW.can_view_quotes = 0)
-    OR (NEW.can_send_quotes = 1 AND NEW.can_manage_quotes = 0)
-    OR (NEW.can_manage_invoices = 1 AND NEW.can_view_invoices = 0)
-    OR (NEW.can_manage_price_book = 1 AND NEW.can_view_price_book = 0)
-    OR (NEW.can_manage_field_evidence = 1 AND NEW.can_view_field_evidence = 0)
-    OR (NEW.can_edit_team_permissions = 1 AND NEW.can_manage_team = 0)
-  THEN RAISE(ABORT, 'invalid team permissions') END;
-END;
---> statement-breakpoint
-CREATE TRIGGER `trade_team_members_permissions_update_guard`
-BEFORE UPDATE OF can_create_jobs, can_manage_jobs, can_assign_jobs, can_view_customers, can_manage_customers,
-  can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
-  can_view_price_book, can_manage_price_book, can_apply_discounts, can_reschedule_jobs,
-  can_manage_team, can_edit_team_permissions, can_view_field_evidence, can_manage_field_evidence,
-  can_run_reports, can_search_customers ON `trade_team_members`
-BEGIN
-  SELECT CASE WHEN
-    NEW.can_create_jobs NOT IN (0, 1) OR NEW.can_manage_jobs NOT IN (0, 1) OR NEW.can_assign_jobs NOT IN (0, 1)
-    OR NEW.can_view_customers NOT IN (0, 1) OR NEW.can_manage_customers NOT IN (0, 1)
-    OR NEW.can_view_quotes NOT IN (0, 1) OR NEW.can_manage_quotes NOT IN (0, 1) OR NEW.can_send_quotes NOT IN (0, 1)
-    OR NEW.can_view_invoices NOT IN (0, 1) OR NEW.can_manage_invoices NOT IN (0, 1)
-    OR NEW.can_view_price_book NOT IN (0, 1) OR NEW.can_manage_price_book NOT IN (0, 1)
-    OR NEW.can_apply_discounts NOT IN (0, 1)
-    OR NEW.can_reschedule_jobs NOT IN (0, 1) OR NEW.can_manage_team NOT IN (0, 1)
-    OR NEW.can_edit_team_permissions NOT IN (0, 1) OR NEW.can_view_field_evidence NOT IN (0, 1)
-    OR NEW.can_manage_field_evidence NOT IN (0, 1) OR NEW.can_run_reports NOT IN (0, 1)
-    OR NEW.can_search_customers NOT IN (0, 1)
-    OR (NEW.can_manage_customers = 1 AND NEW.can_view_customers = 0)
-    OR (NEW.can_manage_quotes = 1 AND NEW.can_view_quotes = 0)
-    OR (NEW.can_send_quotes = 1 AND NEW.can_manage_quotes = 0)
-    OR (NEW.can_manage_invoices = 1 AND NEW.can_view_invoices = 0)
-    OR (NEW.can_manage_price_book = 1 AND NEW.can_view_price_book = 0)
-    OR (NEW.can_manage_field_evidence = 1 AND NEW.can_view_field_evidence = 0)
-    OR (NEW.can_edit_team_permissions = 1 AND NEW.can_manage_team = 0)
-  THEN RAISE(ABORT, 'invalid team permissions') END;
-END;
---> statement-breakpoint
+-- Permission triggers are installed and verified by src/lib/tlink-schema-guards.ts.
 CREATE TABLE `trade_team_member_files` (
   `id` text PRIMARY KEY NOT NULL,
   `owner_uid` text NOT NULL,

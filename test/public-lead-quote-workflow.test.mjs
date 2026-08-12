@@ -12,6 +12,7 @@ import {
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
 } from "../src/lib/public-plan-quote-preparation.mjs";
 import {
+  publicLeadAcceptedCrmCustomerName,
   publicLeadQuoteAccessSnapshot,
   publicLeadIssueAccessGuard,
   publicLeadQuoteWorkflowIds,
@@ -95,6 +96,25 @@ test("public lead quote workflow identifiers are stable and reject invalid match
   assert.equal(publicLeadQuoteWorkflowIds(matchId)?.workOrderId, `public-lead-work-${matchId}`);
 });
 
+test("accepted CRM names redact each missing component independently", () => {
+  assert.deepEqual(publicLeadAcceptedCrmCustomerName({ firstName: "Private", lastName: "Name" }), {
+    firstName: "Private",
+    lastName: "Name",
+  });
+  assert.deepEqual(publicLeadAcceptedCrmCustomerName({ firstName: "", lastName: "" }), {
+    firstName: "Redacted",
+    lastName: "Redacted",
+  });
+  assert.deepEqual(publicLeadAcceptedCrmCustomerName({ firstName: "Private", lastName: "  " }), {
+    firstName: "Private",
+    lastName: "Redacted",
+  });
+  assert.deepEqual(publicLeadAcceptedCrmCustomerName({ firstName: "  ", lastName: "Name" }), {
+    firstName: "Redacted",
+    lastName: "Name",
+  });
+});
+
 test("workflow snapshot keeps undisclosed private fields out and filters quote answers to matched services", () => {
   const snapshot = publicLeadQuoteWorkflowSnapshot(publicLeadRow([
     "customer_email",
@@ -112,6 +132,11 @@ test("workflow snapshot keeps undisclosed private fields out and filters quote a
   assert.deepEqual(snapshot.categories, ["hot-water"]);
   assert.deepEqual(snapshot.serviceLabels, ["Hot water"]);
   assert.deepEqual(snapshot.answers.map((answer) => answer.questionId), ["timing"]);
+  assert.equal(publicLeadQuoteWorkflowSnapshot({
+    ...publicLeadRow(["customer_email", "postcode", "service_categories", "customer_message"]),
+    opportunity_title: "   ",
+    title: "   ",
+  })?.title, "Customer enquiry");
 });
 
 test("released lead quote access fails closed after withdrawal, expiry, closure or invalid consent", () => {
@@ -460,7 +485,7 @@ test("Interested creates one explicit draft workflow and never sends a quote", (
   assert.match(server, /w\.source_type = 'public_lead'/);
   assert.match(server, /ORDER BY datetime\(current_release\.updated_at\) DESC/);
   assert.match(server, /VALUES \(\?, \?, \?, 1, 'draft', '',/);
-  assert.match(server, /snapshot\.contact\.firstName, snapshot\.contact\.lastName[\s\S]*snapshot\.contact\.email, snapshot\.contact\.phone/);
+  assert.match(server, /acceptedCrmName\.firstName, acceptedCrmName\.lastName[\s\S]*snapshot\.contact\.email, snapshot\.contact\.phone/);
   assert.match(server, /snapshot\.contact\.addressLine1, snapshot\.contact\.addressLine2[\s\S]*snapshot\.contact\.postcode/);
   assert.match(server, /publicLeadAcceptedDisclosure\([\s\S]*snapshot,[\s\S]*row,[\s\S]*now/);
   assert.match(server, /acceptedDisclosureJson, acceptedDisclosureSha256, now/);

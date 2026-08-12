@@ -23,6 +23,13 @@ export function publicLeadQuoteWorkflowIds(matchId) {
   };
 }
 
+export function publicLeadAcceptedCrmCustomerName(contact) {
+  return {
+    firstName: String(contact?.firstName || "").trim() || "Redacted",
+    lastName: String(contact?.lastName || "").trim() || "Redacted",
+  };
+}
+
 export function publicLeadQuoteWorkflowSnapshot(row) {
   const contact = publicTradeContactForMatchedLead(row);
   const categories = strictPublicPlanQuoteServiceCategories(row?.matched_categories);
@@ -39,7 +46,7 @@ export function publicLeadQuoteWorkflowSnapshot(row) {
     serviceLabels,
     answers,
     reference: String(row.source_reference || "").trim().slice(0, 120),
-    title: String(row.opportunity_title || row.title || "Customer enquiry").trim().slice(0, 180),
+    title: String(row.opportunity_title || row.title || "").trim().slice(0, 180) || "Customer enquiry",
     summary: String(row.summary || "").trim().slice(0, 1200),
     priority: String(row.opportunity_priority || row.priority || "standard").trim().slice(0, 40) || "standard",
   };

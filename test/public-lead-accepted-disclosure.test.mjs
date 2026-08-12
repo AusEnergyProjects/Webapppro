@@ -14,6 +14,7 @@ import {
   strictPublicPlanQuoteServiceCategories,
 } from "../src/lib/public-plan-quote-preparation.mjs";
 import {
+  publicLeadAcceptedCrmCustomerName,
   publicLeadAcceptedDisclosure,
   publicLeadIssueAccessGuard,
   publicLeadQuoteWorkflowIds,
@@ -320,12 +321,25 @@ const workflowServer = loadTypescriptModule(
       }),
     },
     "@/lib/public-lead-quote-workflow.mjs": {
+      publicLeadAcceptedCrmCustomerName,
       publicLeadAcceptedDisclosure,
       publicLeadQuoteWorkflowIds,
       publicLeadQuoteWorkflowSnapshot,
     },
     "@/lib/trade-job-number-server": {
       nextTlinkJobNumber: async () => "JOB-0001",
+    },
+    "@/lib/tlink-schema-guards": {
+      ensureTlinkSchemaGuards: async (db) => {
+        const installed = new Set(
+          (await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger'").all())
+            .results.map((row) => String(row.name)),
+        );
+        const definitions = (await import("../src/lib/tlink-schema-guards.ts"))
+          .TLINK_SCHEMA_GUARD_DEFINITIONS.slice(2);
+        const missing = definitions.filter((definition) => !installed.has(definition.name));
+        if (missing.length) await db.batch(missing.map((definition) => db.prepare(definition.sql)));
+      },
     },
   },
 );
@@ -456,6 +470,30 @@ test("Interested persists only disclosed customer context and survives later mar
   database.close();
 });
 
+test("Interested stores Redacted in each undisclosed CRM name field without changing the disclosure", async () => {
+  const { database, db, matchId, now } = workflowFixture();
+  const ids = publicLeadQuoteWorkflowIds(matchId);
+  database.prepare(`UPDATE public_trade_lead_contact_releases
+    SET disclosed_fields = '["customer_address","customer_email","customer_message","postcode","service_categories"]'
+    WHERE id = 'release-1'`).run();
+
+  await workflowServer.startPublicLeadQuoteWorkflow(db, "trade-a", matchId, now);
+  const customer = database.prepare(`SELECT first_name, last_name
+    FROM trade_crm_customers WHERE id = ?`).get(ids.customerId);
+  const contact = database.prepare(`SELECT first_name, last_name
+    FROM trade_crm_customer_contacts WHERE id = ?`).get(ids.contactId);
+  assert.deepEqual({ ...customer }, { first_name: "Redacted", last_name: "Redacted" });
+  assert.deepEqual({ ...contact }, { first_name: "Redacted", last_name: "Redacted" });
+  const detail = database.prepare(`SELECT accepted_disclosure_snapshot
+    FROM trade_crm_job_details WHERE work_order_id = ?`).get(ids.workOrderId);
+  const disclosure = JSON.parse(detail.accepted_disclosure_snapshot);
+  assert.equal(disclosure.customer.firstName, "");
+  assert.equal(disclosure.customer.lastName, "");
+  assert.equal(database.prepare("SELECT title FROM trade_work_orders WHERE id = ?")
+    .get(ids.workOrderId).title, "Heat-pump hot-water quote");
+  database.close();
+});
+
 test("Interested copies every active customer photo into immutable canonical job Files", async () => {
   const { database, db, matchId, now } = workflowFixture();
   const bytes = new TextEncoder().encode("accepted customer photo").buffer;
@@ -544,13 +582,16 @@ test("the same lead creates independent tenant-owned jobs and files for each int
   database.close();
 });
 
-test("accepted disclosure migration rejects missing, mutable and malformed snapshots", () => {
+test("accepted disclosure migration rejects missing, mutable and malformed snapshots", async () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE trade_crm_job_details (
     id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL,
     customer_source text NOT NULL
   )`);
   applyMigration(database, acceptedDisclosureMigration);
+  for (const definition of (await import("../src/lib/tlink-schema-guards.ts")).TLINK_SCHEMA_GUARD_DEFINITIONS.slice(2, 4)) {
+    database.exec(definition.sql);
+  }
   assert.throws(() => database.prepare(`INSERT INTO trade_crm_job_details
     (id, work_order_id, firebase_uid, customer_source)
     VALUES ('detail-1', 'job-1', 'owner-1', 'public_lead_released')`).run(),
@@ -560,6 +601,12 @@ test("accepted disclosure migration rejects missing, mutable and malformed snaps
      accepted_disclosure_snapshot, accepted_disclosure_sha256, accepted_disclosure_at)
     VALUES ('detail-2', 'job-2', 'owner-1', 'public_lead_released',
       '{"contract":"wrong"}', ?, '2026-08-12T01:00:00.000Z')`).run("a".repeat(64)),
+  /accepted public lead disclosure required/);
+  assert.throws(() => database.prepare(`INSERT INTO trade_crm_job_details
+    (id, work_order_id, firebase_uid, customer_source,
+     accepted_disclosure_snapshot, accepted_disclosure_sha256, accepted_disclosure_at)
+    VALUES ('detail-3', 'job-3', 'owner-1', 'public_lead_released',
+      '{}', ?, '2026-08-12T01:00:00.000Z')`).run("b".repeat(64)),
   /accepted public lead disclosure required/);
   database.close();
 });

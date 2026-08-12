@@ -5,6 +5,7 @@ import {
   tradeAccountProjection,
 } from "./trade-access-server";
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
+import { ensureTlinkSchemaGuards } from "./tlink-schema-guards";
 import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
 
 export type TeamScope = "own" | "team";
@@ -81,6 +82,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
   await ensureCreditexSchemaGuards(db);
+  await ensureTlinkSchemaGuards(db);
   const owner = await tradeAccountProjection(identity.uid);
   if (owner) {
     const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer"] });
