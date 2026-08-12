@@ -54,6 +54,14 @@ import {
   drainTradeTeamMemberFileCleanup,
   type TradeTeamMemberCleanupBucket,
 } from "../src/lib/trade-team-member-file-cleanup";
+import {
+  drainTradeTeamDocumentExpiryEmails,
+  enqueueTradeTeamDocumentExpiryWarnings,
+} from "../src/lib/trade-team-document-expiry-server";
+import {
+  sendServiceReminderProviderMessage,
+  serviceReminderProviderConfiguration,
+} from "../src/lib/service-reminder-delivery";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -366,6 +374,7 @@ const worker = {
     const tasks: Promise<unknown>[] = [];
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
       const teamMemberBucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
+      const documentExpiryEmail = serviceReminderProviderConfiguration().email;
       tasks.push(
         ensureTlinkSchemaGuards(getD1()).catch((error) => {
           console.error("TLink schema guard installation failed.", error instanceof Error ? error.message : "Unknown error");
@@ -399,6 +408,15 @@ const worker = {
         cleanupUnreferencedTradeIssuedDocuments().catch((error) => {
           console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
         }),
+        enqueueTradeTeamDocumentExpiryWarnings({ db: getD1() })
+          .then(() => drainTradeTeamDocumentExpiryEmails({
+            db: getD1(),
+            emailConfigured: documentExpiryEmail.configured,
+            sendEmail: (message) => sendServiceReminderProviderMessage(message),
+          }))
+          .catch((error) => {
+            console.error("Team document expiry notification failed.", error instanceof Error ? error.message : "Unknown error");
+          }),
       );
       if (teamMemberBucket) {
         tasks.push(drainTradeTeamMemberFileCleanup({ db: getD1(), bucket: teamMemberBucket }).catch((error) => {

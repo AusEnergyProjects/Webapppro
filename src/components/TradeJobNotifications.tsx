@@ -6,7 +6,7 @@ import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity";
+  targetKind: "job" | "opportunity" | "team";
   targetId: string;
   workOrderId: string;
   workNumber: string;
@@ -14,7 +14,7 @@ type JobNotification = {
   summary: string;
   createdAt: string;
   targetTab: "schedule" | "quote" | "field" | "invoice";
-  source: "customer" | "field";
+  source: "customer" | "field" | "team";
   read: boolean;
 };
 
@@ -98,6 +98,10 @@ export function TradeJobNotifications({
       return;
     }
     navigationNonce.current += 1;
+    if (item.targetKind === "team") {
+      onNavigate({ workspace: "team", kind: "team", id: item.targetId, query: item.summary, nonce: navigationNonce.current });
+      return;
+    }
     onNavigate({ workspace: "work", kind: "job", id: item.workOrderId, query: item.workNumber, nonce: navigationNonce.current, jobTab: item.targetTab });
   }
 
@@ -111,10 +115,10 @@ export function TradeJobNotifications({
         <header><div><span>Review queue</span><strong id="job-update-title">Work updates</strong></div><button type="button" onClick={closeNotifications} aria-label="Close work updates">Close</button></header>
         <div className="tlink-notification-list">
           {status && <p role="status">{status}</p>}
-          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, questions, uploads, schedule requests and field team progress will appear here.</span></div>}
+          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
           {items.map((item) => <button type="button" key={item.id} className={item.read ? "read" : "unread"} onClick={() => void openItem(item)}>
             <span className="tlink-notification-dot" aria-hidden="true" />
-            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "customer" ? "Customer" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
+            <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "customer" ? "Customer" : item.source === "team" ? "Team" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>
           </button>)}
         </div>
       </section>

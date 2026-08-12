@@ -100,7 +100,7 @@ test("the scheduling migration applies cleanly to its appointment dependency", (
 
 test("schedule SQL compiles against the production team and CRM migrations", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0070_frictionless_team_roster.sql", "0131_trade_team_permissions_and_member_files.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0070_frictionless_team_roster.sql", "0131_trade_team_permissions_and_member_files.sql", "0134_team_member_documents_and_colours.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
   const queries = [...route.matchAll(/prepare\(\s*`([\s\S]*?)`,?\s*\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
   assert.ok(queries.length > 10);
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `schedule SQL should compile: ${sql.slice(0, 80)}`);

@@ -28,6 +28,7 @@ import {
 } from "@/lib/direct-trade-entitlements";
 import { DEFAULT_TRADE_BRAND_THEME } from "@/lib/trade-business-branding";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
+import { publicLeadQuoteNavigationTarget } from "@/lib/public-lead-quote-workflow.mjs";
 import {
   TradeBusinessSettingsWorkspace,
   tradeBusinessThemeGradient,
@@ -714,10 +715,14 @@ export function DirectTradeDashboard() {
       : "today"
   );
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(() =>
-    typeof window !== "undefined"
-      && new URLSearchParams(window.location.search).get("workspace") === "schedule"
-      ? { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() }
-      : null
+    typeof window === "undefined" ? null : (() => {
+      const search = new URLSearchParams(window.location.search);
+      if (search.get("workspace") === "schedule") return { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() };
+      const teamMemberId = search.get("teamMemberId");
+      return search.get("workspace") === "team" && teamMemberId
+        ? { workspace: "team", kind: "team", id: teamMemberId, query: "", nonce: Date.now() }
+        : null;
+    })()
   );
   const [visibleEvidenceMatches, setVisibleEvidenceMatches] = useState<Record<string, boolean>>({});
   const [evidencePhotoUrls, setEvidencePhotoUrls] = useState<Record<string, Record<string, string>>>({});
@@ -1234,18 +1239,12 @@ export function DirectTradeDashboard() {
         ),
       );
       const quoteWorkflow = result.quoteWorkflow && typeof result.quoteWorkflow === "object"
-        ? result.quoteWorkflow as { workOrderId?: unknown; workNumber?: unknown }
+        ? result.quoteWorkflow as { workOrderId?: unknown; workNumber?: unknown; quoteId?: unknown }
         : null;
-      const quoteWorkOrderId = typeof quoteWorkflow?.workOrderId === "string"
-        ? quoteWorkflow.workOrderId
-        : "";
-      if (status === "interested" && quoteWorkOrderId) {
+      const quoteTarget = publicLeadQuoteNavigationTarget(quoteWorkflow);
+      if (status === "interested" && quoteTarget) {
         setCommandTarget({
-          workspace: "work",
-          kind: "job",
-          id: quoteWorkOrderId,
-          query: "",
-          jobTab: "quote",
+          ...quoteTarget,
           nonce: Date.now(),
         });
         setWorkspace("work");
@@ -1888,9 +1887,9 @@ export function DirectTradeDashboard() {
                   <div className="dashboard-panel-heading">
                     <span>Team</span>
                     <h2 id="team-workspace-title">People, access and member records</h2>
-                    <p>Add staff, set practical access and keep private licence and compliance records together.</p>
+                    <p>Add staff, set practical access, availability, schedule colours and private documents.</p>
                   </div>
-                  <TradeTeamSettings user={user} />
+                  <TradeTeamSettings user={user} navigationTarget={commandTarget} />
                 </section>
               ) : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team management is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 

@@ -23,6 +23,26 @@ export function publicLeadQuoteWorkflowIds(matchId) {
   };
 }
 
+/**
+ * @param {unknown} value
+ * @returns {null | { workspace: "work", kind: "job", id: string, query: "", jobTab: "quote" }}
+ */
+export function publicLeadQuoteNavigationTarget(value) {
+  if (!value || typeof value !== "object") return null;
+  const workOrderId = typeof value.workOrderId === "string" ? value.workOrderId.trim() : "";
+  const quoteId = typeof value.quoteId === "string" ? value.quoteId.trim() : "";
+  const matchId = workOrderId.replace(/^public-lead-work-/, "");
+  const ids = publicLeadQuoteWorkflowIds(matchId);
+  if (!ids || ids.workOrderId !== workOrderId || ids.quoteId !== quoteId) return null;
+  return {
+    workspace: "work",
+    kind: "job",
+    id: workOrderId,
+    query: "",
+    jobTab: "quote",
+  };
+}
+
 export function publicLeadAcceptedCrmCustomerName(contact) {
   return {
     firstName: String(contact?.firstName || "").trim() || "Redacted",

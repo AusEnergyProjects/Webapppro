@@ -405,6 +405,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
   phone: text("phone").notNull().default(""),
+  scheduleColour: text("schedule_colour").notNull().default("emerald"),
   capabilities: text("capabilities").notNull().default("[]"),
   role: text("role").notNull().default("technician"),
   canCreateJobs: integer("can_create_jobs", { mode: "boolean" }).notNull().default(false),
@@ -442,6 +443,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   index("trade_team_members_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),
   check("trade_team_members_permissions_check", sql`${table.canCreateJobs} IN (0, 1) AND ${table.canManageJobs} IN (0, 1) AND ${table.canAssignJobs} IN (0, 1) AND ${table.jobScope} IN ('own', 'team') AND ${table.canViewCustomers} IN (0, 1) AND ${table.canManageCustomers} IN (0, 1) AND ${table.canViewQuotes} IN (0, 1) AND ${table.canManageQuotes} IN (0, 1) AND ${table.canSendQuotes} IN (0, 1) AND ${table.canViewInvoices} IN (0, 1) AND ${table.canManageInvoices} IN (0, 1) AND ${table.canViewPriceBook} IN (0, 1) AND ${table.canManagePriceBook} IN (0, 1) AND ${table.canApplyDiscounts} IN (0, 1) AND ${table.scheduleScope} IN ('own', 'team') AND ${table.canRescheduleJobs} IN (0, 1) AND ${table.canManageTeam} IN (0, 1) AND ${table.canEditTeamPermissions} IN (0, 1) AND ${table.canViewFieldEvidence} IN (0, 1) AND ${table.canManageFieldEvidence} IN (0, 1) AND ${table.canRunReports} IN (0, 1) AND ${table.canSearchCustomers} IN (0, 1) AND (${table.canManageCustomers} = 0 OR ${table.canViewCustomers} = 1) AND (${table.canManageQuotes} = 0 OR ${table.canViewQuotes} = 1) AND (${table.canSendQuotes} = 0 OR ${table.canManageQuotes} = 1) AND (${table.canManageInvoices} = 0 OR ${table.canViewInvoices} = 1) AND (${table.canManagePriceBook} = 0 OR ${table.canViewPriceBook} = 1) AND (${table.canManageFieldEvidence} = 0 OR ${table.canViewFieldEvidence} = 1) AND (${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1)`),
   check("trade_team_members_capabilities_check", sql`json_valid(${table.capabilities}) AND json_type(${table.capabilities}) = 'array'`),
+  check("trade_team_members_schedule_colour_check", sql`${table.scheduleColour} IN ('emerald', 'teal', 'blue', 'violet', 'amber', 'rose')`),
   check("trade_team_members_permission_editor_check", sql`${table.canEditTeamPermissions} = 0 OR ${table.canManageTeam} = 1`),
 ]);
 
@@ -451,6 +453,8 @@ export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
   teamMemberId: text("team_member_id").notNull().references(() => tradeTeamMembers.id, { onDelete: "restrict" }),
   category: text("category").notNull(),
   description: text("description").notNull().default(""),
+  title: text("title").notNull().default(""),
+  expiresAt: text("expires_at").notNull().default(""),
   fileName: text("file_name").notNull(),
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
@@ -467,6 +471,7 @@ export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
 }, (table) => [
   index("trade_team_member_files_member_status_idx").on(table.ownerUid, table.teamMemberId, table.status, table.createdAt),
   index("trade_team_member_files_cleanup_idx").on(table.status, table.nextCleanupAt),
+  index("trade_team_member_files_expiry_idx").on(table.status, table.expiresAt, table.ownerUid, table.teamMemberId),
   check("trade_team_member_files_category_check", sql`${table.category} IN ('id', 'licence', 'compliance', 'training', 'insurance', 'other')`),
   check("trade_team_member_files_content_type_check", sql`${table.contentType} IN ('application/pdf', 'image/jpeg', 'image/png')`),
   check("trade_team_member_files_size_check", sql`${table.sizeBytes} > 0 AND ${table.sizeBytes} <= 12582912`),
@@ -474,6 +479,7 @@ export const tradeTeamMemberFiles = sqliteTable("trade_team_member_files", {
   check("trade_team_member_files_status_check", sql`${table.status} IN ('uploading', 'active', 'cleanup_pending', 'deleted')`),
   check("trade_team_member_files_cleanup_attempts_check", sql`${table.cleanupAttempts} >= 0`),
   check("trade_team_member_files_object_key_check", sql`length(${table.objectKey}) BETWEEN 1 AND 512 AND ${table.objectKey} NOT GLOB '*[^A-Za-z0-9._/-]*'`),
+  check("trade_team_member_files_expiry_check", sql`${table.expiresAt} = '' OR (date(${table.expiresAt}) = ${table.expiresAt} AND length(${table.expiresAt}) = 10)`),
   check("trade_team_member_files_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL AND (${table.deletedAt} = '' OR datetime(${table.deletedAt}) IS NOT NULL)`),
 ]);
 
@@ -498,6 +504,37 @@ export const tradeTeamMemberCredentials = sqliteTable("trade_team_member_credent
   check("trade_team_member_credentials_status_check", sql`${table.status} IN ('active', 'expired', 'suspended', 'archived')`),
   check("trade_team_member_credentials_expiry_check", sql`${table.expiresAt} = '' OR (date(${table.expiresAt}) = ${table.expiresAt} AND length(${table.expiresAt}) = 10)`),
   check("trade_team_member_credentials_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
+export const tradeTeamDocumentExpiryWarnings = sqliteTable("trade_team_document_expiry_warnings", {
+  id: text("id").primaryKey(),
+  eventKey: text("event_key").notNull().unique(),
+  ownerUid: text("owner_uid").notNull(),
+  teamMemberId: text("team_member_id").notNull().references(() => tradeTeamMembers.id, { onDelete: "restrict" }),
+  fileId: text("file_id").notNull().references(() => tradeTeamMemberFiles.id, { onDelete: "restrict" }),
+  documentTitle: text("document_title").notNull(),
+  memberName: text("member_name").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  emailStatus: text("email_status").notNull().default("pending"),
+  emailAttempts: integer("email_attempts").notNull().default(0),
+  emailNextAttemptAt: text("email_next_attempt_at").notNull().default(""),
+  emailLastAttemptAt: text("email_last_attempt_at").notNull().default(""),
+  emailProvider: text("email_provider").notNull().default(""),
+  emailProviderMessageId: text("email_provider_message_id").notNull().default(""),
+  emailIdempotencyKey: text("email_idempotency_key").notNull(),
+  emailLastError: text("email_last_error").notNull().default(""),
+  emailedAt: text("emailed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_team_document_expiry_warnings_revision_idx").on(table.ownerUid, table.fileId, table.expiresAt),
+  index("trade_team_document_expiry_warnings_owner_time_idx").on(table.ownerUid, table.createdAt, table.id),
+  index("trade_team_document_expiry_warnings_email_queue_idx").on(table.emailStatus, table.emailNextAttemptAt, table.createdAt),
+  check("trade_team_document_expiry_warnings_expiry_check", sql`date(${table.expiresAt}) = ${table.expiresAt} AND length(${table.expiresAt}) = 10`),
+  check("trade_team_document_expiry_warnings_email_status_check", sql`${table.emailStatus} IN ('pending', 'sending', 'sent', 'failed', 'skipped')`),
+  check("trade_team_document_expiry_warnings_email_attempts_check", sql`${table.emailAttempts} >= 0`),
+  check("trade_team_document_expiry_warnings_idempotency_check", sql`length(${table.emailIdempotencyKey}) = 64 AND ${table.emailIdempotencyKey} = lower(${table.emailIdempotencyKey}) AND ${table.emailIdempotencyKey} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_team_document_expiry_warnings_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
 ]);
 
 export const tradeTeamMemberEvents = sqliteTable("trade_team_member_events", {

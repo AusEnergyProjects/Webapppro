@@ -379,14 +379,17 @@ export async function startPublicLeadQuoteWorkflow(
   const snapshot = publicLeadQuoteWorkflowSnapshot(row);
   if (!row || !snapshot) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
   const acceptedCrmName = publicLeadAcceptedCrmCustomerName(snapshot.contact);
-  const incomplete = await db.prepare(`SELECT 1 found FROM trade_crm_customers WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_crm_customer_contacts WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_crm_service_sites WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_work_orders WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_crm_job_details WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_crm_quotes WHERE id = ?
-    UNION ALL SELECT 1 FROM trade_crm_quote_versions WHERE id = ?
-    LIMIT 1`)
+  // Production D1 limits compound SELECTs to five terms. Keep this fail-closed
+  // partial-workflow check in one ordinary SELECT so every deterministic CRM
+  // record can be checked before the atomic create batch runs.
+  const incomplete = await db.prepare(`SELECT 1 found WHERE
+      EXISTS (SELECT 1 FROM trade_crm_customers WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_customer_contacts WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_service_sites WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_work_orders WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_job_details WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_quotes WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM trade_crm_quote_versions WHERE id = ?)`)
     .bind(ids.customerId, ids.contactId, ids.serviceSiteId, ids.workOrderId,
       ids.jobDetailId, ids.quoteId, ids.quoteVersionId)
     .first<Row>();

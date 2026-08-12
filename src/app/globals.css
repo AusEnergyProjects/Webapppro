@@ -6586,7 +6586,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .schedule-calendar-links button.primary, .schedule-selection button.primary { background: var(--color-aea-green-dark); color: #fff; justify-self: start; }
 .schedule-calendar-links button:disabled { cursor: not-allowed; opacity: .5; }
 .schedule-person-dot { border-radius: 50%; display: inline-block !important; height: 8px !important; margin-right: 6px; width: 8px; }
-.schedule-person-dot.green { background: #0e8f65; }.schedule-person-dot.teal { background: #168b91; }.schedule-person-dot.blue { background: #426fa8; }.schedule-person-dot.amber { background: #c07b19; }.schedule-person-dot.purple { background: #7c5ea6; }.schedule-person-dot.coral { background: #b95f58; }
+.schedule-person-dot.emerald { background: #1b8a60; }.schedule-person-dot.teal { background: #087f7a; }.schedule-person-dot.blue { background: #3268a8; }.schedule-person-dot.violet { background: #7351a8; }.schedule-person-dot.amber { background: #b66b08; }.schedule-person-dot.rose { background: #b7445d; }
 .schedule-week-viewport { min-width: 0; overflow: hidden; position: relative; }
 .schedule-week-pages { display: flex; min-width: 0; transition: transform .22s ease; }
 .schedule-week-page { flex: 0 0 100%; min-width: 0; }
@@ -6612,7 +6612,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .schedule-time-heading, .schedule-day-track > header { position: sticky; top: 0; z-index: 12; }
 .schedule-free-day { color: #8a9a94; font-size: .56rem; left: 0; position: absolute; right: 0; text-align: center; top: 42px; }
 .schedule-block { border: 1px solid rgba(6, 54, 46, .18); border-left: 5px solid #0e8f65; border-radius: 7px; box-shadow: 0 4px 11px rgba(9, 57, 48, .12); cursor: grab; display: grid; gap: 2px; left: 5px; overflow: hidden; padding: 6px 7px; position: absolute; right: 5px; z-index: 2; }
-.schedule-block.green { background: #daf3e8; border-left-color: #0e8f65; }.schedule-block.teal { background: #d9f0f0; border-left-color: #168b91; }.schedule-block.blue { background: #e0eaf7; border-left-color: #426fa8; }.schedule-block.amber { background: #f8ecd8; border-left-color: #c07b19; }.schedule-block.purple { background: #eee7f7; border-left-color: #7c5ea6; }.schedule-block.coral { background: #f7e3e1; border-left-color: #b95f58; }
+.schedule-block.emerald { background: #daf3e8; border-left-color: #1b8a60; }.schedule-block.teal { background: #d7efed; border-left-color: #087f7a; }.schedule-block.blue { background: #e0eaf7; border-left-color: #3268a8; }.schedule-block.violet { background: #eee7f7; border-left-color: #7351a8; }.schedule-block.amber { background: #f8ecd8; border-left-color: #b66b08; }.schedule-block.rose { background: #f7e2e8; border-left-color: #b7445d; }
 .schedule-block:hover, .schedule-block.selected { box-shadow: 0 0 0 2px #073f31, 0 7px 17px rgba(9, 57, 48, .16); z-index: 3; }
 .schedule-block.dragging { cursor: grabbing; opacity: .45; }
 .schedule-block.conflict { box-shadow: inset 0 0 0 2px #a3422f; }

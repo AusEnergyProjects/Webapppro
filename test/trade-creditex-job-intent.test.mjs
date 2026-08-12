@@ -175,9 +175,9 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 134);
+  assert.equal(completeMigrationChain.length, 136);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0133_/);
+  assert.match(completeMigrationChain.at(-1), /^0135_/);
   applyMigrationChain(database, completeMigrationChain);
 }
 

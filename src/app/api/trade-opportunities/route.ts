@@ -1179,11 +1179,21 @@ export async function PATCH(request: Request) {
       }
       return json({ ok: true, quoteWorkflow, warning: "" });
     } catch (error) {
+      const code = error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED";
       console.error("Public lead interest handoff failed", {
-        code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
+        code,
         matchId, installerUid: user.uid,
       });
-      return json({ ok: false, error: "The job and customer files could not be prepared. No interest was recorded. Try again." }, 409);
+      const publicError = code === "PUBLIC_LEAD_QUOTE_PHOTO_UNAVAILABLE"
+        ? "One or more customer photos are temporarily unavailable. No interest was recorded. Try again."
+        : code === "PUBLIC_LEAD_QUOTE_PHOTO_INVALID"
+          ? "The customer photos could not be verified. No interest was recorded. Try again or contact support."
+          : code === "PUBLIC_LEAD_QUOTE_WORKFLOW_INCOMPLETE"
+            ? "An incomplete job setup already exists for this lead. No interest was recorded. Contact support to recover it."
+            : code.startsWith("TLINK_SCHEMA_")
+              ? "TLink is finishing a workspace update. No interest was recorded. Try again shortly."
+              : "The job and customer files could not be prepared. No interest was recorded. Try again.";
+      return json({ ok: false, error: publicError }, 409);
     }
   }
   if (currentStatus === status) {

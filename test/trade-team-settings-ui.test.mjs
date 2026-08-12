@@ -65,11 +65,11 @@ test("large rosters are searched, filtered and paginated by the server", () => {
   assert.doesNotMatch(settings, /50 (?:member|seat)/i);
 });
 
-test("member lifecycle preserves compliance history and has no hard-delete control", () => {
+test("member lifecycle preserves historical records and has no hard-delete control", () => {
   assert.match(settings, /Deactivate access/);
   assert.match(settings, /Reactivate access/);
-  assert.match(settings, /job history, files and compliance records will remain saved/);
-  assert.match(settings, /revoked devices remain revoked and old invitation links remain invalid/);
+  assert.match(settings, /Job history and member documents remain saved/);
+  assert.match(settings, /revoked devices and old invitation links remain inactive/);
   assert.match(settings, /!isCurrentMember\(member\).*?member\.status === "active"/);
   assert.doesNotMatch(settings, /delete_member|remove_member|Delete team member|Remove team member/);
   assert.match(settings, /device\.memberStatus === "suspended"/);
@@ -89,28 +89,32 @@ test("large field device inventories remain searchable and revokable beyond the 
 
 test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /onContextMenu/);
-  assert.match(settings, />More<\/button>/);
+  assert.match(settings, />Open<\/button>/);
   assert.match(settings, /role="menu"/);
-  assert.match(settings, /Open member files/);
+  assert.match(settings, /Open documents/);
   assert.match(settings, /application\/pdf/);
   assert.match(settings, /URL\.createObjectURL/);
   assert.match(settings, /Delete .* This cannot be undone/);
-  assert.match(settings, /Category/);
-  assert.match(settings, /Licence/);
-  assert.match(settings, /Compliance/);
+  assert.match(settings, /Upload a document or photo/);
+  assert.match(settings, /Title<input name="title" required maxLength=\{180\}/);
+  assert.match(settings, /Expiry, optional<input type="date" name="expiresAt"/);
+  assert.match(settings, /Document or photo<input name="file" type="file" required/);
+  assert.match(settings, /notified 30 days before a saved expiry/);
   assert.match(settings, /Maximum 12 MB/);
   assert.match(settings, /fetch\("\/api\/trade-team\/member-files"/);
+  assert.doesNotMatch(settings, /credentialType|credential_number|jurisdiction|Add credential|Licences and compliance/);
 });
 
-test("member credentials and services are structured rather than filename-only", () => {
-  assert.match(settings, /save_credential/);
-  assert.match(settings, /credentialType/);
-  assert.match(settings, /jurisdiction/);
-  assert.match(settings, /expiresAt/);
-  assert.match(settings, /fileId/);
+test("member profiles use a dense contact roster, schedule colour and validated phone input", () => {
+  assert.match(settings, /<th>First name<\/th><th>Last name<\/th><th>Phone<\/th><th>Email<\/th><th>Status<\/th><th>Colour<\/th><th>Actions<\/th>/);
+  assert.match(settings, /className=\{styles\.memberMenuButton\}/);
+  assert.match(settings, /type="tel" inputMode="tel" autoComplete="tel"/);
+  assert.match(settings, /filterPhoneInput\(event\.currentTarget\.value\)/);
+  assert.match(settings, /Schedule colour/);
+  assert.match(settings, /scheduleColours\.map/);
+  assert.match(settings, /scheduleColour: String\(data\.get\("scheduleColour"\)/);
   assert.match(settings, /ENERGY_SERVICE_CATALOGUE/);
   assert.match(settings, /capabilities: memberServices/);
-  assert.match(settings, /complianceState/);
 });
 
 test("staff portal renders only permission-backed operations", () => {
@@ -169,6 +173,9 @@ test("staff schedule loads through its authorised API without opening owner cale
   assert.doesNotMatch(scheduleLoad, /if \(permissions\) return/);
   assert.match(schedule, /if \(permissions\) return;[\s\S]*?fetch\("\/api\/trade-calendar-sync"/);
   assert.match(schedule, /const canRescheduleJobs = !schedulePermissions \|\| schedulePermissions\.canRescheduleJobs/);
+  assert.match(schedule, /const canManageAvailability = Boolean\(data\.access\?\.memberId\)/);
+  assert.match(schedule, /canManageTeamAvailability\s*\? members\s*:\s*members\.filter\(\(member\) => member\.id === data\.access\?\.memberId\)/);
+  assert.match(schedule, /Manage your own availability/);
   assert.doesNotMatch(schedule, /canManageSchedule/);
 });
 

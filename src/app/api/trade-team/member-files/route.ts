@@ -5,7 +5,6 @@ import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-se
 import {
   inspectTeamMemberFile,
   safeTeamMemberFileName,
-  TEAM_MEMBER_FILE_CATEGORIES,
   TEAM_MEMBER_FILE_LIMIT,
   TeamMemberFileError,
 } from "@/lib/trade-team-member-files-server";
@@ -31,6 +30,8 @@ type MemberFileRow = {
   team_member_id: string;
   category: string;
   description: string;
+  title: string;
+  expires_at: string;
   file_name: string;
   content_type: string;
   size_bytes: number;
@@ -58,7 +59,7 @@ function errorResponse(error: unknown) {
   }
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
-  if (code === "OWNER_REQUIRED") return adminJson({ ok: false, error: "Only the business owner can access team member files." }, 403);
+  if (code === "TEAM_DOCUMENT_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Your team access does not include private member documents." }, 403);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Team member not found." }, 404);
   if (code === "FILE_NOT_FOUND") return adminJson({ ok: false, error: "Team member file not found." }, 404);
   if (code === "FILE_LIMIT_REACHED") return adminJson({ ok: false, error: `This team member already has ${TEAM_MEMBER_FILE_LIMIT} active files.` }, 409);
@@ -70,9 +71,9 @@ function errorResponse(error: unknown) {
   return response;
 }
 
-async function ownerAccess(request: Request) {
+async function documentAccess(request: Request) {
   const access = await requireInstallerTeamAccess(request);
-  if (!access.isOwner) throw new Error("OWNER_REQUIRED");
+  if (!access.isOwner && !access.canManageTeam) throw new Error("TEAM_DOCUMENT_ACCESS_REQUIRED");
   return access;
 }
 
@@ -132,8 +133,8 @@ function filePayload(row: MemberFileRow) {
   return {
     id: row.id,
     memberId: row.team_member_id,
-    category: row.category,
-    description: row.description,
+    title: row.title,
+    expiresAt: row.expires_at,
     fileName: row.file_name,
     contentType: row.content_type,
     mimeType: row.content_type,
@@ -148,10 +149,17 @@ function filePayload(row: MemberFileRow) {
   };
 }
 
+function validDocumentExpiry(value: string) {
+  if (!value) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await ownerAccess(request);
+    const access = await documentAccess(request);
     await sweepCleanup(access);
     const search = new URL(request.url).searchParams;
     const memberId = cleanAdminText(search.get("memberId"), 180);
@@ -193,7 +201,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await ownerAccess(request);
+    const access = await documentAccess(request);
     await sweepCleanup(access);
     const contentType = request.headers.get("content-type") || "";
     const contentLength = Number(request.headers.get("content-length") || 0);
@@ -214,11 +222,12 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, cleanup: result });
     }
     if (action !== "upload") return adminJson({ ok: false, error: "Unsupported team member file action." }, 400);
-    const category = cleanAdminText(form.get("category"), 30);
-    const description = cleanAdminText(form.get("description"), 500);
-    if (!TEAM_MEMBER_FILE_CATEGORIES.has(category)) {
-      return adminJson({ ok: false, error: "Choose ID, licence, compliance, training, insurance or other." }, 400);
-    }
+    const category = "other";
+    const title = cleanAdminText(form.get("title"), 180);
+    const expiresAt = cleanAdminText(form.get("expiresAt"), 10);
+    if (!title) return adminJson({ ok: false, error: "Add a title for this document or photo." }, 400);
+    if (!validDocumentExpiry(expiresAt)) return adminJson({ ok: false, error: "Choose a valid expiry date or leave it blank." }, 400);
+    const description = "";
     const file = form.get("file");
     if (!(file instanceof File)) return adminJson({ ok: false, error: "Choose a team member file." }, 400);
     const activeCount = await getD1().prepare(`SELECT COUNT(*) count FROM trade_team_member_files
@@ -231,15 +240,15 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     await getD1().batch([
       getD1().prepare(`INSERT INTO trade_team_member_files
-        (id, owner_uid, team_member_id, category, description, file_name, content_type,
+        (id, owner_uid, team_member_id, category, description, title, expires_at, file_name, content_type,
          size_bytes, sha256, object_key, status, cleanup_attempts, next_cleanup_at,
          last_cleanup_error, uploaded_by_uid, created_at, updated_at, deleted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', 0, '', '', ?, ?, ?, '')`)
-        .bind(id, access.ownerUid, memberId, category, description, inspected.fileName,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', 0, '', '', ?, ?, ?, '')`)
+        .bind(id, access.ownerUid, memberId, category, description, title, expiresAt, inspected.fileName,
           inspected.contentType, inspected.sizeBytes, inspected.sha256, objectKey,
           access.actorUid, now, now),
       auditStatement(access, memberId, id, "file.upload_started", {
-        category, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+        title, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
       }),
     ]);
     try {
@@ -252,7 +261,7 @@ export async function POST(request: Request) {
           WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'uploading'`)
           .bind(now, id, access.ownerUid, memberId),
         conditionalFileAuditStatement(access, memberId, id, "file.uploaded", {
-          category, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+          title, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
         }, "active", now),
       ]);
       if (Number(results[0]?.meta.changes || 0) !== 1) throw new Error("FILE_UPLOAD_STATE_CHANGED");
@@ -283,7 +292,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await ownerAccess(request);
+    const access = await documentAccess(request);
     await sweepCleanup(access);
     const search = new URL(request.url).searchParams;
     const memberId = cleanAdminText(search.get("memberId"), 180);
@@ -307,7 +316,7 @@ export async function DELETE(request: Request) {
               AND file.status = 'cleanup_pending' AND file.updated_at = ?)`)
         .bind(now, access.ownerUid, memberId, fileId, fileId, now),
       conditionalFileAuditStatement(access, memberId, fileId, "file.delete_requested", {
-        category: current.category,
+        title: current.title,
       }, "cleanup_pending", now),
     ]);
     if (Number(results[0]?.meta.changes || 0) !== 1) throw new Error("FILE_NOT_FOUND");

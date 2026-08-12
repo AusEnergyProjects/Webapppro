@@ -28,7 +28,7 @@ function loadRoute(state) {
   const db = { prepare: (sql) => new Statement(sql), batch: async () => [] };
   const workflow = async () => {
     state.workflowCalls += 1;
-    if (state.workflowFails) throw new Error("COPY_FAILED");
+    if (state.workflowFails) throw new Error(state.workflowErrorCode || "COPY_FAILED");
     if (!state.handoff) {
       state.handoff = { workOrderId: "job-1", workNumber: "JOB-1", customerId: "customer-1",
         quoteId: "quote-1", quoteVersionId: "version-1", replayed: false };
@@ -105,4 +105,15 @@ test("canonical workflow failure still returns 409 and records no interest or ha
   assert.match(body.error, /No interest was recorded/);
   assert.equal(state.status, "offered"); assert.equal(state.handoffCommits, 0);
   assert.equal(state.notificationCalls, 0);
+});
+
+test("customer photo failures return an actionable retry without recording interest", async () => {
+  const state = { status: "offered", workflowCalls: 0, workflowFails: true,
+    workflowErrorCode: "PUBLIC_LEAD_QUOTE_PHOTO_UNAVAILABLE", handoff: null,
+    handoffCommits: 0, notificationCalls: 0, syncCalls: 0 };
+  const response = await interested(loadRoute(state)); const body = await response.json();
+  assert.equal(response.status, 409); assert.equal(body.ok, false);
+  assert.equal(body.error,
+    "One or more customer photos are temporarily unavailable. No interest was recorded. Try again.");
+  assert.equal(state.status, "offered"); assert.equal(state.handoffCommits, 0);
 });

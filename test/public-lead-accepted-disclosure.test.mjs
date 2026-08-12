@@ -59,9 +59,16 @@ class TestD1Statement {
   }
 }
 
-function testD1(database) {
+function testD1(database, { compoundSelectLimit = Infinity } = {}) {
+  const assertWithinProductionLimits = (sql) => {
+    const compoundSelectTerms = 1 + (String(sql).match(/\bUNION(?:\s+ALL)?\s+SELECT\b/gi) || []).length;
+    if (compoundSelectTerms > compoundSelectLimit) {
+      throw new Error("D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR");
+    }
+  };
   return {
     prepare(sql) {
+      assertWithinProductionLimits(sql);
       return new TestD1Statement(database, sql);
     },
     async batch(statements) {
@@ -533,6 +540,52 @@ test("Interested copies every active customer photo into immutable canonical job
     "canonical job bytes remain after source withdrawal and deletion");
   assert.throws(() => database.prepare("DELETE FROM trade_crm_job_media WHERE id = ?").run(media.id),
     /retained with job history/);
+  database.close();
+});
+
+test("pictured multi-service lead with three photos stays within production D1 compound SELECT limits", async () => {
+  const { database, matchId, now } = workflowFixture();
+  const db = testD1(database, { compoundSelectLimit: 5 });
+  assert.throws(() => db.prepare(`SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+    UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6`),
+  /D1_ERROR: too many terms in compound SELECT/,
+  "the fixture must reproduce the production limit that rejected the former seven-term preflight");
+  const categories = [
+    "assessment", "draught-proofing", "insulation", "glazing", "window-coverings",
+    "hot-water", "heating-cooling", "solar", "ev-charging",
+  ];
+  database.prepare("UPDATE trade_opportunity_matches SET matched_categories = ? WHERE id = ?")
+    .run(JSON.stringify(categories), matchId);
+  const prompts = ["switchboard", "roof", "heating-cooling"];
+  database.prepare(`UPDATE public_trade_lead_quote_preparations
+    SET photo_prompt_ids = ? WHERE id = 'preparation-1'`).run(JSON.stringify(prompts));
+  for (const [index, promptId] of prompts.entries()) {
+    const bytes = new TextEncoder().encode(`pictured lead photo ${index + 1}`).buffer;
+    const sha256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
+      .map((value) => value.toString(16).padStart(2, "0")).join("");
+    const photoId = `pictured-photo-${index + 1}`;
+    const objectKey = `public/source/${photoId}`;
+    database.prepare(`INSERT INTO public_trade_lead_quote_photos
+      (id, opportunity_id, prompt_id, prompt_label, service_categories, content_type,
+       size_bytes, object_key, sha256, privacy_status, status, created_at)
+      VALUES (?, 'opportunity-1', ?, ?, ?, 'image/jpeg', ?, ?, ?,
+        'metadata-stripped', 'active', ?)`)
+      .run(photoId, promptId, `Customer photo ${index + 1}`, JSON.stringify(categories),
+        bytes.byteLength, objectKey, sha256, now);
+    evidenceObjects.set(objectKey, bytes);
+  }
+
+  const created = await workflowServer.startPublicLeadQuoteWorkflow(db, "trade-a", matchId, now);
+  assert.equal(created.replayed, false);
+  assert.equal(database.prepare("SELECT status FROM trade_opportunity_matches WHERE id = ?")
+    .get(matchId).status, "interested");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_customers").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_orders").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quotes").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quote_versions").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_job_media").get().count, 3);
+  assert.equal((await workflowServer.startPublicLeadQuoteWorkflow(db, "trade-a", matchId, now)).replayed, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_orders").get().count, 1);
   database.close();
 });
 

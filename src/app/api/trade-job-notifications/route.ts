@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
 
 export const runtime = "edge";
 
@@ -8,7 +9,7 @@ type Row = Record<string, unknown>;
 type JobTab = "schedule" | "quote" | "field" | "invoice";
 type JobNotification = {
   id: string;
-  targetKind: "job" | "opportunity";
+  targetKind: "job" | "opportunity" | "team";
   targetId: string;
   workOrderId: string;
   workNumber: string;
@@ -16,7 +17,7 @@ type JobNotification = {
   summary: string;
   createdAt: string;
   targetTab: JobTab;
-  source: "customer" | "field";
+  source: "customer" | "field" | "team";
   read: boolean;
 };
 
@@ -55,12 +56,22 @@ function workEventPresentation(eventType: string) {
   return { title: "Field progress updated", targetTab: "field" as const };
 }
 
+function documentExpiryDate(value: unknown) {
+  const date = String(value || "");
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00.000Z`));
+}
+
 async function notifications(access: TeamAccess) {
   const db = getD1();
   const scope = jobScope(access);
   const scheduling = scheduleScope(access);
   const none = () => Promise.resolve({ results: [] as Row[] });
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, documentExpiries, reads] = await Promise.all([
     access.canViewFieldEvidence ? db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_photo_request_completions completion
@@ -164,6 +175,10 @@ async function notifications(access: TeamAccess) {
         AND event.event_type = 'customer_installer_accepted'
       ORDER BY event.occurred_at DESC LIMIT 80`)
       .bind(access.ownerUid).all<Row>() : none(),
+    (access.isOwner || access.canManageTeam)
+      ? listTradeTeamDocumentExpiryWarnings(db, access.ownerUid)
+        .then((results) => ({ results: results as unknown as Row[] }))
+      : none(),
     db.prepare(`SELECT notification_key FROM trade_job_notification_reads
       WHERE firebase_uid = ? AND read_by_uid = ? ORDER BY read_at DESC LIMIT 500`)
       .bind(access.ownerUid, access.actorUid).all<Row>(),
@@ -233,6 +248,18 @@ async function notifications(access: TeamAccess) {
       createdAt: String(row.occurred_at),
       targetTab: "quote" as const,
       source: "customer" as const,
+    })),
+    ...documentExpiries.results.map((row) => ({
+      id: `team-document-expiry:${String(row.id)}`,
+      targetKind: "team" as const,
+      targetId: String(row.team_member_id),
+      workOrderId: "",
+      workNumber: "Team document",
+      title: `${String(row.member_name)}: ${String(row.document_title)} expires soon`,
+      summary: `${String(row.document_title)} for ${String(row.member_name)} expires on ${documentExpiryDate(row.expires_at)}.`,
+      createdAt: String(row.created_at),
+      targetTab: "field" as const,
+      source: "team" as const,
     })),
   ];
   const readKeys = new Set(reads.results.map((row) => String(row.notification_key)));

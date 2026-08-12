@@ -97,16 +97,19 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
 async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeeks = 1) {
   const db = getD1(); const ownerUid = access.ownerUid;
   const ownOnly = !access.isOwner && access.scheduleScope === "own";
+  const availabilityOwnOnly = !access.isOwner && !access.canManageTeam;
   const rangeEnd = addCalendarDays(rangeStart, normaliseScheduleRangeWeeks(rangeWeeks) * 7);
-  const [members, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
-    db.prepare(`SELECT id, member_uid, display_name, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
+  const [members, availabilityMembers, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
+    db.prepare(`SELECT id, member_uid, display_name, status, schedule_colour FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
       AND (? = 0 OR id = ?) ORDER BY display_name, email`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, member_uid, display_name, status, schedule_colour FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
+      AND (? = 0 OR id = ?) ORDER BY display_name, email`).bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, weekday, start_minute, end_minute, is_available FROM trade_team_working_hours
       WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) ORDER BY team_member_id, weekday`)
-      .bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+      .bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, starts_at, ends_at, reason FROM trade_team_unavailability
       WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`)
-      .bind(ownerUid, ownOnly ? 1 : 0, access.memberId, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
+      .bind(ownerUid, availabilityOwnOnly ? 1 : 0, access.memberId, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.id, a.work_order_id, a.appointment_type, a.title, a.starts_at, a.ends_at, a.assignee_member_id,
         a.assignee_label, a.status, a.revision, w.work_number, w.service_category, w.site_area, w.source_type,
         d.customer_source, d.quote_status, d.quoted_value_cents, c.first_name customer_first_name, c.last_name customer_last_name,
@@ -175,9 +178,13 @@ async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeek
       outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
   return { weekStart: rangeStart, weekEnd: rangeEnd, rangeStart, rangeEnd, rangeWeeks,
-    access: { permissions: { canAssignJobs: access.canAssignJobs, canRescheduleJobs: access.canRescheduleJobs,
-      jobScope: access.jobScope, scheduleScope: access.scheduleScope } },
-    members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status, isOwner: row.member_uid === ownerUid })),
+    access: { memberId: access.memberId, isOwner: access.isOwner,
+      permissions: { canAssignJobs: access.canAssignJobs, canRescheduleJobs: access.canRescheduleJobs,
+        canManageTeam: access.canManageTeam, jobScope: access.jobScope, scheduleScope: access.scheduleScope } },
+    members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status,
+      scheduleColour: row.schedule_colour, isOwner: row.member_uid === ownerUid })),
+    availabilityMembers: availabilityMembers.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status,
+      scheduleColour: row.schedule_colour, isOwner: row.member_uid === ownerUid })),
     workingHours,
     unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
     appointments, rescheduleRequests: rescheduleRows.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private"; return ({ id: row.id, appointmentId: row.appointment_id,
@@ -221,7 +228,8 @@ export async function PATCH(request: Request) {
   try {
     const access = await requireInstallerTeamAccess(request);
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
-    if (!access.isOwner && !access.canRescheduleJobs) throw new Error("RESCHEDULE_REQUIRED");
+    const availabilityAction = ["save_working_hours", "add_unavailability", "remove_unavailability"].includes(action);
+    if (!availabilityAction && !access.isOwner && !access.canRescheduleJobs) throw new Error("RESCHEDULE_REQUIRED");
     const ownOnly = !access.isOwner && access.scheduleScope === "own";
     const rangeStart = normaliseWeekStart(body.rangeStart || body.weekStart); const rangeWeeks = normaliseScheduleRangeWeeks(body.rangeWeeks, 1);
     const account = await db.prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?").bind(access.ownerUid).first<Record<string, unknown>>();
@@ -230,7 +238,7 @@ export async function PATCH(request: Request) {
     let syncAppointmentId = "";
     if (action === "save_working_hours") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
-      if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
+      if (!access.isOwner && !access.canManageTeam && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
       const weekday = Number(body.weekday); const startMinute = Number(body.startMinute); const endMinute = Number(body.endMinute); const isAvailable = Boolean(body.isAvailable);
       if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !Number.isInteger(startMinute) || !Number.isInteger(endMinute)
         || startMinute < 0 || endMinute > 1440 || startMinute >= endMinute) throw new Error("INVALID_HOURS");
@@ -240,7 +248,7 @@ export async function PATCH(request: Request) {
         .bind(crypto.randomUUID(), access.ownerUid, memberId, weekday, startMinute, endMinute, isAvailable ? 1 : 0, now, now).run();
     } else if (action === "add_unavailability") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
-      if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
+      if (!access.isOwner && !access.canManageTeam && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
       await db.prepare(`INSERT INTO trade_team_unavailability (id, owner_uid, team_member_id, starts_at, ends_at, reason, created_by_uid, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), access.ownerUid, memberId, startsAt, endsAt, cleanAdminText(body.reason, 200) || "Unavailable", access.actorUid, now, now).run();
@@ -249,7 +257,7 @@ export async function PATCH(request: Request) {
       const row = await db.prepare("SELECT team_member_id FROM trade_team_unavailability WHERE id = ? AND owner_uid = ?")
         .bind(id, access.ownerUid).first<Record<string, unknown>>();
       if (!row) throw new Error("MEMBER_NOT_FOUND");
-      if (!access.isOwner && access.scheduleScope === "own" && row.team_member_id !== access.memberId) throw new Error("DISPATCH_REQUIRED");
+      if (!access.isOwner && !access.canManageTeam && row.team_member_id !== access.memberId) throw new Error("DISPATCH_REQUIRED");
       await db.prepare("DELETE FROM trade_team_unavailability WHERE id = ? AND owner_uid = ?").bind(id, access.ownerUid).run();
     } else if (action === "review_reschedule_request") {
       const requestId = cleanAdminText(body.requestId, 180); const decision = cleanAdminText(body.decision, 40);

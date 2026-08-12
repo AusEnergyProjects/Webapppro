@@ -17,10 +17,8 @@ const MEMBER_LIFECYCLE_STATUSES = new Set(["active", "suspended"]);
 const ROSTER_STATUS_FILTERS = new Set(["active", "invited", "suspended"]);
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_PATTERN = /^[+0-9() .-]{6,30}$/;
-const CREDENTIAL_TYPES = new Set(["licence", "registration", "training", "insurance", "other"]);
-const CREDENTIAL_STATUSES = new Set(["active", "suspended", "archived"]);
-const CREDENTIAL_JURISDICTIONS = new Set(["", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA", "NATIONAL"]);
+const PHONE_ALLOWED_PATTERN = /^[+0-9() .-]+$/;
+const SCHEDULE_COLOURS = new Set(["emerald", "teal", "blue", "violet", "amber", "rose"]);
 const ROSTER_PAGE_SIZE = 25;
 const ROSTER_PAGE_SIZE_MAX = 50;
 
@@ -40,11 +38,16 @@ async function memberCapabilities(ownerUid: string, value: unknown) {
   return requested;
 }
 
-function validExpiry(value: string) {
-  if (!value) return true;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+function normalisePhone(value: unknown) {
+  const raw = cleanAdminText(value, 40).normalize("NFKC");
+  if (!raw) return "";
+  if (!PHONE_ALLOWED_PATTERN.test(raw) || (raw.includes("+") && !raw.startsWith("+"))
+    || (raw.match(/\+/g) || []).length > 1) throw new Error("PHONE_INVALID");
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 6 || digits.length > 15) throw new Error("PHONE_INVALID");
+  if (raw.startsWith("+") || raw.startsWith("00")) return `+${digits.replace(/^00/, "")}`;
+  if (/^0[23478]\d{8}$/.test(digits)) return `+61${digits.slice(1)}`;
+  return digits;
 }
 
 type MemberPermissions = {
@@ -303,43 +306,6 @@ function inviteReplacementStatements(db: D1Database, access: TeamAccess, memberI
   ];
 }
 
-function entityAuditStatement(
-  db: D1Database,
-  access: TeamAccess,
-  memberId: string,
-  entityType: "credential",
-  entityId: string,
-  eventType: string,
-  metadata: Record<string, unknown>,
-) {
-  return db.prepare(`INSERT INTO trade_team_member_events
-    (id, owner_uid, team_member_id, actor_uid, entity_type, entity_id, event_type, metadata, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, entityType, entityId,
-      eventType, JSON.stringify(metadata), new Date().toISOString());
-}
-
-function conditionalCredentialAuditStatement(
-  db: D1Database,
-  access: TeamAccess,
-  memberId: string,
-  credentialId: string,
-  eventType: string,
-  metadata: Record<string, unknown>,
-  status: string,
-  updatedAt: string,
-) {
-  return db.prepare(`INSERT INTO trade_team_member_events
-    (id, owner_uid, team_member_id, actor_uid, entity_type, entity_id, event_type, metadata, created_at)
-    SELECT ?, ?, ?, ?, 'credential', ?, ?, ?, ?
-    WHERE EXISTS (SELECT 1 FROM trade_team_member_credentials credential
-      WHERE credential.id = ? AND credential.owner_uid = ? AND credential.team_member_id = ?
-        AND credential.status = ? AND credential.updated_at = ?)`)
-    .bind(crypto.randomUUID(), access.ownerUid, memberId, access.actorUid, credentialId,
-      eventType, JSON.stringify(metadata), updatedAt, credentialId, access.ownerUid, memberId,
-      status, updatedAt);
-}
-
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
@@ -362,8 +328,8 @@ function errorResponse(error: unknown) {
   if (code === "PERMISSIONS_INVALID") return adminJson({ ok: false, error: "Check the saved permission values and access scopes." }, 400);
   if (code === "CAPABILITY_NOT_ALLOWED") return adminJson({ ok: false, error: "Choose only services saved on this business profile." }, 400);
   if (code === "MEMBER_CAPABILITY_REQUIRED") return adminJson({ ok: false, error: "This team member is not enabled for the job's service category." }, 409);
-  if (code === "CREDENTIAL_NOT_FOUND") return adminJson({ ok: false, error: "Team member credential not found." }, 404);
-  if (code === "CREDENTIAL_CONFLICT") return adminJson({ ok: false, error: "This credential changed elsewhere. Reload before saving." }, 409);
+  if (code === "PHONE_INVALID") return adminJson({ ok: false, error: "Enter a valid phone number using digits and standard phone symbols." }, 400);
+  if (code === "SCHEDULE_COLOUR_INVALID") return adminJson({ ok: false, error: "Choose one of the available schedule colours." }, 400);
   if (code === "MEMBER_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This team member changed elsewhere. Reload before saving." }, 409);
   return adminJson({ ok: false, error: "The team request could not be completed." }, 500);
 }
@@ -385,6 +351,7 @@ type RosterOptions = {
   search?: string;
   status?: string;
   capability?: string;
+  memberId?: string;
   includeWork?: boolean;
   workPage?: number;
   workPageSize?: number;
@@ -401,6 +368,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const rosterSearch = cleanAdminText(options.search, 120).toLowerCase();
   const rosterStatus = ROSTER_STATUS_FILTERS.has(String(options.status)) ? String(options.status) : "all";
   const rosterCapability = cleanAdminText(options.capability, 80);
+  const rosterMemberId = cleanAdminText(options.memberId, 180);
   const includeWork = options.includeWork === true;
   const workPage = Math.max(1, Math.floor(Number(options.workPage) || 1));
   const workPageSize = Math.min(100, Math.max(1, Math.floor(Number(options.workPageSize) || 50)));
@@ -410,6 +378,10 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const assigneeCapability = cleanAdminText(options.assigneeCapability, 80);
   const conditions = ["owner_uid = ?"];
   const bindings: unknown[] = [access.ownerUid];
+  if (rosterMemberId) {
+    conditions.push("id = ?");
+    bindings.push(rosterMemberId);
+  }
   if (rosterSearch) {
     conditions.push("(lower(display_name) LIKE ? OR lower(email) LIKE ? OR lower(first_name || ' ' || last_name) LIKE ? OR lower(phone) LIKE ?)");
     const pattern = `%${rosterSearch.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
@@ -440,7 +412,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
   const rosterTotal = Number(rosterTotalRow?.count || 0);
   const offset = (page - 1) * pageSize;
   const memberRows = !canManageTeam(access) ? { results: [] as Record<string, unknown>[] } : await db.prepare(`SELECT id, member_uid, email, display_name,
-      first_name, last_name, phone, capabilities, status,
+      first_name, last_name, phone, schedule_colour, capabilities, status,
       can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
       can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
       can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -455,16 +427,6 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     ORDER BY status = 'active' DESC, display_name COLLATE NOCASE, email COLLATE NOCASE, id
     LIMIT ? OFFSET ?`)
     .bind(new Date().toISOString(), ...bindings, pageSize, offset).all<Record<string, unknown>>();
-  const memberIds = memberRows.results.map((row) => String(row.id));
-  const credentialRows = !canManageTeam(access) || !memberIds.length
-    ? { results: [] as Record<string, unknown>[] }
-    : await db.prepare(`SELECT id, team_member_id, ${access.isOwner ? "credential_type, name, credential_number, issuer, jurisdiction, file_id, created_at, updated_at," : ""}
-        expires_at, status
-      FROM trade_team_member_credentials
-      WHERE owner_uid = ? AND status <> 'archived'
-        AND team_member_id IN (${memberIds.map(() => "?").join(",")})
-      ORDER BY expires_at = '', expires_at, name COLLATE NOCASE`)
-      .bind(access.ownerUid, ...memberIds).all<Record<string, unknown>>();
   const assigneeConditions = ["owner_uid = ?", "status = 'active'"];
   const assigneeBindings: unknown[] = [access.ownerUid];
   if (assigneeSearch) {
@@ -528,6 +490,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         canSearchCustomers: access.canSearchCustomers } },
     members: memberRows.results.map((row) => ({ id: row.id, email: row.email, displayName: row.display_name,
       firstName: row.first_name, lastName: row.last_name, phone: row.phone,
+      scheduleColour: row.schedule_colour,
       capabilities: parsedList(row.capabilities), staffCode: String(row.id).slice(0, 8).toUpperCase(),
       status: row.status,
       invitedAt: row.invited_at, acceptedAt: row.accepted_at,
@@ -550,21 +513,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         canManageFieldEvidence: Boolean(row.can_manage_field_evidence),
         canRunReports: Boolean(row.can_run_reports),
         canSearchCustomers: Boolean(row.can_search_customers),
-      }, credentials: !access.isOwner ? [] : credentialRows.results.filter((credential) => credential.team_member_id === row.id)
-        .map((credential) => ({ id: credential.id, credentialType: credential.credential_type,
-          name: credential.name, number: credential.credential_number, issuer: credential.issuer,
-          jurisdiction: credential.jurisdiction, expiresAt: credential.expires_at,
-          status: credential.status, fileId: credential.file_id,
-          createdAt: credential.created_at, updatedAt: credential.updated_at })),
-      complianceState: (() => {
-        const credentials = credentialRows.results.filter((credential) => credential.team_member_id === row.id && credential.status === "active");
-        if (!credentials.length) return "none";
-        const today = new Date().toISOString().slice(0, 10);
-        if (credentials.some((credential) => credential.expires_at && String(credential.expires_at) < today)) return "expired";
-        const soon = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
-        if (credentials.some((credential) => credential.expires_at && String(credential.expires_at) <= soon)) return "expiring";
-        return "current";
-      })() })),
+      } })),
     assignees: assigneeRows.results.map((row) => ({ id: row.id, displayName: row.display_name,
       status: row.status, capabilities: parsedList(row.capabilities), isSelf: row.id === access.memberId,
       isOwner: row.member_uid === access.ownerUid })),
@@ -642,6 +591,7 @@ export async function GET(request: Request) {
       page: Number(search.get("page") || 1), pageSize: Number(search.get("pageSize") || ROSTER_PAGE_SIZE),
       search: search.get("search") || "", status: search.get("status") || "all",
       capability: search.get("capability") || "",
+      memberId: search.get("memberId") || "",
       includeWork: search.get("includeWork") === "1",
       workPage: Number(search.get("workPage") || 1),
       workPageSize: Number(search.get("workPageSize") || 50),
@@ -705,68 +655,6 @@ export async function POST(request: Request) {
 
     const access = await requireInstallerTeamAccess(request);
     if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
-    if (action === "save_credential") {
-      if (!access.isOwner) throw new Error("OWNER_REQUIRED");
-      const db = getD1(); const now = new Date().toISOString();
-      const memberId = cleanAdminText(body.memberId, 180);
-      const credentialId = cleanAdminText(body.credentialId, 180);
-      const credentialType = cleanAdminText(body.credentialType, 30);
-      const name = cleanAdminText(body.name, 120);
-      const number = cleanAdminText(body.number, 100);
-      const issuer = cleanAdminText(body.issuer, 120);
-      const jurisdiction = cleanAdminText(body.jurisdiction, 20).toUpperCase();
-      const expiresAt = cleanAdminText(body.expiresAt, 10);
-      const status = cleanAdminText(body.status, 20) || "active";
-      const fileId = cleanAdminText(body.fileId, 180);
-      const member = await db.prepare("SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status <> 'removed'")
-        .bind(memberId, access.ownerUid).first();
-      if (!member) throw new Error("MEMBER_NOT_FOUND");
-      if (!CREDENTIAL_TYPES.has(credentialType) || !name || !CREDENTIAL_STATUSES.has(status)
-        || !CREDENTIAL_JURISDICTIONS.has(jurisdiction) || !validExpiry(expiresAt)) {
-        return adminJson({ ok: false, error: "Check the credential type, name, jurisdiction, expiry date and status." }, 400);
-      }
-      if (fileId) {
-        const linked = await db.prepare(`SELECT id FROM trade_team_member_files
-          WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
-          .bind(fileId, access.ownerUid, memberId).first();
-        if (!linked) return adminJson({ ok: false, error: "Choose an active file from this team member's private vault." }, 400);
-      }
-      const credentialCurrent = credentialId
-        ? await db.prepare(`SELECT updated_at FROM trade_team_member_credentials
-            WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status <> 'archived'`)
-          .bind(credentialId, access.ownerUid, memberId).first<Record<string, unknown>>()
-        : null;
-      if (credentialId && !credentialCurrent) throw new Error("CREDENTIAL_NOT_FOUND");
-      const expectedUpdatedAt = cleanAdminText(body.expectedUpdatedAt, 80);
-      if (credentialId && (!expectedUpdatedAt
-        || expectedUpdatedAt !== String(credentialCurrent?.updated_at || ""))) {
-        throw new Error("CREDENTIAL_CONFLICT");
-      }
-      const id = credentialId || crypto.randomUUID();
-      const results = await db.batch([
-        credentialId
-          ? db.prepare(`UPDATE trade_team_member_credentials SET credential_type = ?, name = ?,
-              credential_number = ?, issuer = ?, jurisdiction = ?, expires_at = ?, status = ?, file_id = ?, updated_at = ?
-            WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status <> 'archived' AND updated_at = ?`)
-            .bind(credentialType, name, number, issuer, jurisdiction, expiresAt, status, fileId,
-              now, id, access.ownerUid, memberId, credentialCurrent?.updated_at)
-          : db.prepare(`INSERT INTO trade_team_member_credentials
-              (id, owner_uid, team_member_id, credential_type, name, credential_number, issuer,
-               jurisdiction, expires_at, status, file_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .bind(id, access.ownerUid, memberId, credentialType, name, number, issuer,
-              jurisdiction, expiresAt, status, fileId, now, now),
-        credentialId
-          ? conditionalCredentialAuditStatement(db, access, memberId, id, "credential.updated", {
-              credentialId: id, credentialType, jurisdiction, expiresAt, status, fileLinked: Boolean(fileId),
-            }, status, now)
-          : entityAuditStatement(db, access, memberId, "credential", id, "credential.created", {
-          credentialId: id, credentialType, jurisdiction, expiresAt, status, fileLinked: Boolean(fileId),
-          }),
-      ]);
-      if (credentialId && !results[0]?.meta.changes) throw new Error("CREDENTIAL_CONFLICT");
-      return adminJson({ ok: true, ...(await teamPayload(access)) }, credentialId ? 200 : 201);
-    }
     if (!["add_member", "invite_member", "reissue_invite"].includes(action)) return adminJson({ ok: false, error: "Unsupported team action." }, 400);
     const db = getD1(); const now = new Date().toISOString();
     const inviteId = crypto.randomUUID();
@@ -778,7 +666,9 @@ export async function POST(request: Request) {
     let email = cleanAdminText(body.email, 180).toLowerCase();
     let firstName = cleanAdminText(body.firstName, 80);
     let lastName = cleanAdminText(body.lastName, 80);
-    let phone = cleanAdminText(body.phone, 30);
+    let phone = normalisePhone(body.phone);
+    let scheduleColour = cleanAdminText(body.scheduleColour, 20) || "emerald";
+    if (!SCHEDULE_COLOURS.has(scheduleColour)) throw new Error("SCHEDULE_COLOUR_INVALID");
     let displayName = cleanAdminText(body.displayName, 100)
       || [firstName, lastName].filter(Boolean).join(" ");
     const requestedPermissions = permissionInput(body);
@@ -786,7 +676,7 @@ export async function POST(request: Request) {
     if (hasPermissionMutation(body)) assertPermissionGrant(access, permissions);
     let capabilities = await memberCapabilities(access.ownerUid, body.capabilities);
     if (action === "add_member") {
-      if (!displayName || (email && !EMAIL_PATTERN.test(email)) || (phone && !PHONE_PATTERN.test(phone))) {
+      if (!displayName || (email && !EMAIL_PATTERN.test(email))) {
         return adminJson({ ok: false, error: "Add a valid name, optional login email and phone number." }, 400);
       }
       if (email) {
@@ -798,7 +688,7 @@ export async function POST(request: Request) {
       const createGuard = memberCreateActorGuard(access, permissions, hasPermissionMutation(body));
       const created = await db.batch([
         db.prepare(`INSERT INTO trade_team_members
-          (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, capabilities, role,
+          (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, schedule_colour, capabilities, role,
            can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
            can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes,
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
@@ -806,9 +696,9 @@ export async function POST(request: Request) {
            can_view_field_evidence,
            can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
            accepted_at, last_active_at, created_at, updated_at)
-           SELECT ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           SELECT ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              'active', '', '', '', ?, ? WHERE ${createGuard.sql}`)
-          .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, JSON.stringify(capabilities), "field",
+          .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, scheduleColour, JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, ...createGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.created", {
           hasLoginEmail: Boolean(email), permissions,
@@ -820,7 +710,7 @@ export async function POST(request: Request) {
       if (email && !created[3]?.meta.changes) throw new Error("MEMBER_CONFLICT");
       if (!email) return adminJson({ ok: true, ...(await teamPayload(access)) }, 201);
     } else if (action === "reissue_invite") {
-      const existing = await db.prepare(`SELECT id, member_uid, email, display_name, first_name, last_name, phone, capabilities,
+      const existing = await db.prepare(`SELECT id, member_uid, email, display_name, first_name, last_name, phone, schedule_colour, capabilities,
           status, updated_at, can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
           can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes,
           can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
@@ -839,6 +729,7 @@ export async function POST(request: Request) {
       email = String(existing.email); displayName = String(existing.display_name);
       firstName = String(existing.first_name || ""); lastName = String(existing.last_name || "");
       phone = String(existing.phone || "");
+      scheduleColour = String(existing.schedule_colour || "emerald");
       capabilities = parsedList(existing.capabilities);
       permissions = memberPermissions({}, existing);
       const actorGuard = memberMutationActorGuard(access, permissions, permissions, false);
@@ -852,11 +743,11 @@ export async function POST(request: Request) {
       ]);
       if (!reissued[0]?.meta.changes || !reissued[3]?.meta.changes) throw new Error("MEMBER_CONFLICT");
     } else {
-      if (!EMAIL_PATTERN.test(email) || !displayName || (phone && !PHONE_PATTERN.test(phone))) {
+      if (!EMAIL_PATTERN.test(email) || !displayName) {
         return adminJson({ ok: false, error: "Add a valid name, email and phone number." }, 400);
       }
       if (memberId) {
-        const current = await db.prepare(`SELECT id, member_uid, updated_at,
+        const current = await db.prepare(`SELECT id, member_uid, updated_at, schedule_colour,
             can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
             can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
             can_view_price_book, can_manage_price_book, can_apply_discounts, schedule_scope,
@@ -870,6 +761,7 @@ export async function POST(request: Request) {
           throw new Error("MEMBER_CONFLICT");
         }
         if (current.member_uid) return adminJson({ ok: false, error: "This person already has login access." }, 409);
+        if (body.scheduleColour === undefined) scheduleColour = String(current.schedule_colour || "emerald");
         permissions = memberPermissions(requestedPermissions, current);
         const beforePermissions = memberPermissions({}, current);
         const permissionsChanged = hasPermissionMutation(body);
@@ -880,12 +772,12 @@ export async function POST(request: Request) {
         const actorGuard = memberMutationActorGuard(access, beforePermissions, permissions, permissionsChanged);
         const invited = await db.batch([
           db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
-            phone = ?, capabilities = ?, can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
+            phone = ?, schedule_colour = ?, capabilities = ?, can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
             can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?,
             can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?, can_apply_discounts = ?,
             schedule_scope = ?, can_reschedule_jobs = ?, can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
             can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, invited_at = ?, updated_at = ?
-            WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone,
+            WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, scheduleColour,
               JSON.stringify(capabilities), ...permissionBindings(permissions),
               now, now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
           conditionalMemberAuditStatement(db, access, memberId, "member.invitation_updated", { permissions }, now),
@@ -899,7 +791,7 @@ export async function POST(request: Request) {
       const createGuard = memberCreateActorGuard(access, permissions, hasPermissionMutation(body));
       const invited = await db.batch([
         db.prepare(`INSERT INTO trade_team_members
-          (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, capabilities, role,
+          (id, owner_uid, member_uid, email, display_name, first_name, last_name, phone, schedule_colour, capabilities, role,
            can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope,
            can_view_customers, can_manage_customers, can_view_quotes, can_manage_quotes, can_send_quotes,
            can_view_invoices, can_manage_invoices, can_view_price_book, can_manage_price_book, can_apply_discounts,
@@ -907,9 +799,9 @@ export async function POST(request: Request) {
            can_view_field_evidence,
            can_manage_field_evidence, can_run_reports, can_search_customers, status, invited_at,
            accepted_at, last_active_at, created_at, updated_at)
-          SELECT ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          SELECT ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             'active', ?, '', '', ?, ? WHERE ${createGuard.sql}`)
-          .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone,
+          .bind(memberId, access.ownerUid, email, displayName, firstName, lastName, phone, scheduleColour,
             JSON.stringify(capabilities), "field",
             ...permissionBindings(permissions), now, now, now, ...createGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.invited", { permissions }, now),
@@ -937,7 +829,7 @@ export async function PATCH(request: Request) {
     if (action === "update_member") {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
       const memberId = cleanAdminText(body.memberId, 180);
-      const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone,
+      const current = await db.prepare(`SELECT member_uid, email, display_name, first_name, last_name, phone, schedule_colour,
           capabilities, status, updated_at,
           can_create_jobs, can_manage_jobs, can_assign_jobs, job_scope, can_view_customers, can_manage_customers,
           can_view_quotes, can_manage_quotes, can_send_quotes, can_view_invoices, can_manage_invoices,
@@ -965,12 +857,15 @@ export async function PATCH(request: Request) {
       }
       const firstName = body.firstName === undefined ? String(current.first_name || "") : cleanAdminText(body.firstName, 80);
       const lastName = body.lastName === undefined ? String(current.last_name || "") : cleanAdminText(body.lastName, 80);
-      const phone = body.phone === undefined ? String(current.phone || "") : cleanAdminText(body.phone, 30);
+      const phone = body.phone === undefined ? String(current.phone || "") : normalisePhone(body.phone);
+      const scheduleColour = body.scheduleColour === undefined
+        ? String(current.schedule_colour || "emerald") : cleanAdminText(body.scheduleColour, 20);
+      if (!SCHEDULE_COLOURS.has(scheduleColour)) throw new Error("SCHEDULE_COLOUR_INVALID");
       const requestedEmail = body.email === undefined ? String(current.email || "") : cleanAdminText(body.email, 180).toLowerCase();
       const email = current.member_uid ? String(current.email || "") : requestedEmail;
       const displayName = cleanAdminText(body.displayName, 100) || [firstName, lastName].filter(Boolean).join(" ")
         || String(current.display_name || "");
-      if (!displayName || (email && !EMAIL_PATTERN.test(email)) || (phone && !PHONE_PATTERN.test(phone))) {
+      if (!displayName || (email && !EMAIL_PATTERN.test(email))) {
         return adminJson({ ok: false, error: "Add a valid name, email and phone number." }, 400);
       }
       if (email) {
@@ -992,14 +887,14 @@ export async function PATCH(request: Request) {
       const actorGuard = memberMutationActorGuard(access, beforePermissions, permissions, permissionsChanged);
       const results = await db.batch([
         db.prepare(`UPDATE trade_team_members SET email = ?, display_name = ?, first_name = ?, last_name = ?,
-          phone = ?, capabilities = ?, status = ?,
+          phone = ?, schedule_colour = ?, capabilities = ?, status = ?,
           can_create_jobs = ?, can_manage_jobs = ?, can_assign_jobs = ?, job_scope = ?, can_view_customers = ?,
           can_manage_customers = ?, can_view_quotes = ?, can_manage_quotes = ?, can_send_quotes = ?,
           can_view_invoices = ?, can_manage_invoices = ?, can_view_price_book = ?, can_manage_price_book = ?,
           can_apply_discounts = ?, schedule_scope = ?, can_reschedule_jobs = ?,
           can_manage_team = ?, can_edit_team_permissions = ?, can_view_field_evidence = ?,
           can_manage_field_evidence = ?, can_run_reports = ?, can_search_customers = ?, updated_at = ?
-          WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone,
+          WHERE id = ? AND owner_uid = ? AND updated_at = ?${actorGuard.sql}`).bind(email, displayName, firstName, lastName, phone, scheduleColour,
             JSON.stringify(capabilities), status,
             ...permissionBindings(permissions), now, memberId, access.ownerUid, current.updated_at, ...actorGuard.bindings),
         conditionalMemberAuditStatement(db, access, memberId, "member.updated", {
@@ -1149,37 +1044,5 @@ export async function PATCH(request: Request) {
       });
     } else return adminJson({ ok: false, error: "Unsupported team update." }, 400);
     return adminJson({ ok: true, ...(await teamPayload(access)) });
-  } catch (error) { return errorResponse(error); }
-}
-
-export async function DELETE(request: Request) {
-  if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  try {
-    const access = await requireInstallerTeamAccess(request);
-    if (!access.isOwner) throw new Error("OWNER_REQUIRED");
-    const search = new URL(request.url).searchParams;
-    const credentialId = cleanAdminText(search.get("credentialId"), 180);
-    const memberId = cleanAdminText(search.get("memberId"), 180);
-    const expectedUpdatedAt = cleanAdminText(search.get("expectedUpdatedAt"), 80);
-    const db = getD1(); const now = new Date().toISOString();
-    if (credentialId && memberId) {
-      const existing = await db.prepare(`SELECT id, name, updated_at FROM trade_team_member_credentials
-        WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status <> 'archived'`)
-        .bind(credentialId, access.ownerUid, memberId).first<Record<string, unknown>>();
-      if (!existing) throw new Error("CREDENTIAL_NOT_FOUND");
-      if (!expectedUpdatedAt || expectedUpdatedAt !== String(existing.updated_at || "")) {
-        throw new Error("CREDENTIAL_CONFLICT");
-      }
-      const results = await db.batch([
-        db.prepare(`UPDATE trade_team_member_credentials SET status = 'archived', updated_at = ?
-          WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status <> 'archived' AND updated_at = ?`)
-          .bind(now, credentialId, access.ownerUid, memberId, existing.updated_at),
-        conditionalCredentialAuditStatement(db, access, memberId, credentialId,
-          "credential.archived", { name: String(existing.name || "") }, "archived", now),
-      ]);
-      if (!results[0]?.meta.changes) throw new Error("CREDENTIAL_CONFLICT");
-      return adminJson({ ok: true, ...(await teamPayload(access)) });
-    }
-    return adminJson({ ok: false, error: "Choose a credential to remove." }, 400);
   } catch (error) { return errorResponse(error); }
 }

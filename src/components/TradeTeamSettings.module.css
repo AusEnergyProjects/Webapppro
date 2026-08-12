@@ -246,7 +246,7 @@
   border-collapse: collapse;
   color: #294f46;
   font-size: .82rem;
-  min-width: 1120px;
+  min-width: 1040px;
   table-layout: fixed;
   width: 100%;
 }
@@ -270,13 +270,12 @@
 }
 
 .memberTable th:nth-child(1) { width: 13%; }
-.memberTable th:nth-child(2) { width: 10%; }
-.memberTable th:nth-child(3) { width: 16%; }
-.memberTable th:nth-child(4) { width: 15%; }
-.memberTable th:nth-child(5) { width: 18%; }
-.memberTable th:nth-child(6) { width: 11%; }
-.memberTable th:nth-child(7) { width: 12%; }
-.memberTable th:nth-child(8) { width: 5%; }
+.memberTable th:nth-child(2) { width: 13%; }
+.memberTable th:nth-child(3) { width: 15%; }
+.memberTable th:nth-child(4) { width: 25%; }
+.memberTable th:nth-child(5) { width: 14%; }
+.memberTable th:nth-child(6) { width: 12%; }
+.memberTable th:nth-child(7) { width: 8%; }
 
 .memberTable tbody tr:last-child td {
   border-bottom: 0;
@@ -371,10 +370,14 @@
   align-items: center;
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 1.1rem !important;
+  background: #fff;
+  border: 1px solid #8fb8aa;
+  color: #0f604b;
+  font-size: .84rem !important;
+  font-weight: 900;
   justify-content: center;
   min-width: 44px;
-  padding: 0 !important;
+  padding: 7px 12px !important;
 }
 
 .chips {
@@ -392,6 +395,28 @@
   margin: 0;
   padding: 5px 8px;
 }
+
+.colourName {
+  align-items: center;
+  display: flex !important;
+  gap: 7px;
+}
+
+.colourDot {
+  border: 2px solid rgb(20 52 44 / 18%);
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 15px;
+  width: 15px;
+}
+
+.emerald { background: #1b8a60; }
+.teal { background: #087f7a; }
+.blue { background: #3268a8; }
+.violet { background: #7351a8; }
+.amber { background: #b66b08; }
+.rose { background: #b7445d; }
 
 .actions {
   flex-wrap: wrap;
@@ -508,49 +533,88 @@
   gap: 14px;
 }
 
-.credentials {
-  border-bottom: 1px solid #d6e4df;
-  display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding-bottom: 14px;
-}
-
-.credentialRow {
-  align-items: flex-start;
-  background: #fff;
-  border: 1px solid #d4e2dd;
-  border-radius: 9px;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 10px;
-}
-
-.credentialRow strong,
-.credentialRow span,
-.credentialRow small {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.credentialRow strong {
-  color: #173f36;
-  font-size: .88rem;
-}
-
-.credentialRow span,
-.credentialRow small {
-  color: #60766f;
-  font-size: .82rem;
-  line-height: 1.4;
-  margin-top: 3px;
-}
-
 .grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contactGrid > label {
+  align-content: start;
+  align-self: start;
+  grid-auto-rows: max-content;
+}
+
+.colourPicker {
+  background: #f4faf7;
+  border: 1px solid #cfe2da;
+  border-radius: 13px;
+  padding: 13px;
+}
+
+.colourPicker legend {
+  color: #123d35;
+  font-size: .9rem;
+  font-weight: 900;
+  padding: 0 5px;
+}
+
+.colourPicker > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  margin-top: 10px;
+}
+
+.colourChoice {
+  align-items: center;
+  background: #fff !important;
+  border: 1px solid #c6d9d2;
+  border-radius: 11px;
+  cursor: pointer;
+  display: grid !important;
+  gap: 5px !important;
+  justify-items: center;
+  min-height: 70px;
+  padding: 8px;
+  position: relative;
+}
+
+.colourChoice input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.colourChoice > span {
+  background: inherit;
+  border: 2px solid rgb(20 52 44 / 16%);
+  border-radius: 50%;
+  height: 28px;
+  width: 28px;
+}
+
+.colourChoice.emerald > span { background: #1b8a60; }
+.colourChoice.teal > span { background: #087f7a; }
+.colourChoice.blue > span { background: #3268a8; }
+.colourChoice.violet > span { background: #7351a8; }
+.colourChoice.amber > span { background: #b66b08; }
+.colourChoice.rose > span { background: #b7445d; }
+
+.colourChoice strong {
+  color: #294f46;
+  font-size: .82rem;
+}
+
+.colourChoice:has(input:checked) {
+  border-color: #08795f;
+  box-shadow: 0 0 0 3px rgb(8 121 95 / 16%);
+}
+
+.colourChoice:has(input:focus-visible) {
+  outline: 3px solid rgb(8 121 95 / 28%);
+  outline-offset: 2px;
 }
 
 .form label,
@@ -734,6 +798,10 @@
   .invitePanel,
   .deviceRow {
     grid-template-columns: 1fr;
+  }
+
+  .colourPicker > div {
+    grid-template-columns: repeat(3, minmax(72px, 1fr));
   }
 
   .filesDialog,

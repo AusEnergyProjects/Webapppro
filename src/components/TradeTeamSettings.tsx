@@ -13,12 +13,13 @@ import {
 } from "react";
 import type { User } from "firebase/auth";
 import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
+import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import styles from "./TradeTeamSettings.module.css";
 
 type Scope = "own" | "team";
 type MemberStatus = "active" | "suspended";
 type RosterStatus = "all" | "active" | "invited" | "suspended";
-type MemberFileCategory = "id" | "licence" | "compliance" | "training" | "insurance" | "other";
+type ScheduleColour = "emerald" | "teal" | "blue" | "violet" | "amber" | "rose";
 type AccessPreset = "manager" | "office" | "field";
 
 export type TradeTeamPermissions = {
@@ -55,16 +56,15 @@ export type TradeTeamMember = {
   displayName: string;
   email: string;
   phone: string;
+  scheduleColour: ScheduleColour;
   status: MemberStatus;
   hasLogin: boolean;
   invitePending: boolean;
   isOwner: boolean;
   fileCount: number;
   capabilities?: string[];
-  complianceState?: "none" | "current" | "expiring" | "expired";
   lastActiveAt?: string;
   updatedAt: string;
-  credentials?: MemberCredential[];
   permissions: TradeTeamPermissions;
 };
 
@@ -74,23 +74,9 @@ type MemberFile = {
   fileName: string;
   contentType: string;
   sizeBytes: number;
-  category: MemberFileCategory;
-  description?: string;
-  createdAt: string;
-};
-
-type MemberCredential = {
-  id: string;
-  credentialType: "licence" | "registration" | "training" | "insurance" | "other";
-  name: string;
-  number: string;
-  issuer: string;
-  jurisdiction: "" | "ACT" | "NSW" | "NT" | "QLD" | "SA" | "TAS" | "VIC" | "WA" | "NATIONAL";
+  title: string;
   expiresAt: string;
-  status: "active" | "suspended" | "archived";
-  fileId?: string;
-  expiryState?: "current" | "expiring" | "expired" | "none";
-  updatedAt: string;
+  createdAt: string;
 };
 
 type TeamResult = {
@@ -166,6 +152,12 @@ const accessPresets: Array<{ id: AccessPreset; name: string; description: string
   { id: "field", name: "Field access", description: "Starts with assigned jobs, own schedule and field evidence only.", permissions: fieldPermissions },
 ];
 
+const scheduleColours: Array<{ id: ScheduleColour; label: string }> = [
+  { id: "emerald", label: "Emerald" }, { id: "teal", label: "Teal" },
+  { id: "blue", label: "Blue" }, { id: "violet", label: "Violet" },
+  { id: "amber", label: "Amber" }, { id: "rose", label: "Rose" },
+];
+
 const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermissionKey; label: string; detail: string }> }> = [
   { label: "Jobs and customers", items: [
     { key: "canCreateJobs", label: "Create jobs", detail: "Start a new customer job." },
@@ -227,6 +219,12 @@ function memberLabel(member: TradeTeamMember) {
   return member.displayName || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email;
 }
 
+function filterPhoneInput(value: string) {
+  const filtered = value.replace(/[^+0-9() .-]/g, "");
+  const firstPlus = filtered.indexOf("+");
+  return filtered.split("").filter((character, index) => character !== "+" || (index === 0 && firstPlus === 0)).join("");
+}
+
 function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
   if (event.key === "Escape") { event.preventDefault(); close(); return; }
   if (event.key !== "Tab") return;
@@ -237,7 +235,7 @@ function trapDialogKey(event: KeyboardEvent<HTMLElement>, close: () => void) {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-export function TradeTeamSettings({ user }: { user: User }) {
+export function TradeTeamSettings({ user, navigationTarget }: { user: User; navigationTarget?: TLinkCommandTarget | null }) {
   const [members, setMembers] = useState<TradeTeamMember[]>([]);
   const [teamAccess, setTeamAccess] = useState<TeamResult["access"]>(undefined);
   const [loading, setLoading] = useState(true);
@@ -253,7 +251,6 @@ export function TradeTeamSettings({ user }: { user: User }) {
   const [files, setFiles] = useState<MemberFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [preview, setPreview] = useState<{ file: MemberFile; url: string } | null>(null);
-  const [credentialEditor, setCredentialEditor] = useState<MemberCredential | "new" | null>(null);
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<RosterStatus>("all");
@@ -274,6 +271,7 @@ export function TradeTeamSettings({ user }: { user: User }) {
   const filesDialogRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const handledNavigationNonceRef = useRef(0);
 
   const visibleMembers = members;
 
@@ -286,6 +284,10 @@ export function TradeTeamSettings({ user }: { user: User }) {
     });
     if (appliedQuery) params.set("search", appliedQuery);
     if (capabilityFilter) params.set("capability", capabilityFilter);
+    if (navigationTarget?.workspace === "team" && navigationTarget.kind === "team"
+      && handledNavigationNonceRef.current !== navigationTarget.nonce) {
+      params.set("memberId", navigationTarget.id);
+    }
     const response = await fetch(`/api/trade-team?${params}`, { headers: await tokenHeaders(), cache: "no-store" });
     const result = await response.json().catch(() => ({})) as TeamResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The team could not be loaded.");
@@ -293,7 +295,7 @@ export function TradeTeamSettings({ user }: { user: User }) {
     setMembers(result.members || []);
     if (result.roster) setRoster(result.roster);
     return result;
-  }, [appliedQuery, capabilityFilter, page, statusFilter, tokenHeaders]);
+  }, [appliedQuery, capabilityFilter, navigationTarget, page, statusFilter, tokenHeaders]);
   const handleMemberConflict = useCallback(async (response: Response) => {
     if (response.status !== 409) return false;
     await load();
@@ -324,6 +326,19 @@ export function TradeTeamSettings({ user }: { user: User }) {
       setDevicesLoading(false);
     }
   }, [appliedDeviceQuery, deviceMemberId, devicePage, deviceStatus, tokenHeaders]);
+
+  const openFiles = useCallback(async (member: TradeTeamMember) => {
+    if (!restoreFocusRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setError("");
+    if (preview) { URL.revokeObjectURL(preview.url); setPreview(null); }
+    try {
+      const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(member.id)}`, { headers: await tokenHeaders(), cache: "no-store" });
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; files?: MemberFile[]; error?: string };
+      if (!response.ok || !result.ok) throw new Error(result.error || "Member files could not be loaded.");
+      setFiles(result.files || []);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Member files could not be loaded."); }
+    finally { setFilesLoading(false); }
+  }, [preview, tokenHeaders]);
 
   useEffect(() => {
     let active = true;
@@ -365,6 +380,18 @@ export function TradeTeamSettings({ user }: { user: User }) {
   }, [editing, filesMember]);
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
+
+  useEffect(() => {
+    if (!navigationTarget || navigationTarget.workspace !== "team" || navigationTarget.kind !== "team"
+      || handledNavigationNonceRef.current === navigationTarget.nonce || loading) return;
+    const frame = window.requestAnimationFrame(() => {
+      handledNavigationNonceRef.current = navigationTarget.nonce;
+      const member = members.find((item) => item.id === navigationTarget.id);
+      if (member) void openFiles(member);
+      else setError("That team member could not be found.");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, members, navigationTarget, openFiles]);
 
   function openNew() {
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -426,6 +453,7 @@ export function TradeTeamSettings({ user }: { user: User }) {
         lastName: String(data.get("lastName") || "").trim(),
         email: String(data.get("email") || "").trim(),
         phone: String(data.get("phone") || "").trim(),
+        scheduleColour: String(data.get("scheduleColour") || "emerald"),
         status: isNew ? "active" : editedMember?.status || "active",
         capabilities: memberServices,
         expectedUpdatedAt: editedMember?.updatedAt,
@@ -453,7 +481,8 @@ export function TradeTeamSettings({ user }: { user: User }) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
         body: JSON.stringify({ action, memberId: member.id, firstName: member.firstName, lastName: member.lastName,
-          displayName: memberLabel(member), email: member.email, phone: member.phone, expectedUpdatedAt: member.updatedAt }),
+          displayName: memberLabel(member), email: member.email, phone: member.phone,
+          scheduleColour: member.scheduleColour, expectedUpdatedAt: member.updatedAt }),
       });
       if (await handleMemberConflict(response)) return;
       const result = await response.json().catch(() => ({})) as TeamResult;
@@ -529,19 +558,6 @@ export function TradeTeamSettings({ user }: { user: User }) {
     else if (event.key === "ArrowUp") { event.preventDefault(); items[(current - 1 + items.length) % items.length]?.focus(); }
   }
 
-  async function openFiles(member: TradeTeamMember) {
-    if (!restoreFocusRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setError("");
-    if (preview) { URL.revokeObjectURL(preview.url); setPreview(null); }
-    try {
-      const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(member.id)}`, { headers: await tokenHeaders(), cache: "no-store" });
-      const result = await response.json().catch(() => ({})) as { ok?: boolean; files?: MemberFile[]; error?: string };
-      if (!response.ok || !result.ok) throw new Error(result.error || "Member files could not be loaded.");
-      setFiles(result.files || []);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Member files could not be loaded."); }
-    finally { setFilesLoading(false); }
-  }
-
   async function uploadFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!filesMember) return;
     const form = event.currentTarget; const data = new FormData(form); data.set("action", "upload"); data.set("memberId", filesMember.id);
@@ -570,7 +586,7 @@ export function TradeTeamSettings({ user }: { user: User }) {
   }
 
   async function deleteFile(file: MemberFile) {
-    if (!filesMember || !window.confirm(`Delete ${file.fileName}? This cannot be undone.`)) return;
+    if (!filesMember || !window.confirm(`Delete ${file.title}? This cannot be undone.`)) return;
     setBusy(`delete:${file.id}`); setError("");
     try {
       const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(filesMember.id)}&fileId=${encodeURIComponent(file.id)}`, { method: "DELETE", headers: await tokenHeaders() });
@@ -583,55 +599,10 @@ export function TradeTeamSettings({ user }: { user: User }) {
     finally { setBusy(""); }
   }
 
-  async function saveCredential(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!filesMember) return;
-    const data = new FormData(event.currentTarget);
-    setBusy("credential"); setError("");
-    try {
-      const response = await fetch("/api/trade-team", { method: "POST", headers: { "Content-Type": "application/json", ...(await tokenHeaders()) }, body: JSON.stringify({
-        action: "save_credential",
-        memberId: filesMember.id,
-        credentialId: credentialEditor === "new" ? undefined : credentialEditor?.id,
-        expectedUpdatedAt: credentialEditor === "new" ? undefined : credentialEditor?.updatedAt,
-        credentialType: String(data.get("credentialType") || "other"),
-        name: String(data.get("name") || "").trim(),
-        number: String(data.get("number") || "").trim(),
-        issuer: String(data.get("issuer") || "").trim(),
-        jurisdiction: String(data.get("jurisdiction") || ""),
-        expiresAt: String(data.get("expiresAt") || ""),
-        status: String(data.get("status") || "active"),
-        fileId: String(data.get("fileId") || ""),
-      }) });
-      const result = await response.json().catch(() => ({})) as TeamResult;
-      if (!response.ok || !result.ok) throw new Error(result.error || "The credential could not be saved.");
-      const refreshed = await load();
-      const updated = refreshed.members?.find((member) => member.id === filesMember.id);
-      if (updated) setFilesMember(updated);
-      setCredentialEditor(null); setMessage("Credential saved.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "The credential could not be saved."); }
-    finally { setBusy(""); }
-  }
-
-  async function deleteCredential(credential: MemberCredential) {
-    if (!filesMember || !window.confirm(`Archive ${credential.name}?`)) return;
-    setBusy(`credential-delete:${credential.id}`); setError("");
-    try {
-      const response = await fetch(`/api/trade-team?memberId=${encodeURIComponent(filesMember.id)}&credentialId=${encodeURIComponent(credential.id)}&expectedUpdatedAt=${encodeURIComponent(credential.updatedAt)}`, { method: "DELETE", headers: await tokenHeaders() });
-      const result = await response.json().catch(() => ({})) as TeamResult;
-      if (!response.ok || !result.ok) throw new Error(result.error || "The credential could not be archived.");
-      const refreshed = await load();
-      const updated = refreshed.members?.find((member) => member.id === filesMember.id);
-      if (updated) setFilesMember(updated);
-      setCredentialEditor(null); setMessage("Credential archived.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "The credential could not be archived."); }
-    finally { setBusy(""); }
-  }
-
   function closeFiles() {
     if (busy) return;
     if (preview) URL.revokeObjectURL(preview.url);
     setPreview(null); setFilesMember(null); setFiles([]);
-    setCredentialEditor(null);
     window.requestAnimationFrame(() => restoreFocusRef.current?.focus());
   }
 
@@ -648,60 +619,47 @@ export function TradeTeamSettings({ user }: { user: User }) {
   const statusName = (member: TradeTeamMember) => member.status === "active"
     ? member.hasLogin ? "Login active" : member.invitePending ? "Invitation pending" : "Roster only"
     : "Former or inactive";
-  const serviceName = (member: TradeTeamMember) => {
-    const labels = (member.capabilities || []).map((capability) => ENERGY_SERVICE_CATALOGUE.find((service) => service.id === capability)?.label || capability);
-    if (!labels.length) return "No services assigned";
-    return labels.length > 2 ? `${labels.slice(0, 2).join(", ")} +${labels.length - 2}` : labels.join(", ");
-  };
-  const lastActiveName = (member: TradeTeamMember) => member.lastActiveAt
-    ? new Date(member.lastActiveAt).toLocaleString("en-AU")
-    : "Not signed in yet";
-  const accessName = (member: TradeTeamMember) => [
-    member.permissions.jobScope === "own" ? "Assigned jobs" : "All team jobs",
-    member.permissions.scheduleScope === "own" ? "Own schedule" : "Team schedule",
-    member.permissions.canSendQuotes ? "Can send quotes" : member.permissions.canViewQuotes ? "Can view quotes" : "No quote access",
-  ].join(" | ");
   const editingOwnAccess = editing !== null && editing !== "new" && isCurrentMember(editing);
   const showAccessEditor = Boolean(editing && canEditPermissions && !editingOwnAccess);
 
   return <div className={styles.workspace}>
-    <div className={styles.heading}><div><h4>Your team</h4><p>Add staff once, assign clear access and keep their licences and compliance files together.</p></div><button type="button" className={styles.primary} onClick={openNew}>Add team member</button></div>
+    <div className={styles.heading}><div><h4>Your team</h4><p>Keep each person&apos;s contact details, access, availability and documents in one place.</p></div><button type="button" className={styles.primary} onClick={openNew}>Add team member</button></div>
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
     {inviteUrl && <section className={styles.invitePanel} aria-label="Private team login link"><div><strong>Private login link</strong><p>Send this link only to the person it was created for. It expires after 7 days.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy login link</button></section>}
     <section className={styles.list} aria-label="Team members"><header className={styles.listHeader}><strong>People</strong><span>{roster.total} team members</span></header>
       <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label><label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label><label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
-      <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history, member files and compliance records remain saved. Reactivation restores login eligibility, but revoked devices remain revoked and old invitation links remain invalid.</p>
+      <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive.</p>
       {visibleMembers.length ? <>
         <div className={styles.tableShell}>
           <table className={styles.memberTable}>
-            <caption className={styles.srOnly}>Team members and their access, services and compliance</caption>
-            <thead><tr><th>Person</th><th>Status</th><th>Contact</th><th>Services</th><th>Access</th><th>Compliance</th><th>Last active</th><th><span className={styles.srOnly}>Actions</span></th></tr></thead>
+            <caption className={styles.srOnly}>Team member contact details, status and schedule colour</caption>
+            <thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>Email</th><th>Status</th><th>Colour</th><th>Actions</th></tr></thead>
             <tbody>{visibleMembers.map((member) => <tr key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-              <td><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong></td>
+              <td><strong>{member.firstName || "Not added"}{member.isOwner ? <small>Owner</small> : null}</strong></td>
+              <td><strong>{member.lastName || "Not added"}</strong></td>
+              <td>{member.phone ? <a href={`tel:${member.phone}`}>{member.phone}</a> : <span>Not added</span>}</td>
+              <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
               <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
-              <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>No email</span>}{member.phone ? <a href={`tel:${member.phone.replace(/[^+\d]/g, "")}`}>{member.phone}</a> : <small>No phone</small>}</td>
-              <td><span>{serviceName(member)}</span></td>
-              <td><span>{accessName(member)}</span></td>
-              <td><span className={`${styles.state} ${styles[member.complianceState || "none"]}`}>{member.complianceState === "none" ? "Not recorded" : member.complianceState}</span>{isOwner && <small>{member.fileCount || 0} files</small>}</td>
-              <td><span>{lastActiveName(member)}</span></td>
-              <td>{(!member.isOwner || isOwner) && <button type="button" className={styles.memberMenuButton} aria-label={`More options for ${memberLabel(member)}`} onClick={(event) => showMenu(event, member)}>More</button>}</td>
+              <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
+              <td>{(!member.isOwner || isOwner) && <button type="button" className={styles.memberMenuButton} aria-label={`Open actions for ${memberLabel(member)}`} onClick={(event) => showMenu(event, member)}>Open</button>}</td>
             </tr>)}</tbody>
           </table>
         </div>
         <div className={styles.mobileCards}>{visibleMembers.map((member) => <article className={styles.memberCard} key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.email, member.phone].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>{member.status === "active" ? member.hasLogin ? "Login active" : member.invitePending ? "Login invitation pending" : "Roster only" : "Access suspended"}</small></div>{(!member.isOwner || isOwner) && <button type="button" className={styles.memberMenuButton} aria-label={`More options for ${memberLabel(member)}`} onClick={(event) => showMenu(event, member)}>More</button>}</header>
-        <div className={styles.chips}><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.permissions.scheduleScope === "own" ? "Own schedule" : "Whole team schedule"}</span>{isOwner && <span>{member.fileCount || 0} files</span>}<span>{member.complianceState || "none"} compliance</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
+        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>{statusName(member)}</small></div>{(!member.isOwner || isOwner) && <button type="button" className={styles.memberMenuButton} aria-label={`Open actions for ${memberLabel(member)}`} onClick={(event) => showMenu(event, member)}>Open</button>}</header>
+        <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        {(!member.isOwner || isOwner) && <div className={styles.actions}>{!member.isOwner && <button type="button" onClick={() => openEdit(member)}>{canEditPermissions && !isCurrentMember(member) ? "Edit member and access" : "Edit member"}</button>}{!member.isOwner && member.status === "active" && !member.hasLogin && <button type="button" disabled={busy === `invite:${member.id}`} onClick={() => void createLogin(member)}>{member.email ? member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "suspended")}>Deactivate access</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "active")}>Reactivate access</button>}{isOwner && <button type="button" onClick={() => void openFiles(member)}>Member files</button>}</div>}
+        {(!member.isOwner || isOwner) && <div className={styles.actions}>{!member.isOwner && <button type="button" onClick={() => openEdit(member)}>{canEditPermissions && !isCurrentMember(member) ? "Edit member and access" : "Edit member"}</button>}{!member.isOwner && member.status === "active" && !member.hasLogin && <button type="button" disabled={busy === `invite:${member.id}`} onClick={() => void createLogin(member)}>{member.email ? member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "suspended")}>Deactivate access</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "active")}>Reactivate access</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>}
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
 
-    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}>{!menu.member.isOwner && <button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{canEditPermissions && !isCurrentMember(menu.member) ? "Edit member and access" : "Edit member"}</button>}{!menu.member.isOwner && menu.member.status === "active" && !menu.member.hasLogin && <button type="button" role="menuitem" disabled={busy === `invite:${menu.member.id}`} onClick={() => { const member = menu.member; setMenu(null); void createLogin(member); }}>{menu.member.email ? menu.member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "suspended")}>Deactivate access</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "suspended" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "active")}>Reactivate access</button>}{isOwner && <button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open member files</button>}</div></>}
+    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}>{!menu.member.isOwner && <button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{canEditPermissions && !isCurrentMember(menu.member) ? "Edit member and access" : "Edit member"}</button>}{!menu.member.isOwner && menu.member.status === "active" && !menu.member.hasLogin && <button type="button" role="menuitem" disabled={busy === `invite:${menu.member.id}`} onClick={() => { const member = menu.member; setMenu(null); void createLogin(member); }}>{menu.member.email ? menu.member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "suspended")}>Deactivate access</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "suspended" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "active")}>Reactivate access</button>}<button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
 
     {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
-      <form className={styles.form} onSubmit={saveMember}><div className={styles.grid}><label>First name<input name="firstName" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional<input name="email" type="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Add an email only when this person needs their own login.</small></label><label>Phone, optional<input name="phone" type="tel" maxLength={30} defaultValue={editing === "new" ? "" : editing.phone} /></label></div>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history, files and compliance records remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
+      <form className={styles.form} onSubmit={saveMember}><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Add an email only when this person needs their own login.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
+        <fieldset className={styles.colourPicker}><legend>Schedule colour</legend><p className={styles.hint}>This colour identifies the team member throughout the schedule.</p><div>{scheduleColours.map((colour) => <label key={colour.id} className={`${styles.colourChoice} ${styles[colour.id]}`}><input type="radio" name="scheduleColour" value={colour.id} defaultChecked={(editing === "new" ? "emerald" : editing.scheduleColour || "emerald") === colour.id} /><span aria-hidden="true" /><strong>{colour.label}</strong></label>)}</div></fieldset>
         <fieldset className={styles.permissionGroup}><legend>Services</legend><p className={styles.hint}>Choose the work this person performs. This does not change the services your business offers.</p><div className={styles.grid}>{ENERGY_SERVICE_CATALOGUE.map((service) => <label className={styles.check} key={service.id}><input type="checkbox" checked={memberServices.includes(service.id)} onChange={(event) => setMemberServices((current) => event.target.checked ? [...new Set([...current, service.id])] : current.filter((id) => id !== service.id))} /><span>{service.label}</span></label>)}</div></fieldset>
         {showAccessEditor ? <>
           <label>Quick access preset<select value={formPreset} onChange={(event) => applyPreset(event.target.value as AccessPreset)}><option value="custom" disabled>Custom access</option>{accessPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small className={styles.hint}>{editing === "new" ? accessPresets.find((item) => item.id === formPreset)?.description : "This person&apos;s saved switches are shown below."} Applying a preset only fills the switches below. You can then change any permission for this person.</small></label>
@@ -717,12 +675,11 @@ export function TradeTeamSettings({ user }: { user: User }) {
       {deviceRoster.totalPages > 1 && <nav className={styles.pagination} aria-label="Field device pages"><button type="button" className={styles.secondary} disabled={devicePage <= 1 || devicesLoading} onClick={() => setDevicePage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {deviceRoster.page} of {deviceRoster.totalPages}</span><button type="button" className={styles.secondary} disabled={devicePage >= deviceRoster.totalPages || devicesLoading} onClick={() => setDevicePage((current) => current + 1)}>Next</button></nav>}
     </section>
 
-    {filesMember && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeFiles(); }}><div ref={filesDialogRef} className={styles.filesDialog} role="dialog" aria-modal="true" aria-labelledby="member-files-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeFiles)}><header className={styles.dialogHeader}><div><span>Private member records</span><h4 id="member-files-title">{memberLabel(filesMember)} files</h4></div><button type="button" className={styles.iconButton} aria-label="Close member files" disabled={Boolean(busy)} onClick={closeFiles}>X</button></header>
-      <div className={styles.filesBody}><aside className={styles.filesSidebar}><section className={styles.credentials}><header className={styles.filesHeader}><div><strong>Licences and compliance</strong><p>{filesMember.complianceState === "expired" ? "An expired credential needs attention." : filesMember.complianceState === "expiring" ? "A credential expires soon." : filesMember.complianceState === "current" ? "Recorded credentials are current." : "No active credentials recorded."}</p></div><button type="button" className={styles.secondary} onClick={() => setCredentialEditor("new")}>Add credential</button></header>{(filesMember.credentials || []).filter((credential) => credential.status !== "archived").map((credential) => <article className={styles.credentialRow} key={credential.id}><div><strong>{credential.name}</strong><span>{[credential.credentialType, credential.number, credential.jurisdiction].filter(Boolean).join(" | ")}</span><small>{credential.expiresAt ? `${credential.expiryState || "current"} | expires ${new Date(`${credential.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry recorded"}</small></div><div className={styles.actions}><button type="button" className={styles.secondary} onClick={() => setCredentialEditor(credential)}>Edit</button><button type="button" className={styles.danger} disabled={busy === `credential-delete:${credential.id}`} onClick={() => void deleteCredential(credential)}>Archive</button></div></article>)}{!(filesMember.credentials || []).some((credential) => credential.status !== "archived") && <p className={styles.empty}>No licences or credentials saved.</p>}</section>
-        {credentialEditor && <form className={styles.uploadForm} onSubmit={saveCredential}><strong>{credentialEditor === "new" ? "Add credential" : "Edit credential"}</strong><div className={styles.grid}><label>Type<select name="credentialType" defaultValue={credentialEditor === "new" ? "licence" : credentialEditor.credentialType}><option value="licence">Licence</option><option value="registration">Registration</option><option value="training">Training</option><option value="insurance">Insurance</option><option value="other">Other</option></select></label><label>Status<select name="status" defaultValue={credentialEditor === "new" ? "active" : credentialEditor.status}><option value="active">Active</option><option value="suspended">Suspended</option></select></label></div><label>Name<input name="name" required maxLength={120} defaultValue={credentialEditor === "new" ? "" : credentialEditor.name} placeholder="Electrical licence" /></label><div className={styles.grid}><label>Number<input name="number" maxLength={100} defaultValue={credentialEditor === "new" ? "" : credentialEditor.number} /></label><label>Issuer<input name="issuer" maxLength={120} defaultValue={credentialEditor === "new" ? "" : credentialEditor.issuer} /></label><label>State or jurisdiction<select name="jurisdiction" defaultValue={credentialEditor === "new" ? "" : credentialEditor.jurisdiction}><option value="">Not applicable</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA", "NATIONAL"].map((state) => <option value={state} key={state}>{state === "NATIONAL" ? "National" : state}</option>)}</select></label><label>Expiry date<input type="date" name="expiresAt" defaultValue={credentialEditor === "new" ? "" : credentialEditor.expiresAt} /></label></div><label>Linked file<select name="fileId" defaultValue={credentialEditor === "new" ? "" : credentialEditor.fileId || ""}><option value="">No linked file</option>{files.map((file) => <option key={file.id} value={file.id}>{file.fileName}</option>)}</select></label><div className={styles.actions}><button className={styles.primary} disabled={busy === "credential"}>{busy === "credential" ? "Saving..." : "Save credential"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={() => setCredentialEditor(null)}>Cancel</button></div></form>}
-        <form className={styles.uploadForm} onSubmit={uploadFile}><strong>Add a protected file</strong><label>Category<select name="category" defaultValue="licence"><option value="id">ID</option><option value="licence">Licence</option><option value="compliance">Compliance</option><option value="training">Training</option><option value="insurance">Insurance</option><option value="other">Other</option></select></label><label>Description<input name="description" maxLength={180} placeholder="For example, electrical licence" /></label><label>File<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label><small className={styles.hint}>PDF, JPEG or PNG. Maximum 12 MB.</small><button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : "Upload file"}</button></form>
-        {filesLoading ? <p className={styles.status}>Loading files...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.fileName}</strong><small>{file.category} | {bytesLabel(file.sizeBytes)}{file.description ? ` | ${file.description}` : ""}</small></div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.fileName}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.fileName}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No member files saved.</p>}</div>}
-      </aside><section className={styles.preview} aria-label="Member file preview">{preview ? preview.file.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.file.description || preview.file.fileName} /> : preview.file.contentType === "application/pdf" ? <iframe src={preview.url} title={preview.file.fileName} /> : <p className={styles.previewMessage}>This file cannot be previewed here. Use download to open it.</p> : <p className={styles.previewMessage}>Select View to open the whole image or PDF here. Files remain protected and require your signed-in business account.</p>}</section></div>
+    {filesMember && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeFiles(); }}><div ref={filesDialogRef} className={styles.filesDialog} role="dialog" aria-modal="true" aria-labelledby="member-files-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeFiles)}><header className={styles.dialogHeader}><div><span>Private member documents</span><h4 id="member-files-title">{memberLabel(filesMember)}</h4></div><button type="button" className={styles.iconButton} aria-label="Close member documents" disabled={Boolean(busy)} onClick={closeFiles}>X</button></header>
+      <div className={styles.filesBody}><aside className={styles.filesSidebar}>
+        <form className={styles.uploadForm} onSubmit={uploadFile}><strong>Upload a document or photo</strong><label>Title<input name="title" required maxLength={180} placeholder="For example, grade licence or insurance" /></label><label>Expiry, optional<input type="date" name="expiresAt" /></label><label>Document or photo<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label><small className={styles.hint}>PDF, JPEG or PNG. Maximum 12 MB. The owner is notified 30 days before a saved expiry.</small><button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : "Upload document"}</button></form>
+        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small></div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or photos saved.</p>}</div>}
+      </aside><section className={styles.preview} aria-label="Member document preview">{preview ? preview.file.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.file.title} /> : preview.file.contentType === "application/pdf" ? <iframe src={preview.url} title={preview.file.title} /> : <p className={styles.previewMessage}>This document cannot be previewed here. Use download to open it.</p> : <p className={styles.previewMessage}>Select View to open the image or PDF. Documents remain private to authorised business access.</p>}</section></div>
     </div></div>}
   </div>;
 }

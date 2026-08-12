@@ -87,7 +87,7 @@ function fixture() {
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
       display_name text NOT NULL, first_name text NOT NULL, last_name text NOT NULL, phone text NOT NULL,
-      capabilities text NOT NULL, role text NOT NULL, ${permissionColumns.map((column) => `${column} integer NOT NULL DEFAULT 0`).join(", ")},
+      schedule_colour text NOT NULL DEFAULT 'emerald', capabilities text NOT NULL, role text NOT NULL, ${permissionColumns.map((column) => `${column} integer NOT NULL DEFAULT 0`).join(", ")},
       job_scope text NOT NULL, schedule_scope text NOT NULL, status text NOT NULL,
       invited_at text NOT NULL, accepted_at text NOT NULL, last_active_at text NOT NULL,
       created_at text NOT NULL, updated_at text NOT NULL
@@ -173,4 +173,14 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_files WHERE id='file-1'").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_credentials WHERE id='credential-1'").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_events WHERE team_member_id='target-1'").get().count, 2);
+
+  const profileRevision = database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at;
+  const normalisedPhone = await patch(route, { action: "update_member", memberId: "target-1", phone: "0412 345 678", expectedUpdatedAt: profileRevision });
+  assert.equal(normalisedPhone.status, 200);
+  assert.equal(database.prepare("SELECT phone FROM trade_team_members WHERE id='target-1'").get().phone, "+61412345678");
+  const phoneRevision = database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at;
+  const rejectedPhone = await patch(route, { action: "update_member", memberId: "target-1", phone: "0412 call me", expectedUpdatedAt: phoneRevision });
+  assert.equal(rejectedPhone.status, 400);
+  assert.equal(database.prepare("SELECT phone, updated_at FROM trade_team_members WHERE id='target-1'").get().phone, "+61412345678");
+  assert.equal(database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at, phoneRevision);
 });

@@ -13,6 +13,7 @@ import {
 } from "../src/lib/public-plan-quote-preparation.mjs";
 import {
   publicLeadAcceptedCrmCustomerName,
+  publicLeadQuoteNavigationTarget,
   publicLeadQuoteAccessSnapshot,
   publicLeadIssueAccessGuard,
   publicLeadQuoteWorkflowIds,
@@ -94,6 +95,29 @@ test("public lead quote workflow identifiers are stable and reject invalid match
   assert.deepEqual(publicLeadQuoteWorkflowIds(matchId), publicLeadQuoteWorkflowIds(matchId.toUpperCase()));
   assert.equal(publicLeadQuoteWorkflowIds("not-a-match"), null);
   assert.equal(publicLeadQuoteWorkflowIds(matchId)?.workOrderId, `public-lead-work-${matchId}`);
+});
+
+test("successful Interested response opens the created job directly in the editable quote tab", () => {
+  assert.deepEqual(publicLeadQuoteNavigationTarget({
+    workOrderId: "public-lead-work-39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+    quoteId: "public-lead-quote-39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+  }), {
+    workspace: "work",
+    kind: "job",
+    id: "public-lead-work-39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+    query: "",
+    jobTab: "quote",
+  });
+  assert.equal(publicLeadQuoteNavigationTarget({ workOrderId: "job-1" }), null,
+    "the UI must not report a complete quote workflow without the canonical quote id");
+  assert.equal(publicLeadQuoteNavigationTarget({ quoteId: "quote-1" }), null,
+    "the UI must not navigate without the canonical job id");
+  assert.equal(publicLeadQuoteNavigationTarget({
+    workOrderId: "public-lead-work-39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+    quoteId: "public-lead-quote-49c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+  }), null, "the UI must not navigate when the job and quote belong to different matches");
+  assert.match(dashboard, /const quoteTarget = publicLeadQuoteNavigationTarget\(quoteWorkflow\)/);
+  assert.match(dashboard, /setCommandTarget\(\{[\s\S]*\.\.\.quoteTarget,[\s\S]*nonce: Date\.now\(\)/);
 });
 
 test("accepted CRM names redact each missing component independently", () => {
@@ -493,7 +517,10 @@ test("Interested creates one explicit draft workflow and never sends a quote", (
 });
 
 test("Interested opens the existing editable quote tool and the brief stays privacy bounded", () => {
-  assert.match(dashboard, /jobTab: "quote"/);
+  assert.equal(publicLeadQuoteNavigationTarget({
+    workOrderId: `public-lead-work-${matchId}`,
+    quoteId: `public-lead-quote-${matchId}`,
+  })?.jobTab, "quote");
   assert.match(dashboard, /kind: "job"/);
   assert.match(dashboard, /opportunity\.platformOnly \? "Interest recorded" : "Continue quote"/);
   assert.match(dashboard, /opportunity\.platformOnly \? "I'm interested" : "Create job and quote"/);
