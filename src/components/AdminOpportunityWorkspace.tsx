@@ -5,6 +5,10 @@ import { WorkspaceListControls, type WorkspaceListPreferences } from "@/componen
 import { downloadWorkspaceCsv } from "@/components/WorkspaceTableTools";
 import { SearchableLookup, type SearchableLookupOption } from "@/components/SearchableLookup";
 import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
+import {
+  ENERGY_SERVICE_LABELS,
+  ENERGY_SERVICE_OPTIONS,
+} from "@/lib/energy-service-catalogue.mjs";
 import { dateTime, readable, resetWorkspaceListView, saveWorkspaceListView, workspaceError as errorMessage } from "@/components/admin-workspace";
 import styles from "./AdminOpportunityWorkspace.module.css";
 
@@ -56,20 +60,8 @@ type AdminApiResult = {
 };
 
 const states = AUSTRALIAN_STATE_CODES;
-const categories = [
-  ["assessment", "Energy assessment"],
-  ["solar", "Rooftop solar"],
-  ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"],
-  ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"],
-  ["insulation", "Insulation"],
-  ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"],
-  ["ev-charging", "EV charging"],
-  ["other", "Other energy upgrades"],
-] as const;
-const capabilityLabels = Object.fromEntries(categories);
+const categories = ENERGY_SERVICE_OPTIONS;
+const capabilityLabels = ENERGY_SERVICE_LABELS;
 const emptyPagination: ListPagination = { page: 1, pageSize: 25, total: 0, pageCount: 1 };
 
 export type AdminOpportunityWorkspaceProps = {

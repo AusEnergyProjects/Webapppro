@@ -21,6 +21,10 @@ import {
   type TradeBrandBorderStyle,
   type TradeBrandThemeKey,
 } from "@/lib/trade-business-branding";
+import {
+  ENERGY_SERVICE_CATALOGUE,
+  isEnergyServiceId,
+} from "@/lib/energy-service-catalogue.mjs";
 
 type AvailabilityStatus = "open" | "limited" | "paused";
 
@@ -104,7 +108,7 @@ const sectionOptions: Array<{
   { id: "account", label: "Account", detail: "Identity and verification" },
   { id: "appearance", label: "Appearance", detail: "Logo, banner and colours" },
   { id: "documents", label: "Customer documents", detail: "Identity and payment" },
-  { id: "service", label: "Service areas", detail: "Postcodes and travel radius" },
+  { id: "service", label: "Service areas", detail: "Lead types and coverage" },
   { id: "quotes", label: "Quote defaults", detail: "Email and standard terms" },
   { id: "notifications", label: "Notifications", detail: "Capacity and account emails" },
   { id: "templates", label: "Templates", detail: "Quote and invoice preview" },
@@ -591,6 +595,9 @@ export function TradeBusinessSettingsWorkspace({
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>(() =>
     initialServiceAreas(profile),
   );
+  const [capabilities, setCapabilities] = useState<string[]>(() =>
+    profile.capabilities.filter(isEnergyServiceId),
+  );
   const [brandThemeKey, setBrandThemeKey] = useState<TradeBrandThemeKey>(
     profile.brandThemeKey || DEFAULT_TRADE_BRAND_THEME,
   );
@@ -852,8 +859,19 @@ export function TradeBusinessSettingsWorkspace({
     );
   }
 
+  function toggleCapability(capability: string) {
+    setCapabilities((current) =>
+      current.includes(capability)
+        ? current.filter((item) => item !== capability)
+        : [...current, capability],
+    );
+  }
+
   function validateSettings(targetSection: string) {
     if (targetSection === "service") {
+      if (profile.partnerType === "installer" && !capabilities.length) {
+        return "Choose at least one lead service.";
+      }
       if (!serviceAreas.length || serviceAreas.length > 6) {
         return "Keep between one and six service areas.";
       }
@@ -939,6 +957,7 @@ export function TradeBusinessSettingsWorkspace({
             }
         : targetSection === "service"
           ? {
+              capabilities,
               serviceBasePostcode: serviceAreas[0]?.postcode || "",
               serviceRadiusKm: serviceAreas[0]?.radiusKm || 50,
               serviceAreas: serviceAreas.map((area) => ({
@@ -986,6 +1005,9 @@ export function TradeBusinessSettingsWorkspace({
         | Partial<TradeBusinessSettingsProfile>
         | undefined;
       onProfileChange(savedSettings || payload);
+      if (savedSettings?.capabilities) {
+        setCapabilities(savedSettings.capabilities);
+      }
       if (savedSettings?.invoicePaymentBsb !== undefined) {
         setInvoicePaymentBsb(savedSettings.invoicePaymentBsb);
       }
@@ -1261,7 +1283,7 @@ export function TradeBusinessSettingsWorkspace({
                   rel="noreferrer"
                   style={{
                     color: "var(--trade-accent)",
-                    fontSize: ".7rem",
+                    fontSize: ".84rem",
                     fontWeight: 800,
                   }}
                 >
@@ -1273,8 +1295,8 @@ export function TradeBusinessSettingsWorkspace({
               <a href="/direct-trade/partners">
                 <strong>Edit business identity</strong>
                 <span>
-                  Update contact details, address, capabilities and service
-                  states. The account type remains fixed.
+                  Update contact details, address and registered service states.
+                  The account type remains fixed.
                 </span>
               </a>
               <a href="/direct-trade/dashboard/verification">
@@ -1651,13 +1673,12 @@ export function TradeBusinessSettingsWorkspace({
           aria-labelledby="business-settings-service-title"
         >
           <header className="business-settings-section-heading">
-            <span>Service areas</span>
+            <span>Services and areas</span>
             <h3 id="business-settings-service-title">
-              Postcodes and travel radius
+              Lead services and travel coverage
             </h3>
             <p>
-              Keep customer matching inside the locations the business can
-              actually service.
+              Choose the work and locations this business can actually service.
             </p>
           </header>
           <form
@@ -1665,6 +1686,59 @@ export function TradeBusinessSettingsWorkspace({
             data-settings-section="service"
             style={{ display: "grid", gap: 16 }}
           >
+            {profile.partnerType === "installer" && (
+              <fieldset
+                style={{
+                  border: "1px solid #d2e2dc",
+                  borderRadius: 12,
+                  padding: 14,
+                }}
+              >
+                <legend style={{ padding: "0 5px" }}>Lead services</legend>
+                <p
+                  style={{
+                    color: "#61766f",
+                    fontSize: ".82rem",
+                    lineHeight: 1.55,
+                    margin: "0 0 12px",
+                  }}
+                >
+                  TLink uses these saved services for future lead matching.
+                  Changes do not remove leads already assigned. Licences and
+                  verification do not automatically add services.
+                </p>
+                <div className="dashboard-choice-grid">
+                  {ENERGY_SERVICE_CATALOGUE.map((service) => {
+                    const selected = capabilities.includes(service.id);
+                    return (
+                      <label
+                        className={selected ? "selected" : ""}
+                        key={service.id}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleCapability(service.id)}
+                        />
+                        <span>
+                          <strong>{service.label}</strong>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p
+                  style={{
+                    color: "#365d52",
+                    fontSize: ".82rem",
+                    fontWeight: 800,
+                    margin: "12px 0 0",
+                  }}
+                >
+                  {capabilities.length} of {ENERGY_SERVICE_CATALOGUE.length} services selected
+                </p>
+              </fieldset>
+            )}
             <div>
               <strong style={{ color: "#173f34", fontSize: ".82rem" }}>
                 Serviceability
@@ -1672,7 +1746,7 @@ export function TradeBusinessSettingsWorkspace({
               <p
                 style={{
                   color: "#61766f",
-                  fontSize: ".7rem",
+                  fontSize: ".84rem",
                   lineHeight: 1.55,
                   margin: "5px 0 0",
                 }}
@@ -1762,7 +1836,7 @@ export function TradeBusinessSettingsWorkspace({
                 Add service area
               </button>
               <button className="btn" disabled={saveBusy}>
-                {saveBusy ? "Saving..." : "Save service areas"}
+                {saveBusy ? "Saving..." : "Save services and areas"}
               </button>
             </div>
             {saveStatus && saveSection === "service" && (

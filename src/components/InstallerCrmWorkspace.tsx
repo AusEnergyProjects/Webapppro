@@ -16,6 +16,10 @@ import {
   exportDataforceJobCsv,
   type DataforceJobCsvRecord,
 } from "@/lib/creditex-dataforce-job-csv";
+import {
+  ENERGY_SERVICE_LABELS,
+  ENERGY_SERVICE_OPTIONS,
+} from "@/lib/energy-service-catalogue.mjs";
 
 const TradeHandoverCentre = dynamic(() => import("./TradeHandoverCentre").then((module) => module.TradeHandoverCentre));
 const TradeIntegrationCentre = dynamic(() => import("./TradeIntegrationCentre").then((module) => module.TradeIntegrationCentre));
@@ -109,20 +113,14 @@ type JobDetailTab = JobTab | "forms" | "tasks" | "notes" | "handover";
 type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string; customerName: string };
 
 const serviceOptions = [
-  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ...ENERGY_SERVICE_OPTIONS,
   ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
-  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"], ["other", "Other work"],
+  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceLabels: Record<string, string> = {
-  assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
-  "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
-  "draught-proofing": "Draught-proofing", insulation: "Insulation", glazing: "Glazing",
-  "window-coverings": "Blinds, shutters and external shading", "ev-charging": "EV charging",
+  ...ENERGY_SERVICE_LABELS,
   electrical: "Electrical services", plumbing: "Plumbing services",
-  "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
+  "mounting-hardware": "Mounting and hardware", controls: "Energy controls",
   "insulation-draughts": "Insulation and draught control",
 };
 const pipelineLabels: Record<string, string> = {

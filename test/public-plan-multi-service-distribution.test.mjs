@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { validateLeadPayload } from "../src/lib/lead-validation.mjs";
+import {
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+  PUBLIC_PLAN_ENQUIRY_KIND,
+} from "../src/lib/public-plan-enquiry.mjs";
 import { selectEveryQualifiedTradeRecipient } from "../src/lib/direct-trade-matching.mjs";
 import { matchedServiceCategories } from "../src/lib/trade-service-matching.mjs";
 import { opportunityNotificationDraft } from "../src/lib/opportunity-notifications.ts";
@@ -8,6 +14,78 @@ import { opportunityNotificationDraft } from "../src/lib/opportunity-notificatio
 const opportunityServer = fs.readFileSync("src/lib/opportunity-server.ts", "utf8");
 const notificationMigration = fs.readFileSync("drizzle/0087_trade_opportunity_notifications.sql", "utf8");
 const notificationRoute = fs.readFileSync("src/app/api/trade-job-notifications/route.ts", "utf8");
+
+test("electric cooking validates, matches only an opted-in trade and keeps its exact email label", () => {
+  const validated = validateLeadPayload({
+    submissionType: "upgrade",
+    enquiry: PUBLIC_PLAN_ENQUIRY_KIND,
+    submissionId: "20260812.12345678-abcd-4abc-8def-123456789abc",
+    customerFirstName: "Jamie",
+    customerLastName: "Customer",
+    email: "jamie@example.com",
+    phone: "0400 000 000",
+    customerUnitNumber: "",
+    customerStreetAddress: "15 Example Street",
+    customerSuburb: "MELBOURNE",
+    customerState: "VIC",
+    postcode: "3000",
+    projectCategories: ["electric-cooking"],
+    projectNotes: "Replace the gas cooktop.",
+    tradeSharing: { email: true, postcode: true, name: false, phone: false, address: false },
+    planSnapshot: {
+      goals: ["move-from-gas"],
+      pace: "staged",
+      situation: "owner",
+      approvalContext: "none",
+      budgetRange: "not-sure",
+      addressState: "VIC",
+      features: ["gas-cooking"],
+      propertyContext: {
+        propertyType: "house",
+        storeys: "single",
+        floorArea: "100_199",
+        occupants: "two",
+        sharedWalls: "none",
+      },
+    },
+    clientStartedAt: Date.now() - 5000,
+    website: "",
+    consent: {
+      accepted: true,
+      purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+      noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+      grantedAt: new Date().toISOString(),
+    },
+  });
+  assert.equal(validated.ok, true);
+  assert.deepEqual(validated.value.projectCategories, ["electric-cooking"]);
+
+  const cookingMatch = matchedServiceCategories(
+    validated.value.projectCategories,
+    ["solar", "electric-cooking"],
+  );
+  assert.deepEqual(cookingMatch, ["electric-cooking"]);
+  assert.deepEqual(
+    matchedServiceCategories(validated.value.projectCategories, ["solar"]),
+    [],
+  );
+
+  const draft = opportunityNotificationDraft({
+    businessName: "Cooktop Electrician",
+    sourceKind: "public_plan_enquiry",
+    customerName: "",
+    customerMessage: "",
+    suburb: "Private suburb",
+    postcode: "3000",
+    state: "VIC",
+    matchedCategories: cookingMatch,
+    timing: "planning",
+    expiresAt: "2026-09-09T00:00:00.000Z",
+    customerSharedEvidenceCount: 0,
+  });
+  assert.match(draft.body, /Selected service: Electric cooking and cooktops/);
+  assert.doesNotMatch(draft.body, /Rooftop solar/);
+});
 
 test("a multi-service public lead reaches every approved trade matching at least one selected service", () => {
   const selectedServices = ["solar", "battery", "heating-cooling", "hot-water"];

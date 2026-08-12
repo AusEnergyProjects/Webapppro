@@ -1,9 +1,19 @@
 export const CREDITEX_VEU_CATALOGUE_REVIEWED_ON = "2026-08-09" as const;
 
+export const CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM = "2026-04-14" as const;
+export const CREDITEX_VEU_PART_46_CURRENT_RULES_FROM = "2026-06-30" as const;
+
 export const CREDITEX_VEU_SPECIFICATION_SOURCES = {
+  v23: {
+    version: "23.0",
+    effectiveFrom: CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM,
+    effectiveTo: "2026-06-29",
+    url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0033/783573/Victorian-Energy-Upgrades-Specifications-2018-Version-23.0.pdf",
+    title: "Victorian Energy Upgrades Specifications 2018 Version 23.0",
+  },
   v24: {
     version: "24.0",
-    effectiveFrom: "2026-06-30",
+    effectiveFrom: CREDITEX_VEU_PART_46_CURRENT_RULES_FROM,
     effectiveTo: "2026-07-20",
     url: "https://www.energy.vic.gov.au/__data/assets/pdf_file/0031/792904/victorian-energy-upgrades-specifications-2018-version-24.pdf",
     title: "Victorian Energy Upgrades Specifications 2018 Version 24.0",
@@ -26,6 +36,14 @@ export const CREDITEX_VEU_PART_44_APPLICATION_GUIDE = {
   url: "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Commercial%20and%20Industrial%20Air%20Source%20Heat%20Pump%20Water%20Heater%20Product%20Application%20Guide%20-%20V%202.2%2020260331.pdf",
   title: "Commercial and Industrial Air Source Heat Pump Water Heater Product Application Guide",
   pages: "Appendix A, document pages 19-20",
+} as const;
+
+export const CREDITEX_VEU_PART_46_CURRENT_RULE_SOURCE = {
+  version: "Current Part 46 rules from 30 June 2026",
+  publishedOn: "2026-06-30",
+  url: "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-latest-news/veu-news/changes-to-the-victorian-energy-upgrades-induction-cooktop-activity-part-46",
+  title: "Changes to the Victorian Energy Upgrades induction cooktop activity (Part 46)",
+  pages: "Current activity changes and retained design components",
 } as const;
 
 export const CREDITEX_VEU_ELECTRICITY_EMISSIONS_FACTOR = "0.393" as const;
@@ -141,6 +159,15 @@ export const CREDITEX_VEU_QUOTE_EVIDENCE_ASSUMPTIONS = {
     { key: "existing_storage_requirements_confirmed", assumedValue: "yes" },
     { key: "installation_and_model_evidence_confirmed", assumedValue: "yes" },
     { key: "co_payment_per_installed_product_aud", assumedValue: "10000" },
+  ],
+  "46": [
+    { key: "victorian_residential_premises_confirmed", assumedValue: "yes" },
+    { key: "premises_at_least_two_years_old_confirmed", assumedValue: "yes" },
+    { key: "existing_gas_or_lpg_cooktop_confirmed", assumedValue: "yes" },
+    { key: "no_prior_part_46_discount_confirmed", assumedValue: "yes" },
+    { key: "eligible_product_requirements_confirmed", assumedValue: "yes" },
+    { key: "cooktop_consumer_fact_sheet_provided", assumedValue: "yes" },
+    { key: "co_payment_per_product_aud", assumedValue: "200" },
   ],
 } as const satisfies Partial<Record<
   string,
@@ -1048,11 +1075,21 @@ export const CREDITEX_VEU_ACTIVITY_DEFINITIONS = [
     sourcePages: "Version 25 pages 134-135, Equation 46.1 and Table 46.3",
     productRegistry: "VEU",
     productPerformanceInputs: [
-      "VEU approval category",
-      "VEU approval start/end",
+      "electricity-only product",
+      "minimum 550 mm width and 380 mm depth",
+      "at least three independently controlled cooking zones",
+      "minimum two-year warranty",
     ],
+    supportingSources: [CREDITEX_VEU_PART_46_CURRENT_RULE_SOURCE],
     inputDefinitions: [
-      { key: "scenario", label: "Induction-cooking scenario", type: "select", unit: "scenario", help: "The selected VEU-approved product determines the applicable cooking-product type.", defaultValue: "46A", source: "approved_product", required: true, options: [{ value: "46A", label: "In-bench induction cooktop for a home with gas or LPG (46A)" }, { value: "46B", label: "Freestanding combined induction cooking product for a home with gas or LPG (46B)" }] },
+      { key: "scenario", label: "Cooktop type", type: "select", unit: "scenario", help: "Choose the product type. Portable or on-bench plug-in cooktops are not eligible.", defaultValue: "46A", source: "operator", required: true, options: [{ value: "46A", label: "Built-in induction cooktop" }, { value: "46B", label: "Freestanding induction stove with oven" }] },
+      { key: "victorian_residential_premises_confirmed", label: "Victorian residential premises", type: "select", unit: "confirmation", help: "The current Part 46 activity is for a Victorian residential premises.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "premises_at_least_two_years_old_confirmed", label: "Home is at least two years old", type: "select", unit: "confirmation", help: "Part 46 permits one induction cooking product at a residential premises that is at least two years old.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "existing_gas_or_lpg_cooktop_confirmed", label: "Existing gas or LPG cooktop", type: "select", unit: "confirmation", help: "The induction product must replace a current gas or LPG cooking product.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "no_prior_part_46_discount_confirmed", label: "No earlier induction cooktop discount at this home", type: "select", unit: "confirmation", help: "Only one Part 46 induction cooking product can receive a discount at each eligible residential premises.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "eligible_product_requirements_confirmed", label: "Eligible product requirements", type: "select", unit: "confirmation", help: "Confirm an electricity-only built-in or freestanding induction product at least 550 mm wide and 380 mm deep, with three independently controlled zones and a minimum two-year warranty.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "cooktop_consumer_fact_sheet_provided", label: "Cooktop consumer factsheet", type: "select", unit: "confirmation", help: "The current VEU cooktop consumer factsheet must be provided before VEECs are created.", defaultValue: "yes", source: "operator", required: true, options: YES_NO_OPTIONS },
+      { key: "co_payment_per_product_aud", label: "Co-payment per product", type: "decimal", unit: "AUD including GST", help: "Part 46 requires a minimum co-payment of $200 including GST per product.", defaultValue: "200", source: "operator", required: true, min: "200", step: "any" },
     ],
   },
   {

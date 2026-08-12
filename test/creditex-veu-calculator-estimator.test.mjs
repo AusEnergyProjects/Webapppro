@@ -154,7 +154,16 @@ const DEFAULT_VECTORS = [
     geography: "metropolitan",
     paec_kwh_per_year: "500",
   }, product("VEU", "26A")],
-  ["46", { scenario: "46A" }, product("VEU", "46A")],
+  ["46", {
+    scenario: "46A",
+    victorian_residential_premises_confirmed: "yes",
+    premises_at_least_two_years_old_confirmed: "yes",
+    existing_gas_or_lpg_cooktop_confirmed: "yes",
+    no_prior_part_46_discount_confirmed: "yes",
+    eligible_product_requirements_confirmed: "yes",
+    cooktop_consumer_fact_sheet_provided: "yes",
+    co_payment_per_product_aud: "200",
+  }, undefined],
   ["48", {
     scenario: "48A(i)",
     geography: "metropolitan",
@@ -178,7 +187,7 @@ function defaultsFromCatalogue(activity) {
 }
 
 function defaultEvidenceFromCatalogue(activityCode, inputs) {
-  if (["37", "38", "39", "40", "41", "42", "43"].includes(activityCode)) {
+  if (["37", "38", "39", "40", "41", "42", "43", "46"].includes(activityCode)) {
     return undefined;
   }
   if (activityCode === "31") return product("GEMS", "electric_motor");
@@ -1080,8 +1089,8 @@ test("fixed-product activities require exact Approved VEU Public Registry eviden
 test("an exact one-half VEEC residual rounds up under VEET Act section 18(1A)", () => {
   const result = estimate(
     "46",
-    { scenario: "46A" },
-    product("VEU", "46A"),
+    DEFAULT_VECTORS[13][1],
+    undefined,
   );
   assert.equal(result.output.exactFraction, "3/2");
   assert.equal(result.output.unroundedTonnes, "1.5");
@@ -1089,10 +1098,74 @@ test("an exact one-half VEEC residual rounds up under VEET Act section 18(1A)", 
   assert.equal(result.output.roundingStatus, "nearest_whole_applied");
   assert.equal(result.status, "estimate_only_compliance_reconciliation_required");
   assert.equal(result.certificateActionEnabled, false);
+  assert.equal(result.productRegistryUrl, "");
   assert.ok(result.supportingSources.some((source) => (
     source.title === "Victorian Energy Efficiency Target Act 2007"
       && /18\(1A\)/.test(source.pages)
   )));
+});
+
+test("Part 46 switches by point-of-sale purchase date on 30 June 2026", () => {
+  const legacy = estimate(
+    "46",
+    { scenario: "46A" },
+    product("VEU", "46A", {
+      status: "Legacy",
+      effectiveFrom: "2026-04-14",
+      effectiveTo: "2026-06-29",
+    }),
+    "2026-06-29",
+  );
+  assert.equal(legacy.specificationVersion, "23.0");
+  assert.equal(legacy.effectiveDateLabel, "Purchase date");
+  assert.equal(legacy.purchaseDate, "2026-06-29");
+  assert.equal(legacy.installationDate, undefined);
+  assert.equal(legacy.inputSnapshot.purchaseDate, "2026-06-29");
+  assert.equal(legacy.inputSnapshot.installationDate, undefined);
+  assert.match(legacy.productRegistryUrl, /veu\.esc\.vic\.gov\.au/);
+  assert.equal(legacy.inputSnapshot.product.activityCategory, "46A");
+
+  const current = estimate("46", DEFAULT_VECTORS[13][1], undefined, "2026-06-30");
+  assert.equal(current.specificationVersion, "24.0");
+  assert.equal(current.effectiveDateLabel, "Purchase date");
+  assert.equal(current.purchaseDate, "2026-06-30");
+  assert.equal(current.installationDate, undefined);
+  assert.equal(current.inputSnapshot.purchaseDate, "2026-06-30");
+  assert.match(current.operatorMessage, /purchase date/);
+  assert.equal(current.productRegistryUrl, "");
+  assert.equal(current.inputSnapshot.product, null);
+
+  assert.throws(
+    () => estimate("46", { scenario: "46A" }, undefined, "2026-06-29"),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_REQUEST_INVALID",
+  );
+  assert.throws(
+    () => estimate("46", {
+      ...DEFAULT_VECTORS[13][1],
+      co_payment_per_product_aud: "199",
+    }, undefined, "2026-06-30"),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE",
+  );
+  assert.throws(
+    () => estimate("46", {
+      ...DEFAULT_VECTORS[13][1],
+      eligible_product_requirements_confirmed: "no",
+    }, undefined, "2026-06-30"),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_SYSTEM_INELIGIBLE",
+  );
+  assert.throws(
+    () => estimate(
+      "46",
+      DEFAULT_VECTORS[13][1],
+      product("VEU", "46A"),
+      "2026-06-30",
+    ),
+    (error) => error instanceof CreditexVeuEstimateError
+      && error.code === "VEU_PRODUCT_EVIDENCE_INVALID",
+  );
 });
 
 test("product status, historical Legacy dates and source snapshot custody fail closed", () => {

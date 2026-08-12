@@ -11,6 +11,7 @@ import {
   normalizeCustomerReviewItems,
   privateCustomPlanGuidance,
 } from "./customer-plan-decision-support.mjs";
+import { ENERGY_SERVICE_OPTIONS } from "./energy-service-catalogue.mjs";
 
 export const CUSTOMER_NOTICE_VERSION = "2026-07-18-quoting-photos";
 export const CUSTOMER_EVIDENCE_SHARE_NOTICE_VERSION = "2026-07-29";
@@ -556,19 +557,7 @@ export const customerProjectOptions = {
     ["new-build", "New build or major renovation"],
     ["not_sure", "Not sure"],
   ],
-  serviceCategories: [
-    ["assessment", "Energy assessment"],
-    ["solar", "Rooftop solar"],
-    ["battery", "Home battery"],
-    ["heating-cooling", "Heating and cooling"],
-    ["hot-water", "Hot water"],
-    ["draught-proofing", "Draught-proofing"],
-    ["insulation", "Insulation"],
-    ["glazing", "Glazing"],
-    ["window-coverings", "Blinds, shutters and external shading"],
-    ["ev-charging", "EV charging"],
-    ["other", "Other energy upgrade"],
-  ],
+  serviceCategories: ENERGY_SERVICE_OPTIONS,
   homeFeatures: canonicalHomeFeatureOptions,
   priorities: [
     ["lower-bills", "Lower ongoing bills"],

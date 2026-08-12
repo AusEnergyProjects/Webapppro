@@ -45,10 +45,9 @@ test("all certificate programs use only current latest reported trades", () => {
   const dataset = {
     asOf: "2026-08-11T08:30:00.000Z",
     source: {
-      name: "Demand Manager reported trades",
-      url: "https://www.demandmanager.com.au/certificate-prices/",
       lastCheckedAt: "2026-08-11T08:00:00.000Z",
       status: "current",
+      note: "Indicative market reference.",
     },
     certificates: [
       { code: "STC", latest: { tradedOn: "2026-08-08", priceCents: 3950 } },
@@ -67,8 +66,6 @@ test("all certificate programs use only current latest reported trades", () => {
       grossValueCents: 47400,
       tradedOn: "2026-08-08",
       datasetAsOf: dataset.asOf,
-      sourceName: dataset.source.name,
-      sourceUrl: dataset.source.url,
       sourceCheckedAt: dataset.source.lastCheckedAt,
     },
   );
@@ -111,8 +108,9 @@ test("all certificate programs use only current latest reported trades", () => {
   );
   assert.match(source, /api\("\/api\/certificate-prices"\)/);
   assert.match(source, /CERTIFICATE_CODES/);
-  assert.match(source, /Latest reported trade/);
-  assert.match(source, /Dataset as of/);
+  assert.match(source, /Latest market reference value/);
+  assert.match(source, /Market data as of/);
+  assert.doesNotMatch(source, /\bsourceName\b|\bsourceUrl\b|demandmanager/i);
   assert.match(source, /Gross certificate value before registration, audit, compliance,/);
   assert.match(source, /actual customer rebate will be lower/);
   assert.doesNotMatch(
@@ -128,10 +126,9 @@ test("input invalidation clears stale certificate value and trade action state",
   const dataset = {
     asOf: "2026-08-11T08:30:00.000Z",
     source: {
-      name: "Demand Manager reported trades",
-      url: "https://www.demandmanager.com.au/certificate-prices/",
       lastCheckedAt: "2026-08-11T08:00:00.000Z",
       status: "current",
+      note: "Indicative market reference.",
     },
     certificates: [
       { code: "STC", latest: { tradedOn: "2026-08-08", priceCents: 3950 } },
@@ -228,6 +225,17 @@ test("BESS2 asks for the onboarding date while every other NSW activity keeps th
   }
 });
 
+test("VEU Part 46 asks for the point-of-sale purchase date", () => {
+  assert.equal(governedModule.creditexVeuEffectiveDateLabel("46"), "Purchase date");
+  for (const activityCode of ["1C", "6", "17", "48"]) {
+    assert.equal(
+      governedModule.creditexVeuEffectiveDateLabel(activityCode),
+      "Installation date",
+      `${activityCode} must retain the installation-date basis`,
+    );
+  }
+});
+
 after(async () => {
   await server?.close();
 });
@@ -253,10 +261,10 @@ function veuProduct(overrides = {}) {
   };
 }
 
-test("VEU activity 46 stays disabled without one exact dated approved product", () => {
+test("VEU activity 46 uses the legacy dated product list only before 30 June 2026", () => {
   const missing = governedModule.creditexVeuProductEvidenceState(
     "46",
-    "2026-08-09",
+    "2026-06-29",
     {},
   );
   assert.deepEqual(missing.requiredKinds, ["veu_induction_cooktop"]);
@@ -264,10 +272,14 @@ test("VEU activity 46 stays disabled without one exact dated approved product", 
   assert.equal(missing.blocked, true);
   assert.deepEqual(missing.selectedProductIds, {});
 
-  const product = veuProduct();
+  const product = veuProduct({
+    approvalStatus: "legacy",
+    eligibleFrom: "2026-04-14",
+    eligibleTo: "2026-06-29",
+  });
   const complete = governedModule.creditexVeuProductEvidenceState(
     "46",
-    "2026-08-09",
+    "2026-06-29",
     { veu_induction_cooktop: product },
   );
   assert.equal(complete.blocked, false);
@@ -275,6 +287,17 @@ test("VEU activity 46 stays disabled without one exact dated approved product", 
     veu_induction_cooktop: product.id,
   });
   assert.deepEqual(complete.completeSelections, [product]);
+
+  const current = governedModule.creditexVeuProductEvidenceState(
+    "46",
+    "2026-06-30",
+    {},
+    "An old product registry refresh failed.",
+  );
+  assert.deepEqual(current.requiredKinds, []);
+  assert.equal(current.missingProduct, false);
+  assert.equal(current.issue, "");
+  assert.equal(current.blocked, false);
 });
 
 test("UI source-complete activities stay synchronized with the estimate API", () => {
@@ -325,19 +348,25 @@ test("product-free governed VEU activities do not invent a registry selection", 
 });
 
 test("VEU UI evidence fails closed for unavailable, undated, expired and wrong-category rows", () => {
+  const historicalProduct = (overrides = {}) => veuProduct({
+    approvalStatus: "legacy",
+    eligibleFrom: "2026-04-14",
+    eligibleTo: "2026-06-29",
+    ...overrides,
+  });
   for (const [product, expected] of [
-    [veuProduct({ eligibleFrom: "" }), /Effective From/],
-    [veuProduct({ eligibleTo: "2026-08-08" }), /approval window/],
-    [veuProduct({
+    [historicalProduct({ eligibleFrom: "" }), /Effective From/],
+    [historicalProduct({ eligibleTo: "2026-06-28" }), /approval window/],
+    [historicalProduct({
       attributes: { veuProductCategoryNumber: "24A" },
     }), /does not match activity 46/],
-    [veuProduct({ productKind: "veu_television_listing" }), /identity is incomplete or does not match/],
-    [veuProduct({ approvalStatus: "unknown" }), /not pinned to a VEU Public Registry approval/],
-    [veuProduct({ approvalStatus: "legacy", eligibleTo: "" }), /historical.*no defensible Effective To/],
+    [historicalProduct({ productKind: "veu_television_listing" }), /identity is incomplete or does not match/],
+    [historicalProduct({ approvalStatus: "unknown" }), /not pinned to a VEU Public Registry approval/],
+    [historicalProduct({ eligibleTo: "" }), /historical.*no defensible Effective To/],
   ]) {
     const state = governedModule.creditexVeuProductEvidenceState(
       "46",
-      "2026-08-09",
+      "2026-06-29",
       { veu_induction_cooktop: product },
     );
     assert.equal(state.blocked, true);
@@ -346,8 +375,8 @@ test("VEU UI evidence fails closed for unavailable, undated, expired and wrong-c
 
   const unavailable = governedModule.creditexVeuProductEvidenceState(
     "46",
-    "2026-08-09",
-    { veu_induction_cooktop: veuProduct() },
+    "2026-06-29",
+    { veu_induction_cooktop: historicalProduct() },
     "The current VEU Public Registry snapshot is stale or unavailable.",
   );
   assert.equal(unavailable.blocked, true);
@@ -355,19 +384,17 @@ test("VEU UI evidence fails closed for unavailable, undated, expired and wrong-c
 
   const historical = governedModule.creditexVeuProductEvidenceState(
     "46",
-    "2026-08-09",
+    "2026-06-29",
     {
-      veu_induction_cooktop: veuProduct({
+      veu_induction_cooktop: historicalProduct({
         approvalStatus: "legacy",
-        eligibleFrom: "2026-07-01",
-        eligibleTo: "2026-08-31",
       }),
     },
   );
   assert.equal(historical.blocked, false);
 });
 
-test("activity and installation-date identity changes clear selected products and evidence", () => {
+test("activity and effective-date identity changes clear selected products and evidence", () => {
   const selected = governedModule.creditexVeuProductUiReducer(
     { selectedProducts: {}, registryIssue: "", evidenceError: "" },
     {
@@ -381,7 +408,7 @@ test("activity and installation-date identity changes clear selected products an
     "Exact Model 46A",
   );
 
-  for (const reason of ["activity", "installation_date"]) {
+  for (const reason of ["activity", "effective_date"]) {
     const reset = governedModule.creditexVeuProductUiReducer(selected, {
       type: "identity_changed",
       reason,
@@ -745,14 +772,18 @@ test("quote requests allow future installation dates without exposing evidence c
   assert.doesNotMatch(source, /max=\{todayIso\(\)\}/);
   assert.match(source, /estimatePurpose: "quote"/);
   assert.match(source, /effectiveDate: date/);
-  assert.match(source, /creditexVeuQuoteInputVisible\(definition, inputs\)/);
+  assert.match(source, /creditexVeuQuoteInputVisible\([\s\S]*definition,[\s\S]*inputs,[\s\S]*activity\.activityCode/);
   assert.match(source, /creditexQuoteEvidenceInput\(definition\.key\)/);
   assert.match(source, /<summary>Calculation details<\/summary>/);
   const veuUiSource = source.slice(source.indexOf("function CreditexVeuCalculator"));
   assert.ok(
     veuUiSource.indexOf("{scenarioInputs.map(renderVeuInput)}")
-      < veuUiSource.indexOf("Installation date"),
-    "plain-English scenario must precede installation date",
+      < veuUiSource.indexOf("{creditexVeuEffectiveDateLabel(activity.activityCode)}"),
+    "plain-English scenario must precede the activity's effective date",
+  );
+  assert.match(
+    veuUiSource,
+    /creditexVeuEffectiveDateLabel\(activity\.activityCode\)/,
   );
   assert.ok(
     veuUiSource.indexOf("{requiredKinds.map((kind) => (")

@@ -33,6 +33,10 @@ import {
   type AustralianAddressComponents,
   type TradeAddressProvenance,
 } from "@/lib/trade-address-verification";
+import {
+  ENERGY_SERVICE_IDS,
+  ENERGY_SERVICE_LABELS,
+} from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -44,9 +48,8 @@ const PIPELINE_STAGES = new Set(["enquiry", "qualifying", "quoting", "approved",
 const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "blocked", "completed", "cancelled"]);
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const SERVICE_CATEGORIES = new Set([
-  "assessment", "solar", "battery", "heating-cooling", "hot-water",
-  "draught-proofing", "insulation", "glazing", "window-coverings",
-  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+  ...ENERGY_SERVICE_IDS,
+  "electrical", "plumbing", "mounting-hardware", "controls",
 ]);
 const APPOINTMENT_TYPES = new Set(["phone_call", "site_visit", "quote_review", "installation", "service", "admin"]);
 const APPOINTMENT_STATUSES = new Set(["scheduled", "completed", "cancelled", "no_show"]);
@@ -60,11 +63,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAGE_SIZES = new Set([25, 50, 100]);
 const CRM_REQUEST_MAX_BYTES = 96 * 1024;
 const SERVICE_LABELS: Record<string, string> = {
-  assessment: "Energy assessment", solar: "Rooftop solar", battery: "Home batteries",
-  "heating-cooling": "Heating and cooling", "hot-water": "Hot water",
-  "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Glazing",
-  "window-coverings": "Blinds, shutters and external shading",
-  "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging",
+  ...ENERGY_SERVICE_LABELS,
+  "insulation-draughts": "Insulation and draught control",
   electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
 };

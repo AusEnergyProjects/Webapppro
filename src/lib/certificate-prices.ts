@@ -33,13 +33,45 @@ export interface CertificatePriceSeries extends CertificateDefinition {
 export interface CertificatePriceDataset {
   asOf: string;
   source: {
-    name: string;
-    url: string;
     lastCheckedAt: string;
     status: "current" | "stale";
     note: string;
   };
   certificates: CertificatePriceSeries[];
+}
+
+export function publicCertificatePriceDataset(
+  dataset: CertificatePriceDataset,
+): CertificatePriceDataset {
+  return {
+    asOf: dataset.asOf,
+    source: {
+      lastCheckedAt: dataset.source.lastCheckedAt,
+      status: dataset.source.status,
+      note: dataset.source.note,
+    },
+    certificates: dataset.certificates.map((series) => ({
+      code: series.code,
+      name: series.name,
+      region: series.region,
+      relevance: series.relevance,
+      plainEnglish: series.plainEnglish,
+      represents: series.represents,
+      whyPriceMatters: series.whyPriceMatters,
+      officialUrl: series.officialUrl,
+      colour: series.colour,
+      latest: series.latest
+        ? {
+            tradedOn: series.latest.tradedOn,
+            priceCents: series.latest.priceCents,
+          }
+        : null,
+      points: series.points.map((point) => ({
+        tradedOn: point.tradedOn,
+        priceCents: point.priceCents,
+      })),
+    })),
+  };
 }
 
 export const CERTIFICATE_DEFINITIONS: CertificateDefinition[] = [

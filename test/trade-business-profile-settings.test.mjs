@@ -16,6 +16,11 @@ import {
   hasAllowedSignature,
   sanitiseQuotingPhoto,
 } from "../src/lib/private-image-evidence.ts";
+import {
+  ENERGY_SERVICE_IDS,
+  normalizeEnergyServiceIds,
+} from "../src/lib/energy-service-catalogue.mjs";
+import { matchedServiceCategories } from "../src/lib/trade-service-matching.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const profileRoute = read("../src/app/api/trade-profile/route.ts");
@@ -24,6 +29,10 @@ const migration = read("../drizzle/0120_trade_business_identity_and_quote_delive
 const customerDocumentsMigration = read("../drizzle/0121_trade_customer_documents.sql");
 const schema = read("../db/schema.ts");
 const settingsUi = read("../src/components/TradeBusinessSettingsWorkspace.tsx");
+const enquiryRoute = read("../src/app/api/trade-enquiries/route.ts");
+const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
+const crmRoute = read("../src/app/api/trade-crm/route.ts");
+const newJobUi = read("../src/components/TradeNewJobForm.tsx");
 const globalStyles = read("../src/app/globals.css");
 
 function pngChunk(type, payload = []) {
@@ -132,6 +141,61 @@ test("service areas are bounded, authoritative and saved atomically", () => {
   );
 });
 
+test("approved installers can save canonical lead services for future exact matching", () => {
+  assert.equal(ENERGY_SERVICE_IDS.includes("electric-cooking"), true);
+  assert.deepEqual(
+    normalizeEnergyServiceIds(["solar", "electric-cooking", "solar"]),
+    ["solar", "electric-cooking"],
+  );
+  assert.equal(normalizeEnergyServiceIds(["solar", "not-a-service"]), null);
+  assert.equal(normalizeEnergyServiceIds("solar"), null);
+
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec(`CREATE TABLE trade_accounts (
+      firebase_uid text PRIMARY KEY NOT NULL,
+      capabilities text NOT NULL,
+      settings_updated_at text NOT NULL
+    ); CREATE TABLE trade_opportunity_matches (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      matched_categories text NOT NULL
+    )`);
+    database.prepare("INSERT INTO trade_accounts VALUES (?, ?, ?)")
+      .run("trade-1", JSON.stringify(["solar"]), "2026-08-12T00:00:00.000Z");
+    database.prepare("INSERT INTO trade_opportunity_matches VALUES (?, ?, ?)")
+      .run("existing-match", "trade-1", JSON.stringify(["solar"]));
+    const saved = normalizeEnergyServiceIds(["electric-cooking"]);
+    database.prepare("UPDATE trade_accounts SET capabilities = ?, settings_updated_at = ? WHERE firebase_uid = ?")
+      .run(JSON.stringify(saved), "2026-08-12T01:00:00.000Z", "trade-1");
+    const reloaded = JSON.parse(database.prepare("SELECT capabilities FROM trade_accounts WHERE firebase_uid = ?").get("trade-1").capabilities);
+    assert.deepEqual(reloaded, ["electric-cooking"]);
+    assert.deepEqual(matchedServiceCategories(["electric-cooking"], reloaded), ["electric-cooking"]);
+    assert.deepEqual(matchedServiceCategories(["solar"], reloaded), []);
+    assert.deepEqual(
+      JSON.parse(database.prepare("SELECT matched_categories FROM trade_opportunity_matches WHERE id = ?").get("existing-match").matched_categories),
+      ["solar"],
+      "capability changes must not rewrite existing matches",
+    );
+  } finally {
+    database.close();
+  }
+
+  assert.match(profileRoute, /requireVerifiedTradeIdentity\(identity\)/);
+  assert.match(profileRoute, /capabilities = \?, availability_status/);
+  assert.match(profileRoute, /JSON\.stringify\(capabilities\)/);
+  assert.match(profileRoute, /settings_updated_at = \?, updated_at = \?/);
+  assert.match(settingsUi, /TLink uses these saved services for future lead matching/);
+  assert.match(settingsUi, /Changes do not remove leads already assigned/);
+  assert.match(settingsUi, /Licences and[\s\S]*do not automatically add services/);
+  assert.match(settingsUi, /ENERGY_SERVICE_CATALOGUE\.map/);
+  assert.match(settingsUi, /capabilities,/);
+  assert.match(enquiryRoute, /\.\.\.ENERGY_SERVICE_IDS/);
+  assert.match(enquiryInbox, /\.\.\.ENERGY_SERVICE_OPTIONS/);
+  assert.match(crmRoute, /\.\.\.ENERGY_SERVICE_IDS/);
+  assert.match(newJobUi, /\.\.\.ENERGY_SERVICE_OPTIONS/);
+});
+
 test("business branding and quote defaults use one curated contract", () => {
   assert.deepEqual(TRADE_BRAND_THEME_KEYS, [
     "emerald_navy",
@@ -228,7 +292,7 @@ test("business settings render as one continuous page with explicit section acti
   for (const action of [
     "Save appearance",
     "Save customer document details",
-    "Save service areas",
+    "Save services and areas",
     "Save quote defaults",
     "Save notifications",
     "Edit document appearance",

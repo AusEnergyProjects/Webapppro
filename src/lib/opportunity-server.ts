@@ -8,6 +8,7 @@ import { selectEveryQualifiedTradeRecipient } from "@/lib/direct-trade-matching.
 import { closestQualifyingTradeServiceArea } from "@/lib/trade-service-area-matching.mjs";
 import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
 import { ensureOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
+import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import {
   publicPlanContactReleaseAccessSql,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -124,19 +125,7 @@ const ACTIVE_MATCH_STATUSES = new Set([
   "interested",
   "connected",
 ]);
-const CATEGORY_LABELS: Record<string, string> = {
-  assessment: "energy assessment",
-  solar: "rooftop solar",
-  battery: "home battery",
-  "heating-cooling": "heating and cooling",
-  "hot-water": "hot water",
-  "draught-proofing": "draught-proofing",
-  insulation: "insulation",
-  glazing: "glazing",
-  "window-coverings": "blinds, shutters and external shading",
-  "ev-charging": "EV charging",
-  other: "energy upgrade",
-};
+const CATEGORY_LABELS = ENERGY_SERVICE_LABELS as Readonly<Record<string, string>>;
 
 export function canonicalMarketplaceState(value: unknown) {
   return canonicalAustralianState(value) || "";

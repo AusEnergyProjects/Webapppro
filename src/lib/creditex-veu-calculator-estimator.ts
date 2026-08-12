@@ -7,6 +7,8 @@ import {
   CREDITEX_VEU_LOCATION_CLASSES,
   CREDITEX_VEU_METROPOLITAN_FACTOR,
   CREDITEX_VEU_PART_44_APPLICATION_GUIDE,
+  CREDITEX_VEU_PART_46_CURRENT_RULES_FROM,
+  CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM,
   CREDITEX_VEU_PART_6_BASELINES,
   CREDITEX_VEU_PART_6_BUILDING_LOADS,
   CREDITEX_VEU_PART_6_CATEGORIES,
@@ -25,7 +27,7 @@ import {
 export const CREDITEX_VEU_ESTIMATE_SCHEMA =
   "creditex-veu-deterministic-estimate/v1" as const;
 export const CREDITEX_VEU_ESTIMATOR_VERSION =
-  "creditex-veu-exact-rational-engine/2026-08-11.2" as const;
+  "creditex-veu-exact-rational-engine/2026-08-12.1" as const;
 
 const CREDITEX_VEU_ROUNDING_SOURCE = {
   version: "Authorised version 023",
@@ -95,9 +97,11 @@ export type CreditexVeuEstimate = {
   scenario: string;
   formulaKey: string;
   formulaProfile: string;
-  specificationVersion: "24.0" | "25.0";
+  specificationVersion: "23.0" | "24.0" | "25.0";
   specificationEffectiveFrom: string;
-  installationDate: string;
+  effectiveDateLabel: "Installation date" | "Purchase date";
+  installationDate?: string;
+  purchaseDate?: string;
   officialSourceUrl: string;
   officialSourceTitle: string;
   sourcePages: string;
@@ -451,7 +455,10 @@ function usesVeuProductRegistry(
   return productRegistry === "VEU" || productRegistry === "VEU_AND_GEMS";
 }
 
-function supportingSourcesFor(activity: CreditexVeuActivityDefinition) {
+function supportingSourcesFor(
+  activity: CreditexVeuActivityDefinition,
+  installationDate: string,
+) {
   const waterHeaterActivity = ["1C", "1D", "3C", "3D"].includes(
     activity.activityCode,
   );
@@ -463,7 +470,10 @@ function supportingSourcesFor(activity: CreditexVeuActivityDefinition) {
           CREDITEX_VEU_WATER_HEATER_QUANTITY_SOURCE,
         ]
       : []),
-    ...(activity.supportingSources || []),
+    ...(activity.activityCode === "46"
+      && installationDate < CREDITEX_VEU_PART_46_CURRENT_RULES_FROM
+      ? []
+      : activity.supportingSources || []),
   ];
 }
 
@@ -478,13 +488,32 @@ function parseDate(value: unknown, label: string) {
   return { text: value, time: date.getTime() };
 }
 
-function resolveSpecification(installationDate: string, activityCode: string) {
-  const parsed = parseDate(installationDate, "Installation date");
-  const minimum = parseDate("2026-06-30", "Minimum supported date");
-  if (parsed.time < minimum.time) {
+function effectiveDateLabel(activityCode: string) {
+  return activityCode === "46" ? "Purchase date" : "Installation date";
+}
+
+function resolveSpecification(effectiveDate: string, activityCode: string) {
+  const parsed = parseDate(effectiveDate, effectiveDateLabel(activityCode));
+  const currentRulesStart = parseDate(
+    CREDITEX_VEU_PART_46_CURRENT_RULES_FROM,
+    "Version 24 start",
+  );
+  if (parsed.time < currentRulesStart.time) {
+    const legacyPart46Start = parseDate(
+      CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM,
+      "Version 23 start",
+    );
+    if (activityCode === "46" && parsed.time >= legacyPart46Start.time) {
+      return {
+        parsed,
+        source: CREDITEX_VEU_SPECIFICATION_SOURCES.v23,
+        formulaProfile: "veu-specification-v23.0-part46",
+        part6RevisionApplied: false,
+      };
+    }
     fail(
       "VEU_DATE_UNSUPPORTED",
-      "This VEU slice supports Version 24 and Version 25 installations from 30 June 2026 onward.",
+      "This VEU slice supports Version 24 and Version 25 installations from 30 June 2026 onward, plus Part 46 purchases from 14 April to 29 June 2026 under Version 23.",
     );
   }
   const v25Start = parseDate("2026-07-21", "Version 25 start");
@@ -507,9 +536,10 @@ function resolveSpecification(installationDate: string, activityCode: string) {
 
 function validateProductEvidence(
   value: unknown,
-  installationDate: string,
+  effectiveDate: string,
   registry: CreditexVeuRegistry,
   activityCategories: readonly string[],
+  dateLabel = "Installation date",
 ) {
   const product = record(value, "Product evidence");
   exactKeys(product, [
@@ -564,14 +594,14 @@ function validateProductEvidence(
       "Legacy product evidence requires an exact official effective-to date.",
     );
   }
-  const install = parseDate(installationDate, "Installation date");
+  const date = parseDate(effectiveDate, dateLabel);
   if (
-    install.time < effectiveFrom.time
-    || (effectiveTo && install.time > effectiveTo.time)
+    date.time < effectiveFrom.time
+    || (effectiveTo && date.time > effectiveTo.time)
   ) {
     fail(
       "VEU_PRODUCT_NOT_EFFECTIVE",
-      `Product ${productId} is not effective on ${installationDate}.`,
+      `Product ${productId} is not effective on the ${dateLabel.toLowerCase()} ${effectiveDate}.`,
       409,
     );
   }
@@ -3986,22 +4016,120 @@ function calculatePart44(
 function calculatePart46(
   inputs: UnknownRecord,
   product: unknown,
-  installationDate: string,
+  purchaseDate: string,
 ): Execution {
-  exactKeys(inputs, ["scenario"], "Part 46 input");
+  if (purchaseDate < CREDITEX_VEU_PART_46_CURRENT_RULES_FROM) {
+    exactKeys(inputs, ["scenario"], "Part 46 input");
+    const scenario = selectInput(
+      inputs,
+      "scenario",
+      "Part 46 scenario",
+      ["46A", "46B"] as const,
+    );
+    const evidence = validateProductEvidence(
+      product,
+      purchaseDate,
+      "VEU",
+      [scenario],
+      "Purchase date",
+    );
+    const result = multiply(
+      subtract(decimalConstant("0.1"), decimalConstant("0.04")),
+      decimalConstant("25"),
+    );
+    return {
+      scenario,
+      result,
+      inputSnapshot: { scenario, product: evidence },
+      trace: [
+        traceEntry(
+          "ghg_reduction",
+          "Lifetime GHG equivalent reduction",
+          "baseline 0.10; upgrade 0.04",
+          "(baseline - upgrade) x 25 years",
+          result,
+        ),
+      ],
+    };
+  }
+  exactKeys(inputs, [
+    "scenario",
+    "victorian_residential_premises_confirmed",
+    "premises_at_least_two_years_old_confirmed",
+    "existing_gas_or_lpg_cooktop_confirmed",
+    "no_prior_part_46_discount_confirmed",
+    "eligible_product_requirements_confirmed",
+    "cooktop_consumer_fact_sheet_provided",
+    "co_payment_per_product_aud",
+  ], "Part 46 input");
   const scenario = selectInput(inputs, "scenario", "Part 46 scenario", ["46A", "46B"] as const);
-  const evidence = validateProductEvidence(
-    product,
-    installationDate,
-    "VEU",
-    [scenario],
+  eligibilityConfirmationInput(
+    inputs,
+    "victorian_residential_premises_confirmed",
+    "Victorian residential premises confirmation",
+    "Part 46 is available only for an eligible Victorian residential premises.",
   );
+  eligibilityConfirmationInput(
+    inputs,
+    "premises_at_least_two_years_old_confirmed",
+    "premises age confirmation",
+    "Part 46 requires the residential premises to be at least two years old.",
+  );
+  eligibilityConfirmationInput(
+    inputs,
+    "existing_gas_or_lpg_cooktop_confirmed",
+    "existing gas or LPG cooktop confirmation",
+    "Part 46 requires an existing gas or LPG cooking product.",
+  );
+  eligibilityConfirmationInput(
+    inputs,
+    "no_prior_part_46_discount_confirmed",
+    "prior Part 46 discount confirmation",
+    "Part 46 permits only one induction cooking product per eligible residential premises.",
+  );
+  eligibilityConfirmationInput(
+    inputs,
+    "eligible_product_requirements_confirmed",
+    "eligible product requirements confirmation",
+    "The induction cooking product does not meet the current Part 46 product requirements.",
+  );
+  eligibilityConfirmationInput(
+    inputs,
+    "cooktop_consumer_fact_sheet_provided",
+    "cooktop consumer factsheet confirmation",
+    "The current VEU cooktop consumer factsheet must be provided before VEECs are created.",
+  );
+  const coPayment = decimalInput(
+    inputs,
+    "co_payment_per_product_aud",
+    "Co-payment per product",
+    { allowZero: true },
+  );
+  ensureAtLeast(
+    coPayment,
+    "200",
+    "Part 46 requires a minimum co-payment of $200 including GST per product.",
+  );
+  const evidence = validateNoProductEvidence(product, "46");
   const result = multiply(subtract(decimalConstant("0.1"), decimalConstant("0.04")), decimalConstant("25"));
   return {
     scenario,
     result,
-    inputSnapshot: { scenario, product: evidence },
-    trace: [traceEntry("ghg_reduction", "Lifetime GHG equivalent reduction", "baseline 0.10; upgrade 0.04", "(baseline - upgrade) x 25 years", result)],
+    inputSnapshot: {
+      scenario,
+      victorianResidentialPremisesConfirmed: "yes",
+      premisesAtLeastTwoYearsOldConfirmed: "yes",
+      existingGasOrLpgCooktopConfirmed: "yes",
+      noPriorPart46DiscountConfirmed: "yes",
+      eligibleProductRequirementsConfirmed: "yes",
+      cooktopConsumerFactSheetProvided: "yes",
+      coPaymentPerProductAud: exactFraction(coPayment),
+      product: evidence,
+    },
+    trace: [
+      traceEntry("minimum_co_payment", "Minimum co-payment gate", exactFraction(coPayment), "minimum $200 including GST per product", decimalConstant("200"), "AUD including GST per product"),
+      traceEntry("ghg_reduction", "Lifetime GHG equivalent reduction", "baseline 0.10; upgrade 0.04", "(baseline - upgrade) x 25 years", result),
+    ],
   };
 }
 
@@ -4150,10 +4278,20 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   if (!activity) {
     fail("VEU_ACTIVITY_UNSUPPORTED", `Activity ${activityCode} is not executable in this bounded VEU slice.`, 404);
   }
-  const installationDate = parseDate(request.installationDate, "Installation date").text;
-  const specification = resolveSpecification(installationDate, activityCode);
+  // The wire key remains `installationDate` for compatibility with the shared
+  // VEU request contract. For Part 46 it carries the scheme's point-of-sale
+  // purchase date, which determines both the rule version and legacy listing.
+  const effectiveDate = parseDate(
+    request.installationDate,
+    effectiveDateLabel(activityCode),
+  ).text;
+  const specification = resolveSpecification(effectiveDate, activityCode);
   const suppliedInputs = record(request.inputs, "Activity inputs");
   const quotePreparation = estimatePurpose === "quote"
+    && !(
+      activityCode === "46"
+      && effectiveDate < CREDITEX_VEU_PART_46_CURRENT_RULES_FROM
+    )
     ? prepareQuoteInputs(activity, suppliedInputs)
     : { normalizedInputs: suppliedInputs, warnings: [] };
   const unitPreparation = prepareWaterHeaterUnitQuantity(
@@ -4166,7 +4304,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     activityCode,
     inputs,
     request.product,
-    installationDate,
+    effectiveDate,
     specification.part6RevisionApplied,
     estimatePurpose,
   );
@@ -4237,7 +4375,9 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
   };
   const formulaKey = `${activity.formulaKey}:${specification.formulaProfile}`;
   const inputSnapshot = {
-    installationDate,
+    ...(activityCode === "46"
+      ? { purchaseDate: effectiveDate }
+      : { installationDate: effectiveDate }),
     ...execution.inputSnapshot,
     ...(schedule4Limit
       ? { schedule4WaterHeaterProductLimit: schedule4Limit }
@@ -4259,6 +4399,9 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
         eligibilityWarnings: quotePreparation.warnings,
       }
     : {};
+  const sourcePages = activityCode === "46" && specification.source.version === "23.0"
+    ? "Version 23 pages 132-133, Equation 46.1 and Table 46.3"
+    : activity.sourcePages;
   const receiptBase = {
     schemaVersion: CREDITEX_VEU_ESTIMATE_SCHEMA,
     estimatorVersion: CREDITEX_VEU_ESTIMATOR_VERSION,
@@ -4266,7 +4409,7 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     scenario: execution.scenario,
     formulaKey,
     specificationVersion: specification.source.version,
-    supportingSources: supportingSourcesFor(activity),
+    supportingSources: supportingSourcesFor(activity, effectiveDate),
     inputSnapshot,
     trace,
     output,
@@ -4282,13 +4425,20 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     formulaProfile: specification.formulaProfile,
     specificationVersion: specification.source.version,
     specificationEffectiveFrom: specification.source.effectiveFrom,
-    installationDate,
+    effectiveDateLabel: effectiveDateLabel(activityCode),
+    ...(activityCode === "46"
+      ? { purchaseDate: effectiveDate }
+      : { installationDate: effectiveDate }),
     officialSourceUrl: specification.source.url,
     officialSourceTitle: specification.source.title,
-    sourcePages: activity.sourcePages,
+    sourcePages,
     sourceReviewedOn: CREDITEX_VEU_CATALOGUE_REVIEWED_ON,
-    supportingSources: supportingSourcesFor(activity),
+    supportingSources: supportingSourcesFor(activity, effectiveDate),
     productRegistryUrl: usesVeuProductRegistry(activity.productRegistry)
+      && !(
+        activityCode === "46"
+        && effectiveDate >= CREDITEX_VEU_PART_46_CURRENT_RULES_FROM
+      )
       ? CREDITEX_VEU_PUBLIC_REGISTRY_URL
       : "",
     inputSnapshot,
@@ -4297,8 +4447,10 @@ export function estimateCreditexVeu(value: unknown): CreditexVeuEstimate {
     status: "estimate_only_compliance_reconciliation_required",
     certificateActionEnabled: false,
     operatorMessage: estimatePurpose === "quote"
-      ? "Potential rebate estimate only. Where required, the approved product was checked. The effective date and governed formula values were checked, but quote-mode evidence assumptions must be confirmed before relying on eligibility."
-      : "Estimate only. Reconcile the installation, postcode classification, approved product record, effective dates and all activity evidence against the official VEU systems before certificate creation.",
+      ? `Potential rebate estimate only. Where required, the approved product was checked. The ${effectiveDateLabel(activityCode).toLowerCase()} and governed formula values were checked, but quote-mode evidence assumptions must be confirmed before relying on eligibility.`
+      : activityCode === "46"
+        ? "Estimate only. Reconcile the purchase date, eligible product, premises requirements, minimum co-payment and all activity evidence against the official VEU systems before certificate creation."
+        : "Estimate only. Reconcile the installation, postcode classification, approved product record, effective dates and all activity evidence against the official VEU systems before certificate creation.",
     inputHash: sha256(inputSnapshot),
     traceHash: sha256(trace),
     outputHash: sha256(output),

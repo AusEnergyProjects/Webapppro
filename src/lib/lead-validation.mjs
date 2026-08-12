@@ -11,22 +11,11 @@ import {
   normalizePublicPlanQuotePreparation,
   PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
 } from "./public-plan-quote-preparation.mjs";
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PUBLIC_PLAN_PHONE_RE = /^[+\d()\s.-]+$/;
-const DIRECT_TRADE_CATEGORIES = new Set([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-]);
+const DIRECT_TRADE_CATEGORIES = new Set(ENERGY_SERVICE_IDS);
 const LEGACY_DIRECT_TRADE_CATEGORY_ALIASES = {
   "insulation-draughts": ["insulation", "draught-proofing"],
 };

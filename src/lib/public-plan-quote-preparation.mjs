@@ -97,6 +97,7 @@ const ALL_SERVICES = Object.freeze([
   "battery",
   "heating-cooling",
   "hot-water",
+  "electric-cooking",
   "draught-proofing",
   "insulation",
   "glazing",
@@ -131,6 +132,12 @@ const QUESTION_DEFINITIONS = Object.freeze([
     options: ["One main room", "Several rooms", "Whole home", "Need advice"],
   },
   {
+    id: "electric-cooking-scope",
+    label: "What should the electric cooking quote cover?",
+    services: ["electric-cooking"],
+    options: ["Built-in cooktop", "Cooktop and oven", "Freestanding cooker", "Portable induction option", "Need advice"],
+  },
+  {
     id: "other-scope",
     label: "What upgrade or problem do you want help with?",
     services: ["other"],
@@ -155,7 +162,7 @@ const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
     id: "switchboard-front",
     label: "Full switchboard from the front",
     hint: "Show the whole switchboard from a safe standing position with only its normal hinged door open. Do not remove covers or touch wiring.",
-    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
+    services: ["solar", "battery", "heating-cooling", "hot-water", "electric-cooking", "ev-charging"],
   },
   {
     id: "solar-battery-equipment-wide",
@@ -180,6 +187,12 @@ const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
     label: "Wide view of the whole hot-water system and surrounding space",
     hint: "Show the full unit, nearby walls, doors, pipework and clearances. Add a close label only as an optional second photo.",
     services: ["hot-water"],
+  },
+  {
+    id: "electric-cooking-installation-area",
+    label: "Wide view of the cooktop and installation area",
+    hint: "Stand back and show the whole cooktop or cooker, nearby bench, oven, wall and ventilation. Do not remove the appliance or electrical covers.",
+    services: ["electric-cooking"],
   },
   {
     id: "ev-installation-area",
@@ -330,6 +343,13 @@ const HOT_WATER_LABELS = Object.freeze([
   ["electric-gas-boosted-hot-water", "Electric hot water with gas booster"],
   ["hot-water-other", "Another hot-water type"],
 ]);
+const ELECTRIC_COOKING_LABELS = Object.freeze([
+  ["gas-cooking", "Gas cooktop or oven"],
+  ["electric-resistance-cooking", "Standard electric cooktop or oven"],
+  ["induction-cooking", "Induction cooking"],
+  ["mixed-cooking", "Mixed gas and electric cooking"],
+  ["cooking-unknown", "Cooking setup not known"],
+]);
 const INSULATION_LABELS = Object.freeze([
   ["ceiling-insulation-none", "Ceiling: none known"],
   ["ceiling-insulation-limited", "Ceiling: old, thin or patchy"],
@@ -398,7 +418,7 @@ export function publicPlanQuotePlanFactsForSnapshot(services, planSnapshot) {
     questionId: "known-plan-switchboard",
     label: "Switchboard already recorded in the home plan",
     answers: [SWITCHBOARD_LABELS[propertyContext.switchboard]],
-    services: ["solar", "battery", "heating-cooling", "hot-water", "ev-charging"],
+    services: ["solar", "battery", "heating-cooling", "hot-water", "electric-cooking", "ev-charging"],
   });
   addKnownPlanFact(facts, selectedServices, {
     questionId: "known-plan-roof",
@@ -421,6 +441,12 @@ export function publicPlanQuotePlanFactsForSnapshot(services, planSnapshot) {
     label: "Hot water already recorded in the home plan",
     answers: labelsFromFeatures(features, HOT_WATER_LABELS),
     services: ["hot-water"],
+  });
+  addKnownPlanFact(facts, selectedServices, {
+    questionId: "known-plan-electric-cooking",
+    label: "Cooking setup already recorded in the home plan",
+    answers: labelsFromFeatures(features, ELECTRIC_COOKING_LABELS),
+    services: ["electric-cooking"],
   });
   addKnownPlanFact(facts, selectedServices, {
     questionId: "known-plan-insulation",

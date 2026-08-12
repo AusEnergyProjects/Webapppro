@@ -10,6 +10,7 @@ import {
   type ComplianceClaimOutputCode,
 } from "@/lib/australian-government-program-catalogue";
 import { GOVERNMENT_ACTIVITY_CALCULATION_METHODS } from "@/lib/australian-certificate-calculation-catalogue";
+import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 
 type Template = { id: string; name: string; title: string; serviceCategory: string; priority: string; description: string; taskTitles: string[] };
 type Customer = { id: string; customerNumber: string; displayName: string; email: string; phone: string; suburb: string; postcode: string };
@@ -58,12 +59,9 @@ type AddressSuggestion = {
   selectionProof?: string;
 };
 const serviceOptions = [
-  ["assessment", "Energy assessment"], ["solar", "Rooftop solar"], ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"], ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"], ["insulation", "Insulation"], ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"], ["ev-charging", "EV charging"],
+  ...ENERGY_SERVICE_OPTIONS,
   ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
-  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"], ["other", "Other work"],
+  ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceCategories = new Set<string>(serviceOptions.map(([value]) => value));
 const serviceLabels: Record<string, string> = {

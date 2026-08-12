@@ -9,6 +9,7 @@ import {
   collapseCertificateTradesByDay,
   isoDateMonthsBefore,
   parseDemandManagerCertificateHtml,
+  publicCertificatePriceDataset,
 } from "../src/lib/certificate-prices.ts";
 
 const root = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/(.:)/, "$1"));
@@ -30,6 +31,37 @@ test("certificate definitions explain every supported market in plain language",
     assert.ok(definition.represents.length > 40);
     assert.ok(definition.whyPriceMatters.length > 60);
     assert.match(definition.officialUrl, /^https:\/\//);
+  }
+});
+
+test("public certificate-price API projection never exposes commercial source provenance", () => {
+  const projected = publicCertificatePriceDataset({
+    asOf: "2026-08-12T02:00:00.000Z",
+    source: {
+      name: "Demand Manager reported trades",
+      url: "https://www.demandmanager.com.au/certificate-prices/",
+      lastCheckedAt: "2026-08-12T01:00:00.000Z",
+      status: "current",
+      note: "Indicative market reference.",
+    },
+    certificates: CERTIFICATE_DEFINITIONS.map((definition) => ({
+      ...definition,
+      sourceName: "Demand Manager reported trades",
+      sourceUrl: "https://www.demandmanager.com.au/certificate-prices/",
+      latest: { tradedOn: "2026-08-11", priceCents: 8000 },
+      points: [{ tradedOn: "2026-08-11", priceCents: 8000 }],
+    })),
+  });
+  const serialized = JSON.stringify(projected);
+  assert.doesNotMatch(serialized, /Demand Manager|demandmanager\.com\.au/i);
+  assert.deepEqual(Object.keys(projected.source).sort(), [
+    "lastCheckedAt",
+    "note",
+    "status",
+  ]);
+  for (const certificate of projected.certificates) {
+    assert.equal("sourceName" in certificate, false);
+    assert.equal("sourceUrl" in certificate, false);
   }
 });
 

@@ -22,6 +22,7 @@ import {
   TRADE_BRAND_BORDER_STYLES,
   TRADE_BRAND_THEME_KEYS,
 } from "@/lib/trade-business-branding";
+import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -40,20 +41,6 @@ const DEFAULT_BANNER_CROP = {
   width: 10_000,
   height: 10_000,
 } as const;
-const CAPABILITIES = new Set([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-]);
-
 type ProfilePayload = {
   businessName?: unknown;
   abn?: unknown;
@@ -102,12 +89,6 @@ function canonicalHttpsWebsite(value: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function cleanList(value: unknown, allowed: Set<string>) {
-  return Array.isArray(value)
-    ? [...new Set(value.filter((item): item is string => typeof item === "string" && allowed.has(item)))]
-    : [];
 }
 
 function parseStringList(value: unknown) {
@@ -395,6 +376,7 @@ export async function GET(request: Request) {
 }
 
 type SettingsPayload = {
+  capabilities?: unknown;
   availabilityStatus?: unknown;
   serviceBasePostcode?: unknown;
   serviceRadiusKm?: unknown;
@@ -442,7 +424,7 @@ export async function PATCH(request: Request) {
   }
 
   const db = getD1();
-  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, service_base_postcode,
+  const account = await db.prepare(`SELECT email, business_name, phone, partner_type, postcode, capabilities, service_base_postcode,
       service_radius_km, availability_status, email_opportunities,
       email_weekly_summary, brand_theme_key, brand_border_style,
       quote_email_subject_template, quote_email_intro, quote_default_terms,
@@ -475,6 +457,16 @@ export async function PATCH(request: Request) {
   const emailWeeklySummary = raw.emailWeeklySummary === undefined
     ? Boolean(account.email_weekly_summary)
     : raw.emailWeeklySummary;
+  const storedCapabilities = parseStringList(account.capabilities);
+  const capabilities = raw.capabilities === undefined
+    ? storedCapabilities
+    : normalizeEnergyServiceIds(raw.capabilities);
+  if (!capabilities || (account.partner_type === "installer" && !capabilities.length)) {
+    return json({
+      ok: false,
+      error: "Choose at least one valid lead service for this business.",
+    }, 400);
+  }
 
   const currentAreaRows = await db.prepare(`
     SELECT postcode, radius_km
@@ -627,7 +619,7 @@ export async function PATCH(request: Request) {
   const now = new Date().toISOString();
   const statements = [db.prepare(`
     UPDATE trade_accounts
-    SET availability_status = ?, service_base_postcode = ?, service_radius_km = ?,
+    SET capabilities = ?, availability_status = ?, service_base_postcode = ?, service_radius_km = ?,
         email_opportunities = ?, email_weekly_summary = ?,
         brand_theme_key = ?, brand_border_style = ?,
         document_business_name = ?, document_phone = ?, document_email = ?,
@@ -640,6 +632,7 @@ export async function PATCH(request: Request) {
         settings_updated_at = ?, updated_at = ?
     WHERE firebase_uid = ?
   `).bind(
+    JSON.stringify(capabilities),
     availabilityStatus,
     serviceBasePostcode,
     serviceRadiusKm,
@@ -694,6 +687,7 @@ export async function PATCH(request: Request) {
   return json({
     ok: true,
     settings: {
+      capabilities,
       availabilityStatus,
       serviceBasePostcode,
       serviceRadiusKm,
@@ -754,7 +748,7 @@ export async function POST(request: Request) {
   const serviceStates = [...new Set(Array.isArray(raw.serviceStates)
     ? raw.serviceStates.map(canonicalAustralianState).filter((value): value is string => Boolean(value))
     : [])];
-  const capabilities = cleanList(raw.capabilities, CAPABILITIES);
+  const capabilities = normalizeEnergyServiceIds(raw.capabilities) || [];
   const summary = cleanText(raw.summary, 800);
   const consent = raw.consent === true;
   const db = getD1();

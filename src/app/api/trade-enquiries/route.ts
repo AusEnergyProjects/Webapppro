@@ -10,13 +10,20 @@ import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server"
 import {
   publicPlanContactReleaseAccessSql,
 } from "@/lib/public-plan-enquiry.mjs";
+import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
 const ENQUIRY_STATUSES = new Set(["new", "contacted", "site_visit", "quote_required", "quoted", "booked", "won", "lost"]);
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
-const SERVICE_CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other"]);
+const SERVICE_CATEGORIES = new Set([
+  ...ENERGY_SERVICE_IDS,
+  "electrical",
+  "plumbing",
+  "mounting-hardware",
+  "controls",
+]);
 const currentPublicMarketplaceAccessSql = (enquiryAlias: string) => `(
   ${enquiryAlias}.source_type <> 'tlink_marketplace'
   OR NOT EXISTS (

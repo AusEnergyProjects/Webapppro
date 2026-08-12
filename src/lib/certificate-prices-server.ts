@@ -124,11 +124,9 @@ export async function loadCertificatePriceDataset(
   return {
     asOf: now.toISOString(),
     source: {
-      name: SOURCE_NAME,
-      url: CERTIFICATE_PRICE_SOURCE_URL,
       lastCheckedAt,
       status: stale ? "stale" : "current",
-      note: "Prices are indicative last reported trades, not a live exchange quote or a guaranteed customer rebate.",
+      note: "Prices are indicative market references based on last reported trades, not a live exchange quote or a guaranteed customer rebate.",
     },
     certificates: CERTIFICATE_DEFINITIONS.map((definition) => {
       const points = pointsByCode.get(definition.code) || [];

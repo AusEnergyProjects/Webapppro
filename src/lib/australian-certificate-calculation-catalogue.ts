@@ -314,7 +314,7 @@ const VEU_PARTIAL_ESTIMATE_ACTIVITY_MESSAGES: Readonly<Record<string, string>> =
   "31": "Exact estimates are available for 31A motors selected from the installation-date GEMS register. Activity 31B remains fail-closed until an exact VEU-approved product contract is available.",
   "33": "Exact estimates are available for 33A products selected from the installation-date VEU Public Registry. Activity 33B remains fail-closed because the governed registry connector has no exact 33B product contract.",
   "34": "Exact estimates are available only for sites that are not required to comply with Building Code Part J6. The Part J6 baseline branch remains fail-closed.",
-  "46": "Exact historical estimates require an installation-date-eligible Legacy VEU product. The current Public Registry has no Approved activity 46 product for a current installation.",
+  "46": "Current estimates from 30 June 2026 use the official Part 46 product and premises requirements without the former Secretary product list. Purchases from 14 April to 29 June 2026 remain date-list validated under Version 23; earlier dates fail closed.",
 };
 
 const NSW_EXECUTABLE_ACTIVITY_CODES = new Set([

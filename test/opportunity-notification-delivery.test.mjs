@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   OPPORTUNITY_INBOX_URL,
   opportunityNotificationDraft,
+  opportunityNotificationHtml,
   opportunityNotificationEmailHash,
   opportunityNotificationEmailPreferenceAllows,
   opportunityNotificationIdempotencyKey,
@@ -84,6 +85,38 @@ test("opportunity email copy contains only the bounded business summary and sign
   assert.doesNotMatch(draft.body, /70 Southbank Boulevard|Unit 6612/i);
   assert.doesNotMatch(draft.body, /2000|distance|customer name|customer email|customer phone|filename|meter|usage|token|match id/i);
   assert.ok(draft.subject.length <= 160 && draft.body.length <= 1800);
+});
+
+test("opportunity HTML is deterministic, TLink branded, escaped and retains plain-text fallback", () => {
+  const draft = opportunityNotificationDraft({
+    businessName: "Example <script>alert(1)</script>",
+    sourceKind: "public_plan_enquiry",
+    customerName: "Jamie & Customer",
+    customerMessage: "Please replace <the cooktop>.",
+    suburb: "Private suburb",
+    postcode: "3000",
+    state: "VIC",
+    matchedCategories: ["electric-cooking"],
+    timing: "planning",
+    expiresAt: "2026-09-09T00:00:00.000Z",
+    customerSharedEvidenceCount: 0,
+  });
+  const html = opportunityNotificationHtml(draft);
+  assert.equal(html, opportunityNotificationHtml(draft));
+  assert.match(html, /<!doctype html>/i);
+  assert.match(html, />TLink</);
+  assert.match(html, /Installer control centre/);
+  assert.match(html, /Electric cooking and cooktops/);
+  assert.match(html, /Open this lead in TLink/);
+  assert.match(html, /TLink by Australian Energy Assessments/);
+  assert.match(html, /&lt;the cooktop&gt;/);
+  assert.doesNotMatch(html, /<script>|private suburb/i);
+  assert.match(draft.body, /^Hello Example <script>/);
+  assert.match(deliveryServer, /const html = opportunityNotificationHtml\(draft\)/);
+  assert.match(
+    deliveryServer,
+    /subject: draft\.subject,[\s\S]*body: draft\.body,[\s\S]*html,[\s\S]*idempotencyKey/,
+  );
 });
 
 test("provider and suppression hashes are deterministic without retaining the email address", async () => {

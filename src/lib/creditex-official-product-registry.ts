@@ -1779,7 +1779,15 @@ function veuActivityProductContract(activityCode: string, scenario?: string) {
 export function officialProductKindsForVeuActivity(
   activityCode: string,
   scenario?: string,
+  installationDate?: string,
 ): readonly CreditexOfficialProductKind[] {
+  if (
+    activityCode === "46"
+    && installationDate
+    && installationDate >= "2026-06-30"
+  ) {
+    return [];
+  }
   return veuActivityProductContract(activityCode, scenario)?.productKinds || [];
 }
 

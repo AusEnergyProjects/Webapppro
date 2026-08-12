@@ -16,6 +16,7 @@ import {
   isTradeComplianceIntentScheduleConflict,
   plannedComplianceIntentReplanStatements,
 } from "@/lib/trade-compliance-intent-replan-server";
+import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
@@ -33,18 +34,8 @@ const STAGES = new Set([
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const SOURCE_TYPES = new Set(["internal", "opportunity", "product_enquiry"]);
 const SERVICE_CATEGORIES = new Set([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
+  ...ENERGY_SERVICE_IDS,
   "product-fulfilment",
-  "other",
 ]);
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_PATTERN = /(?:\+?\d[\s().-]*){8,}/;

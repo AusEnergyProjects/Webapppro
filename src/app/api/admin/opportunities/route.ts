@@ -5,11 +5,12 @@ import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirecti
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { AUSTRALIAN_STATE_CODES, canonicalAustralianState } from "@/lib/australian-postcodes.mjs";
+import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 
 const STATES = new Set(AUSTRALIAN_STATE_CODES);
-const CATEGORIES = new Set(["assessment", "solar", "battery", "heating-cooling", "hot-water", "draught-proofing", "insulation", "glazing", "window-coverings", "ev-charging", "other"]);
+const CATEGORIES = new Set<string>(ENERGY_SERVICE_IDS);
 const STATUSES = new Set(["draft", "open", "paused", "closed", "expired"]);
 const PRIORITIES = new Set(["standard", "priority", "urgent"]);
 const TIMINGS = new Set(["planning", "within_3_months", "within_30_days", "urgent"]);

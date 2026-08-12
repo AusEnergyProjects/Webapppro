@@ -1,6 +1,7 @@
 import { getD1 } from "../../db";
 import {
   opportunityNotificationDraft,
+  opportunityNotificationHtml,
   opportunityNotificationEmailHash,
   opportunityNotificationEmailPreferenceAllows,
   opportunityNotificationIdempotencyKey,
@@ -428,6 +429,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
       expiresAt: String(context.expires_at || ""),
       customerSharedEvidenceCount: Number(context.customer_shared_evidence_count || 0),
     });
+  const html = opportunityNotificationHtml(draft);
   const attempts = previousAttempts + 1;
   const attemptedAt = new Date().toISOString();
   const claim = await db.prepare(`UPDATE trade_opportunity_notification_deliveries
@@ -516,6 +518,7 @@ async function dispatchDelivery(row: DeliveryRow, fetchImpl: typeof fetch) {
       recipient: email,
       subject: draft.subject,
       body: draft.body,
+      html,
       idempotencyKey,
       callbackUrl: CALLBACK_URL,
       messageType: "trade_opportunity",

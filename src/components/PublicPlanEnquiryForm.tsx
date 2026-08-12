@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -11,6 +12,10 @@ import {
   downloadPublicPlanPdf,
   type PublicPlanPdfInput,
 } from "@/lib/customer-plan-pdf-client";
+import {
+  ENERGY_SERVICE_CATALOGUE,
+  ENERGY_SERVICE_LABELS,
+} from "@/lib/energy-service-catalogue.mjs";
 import {
   isPublicPlanUpgradeInterest,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
@@ -42,6 +47,7 @@ export type PublicPlanUpgradeInterest =
   | "glazing"
   | "window-coverings"
   | "ev-charging"
+  | "electric-cooking"
   | "other";
 
 export type PublicPlanSnapshot = {
@@ -69,20 +75,6 @@ export type PublicPlanSnapshot = {
   };
 };
 
-const INTEREST_LABELS: Record<PublicPlanUpgradeInterest, string> = {
-  assessment: "An independent home energy assessment",
-  solar: "Rooftop solar",
-  battery: "A home battery",
-  "heating-cooling": "Heating and cooling",
-  "hot-water": "Hot water",
-  "draught-proofing": "Draught proofing",
-  insulation: "Insulation",
-  glazing: "Windows and glazing",
-  "window-coverings": "Blinds, shutters or external shading",
-  "ev-charging": "Electric vehicle charging",
-  other: "Another home energy upgrade",
-};
-
 type PublicPlanEnquiryFormProps = {
   initialPostcode?: string;
   suggestedInterests?: readonly string[];
@@ -94,8 +86,8 @@ type PublicPlanEnquiryFormProps = {
 type SubmissionStatus =
   | { kind: "idle"; message: "" }
   | { kind: "sending"; message: string }
-  | { kind: "uploading"; message: string; reference: string }
-  | { kind: "photos_pending"; message: string; reference: string }
+  | { kind: "uploading"; message: string; reference: string; uploadedCount: number }
+  | { kind: "photos_pending"; message: string; reference: string; uploadedCount: number }
   | { kind: "error"; message: string }
   | { kind: "received"; message: string; reference: string }
   | { kind: "success"; message: string; reference: string };
@@ -169,9 +161,13 @@ function initialAllowedInterests(
   return suggested?.length ? suggested : ["assessment"];
 }
 
-const INTEREST_OPTIONS = Object.entries(INTEREST_LABELS) as Array<
-  [PublicPlanUpgradeInterest, string]
->;
+const INTEREST_OPTIONS = ENERGY_SERVICE_CATALOGUE.map(({ id, label }) => (
+  [id as PublicPlanUpgradeInterest, label] as const
+));
+
+function interestLabel(value: PublicPlanUpgradeInterest) {
+  return ENERGY_SERVICE_LABELS[value];
+}
 
 function createSubmissionId() {
   const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -343,6 +339,8 @@ export function PublicPlanEnquiryForm({
   const consentGrantedAt = useRef("");
   const lastAttemptCore = useRef("");
   const successfulPdfInput = useRef<PublicPlanPdfInput | null>(null);
+  const submissionDialogRef = useRef<HTMLDialogElement>(null);
+  const submissionPrimaryActionRef = useRef<HTMLButtonElement>(null);
   const gatewayDialogRef = useRef<HTMLDialogElement>(null);
   const gatewayFirstActionRef = useRef<HTMLAnchorElement>(null);
   const gatewayReopenRef = useRef<HTMLButtonElement>(null);
@@ -406,6 +404,45 @@ export function PublicPlanEnquiryForm({
       controller.abort();
     };
   }, [postcode]);
+
+  useEffect(() => {
+    const submissionActive = status.kind === "sending"
+      || status.kind === "uploading"
+      || status.kind === "photos_pending";
+    const dialog = submissionDialogRef.current;
+    if (!submissionActive || !dialog) return;
+    if (typeof dialog.showModal === "function" && !dialog.open) {
+      dialog.showModal();
+    } else if (!dialog.open) {
+      dialog.setAttribute("open", "");
+    }
+    (submissionPrimaryActionRef.current || dialog).focus();
+  }, [status.kind]);
+
+  useEffect(() => {
+    const submissionActive = status.kind === "sending"
+      || status.kind === "uploading"
+      || status.kind === "photos_pending";
+    if (!submissionActive) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [status.kind]);
+
+  useEffect(() => {
+    const networkWorkActive = status.kind === "sending" || status.kind === "uploading";
+    if (!networkWorkActive) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeLeaving);
+    };
+  }, [status.kind]);
 
   useEffect(() => {
     if (status.kind !== "success" || !gatewayOpen) return;
@@ -557,6 +594,10 @@ export function PublicPlanEnquiryForm({
   }
 
   function finishAcceptedEnquiry(reference: string) {
+    const dialog = submissionDialogRef.current;
+    if (dialog?.open && typeof dialog.close === "function") {
+      dialog.close();
+    }
     setStatus({
       kind: "success",
       message: acceptedLeadSuccessMessage.current,
@@ -576,6 +617,7 @@ export function PublicPlanEnquiryForm({
       kind: "uploading",
       message: `Your enquiry is received. Securely preparing ${remaining.length} selected ${remaining.length === 1 ? "photo" : "photos"} for matched trades...`,
       reference,
+      uploadedCount: uploadedQuotePhotoIds.current.size,
     });
     try {
       for (const selection of remaining) {
@@ -608,6 +650,7 @@ export function PublicPlanEnquiryForm({
             ? `${uploadedQuotePhotoIds.current.size} of ${quotePhotos.length} selected photos are ready. Uploading ${remainingCount} more...`
             : "All selected quote photos are ready for matched trades.",
           reference,
+          uploadedCount: uploadedQuotePhotoIds.current.size,
         });
       }
       finishAcceptedEnquiry(reference);
@@ -615,8 +658,9 @@ export function PublicPlanEnquiryForm({
       const readyCount = uploadedQuotePhotoIds.current.size;
       setStatus({
         kind: "photos_pending",
-        message: `Your enquiry was sent and ${readyCount} of ${quotePhotos.length} selected photos are ready. ${error instanceof Error ? error.message : "The remaining photos could not be uploaded."} Retry the remaining photos without sending the enquiry again.`,
+        message: `Your enquiry was sent and ${readyCount} of ${quotePhotos.length} selected photos are ready. ${error instanceof Error ? error.message : "The remaining photos could not be uploaded."} Retry the remaining photos without sending the enquiry again, or continue without them.`,
         reference,
+        uploadedCount: readyCount,
       });
     }
   }
@@ -625,6 +669,38 @@ export function PublicPlanEnquiryForm({
     const reference = acceptedLeadReference.current;
     if (!reference || status.kind !== "photos_pending") return;
     void uploadRemainingQuotePhotos(reference);
+  }
+
+  function continueWithoutRemainingPhotos() {
+    if (status.kind !== "photos_pending") return;
+    const reference = acceptedLeadReference.current || status.reference;
+    const remainingCount = quotePhotos.length - uploadedQuotePhotoIds.current.size;
+    if (!window.confirm(
+      `Continue without ${remainingCount} remaining ${remainingCount === 1 ? "photo" : "photos"}? Your enquiry is already sent. Uploaded photos will stay with the enquiry.`,
+    )) return;
+    finishAcceptedEnquiry(reference);
+  }
+
+  function keepFocusInSubmissionDialog(event: ReactKeyboardEvent<HTMLDialogElement>) {
+    if (event.key !== "Tab") return;
+    const dialog = event.currentTarget;
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ));
+    if (!focusable.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   async function removeSharedQuotePack(confirmRemoval = true) {
@@ -788,7 +864,12 @@ export function PublicPlanEnquiryForm({
       return;
     }
 
-    setStatus({ kind: "sending", message: "Sending your enquiry..." });
+    setStatus({
+      kind: "sending",
+      message: quotePhotos.length
+        ? `Preparing your enquiry and ${quotePhotos.length} selected ${quotePhotos.length === 1 ? "photo" : "photos"}...`
+        : "Preparing and sending your enquiry...",
+    });
     try {
       if (!submissionId.current) {
         submissionId.current = createSubmissionId();
@@ -936,6 +1017,7 @@ export function PublicPlanEnquiryForm({
             kind: "photos_pending",
             message: "Your enquiry was sent, but its private photo reference was not returned. Call 1300 241 149 with your email address so we can help without resending the enquiry.",
             reference: "",
+            uploadedCount: 0,
           });
           return;
         }
@@ -967,58 +1049,9 @@ export function PublicPlanEnquiryForm({
   const selectedLocalityValue = customerSuburb && customerState
     ? localityOptionValue({ suburb: customerSuburb, state: customerState })
     : "";
-
-  if (status.kind === "uploading" || status.kind === "photos_pending") {
-    return (
-      <section className={rootClassName} aria-labelledby="public-plan-photo-upload-title">
-        <div className={styles.success}>
-          <span className={styles.eyebrow}>Enquiry received</span>
-          <h3 className={styles.title} id="public-plan-photo-upload-title">
-            {status.kind === "uploading"
-              ? "Preparing your quote photos"
-              : "Your enquiry is safe. Some photos still need attention."}
-          </h3>
-          <p role={status.kind === "photos_pending" ? "alert" : "status"}>{status.message}</p>
-          {status.reference && <p className={styles.reference}>Reference {status.reference}</p>}
-          <div className={styles.successActions}>
-            {status.kind === "photos_pending" && status.reference ? (
-              <button className={styles.reset} type="button" onClick={retryQuotePhotoUploads}>
-                Retry remaining photos
-              </button>
-            ) : null}
-            {status.kind === "photos_pending" ? (
-              <button className={styles.secondaryAction} type="button" onClick={reset}>
-                Start another enquiry
-              </button>
-            ) : null}
-            {status.kind === "photos_pending" && sharedQuotePackPrepared ? (
-              <button
-                className={styles.secondaryAction}
-                disabled={quoteWithdrawal.kind === "removing"}
-                type="button"
-                onClick={() => void removeSharedQuotePack()}
-              >
-                {quoteWithdrawal.kind === "removing"
-                  ? "Removing shared quote details..."
-                  : "Remove shared quote details and photos"}
-              </button>
-            ) : null}
-          </div>
-          {quoteWithdrawal.message ? (
-            <p
-              className={styles.withdrawalStatus}
-              role={quoteWithdrawal.kind === "error" ? "alert" : "status"}
-            >
-              {quoteWithdrawal.message}
-            </p>
-          ) : null}
-          <p className={styles.uploadPrivacyNote}>
-            The enquiry is not sent again during a photo retry. Photos are stripped of location metadata, stay out of email and are available only after an approved matched trade signs in.
-          </p>
-        </div>
-      </section>
-    );
-  }
+  const uploadedQuotePhotoCount = status.kind === "uploading" || status.kind === "photos_pending"
+    ? status.uploadedCount
+    : 0;
 
   if (status.kind === "success") {
     return (
@@ -1313,8 +1346,8 @@ export function PublicPlanEnquiryForm({
                   {includeKnownPlanAnswers ? (
                     <ul className={styles.knownPlanFactList} aria-label="Home plan details that will be shared">
                       {knownPlanFacts.map((fact) => (
-                        <li key={fact.questionId}>
-                          <strong>{fact.label}</strong>
+                        <li className={styles.knownPlanFact} key={fact.questionId}>
+                          <strong>{fact.label.replace(" already recorded in the home plan", "")}</strong>
                           <span>{fact.answer}</span>
                         </li>
                       ))}
@@ -1328,7 +1361,7 @@ export function PublicPlanEnquiryForm({
                     <span>{question.label}</span>
                     <small>
                       For {question.services
-                        .map((service) => INTEREST_LABELS[service as PublicPlanUpgradeInterest])
+                        .map((service) => interestLabel(service as PublicPlanUpgradeInterest))
                         .join(", ")}
                     </small>
                     <select
@@ -1441,7 +1474,7 @@ export function PublicPlanEnquiryForm({
         </details>
 
         <div className={styles.actions}>
-          <button className={styles.submit} type="submit" disabled={status.kind === "sending"}>
+          <button className={styles.submit} type="submit" disabled={status.kind === "sending" || status.kind === "uploading"}>
             {status.kind === "sending"
               ? "Sending..."
               : status.kind === "received"
@@ -1456,6 +1489,100 @@ export function PublicPlanEnquiryForm({
           )}
         </div>
       </form>
+      {(status.kind === "sending" || status.kind === "uploading" || status.kind === "photos_pending") ? (
+        <dialog
+          aria-describedby="public-plan-submission-description"
+          aria-labelledby="public-plan-submission-title"
+          aria-modal="true"
+          className={styles.submissionDialog}
+          onCancel={(event) => event.preventDefault()}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) event.preventDefault();
+          }}
+          onKeyDown={keepFocusInSubmissionDialog}
+          ref={submissionDialogRef}
+          tabIndex={-1}
+        >
+          <div className={styles.submissionDialogBody}>
+            <span className={styles.eyebrow}>
+              {status.kind === "sending" ? "Sending enquiry" : "Enquiry received"}
+            </span>
+            <h3 id="public-plan-submission-title">
+              {status.kind === "sending"
+                ? "Please stay on this page"
+                : status.kind === "uploading"
+                  ? "Uploading your quote photos"
+                  : "Your enquiry is safe. Some photos need attention."}
+            </h3>
+            <p className={styles.submissionWarning} id="public-plan-submission-description">
+              {status.kind === "photos_pending"
+                ? "Your enquiry has already been sent. Choose what to do with the photos that remain."
+                : "Do not close this page or follow another link until this finishes."}
+            </p>
+            <ol className={styles.submissionSteps} aria-label="Enquiry submission progress">
+              <li aria-current={status.kind === "sending" ? "step" : undefined} data-complete={status.kind !== "sending"}>
+                <span aria-hidden="true">1</span>
+                <div><strong>Send enquiry</strong><small>{status.kind === "sending" ? "Securely submitting now" : "Lead accepted"}</small></div>
+              </li>
+              {quotePhotos.length ? (
+                <li
+                  aria-current={status.kind === "uploading" || status.kind === "photos_pending" ? "step" : undefined}
+                  data-complete={uploadedQuotePhotoCount === quotePhotos.length}
+                >
+                  <span aria-hidden="true">2</span>
+                  <div>
+                    <strong>Prepare photos</strong>
+                    <small>{uploadedQuotePhotoCount} of {quotePhotos.length} uploaded</small>
+                  </div>
+                </li>
+              ) : null}
+            </ol>
+            <progress
+              aria-label={status.kind === "sending" ? "Sending enquiry" : "Uploading quote photos"}
+              max={quotePhotos.length + 1}
+              value={(status.kind === "sending" ? 0 : 1) + uploadedQuotePhotoCount}
+            >
+              {(status.kind === "sending" ? 0 : 1) + uploadedQuotePhotoCount} of {quotePhotos.length + 1}
+            </progress>
+            <p
+              aria-atomic="true"
+              aria-live={status.kind === "photos_pending" ? "assertive" : "polite"}
+              className={status.kind === "photos_pending" ? styles.submissionError : styles.submissionStatus}
+              role={status.kind === "photos_pending" ? "alert" : "status"}
+            >
+              {status.message}
+            </p>
+            {status.kind !== "sending" && status.reference ? (
+              <p className={styles.reference}>Reference {status.reference}</p>
+            ) : null}
+            {status.kind === "photos_pending" ? (
+              <div className={styles.submissionActions}>
+                {status.reference ? (
+                  <button
+                    className={styles.reset}
+                    onClick={retryQuotePhotoUploads}
+                    ref={submissionPrimaryActionRef}
+                    type="button"
+                  >
+                    Retry remaining photos
+                  </button>
+                ) : null}
+                <button
+                  className={styles.secondaryAction}
+                  onClick={continueWithoutRemainingPhotos}
+                  ref={status.reference ? undefined : submissionPrimaryActionRef}
+                  type="button"
+                >
+                  Continue without remaining photos
+                </button>
+              </div>
+            ) : null}
+            <p className={styles.uploadPrivacyNote}>
+              Photo retry never sends the enquiry again. Photos have location metadata removed, stay out of email and remain private to approved matched trades after sign-in.
+            </p>
+          </div>
+        </dialog>
+      ) : null}
     </section>
   );
 }

@@ -19,21 +19,10 @@ import { firebaseAuth } from "@/lib/firebase-client";
 import { Field, SiteFooter } from "./ComparatorChrome";
 import { TLinkHeader } from "./TLinkChrome";
 import { AUSTRALIAN_STATE_CODES } from "@/lib/australian-postcodes.mjs";
+import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 
 const states = AUSTRALIAN_STATE_CODES;
-const categories = [
-  ["assessment", "Energy assessment"],
-  ["solar", "Rooftop solar"],
-  ["battery", "Home batteries"],
-  ["heating-cooling", "Heating and cooling"],
-  ["hot-water", "Hot water"],
-  ["draught-proofing", "Draught-proofing"],
-  ["insulation", "Insulation"],
-  ["glazing", "Glazing"],
-  ["window-coverings", "Blinds, shutters and external shading"],
-  ["ev-charging", "EV charging"],
-  ["other", "Other energy upgrades"],
-] as const;
+const categories = ENERGY_SERVICE_OPTIONS;
 
 type PartnerType = "installer" | "supplier";
 type AuthMode = "create" | "signin";

@@ -1940,6 +1940,7 @@ export async function searchOfficialProducts(
     const governedKinds = officialProductKindsForVeuActivity(
       veuActivityCode,
       veuScenario || undefined,
+      installationDate,
     );
     veuProductCategoryNumbers = officialVeuProductCategoryNumbersForActivity(
       veuActivityCode,

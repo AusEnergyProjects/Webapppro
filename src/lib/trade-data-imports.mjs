@@ -1,3 +1,5 @@
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+
 export const IMPORT_MAX_ROWS = 500;
 
 export const IMPORT_DEFINITIONS = {
@@ -55,9 +57,8 @@ export const IMPORT_DEFINITIONS = {
 const CUSTOMER_TYPES = new Set(["residential", "business"]);
 const STATES = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
 const OPERATIONAL_SERVICE_CATEGORIES = new Set([
-  "assessment", "solar", "battery", "heating-cooling", "hot-water",
-  "draught-proofing", "insulation", "glazing", "window-coverings",
-  "ev-charging", "electrical", "plumbing", "mounting-hardware", "controls", "other",
+  ...ENERGY_SERVICE_IDS,
+  "electrical", "plumbing", "mounting-hardware", "controls",
 ]);
 const PRODUCT_CATEGORIES = new Set([
   "assessment", "solar", "battery", "heating-cooling", "hot-water",

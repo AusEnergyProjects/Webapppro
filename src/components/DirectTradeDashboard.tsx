@@ -27,6 +27,7 @@ import {
   type FeatureKey,
 } from "@/lib/direct-trade-entitlements";
 import { DEFAULT_TRADE_BRAND_THEME } from "@/lib/trade-business-branding";
+import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import {
   TradeBusinessSettingsWorkspace,
   tradeBusinessThemeGradient,
@@ -254,21 +255,11 @@ function opportunityNextAction(opportunity: DashboardOpportunity) {
 }
 
 const capabilityLabels: Record<string, string> = {
-  assessment: "Energy assessment",
-  solar: "Rooftop solar",
-  battery: "Home batteries",
-  "heating-cooling": "Heating and cooling",
-  "hot-water": "Hot water",
-  "draught-proofing": "Draught-proofing",
-  insulation: "Insulation",
-  glazing: "Glazing",
-  "window-coverings": "Blinds, shutters and external shading",
-  "ev-charging": "EV charging",
+  ...ENERGY_SERVICE_LABELS,
   electrical: "Electrical services",
   plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware",
   controls: "Energy controls",
-  other: "Other energy upgrades",
 };
 
 function EnquiryPack({

@@ -68,8 +68,6 @@ type CreditexCertificateGrossValue = {
   grossValueCents: number;
   tradedOn: string;
   datasetAsOf: string;
-  sourceName: string;
-  sourceUrl: string;
   sourceCheckedAt: string;
 };
 
@@ -122,15 +120,11 @@ export function creditexCertificateGrossValue(
   const grossValueCents = certificateCount * unitPriceCents;
   const tradedOn = String(latest.tradedOn || "");
   const datasetAsOf = String(dataset.asOf || "");
-  const sourceName = String(source.name || "");
-  const sourceUrl = String(source.url || "");
   const sourceCheckedAt = String(source.lastCheckedAt || "");
   if (
     !Number.isSafeInteger(grossValueCents)
     || !validDate(tradedOn)
     || !validDate(datasetAsOf)
-    || !sourceName
-    || !/^https:\/\//.test(sourceUrl)
     || !validDate(sourceCheckedAt)
   ) {
     return null;
@@ -143,8 +137,6 @@ export function creditexCertificateGrossValue(
     grossValueCents,
     tradedOn,
     datasetAsOf,
-    sourceName,
-    sourceUrl,
     sourceCheckedAt,
   };
 }
@@ -204,7 +196,7 @@ function CreditexCertificateGrossValueResult({
     >
       <header>
         <div>
-          <span>Latest reported certificate value</span>
+          <span>Latest market reference value</span>
           <strong>
             {value.certificateCount.toLocaleString("en-AU")} {value.code}
             {" "}x {certificateMoney(value.unitPriceCents)}
@@ -215,15 +207,11 @@ function CreditexCertificateGrossValueResult({
       </header>
       <div className={styles.estimateResolution}>
         <span>
-          Latest reported trade {certificateDate(value.tradedOn)}.
-          Dataset as of {certificateDate(value.datasetAsOf, true)}.
+          Most recent reference trade {certificateDate(value.tradedOn)}.
+          Market data as of {certificateDate(value.datasetAsOf, true)}.
         </span>
         <small>
-          Source checked {certificateDate(value.sourceCheckedAt, true)}: <a
-            href={value.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-          >{value.sourceName}</a>.
+          Market reference checked {certificateDate(value.sourceCheckedAt, true)}.
         </small>
         <small>
           *Gross certificate value before registration, audit, compliance,

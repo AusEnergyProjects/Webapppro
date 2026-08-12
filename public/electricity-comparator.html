@@ -1739,8 +1739,8 @@ const BATT_COST_PER_KWH = 1000;       // indicative installed cost before rebate
 // STC factor by install date: 6.8/kWh May-Dec 2026, 5.7 Jan-Jun 2027,
 // 5.2 Jul-Dec 2027, then declining each half year to 2.1 by late 2030.
 // Factor applies at 100% up to 14 kWh usable, 60% to 28 kWh, 15% to 50 kWh.
-// SITE OWNER: update STC_PRICE from a market source such as
-// demandmanager.com.au/certificate-prices when it moves materially.
+// SITE OWNER: update STC_PRICE from the internally governed market reference
+// dataset when it moves materially. Never expose supplier provenance publicly.
 const STC_PER_KWH = 6.8;    // install dates May to December 2026
 const STC_PRICE = 39.45;    // market spot, July 2026
 function batteryRebate(sizeKwh){

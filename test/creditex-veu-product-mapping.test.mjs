@@ -105,6 +105,16 @@ test("VEU activity mapping distinguishes every approved-product family", () => {
     assert.deepEqual(officialProductKindsForVeuActivity(activityCode), kinds);
   }
   assert.deepEqual(officialProductKindsForVeuActivity("unsupported"), []);
+  assert.deepEqual(
+    officialProductKindsForVeuActivity("46", "46A", "2026-06-29"),
+    ["veu_induction_cooktop"],
+    "a 29 June point-of-sale purchase keeps the legacy listed-product rule even if installation is later",
+  );
+  assert.deepEqual(
+    officialProductKindsForVeuActivity("46", "46A", "2026-06-30"),
+    [],
+    "a 30 June point-of-sale purchase uses the current product-requirements path",
+  );
   assert.ok(
     !Object.values(CREDITEX_VEU_ACTIVITY_PRODUCT_CONTRACTS).some(
       (contract) => contract.productKinds.includes("veu_unclassified_product"),

@@ -396,6 +396,31 @@ test("VEU route calculates product-free governed activities without inventing a 
   assert.equal(body.estimate.registryReceipt, undefined);
 });
 
+test("VEU Part 46 route treats effectiveDate as the point-of-sale purchase date", async () => {
+  let validationCalls = 0;
+  const route = loadRoute(async () => {
+    validationCalls += 1;
+    throw new Error("The expired product list must not run for a current purchase.");
+  });
+  const response = await route.POST(request(
+    "46",
+    { scenario: "46A" },
+    undefined,
+    undefined,
+    "2026-06-30",
+    "quote",
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(validationCalls, 0);
+  assert.equal(body.estimate.effectiveDateLabel, "Purchase date");
+  assert.equal(body.estimate.purchaseDate, "2026-06-30");
+  assert.equal(body.estimate.installationDate, undefined);
+  assert.equal(body.estimate.inputSnapshot.purchaseDate, "2026-06-30");
+  assert.equal(body.estimate.registryReceipt, undefined);
+});
+
 test("VEU route derives Activity 30 category and postcode gas class server-side", async () => {
   const selection = televisionSelection({
     productKind: "veu_in_home_display",

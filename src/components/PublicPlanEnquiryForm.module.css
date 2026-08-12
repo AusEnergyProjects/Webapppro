@@ -263,7 +263,7 @@ textarea.control {
 
 .serviceChoice small {
   color: #5d777b;
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   font-weight: 650;
   line-height: 1.35;
 }
@@ -416,31 +416,56 @@ textarea.control {
 }
 
 .knownPlanFactList {
+  container-type: inline-size;
   display: grid;
   gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.knownPlanFactList li {
+.knownPlanFactList .knownPlanFact {
+  align-items: start;
   background: #ffffff;
   border: 1px solid #beded6;
   border-radius: 10px;
   display: grid;
-  gap: 0.15rem;
-  padding: 0.65rem 0.75rem;
+  gap: 0.65rem;
+  grid-template-columns: minmax(7.5rem, 0.35fr) minmax(0, 1fr);
+  min-width: 0;
+  padding: 0.75rem;
 }
 
-.knownPlanFactList strong,
-.knownPlanFactList span {
+.knownPlanFactList .knownPlanFact strong,
+.knownPlanFactList .knownPlanFact span {
   color: #173f46;
   font-size: 0.875rem;
   line-height: 1.45;
+  min-width: 0;
+  writing-mode: horizontal-tb;
+  word-break: normal;
 }
 
-.knownPlanFactList strong {
+.knownPlanFactList .knownPlanFact strong {
   color: #075e4d;
+}
+
+.knownPlanFactList .knownPlanFact span {
+  overflow-wrap: break-word;
+}
+
+@container (max-width: 44rem) {
+  .knownPlanFactList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 25rem) {
+  .knownPlanFactList .knownPlanFact {
+    gap: 0.25rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .quoteQuestionGrid,
@@ -764,6 +789,150 @@ textarea.control {
   backdrop-filter: blur(5px);
 }
 
+.submissionDialog {
+  background: transparent;
+  border: 0;
+  color: #082f36;
+  margin: auto;
+  max-height: 100dvh;
+  max-width: none;
+  overflow: auto;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+  width: 100%;
+}
+
+.submissionDialog::backdrop {
+  backdrop-filter: blur(7px);
+  background: rgba(0, 19, 31, 0.86);
+}
+
+.submissionDialogBody {
+  background: linear-gradient(145deg, #f8fffd, #ffffff 62%, #e7f9f4);
+  border: 1px solid #7fcabb;
+  border-radius: 22px;
+  box-shadow: 0 28px 90px rgba(0, 20, 33, 0.48);
+  display: grid;
+  gap: 0.9rem;
+  margin: auto;
+  max-width: 42rem;
+  padding: clamp(1.1rem, 4vw, 1.8rem);
+}
+
+.submissionDialogBody h3 {
+  color: #052f39;
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
+  line-height: 1.12;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.submissionWarning,
+.submissionStatus,
+.submissionError {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.submissionWarning {
+  background: #fff4d4;
+  border: 1px solid #e4c66c;
+  border-radius: 12px;
+  color: #5d4808;
+  font-weight: 800;
+  padding: 0.75rem 0.85rem;
+}
+
+.submissionStatus {
+  color: #246458;
+  font-weight: 750;
+}
+
+.submissionError {
+  background: #fff0ef;
+  border: 1px solid #e4a49e;
+  border-radius: 10px;
+  color: #8b2823;
+  font-weight: 750;
+  padding: 0.7rem 0.8rem;
+}
+
+.submissionSteps {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.submissionSteps li {
+  align-items: center;
+  background: #f1f8f6;
+  border: 1px solid #c7dfd9;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  padding: 0.7rem;
+}
+
+.submissionSteps li[aria-current="step"] {
+  background: #e8faf4;
+  border-color: #49b99d;
+}
+
+.submissionSteps li[data-complete="true"] {
+  background: #e3f8f0;
+  border-color: #8acbb9;
+}
+
+.submissionSteps li > span {
+  align-items: center;
+  background: #0b725c;
+  border-radius: 50%;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 900;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.submissionSteps li > div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.submissionSteps strong {
+  color: #123e44;
+  font-size: 0.95rem;
+}
+
+.submissionSteps small {
+  color: #527176;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.submissionDialog progress {
+  accent-color: #0aa878;
+  height: 0.85rem;
+  width: 100%;
+}
+
+.submissionActions {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.submissionActions button {
+  border-radius: 12px;
+  min-height: 3rem;
+}
+
 .gatewayHeader {
   align-items: flex-start;
   display: flex;
@@ -868,6 +1037,20 @@ textarea.control {
   .quotePhotoGrid,
   .gatewayActions {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .submissionActions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .submissionDialog {
+    padding: 0.65rem;
+  }
+
+  .submissionDialogBody {
+    border-radius: 16px;
+    gap: 0.75rem;
+    padding: 1rem;
   }
 
   .addressStreet {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -289,6 +290,7 @@ function workOrdersRoute(db) {
       isTradeComplianceIntentScheduleConflict: () => false,
       plannedComplianceIntentReplanStatements: async () => [],
     },
+    "@/lib/energy-service-catalogue.mjs": { ENERGY_SERVICE_IDS },
   });
 }
 

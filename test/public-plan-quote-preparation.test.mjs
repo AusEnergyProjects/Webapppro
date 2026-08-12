@@ -41,6 +41,7 @@ const SERVICES = [
   "battery",
   "heating-cooling",
   "hot-water",
+  "electric-cooking",
   "draught-proofing",
   "insulation",
   "glazing",
@@ -104,7 +105,7 @@ test("quote preparation stays materially shorter than the plan and deduplicates 
   }
 
   const combined = publicPlanQuoteQuestionsForServices(SERVICES);
-  assert.ok(combined.length <= 5, `all services have ${combined.length} questions`);
+  assert.ok(combined.length <= 6, `all services have ${combined.length} questions`);
   assert.equal(new Set(combined.map((question) => question.id)).size, combined.length);
   for (const service of SERVICES) {
     const serviceIds = publicPlanQuoteQuestionsForServices([service]).map((question) => question.id);
@@ -143,6 +144,32 @@ test("quote preparation stays materially shorter than the plan and deduplicates 
     "ev-charging",
   ];
   assert.equal(publicPlanQuoteQuestionsForServices(screenshotServices).length, 3);
+});
+
+test("electric cooking reuses the plan fact and asks only for useful quote scope and wide photos", () => {
+  const questions = publicPlanQuoteQuestionsForServices(["electric-cooking"]);
+  assert.deepEqual(
+    questions.map((question) => question.id),
+    ["timing", "electric-cooking-scope"],
+  );
+  assert.doesNotMatch(questions.map((question) => question.label).join(" "), /installed now|existing fuel/i);
+
+  const facts = publicPlanQuotePlanFactsForSnapshot(["electric-cooking"], {
+    features: ["gas-cooking"],
+  });
+  assert.deepEqual(facts, [{
+    questionId: "known-plan-electric-cooking",
+    label: "Cooking setup already recorded in the home plan",
+    answer: "Gas cooktop or oven",
+    services: ["electric-cooking"],
+  }]);
+
+  const prompts = publicPlanQuotePhotoPromptsForServices(["electric-cooking"]);
+  assert.deepEqual(
+    prompts.map((prompt) => prompt.id),
+    ["switchboard-front", "electric-cooking-installation-area"],
+  );
+  assert.match(prompts[1].hint, /whole cooktop or cooker/i);
 });
 
 test("known plan facts become an exact read-only summary and preserve multi-system heating", () => {
@@ -680,6 +707,48 @@ test("the public form progressively renders mobile capture, explicit sharing con
   assert.equal(PUBLIC_PLAN_QUOTE_MAX_FILE_BYTES, 8 * 1024 * 1024);
   assert.equal(PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES, 48 * 1024 * 1024);
   assert.deepEqual(PUBLIC_PLAN_QUOTE_ALLOWED_TYPES, ["image/jpeg", "image/png"]);
+});
+
+test("submission and quote-photo uploads stay in an accessible progress modal until a safe outcome", () => {
+  const form = read("../src/components/PublicPlanEnquiryForm.tsx");
+  const css = read("../src/components/PublicPlanEnquiryForm.module.css");
+  const leadPost = form.indexOf('fetch("/api/leads"');
+  const sendingState = form.lastIndexOf('kind: "sending"', leadPost);
+  assert.ok(sendingState > 0 && sendingState < leadPost);
+  assert.match(form, /ref={submissionDialogRef}/);
+  assert.match(form, /aria-labelledby="public-plan-submission-title"/);
+  assert.match(form, /aria-modal="true"/);
+  assert.match(form, /onCancel=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(form, /onKeyDown={keepFocusInSubmissionDialog}/);
+  assert.match(form, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(form, /window\.addEventListener\("beforeunload", warnBeforeLeaving\)/);
+  assert.match(form, /Do not close this page or follow another link until this finishes/);
+  assert.match(form, /<progress[\s\S]*max=\{quotePhotos\.length \+ 1\}[\s\S]*value=/);
+  assert.match(form, /Lead accepted/);
+  assert.match(form, /\{uploadedQuotePhotoCount\} of \{quotePhotos\.length\} uploaded/);
+  assert.match(form, /Continue without remaining photos/);
+  assert.match(form, /window\.confirm\([\s\S]*Continue without/);
+  const retryStart = form.indexOf("function retryQuotePhotoUploads");
+  const retryEnd = form.indexOf("function continueWithoutRemainingPhotos", retryStart);
+  assert.doesNotMatch(form.slice(retryStart, retryEnd), /\/api\/leads/);
+  assert.match(form, /finishAcceptedEnquiry\(reference\)[\s\S]*setGatewayOpen\(true\)/);
+  assert.match(css, /\.submissionDialog::backdrop[\s\S]*background: rgba\(0, 19, 31, 0\.86\)/);
+  assert.match(css, /\.submissionActions[\s\S]*grid-template-columns: repeat\(2/);
+  assert.match(css, /@container \(max-width: 34rem\)[\s\S]*\.submissionActions[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test("known home-plan facts use readable horizontal label and value rows", () => {
+  const form = read("../src/components/PublicPlanEnquiryForm.tsx");
+  const css = read("../src/components/PublicPlanEnquiryForm.module.css");
+  assert.match(form, /fact\.label\.replace\(" already recorded in the home plan", ""\)/);
+  assert.match(form, /className=\{styles\.knownPlanFact\}/);
+  assert.match(css, /\.knownPlanFactList \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.knownPlanFactList \.knownPlanFact \{[\s\S]*display: grid;[\s\S]*grid-template-columns: minmax\(7\.5rem, 0\.35fr\) minmax\(0, 1fr\);[\s\S]*min-width: 0/);
+  assert.match(css, /\.knownPlanFactList \.knownPlanFact strong,[\s\S]*writing-mode: horizontal-tb;[\s\S]*word-break: normal/);
+  assert.doesNotMatch(css.match(/\.knownPlanFactList \.knownPlanFact strong,[\s\S]*?\n\}/)?.[0] || "", /overflow-wrap: anywhere/);
+  assert.match(css, /@container \(max-width: 44rem\)[\s\S]*\.knownPlanFactList[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /@container \(max-width: 25rem\)[\s\S]*\.knownPlanFactList \.knownPlanFact[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.serviceChoice small \{[\s\S]*font-size: 0\.82rem/);
 });
 
 test("the private upload boundary rate-limits before multipart parsing and validates content, consent, idempotency and exact trade access", () => {

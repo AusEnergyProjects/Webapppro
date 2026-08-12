@@ -19,6 +19,7 @@ import {
   matchedServiceCategories,
 } from "../src/lib/trade-service-matching.mjs";
 import { selectEveryQualifiedTradeRecipient } from "../src/lib/direct-trade-matching.mjs";
+import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0081_customer_project_advisor.sql");
@@ -641,6 +642,7 @@ test("split fabric work remains precise through opportunity matching and trade w
   ]);
   assert.match(opportunity.summary, /draught-proofing, insulation, glazing, blinds, shutters and external shading/);
   for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
+    assert.ok(ENERGY_SERVICE_IDS.includes(category));
     assert.deepEqual(
       matchedServiceCategories([category], [category]),
       [category],
@@ -649,17 +651,15 @@ test("split fabric work remains precise through opportunity matching and trade w
       matchedServiceCategories([category], ["solar"]),
       [],
     );
-    for (const source of [
-      tradeProfileRoute,
-      tradePartnerForm,
-      tradeWorkOrdersRoute,
-      adminOpportunitiesRoute,
-      adminOpportunitiesUi,
-      tradeBusinessHub,
-    ]) {
-      assert.match(source, new RegExp(category));
-    }
   }
+  for (const source of [
+    tradeProfileRoute,
+    tradePartnerForm,
+    tradeWorkOrdersRoute,
+    adminOpportunitiesRoute,
+    adminOpportunitiesUi,
+  ]) assert.match(source, /energy-service-catalogue\.mjs/);
+  assert.match(tradeBusinessHub, /InstallerCrmWorkspace/);
   assert.match(opportunityServer, /matchedServiceCategories\(categories, capabilities\)/);
   assert.match(opportunityServer, /json_extract\(m\.matched_categories, '\$\[0\]'\)/);
   assert.match(tradeWorkOrdersRoute, /m\.matched_categories/);

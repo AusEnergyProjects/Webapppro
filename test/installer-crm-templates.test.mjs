@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { ENERGY_SERVICE_IDS } from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -38,17 +39,13 @@ test("templates prefill jobs and copy up to 24 checklist tasks", () => {
 });
 
 test("CRM jobs use the four first-class home-fabric service categories", () => {
-  const allowed = route.match(/const SERVICE_CATEGORIES = new Set\(\[([\s\S]*?)\]\);/)?.[1] || "";
-  const crmOptions = crm.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
-  const newJobOptions = newJob.match(/const serviceOptions = \[([\s\S]*?)\] as const;/)?.[1] || "";
   for (const category of ["draught-proofing", "insulation", "glazing", "window-coverings"]) {
-    assert.match(allowed, new RegExp(`"${category}"`));
-    assert.match(crmOptions, new RegExp(`"${category}"`));
-    assert.match(newJobOptions, new RegExp(`"${category}"`));
+    assert.ok(ENERGY_SERVICE_IDS.includes(category));
   }
-  assert.doesNotMatch(allowed, /insulation-draughts/);
-  assert.doesNotMatch(crmOptions, /insulation-draughts/);
-  assert.doesNotMatch(newJobOptions, /insulation-draughts/);
+  assert.equal(ENERGY_SERVICE_IDS.includes("insulation-draughts"), false);
+  assert.match(route, /\.\.\.ENERGY_SERVICE_IDS/);
+  assert.match(crm, /\.\.\.ENERGY_SERVICE_OPTIONS/);
+  assert.match(newJob, /\.\.\.ENERGY_SERVICE_OPTIONS/);
 });
 
 test("public access copy makes free and verification boundaries explicit", () => {

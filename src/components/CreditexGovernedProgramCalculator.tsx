@@ -16,6 +16,8 @@ import {
 } from "@/lib/creditex-nsw-program-catalogue";
 import {
   CREDITEX_VEU_ACTIVITY_DEFINITIONS,
+  CREDITEX_VEU_PART_46_CURRENT_RULES_FROM,
+  CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM,
   type CreditexVeuActivityDefinition,
 } from "@/lib/creditex-veu-calculator-catalogue";
 import {
@@ -57,7 +59,9 @@ export type CreditexGovernedEstimate = {
   supportedScenario?: string;
   formulaKey: string;
   effectiveDate?: string;
+  effectiveDateLabel?: "Installation date" | "Purchase date";
   installationDate?: string;
+  purchaseDate?: string;
   officialSourceUrl: string;
   officialSourceTitle: string;
   trace: Array<{
@@ -128,6 +132,10 @@ export function creditexNswEffectiveDateLabel(
   activity: CreditexNswActivityDefinition,
 ) {
   return activity.effectiveDateLabel || "Installation date";
+}
+
+export function creditexVeuEffectiveDateLabel(activityCode: string) {
+  return activityCode === "46" ? "Purchase date" : "Installation date";
 }
 
 function veuDefaults(activity: CreditexVeuActivityDefinition) {
@@ -662,8 +670,12 @@ function veuVisibleInput(
 export function creditexVeuQuoteInputVisible(
   definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
   inputs: Record<string, string>,
+  activityCode = "",
 ) {
   if (!veuVisibleInput(definition, inputs)) return false;
+  if (activityCode === "46" && definition.key !== "scenario") {
+    return false;
+  }
   if (definition.key === "prior_relevant_period_water_heater_products") {
     return false;
   }
@@ -748,7 +760,7 @@ type CreditexVeuProductUiState = {
 type CreditexVeuProductUiAction =
   | {
       type: "identity_changed";
-      reason: "activity" | "installation_date" | "postcode" | "registry_snapshot" | "scenario";
+      reason: "activity" | "effective_date" | "postcode" | "registry_snapshot" | "scenario";
       issue?: string;
     }
   | {
@@ -853,7 +865,7 @@ export function creditexVeuRegistryCodeForProductKind(productKind: string) {
 
 export function creditexVeuProductEvidenceState(
   activityCode: string,
-  installationDate: string,
+  effectiveDate: string,
   selectedProducts: Readonly<SelectedVeuProducts>,
   registryIssue = "",
   scenario?: string,
@@ -861,18 +873,20 @@ export function creditexVeuProductEvidenceState(
   const requiredKinds = officialProductKindsForVeuActivity(
     activityCode,
     scenario,
+    effectiveDate,
   );
   const selectedProductIds: Record<string, string> = {};
   const completeSelections: CreditexOfficialProductOption[] = [];
-  let issue = registryIssue;
+  let issue = requiredKinds.length > 0 ? registryIssue : "";
   let missingProduct = false;
   const permittedCategories = officialVeuProductCategoryNumbersForActivity(
     activityCode,
     scenario,
   );
 
-  if (!issue && !exactRegistryDate(installationDate)) {
-    issue = "Choose a valid installation date before selecting a VEU Public Registry model.";
+  const dateLabel = creditexVeuEffectiveDateLabel(activityCode).toLowerCase();
+  if (requiredKinds.length > 0 && !issue && !exactRegistryDate(effectiveDate)) {
+    issue = `Choose a valid ${dateLabel} before selecting a VEU Public Registry model.`;
   }
 
   for (const kind of requiredKinds) {
@@ -891,7 +905,7 @@ export function creditexVeuProductEvidenceState(
       || !product.model.trim()
       || !product.registrationNumber.trim()
     ) {
-      issue = "The selected VEU product identity is incomplete or does not match this activity. Select the exact installation-date-eligible VEU Public Registry model again.";
+      issue = `The selected VEU product identity is incomplete or does not match this activity. Select the exact ${dateLabel}-eligible VEU Public Registry model again.`;
       continue;
     }
     if (
@@ -926,10 +940,10 @@ export function creditexVeuProductEvidenceState(
       continue;
     }
     if (
-      installationDate < product.eligibleFrom
-      || (product.eligibleTo && installationDate > product.eligibleTo)
+      effectiveDate < product.eligibleFrom
+      || (product.eligibleTo && effectiveDate > product.eligibleTo)
     ) {
-      issue = "The selected VEU Public Registry model is outside its installation-date approval window.";
+      issue = `The selected VEU Public Registry model is outside its ${dateLabel} approval window.`;
       continue;
     }
     if (!gemsMotor) {
@@ -1124,7 +1138,7 @@ function CreditexVeuCalculator({
       if (previousSnapshotId && previousSnapshotId !== snapshotId) {
         setProductPickerRevision((current) => current + 1);
         clearProductEvidence(
-          `The ${registryLabel} snapshot changed. Select the exact installation-date-eligible model again.`,
+          `The ${registryLabel} snapshot changed. Select the exact ${creditexVeuEffectiveDateLabel(activity.activityCode).toLowerCase()}-eligible model again.`,
         );
       } else {
         dispatchProductUi({ type: "registry_current" });
@@ -1143,7 +1157,7 @@ function CreditexVeuCalculator({
       clearProductEvidence(message);
       throw caught;
     }
-  }, [api, clearProductEvidence]);
+  }, [activity.activityCode, api, clearProductEvidence]);
 
   async function calculate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1155,7 +1169,11 @@ function CreditexVeuCalculator({
     try {
       const visibleInputs: Record<string, unknown> = Object.fromEntries(
         activity.inputDefinitions
-          .filter((definition) => veuVisibleInput(definition, inputs))
+          .filter((definition) => creditexVeuQuoteInputVisible(
+            definition,
+            inputs,
+            activity.activityCode,
+          ))
           .map((definition) => [definition.key, inputs[definition.key]]),
       );
       if (waterHeaterActivity) {
@@ -1285,7 +1303,11 @@ function CreditexVeuCalculator({
   function renderVeuInput(
     definition: CreditexVeuActivityDefinition["inputDefinitions"][number],
   ) {
-    if (!creditexVeuQuoteInputVisible(definition, inputs)) return null;
+    if (!creditexVeuQuoteInputVisible(
+      definition,
+      inputs,
+      activity.activityCode,
+    )) return null;
     return (
       <label key={definition.key}>
         {creditexVeuQuoteInputLabel(
@@ -1377,7 +1399,11 @@ function CreditexVeuCalculator({
   }
 
   const operatorInputs = activity.inputDefinitions.filter((definition) => (
-    creditexVeuQuoteInputVisible(definition, inputs)
+    creditexVeuQuoteInputVisible(
+      definition,
+      inputs,
+      activity.activityCode,
+    )
     && !(waterHeaterActivity && definition.key === "unit_quantity")
   ));
   const scenarioInputs = operatorInputs.filter(
@@ -1447,11 +1473,30 @@ function CreditexVeuCalculator({
           </select>
         </label>
         {scenarioInputs.map(renderVeuInput)}
+        {activity.activityCode === "46" && date >= CREDITEX_VEU_PART_46_CURRENT_RULES_FROM && (
+          <p>
+            Current rules do not use the old brand and model list. Choose the
+            product type only. This estimate assumes an eligible electricity-only
+            product that is at least 550 mm wide and 380 mm deep, has at least
+            three separately controlled cooking zones and a two-year warranty.
+            It must replace gas or LPG in a Victorian home at least two years old,
+            with no earlier cooktop discount and a minimum $200 customer payment.
+          </p>
+        )}
+        {activity.activityCode === "46" && date < CREDITEX_VEU_PART_46_CURRENT_RULES_FROM && (
+          <p>
+            For a purchase before 30 June 2026, choose the exact induction
+            product that was listed for that date. Current purchases no longer
+            use the former product list.
+          </p>
+        )}
         <label>
-          Installation date
+          {creditexVeuEffectiveDateLabel(activity.activityCode)}
           <input
             type="date"
-            min="2026-06-30"
+            min={activity.activityCode === "46"
+              ? CREDITEX_VEU_PART_46_LEGACY_SUPPORTED_FROM
+              : "2026-06-30"}
             required
             value={date}
             onChange={(event) => {
@@ -1465,7 +1510,7 @@ function CreditexVeuCalculator({
               registrySnapshotIdsRef.current = {};
               dispatchProductUi({
                 type: "identity_changed",
-                reason: "installation_date",
+                reason: "effective_date",
               });
               try {
                 setInputs((current) => applyVeuPostcode(
@@ -1539,7 +1584,7 @@ function CreditexVeuCalculator({
                   type: "evidence_invalid",
                   issue: caught instanceof Error
                     ? caught.message
-                    : "The selected installation-date-eligible VEU Public Registry model is not eligible for this activity.",
+                    : `The selected ${creditexVeuEffectiveDateLabel(activity.activityCode).toLowerCase()}-eligible VEU Public Registry model is not eligible for this activity.`,
                 });
               }
             }}

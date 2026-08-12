@@ -1,3 +1,5 @@
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
+
 const SOURCES = {
   "electricity-solar": { label: "electricity solar scenario", returnHref: "/compare" },
   "electricity-battery": { label: "electricity battery scenario", returnHref: "/compare" },
@@ -5,19 +7,7 @@ const SOURCES = {
   "gas-hot-water": { label: "gas hot-water upgrade estimate", returnHref: "/gas-compare" },
 };
 
-const SERVICES = new Set([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-]);
+const SERVICES = new Set(ENERGY_SERVICE_IDS);
 const LEGACY_SERVICE_ALIASES = {
   "insulation-draughts": ["insulation", "draught-proofing"],
 };

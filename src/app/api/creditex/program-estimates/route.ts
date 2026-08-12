@@ -585,9 +585,17 @@ async function attachRegistryReceipt(
 ) {
   const approvedProducts = productValidation.selections
     .sort((left, right) => left.productKind.localeCompare(right.productKind));
+  const registryReceipt = estimate.activityCode === "46"
+    ? {
+        purchaseDate: typeof estimate.purchaseDate === "string"
+          ? estimate.purchaseDate
+          : productValidation.registryReceipt.installationDate,
+        snapshots: productValidation.registryReceipt.snapshots,
+      }
+    : productValidation.registryReceipt;
   const registryReceiptBase = {
     arithmeticReceiptHash: estimate.receiptHash,
-    registryReceipt: productValidation.registryReceipt,
+    registryReceipt,
     approvedProducts,
   };
   const registryReceiptHash = await sha256(registryReceiptBase);
@@ -595,7 +603,7 @@ async function attachRegistryReceipt(
     ...estimate,
     arithmeticReceiptHash: estimate.receiptHash,
     approvedProducts,
-    registryReceipt: productValidation.registryReceipt,
+    registryReceipt,
     registryReceiptHash,
     receiptHash: await sha256({
       ...registryReceiptBase,
@@ -632,10 +640,13 @@ function deriveVeuProductEvidence(
   activityCode: string,
   selections: readonly CreditexOfficialProductSelection[],
 ): CreditexVeuProductEvidence {
+  const effectiveDateLabel = activityCode === "46"
+    ? "purchase date"
+    : "installation date";
   if (selections.length !== 1) {
     return veuEvidenceFailure(
       activityCode,
-      "does not resolve to exactly one activity-specific product approved on the installation date",
+      `does not resolve to exactly one activity-specific product approved on the ${effectiveDateLabel}`,
     );
   }
   const selection = selections[0];
@@ -694,7 +705,7 @@ function deriveVeuProductEvidence(
   ) {
     return veuEvidenceFailure(
       activityCode,
-      "does not prove approval on the installation date",
+      `does not prove approval on the ${effectiveDateLabel}`,
     );
   }
   const productId = exactVeuEvidenceText(
@@ -831,6 +842,7 @@ export async function POST(request: Request) {
       const requiredKinds = officialProductKindsForVeuActivity(
         activityCode,
         selectedScenario,
+        typeof raw.effectiveDate === "string" ? raw.effectiveDate : undefined,
       );
       const waterHeaterItems = requestVeuWaterHeaterQuoteItems(
         raw,

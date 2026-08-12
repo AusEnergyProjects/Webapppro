@@ -4,6 +4,7 @@ import {
   customerProjectOptions,
   normalizeHomeFeatureSelections,
 } from "./customer-projects.mjs";
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
@@ -150,19 +151,7 @@ export const PUBLIC_PLAN_SNAPSHOT_VERSION =
 export const PUBLIC_PLAN_SUBMISSION_ID_PATTERN =
   /^\d{8}\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const PUBLIC_PLAN_UPGRADE_INTERESTS = Object.freeze([
-  "assessment",
-  "solar",
-  "battery",
-  "heating-cooling",
-  "hot-water",
-  "draught-proofing",
-  "insulation",
-  "glazing",
-  "window-coverings",
-  "ev-charging",
-  "other",
-]);
+export const PUBLIC_PLAN_UPGRADE_INTERESTS = ENERGY_SERVICE_IDS;
 
 const publicPlanUpgradeInterestSet = new Set(
   PUBLIC_PLAN_UPGRADE_INTERESTS,

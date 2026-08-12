@@ -1,19 +1,10 @@
 import { assessParticipantRecord } from "./direct-trade-participants.mjs";
 import { canonicalAustralianState } from "./australian-postcodes.mjs";
+import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
-const CATEGORY_REQUIREMENTS = {
-  assessment: ["assessment"],
-  solar: ["solar"],
-  battery: ["battery"],
-  "heating-cooling": ["heating-cooling"],
-  "hot-water": ["hot-water"],
-  "draught-proofing": ["draught-proofing"],
-  insulation: ["insulation"],
-  glazing: ["glazing"],
-  "window-coverings": ["window-coverings"],
-  "ev-charging": ["ev-charging"],
-  other: ["other"],
-};
+const CATEGORY_REQUIREMENTS = Object.fromEntries(
+  ENERGY_SERVICE_IDS.map((service) => [service, [service]]),
+);
 
 const LEGACY_CATEGORY_ALIASES = {
   "insulation-draughts": ["insulation", "draught-proofing"],
@@ -73,6 +64,12 @@ const QUOTE_EVIDENCE = {
     [
       "hot-water-design",
       "Tank or delivery capacity, climate performance, tariff needs and backup operation",
+    ],
+  ],
+  "electric-cooking": [
+    [
+      "electric-cooking-scope",
+      "Cooktop or freestanding appliance model, circuit and switchboard scope, kitchen fit, ventilation and safe gas disconnection",
     ],
   ],
   "draught-proofing": [
