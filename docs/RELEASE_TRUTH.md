@@ -192,9 +192,12 @@ This is the only current implementation and release-status document. The [dated 
 | Failed historical Team and one-click quote application source | `9bc981227e258dffb036a1ddf9acd6ad9117b72a` on `codex/sites-custom-domain-migration` | Complete feature source saved as Sites version 319, but never activated because the Sites migration parser rejected multiline trigger bodies |
 | Failed historical Sites version 319 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8` | Exact Sites version 319 built from `9bc981227e258dffb036a1ddf9acd6ad9117b72a`; deployment failed before activation with `incomplete input: SQLITE_ERROR` |
 | Failed historical Sites version 319 deployment identity | `appgdep_6a7c7a96fe2c8191be72871005057712` | Failed before activation with `incomplete input: SQLITE_ERROR`; deployment URL was null; version 318 remained public |
-| Current Team and one-click quote application source | `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` on `codex/sites-custom-domain-migration` | Validated, pushed to GitHub and Sites internal `main`; exact executable and Sites migration-parser repair source for milestone `TLINK-TEAM-ONE-CLICK-QUOTE-58` |
-| Current Sites version 320 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b` | Exact Sites version 320 built from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`; 408 files; 39,536,640 bytes; archive storage content hash `sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`; all 134 migrations through `0133_public_lead_job_files.sql` |
-| Current Sites version 320 executable identity | Sites version 320 from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` succeeded on provider `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; custom home served, health returned HTTP 200 at `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned zero events |
+| Historical Team and one-click quote application source | `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` on `codex/sites-custom-domain-migration` | Validated, pushed to GitHub and Sites internal `main`; exact Sites migration-parser repair source for historical Sites version 320 |
+| Historical Sites version 320 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b` | Exact Sites version 320 built from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`; 408 files; 39,536,640 bytes; archive storage content hash `sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`; all 134 migrations through `0133_public_lead_job_files.sql` |
+| Historical Sites version 320 executable identity | Sites version 320 from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` succeeded on provider `https://aea-energy-comparison.info294029.chatgpt.site` with environment revision 20 and remained public until version 321 replaced it |
+| Current Team simplification and Interested workflow application source | `523b517c4027ef72f2b267c95ae8c36fd26af92d` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-TEAM-ONE-CLICK-QUOTE-58` |
+| Current Sites version 321 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf` | Exact Sites version 321 built from `523b517c4027ef72f2b267c95ae8c36fd26af92d`; 412 files; 39,546,880 bytes; archive storage content hash `sha256:a071cd89ac2137ff5877943785decf00cdefa983056c9d029226e21fbc086424`; all 136 migrations through `0135_team_document_expiry_warnings.sql` |
+| Current Sites version 321 executable identity | Sites version 321 from `523b517c4027ef72f2b267c95ae8c36fd26af92d` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c9aa092088191896d869614891e2f` succeeded on provider `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in read-only Team and pictured-lead QA completed |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -240,9 +243,11 @@ reads and is historical. Full implementation Sites version 316 from
 through the failed version 319 attempt. Version 319 from
 `9bc981227e258dffb036a1ddf9acd6ad9117b72a` failed before activation with
 `incomplete input: SQLITE_ERROR` and a null deployment URL. Sites version 320
-from exact repair source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is the current
-verified production release and contains the full Team system, atomic one-click
-Interested workflow and accepted lead Files custody.
+from exact repair source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is historical.
+Sites version 321 from exact application source
+`523b517c4027ef72f2b267c95ae8c36fd26af92d` is the current verified production
+release and contains the simplified Team system, the D1-compatible atomic
+one-click Interested workflow and accepted lead Files custody.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
@@ -250,26 +255,39 @@ Certificate creation, submission, trading and settlement remain disabled.
 ## Current TLink Team and one-click Interested release
 
 Milestone `TLINK-TEAM-ONE-CLICK-QUOTE-58` is released from exact repair and
-executable application source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`, which is
+executable application source `523b517c4027ef72f2b267c95ae8c36fd26af92d`, which is
 pushed to GitHub and Sites internal `main`. Sites saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
-and deployed it through `appgdep_6a7c85c3787c8191b79ee717958643c6` as current
-Sites version 320. The public custom URL is
+`appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
+and deployed it through `appgdep_6a7c9aa092088191896d869614891e2f` as current
+Sites version 321. The public custom URL is
 `https://compare.ausenergyassessments.com`, the provider URL is
 `https://aea-energy-comparison.info294029.chatgpt.site`, and the deployment uses
-environment revision 20. Sites stored 408 files and 39,536,640 bytes with archive
+environment revision 20. Sites stored 412 files and 39,546,880 bytes with archive
 storage content hash
-`sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`.
+`sha256:a071cd89ac2137ff5877943785decf00cdefa983056c9d029226e21fbc086424`.
 
 Team is now a first-class trade workspace. Owners can govern granular access
-permissions, saved permission presets, roster membership, member files and
-credential vault records, device inventory and active or inactive lifecycle
-history. Saved presets copy defaults only and never authorize access. Deactivation
-removes access while retaining historical job, file and compliance records. Job,
+permissions, saved permission presets, a dense roster with separate first name,
+last name, phone and email columns, clear Open actions, device inventory and
+active or inactive lifecycle history. Saved presets copy defaults only and never
+authorize access. Deactivation removes access while retaining historical job,
+file and member records. Job,
 assignment, rescheduling, customer, report, quote, invoice, price-book, discount,
 evidence and permission-management access remains separately controlled,
 including own-work and team-work scopes. Only an owner can close the business
 account.
+
+Add-member contact fields are aligned. The phone control strips letters in the
+client, and the server rejects non-phone characters before Australian
+normalisation.
+
+Member records now use generic document or photo upload with a title and optional
+expiry date. The replaced licence and credential form is removed. Active
+documents due within 30 days create permission-scoped notification-drawer warnings
+and durable, idempotent owner-email work. Release QA sent no expiry email. Each
+member has an allowlisted schedule colour. A member can update their own
+availability, while an owner or delegated team manager can update staff
+availability without widening job or appointment visibility.
 
 For an exact authorised match, one Interested action atomically creates or
 replays that accepting company's customer, primary contact, service site, numbered
@@ -280,6 +298,14 @@ state for every company that accepts it. Accepted customer context, answers and
 copied photos remain available after the source lead is withdrawn, expires or is
 removed.
 
+The exact version 320 production failure occurred before mutation. Its Interested
+preflight used seven `UNION ALL SELECT` terms, above the D1 production compound
+`SELECT` limit of five. Version 321 replaces that preflight with one ordinary
+`SELECT 1 WHERE EXISTS(...) OR ...` statement across the seven deterministic
+records. The correction retains the atomic match status, tenant customer, contact,
+site, job, copied job photos, draft quote and conversion workflow plus idempotent
+replay.
+
 Accepted CRM names use a deliberate placeholder without changing consent truth.
 An unknown first name is persisted as `Redacted` and an unknown last name is
 persisted separately as `Redacted`; an available component is preserved. The
@@ -289,7 +315,10 @@ an authorised company user can later replace the CRM placeholders.
 
 Additive migrations `0131_trade_team_permissions_and_member_files.sql`,
 `0132_public_lead_accepted_disclosure.sql` and
-`0133_public_lead_job_files.sql` extend the deployed inventory to 134 migrations.
+`0133_public_lead_job_files.sql` remain deployed. Additive migrations
+`0134_team_member_documents_and_colours.sql` and
+`0135_team_document_expiry_warnings.sql` extend the deployed inventory to 136
+migrations.
 Historical version 319 used source `9bc981227e258dffb036a1ddf9acd6ad9117b72a`, saved
 version
 `appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8`
@@ -299,24 +328,39 @@ version 318 live. Repair source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 keeps the three forward migrations Sites-parser compatible and installs and
 verifies the exact complete trigger statements at runtime.
 
-The intended full suite excluding the preserved unrelated stale evidence test ran
-1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed. Focused coverage
-passed 38 of 38, independent risk coverage passed 210 of
-210 and integration passed 36 of 36. Typecheck, warning-free lint, `db:check`
-across all 134 migrations, production build, Sites server-bundle audit,
+Historical version 320 used source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`,
+saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6`. It succeeded and
+remained public until version 321 replaced it.
+
+Product-focused Team coverage passed 67 of 67, bounded schedule coverage passed
+34 of 34, lead and expiry coverage passed 35 of 35, integration passed 36 of 36,
+and independent audit coverage passed 68 of 68. Typecheck, warning-free lint,
+`db:check` across all 136 migrations, production build, Sites server-bundle audit,
 `git diff --check` and the customer-plan PDF audit passed.
 
-Raw unfiltered `npm test` is not green because preserved unrelated test
-`test/trade-field-evidence-finalisation.test.mjs` contains stale mock and source
-location expectations. It was not edited and retains SHA-256
-`6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`. This
-caveat is not counted as a pass and does not alter the validated intended-suite
-result above.
+Raw unfiltered `npm test` reported 2,066 total: 2,042 passed, 7 failed, 7
+cancelled and 10 skipped. Every failure and cancellation is confined to preserved
+unrelated test `test/trade-field-evidence-finalisation.test.mjs`, whose stale mock
+and source-location expectations were not edited. It retains SHA-256
+`6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
 
-The custom-domain home served successfully, `/api/health` returned HTTP 200 at
-`2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
-zero events. Release QA deliberately did not create a synthetic Interested
-workflow or perform a live quote send.
+Signed-in production QA reloaded the pictured existing lead. `Create job and
+quote` was present and enabled, and the prior workflow-preparation error was
+absent. The Team workspace showed aligned separate first-name, last-name, phone,
+email, status, colour and action columns, bordered `Open` actions and no `More`
+text. The add-member contact fields were equal-height, equal-width aligned pairs,
+and entering `abc0412def345678` into the telephone field left `0412345678`. The
+document vault exposed only title, optional expiry and one PDF/JPEG/PNG file
+input. The colour palette and self/team availability choices were visible. This
+account had no appointments, so appointment colour rendering was not observed
+live.
+
+Release QA deliberately did not click Interested on the live lead, upload a
+member document, mutate availability, send a quote, send a document-expiry email
+or send any other live email. `/api/health` returned HTTP 200 and the 20-minute
+Sites Worker errors-only query returned zero events after inspection.
 
 ## Previous durable public lead, customer delivery and quote handoff release
 
@@ -2426,7 +2470,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 320 is:
+The current verified deployed topology for Sites version 321 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

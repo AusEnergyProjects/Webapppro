@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TLINK-TEAM-ONE-CLICK-QUOTE-58` released as current Sites version 320; next task is the controlled live permission matrix
+Status: `TLINK-TEAM-ONE-CLICK-QUOTE-58` released as current Sites version 321; next task is the controlled signed-in permission matrix
 
 Prepared: 13 August 2026
 
@@ -14,15 +14,23 @@ Full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
 
 Exact release and Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 
-Current production application source: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
+Current Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production: Sites version 320 at `https://compare.ausenergyassessments.com`
+Current production application source: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+Current production: Sites version 321 at `https://compare.ausenergyassessments.com`
 
-Current deployment: `appgdep_6a7c85c3787c8191b79ee717958643c6`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
 
-Migration inventory: all 134 migrations through `0133_public_lead_job_files.sql`
+Current deployment: `appgdep_6a7c9aa092088191896d869614891e2f`
+
+Migration inventory: all 136 migrations through `0135_team_document_expiry_warnings.sql`
+
+Historical version 320 application source: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
+
+Historical version 320 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+
+Historical version 320 deployment: `appgdep_6a7c85c3787c8191b79ee717958643c6`; succeeded and remained public until version 321 replaced it
 
 Failed historical version 319 application source: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
 
@@ -54,7 +62,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 408 files, 39,536,640 bytes, Sites archive storage content hash `sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`
+Current release package: 412 files, 39,546,880 bytes, Sites archive storage content hash `sha256:a071cd89ac2137ff5877943785decf00cdefa983056c9d029226e21fbc086424`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -69,10 +77,10 @@ Environment revision: 20
 ## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
 
 Status: exact repair and executable application source
-`732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 320. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
-and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` reconcile to that
+`523b517c4027ef72f2b267c95ae8c36fd26af92d` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 321. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
+and deployment `appgdep_6a7c9aa092088191896d869614891e2f` reconcile to that
 source. Deployment succeeded at the public custom URL
 `https://compare.ausenergyassessments.com` and provider URL
 `https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
@@ -86,11 +94,21 @@ quote editor opens.
 
 ### Implemented capability
 
-- Team provides owner-governed access permissions, a searchable roster, member
-  files and credential vault, saved permission presets, paged device inventory,
-  and active or inactive lifecycle records. Saved presets copy defaults only and
-  never authorize access. Deactivation revokes access while preserving historical
-  jobs, files and compliance records.
+- Team provides owner-governed access permissions, a dense roster with separate
+  first name, last name, phone and email columns, bordered Open actions, saved
+  permission presets, paged device inventory and active or inactive lifecycle
+  records. Saved presets copy defaults only and never authorize access.
+  Deactivation revokes access while preserving historical jobs, files and records.
+- Add-member contact fields are aligned. The phone control strips letters in the
+  client, and the server rejects non-phone characters before Australian
+  normalisation.
+- Member records now use generic document or photo upload with a title and
+  optional expiry date. The replaced licence and credential form is removed.
+  Active documents due within 30 days create permission-scoped drawer warnings
+  and durable idempotent owner-email work.
+- Each member has an allowlisted schedule colour. A member can change their own
+  availability, while an owner or delegated team manager can update staff
+  availability without widening job or appointment visibility.
 - Permissions cover customer visibility and search, reports, jobs, assignment and
   reassignment, own or team scheduling, quotes, invoices, price book, discounts,
   evidence and permission administration. Only the owner can close the business
@@ -99,6 +117,11 @@ quote editor opens.
   primary contact, service site, numbered job and draft quote, then opens the
   quote tool. Every company accepting the same lead receives independent
   tenant-owned IDs, workflow records, media objects and replay state.
+- The version 320 production failure occurred before mutation because D1 rejected
+  the seven-term compound preflight `SELECT` against its five-term production
+  limit. Version 321 uses one non-compound
+  `SELECT 1 WHERE EXISTS(...) OR ...` preflight while preserving the atomic
+  tenant-owned workflow and idempotent replay.
 - All customer-selected quote photos are copied into canonical job Files before
   the Interested action returns success. Accepted customer context, answers and
   copied files survive later source withdrawal, expiry or removal.
@@ -108,26 +131,47 @@ quote editor opens.
   An authorised company user can later replace the CRM placeholders.
 - Migrations `0131_trade_team_permissions_and_member_files.sql`,
   `0132_public_lead_accepted_disclosure.sql` and
-  `0133_public_lead_job_files.sql` bring the deployed inventory to 134. The
-  correction installs and verifies exact complete trigger statements at runtime
+  `0133_public_lead_job_files.sql` remain deployed. Migrations
+  `0134_team_member_documents_and_colours.sql` and
+  `0135_team_document_expiry_warnings.sql` bring the deployed inventory to 136.
+  Exact complete trigger statements remain installed and verified at runtime
   because the Sites migration parser cannot consume multiline trigger bodies.
 
 ### Validation and release evidence
 
-- The intended full suite excluding the preserved unrelated stale evidence test
-  ran 1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed. Focused
-  coverage passed 38 of 38, independent risk coverage passed 210
-  of 210 and integration passed 36 of 36.
-- Typecheck, warning-free lint, `db:check` across all 134 migrations, production
+- Product-focused Team coverage passed 67 of 67, bounded schedule coverage passed
+  34 of 34, lead and expiry coverage passed 35 of 35, integration passed 36 of
+  36 and independent audit coverage passed 68 of 68.
+- Typecheck, warning-free lint, `db:check` across all 136 migrations, production
   build, Sites server-bundle audit, `git diff --check` and the customer-plan PDF
   audit passed.
-- Raw unfiltered `npm test` is not green because the preserved unrelated
-  `test/trade-field-evidence-finalisation.test.mjs` still contains stale mock and
-  source-location expectations. It was not edited and retains SHA-256
+- Raw unfiltered `npm test` reported 2,066 total: 2,042 passed, 7 failed, 7
+  cancelled and 10 skipped. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  stale mock and source-location expectations were not edited. It retains SHA-256
   `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
-- The custom-domain home served successfully. `/api/health` returned HTTP 200 at
-  `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
-  zero events. No synthetic Interested action or live quote send was performed.
+- Signed-in production QA reloaded the pictured existing lead. `Create job and
+  quote` was present and enabled, and the prior workflow-preparation error was
+  absent. The Team workspace showed aligned separate first-name, last-name,
+  phone, email, status, colour and action columns, bordered `Open` actions and
+  no `More` text. The add-member contact fields were equal-height, equal-width
+  aligned pairs, and entering `abc0412def345678` into the telephone field left
+  `0412345678`. The document vault exposed only title, optional expiry and one
+  PDF/JPEG/PNG file input. The colour palette and self/team availability choices
+  were visible; this account had no appointments, so appointment colour rendering
+  was not observed live.
+- Release QA did not click Interested on the live lead, upload a member document,
+  mutate availability, send a quote, send a document-expiry email or send any
+  other live email. `/api/health` returned HTTP 200 and the 20-minute Sites Worker
+  errors-only query returned zero events after inspection.
+
+### Historical Sites version 320
+
+Version 320 used source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`, saved
+version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6`. It succeeded and
+remained public until version 321 replaced it.
 
 ### Failed historical Sites version 319
 
@@ -1214,11 +1258,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Controlled live owner/manager/office/field permission matrix with test accounts and device revocation.
-2. Compliance expiry and credential alerts dashboard.
-3. Workload and capability-aware assignment suggestions.
-4. Permission/access review export plus periodic audit.
-5. Staff mobile rollout and field acceptance with offline/device policy.
+1. Controlled signed-in permission matrix for owner, delegated manager, office and field accounts across own and team scopes.
+2. User-approved live Interested-to-draft proof on a test lead without sending email.
+3. Quote options, customer email, acceptance and deposit workflow.
+4. Schedule and mobile operational pilot covering colours, availability, assignment and rescheduling.
+5. Expiry renewal and alert-delivery operational audit.
 
 ## Previous released milestone
 

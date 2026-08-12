@@ -2069,15 +2069,21 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 ## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
 
 Release status: exact repair and executable application commit
-`732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 320 at
+`523b517c4027ef72f2b267c95ae8c36fd26af92d` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 321 at
 `https://compare.ausenergyassessments.com`. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
-and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` reconcile to that
+`appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
+and deployment `appgdep_6a7c9aa092088191896d869614891e2f` reconcile to that
 source. Deployment succeeded on provider
 `https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
-20. Sites stored 408 files and 39,536,640 bytes with content hash
-`sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`.
+20. Sites stored 412 files and 39,546,880 bytes with content hash
+`sha256:a071cd89ac2137ff5877943785decf00cdefa983056c9d029226e21fbc086424`.
+
+Historical Sites version 320 used application source
+`732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`, saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6`. It succeeded and
+remained public until version 321 replaced it.
 
 Historical Sites version 319 used application source
 `9bc981227e258dffb036a1ddf9acd6ad9117b72a`, saved version
@@ -2094,10 +2100,20 @@ needed to start work immediately.
 
 ### Implemented scope
 
-- Team is a first-class workspace with owner-governed access permissions, roster,
-  member files and credential vault, device inventory, saved permission presets,
-  active and inactive lifecycle history, immediate access revocation and retained
-  compliance records.
+- Team is a first-class workspace with owner-governed access permissions, a dense
+  roster with separate first name, last name, phone and email columns, clear Open
+  actions, device inventory, saved permission presets, active and inactive
+  lifecycle history, immediate access revocation and retained records.
+- Add-member contact fields are aligned. The phone control strips letters in the
+  client, and the server rejects non-phone characters before Australian
+  normalisation.
+- Team member files are deliberately generic documents or photos with a title and
+  optional expiry date. The replaced licence and credential form is removed.
+  Active documents due within 30 days create permission-scoped drawer warnings
+  and durable, idempotent owner-email work without sending during release QA.
+- Each active team member has an allowlisted schedule colour. Availability can be
+  maintained by the member for themselves and by an owner or delegated team
+  manager for staff, without widening job or appointment visibility.
 - Job, quote, customer, schedule, reports, price book, discount, evidence and team
   administration permissions support own-work and team-work boundaries. Only the
   owner can close the business account.
@@ -2105,6 +2121,11 @@ needed to start work immediately.
   customer, primary contact, service site, numbered job and draft quote, then
   opens the quote workspace. Every company accepting the same marketplace lead
   receives its own tenant-owned IDs, records, media objects and replay boundary.
+- Production version 320 exposed the exact failure before mutation: the D1
+  Interested preflight used a seven-term compound `SELECT`, above the production
+  limit of five terms. Version 321 replaces it with one non-compound
+  `SELECT 1 WHERE EXISTS(...) OR ...` preflight while retaining the all-or-nothing
+  tenant-owned workflow.
 - Every customer-selected quote photo is copied into the accepting company's
   canonical job Files before success is returned. The accepted contact, scope,
   answers and copied photos remain available after the source lead is withdrawn,
@@ -2116,27 +2137,39 @@ needed to start work immediately.
   record.
 - Additive migrations `0131_trade_team_permissions_and_member_files.sql`,
   `0132_public_lead_accepted_disclosure.sql` and
-  `0133_public_lead_job_files.sql` extend the packaged inventory to 134
-  migrations. Sites-incompatible trigger bodies are installed and verified at
-  runtime from exact complete statements by the repair source.
+  `0133_public_lead_job_files.sql` remain deployed. Migrations
+  `0134_team_member_documents_and_colours.sql` and
+  `0135_team_document_expiry_warnings.sql` extend the packaged inventory to 136
+  migrations. Sites-incompatible trigger bodies remain installed and verified at
+  runtime from exact complete statements.
 
 ### Validation and release evidence
 
-- The intended full suite, excluding the preserved unrelated stale evidence test,
-  ran 1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed.
-  Focused coverage passed 38 of 38, independent risk coverage passed 210 of 210,
-  and integration passed 36 of 36.
-- Typecheck, warning-free lint, `db:check` across all 134 migrations, production
+- Product-focused Team coverage passed 67 of 67, bounded schedule coverage passed
+  34 of 34, lead and expiry coverage passed 35 of 35, integration passed 36 of
+  36, and independent audit coverage passed 68 of 68.
+- Typecheck, warning-free lint, `db:check` across all 136 migrations, production
   build, Sites server-bundle audit, `git diff --check` and the customer-plan PDF
   audit passed.
-- Raw unfiltered `npm test` is not green because preserved unrelated test
-  `test/trade-field-evidence-finalisation.test.mjs` contains stale mock and source
-  location expectations. It was not edited and retains SHA-256
+- Raw unfiltered `npm test` reported 2,066 total: 2,042 passed, 7 failed, 7
+  cancelled and 10 skipped. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  stale mock and source-location expectations were not edited. It retains SHA-256
   `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
-- The custom-domain home served successfully, `/api/health` returned HTTP 200 at
-  `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
-  zero events. Release QA did not create a synthetic Interested workflow or send
-  a live quote.
+- Signed-in production QA reloaded the pictured existing lead. `Create job and
+  quote` was present and enabled, and the prior workflow-preparation error was
+  absent. The Team workspace showed aligned separate first-name, last-name,
+  phone, email, status, colour and action columns, bordered `Open` actions and
+  no `More` text. The add-member contact fields were equal-height, equal-width
+  aligned pairs, and entering `abc0412def345678` into the telephone field left
+  `0412345678`. The document vault exposed only title, optional expiry and one
+  PDF/JPEG/PNG file input. The colour palette and self/team availability choices
+  were visible; this account had no appointments, so appointment colour rendering
+  was not observed live.
+- Release QA did not click Interested on the live lead, upload a member document,
+  mutate availability, send a quote, send a document-expiry email or send any
+  other live email. `/api/health` returned HTTP 200 and the 20-minute Sites Worker
+  errors-only query returned zero events after inspection.
 
 ## Previous released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
 
@@ -2478,7 +2511,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical versions 310, 317 and 318 and the current version 320 release.
+historical versions 310, 317, 318 and 320 and the current version 321 release.
 
 ### Outcome
 
@@ -2622,11 +2655,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Controlled live owner/manager/office/field permission matrix with test accounts and device revocation.
-2. Compliance expiry and credential alerts dashboard.
-3. Workload and capability-aware assignment suggestions.
-4. Permission/access review export plus periodic audit.
-5. Staff mobile rollout and field acceptance with offline/device policy.
+1. Controlled signed-in permission matrix for owner, delegated manager, office and field accounts across own and team scopes.
+2. User-approved live Interested-to-draft proof on a test lead without sending email.
+3. Quote options, customer email, acceptance and deposit workflow.
+4. Schedule and mobile operational pilot covering colours, availability, assignment and rescheduling.
+5. Expiry renewal and alert-delivery operational audit.
 
 ## Global stop conditions
 
