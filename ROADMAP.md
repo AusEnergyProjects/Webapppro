@@ -2066,12 +2066,79 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
+## Released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
+
+Release status: exact application commit
+`621797579ea1f2249e8679b26056066a4c824668` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 318 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+and deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
+`2026-08-12T08:12:48.019629Z` with environment revision 20.
+
+### Outcome
+
+Make the first public enquiry attempt durable before returning success, deliver
+the customer plan and internal review independently after acceptance, replace
+the false lead-delivery timeout monitor with a read-only readiness check, let a
+matched trade inspect quote photos without downloads and open a prefilled quote
+workflow directly from Interest.
+
+### Implemented scope
+
+- The prior first-attempt failure was caused by cold PDF and font generation
+  followed by a synchronous Google Apps Script relay inside the public request.
+  That work exceeded the request budget and aborted before the customer could
+  trust the result.
+- The public request now records canonical intake in D1 and R2 plus independent
+  customer-email and internal-review outboxes before returning HTTP 200 with a
+  truthful queued delivery state. PDF generation, Resend customer delivery and
+  Google Apps Script internal review happen asynchronously with durable retries.
+- The operational lead check is a signed, read-only readiness probe over the D1
+  schema and indexes, R2 capability and provider configuration presence. It does
+  not call the external relay, create a lead, send email or claim provider inbox
+  delivery.
+- Clicking an authorised quote-photo thumbnail opens the whole protected image
+  in a focus-contained lightbox. X, backdrop and Escape close it and object URLs
+  are revoked after use.
+- Interest creates or reuses a deterministic pseudonymous CRM customer, contact,
+  site, job and draft quote, then opens the prefilled quote editor. Issue and
+  send remain explicit. Current recipient and access are checked at each new
+  issue or send, and an issued customer PDF and secure link are immutable. Per
+  the product-owner decision, no withdraw-or-change workflow was added after
+  issue.
+- Additive migrations `0129_public_plan_delivery_outboxes.sql` and
+  `0130_trade_issued_document_cleanup.sql` extend the packaged inventory to 131
+  migrations.
+- The existing Google Apps Script project and deployment ID
+  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+  were updated in place to version 15 at 12 August 2026 18:10 with description
+  `durable public-plan delivery and read-only readiness monitoring`. The hosted
+  relay source exactly matches SHA-256
+  `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2`.
+
+### Validation and release evidence
+
+- `npm.cmd run validate` passed with typecheck, warning-free lint, 36 integration
+  tests, 1,980 total tests with 1,970 passed, 10 intentional skips and 0 failures,
+  all 131 migrations, the 24-page customer-plan PDF audit, production build and
+  Sites bundle audit. `git diff --check` passed.
+- Focused quote and photo coverage passed 123 of 123, durable lead and email
+  coverage passed 38 of 38, monitor coverage passed 29 of 29, and the broader
+  regression set passed 85 of 85.
+- The custom-domain health route, plan and trade dashboard returned HTTP 200.
+  The 15-minute post-release Worker error query returned zero events.
+- No synthetic production lead, customer email or quote was sent. The first real
+  post-release customer and matched-trade delivery remains the explicit runtime
+  proof gap.
+
+## Previous released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
 
 Status: exact executable application commit
 `e01d7fc8eb80292ddfb019366355293c1103c5fe` is pushed to
-`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
-released as current Sites version 317. Saved version
+`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and was
+released as historical Sites version 317. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
 and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` reconcile to that
 source. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with environment
@@ -2339,7 +2406,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical version 310 and the current version 317 release.
+historical versions 310 and 317 and the current version 318 release.
 
 ### Outcome
 
@@ -2483,11 +2550,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Add a mounted browser regression for the submission progress modal, mobile navigation guard and focus containment using intercepted APIs that cannot create a real lead.
-2. Add an append-only owner-visible audit history for every business capability change.
-3. Add provider-acceptance, inbox-delivery and failure alerting for mandatory lead email without creating a synthetic customer lead.
-4. Extend the exact Activity 46 rule history to 25 October 2024 instead of failing closed before 14 April 2026.
-5. Retire the unused all-category matching helper or align it with canonical any-selected public matching before it can be reused.
+1. Observe first real post-release enquiry end-to-end (200 queued, customer provider acceptance/inbox, every matched trade email/dashboard).
+2. Confirm the next signed hourly monitor reports durable lead readiness HTTP 200 without false Apps Script timeout.
+3. Run a controlled signed-in Interested -> draft -> issue/send -> customer secure quote decision proof.
+4. Perform mobile/customer visual QA of submission progress, photo lightbox, and quote editor, fixing only verified gaps.
+5. Add an owner delivery-status/retry dashboard for customer email, matched-trade email, and quotes.
 
 ## Global stop conditions
 

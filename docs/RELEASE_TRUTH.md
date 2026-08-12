@@ -183,10 +183,13 @@ This is the only current implementation and release-status document. The [dated 
 | Historical Sites version 315 executable identity | Sites version 315 from `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-11T15:42:54.685549Z`; environment revision 20; exact signed-in lead GET and safe UI reload passed with no Worker error events |
 | Historical lead-submission, service-catalogue and calculator implementation source | `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1` on `codex/sites-custom-domain-migration` | Full validated implementation for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; historical intermediate Sites version 316 |
 | Historical Sites version 316 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68` | Exact Sites version 316 built from `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`; deployment `appgdep_6a7bef81996c8191951f013dce24d698` succeeded with environment revision 20 |
-| Current activity-date copy-corrected application source | `e01d7fc8eb80292ddfb019366355293c1103c5fe` on `codex/sites-custom-domain-migration` | Current executable source for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; differs from version 316 only in the calculator footer activity-date wording |
-| Current Sites version 317 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca` | Exact Sites version 317 built from `e01d7fc8eb80292ddfb019366355293c1103c5fe`; 397 files; 39,034,880 bytes; content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`; all 129 migrations |
-| Current Sites version 317 executable identity | Sites version 317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` succeeded at `2026-08-12T04:06:57.633776Z`; environment revision 20 |
-| Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Exact committed relay source saved and the existing deployment update to version 14 was initiated; hosted v14 identity and signed lead-delivery probe remain unverified; no real lead was submitted |
+| Historical activity-date copy-corrected application source | `e01d7fc8eb80292ddfb019366355293c1103c5fe` on `codex/sites-custom-domain-migration` | Historical executable source for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; differs from version 316 only in the calculator footer activity-date wording |
+| Historical Sites version 317 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca` | Exact Sites version 317 built from `e01d7fc8eb80292ddfb019366355293c1103c5fe`; 397 files; 39,034,880 bytes; content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`; all 129 migrations |
+| Historical Sites version 317 executable identity | Sites version 317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` succeeded at `2026-08-12T04:06:57.633776Z`; environment revision 20 |
+| Current durable public-lead and quote application source | `621797579ea1f2249e8679b26056066a4c824668` on `codex/sites-custom-domain-migration` | Validated, pushed to GitHub and Sites internal `main`; exact executable source for milestone `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` |
+| Current Sites version 318 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e` | Exact Sites version 318 built from `621797579ea1f2249e8679b26056066a4c824668`; 399 files; 39,157,760 bytes; content hash `sha256:8dc4ea96f8dffa646d073e8e0ca3b8106bd286bc0e3dbbf5533402df841f4cc6`; all 131 migrations through `0130_trade_issued_document_cleanup.sql` |
+| Current Sites version 318 executable identity | Sites version 318 from `621797579ea1f2249e8679b26056066a4c824668` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-12T08:12:48.019629Z`; environment revision 20 |
+| Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
 The additive schema expansion, reviewed-ABN application, authorised contract
@@ -226,18 +229,79 @@ HTTP 500. Sites version 315 from
 `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` restored bounded trade-opportunity
 reads and is historical. Full implementation Sites version 316 from
 `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1` is also historical. Sites version
-317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` is the current verified
-production release and contains the final activity-date wording correction.
+317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` is historical. Sites version
+318 from `621797579ea1f2249e8679b26056066a4c824668` is the current verified
+production release and contains the durable public-lead, email, photo-lightbox,
+quote-handoff and read-only monitor correction.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current lead submission, service catalogue and calculator release
+## Current durable public lead, customer delivery and quote handoff release
+
+Milestone `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` is released from exact application
+source `621797579ea1f2249e8679b26056066a4c824668`, which is pushed to GitHub and
+Sites internal `main`. Sites saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+and deployed it through `appgdep_6a7c2aece3248191abf36ae69cdb2095` as current
+Sites version 318. Deployment succeeded on provider
+`info294029--aea-energy-comparison` at `2026-08-12T08:12:48.019629Z` with
+environment revision 20 at `https://compare.ausenergyassessments.com`.
+
+The reproduced first-attempt public lead failure was an `AbortError` after cold
+customer-PDF and font preparation followed by a synchronous Google Apps Script
+relay inside the request. A later warm retry succeeded, but relying on a customer
+retry was unacceptable. The route now writes the canonical intake to D1 and R2
+and creates independent customer-email and internal-review outboxes before HTTP
+200. It returns the truthful `planEmailStatus: queued` state. Customer PDF
+generation and Resend delivery and the Apps Script internal-review relay execute
+as independent asynchronous work with durable retries.
+
+The signed lead-delivery monitor no longer calls the external relay or performs a
+synthetic delivery. It is a read-only readiness check over required D1 schema and
+indexes, R2 capability and provider configuration presence. It creates no lead,
+writes no outbox, sends no email and makes no provider-deliverability claim.
+
+Exact authorised trade matches can click a protected quote-photo thumbnail and
+view the whole image in a focus-contained lightbox. X, backdrop and Escape close
+the image, focus returns to the invoking thumbnail and object URLs are revoked.
+Selecting Interest creates or reuses a deterministic pseudonymous CRM customer,
+contact, site, job and draft quote, then opens the prefilled quote editor. Issue
+and send are explicit, current recipient and access are rechecked for each new
+issue or send, and issued PDF bytes and the secure customer link are immutable.
+Per the product-owner override, there is no withdraw-or-change workflow after
+issue.
+
+Additive migrations `0129_public_plan_delivery_outboxes.sql` and
+`0130_trade_issued_document_cleanup.sql` extend the deployed inventory to 131
+migrations. The existing Google Apps Script project and deployment ID
+`AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+were preserved and updated in place to version 15 at 12 August 2026 18:10 with
+description `durable public-plan delivery and read-only readiness monitoring`.
+The hosted editor source was compared with the committed relay and has exact
+SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2`.
+
+Final `npm.cmd run validate` exited 0. Typecheck, warning-free lint, 36 of 36
+integration tests, `db:check`, production build, Sites bundle audit and
+`git diff --check` passed. The full suite ran 1,980 tests with 1,970 passed, 10
+intentional skips and 0 failures. All 131 migrations passed and the customer-plan
+PDF audit rendered 24 pages. Focused quote and photo tests passed 123 of 123,
+durable lead and email tests passed 38 of 38, monitor tests passed 29 of 29, and
+the wider regression set passed 85 of 85.
+
+Live custom-domain health, plan and trade dashboard checks returned HTTP 200.
+The 15-minute post-release Worker errors-only query returned zero events. No
+synthetic production lead, customer email or quote was sent, so first real
+post-release customer provider acceptance and inbox receipt, every matched-trade
+email and dashboard appearance, and the issued customer quote decision remain
+explicitly pending runtime proof.
+
+## Prior lead submission, service catalogue and calculator release
 
 Milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56` is released from exact
 application source `e01d7fc8eb80292ddfb019366355293c1103c5fe`. Sites saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
-and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` identify current
+and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` identify historical
 Sites version 317. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with
 environment revision 20 at `https://compare.ausenergyassessments.com`.
 
@@ -270,7 +334,7 @@ closed until the exact historical rule versions are added.
 Full implementation commit `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
 was saved as historical intermediate Sites version 316 under
 `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
-and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`. Current
+and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`. Historical
 version 317 changes only the calculator footer from `selected installation date`
 to `selected activity date`. Sites stored 397 files and 39,034,880 bytes with
 content hash
@@ -2281,7 +2345,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 317 is:
+The current verified deployed topology for Sites version 318 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

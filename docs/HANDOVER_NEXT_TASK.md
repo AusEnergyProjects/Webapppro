@@ -1,28 +1,34 @@
 # Next task handover
 
-Status: `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56` released as current Sites version 317; next recommended milestone is a mounted no-side-effect submission regression
+Status: `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` released as current Sites version 318; next task is first-real-enquiry delivery proof
 
 Prepared: 12 August 2026
 
-Milestone ID: `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`
+Milestone ID: `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
+Milestone source baseline: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
 
-Full implementation commit: `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
+Full implementation commit: `621797579ea1f2249e8679b26056066a4c824668`
 
-Exact release commit: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
+Exact release commit: `621797579ea1f2249e8679b26056066a4c824668`
 
-Current production application source: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
+Current production application source: `621797579ea1f2249e8679b26056066a4c824668`
 
-Current production: Sites version 317 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 318 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
 
-Current deployment: `appgdep_6a7bf11b64a8819187ab2155e60906ad`
+Current deployment: `appgdep_6a7c2aece3248191abf36ae69cdb2095`
 
-Migration inventory: all 129 migrations through `0128_public_plan_quote_preparation.sql`
+Migration inventory: all 131 migrations through `0130_trade_issued_document_cleanup.sql`
+
+Historical version 317 application source: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
+
+Historical version 317 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+
+Historical version 317 deployment: `appgdep_6a7bf11b64a8819187ab2155e60906ad`
 
 Historical intermediate version 316 source: `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
 
@@ -36,7 +42,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current package: 397 files, 39,034,880 bytes and content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
+Current release package: 399 files, 39,157,760 bytes, Sites content hash `sha256:8dc4ea96f8dffa646d073e8e0ca3b8106bd286bc0e3dbbf5533402df841f4cc6`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -48,10 +54,74 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
+## Released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
+
+Status: exact application source `621797579ea1f2249e8679b26056066a4c824668`
+is pushed to GitHub and Sites internal `main` and released as current Sites
+version 318. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+and deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
+`2026-08-12T08:12:48.019629Z` with environment revision 20.
+
+### Implemented outcome
+
+The first public enquiry attempt is durably accepted before expensive delivery
+work begins, customer and internal email paths retry independently, monitoring
+checks readiness without creating a lead, protected photos open in a lightbox,
+and Interest opens a deterministic prefilled quote ready for explicit issue and
+send.
+
+### Implemented capability
+
+- The reproduced first-attempt failure came from cold PDF and font preparation
+  followed by a synchronous Apps Script relay inside the public request. The
+  request reached its execution budget and aborted before success could be
+  returned.
+- The public route now persists canonical intake in D1 and R2 and creates
+  independent customer-email and internal-review outboxes before returning HTTP
+  200 with `planEmailStatus: queued`. Customer PDF generation, Resend delivery
+  and Apps Script review relay happen after acceptance with durable retries.
+- The signed lead monitor now reads D1 schema and index readiness, R2 capability
+  and provider configuration presence. It does not write a lead, call the relay,
+  send email or claim provider deliverability.
+- An exact authorised match can click a protected thumbnail to open the whole
+  image. X, backdrop and Escape close the focus-contained lightbox and object URLs
+  are revoked after use.
+- Interest creates or reuses a pseudonymous customer, contact, site, job and draft
+  quote and opens the quote editor. Issue and send are explicit and recheck the
+  current recipient and access. Issued PDF bytes and the customer secure link are
+  immutable. The product-owner override intentionally omits withdraw or change
+  after issue.
+- Migrations `0129_public_plan_delivery_outboxes.sql` and
+  `0130_trade_issued_document_cleanup.sql` bring the release inventory to 131.
+- The existing Apps Script project and deployment ID
+  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
+  remain unchanged. That deployment was updated in place to version 15 at 12
+  August 2026 18:10 with description `durable public-plan delivery and read-only
+  readiness monitoring`. Its exact relay SHA-256 is
+  `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2`.
+
+### Validation and release evidence
+
+- `npm.cmd run validate` exited 0. Typecheck, warning-free lint, `db:check`, build,
+  Sites bundle audit and `git diff --check` passed. Integration passed 36 of 36.
+  The full suite ran 1,980 tests with 1,970 passed, 10 intentional skips and 0
+  failures. All 131 migrations passed and the customer-plan PDF audit rendered
+  24 pages.
+- Focused quote and photo tests passed 123 of 123, durable lead and email tests
+  passed 38 of 38, monitor tests passed 29 of 29, and the broader regression set
+  passed 85 of 85.
+- Live custom-domain health, plan and trade dashboard checks returned HTTP 200.
+  The 15-minute post-release Worker errors-only query returned zero events.
+- No synthetic live lead, customer email or quote was sent. The first real
+  post-release customer delivery and every matched-trade email and dashboard
+  appearance remain the next proof gate.
+
+## Previous released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
 
 Status: exact application source `e01d7fc8eb80292ddfb019366355293c1103c5fe`
-is pushed and released as current Sites version 317. Saved version
+is pushed and was released as historical Sites version 317. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
 and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` reconcile to that
 source. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with environment
@@ -96,7 +166,7 @@ without exposing commercial source provenance.
   became historical intermediate version 316. It was saved as
   `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
   and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`.
-- Current version 317 changes only the calculator footer from `selected
+- Historical version 317 changes only the calculator footer from `selected
   installation date` to `selected activity date`. Sites stored 397 files and
   39,034,880 bytes with content hash
   `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
@@ -1116,11 +1186,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Add a mounted browser regression for the submission progress modal, mobile navigation guard and focus containment using intercepted APIs that cannot create a real lead.
-2. Add an append-only owner-visible audit history for every business capability change.
-3. Add provider-acceptance, inbox-delivery and failure alerting for mandatory lead email without creating a synthetic customer lead.
-4. Extend the exact Activity 46 rule history to 25 October 2024 instead of failing closed before 14 April 2026.
-5. Retire the unused all-category matching helper or align it with canonical any-selected public matching before it can be reused.
+1. Observe first real post-release enquiry end-to-end (200 queued, customer provider acceptance/inbox, every matched trade email/dashboard).
+2. Confirm the next signed hourly monitor reports durable lead readiness HTTP 200 without false Apps Script timeout.
+3. Run a controlled signed-in Interested -> draft -> issue/send -> customer secure quote decision proof.
+4. Perform mobile/customer visual QA of submission progress, photo lightbox, and quote editor, fixing only verified gaps.
+5. Add an owner delivery-status/retry dashboard for customer email, matched-trade email, and quotes.
 
 ## Previous released milestone
 
