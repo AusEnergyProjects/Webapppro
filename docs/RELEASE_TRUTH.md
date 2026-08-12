@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 11 August 2026
+Last reconciled locally: 12 August 2026
 
-Deployment evidence last verified: 11 August 2026
+Deployment evidence last verified: 12 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -178,9 +178,14 @@ This is the only current implementation and release-status document. The [dated 
 | Historical streamlined enquiry and certificate-estimate source | `c1a62944078ace043b68bb23a37e924d3e91fefc` on `codex/sites-custom-domain-migration` | Exact customer quote-preparation, plan and calculator source for intermediate Sites version 314; live signed-in Leads GET still returned HTTP 500 |
 | Historical Sites version 314 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_a3a30ab242c0819184e4ec846fa5ef2c` | Exact Sites version 314 built from `c1a62944078ace043b68bb23a37e924d3e91fefc`; 395 files; 38,973,440 bytes; content hash `sha256:78f156f9459b1187a52c9fb88054fab58e13d440d776d8c94833d73e488c676c`; all 129 migrations |
 | Historical Sites version 314 executable identity | Sites version 314 from `c1a62944078ace043b68bb23a37e924d3e91fefc` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7b30ccbc348191833216f9b4b41c02` succeeded on provider `info294029--aea-energy-comparison` with environment revision 20; plan and calculator QA passed but signed-in trade lead reads failed |
-| Current bounded trade-opportunity read application source | `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` on `codex/sites-custom-domain-migration` | Exact nine-statement atomic D1 read-batch correction and current executable source for milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` |
-| Current Sites version 315 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d` | Exact Sites version 315 built from `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`; all 129 migrations |
-| Current Sites version 315 executable identity | Sites version 315 from `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-11T15:42:54.685549Z`; environment revision 20; exact signed-in lead GET and safe UI reload passed with no Worker error events |
+| Historical bounded trade-opportunity read application source | `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` on `codex/sites-custom-domain-migration` | Exact nine-statement atomic D1 read-batch correction and executable source for historical milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` |
+| Historical Sites version 315 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d` | Exact Sites version 315 built from `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`; all 129 migrations |
+| Historical Sites version 315 executable identity | Sites version 315 from `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-11T15:42:54.685549Z`; environment revision 20; exact signed-in lead GET and safe UI reload passed with no Worker error events |
+| Historical lead-submission, service-catalogue and calculator implementation source | `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1` on `codex/sites-custom-domain-migration` | Full validated implementation for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; historical intermediate Sites version 316 |
+| Historical Sites version 316 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68` | Exact Sites version 316 built from `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`; deployment `appgdep_6a7bef81996c8191951f013dce24d698` succeeded with environment revision 20 |
+| Current activity-date copy-corrected application source | `e01d7fc8eb80292ddfb019366355293c1103c5fe` on `codex/sites-custom-domain-migration` | Current executable source for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; differs from version 316 only in the calculator footer activity-date wording |
+| Current Sites version 317 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca` | Exact Sites version 317 built from `e01d7fc8eb80292ddfb019366355293c1103c5fe`; 397 files; 39,034,880 bytes; content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`; all 129 migrations |
+| Current Sites version 317 executable identity | Sites version 317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` succeeded at `2026-08-12T04:06:57.633776Z`; environment revision 20 |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Exact committed relay source saved and the existing deployment update to version 14 was initiated; hosted v14 identity and signed lead-delivery probe remain unverified; no real lead was submitted |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -218,18 +223,81 @@ compatibility. Both are historical. Sites version 313 from
 version 314 from `c1a62944078ace043b68bb23a37e924d3e91fefc` are historical. Version
 314 passed its plan and calculator QA but its signed-in Leads GET still returned
 HTTP 500. Sites version 315 from
-`ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` is the current verified production
-release and bounds trade-opportunity reads below the live D1 expression limit.
+`ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` restored bounded trade-opportunity
+reads and is historical. Full implementation Sites version 316 from
+`1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1` is also historical. Sites version
+317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` is the current verified
+production release and contains the final activity-date wording correction.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current practical plan, trade email and quote preparation release
+## Current lead submission, service catalogue and calculator release
+
+Milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56` is released from exact
+application source `e01d7fc8eb80292ddfb019366355293c1103c5fe`. Sites saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` identify current
+Sites version 317. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with
+environment revision 20 at `https://compare.ausenergyassessments.com`.
+
+Reused private-plan facts now render as readable label and value cards in two
+desktop columns and one narrow-screen column. Lead submission opens an immediate
+modal before the base request. The modal traps focus, cannot be dismissed by
+backdrop or Escape, locks document scrolling and keeps a departure warning active
+while lead creation or photo upload is running. Determinate progress covers the
+lead and every selected photo. A failed photo upload retries only unfinished
+photos, a skip requires confirmation, and safe completion focuses the existing
+four-option customer gateway.
+
+One canonical catalogue owns 12 services, including `electric-cooking` as
+`Electric cooking and cooktops`. Public validation, any-selected service matching,
+mandatory trade email, notification, CRM, job and work-order paths use those
+values. Business owners can change future lead capabilities without rewriting
+existing lead snapshots. Mandatory trade email retains approval, consent,
+service-area, suppression, retry and idempotency checks, and now uses escaped
+deterministic TLink-branded HTML with a plain-text fallback.
+
+The public certificate-price response and calculator client no longer expose a
+commercial supplier name or link. Current gross values remain available for every
+supported certificate type, and stale or missing price data continues to fail
+closed. Activity 46 uses purchase date for its rule boundary. Purchases from 30
+June 2026 use the current built-in or freestanding scenario, A$200 minimum payment
+and 1.5 reduction rounded to 2 VEECs. Purchases from 14 April through 29 June 2026
+retain the exact legacy listed-product path. Dates before 14 April 2026 fail
+closed until the exact historical rule versions are added.
+
+Full implementation commit `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
+was saved as historical intermediate Sites version 316 under
+`appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
+and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`. Current
+version 317 changes only the calculator footer from `selected installation date`
+to `selected activity date`. Sites stored 397 files and 39,034,880 bytes with
+content hash
+`sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
+and all 129 migrations.
+
+Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+1,946 total tests with 1,936 passed, 10 intentional skips and 0 failures,
+`db:check` across all 129 migrations, the customer-plan PDF audit, production
+build and Sites bundle audit. `git diff --check` passed. The final static copy
+correction then passed typecheck, lint, build and the Sites bundle audit.
+Independent review returned GO with no P0 or P1 finding, and the focused risk set
+passed 135 of 135.
+
+Live `/api/health` and `/api/certificate-prices` returned HTTP 200. The public
+price response contains no `sourceName` or `sourceUrl`. Live inspection confirmed
+readable reused-fact cards and the current Activity 46 purchase-date flow without
+the obsolete product picker. No real lead or trade email was submitted during
+version-317 QA. The upload modal and navigation protections are verified by source
+and regression tests, not by a production submission.
+
+## Prior practical plan, trade email and quote preparation release
 
 Milestone `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` is released from exact
 application source `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`. Sites saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
-and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` identify current
+and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` identify historical
 Sites version 315. Deployment succeeded on provider
 `info294029--aea-energy-comparison` at `2026-08-11T15:42:54.685549Z` with
 environment revision 20.
@@ -2213,7 +2281,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 310 is:
+The current verified deployed topology for Sites version 317 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

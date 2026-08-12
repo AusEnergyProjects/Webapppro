@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 11 August 2026
+Last reconciled: 12 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -2066,12 +2066,84 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
+## Released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
+
+Status: exact executable application commit
+`e01d7fc8eb80292ddfb019366355293c1103c5fe` is pushed to
+`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
+released as current Sites version 317. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` reconcile to that
+source. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with environment
+revision 20 at `https://compare.ausenergyassessments.com`.
+
+### Outcome
+
+Keep customers on the enquiry while photos and the lead are being submitted,
+make reused plan facts readable, route one canonical 12-service lead through the
+trade email and CRM workflow, and simplify the current Activity 46 estimate
+without exposing private commercial data provenance.
+
+### Implemented scope
+
+- Reused plan facts render as readable label and value cards in two desktop
+  columns and one narrow-screen column instead of collapsing into one-word lines.
+- Submit opens an immediate modal before the lead request. Focus stays in the
+  modal, backdrop and Escape cannot dismiss it, document scrolling is locked and
+  departure receives the browser warning while lead creation or photo upload is
+  in progress. Determinate stages cover the base lead and each selected photo.
+- A failed photo upload can retry only the remaining photos without resubmitting
+  the lead. Skipping remaining photos requires confirmation. Completion then
+  focuses the existing four-option electricity, gas, rebate and plan gateway.
+- One canonical catalogue now owns 12 customer and trade services, including
+  `electric-cooking` as `Electric cooking and cooktops`. Public lead validation,
+  any-selected matching, mandatory trade email, CRM, notification, job and work
+  paths use the same values. A business owner can change the capabilities used
+  for future leads without rewriting existing opportunities.
+- Trade lead email retains the mandatory durable delivery and privacy checks but
+  now uses deterministic escaped TLink-branded HTML with a plain-text fallback.
+- The public certificate-price response and calculator client no longer expose
+  a commercial source name or link. Gross estimates remain available for all
+  supported certificate types only while the latest price data is current.
+- Activity 46 uses purchase date for its rule boundary. Purchases from 30 June
+  2026 use the current simple built-in or freestanding scenario, A$200 minimum
+  payment and 1.5 reduction rounded to 2 VEECs. Purchases from 14 April through
+  29 June 2026 retain the exact legacy listed-product path. Earlier history fails
+  closed until the exact rule versions are added.
+
+### Validation and release evidence
+
+- Full implementation commit `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
+  was saved as historical intermediate Sites version 316 under
+  `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
+  and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`.
+- Version 317 adds only the final calculator footer correction from `selected
+  installation date` to `selected activity date`. Sites stored 397 files and
+  39,034,880 bytes with content hash
+  `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
+  and all 129 migrations.
+- Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+  1,946 total tests with 1,936 passed, 10 intentional skips and 0 failures,
+  `db:check` across all 129 migrations, the customer-plan PDF audit, production
+  build and Sites bundle audit. `git diff --check` passed. The final static copy
+  correction then passed typecheck, lint, production build and the Sites bundle
+  audit.
+- Independent review returned GO with no P0 or P1 finding. The focused risk set
+  passed 135 of 135.
+- Live `/api/health` and `/api/certificate-prices` returned HTTP 200. The public
+  price response contains no `sourceName` or `sourceUrl`. Live plan inspection
+  confirmed readable reused-fact cards, and live Activity 46 inspection confirmed
+  purchase date, current scenario choices and no obsolete product picker.
+- No real lead or trade email was submitted during version-317 QA. The upload
+  modal and navigation protections are verified by source and regression tests,
+  not by a production submission.
+
+## Previous released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
 
 Status: exact executable application commit
 `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a` is pushed to
-`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and is
-released as current Sites version 315. Saved version
+`origin/codex/sites-custom-domain-migration` and Sites internal `main`, and was
+released as historical Sites version 315. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
 and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` reconcile to that
 source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
@@ -2267,7 +2339,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-the current version 310 VEU registry and calculator release.
+historical version 310 and the current version 317 release.
 
 ### Outcome
 
@@ -2411,11 +2483,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Delivery operations view and alerts for provider acceptance, bounce, backlog and recovery.
-2. Structured trade quote responses built from the service-specific preparation pack.
-3. No-account customer status and consent link for trade responses and cross-session withdrawal.
-4. Later quote-pack additions and reminders without another lead.
-5. Privacy-safe funnel analytics plan -> provider-accepted email -> response.
+1. Add a mounted browser regression for the submission progress modal, mobile navigation guard and focus containment using intercepted APIs that cannot create a real lead.
+2. Add an append-only owner-visible audit history for every business capability change.
+3. Add provider-acceptance, inbox-delivery and failure alerting for mandatory lead email without creating a synthetic customer lead.
+4. Extend the exact Activity 46 rule history to 25 October 2024 instead of failing closed before 14 April 2026.
+5. Retire the unused all-category matching helper or align it with canonical any-selected public matching before it can be reused.
 
 ## Global stop conditions
 

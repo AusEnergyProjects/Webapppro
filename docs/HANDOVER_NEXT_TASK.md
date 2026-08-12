@@ -1,58 +1,42 @@
 # Next task handover
 
-Status: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55` released as current Sites version 315; next recommended milestone is delivery operations visibility and alerting
+Status: `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56` released as current Sites version 317; next recommended milestone is a mounted no-side-effect submission regression
 
-Prepared: 11 August 2026
+Prepared: 12 August 2026
 
-Milestone ID: `AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55`
+Milestone ID: `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `ceac4486531995a11a566d224b6638c0678fb3d4`
+Milestone source baseline: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Exact release commit: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
+Full implementation commit: `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
 
-Current production application source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
+Exact release commit: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
 
-Current production: Sites version 315 at `https://compare.ausenergyassessments.com`
+Current production application source: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
+Current production: Sites version 317 at `https://compare.ausenergyassessments.com`
 
-Current deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+
+Current deployment: `appgdep_6a7bf11b64a8819187ab2155e60906ad`
 
 Migration inventory: all 129 migrations through `0128_public_plan_quote_preparation.sql`
 
-Previous production application source: `30ebbf2d7b4ac03f00cdc6632786e7a12535c92a`
+Historical intermediate version 316 source: `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
 
-Historical Sites version 308 source: `ad972cf2f61aeb59f2021f56b3c908ddb3ace0a0`
+Historical intermediate version 316 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
 
-Historical v305 corrective source: `79f7e2e5be14464410ba40a749453c7473b22d4d`
+Historical intermediate version 316 deployment: `appgdep_6a7bef81996c8191951f013dce24d698`
 
-Historical simplified quote source: `11f4721b678425a4294e95c631e0d37d3fab0ffd`
+Historical version 315 application source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
 
-Prior guided calculator and PDRS source: `1d3abe172e4eb2fa006fab639233cda49a6d37d4`
+Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
 
-Primary TLink recovery source: `b7e40751e2556ffc64e37704c641a6e917046bb6`
+Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Released VEU registry source: `1d77ab222638d3d43d9a49cac0b486173ce88e18`
-
-Released VEU calculator source: `d192d46b4e2056114251ec7cb0e3cfca3b5ea5d9`
-
-Previous milestone application source: `481cb3970ffd0efe498c9fbf7c9ba5f6a7e945c7`
-
-Historical version 314 customer-enquiry and calculator source: `c1a62944078ace043b68bb23a37e924d3e91fefc`
-
-Current production source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
-
-Released application source: `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
-
-Current Sites version 315 checkpoint: application commit `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
-
-Saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
-
-Deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
-
-Current version 315 migration inventory: all 129 migrations
+Current package: 397 files, 39,034,880 bytes and content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -64,10 +48,77 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
+## Released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
+
+Status: exact application source `e01d7fc8eb80292ddfb019366355293c1103c5fe`
+is pushed and released as current Sites version 317. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca`
+and deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` reconcile to that
+source. Deployment succeeded at `2026-08-12T04:06:57.633776Z` with environment
+revision 20.
+
+### Implemented outcome
+
+The public enquiry now keeps the customer in an accessible progress dialog until
+lead and photo work reaches a safe decision point, uses one 12-service catalogue
+through customer and trade workflows, and presents a current Activity 46 estimate
+without exposing commercial source provenance.
+
+### Implemented capability
+
+- Known plan facts use readable label and value cards in two desktop columns and
+  one narrow-screen column.
+- Submit opens the progress modal before the lead request. Focus is contained,
+  backdrop and Escape dismissal are blocked, body scrolling is locked and the
+  departure warning remains active while lead creation or photo upload continues.
+  Determinate progress covers the lead and every selected photo.
+- Photo failure retries only unfinished photos. Skipping remaining photos requires
+  confirmation. Completion then focuses the existing four-option customer gateway.
+- One canonical catalogue owns 12 services, including `electric-cooking` as
+  `Electric cooking and cooktops`, across public validation, any-selected matching,
+  mandatory trade email, notification, CRM, job and work-order paths.
+- Business owners can change capabilities used for future leads. Existing lead
+  snapshots are not rewritten.
+- Mandatory trade lead email uses escaped deterministic TLink-branded HTML and a
+  plain-text fallback without weakening approval, consent, service-area,
+  suppression, retry or idempotency checks.
+- Public certificate-price JSON and calculator assets contain no commercial
+  supplier name or link. Gross values remain available for every supported
+  certificate type only while price data is current.
+- Activity 46 uses purchase date. Purchases from 30 June 2026 use the simple
+  built-in or freestanding path, A$200 minimum and 1.5 reduction rounded to 2
+  VEECs. Purchases from 14 April through 29 June 2026 retain the exact legacy
+  product listing. Earlier dates fail closed pending exact rule history.
+
+### Validation and release evidence
+
+- Full implementation commit `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1`
+  became historical intermediate version 316. It was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_005cf69ce1ac8191a068af6e69c22c68`
+  and deployed through `appgdep_6a7bef81996c8191951f013dce24d698`.
+- Current version 317 changes only the calculator footer from `selected
+  installation date` to `selected activity date`. Sites stored 397 files and
+  39,034,880 bytes with content hash
+  `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`
+  and all 129 migrations.
+- Final `npm.cmd run validate` passed typecheck, warning-free lint, integration,
+  1,946 total tests with 1,936 passed, 10 intentional skips and 0 failures,
+  `db:check` across all 129 migrations, the customer-plan PDF audit, production
+  build and Sites bundle audit. `git diff --check` passed. The final static copy
+  correction then passed typecheck, lint, build and the Sites bundle audit.
+- Independent review returned GO with no P0 or P1 finding. The focused risk set
+  passed 135 of 135.
+- Live `/api/health` and `/api/certificate-prices` returned HTTP 200. The public
+  response has no `sourceName` or `sourceUrl`. Live visual checks confirmed the
+  readable known-fact cards and current Activity 46 purchase-date flow.
+- No real lead or trade email was submitted during release QA. The progress modal
+  and navigation protections are source and regression verified, not production
+  submission verified.
+
+## Previous released milestone: AEA-PRACTICAL-PLAN-TRADE-EMAIL-QUOTE-PREP-55
 
 Status: exact application source `ec7cfe49b3d43ae44756cd4ed77924229dd28a3a`
-is pushed and released as current Sites version 315. Saved version
+is pushed and was released as historical Sites version 315. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_e55118f62f488191b616250cd819863d`
 and deployment `appgdep_6a7b42f0ec288191b1c79b062233cf81` reconcile to that
 source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
@@ -1065,11 +1116,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Delivery operations view and alerts for provider acceptance, bounce, backlog and recovery.
-2. Structured trade quote responses built from the service-specific preparation pack.
-3. No-account customer status and consent link for trade responses and cross-session withdrawal.
-4. Later quote-pack additions and reminders without another lead.
-5. Privacy-safe funnel analytics plan -> provider-accepted email -> response.
+1. Add a mounted browser regression for the submission progress modal, mobile navigation guard and focus containment using intercepted APIs that cannot create a real lead.
+2. Add an append-only owner-visible audit history for every business capability change.
+3. Add provider-acceptance, inbox-delivery and failure alerting for mandatory lead email without creating a synthetic customer lead.
+4. Extend the exact Activity 46 rule history to 25 October 2024 instead of failing closed before 14 April 2026.
+5. Retire the unused all-category matching helper or align it with canonical any-selected public matching before it can be reused.
 
 ## Previous released milestone
 
