@@ -1,5 +1,6 @@
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { integrationEnvironment, requireInstallerOperations } from "@/lib/trade-integrations-server";
+import { integrationEnvironment } from "@/lib/trade-integrations-server";
+import { canCreateJobs, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import {
   canonicalProviderAddressSelection,
   issueTradeAddressSelectionProof,
@@ -83,8 +84,11 @@ function neutralSelection(item: ProviderSuggestion, provider: string): ProviderA
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  let access: Awaited<ReturnType<typeof requireInstallerOperations>>;
-  try { access = await requireInstallerOperations(request); }
+  let access: Awaited<ReturnType<typeof requireInstallerTeamAccess>>;
+  try {
+    access = await requireInstallerTeamAccess(request);
+    if (!canCreateJobs(access)) throw new Error("ADDRESS_ACCESS_REQUIRED");
+  }
   catch (error) {
     const code = error instanceof Error ? error.message : "";
     return adminJson({ ok: false, error: code === "AUTH_REQUIRED" ? "Sign in to search addresses." : "Address search is not available to this account." }, code === "AUTH_REQUIRED" ? 401 : 403);
@@ -134,7 +138,7 @@ export async function GET(request: Request) {
       providerReference: selection.providerReference,
       formattedAddress: selection.formattedAddress,
       selectionProof: await issueTradeAddressSelectionProof(selection, {
-        ownerUid: access.uid,
+        ownerUid: access.ownerUid,
         secret: signingSecret,
       }),
     })));

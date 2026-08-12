@@ -27,7 +27,8 @@ type Site = {
   addressProvider?: string;
   addressVerifiedAt?: string;
 };
-type TeamMember = { id: string; displayName: string; role: string; status: string; isOwner: boolean };
+type TeamMember = { id: string; displayName: string; status: string; isOwner?: boolean; isSelf?: boolean };
+type AssigneeRoster = { page: number; pageSize: number; total: number; totalPages: number; search: string; capability: string };
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
 type PlannedComplianceActivity = {
   programTemplateId: string;
@@ -187,6 +188,9 @@ export function TradeNewJobForm({
   user,
   templates,
   teamMembers,
+  allowCustomerSearch = true,
+  canAssignJobs = true,
+  assignmentScope = "team",
   busy,
   initial,
   onSubmit,
@@ -194,6 +198,9 @@ export function TradeNewJobForm({
   user: User;
   templates: Template[];
   teamMembers: TeamMember[];
+  allowCustomerSearch?: boolean;
+  canAssignJobs?: boolean;
+  assignmentScope?: "own" | "team";
   busy: boolean;
   initial?: TradeNewJobInitial;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -212,9 +219,9 @@ export function TradeNewJobForm({
   );
   const [buildingType, setBuildingType] = useState("not_sure");
   const [priority, setPriority] = useState("standard");
-  const [customerMode, setCustomerMode] = useState<"existing" | "new">(initial?.customerId ? "existing" : "new");
+  const [customerMode, setCustomerMode] = useState<"existing" | "new">(allowCustomerSearch && initial?.customerId ? "existing" : "new");
   const [customerType, setCustomerType] = useState("residential");
-  const [customerId, setCustomerId] = useState(initial?.customerId || "");
+  const [customerId, setCustomerId] = useState(allowCustomerSearch ? initial?.customerId || "" : "");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -222,17 +229,24 @@ export function TradeNewJobForm({
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [sites, setSites] = useState<Site[]>([]);
-  const [serviceSiteId, setServiceSiteId] = useState(initial?.serviceSiteId || "");
+  const [serviceSiteId, setServiceSiteId] = useState(allowCustomerSearch ? initial?.serviceSiteId || "" : "");
   const [newSite, setNewSite] = useState(Boolean(initial?.createNewSite));
   const [newAddress, setNewAddress] = useState<AddressValue>(emptyAddress);
-  const [loadingSites, setLoadingSites] = useState(Boolean(initial?.customerId));
+  const [loadingSites, setLoadingSites] = useState(Boolean(allowCustomerSearch && initial?.customerId));
   const [siteLoadError, setSiteLoadError] = useState("");
   const [siteLoadRetry, setSiteLoadRetry] = useState(0);
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[]>([]);
   const [duplicateReviewed, setDuplicateReviewed] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [appointmentType, setAppointmentType] = useState("site_visit");
-  const [assigneeMemberId, setAssigneeMemberId] = useState(teamMembers[0]?.id || "");
+  const selfMember = teamMembers.find((member) => member.isSelf) || teamMembers[0];
+  const canChooseTeamAssignee = canAssignJobs && assignmentScope === "team";
+  const initialAssignableMembers = canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : [];
+  const [assigneeMemberId, setAssigneeMemberId] = useState(selfMember?.id || "");
+  const [assignableMembers, setAssignableMembers] = useState<TeamMember[]>(initialAssignableMembers);
+  const [assigneeSearch, setAssigneeSearch] = useState("");
+  const [assigneeRoster, setAssigneeRoster] = useState<AssigneeRoster | null>(null);
+  const [assigneesLoading, setAssigneesLoading] = useState(false);
   const [duration, setDuration] = useState(60);
   const [appointmentNotes, setAppointmentNotes] = useState("");
   const [minimumStart, setMinimumStart] = useState(() => nextAppointmentSlot());
@@ -244,8 +258,10 @@ export function TradeNewJobForm({
   const [draftActivityTemplateId, setDraftActivityTemplateId] = useState("");
   const nonComplianceAppointmentType = useRef("site_visit");
   const stepFocusReady = useRef(false);
-  const effectiveAssigneeMemberId = assigneeMemberId || teamMembers[0]?.id || "";
-  const selectedTeamMember = teamMembers.find((member) => member.id === effectiveAssigneeMemberId);
+  const effectiveAssigneeMemberId = assigneeMemberId || selfMember?.id || "";
+  const visibleBootstrapMembers = canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : [];
+  const allAssignableMembers = [...visibleBootstrapMembers, ...assignableMembers].filter((member, index, values) => values.findIndex((candidate) => candidate.id === member.id) === index);
+  const selectedTeamMember = allAssignableMembers.find((member) => member.id === effectiveAssigneeMemberId);
 
   function showStep(nextStep: number) {
     setStep(nextStep);
@@ -255,8 +271,34 @@ export function TradeNewJobForm({
   function changeServiceCategory(value: string) {
     if (!serviceCategories.has(value) || value === serviceCategory) return;
     setServiceCategory(value);
+    setAssignableMembers(canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : []);
+    setAssigneeSearch("");
+    setAssigneeRoster(null);
     clearCompliancePlan();
   }
+
+  const loadAssignees = useCallback(async (search = "", page = 1, append = false) => {
+    if (!canChooseTeamAssignee) return;
+    setAssigneesLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams({ assigneePage: String(page), assigneePageSize: "25", assigneeCapability: serviceCategory });
+      if (search.trim()) params.set("assigneeSearch", search.trim());
+      const response = await fetch(`/api/trade-team?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const result = await response.json().catch(() => ({})) as { assignees?: TeamMember[]; assigneeRoster?: AssigneeRoster; error?: string };
+      if (!response.ok) throw new Error(result.error || "Available team members could not be loaded.");
+      setAssignableMembers((current) => {
+        const next = result.assignees || [];
+        const combined = append ? [...current, ...next] : [...teamMembers, ...next];
+        return combined.filter((member, index) => combined.findIndex((candidate) => candidate.id === member.id) === index);
+      });
+      setAssigneeRoster(result.assigneeRoster || null);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Available team members could not be loaded.");
+    } finally {
+      setAssigneesLoading(false);
+    }
+  }, [canChooseTeamAssignee, serviceCategory, teamMembers, user]);
 
   function resetActivityDraft() {
     setActivityDraftOpen(false);
@@ -313,7 +355,14 @@ export function TradeNewJobForm({
     return () => window.cancelAnimationFrame(frame);
   }, [step]);
 
+  useEffect(() => {
+    if (step !== 4 || !canChooseTeamAssignee) return;
+    const frame = window.requestAnimationFrame(() => { void loadAssignees(); });
+    return () => window.cancelAnimationFrame(frame);
+  }, [canChooseTeamAssignee, loadAssignees, step]);
+
   const loadCustomers = useCallback(async (query: string, selected: string): Promise<SearchableLookupOption[]> => {
+    if (!allowCustomerSearch) return [];
     const token = await user.getIdToken();
     if (selected && !query) {
       const response = await fetch(`/api/trade-crm?mode=detail&resource=customer&id=${encodeURIComponent(selected)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
@@ -323,7 +372,7 @@ export function TradeNewJobForm({
     const response = await fetch(`/api/trade-crm?${new URLSearchParams({ mode: "index", resource: "customers", search: query, pageSize: "25", sort: "name-asc", total: "0" })}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     const result = await response.json() as { items?: Customer[] };
     return (result.items || []).map((customer) => ({ id: customer.id, label: customer.displayName, secondary: [customer.customerNumber, customer.phone, customer.suburb, customer.postcode].filter(Boolean).join(" | ") }));
-  }, [user]);
+  }, [allowCustomerSearch, user]);
 
   useEffect(() => {
     if (!customerId) return;
@@ -398,7 +447,7 @@ export function TradeNewJobForm({
   }
 
   async function checkDuplicates() {
-    if (customerMode !== "new" || !formRef.current || duplicateReviewed) return [];
+    if (!allowCustomerSearch || customerMode !== "new" || !formRef.current || duplicateReviewed) return [];
     const data = new FormData(formRef.current);
     if (!String(data.get("phone") || "").trim() && !String(data.get("email") || "").trim()) return [];
     setCheckingDuplicates(true);
@@ -627,7 +676,7 @@ export function TradeNewJobForm({
           <div className="crm-inline-heading"><strong>Find an existing customer</strong><button type="button" className="crm-text-action" onClick={() => { setCustomerMode("new"); selectCustomer(""); clearCompliancePlan(); }}>Create new customer</button></div>
           <SearchableLookup label="Find and select a customer" value={customerId} placeholder="Name, number, phone, suburb or postcode" required load={loadCustomers} onChange={selectCustomer} />
         </> : <>
-          <div className="crm-inline-heading"><strong>New customer</strong><button type="button" className="crm-text-action" onClick={() => { setCustomerMode("existing"); selectCustomer(""); clearCompliancePlan(); }}>Find existing customer</button></div>
+          <div className="crm-inline-heading"><strong>New customer</strong>{allowCustomerSearch && <button type="button" className="crm-text-action" onClick={() => { setCustomerMode("existing"); selectCustomer(""); clearCompliancePlan(); }}>Find existing customer</button>}</div>
           <div className="crm-form-grid">
             <label><span>Customer type</span><select name="customerType" value={customerType} onChange={(event) => setCustomerType(event.target.value)}><option value="residential">Residential</option><option value="business">Business</option></select></label>
             {customerType === "business"
@@ -640,7 +689,7 @@ export function TradeNewJobForm({
             <label><span>Email</span><input type="email" name="email" required={step === 2} autoComplete="email" maxLength={180} value={newCustomerEmail} onChange={(event) => { setNewCustomerEmail(event.target.value); setDuplicates([]); setDuplicateReviewed(false); }} onBlur={() => void checkDuplicates()} /></label>
           </div>
         </>}
-        <small>Australian Energy Assessments protected leads use their authorised workflow and cannot become direct customer records here.</small>
+        <small>{allowCustomerSearch ? "Australian Energy Assessments protected leads use their authorised workflow and cannot become direct customer records here." : "Your access allows creating this job and customer. Searching the wider customer directory is restricted."}</small>
       </fieldset>
       {duplicates.length > 0 && <div className="crm-duplicate-match" role="alert"><strong>Customer already found</strong><p>Use the existing record so the customer and job history stay together.</p>{duplicates.map((candidate) => <div key={candidate.customerId}><span><b>{candidate.displayName}</b><small>{candidate.customerNumber} | matched {candidate.reasons.join(", ")}</small></span><button type="button" onClick={() => attachDuplicate(candidate)}>Use this customer</button></div>)}<button type="button" className="crm-text-action" onClick={() => { setDuplicateReviewed(true); setDuplicates([]); setMessage("Continuing as a different customer."); }}>This is a different customer</button></div>}
       {(customerMode === "new" || customerId) && <fieldset className="crm-service-site"><legend>Job address</legend>
@@ -707,7 +756,7 @@ export function TradeNewJobForm({
     </section>
 
     <section data-step="4" hidden={step !== 4} className="crm-wizard-panel"><header><span>4 of 5</span><h3 tabIndex={-1}>Set the appointment</h3><p>Set the field visit once. The technician receives the same job, activity and evidence context used by the assigned compliance team.</p></header>
-      <div className="crm-form-grid crm-appointment-grid"><label><span>Team member</span><select name="assigneeMemberId" required={step === 4} value={effectiveAssigneeMemberId} onChange={(event) => setAssigneeMemberId(event.target.value)}><option value="">Choose team member</option>{teamMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}{member.isOwner ? " (owner)" : ""}{member.status === "invited" ? " (invite pending)" : ""}</option>)}</select></label><label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} /></label>
+      <div className="crm-form-grid crm-appointment-grid">{canChooseTeamAssignee ? <><label><span>Team member</span><select name="assigneeMemberId" required={step === 4} value={effectiveAssigneeMemberId} onChange={(event) => setAssigneeMemberId(event.target.value)}><option value="">Choose team member</option>{allAssignableMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /><button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeSearch)}>{assigneesLoading ? "Searching..." : "Search team"}</button>{assigneeRoster && assigneeRoster.page < assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeRoster.search, assigneeRoster.page + 1, true)}>Load more</button>}</label></> : <label><span>Team member</span><input type="hidden" name="assigneeMemberId" value={effectiveAssigneeMemberId} /><strong>{selectedTeamMember?.displayName || "Assigned to you"}</strong><small>This scheduled job starts in your own work queue. You can hand it to another active teammate from the saved job if your access allows it.</small></label>}<label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} /></label>
         <label><span>Appointment type</span><select name="appointmentType" value={appointmentType} onChange={(event) => { const value = event.target.value; if (value !== "installation") nonComplianceAppointmentType.current = value; setAppointmentType(value); }}>{Object.entries(appointmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{complianceMode === "planned" ? "Installation is recommended for certificate work, but earlier field visits can also start the job." : "Choose the first appointment for this job."}</small></label>
         <label className="schedule-duration"><span>Duration <strong>{duration < 60 ? `${duration} minutes` : duration === 60 ? "1 hour" : `${Math.floor(duration / 60)} hours${duration % 60 ? ` ${duration % 60} minutes` : ""}`}</strong></span><input type="range" name="durationMinutes" min="15" max="480" step="15" value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
         <label className="wide"><span>Appointment notes, optional</span><textarea name="appointmentNotes" maxLength={1000} rows={3} placeholder="Access, parking or visit notes" value={appointmentNotes} onChange={(event) => setAppointmentNotes(event.target.value)} /></label>

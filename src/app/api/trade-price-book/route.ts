@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { normalisePriceBookInput } from "@/lib/trade-price-book";
-import { canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 
 export const runtime = "edge";
@@ -25,8 +25,10 @@ function errorResponse(error: unknown) {
   return adminJson({ ok: false, error: "The price-book request could not be completed." }, 500);
 }
 
-function requireManager(access: TeamAccess) {
-  if (!canDispatch(access)) throw new Error("PRICE_BOOK_MANAGEMENT_REQUIRED");
+function requirePriceBookAccess(access: TeamAccess, manage = false) {
+  if (manage ? !access.canManagePriceBook && !access.isOwner : !access.canViewPriceBook && !access.isOwner) {
+    throw new Error("PRICE_BOOK_MANAGEMENT_REQUIRED");
+  }
 }
 
 function parseList(value: unknown) {
@@ -122,7 +124,7 @@ async function libraryPayload(ownerUid: string, url: URL) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const url = new URL(request.url);
+    const access = await requireInstallerTeamAccess(request); requirePriceBookAccess(access); const url = new URL(request.url);
     const itemId = cleanAdminText(url.searchParams.get("itemId"), 180);
     if (itemId) {
       await ownedItem(access.ownerUid, itemId);
@@ -135,14 +137,14 @@ export async function GET(request: Request) {
         taxCode: String(row.tax_code), markupBasisPoints: Number(row.markup_basis_points), marginBasisPoints: Number(row.margin_basis_points),
         changeType: String(row.change_type), changedAt: String(row.changed_at) })) });
     }
-    return adminJson({ ok: true, access: { role: access.role, canManage: true }, ...(await libraryPayload(access.ownerUid, url)) });
+    return adminJson({ ok: true, access: { canView: true, canManage: access.isOwner || access.canManagePriceBook }, ...(await libraryPayload(access.ownerUid, url)) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requirePriceBookAccess(access, true); const body = await request.json() as Row;
     if (cleanAdminText(body.action, 30) !== "create") return adminJson({ ok: false, error: "Unsupported price-book action." }, 400);
     const db = getD1(); const count = await db.prepare("SELECT COUNT(*) count FROM trade_price_book_items WHERE firebase_uid = ?")
       .bind(access.ownerUid).first<Row>();
@@ -174,7 +176,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requirePriceBookAccess(access, true); const body = await request.json() as Row;
     const action = cleanAdminText(body.action, 30); const itemId = cleanAdminText(body.itemId, 180);
     const existing = await ownedItem(access.ownerUid, itemId); const db = getD1(); const now = new Date().toISOString();
     if (action === "archive") {

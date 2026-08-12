@@ -16,6 +16,7 @@ const customerLifecycle = read("../src/components/CustomerAssetLifecycle.tsx");
 const numberer = read("../src/lib/trade-job-number-server.ts");
 const dataforceCsv = read("../src/lib/creditex-dataforce-job-csv.ts");
 const listViews = read("../src/lib/workspace-list-views.ts");
+const addressSuggestionsRoute = read("../src/app/api/trade-address-suggestions/route.ts");
 
 test("installer CRM customers, job details, appointments and notes are durable and indexed", () => {
   assert.match(schema, /sqliteTable\("trade_crm_customers"/);
@@ -36,13 +37,14 @@ test("the CRM migration applies cleanly to SQLite", () => {
   assert.deepEqual(tables, ["trade_crm_appointments", "trade_crm_customers", "trade_crm_job_details", "trade_crm_job_notes"]);
 });
 
-test("CRM access is same-origin, installer-only, active, verification-gated and owner scoped", () => {
+test("CRM access is same-origin, verified-team gated and owner scoped", () => {
   assert.match(route, /sameOrigin\(request\)/);
-  assert.match(route, /requireVerifiedTradeAccess/);
-  assert.match(route, /partnerTypes: \["installer"\]/);
+  assert.match(route, /requireInstallerTeamAccess/);
+  assert.match(route, /type TeamAccess/);
   assert.match(route, /TradeAccessError/);
-  assert.match(route, /accountEntitlements\(access\.identity\.uid, "installer"\)/);
-  assert.match(route, /entitlements\.features\.business_operations/);
+  assert.match(route, /uid: access\.ownerUid/);
+  assert.match(route, /memberId: access\.memberId/);
+  assert.match(route, /identity\.access\.jobScope/);
   assert.doesNotMatch(route, /billing_status/);
   assert.match(route, /WHERE firebase_uid = \?/);
   assert.match(route, /WHERE id = \? AND firebase_uid = \?/);
@@ -54,7 +56,7 @@ test("CRM access is same-origin, installer-only, active, verification-gated and 
 
 test("platform households stay separate from installer-owned contacts", () => {
   assert.match(route, /sourceType === "opportunity" \? "platform_private"/);
-  assert.match(route, /const protectedCustomer = customerSource === "platform_private" \|\| customerSource === "public_lead_released"/);
+  assert.match(route, /const protectedCustomer = customerSource === "platform_private";/);
   assert.match(route, /crmCustomerId: protectedCustomer \? ""/);
   assert.match(route, /platformPrivate \? ""/);
   assert.match(crm, /Australian Energy Assessments manages the household relationship/);
@@ -310,9 +312,14 @@ test("job and customer directories open focused records without automatic or inl
   assert.doesNotMatch(crm.slice(customerDirectoryStart, customerDirectoryEnd), /<CustomerDetail/);
 });
 
-test("all installer CRM destinations are visible in the primary navigation", () => {
-  assert.match(crm, /\["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"/);
-  assert.match(crm, /\.\.\.\(hasTeamAccess \? \["team" as View\] : \[\]\)/);
+test("owner and staff CRM destinations follow the primary navigation and saved access", () => {
+  assert.match(crm, /if \(!staffPermissions\) return \["today", "enquiries", "jobs", "schedule", "customers", "pricebook", "assets", "templates", "reports", "import", "integrations"\]/);
+  assert.match(crm, /if \(staffPermissions\.canViewCustomers && staffPermissions\.canSearchCustomers\) views\.push\("customers"\)/);
+  assert.match(crm, /if \(staffPermissions\.canViewPriceBook\) views\.push\("pricebook"\)/);
+  assert.match(crm, /if \(staffPermissions\.canRunReports\) views\.push\("reports"\)/);
+  assert.doesNotMatch(crm, /TradeTeamCentre|"team" as View/);
+  assert.match(dashboard, /workspace === "team"/);
+  assert.match(dashboard, /People, access and member records/);
   assert.doesNotMatch(crm, /crm-more-nav/);
   assert.match(crm, /item === "import" \? "Import data"/);
   assert.match(crm, /if \(item === "jobs"\) \{ setFocusedJobId\(""\); setJobReturnTarget\(\{ kind: "jobs" \}\); \}/);
@@ -360,8 +367,8 @@ test("all installer Schedule entry paths use the one permanent CRM dispatch work
   assert.match(crm, /const TradeScheduleWorkspace = dynamic\(\(\) => import\("\.\/TradeScheduleWorkspace"\)/);
   assert.match(crm, /if \(item === "schedule"\) \{ openVisualSchedule\(\); return; \}/);
   assert.match(crm, /onClick=\{\(\) => openVisualSchedule\(\)\} aria-label=\{`Open today's \$\{metrics\.todayVisits\} scheduled visits`\}/);
-  assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\} initialWeekStart=\{scheduleWeekStart\}/);
-  assert.match(crm, /onOpenQuote=\{\(id\) => openFocusedJob\(id, "quote"\)\}/);
+  assert.match(crm, /view === "schedule"[\s\S]*?<TradeScheduleWorkspace user=\{user\} permissions=\{staffPermissions\} initialWeekStart=\{scheduleWeekStart\}/);
+  assert.match(crm, /onOpenQuote=\{\(!staffPermissions \|\| staffPermissions\.canViewQuotes\) \? \(id\) => openFocusedJob\(id, "quote"\) : undefined\}/);
   assert.match(hub, /onOpenSchedule=\{props\.onOpenSchedule\}/);
   assert.match(hub, /onViewChange=\{props\.onWorkViewChange\}/);
   assert.doesNotMatch(dashboard, /<TradeScheduleWorkspace/);
@@ -373,11 +380,27 @@ test("job summary renders every planned compliance activity without exposing raw
   assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
   assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
   assert.match(crm, /complianceIntents\.map\(\(intent\) => <section className="crm-job-compliance" key=\{intent\.id\}>/);
-  assert.match(crm, /\{unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
+  assert.match(crm, /\{!permissions && canManageFieldEvidence && unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
   assert.doesNotMatch(crm, /!isProtected && customer && unlinkedComplianceIntents\.map/);
   assert.match(crm, /initialIntent=\{intent\}/);
   assert.doesNotMatch(crm, /\{(?:job\.complianceIntent|intent)\.governanceMessage\}/);
   assert.match(crm, /Confirm the governed activity, product, scenario and evidence requirements before work starts/);
+});
+
+test("staff checklist controls use the hardened scoped CRM task actions", () => {
+  assert.doesNotMatch(crm, /\/api\/trade-work-orders/);
+  assert.match(crm, /onWorkOrder=\{crmRequest\}/);
+  assert.match(route, /const manageActions = new Set\(\["create_note", "add_task"\]\)/);
+  assert.match(route, /if \(!identity\.access\.isOwner && actionJobId && manageActions\.has\(action\)\) \{\s*await assignedJob\(identity\.access, actionJobId\)/);
+  assert.match(route, /if \(action === "add_task"\)/);
+  assert.match(route, /if \(action === "update_task"\)/);
+  assert.match(route, /if \(!identity\.access\.isOwner\) await assignedJob\(identity\.access, String\(task\.work_order_id\)\)/);
+});
+
+test("staff who can create jobs can use the same authenticated address suggestions", () => {
+  assert.match(newJob, /\/api\/trade-address-suggestions\?query=/);
+  assert.match(addressSuggestionsRoute, /requireInstallerTeamAccess\(request\)/);
+  assert.match(addressSuggestionsRoute, /if \(!canCreateJobs\(access\)\) throw new Error\("ADDRESS_ACCESS_REQUIRED"\)/);
 });
 
 test("heavy workspaces load dynamically and profile readiness does not wait for opportunities", () => {
@@ -385,7 +408,7 @@ test("heavy workspaces load dynamically and profile readiness does not wait for 
     assert.match(dashboard, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
     assert.doesNotMatch(dashboard, new RegExp(`import \\{ ${workspace} \\} from "\\./${workspace}"`));
   }
-  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradeTeamCentre", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel", "TradeScheduleWorkspace"]) {
+  for (const workspace of ["TradeIntegrationCentre", "TradeFieldWorkPanel", "TradePriceBookWorkspace", "TradeNewJobForm", "TradeQuickInvoicePanel", "TradeScheduleWorkspace"]) {
     assert.match(crm, new RegExp(`const ${workspace} = dynamic\\(\\(\\) => import\\("\\./${workspace}"\\)`));
   }
 

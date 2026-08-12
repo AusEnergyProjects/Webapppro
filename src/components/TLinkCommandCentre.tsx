@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
 export type TLinkCommandTarget = {
-  workspace: "work" | "products" | "orders";
+  workspace: "work" | "team" | "products" | "orders";
   kind: "job" | "customer" | "product" | "order" | "team" | "new-job" | "new-customer" | "crm-view";
   id: string;
   query: string;
@@ -136,7 +136,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
   }
 
   function navigate(record: SearchRecord) {
-    const workspace = record.kind === "product" ? "products" : record.kind === "order" ? "orders" : "work";
+    const workspace = record.kind === "product" ? "products" : record.kind === "order" ? "orders" : record.kind === "team" ? "team" : "work";
     onNavigate({ workspace, kind: record.kind, id: record.id, query: record.query, nonce: Date.now() });
     close();
   }
@@ -216,7 +216,7 @@ export function TLinkCommandCentre({ user, partnerType, features, onNavigate }: 
               </>}
               {(partnerType === "supplier" || marketplace) && <button type="button" onClick={() => navigateAction("product", "products")}><b>P</b><span><strong>Products</strong><small>{partnerType === "supplier" ? "Open your catalogue" : "Search approved equipment"}</small></span></button>}
               {partnerType === "supplier" && businessOperations && <button type="button" onClick={() => navigateAction("order", "orders")}><b>O</b><span><strong>Orders</strong><small>Open purchasing and fulfilment</small></span></button>}
-              {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "work")}><b>T</b><span><strong>Team</strong><small>Open people and dispatch</small></span></button>}
+              {partnerType === "installer" && teamAccess && <button type="button" onClick={() => navigateAction("team", "team")}><b>T</b><span><strong>Team</strong><small>Open people, access and records</small></span></button>}
             </div>
             <p>Only records this business can already access are included. Australian Energy Assessments protected household contact details are never indexed.</p>
           </div>}

@@ -2,19 +2,22 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import {
-  PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
-  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-} from "@/lib/public-plan-quote-preparation.mjs";
-import {
   publicLeadIssueAccessGuard,
   publicLeadQuoteAccessFingerprint,
-  publicLeadQuoteAccessSnapshot,
 } from "@/lib/public-lead-quote-workflow.mjs";
 import { normaliseTradeQuoteLineGroup } from "@/lib/trade-quote";
 import { normaliseQuoteChoices } from "@/lib/trade-quote-options";
+import { lowersAuthoritativeTotal, quoteInputAppliesDiscount, quoteInputDiscountMagnitude } from "@/lib/trade-discount-permissions";
 import { priceBookItemsForQuote, resolvePriceBookQuoteLines } from "@/lib/trade-price-book-server";
 import { jobPacketsForQuote, resolveJobPacketQuoteLines } from "@/lib/trade-job-packet-server";
-import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import {
+  assignedJob,
+  canManageQuotes,
+  canSendQuotes,
+  canViewQuotes,
+  requireInstallerTeamAccess,
+  type TeamAccess,
+} from "@/lib/trade-team-server";
 import { newQuoteLinkSecret, hashQuoteLinkSecret, protectQuoteLinkSecret, quoteReviewPath, recoverQuoteLinkSecret } from "@/lib/trade-quote-links";
 import { maskPhotoRequestEmail } from "@/lib/trade-photo-request-delivery";
 import { sendServiceReminderProviderMessage, serviceReminderProviderConfiguration } from "@/lib/service-reminder-delivery";
@@ -52,9 +55,11 @@ type StagedQuoteError = Error & { stage?: string };
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function installerAccess(request: Request) {
+async function installerAccess(request: Request, permission: "view" | "manage" | "send") {
   const access = await requireInstallerTeamAccess(request);
-  if (!canDispatch(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+  if (permission === "view" && !canViewQuotes(access)) throw new Error("QUOTE_VIEW_REQUIRED");
+  if (permission === "manage" && !canManageQuotes(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+  if (permission === "send" && !canSendQuotes(access)) throw new Error("QUOTE_SEND_REQUIRED");
   return access;
 }
 
@@ -104,8 +109,14 @@ function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
-  if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can prepare customer quotes." }, 403);
-  if (code === "PUBLIC_LEAD_QUOTE_ACCESS_ENDED") return adminJson({ ok: false, error: "This released lead is no longer available. No quote was sent. Return to Leads and check the current customer sharing status." }, 410);
+  if (code === "QUOTE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not include customer quotes." }, 403);
+  if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow quote changes." }, 403);
+  if (code === "QUOTE_SEND_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer quote delivery." }, 403);
+  if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts or price reductions." }, 403);
+  if (code === "PRICE_BOOK_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow saved price-book or common-job items." }, 403);
+  if (code === "CUSTOMER_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer contact changes." }, 403);
+  if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This quote belongs to a job outside your assigned work." }, 403);
+  if (code === "PUBLIC_LEAD_QUOTE_ACCESS_ENDED") return adminJson({ ok: false, error: "The accepted customer disclosure could not be verified. No quote was sent. Refresh the job or contact support." }, 409);
   if (code === "QUOTE_ISSUE_IN_PROGRESS") return adminJson({ ok: false, error: "This quote is already being issued. Wait for it to finish before trying again." }, 409);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose a direct customer job with an authoritative service site." }, 404);
   if (code === "QUOTE_NOT_FOUND") return adminJson({ ok: false, error: "Quote not found." }, 404);
@@ -155,93 +166,24 @@ async function directJob(ownerUid: string, workOrderId: string) {
   const row = await getD1().prepare(`SELECT w.id, w.work_number, w.title, w.service_categories,
       w.source_type, w.source_reference work_source_reference,
       d.crm_customer_id, d.service_site_id, d.description, d.customer_reference, d.customer_source,
+      d.accepted_disclosure_snapshot, d.accepted_disclosure_sha256, d.accepted_disclosure_at,
       c.customer_number, c.first_name, c.last_name, c.business_name, c.email customer_email,
-      s.site_label, s.address_line_1, s.address_line_2, s.suburb, s.address_state, s.postcode,
-      m.status match_status, m.matched_categories,
-      o.status opportunity_status, o.expires_at, o.source_reference, o.summary,
-      o.title opportunity_title, o.priority opportunity_priority,
-      o.postcode opportunity_postcode, o.state,
-      contact.id public_contact_release_id,
-      contact.updated_at public_contact_updated_at,
-      contact.status public_contact_status,
-      contact.source_reference public_contact_source_reference,
-      contact.withdrawn_at public_contact_withdrawn_at,
-      contact.disclosed_fields public_contact_disclosed_fields,
-      contact.customer_first_name public_customer_first_name,
-      contact.customer_last_name public_customer_last_name,
-      contact.customer_email public_customer_email,
-      contact.customer_phone public_customer_phone,
-      contact.customer_unit_number public_customer_unit_number,
-      contact.customer_street_address public_customer_street_address,
-      contact.customer_suburb public_customer_suburb,
-      contact.customer_address_state public_customer_address_state,
-      contact.postcode public_contact_postcode,
-      contact.customer_message public_customer_message,
-      contact.notice_version public_contact_notice_version,
-      contact.consent_purpose public_contact_consent_purpose,
-      contact.granted_at public_contact_granted_at,
-      preparation.id public_quote_preparation_id,
-      preparation.version public_quote_preparation_version,
-      preparation.granted_at public_quote_preparation_granted_at,
-      preparation.updated_at public_quote_preparation_updated_at,
-      preparation.question_answers public_quote_answers
+      s.site_label, s.address_line_1, s.address_line_2, s.suburb, s.address_state, s.postcode
     FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
     JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.customer_id = c.id AND s.firebase_uid = w.firebase_uid AND s.record_status = 'active'
-    LEFT JOIN trade_opportunity_matches m ON m.id = w.source_reference AND m.firebase_uid = w.firebase_uid
-    LEFT JOIN trade_opportunities o ON o.id = m.opportunity_id
-    LEFT JOIN public_trade_lead_contact_releases contact ON contact.id = (
-      SELECT current_release.id
-      FROM public_trade_lead_contact_releases current_release
-      WHERE current_release.opportunity_id = o.id
-        AND current_release.source_reference = o.source_reference
-      ORDER BY datetime(current_release.updated_at) DESC,
-        datetime(current_release.granted_at) DESC, current_release.id DESC
-      LIMIT 1
-    )
-    LEFT JOIN public_trade_lead_quote_preparations preparation
-      ON preparation.opportunity_id = o.id
-      AND preparation.source_reference = o.source_reference
-      AND preparation.status = 'active'
-      AND preparation.notice_version = ?
-      AND preparation.consent_purpose = ?
-      AND datetime(preparation.granted_at) IS NOT NULL
-      AND preparation.withdrawn_at = ''
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'
       AND d.customer_source IN ('trade_owned', 'public_lead_released')`)
-    .bind(
-      PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
-      PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-      workOrderId,
-      ownerUid,
-    ).first<Row>();
+    .bind(workOrderId, ownerUid).first<Row>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   if (String(row.source_type || "") === "public_lead") {
-    const snapshot = publicLeadQuoteAccessSnapshot(row, Date.now());
-    if (!snapshot || String(row.customer_source || "") !== "public_lead_released") {
+    if (String(row.customer_source || "") !== "public_lead_released"
+      || !publicLeadQuoteAccessFingerprint(row)) {
       throw new Error("PUBLIC_LEAD_QUOTE_ACCESS_ENDED");
     }
-    const enquiryBrief = [
-      snapshot.summary,
-      snapshot.contact.message ? `Customer message: ${snapshot.contact.message}` : "",
-      ...snapshot.answers.map((answer) => `${answer.label}: ${answer.answer}`),
-    ].filter(Boolean).join("\n");
     return {
       ...row,
-      first_name: snapshot.contact.firstName,
-      last_name: snapshot.contact.lastName,
-      business_name: "",
-      customer_email: snapshot.contact.email,
-      public_authorised_email: snapshot.contact.email,
-      site_label: "Customer property",
-      address_line_1: snapshot.contact.addressLine1,
-      address_line_2: snapshot.contact.addressLine2,
-      suburb: snapshot.contact.suburb,
-      address_state: snapshot.contact.addressState,
-      postcode: snapshot.contact.postcode,
-      service_categories: JSON.stringify(snapshot.categories),
-      customer_reference: snapshot.reference,
-      description: enquiryBrief,
+      public_authorised_email: String(row.customer_email || ""),
       public_lead_enquiry: 1,
     };
   }
@@ -266,30 +208,30 @@ async function currentPublicLeadJob(
   return current;
 }
 
-async function authorisedEmails(ownerUid: string, customerId: string, releasedPublicEmail = "") {
-  const currentReleasedEmail = releasedPublicEmail.trim().toLowerCase();
-  if (currentReleasedEmail) {
-    return EMAIL_PATTERN.test(currentReleasedEmail) ? [currentReleasedEmail] : [];
+async function authorisedEmails(ownerUid: string, customerId: string, acceptedPublicEmail = "") {
+  const acceptedEmail = acceptedPublicEmail.trim().toLowerCase();
+  if (acceptedEmail) {
+    return EMAIL_PATTERN.test(acceptedEmail) ? [acceptedEmail] : [];
   }
   const rows = await getD1().prepare(`SELECT email FROM trade_crm_customers WHERE id = ? AND firebase_uid = ? AND record_status = 'active' AND email != ''
     UNION SELECT email FROM trade_crm_customer_contacts WHERE customer_id = ? AND firebase_uid = ? AND record_status = 'active' AND email != ''`)
     .bind(customerId, ownerUid, customerId, ownerUid).all<Row>();
   return [...new Set([
     ...rows.results.map((row) => String(row.email || "").trim().toLowerCase()),
-    currentReleasedEmail,
+    acceptedEmail,
   ].filter((email) => EMAIL_PATTERN.test(email)))].sort();
 }
 
-function releasedPublicEmail(job: Row) {
+function acceptedPublicEmail(job: Row) {
   return String(job.public_authorised_email || "");
 }
 
-function releasedQuoteSnapshotOverrides(job: Row) {
+function acceptedQuoteSnapshotOverrides(job: Row) {
   if (!job.public_lead_enquiry) return {};
   return {
     releasedCustomer: {
       name: [job.first_name, job.last_name].filter(Boolean).join(" ") || "Customer",
-      email: releasedPublicEmail(job),
+      email: acceptedPublicEmail(job),
     },
     releasedSite: {
       label: String(job.site_label || "Customer property"),
@@ -416,26 +358,45 @@ function appendItems(db: D1Database, statements: D1PreparedStatement[], ownerUid
       (id, quote_version_id, firebase_uid, position, line_type, description, quantity_milli, unit_price_cents, tax_code,
        subtotal_cents, tax_cents, total_cents, price_book_item_id, price_book_item_type, unit_cost_cents_ex_gst,
        markup_basis_points, margin_basis_points, job_packet_id, job_packet_revision, job_packet_line_id, section_heading, quote_choice_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM trade_crm_quote_versions version
+        WHERE version.id = ? AND version.firebase_uid = ? AND version.status = 'draft' AND version.updated_at = ?)`)
       .bind(crypto.randomUUID(), versionId, ownerUid, startPosition + index, line.lineType, line.description, line.quantityMilli,
         line.unitPriceCents, line.taxCode, line.subtotalCents, line.taxCents, line.totalCents, price?.id || "", price?.itemType || "",
         price?.unitCostCentsExGst || 0, price?.markupBasisPoints || 0, price?.marginBasisPoints || 0, packet?.packetId || "",
-        packet?.packetRevision || 0, packet?.packetLineId || "", resolved.sectionHeadings[index], choiceId, now));
+        packet?.packetRevision || 0, packet?.packetLineId || "", resolved.sectionHeadings[index], choiceId, now,
+        versionId, ownerUid, now));
   });
   return startPosition + resolved.calculated.lines.length;
+}
+
+function quoteAccessPayload(access: TeamAccess) {
+  return {
+    canManageQuotes: access.isOwner || access.canManageQuotes,
+    canSendQuotes: access.isOwner || access.canSendQuotes,
+    canManageCustomers: access.isOwner || access.canManageCustomers,
+    canViewPriceBook: access.isOwner || access.canViewPriceBook,
+    canViewInternal: access.isOwner || access.canViewPriceBook,
+    canApplyDiscounts: access.isOwner || access.canApplyDiscounts,
+  };
 }
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await installerAccess(request); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
-    const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), releasedPublicEmail(job));
+    const access = await installerAccess(request, "view"); const url = new URL(request.url); const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
+    await assignedJob(access, workOrderId);
+    const job = await directJob(access.ownerUid, workOrderId); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
     const business = await getD1().prepare(`SELECT business_name, brand_theme_key, brand_border_style, logo_object_key, banner_object_key,
         quote_email_subject_template, quote_email_intro, quote_default_terms
       FROM trade_accounts WHERE firebase_uid = ? AND partner_type = 'installer' LIMIT 1`).bind(access.ownerUid).first<Row>();
     const serviceCategories = parseJsonList(job.service_categories);
-    return adminJson({ ok: true, access: { role: access.role, canViewInternal: true }, job: { customerId: String(job.crm_customer_id), workNumber: job.work_number, title: job.title,
-      customerNumber: job.customer_number, customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" ") || (job.public_lead_enquiry ? "Customer" : job.customer_number), siteLabel: job.site_label,
+    const canViewInternal = access.isOwner || access.canViewPriceBook;
+    return adminJson({ ok: true, access: quoteAccessPayload(access), job: {
+      customerId: String(job.crm_customer_id), workNumber: job.work_number, title: job.title,
+      customerNumber: job.customer_number,
+      customerName: job.business_name || [job.first_name, job.last_name].filter(Boolean).join(" ") || (job.public_lead_enquiry ? "Customer" : job.customer_number),
+      siteLabel: job.site_label,
       siteSummary: [job.address_line_1, job.address_line_2, job.suburb, job.address_state, job.postcode].filter(Boolean).join(", "),
       publicLead: Boolean(job.public_lead_enquiry),
       enquiryReference: job.public_lead_enquiry ? String(job.customer_reference || "") : "",
@@ -447,15 +408,21 @@ export async function GET(request: Request) {
         quoteEmailIntro: String(business?.quote_email_intro || "Thank you for the opportunity to quote for your project. Review the scope, choices and total below."),
         quoteDefaultTerms: String(business?.quote_default_terms || "") },
       authorisedEmails: emails,
-      priceBookItems: await priceBookItemsForQuote(access.ownerUid), jobPackets: await jobPacketsForQuote(access.ownerUid), quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+      priceBookItems: canViewInternal ? await priceBookItemsForQuote(access.ownerUid) : [],
+      jobPackets: canViewInternal ? await jobPacketsForQuote(access.ownerUid) : [],
+      quote: await quotePayload(access.ownerUid, workOrderId, canViewInternal, new URL(request.url).origin) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await installerAccess(request); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); const body = await request.json() as Row;
     const action = cleanAdminText(body.action, 40); const workOrderId = cleanAdminText(body.workOrderId, 180);
+    if (action === "send_quote") {
+      if (!canSendQuotes(access)) throw new Error("QUOTE_SEND_REQUIRED");
+    } else if (!canManageQuotes(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
+    await assignedJob(access, workOrderId);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "revoke_link") {
       await revokeOwnedQuoteLink(access.ownerUid, workOrderId, now);
@@ -463,6 +430,7 @@ export async function POST(request: Request) {
     }
     const job = await directJob(access.ownerUid, workOrderId);
     if (action === "add_quote_recipient") {
+      if (!access.isOwner && !access.canManageCustomers) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
       if (job.public_lead_enquiry) {
         return adminJson({ ok: false, error: "Use the email currently released by this customer for this lead." }, 409);
       }
@@ -480,20 +448,67 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?, 'Quote recipient', ?, '', 0, 'active', ?, ?)`)
           .bind(crypto.randomUUID(), access.ownerUid, job.crm_customer_id, firstName, lastName, email, now, now).run();
       }
-      return adminJson({ ok: true, authorisedEmails: await authorisedEmails(access.ownerUid, String(job.crm_customer_id), releasedPublicEmail(job)) }, existing || primaryEmailMatch ? 200 : 201);
+      return adminJson({ ok: true, authorisedEmails: await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job)) }, existing || primaryEmailMatch ? 200 : 201);
     }
     if (action === "save_draft") {
       const choiceInputs = normaliseQuoteChoices(body.choices, (value, maximum = 500) => cleanAdminText(value, maximum));
       const base = await resolveLineGroup(access.ownerUid, body.lines, choiceInputs.length > 0);
       const choices = await Promise.all(choiceInputs.map(async (input) => ({ input, resolved: await resolveLineGroup(access.ownerUid, input.lines) })));
       if (!base.calculated.lines.length && !choices.length) throw new Error("INVALID_LINES");
-      const customerEmail = cleanAdminText(body.customerEmail, 180).toLowerCase(); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), releasedPublicEmail(job));
+      const groups = [base, ...choices.map((choice) => choice.resolved)];
+      const usesSavedLibrary = groups.some((group) => group.priceReferences.some(Boolean) || group.packetReferences.some(Boolean));
+      if (usesSavedLibrary && !access.canViewPriceBook) throw new Error("PRICE_BOOK_VIEW_REQUIRED");
+      const proposedDisplayTotal = choiceDefaultTotal(base, choices);
+      const proposedDiscountMagnitude = quoteInputDiscountMagnitude(groups);
+      const quote = await db.prepare(`SELECT quote.*, details.quoted_value_cents current_display_total,
+          (SELECT version.total_cents FROM trade_crm_quote_versions version
+            WHERE version.quote_id = quote.id AND version.firebase_uid = quote.firebase_uid
+              AND version.version_number = quote.current_version_number) current_base_total
+        FROM trade_crm_quotes quote
+        LEFT JOIN trade_crm_job_details details ON details.work_order_id = quote.work_order_id
+          AND details.firebase_uid = quote.firebase_uid
+        WHERE quote.work_order_id = ? AND quote.firebase_uid = ?`)
+        .bind(workOrderId, access.ownerUid).first<Row>();
+      if (!access.canApplyDiscounts) {
+        if (!quote && quoteInputAppliesDiscount(groups)) throw new Error("DISCOUNT_REQUIRED");
+        if (quote) {
+          const [currentReduction, currentChoices] = await Promise.all([db.prepare(`SELECT COALESCE(SUM(CASE
+              WHEN item.subtotal_cents < 0 THEN -item.subtotal_cents
+              WHEN item.price_book_item_type IN ('discount', 'rebate') THEN ABS(item.subtotal_cents)
+              ELSE 0 END), 0) reduction_cents
+            FROM trade_crm_quote_items item JOIN trade_crm_quote_versions version
+              ON version.id = item.quote_version_id AND version.firebase_uid = item.firebase_uid
+            WHERE version.quote_id = ? AND version.firebase_uid = ? AND version.version_number = ?`)
+            .bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>(),
+          db.prepare(`SELECT choice.choice_key, choice.total_cents FROM trade_crm_quote_choices choice
+            JOIN trade_crm_quote_versions version ON version.id = choice.quote_version_id
+              AND version.firebase_uid = choice.firebase_uid
+            WHERE version.quote_id = ? AND version.firebase_uid = ? AND version.version_number = ?`)
+            .bind(quote.id, access.ownerUid, quote.current_version_number).all<Row>()]);
+          const currentChoiceTotals = new Map(currentChoices.results.map((choice) => [String(choice.choice_key), Number(choice.total_cents)]));
+          const loweredChoice = choices.some((choice) => {
+            const currentTotal = currentChoiceTotals.get(choice.input.clientKey);
+            return currentTotal !== undefined && choice.resolved.calculated.totalCents < currentTotal;
+          });
+          const currentSortedChoiceTotals = currentChoices.results.map((choice) => Number(choice.total_cents)).sort((a, b) => a - b);
+          const proposedSortedChoiceTotals = choices.map((choice) => choice.resolved.calculated.totalCents).sort((a, b) => a - b);
+          const replacedWithCheaperChoice = proposedSortedChoiceTotals.length < currentSortedChoiceTotals.length
+            || currentSortedChoiceTotals.some((currentTotal, index) => proposedSortedChoiceTotals[index] < currentTotal);
+          if (proposedDiscountMagnitude > Number(currentReduction?.reduction_cents || 0)
+            || lowersAuthoritativeTotal(base.calculated.totalCents, quote.current_base_total)
+            || lowersAuthoritativeTotal(proposedDisplayTotal, quote.current_display_total)
+            || loweredChoice || replacedWithCheaperChoice) {
+            throw new Error("DISCOUNT_REQUIRED");
+          }
+        }
+      }
+      const customerEmail = cleanAdminText(body.customerEmail, 180).toLowerCase(); const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
       if (customerEmail && !emails.includes(customerEmail)) return adminJson({ ok: false, error: "Choose an email from this customer's authorised contacts." }, 400);
       const storedCustomerEmail = job.public_lead_enquiry ? "" : customerEmail;
       const validUntil = cleanAdminText(body.validUntil, 10); if (validUntil && !DATE_PATTERN.test(validUntil)) return adminJson({ ok: false, error: "Choose a valid quote expiry date." }, 400);
       const terms = cleanAdminText(body.terms, 4000); const customerMessage = cleanAdminText(body.customerMessage, 1200);
-      const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, access.ownerUid).first<Row>();
       const quoteId = String(quote?.id || crypto.randomUUID()); let versionNumber = Number(quote?.current_version_number || 1); let versionId = ""; const statements: D1PreparedStatement[] = [];
+      let draftClaimIndex = -1;
       if (!quote) {
         const quoteNumber = `Q-${String(job.work_number).replace(/^JOB-/, "")}`;
         statements.push(db.prepare(`INSERT INTO trade_crm_quotes (id, work_order_id, firebase_uid, crm_customer_id, service_site_id, quote_number, current_version_number, status, created_at, updated_at)
@@ -506,10 +521,19 @@ export async function POST(request: Request) {
         if (!current) throw new Error("QUOTE_NOT_FOUND");
         if (current.status === "draft") {
           versionId = String(current.id);
-          statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET acceptance_email = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, terms = ?, customer_message = ?, valid_until = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'draft'`)
-            .bind(storedCustomerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents, terms, customerMessage, validUntil, now, versionId, access.ownerUid));
-          statements.push(db.prepare(`DELETE FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, access.ownerUid));
-          statements.push(db.prepare(`DELETE FROM trade_crm_quote_choices WHERE quote_version_id = ? AND firebase_uid = ?`).bind(versionId, access.ownerUid));
+          draftClaimIndex = statements.length;
+          statements.push(db.prepare(`UPDATE trade_crm_quote_versions SET acceptance_email = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, terms = ?, customer_message = ?, valid_until = ?, updated_at = ?
+            WHERE id = ? AND firebase_uid = ? AND status = 'draft' AND updated_at = ?`)
+            .bind(storedCustomerEmail, base.calculated.subtotalCents, base.calculated.taxCents, base.calculated.totalCents,
+              terms, customerMessage, validUntil, now, versionId, access.ownerUid, current.updated_at));
+          statements.push(db.prepare(`DELETE FROM trade_crm_quote_items WHERE quote_version_id = ? AND firebase_uid = ?
+            AND EXISTS (SELECT 1 FROM trade_crm_quote_versions version WHERE version.id = trade_crm_quote_items.quote_version_id
+              AND version.firebase_uid = trade_crm_quote_items.firebase_uid AND version.status = 'draft' AND version.updated_at = ?)`)
+            .bind(versionId, access.ownerUid, now));
+          statements.push(db.prepare(`DELETE FROM trade_crm_quote_choices WHERE quote_version_id = ? AND firebase_uid = ?
+            AND EXISTS (SELECT 1 FROM trade_crm_quote_versions version WHERE version.id = trade_crm_quote_choices.quote_version_id
+              AND version.firebase_uid = trade_crm_quote_choices.firebase_uid AND version.status = 'draft' AND version.updated_at = ?)`)
+            .bind(versionId, access.ownerUid, now));
         } else {
           versionNumber += 1; versionId = crypto.randomUUID();
           if (current.status === "issued") {
@@ -528,15 +552,31 @@ export async function POST(request: Request) {
       choices.forEach(({ input, resolved }, index) => {
         const choiceId = crypto.randomUUID();
         statements.push(db.prepare(`INSERT INTO trade_crm_quote_choices (id, quote_version_id, firebase_uid, position, choice_key, choice_kind, group_key, name, summary, recommended, subtotal_cents, tax_cents, total_cents, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(choiceId, versionId, access.ownerUid, index + 1, input.clientKey, input.kind, input.groupKey, input.name, input.summary, input.recommended ? 1 : 0, resolved.calculated.subtotalCents, resolved.calculated.taxCents, resolved.calculated.totalCents, now));
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM trade_crm_quote_versions version
+            WHERE version.id = ? AND version.firebase_uid = ? AND version.status = 'draft' AND version.updated_at = ?)`)
+          .bind(choiceId, versionId, access.ownerUid, index + 1, input.clientKey, input.kind, input.groupKey, input.name,
+            input.summary, input.recommended ? 1 : 0, resolved.calculated.subtotalCents, resolved.calculated.taxCents,
+            resolved.calculated.totalCents, now, versionId, access.ownerUid, now));
         position = appendItems(db, statements, access.ownerUid, versionId, choiceId, resolved, position, now);
       });
-      const displayTotal = choiceDefaultTotal(base, choices);
-      statements.push(db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`).bind(displayTotal, now, workOrderId, access.ownerUid));
-      if (body.saveAsBusinessDefault === true) statements.push(db.prepare(`UPDATE trade_accounts SET quote_email_intro = ?, quote_default_terms = ?, settings_updated_at = ?, updated_at = ? WHERE firebase_uid = ? AND partner_type = 'installer'`)
-        .bind(customerMessage, terms, now, now, access.ownerUid));
-      await db.batch(statements);
-      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+      statements.push(draftClaimIndex >= 0
+        ? db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ?
+            WHERE work_order_id = ? AND firebase_uid = ? AND EXISTS (SELECT 1 FROM trade_crm_quote_versions version
+              WHERE version.id = ? AND version.firebase_uid = ? AND version.status = 'draft' AND version.updated_at = ?)`)
+          .bind(proposedDisplayTotal, now, workOrderId, access.ownerUid, versionId, access.ownerUid, now)
+        : db.prepare(`UPDATE trade_crm_job_details SET quoted_value_cents = ?, quote_status = 'draft', updated_at = ? WHERE work_order_id = ? AND firebase_uid = ?`)
+          .bind(proposedDisplayTotal, now, workOrderId, access.ownerUid));
+      if (body.saveAsBusinessDefault === true) statements.push(draftClaimIndex >= 0
+        ? db.prepare(`UPDATE trade_accounts SET quote_email_intro = ?, quote_default_terms = ?, settings_updated_at = ?, updated_at = ?
+            WHERE firebase_uid = ? AND partner_type = 'installer' AND EXISTS (SELECT 1 FROM trade_crm_quote_versions version
+              WHERE version.id = ? AND version.firebase_uid = ? AND version.status = 'draft' AND version.updated_at = ?)`)
+          .bind(customerMessage, terms, now, now, access.ownerUid, versionId, access.ownerUid, now)
+        : db.prepare(`UPDATE trade_accounts SET quote_email_intro = ?, quote_default_terms = ?, settings_updated_at = ?, updated_at = ? WHERE firebase_uid = ? AND partner_type = 'installer'`)
+          .bind(customerMessage, terms, now, now, access.ownerUid));
+      const writeResults = await db.batch(statements);
+      if (draftClaimIndex >= 0 && !writeResults[draftClaimIndex]?.meta.changes) throw new Error("IMMUTABLE_VERSION");
+      return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
     }
     if (action === "issue_quote") {
       const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, access.ownerUid).first<Row>();
@@ -557,9 +597,9 @@ export async function POST(request: Request) {
       const version = await db.prepare(`SELECT * FROM trade_crm_quote_versions WHERE quote_id = ? AND firebase_uid = ? AND version_number = ? AND status = 'draft'`).bind(quote.id, access.ownerUid, quote.current_version_number).first<Row>();
       if (!version) throw new Error("IMMUTABLE_VERSION");
       const customerEmail = job.public_lead_enquiry
-        ? releasedPublicEmail(job).trim().toLowerCase()
+        ? acceptedPublicEmail(job).trim().toLowerCase()
         : String(version.acceptance_email || "").trim().toLowerCase();
-      const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), releasedPublicEmail(job));
+      const emails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
       if (!customerEmail || !emails.includes(customerEmail)) return adminJson({ ok: false, error: "Choose an authorised customer email before issuing this quote." }, 400);
       if (!String(version.terms || "").trim()) return adminJson({ ok: false, error: "Record the quote scope, exclusions and completion terms before issuing." }, 400);
       if (version.valid_until && String(version.valid_until) < now.slice(0, 10)) return adminJson({ ok: false, error: "The quote expiry date must not be in the past." }, 400);
@@ -576,7 +616,7 @@ export async function POST(request: Request) {
           consentStatement,
           issuedAt: issueTimestamp,
           acceptanceEmail: customerEmail,
-          ...releasedQuoteSnapshotOverrides(job),
+          ...acceptedQuoteSnapshotOverrides(job),
         },
       );
       const documentSnapshotJson = JSON.stringify(documentSnapshot);
@@ -724,7 +764,7 @@ export async function POST(request: Request) {
           || String(canonical.issued_pdf_sha256 || "") !== issuedPdf.sha256
           || Number(canonical.issued_pdf_size_bytes || 0) !== issuedPdf.sizeBytes
         ) throw new Error("QUOTE_ISSUE_IN_PROGRESS");
-        return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, origin) });
+        return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin) });
       } catch (error) {
         const canonical = await db.prepare(`SELECT version.status, link.id link_id,
             link.status link_status, version.issued_pdf_object_key,
@@ -750,7 +790,7 @@ export async function POST(request: Request) {
               versionNumber: Number(version.version_number),
               reference: issuedPdf,
             });
-            return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, origin) });
+            return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin) });
           } catch { throw error; }
         }
         if (issuedPdf) {
@@ -820,7 +860,7 @@ export async function POST(request: Request) {
         const priorOptOut = await db.prepare("SELECT 1 stopped FROM trade_crm_quote_deliveries WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email' AND status = 'opted_out' LIMIT 1").bind(access.ownerUid, job.crm_customer_id).first<Row>();
         if (priorOptOut) return adminJson({ ok: false, error: "This customer has opted out of quote email delivery." }, 409);
         const email = String(version.acceptance_email || "").trim().toLowerCase();
-        const currentEmails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), releasedPublicEmail(job));
+        const currentEmails = await authorisedEmails(access.ownerUid, String(job.crm_customer_id), acceptedPublicEmail(job));
         if (!email || !currentEmails.includes(email)) {
           return adminJson({ ok: false, error: "The quote recipient is no longer an authorised customer contact. Create a replacement quote version with the current address." }, 409);
         }
@@ -828,7 +868,7 @@ export async function POST(request: Request) {
         const existing = await db.prepare("SELECT id, status, attempts, updated_at FROM trade_crm_quote_deliveries WHERE idempotency_key = ?")
           .bind(idempotencyKey).first<Row>();
         if (existing && ["provider_accepted", "sent", "delivered"].includes(String(existing.status))) {
-          return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+          return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
         }
         if (existing && existing.status === "sending" && Date.parse(String(existing.updated_at || "")) > Date.now() - 10 * 60 * 1000) {
           return adminJson({ ok: false, error: "This exact quote email is already being sent. Check its delivery status before retrying." }, 409);
@@ -840,7 +880,7 @@ export async function POST(request: Request) {
           snapshot = await buildTradeQuoteDocumentSnapshot(
             access.ownerUid,
             String(version.id),
-            releasedQuoteSnapshotOverrides(job),
+            acceptedQuoteSnapshotOverrides(job),
           );
           await db.prepare("UPDATE trade_crm_quote_versions SET document_snapshot_json = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'issued' AND document_snapshot_json = ''")
             .bind(JSON.stringify(snapshot), now, version.id, access.ownerUid).run();
@@ -885,7 +925,7 @@ export async function POST(request: Request) {
           .bind(idempotencyKey).first<Row>();
         if (!delivery) throw new Error("QUOTE_DELIVERY_CLAIM_FAILED");
         if (["provider_accepted", "sent", "delivered"].includes(String(delivery.status))) {
-          return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, origin) });
+          return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin) });
         }
         const deliveryId = String(delivery.id);
         const staleSendingBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -907,7 +947,7 @@ export async function POST(request: Request) {
             WHERE id = ? AND idempotency_key = ? LIMIT 1`)
             .bind(deliveryId, idempotencyKey).first<Row>();
           if (observed && ["provider_accepted", "sent", "delivered"].includes(String(observed.status))) {
-            return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, origin) });
+            return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin) });
           }
           return adminJson({ ok: false, error: "This exact quote email is already being sent. Check its delivery status before retrying." }, 409);
         }
@@ -954,7 +994,7 @@ export async function POST(request: Request) {
           throw error;
         }
       }
-      return adminJson({ ok: true, quote: await quotePayload(access.ownerUid, workOrderId, true, new URL(request.url).origin) });
+      return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
     }
     return adminJson({ ok: false, error: "Unsupported quote action." }, 400);
   } catch (error) { return errorResponse(error); }

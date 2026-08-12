@@ -337,7 +337,9 @@ test("provider acceptance survives a lost final CAS without falsely issuing a ch
 
 test("quick invoice routes use owner scope with actor attribution and block in-flight correction", () => {
   assert.match(invoiceRoute, /requireInstallerTeamAccess\(request\)/);
-  assert.match(invoiceRoute, /canDispatch\(access\)/);
+  assert.match(invoiceRoute, /requireInvoiceAccess\(access/);
+  assert.match(invoiceRoute, /canManageInvoices/);
+  assert.doesNotMatch(invoiceRoute, /canDispatch|access\.role/);
   assert.match(invoiceRoute, /ownerUid: access\.ownerUid/);
   assert.match(invoiceRoute, /actorUid: access\.actorUid/);
   assert.match(invoiceRoute, /created_by_uid[\s\S]*access\.actorUid/);
@@ -353,7 +355,8 @@ test("quick invoice routes use owner scope with actor attribution and block in-f
   assert.doesNotMatch(invoiceRoute, /requireInstallerOperations|identity\.uid/);
 
   assert.match(invoicePdfRoute, /requireInstallerTeamAccess\(request\)/);
-  assert.match(invoicePdfRoute, /canDispatch\(access\)/);
+  assert.match(invoicePdfRoute, /canViewInvoices/);
+  assert.doesNotMatch(invoicePdfRoute, /canDispatch|access\.role/);
   assert.match(invoicePdfRoute, /access\.ownerUid/);
   assert.doesNotMatch(invoicePdfRoute, /requireInstallerOperations|identity\.uid/);
 });

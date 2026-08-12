@@ -30,12 +30,21 @@ function notificationError(error: unknown) {
 }
 
 function jobScope(access: TeamAccess) {
-  return { role: access.role, memberId: access.memberId || "" };
+  return { scope: !access.isOwner && access.jobScope === "own" ? "own" : "team", memberId: access.memberId || "" };
+}
+
+function scheduleScope(access: TeamAccess) {
+  return { scope: !access.isOwner && access.scheduleScope === "own" ? "own" : "team", memberId: access.memberId || "" };
 }
 
 function limitedSummary(value: unknown, fallback: string) {
   const summary = String(value || "").trim();
   return (summary || fallback).slice(0, 240);
+}
+
+function jobContextAllowed(row: Row) {
+  const source = String(row.customer_source || "");
+  return row.source_type !== "opportunity" && source !== "platform_private";
 }
 
 function workEventPresentation(eventType: string) {
@@ -49,56 +58,68 @@ function workEventPresentation(eventType: string) {
 async function notifications(access: TeamAccess) {
   const db = getD1();
   const scope = jobScope(access);
+  const scheduling = scheduleScope(access);
+  const none = () => Promise.resolve({ results: [] as Row[] });
   const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, reads] = await Promise.all([
-    db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
-        work.work_number, work.title
+    access.canViewFieldEvidence ? db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
+        work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_photo_request_completions completion
       JOIN trade_work_orders work ON work.id = completion.work_order_id AND work.firebase_uid = completion.firebase_uid
         AND work.record_status = 'active'
-      WHERE completion.firebase_uid = ? AND (? <> 'technician' OR work.assignee_member_id = ?)
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
+      WHERE completion.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY completion.completed_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT question.id, question.work_order_id, question.question, question.asked_at,
-        work.work_number, work.title, quote.quote_number
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canViewQuotes ? db.prepare(`SELECT question.id, question.work_order_id, question.question, question.asked_at,
+        work.work_number, work.title, work.source_type, detail.customer_source, quote.quote_number
       FROM trade_crm_quote_questions question
       JOIN trade_work_orders work ON work.id = question.work_order_id AND work.firebase_uid = question.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = question.quote_id AND quote.firebase_uid = question.firebase_uid
-      WHERE question.firebase_uid = ? AND (? <> 'technician' OR work.assignee_member_id = ?)
+      WHERE question.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY question.asked_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT acceptance.id, acceptance.work_order_id, acceptance.decision, acceptance.signer_name,
-        acceptance.selected_total_cents, acceptance.decided_at, work.work_number, work.title, quote.quote_number
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canViewQuotes ? db.prepare(`SELECT acceptance.id, acceptance.work_order_id, acceptance.decision, acceptance.signer_name,
+        acceptance.selected_total_cents, acceptance.decided_at, work.work_number, work.title,
+        work.source_type, detail.customer_source, quote.quote_number
       FROM trade_crm_quote_acceptances acceptance
       JOIN trade_work_orders work ON work.id = acceptance.work_order_id AND work.firebase_uid = acceptance.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = acceptance.quote_id AND quote.firebase_uid = acceptance.firebase_uid
-      WHERE acceptance.firebase_uid = ? AND (? <> 'technician' OR work.assignee_member_id = ?)
+      WHERE acceptance.firebase_uid = ? AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY acceptance.decided_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT event.id, event.work_order_id, event.occurred_at, work.work_number, work.title, quote.quote_number
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canViewQuotes ? db.prepare(`SELECT event.id, event.work_order_id, event.occurred_at, work.work_number, work.title,
+        work.source_type, detail.customer_source, quote.quote_number
       FROM trade_crm_quote_events event
       JOIN trade_work_orders work ON work.id = event.work_order_id AND work.firebase_uid = event.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_crm_quotes quote ON quote.id = event.quote_id AND quote.firebase_uid = event.firebase_uid
       WHERE event.firebase_uid = ? AND event.actor_type = 'link_holder' AND event.event_type = 'viewed'
-        AND (? <> 'technician' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY event.occurred_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT event.id, event.work_order_id, event.summary, event.created_at,
-        work.work_number, work.title
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canRescheduleJobs ? db.prepare(`SELECT event.id, event.work_order_id, event.summary, event.created_at,
+        work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_appointment_reschedule_events event
       JOIN trade_work_orders work ON work.id = event.work_order_id AND work.firebase_uid = event.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
+      LEFT JOIN trade_crm_appointments appointment ON appointment.id = event.appointment_id
+        AND appointment.firebase_uid = event.firebase_uid
       WHERE event.firebase_uid = ? AND event.actor_type = 'customer' AND event.event_type = 'requested'
-        AND (? <> 'technician' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR appointment.assignee_member_id = ?)
       ORDER BY event.created_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT event.id, event.work_order_id, event.event_type, event.summary, event.created_at,
-        work.work_number, work.title
+      .bind(access.ownerUid, scheduling.scope, scheduling.memberId).all<Row>() : none(),
+    access.canViewFieldEvidence ? db.prepare(`SELECT event.id, event.work_order_id, event.event_type, event.summary, event.created_at,
+        work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_work_order_events event
       JOIN trade_work_orders work ON work.id = event.work_order_id AND work.firebase_uid = event.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       WHERE event.firebase_uid = ?
         AND event.event_type IN ('field_state_changed', 'offline_stage_update', 'task_completed', 'offline_task_update',
           'field_form_completed', 'offline_field_form_completed', 'job_actual_recorded', 'job_completed')
@@ -107,28 +128,28 @@ async function notifications(access: TeamAccess) {
           WHERE completed.firebase_uid = event.firebase_uid AND completed.work_order_id = event.work_order_id
             AND completed.event_type = 'job_completed' AND completed.created_at = event.created_at
         ))
-        AND (? <> 'technician' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY event.created_at DESC LIMIT 120`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT signoff.id, signoff.work_order_id, signoff.signer_role, signoff.signer_name, signoff.signed_at,
-        work.work_number, work.title
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canViewFieldEvidence ? db.prepare(`SELECT signoff.id, signoff.work_order_id, signoff.signer_role, signoff.signer_name, signoff.signed_at,
+        work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_signoffs signoff
       JOIN trade_work_orders work ON work.id = signoff.work_order_id AND work.firebase_uid = signoff.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       WHERE signoff.firebase_uid = ? AND signoff.signer_role IN ('customer', 'technician')
-        AND (? <> 'technician' OR work.assignee_member_id = ?)
+        AND (? <> 'own' OR work.assignee_member_id = ?)
       ORDER BY signoff.signed_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role, scope.memberId).all<Row>(),
-    db.prepare(`SELECT assignment.id opportunity_match_id, assignment.matched_at
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
+    access.canViewQuotes && scope.scope === "team" ? db.prepare(`SELECT assignment.id opportunity_match_id, assignment.matched_at
       FROM trade_opportunity_matches assignment
       JOIN trade_opportunities opportunity ON opportunity.id = assignment.opportunity_id
       WHERE assignment.firebase_uid = ?
-        AND ? <> 'technician'
         AND assignment.status IN ('offered', 'viewed', 'interested', 'connected')
         AND opportunity.status IN ('open', 'paused')
       ORDER BY assignment.matched_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role).all<Row>(),
-    db.prepare(`SELECT event.id, event.opportunity_match_id, event.occurred_at
+      .bind(access.ownerUid).all<Row>() : none(),
+    access.canViewQuotes && scope.scope === "team" ? db.prepare(`SELECT event.id, event.opportunity_match_id, event.occurred_at
       FROM customer_project_activity_events event
       JOIN customer_project_quotes quote ON quote.id = event.quote_id
         AND quote.installer_uid = event.installer_uid
@@ -141,9 +162,8 @@ async function notifications(access: TeamAccess) {
         AND release.status = 'active'
       WHERE event.installer_uid = ?
         AND event.event_type = 'customer_installer_accepted'
-        AND ? <> 'technician'
       ORDER BY event.occurred_at DESC LIMIT 80`)
-      .bind(access.ownerUid, scope.role).all<Row>(),
+      .bind(access.ownerUid).all<Row>() : none(),
     db.prepare(`SELECT notification_key FROM trade_job_notification_reads
       WHERE firebase_uid = ? AND read_by_uid = ? ORDER BY read_at DESC LIMIT 500`)
       .bind(access.ownerUid, access.actorUid).all<Row>(),
@@ -153,40 +173,42 @@ async function notifications(access: TeamAccess) {
     ...photoCompletions.results.map((row) => ({ id: `customer-photos-ready:${String(row.id)}`,
       targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer photos ready",
-      summary: `${Number(row.supplied_count)} ${Number(row.supplied_count) === 1 ? "file is" : "files are"} ready to review for ${String(row.title)}.`,
+      summary: `${Number(row.supplied_count)} ${Number(row.supplied_count) === 1 ? "file is" : "files are"} ready to review${jobContextAllowed(row) ? ` for ${String(row.title)}` : ""}.`,
       createdAt: String(row.completed_at), targetTab: "field" as const, source: "customer" as const })),
     ...quoteQuestions.results.map((row) => ({ id: `quote-question:${String(row.id)}`,
       targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer asked a quote question",
-      summary: limitedSummary(row.question, `Open ${String(row.quote_number)} to read and reply.`), createdAt: String(row.asked_at),
+      summary: jobContextAllowed(row) ? limitedSummary(row.question, `Open ${String(row.quote_number)} to read and reply.`) : `Open ${String(row.quote_number)} to read and reply.`, createdAt: String(row.asked_at),
       targetTab: "quote" as const, source: "customer" as const })),
     ...quoteDecisions.results.map((row) => { const accepted = row.decision === "accepted"; const amount = Number(row.selected_total_cents || 0);
       return { id: `quote-decision:${String(row.id)}`, workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
         targetKind: "job" as const, targetId: String(row.work_order_id),
         title: accepted ? "Quote accepted" : "Quote declined",
-        summary: accepted ? `${String(row.quote_number)} was accepted by ${String(row.signer_name || "the customer")} for ${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount / 100)}.`
-          : `${String(row.quote_number)} was declined by ${String(row.signer_name || "the customer")}.`, createdAt: String(row.decided_at),
+        summary: accepted ? `${String(row.quote_number)} was accepted${jobContextAllowed(row) ? ` by ${String(row.signer_name || "the customer")}` : ""} for ${new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amount / 100)}.`
+          : `${String(row.quote_number)} was declined${jobContextAllowed(row) ? ` by ${String(row.signer_name || "the customer")}` : ""}.`, createdAt: String(row.decided_at),
         targetTab: "quote" as const, source: "customer" as const }; }),
     ...quoteViews.results.map((row) => ({ id: `quote-view:${String(row.id)}`,
       targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer opened quote",
-      summary: `${String(row.quote_number)} for ${String(row.title)} was opened.`, createdAt: String(row.occurred_at),
+      summary: `${String(row.quote_number)}${jobContextAllowed(row) ? ` for ${String(row.title)}` : ""} was opened.`, createdAt: String(row.occurred_at),
       targetTab: "quote" as const, source: "customer" as const })),
     ...appointmentRequests.results.map((row) => ({ id: `appointment-request:${String(row.id)}`,
       targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number), title: "Customer requested a schedule change",
-      summary: limitedSummary(row.summary, "Review the customer's requested appointment change."), createdAt: String(row.created_at),
+      summary: jobContextAllowed(row) ? limitedSummary(row.summary, "Review the customer's requested appointment change.") : "Review the requested appointment change.", createdAt: String(row.created_at),
       targetTab: "schedule" as const, source: "customer" as const })),
     ...fieldEvents.results.map((row) => { const presentation = workEventPresentation(String(row.event_type)); return {
       id: `field-event:${String(row.id)}`, targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
-      title: presentation.title, summary: limitedSummary(row.summary, `Field work changed for ${String(row.title)}.`),
+      title: presentation.title, summary: jobContextAllowed(row) ? limitedSummary(row.summary, `Field work changed for ${String(row.title)}.`) : "Field work changed.",
       createdAt: String(row.created_at), targetTab: presentation.targetTab, source: "field" as const }; }),
     ...signoffs.results.map((row) => { const customer = row.signer_role === "customer"; return {
       id: `job-signoff:${String(row.id)}`, targetKind: "job" as const, targetId: String(row.work_order_id),
       workOrderId: String(row.work_order_id), workNumber: String(row.work_number),
       title: customer ? "Customer sign-off recorded" : "Technician sign-off recorded",
-      summary: `${String(row.signer_name || (customer ? "Customer" : "Technician"))} signed the field record for ${String(row.title)}.`,
+      summary: jobContextAllowed(row)
+        ? `${String(row.signer_name || (customer ? "Customer" : "Technician"))} signed the field record for ${String(row.title)}.`
+        : `${customer ? "Customer" : "Technician"} sign-off was recorded.`,
       createdAt: String(row.signed_at), targetTab: "field" as const, source: customer ? "customer" as const : "field" as const }; }),
     ...allocatedProjectLeads.results.map((row) => ({
       id: `platform-lead-allocated:${String(row.opportunity_match_id)}`,

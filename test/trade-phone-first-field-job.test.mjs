@@ -92,8 +92,8 @@ test("guided creation mirrors its saved appointment to every connected calendar"
 });
 
 test("optional summary notes have one editable owner in the Notes tab", () => {
-  const overview = workspace.slice(workspace.indexOf('{tab === "summary"'), workspace.indexOf('{tab === "field"'));
-  const notes = workspace.slice(workspace.indexOf('{tab === "notes"'), workspace.indexOf('{tab === "handover"'));
+  const overview = workspace.slice(workspace.indexOf('{activeTab === "summary"'), workspace.indexOf('{activeTab === "field"'));
+  const notes = workspace.slice(workspace.indexOf('{activeTab === "notes"'), workspace.indexOf('{activeTab === "handover"'));
   assert.doesNotMatch(overview, /name="nextAction"|name="description"|name="tags"/);
   for (const field of ["nextAction", "description", "tags"]) assert.match(notes, new RegExp(`name="${field}"`));
   assert.match(workspace, /saveNotes/);
@@ -129,12 +129,13 @@ test("finish uses genuine blockers and exposes invoice and handover paths", () =
 });
 
 test("contact actions stay behind the direct-customer permission boundary", () => {
-  assert.match(fieldRoute, /const direct = job\?\.source_type !== "opportunity" && job\?\.customer_source === "trade_owned"/);
-  assert.match(fieldRoute, /phone: direct \?/);
-  assert.match(fieldRoute, /const address = direct \?/);
+  assert.match(fieldRoute, /const customerContext = job\?\.source_type !== "opportunity"[\s\S]*?customer_source === "trade_owned"[\s\S]*?customer_source === "public_lead_released"/);
+  assert.match(fieldRoute, /phone: customerContext \?/);
+  assert.match(fieldRoute, /const address = customerContext \?/);
   assert.match(fieldPanel, /href=\{`tel:/);
   assert.match(fieldPanel, /Get directions/);
-  assert.match(syncRoute, /customerPhone: directCustomer \?/);
+  assert.match(syncRoute, /customerPhone: customerContext \?/);
+  assert.match(syncRoute, /customer_source === "public_lead_released"/);
   assert.match(mobile, /!job\.protectedJob/);
 });
 

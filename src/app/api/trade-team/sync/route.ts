@@ -51,7 +51,7 @@ const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
   WHERE cohort.firebase_uid = ?
     AND cohort.partner_type = 'installer'
     AND cohort.record_status = 'active'
-    AND (? <> 'technician' OR cohort.assignee_member_id = ?)
+    AND (? <> 'own' OR cohort.assignee_member_id = ?)
   ORDER BY cohort.scheduled_start = '', cohort.scheduled_start,
     cohort.updated_at DESC
   LIMIT ${MAX_SYNC_JOBS}`;
@@ -96,6 +96,8 @@ function syncError(error: unknown) {
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Offline team sync requires team access on the installer account." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Offline sync is available to installer teams only." }, 403);
+  if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow offline field records." }, 403);
+  if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow offline field changes." }, 403);
   return adminJson({ ok: false, error: "The offline sync request could not be completed." }, 500);
 }
 
@@ -239,46 +241,46 @@ async function accessibleJobs(access: TeamAccess) {
         AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
         ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
       WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
-        AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR w.assignee_member_id = ?)
       ORDER BY w.scheduled_start = '', w.scheduled_start, w.updated_at DESC
       LIMIT ?`)
       .bind(
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         MAX_SYNC_JOBS,
       ).all<Record<string, unknown>>(),
     db.prepare(`SELECT t.id, t.work_order_id, t.title, t.due_at, t.status, t.completed_at, t.revision, t.updated_at
       FROM trade_work_order_tasks t JOIN trade_work_orders w ON w.id = t.work_order_id
       WHERE t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR w.assignee_member_id = ?)
         AND t.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY t.status = 'done', t.due_at = '', t.due_at, t.created_at
       LIMIT ?`)
       .bind(
         access.ownerUid,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
     db.prepare(`SELECT m.id, m.work_order_id, m.category, m.file_name, m.content_type, m.size_bytes, m.caption, m.created_at
       FROM trade_crm_job_media m JOIN trade_work_orders w ON w.id = m.work_order_id
       WHERE m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR w.assignee_member_id = ?)
         AND m.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY m.created_at DESC
       LIMIT ?`)
       .bind(
         access.ownerUid,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
@@ -286,17 +288,17 @@ async function accessibleJobs(access: TeamAccess) {
         f.template_snapshot, f.answers, f.status, f.revision, f.completed_at, f.updated_at
       FROM trade_job_forms f JOIN trade_work_orders w ON w.id = f.work_order_id
       WHERE f.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'
-        AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR w.assignee_member_id = ?)
         AND f.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       ORDER BY f.status = 'complete', f.created_at
       LIMIT ?`)
       .bind(
         access.ownerUid,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
@@ -331,7 +333,7 @@ async function accessibleJobs(access: TeamAccess) {
         AND e.organisation_id = c.organisation_id
       WHERE c.installer_uid = ? AND c.status NOT IN ('rejected', 'closed')
         AND w.record_status = 'active'
-        AND (? <> 'technician' OR w.assignee_member_id = ?)
+        AND (? <> 'own' OR w.assignee_member_id = ?)
         AND c.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
       GROUP BY
         c.work_order_id, c.id, c.case_number, c.activity_version_id,
@@ -348,10 +350,10 @@ async function accessibleJobs(access: TeamAccess) {
       LIMIT ?`)
       .bind(
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         access.ownerUid,
-        access.role,
+        access.jobScope,
         access.memberId,
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
@@ -371,13 +373,14 @@ async function accessibleJobs(access: TeamAccess) {
   }
   return new Map(jobRows.results.map((row) => {
     const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
-    const directCustomer = !protectedJob && row.customer_source === "trade_owned";
-    const serviceAddress = directCustomer ? [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
+    const customerContext = !protectedJob
+      && (row.customer_source === "trade_owned" || row.customer_source === "public_lead_released");
+    const serviceAddress = customerContext ? [row.address_line_1, row.address_line_2, row.suburb, row.address_state, row.postcode]
       .map((part) => String(part || "").trim()).filter(Boolean).join(", ") : "";
     return [String(row.id), {
       id: row.id,
       workNumber: row.work_number,
-      title: row.title,
+      title: protectedJob ? `${String(row.service_category || "Service")} job` : row.title,
       serviceCategory: row.service_category,
       siteArea: row.site_area,
       stage: row.stage,
@@ -387,8 +390,8 @@ async function accessibleJobs(access: TeamAccess) {
       assigneeMemberId: row.assignee_member_id,
       assigneeLabel: row.assignee_label,
       protectedJob,
-      customerName: protectedJob ? "Australian Energy Assessments protected customer" : directCustomer ? String(row.customer_name || "Direct customer") : "Internal job",
-      customerPhone: directCustomer ? String(row.customer_phone || "") : "",
+      customerName: protectedJob ? "Australian Energy Assessments protected customer" : customerContext ? String(row.customer_name || "Customer") : "Internal job",
+      customerPhone: customerContext ? String(row.customer_phone || "") : "",
       serviceAddress,
       appointmentId: row.appointment_id || "",
       appointmentStatus: row.appointment_status || "",
@@ -398,13 +401,13 @@ async function accessibleJobs(access: TeamAccess) {
       arrivedAt: row.arrived_at || "",
       workStartedAt: row.work_started_at || "",
       completedAt: row.completed_at || "",
-      description: row.description || "",
+      description: protectedJob ? "" : row.description || "",
       openIssues: Number(row.open_issues || 0),
       revision: Number(row.revision || 1),
       updatedAt: row.updated_at,
       offlinePolicy: {
-        containsPersonalData: Boolean(serviceAddress || (directCustomer && row.customer_phone)),
-        maxAgeSeconds: serviceAddress || (directCustomer && row.customer_phone) ? 86_400 : 604_800,
+        containsPersonalData: Boolean(serviceAddress || (customerContext && row.customer_phone)),
+        maxAgeSeconds: serviceAddress || (customerContext && row.customer_phone) ? 86_400 : 604_800,
         purgeWhenUnassigned: true,
       },
       tasks: taskRows.results.filter((task) => task.work_order_id === row.id).map((task) => ({
@@ -510,7 +513,7 @@ async function accessibleJobs(access: TeamAccess) {
 }
 
 async function highWater(access: TeamAccess) {
-  const audience = access.role === "technician" ? access.memberId : "";
+  const audience = !access.isOwner && access.jobScope === "own" ? access.memberId : "";
   const row = await getD1().prepare(`SELECT COALESCE(MAX(sequence), 0) sequence FROM trade_team_sync_changes
     WHERE owner_uid = ? AND audience_member_id = ?`).bind(access.ownerUid, audience).first<Record<string, unknown>>();
   return Number(row?.sequence || 0);
@@ -520,6 +523,7 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
+    if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const url = new URL(request.url);
     const deviceId = cleanAdminText(url.searchParams.get("deviceId") || request.headers.get("x-aea-device-id"), 120);
     const device = await requireRegisteredMobileDevice(request, access, deviceId,
@@ -541,7 +545,7 @@ export async function GET(request: Request) {
           operation: "upsert", revision: entity.revision, entity })) });
     }
 
-    const audience = access.role === "technician" ? access.memberId : "";
+    const audience = !access.isOwner && access.jobScope === "own" ? access.memberId : "";
     const rows = await getD1().prepare(`SELECT sequence, entity_type, entity_id, operation, revision, changed_at
       FROM trade_team_sync_changes WHERE owner_uid = ? AND audience_member_id = ? AND sequence > ?
       ORDER BY sequence LIMIT ?`).bind(access.ownerUid, audience, cursor, limit + 1).all<Record<string, unknown>>();
@@ -1969,7 +1973,14 @@ export async function POST(request: Request) {
     if (!actions.length || actions.length > MAX_ACTIONS) return adminJson({ ok: false, error: `Send between 1 and ${MAX_ACTIONS} offline actions at a time.` }, 400);
     const results = [];
     for (const action of actions) {
-      try { results.push(await applyAction(access, deviceId, action)); }
+      try {
+        const actionType = cleanAdminText(action.type, 80);
+        if (["advance_field_job", "set_job_stage", "set_task_status"].includes(actionType)
+          && !access.canManageJobs) throw new Error("JOB_MANAGEMENT_REQUIRED");
+        if (["save_job_form", "add_time_entry"].includes(actionType)
+          && !access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
+        results.push(await applyAction(access, deviceId, action));
+      }
       catch (error) {
         const code = error instanceof Error ? error.message : "ACTION_FAILED";
         results.push({ clientActionId: cleanAdminText(action.clientActionId, 120), status: "rejected", code,

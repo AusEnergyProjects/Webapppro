@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import {
-  canDispatch,
+  assignedJob,
   requireInstallerTeamAccess,
   type TeamAccess,
 } from "@/lib/trade-team-server";
@@ -13,15 +13,24 @@ import {
 } from "@/lib/trade-quick-invoice-server";
 import { creditTotals, invoiceBalance } from "@/lib/trade-invoice-balance";
 import { australiaLocalDateTime } from "@/lib/trade-schedule";
+import { invoiceInputAppliesDiscount, lowersAuthoritativeTotal } from "@/lib/trade-discount-permissions";
 
 export const runtime = "edge";
 
 type Row = Record<string, unknown>;
 
-function requireInvoiceManagement(access: TeamAccess) {
-  if (!canDispatch(access)) {
+function requireInvoiceAccess(access: TeamAccess, manage = false) {
+  if (manage ? !access.canManageInvoices && !access.isOwner : !access.canViewInvoices && !access.isOwner) {
     throw new Error("QUICK_INVOICE_MANAGEMENT_REQUIRED");
   }
+}
+
+function invoiceAccessPayload(access: TeamAccess) {
+  return {
+    canManageInvoices: access.isOwner || access.canManageInvoices,
+    canViewPriceBook: access.isOwner || access.canViewPriceBook,
+    canApplyDiscounts: access.isOwner || access.canApplyDiscounts,
+  };
 }
 
 function invoiceError(error: unknown) {
@@ -29,6 +38,8 @@ function invoiceError(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ABN_REVIEW_REQUIRED", "EMAIL_VERIFICATION_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "This installer account does not currently have invoice access." }, 403);
   if (code === "QUICK_INVOICE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage customer invoices." }, 403);
+  if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
+  if (code === "PRICE_BOOK_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow saved price-book items." }, 403);
   if (code === "QUICK_INVOICE_NOT_FOUND") return adminJson({ ok: false, error: "Quick invoice not found." }, 404);
   if (code === "QUICK_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has a TLink invoice." }, 409);
   if (code === "QUICK_INVOICE_JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active direct-customer job." }, 404);
@@ -148,11 +159,13 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    requireInvoiceManagement(access);
+    requireInvoiceAccess(access);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     if (!workOrderId) return adminJson({ ok: false, error: "Choose a job." }, 400);
+    await assignedJob(access, workOrderId);
     const row = await invoiceRow(access.ownerUid, "work_order_id", workOrderId);
-    return adminJson({ ok: true, invoice: row ? await completePayload(row) : null });
+    return adminJson({ ok: true, access: invoiceAccessPayload(access),
+      invoice: row ? await completePayload(row) : null });
   } catch (error) { return invoiceError(error); }
 }
 
@@ -160,9 +173,11 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    requireInvoiceManagement(access);
+    requireInvoiceAccess(access, true);
     const body = await request.json().catch(() => ({})) as Row;
     const action = cleanAdminText(body.action, 40);
+    const scopedJobId = cleanAdminText(body.workOrderId, 180);
+    if (scopedJobId) await assignedJob(access, scopedJobId);
     const db = getD1();
     const now = new Date().toISOString();
     const australiaSydneyToday = australiaLocalDateTime(
@@ -187,7 +202,7 @@ export async function POST(request: Request) {
           AND work.firebase_uid = ?
           AND work.partner_type = 'installer'
           AND work.record_status = 'active'
-          AND details.customer_source = 'trade_owned'
+          AND details.customer_source IN ('trade_owned', 'public_lead_released')
         LIMIT 1`)
         .bind(workOrderId, access.ownerUid)
         .first<Row>();
@@ -195,7 +210,11 @@ export async function POST(request: Request) {
       if (await invoiceRow(access.ownerUid, "work_order_id", workOrderId)) {
         throw new Error("QUICK_INVOICE_EXISTS");
       }
-      const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents);
+      if (!access.isOwner && !access.canApplyDiscounts && invoiceInputAppliesDiscount(body.discountCents)) {
+        throw new Error("DISCOUNT_REQUIRED");
+      }
+      const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents,
+        access.isOwner || access.canViewPriceBook);
       const dueAt = cleanDate(body.dueAt);
       if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
       const invoiceId = crypto.randomUUID();
@@ -269,12 +288,14 @@ export async function POST(request: Request) {
       const created = await invoiceRow(access.ownerUid, "id", invoiceId);
       return adminJson({
         ok: true,
+        access: invoiceAccessPayload(access),
         invoice: created ? await completePayload(created) : null,
       }, 201);
     }
     const invoiceId = cleanAdminText(body.invoiceId, 180);
     const current = await invoiceRow(access.ownerUid, "id", invoiceId);
     if (!current) throw new Error("QUICK_INVOICE_NOT_FOUND");
+    await assignedJob(access, String(current.work_order_id));
     if (action === "retry_delivery") {
       if (body.consentConfirmed !== true) return adminJson({ ok: false, error: "Confirm the customer asked to receive this invoice." }, 400);
       await sendQuickInvoiceDelivery({ invoiceId, ownerUid: access.ownerUid, actorUid: access.actorUid, origin: new URL(request.url).origin });
@@ -291,7 +312,13 @@ export async function POST(request: Request) {
       ) throw new Error("QUICK_INVOICE_ISSUED");
       if (Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
       if (Number(body.expectedRevision) !== Number(current.revision || 1)) throw new Error("QUICK_INVOICE_CHANGED");
-      const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents);
+      const draft = await resolveQuickInvoiceDraft(access.ownerUid, body.lines, body.discountCents,
+        access.isOwner || access.canViewPriceBook);
+      if (!access.isOwner && !access.canApplyDiscounts
+        && (draft.discountCents > Number(current.discount_cents || 0)
+          || lowersAuthoritativeTotal(draft.totalCents, current.total_cents))) {
+        throw new Error("DISCOUNT_REQUIRED");
+      }
       const dueAt = cleanDate(body.dueAt);
       if (dueAt < australiaSydneyToday) throw new Error("INVALID_QUICK_INVOICE");
       const reason = cleanAdminText(body.reason, 240) || "Draft invoice corrected before issue";
@@ -328,6 +355,7 @@ export async function POST(request: Request) {
         forceDraftRefresh: true,
       });
     } else if (action === "issue_credit") {
+      if (!access.isOwner && !access.canApplyDiscounts) throw new Error("DISCOUNT_REQUIRED");
       if (!['issued', 'part_credited'].includes(String(current.status))) throw new Error("QUICK_INVOICE_ISSUED");
       if (Boolean(current.accounting_activity)) throw new Error("QUICK_INVOICE_EXTERNAL_ACTIVITY");
       const description = cleanAdminText(body.description, 180);
@@ -366,6 +394,7 @@ export async function POST(request: Request) {
       if (!Number(results[0].meta.changes || 0)) throw new Error("INVOICE_BALANCE_EXCEEDED");
     } else return adminJson({ ok: false, error: "Choose an invoice action." }, 400);
     const row = await invoiceRow(access.ownerUid, "id", invoiceId);
-    return adminJson({ ok: true, invoice: row ? await completePayload(row) : null });
+    return adminJson({ ok: true, access: invoiceAccessPayload(access),
+      invoice: row ? await completePayload(row) : null });
   } catch (error) { return invoiceError(error); }
 }

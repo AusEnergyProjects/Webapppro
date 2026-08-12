@@ -19,6 +19,8 @@ function formError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
+  if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field records." }, 403);
+  if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field record changes." }, 403);
   if (code === "FULL_ACCESS_REQUIRED" || code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field forms require approved installer access." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Field forms are available to installer accounts." }, 403);
@@ -79,6 +81,7 @@ export async function GET(request: Request) {
   try {
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     const { access } = await accessAndJob(request, workOrderId);
+    if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     return adminJson({ ok: true, ...(await formPayload(access.ownerUid, workOrderId)) });
   } catch (error) { return formError(error); }
 }
@@ -89,6 +92,7 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const { access, job } = await accessAndJob(request, workOrderId);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     const templateKey = cleanAdminText(body.templateKey, 100);
     const templateVersion = Math.max(1, Math.min(1000, Math.round(Number(body.templateVersion || 1))));
     const work = await getD1().prepare(`SELECT service_category, stage, revision
@@ -161,6 +165,7 @@ export async function PATCH(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const { access, job } = await accessAndJob(request, workOrderId);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     const formId = cleanAdminText(body.formId, 180);
     const row = await getD1().prepare(`SELECT form.id, form.template_key, form.template_snapshot,
         form.status, form.revision, work_order.stage job_stage, work_order.revision job_revision

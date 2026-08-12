@@ -1086,6 +1086,14 @@ export async function DELETE(request: Request) {
       WHERE owner_uid = ? AND status = 'active'
     `).bind(now, identity.uid),
     db.prepare(`
+      UPDATE trade_team_member_files
+      SET status = 'cleanup_pending',
+          next_cleanup_at = ?,
+          last_cleanup_error = 'account_closed',
+          updated_at = ?
+      WHERE owner_uid = ? AND status IN ('uploading', 'active')
+    `).bind(now, now, identity.uid),
+    db.prepare(`
       INSERT OR IGNORE INTO trade_account_closure_requests
         (id, firebase_uid, status, reason, retention_notice_version,
          requested_at, completed_at, recovered_at, recovered_by_uid, created_at, updated_at)

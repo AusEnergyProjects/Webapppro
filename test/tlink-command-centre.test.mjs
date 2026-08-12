@@ -19,7 +19,8 @@ test("the TLink command centre uses a bounded role scoped server search", () => 
   assert.doesNotMatch(command, /\/api\/(trade-crm|product-marketplace|supplier-products|trade-purchasing|trade-team)/);
   assert.match(command, /}, 220\)/);
   assert.match(command, /requestRef\.current\?\.abort\(\)/);
-  assert.match(searchRoute, /requireVerifiedTradeAccess/);
+  assert.match(searchRoute, /requireFirebaseIdentity/);
+  assert.match(searchRoute, /requireInstallerTeamAccess/);
   assert.match(searchRoute, /TradeAccessError/);
   assert.match(searchRoute, /sameOrigin\(request\)/);
   assert.match(searchRoute, /accountEntitlements/);
@@ -31,7 +32,9 @@ test("the TLink command centre uses a bounded role scoped server search", () => 
   assert.match(searchRoute, /entitlements\.features\.team_access/);
   assert.match(command, /partnerType === "installer"/);
   assert.match(command, /Australian Energy Assessments protected household contact details are never indexed/);
-  assert.doesNotMatch(searchRoute, /address_line_1|private_notes|source_reference/);
+  assert.doesNotMatch(searchRoute, /address_line_1|private_notes/);
+  assert.match(searchRoute, /protected_detail\.customer_source = 'platform_private'/);
+  assert.match(searchRoute, /CASE WHEN work\.source_type = 'opportunity' OR detail\.customer_source = 'platform_private'/);
 });
 
 test("command results open the matching focused workspace", () => {

@@ -1,8 +1,6 @@
 import { ENERGY_SERVICE_LABELS } from "./energy-service-catalogue.mjs";
 import { publicTradeContactForMatchedLead } from "./public-trade-lead-access.mjs";
 import {
-  PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
-  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
   publicPlanQuoteAnswersForMatchedCategories,
   strictPublicPlanQuoteServiceCategories,
 } from "./public-plan-quote-preparation.mjs";
@@ -47,6 +45,62 @@ export function publicLeadQuoteWorkflowSnapshot(row) {
   };
 }
 
+export function publicLeadAcceptedDisclosure(snapshot, row, acceptedAt, photos = []) {
+  if (!snapshot || !Number.isFinite(Date.parse(String(acceptedAt || "")))) return null;
+  if (!Array.isArray(photos) || photos.length > 12) return null;
+  let disclosedFields;
+  try {
+    disclosedFields = JSON.parse(String(row?.public_contact_disclosed_fields || "[]"));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(disclosedFields)) return null;
+  return {
+    contract: "tlink-public-lead-accepted-disclosure-v1",
+    acceptedAt: String(acceptedAt),
+    source: {
+      opportunityMatchId: String(row?.match_id || row?.work_source_reference || ""),
+      sourceReference: snapshot.reference,
+      releaseId: String(row?.public_contact_release_id || ""),
+      disclosedFields: disclosedFields.map(String).sort(),
+      noticeVersion: String(row?.public_contact_notice_version || ""),
+      consentPurpose: String(row?.public_contact_consent_purpose || ""),
+      grantedAt: String(row?.public_contact_granted_at || ""),
+    },
+    customer: {
+      firstName: snapshot.contact.firstName,
+      lastName: snapshot.contact.lastName,
+      email: snapshot.contact.email,
+      phone: snapshot.contact.phone,
+      addressLine1: snapshot.contact.addressLine1,
+      addressLine2: snapshot.contact.addressLine2,
+      suburb: snapshot.contact.suburb,
+      addressState: snapshot.contact.addressState,
+      postcode: snapshot.contact.postcode,
+      message: snapshot.contact.message,
+    },
+    enquiry: {
+      title: snapshot.title,
+      summary: snapshot.summary,
+      priority: snapshot.priority,
+      categories: snapshot.categories,
+      serviceLabels: snapshot.serviceLabels,
+      quoteAnswers: snapshot.answers,
+    },
+    photos: photos.map((photo) => ({
+      id: String(photo.id || ""),
+      sourcePhotoId: String(photo.sourcePhotoId || ""),
+      promptId: String(photo.promptId || ""),
+      label: String(photo.label || "").slice(0, 180),
+      serviceCategories: strictPublicPlanQuoteServiceCategories(photo.serviceCategories),
+      contentType: String(photo.contentType || ""),
+      sizeBytes: Number(photo.sizeBytes || 0),
+      sha256: String(photo.sha256 || ""),
+      privacyStatus: String(photo.privacyStatus || ""),
+    })),
+  };
+}
+
 export function publicLeadQuoteAccessSnapshot(row, now = Date.now()) {
   const nowMs = typeof now === "number" ? now : Date.parse(String(now || ""));
   const expiresAtMs = Date.parse(String(row?.expires_at || ""));
@@ -61,143 +115,26 @@ export function publicLeadQuoteAccessSnapshot(row, now = Date.now()) {
 }
 
 export function publicLeadQuoteAccessFingerprint(row) {
-  const snapshot = publicLeadQuoteWorkflowSnapshot(row);
-  if (!snapshot) return "";
-  return JSON.stringify({
-    releaseId: String(row?.public_contact_release_id || ""),
-    releaseUpdatedAt: String(row?.public_contact_updated_at || ""),
-    releaseGrantedAt: String(row?.public_contact_granted_at || ""),
-    releaseNoticeVersion: String(row?.public_contact_notice_version || ""),
-    releasePurpose: String(row?.public_contact_consent_purpose || ""),
-    disclosedFields: String(row?.public_contact_disclosed_fields || ""),
-    matchStatus: String(row?.match_status || ""),
-    matchedCategories: String(row?.matched_categories || ""),
-    opportunityStatus: String(row?.opportunity_status || ""),
-    opportunityExpiresAt: String(row?.expires_at || ""),
-    opportunitySourceReference: String(row?.source_reference || ""),
-    opportunityTitle: String(row?.opportunity_title || row?.title || ""),
-    opportunitySummary: String(row?.summary || ""),
-    opportunityPriority: String(row?.opportunity_priority || row?.priority || ""),
-    opportunityPostcode: String(row?.opportunity_postcode || ""),
-    opportunityState: String(row?.state || ""),
-    quotePreparationId: String(row?.public_quote_preparation_id || ""),
-    quotePreparationVersion: String(row?.public_quote_preparation_version || ""),
-    quotePreparationGrantedAt: String(row?.public_quote_preparation_granted_at || ""),
-    quotePreparationUpdatedAt: String(row?.public_quote_preparation_updated_at || ""),
-    quoteAnswers: String(row?.public_quote_answers || ""),
-    snapshot,
-  });
+  const sha256 = String(row?.accepted_disclosure_sha256 || "");
+  return /^[0-9a-f]{64}$/.test(sha256) ? sha256 : "";
 }
 
 export function publicLeadIssueAccessGuard(ownerUid, row) {
   if (!row?.public_lead_enquiry) return { sql: "1 = 1", bindings: [] };
   return {
     sql: `EXISTS (
-      SELECT 1
-      FROM trade_opportunity_matches current_match
-      JOIN trade_opportunities current_opportunity
-        ON current_opportunity.id = current_match.opportunity_id
-      JOIN public_trade_lead_contact_releases current_release
-        ON current_release.id = (
-          SELECT latest_release.id
-          FROM public_trade_lead_contact_releases latest_release
-          WHERE latest_release.opportunity_id = current_opportunity.id
-            AND latest_release.source_reference = current_opportunity.source_reference
-          ORDER BY datetime(latest_release.updated_at) DESC,
-            datetime(latest_release.granted_at) DESC, latest_release.id DESC
-          LIMIT 1
-        )
-      WHERE current_match.id = ? AND current_match.firebase_uid = ?
-        AND current_match.status IN ('interested', 'connected')
-        AND current_match.matched_categories = ?
-        AND current_opportunity.status = 'open'
-        AND datetime(current_opportunity.expires_at) > datetime('now')
-        AND current_opportunity.source_reference = ?
-        AND current_opportunity.title = ?
-        AND current_opportunity.summary = ?
-        AND current_opportunity.priority = ?
-        AND current_opportunity.postcode = ?
-        AND current_opportunity.state = ?
-        AND current_release.id = ?
-        AND current_release.updated_at = ?
-        AND current_release.status = 'active'
-        AND current_release.withdrawn_at = ''
-        AND current_release.source_reference = current_opportunity.source_reference
-        AND current_release.postcode = current_opportunity.postcode
-        AND current_release.disclosed_fields = ?
-        AND current_release.customer_first_name = ?
-        AND current_release.customer_last_name = ?
-        AND current_release.customer_email = ?
-        AND current_release.customer_phone = ?
-        AND current_release.customer_unit_number = ?
-        AND current_release.customer_street_address = ?
-        AND current_release.customer_suburb = ?
-        AND current_release.customer_address_state = ?
-        AND current_release.customer_message = ?
-        AND current_release.notice_version = ?
-        AND current_release.consent_purpose = ?
-        AND current_release.granted_at = ?
-        AND (
-          (? = '' AND NOT EXISTS (
-            SELECT 1 FROM public_trade_lead_quote_preparations current_preparation
-            WHERE current_preparation.opportunity_id = current_opportunity.id
-              AND current_preparation.source_reference = current_opportunity.source_reference
-              AND current_preparation.status = 'active'
-              AND current_preparation.withdrawn_at = ''
-              AND current_preparation.notice_version = ?
-              AND current_preparation.consent_purpose = ?
-          ))
-          OR EXISTS (
-            SELECT 1 FROM public_trade_lead_quote_preparations current_preparation
-            WHERE current_preparation.id = ?
-              AND current_preparation.opportunity_id = current_opportunity.id
-              AND current_preparation.source_reference = current_opportunity.source_reference
-              AND current_preparation.status = 'active'
-              AND current_preparation.withdrawn_at = ''
-              AND current_preparation.version = ?
-              AND current_preparation.granted_at = ?
-              AND current_preparation.updated_at = ?
-              AND current_preparation.notice_version = ?
-              AND current_preparation.consent_purpose = ?
-              AND current_preparation.question_answers = ?
-          )
-        )
+      SELECT 1 FROM trade_crm_job_details accepted_detail
+      WHERE accepted_detail.work_order_id = ?
+        AND accepted_detail.firebase_uid = ?
+        AND accepted_detail.customer_source = 'public_lead_released'
+        AND accepted_detail.accepted_disclosure_sha256 = ?
+        AND json_extract(accepted_detail.accepted_disclosure_snapshot, '$.contract') =
+          'tlink-public-lead-accepted-disclosure-v1'
     )`,
     bindings: [
-      row.work_source_reference,
+      row.id,
       ownerUid,
-      row.matched_categories,
-      row.source_reference,
-      row.opportunity_title,
-      row.summary,
-      row.opportunity_priority,
-      row.opportunity_postcode,
-      row.state,
-      row.public_contact_release_id,
-      row.public_contact_updated_at,
-      row.public_contact_disclosed_fields,
-      row.public_customer_first_name,
-      row.public_customer_last_name,
-      row.public_customer_email,
-      row.public_customer_phone,
-      row.public_customer_unit_number,
-      row.public_customer_street_address,
-      row.public_customer_suburb,
-      row.public_customer_address_state,
-      row.public_customer_message,
-      row.public_contact_notice_version,
-      row.public_contact_consent_purpose,
-      row.public_contact_granted_at,
-      row.public_quote_preparation_id,
-      PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
-      PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-      row.public_quote_preparation_id,
-      row.public_quote_preparation_version,
-      row.public_quote_preparation_granted_at,
-      row.public_quote_preparation_updated_at,
-      PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
-      PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-      row.public_quote_answers,
+      row.accepted_disclosure_sha256,
     ],
   };
 }

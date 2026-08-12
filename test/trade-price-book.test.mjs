@@ -80,10 +80,12 @@ test("the price-book migration applies after the versioned quote dependencies", 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM trade_price_book_items").get().count, 0);
 });
 
-test("price-book writes are office-role protected, owner scoped and append price history", () => {
+test("price-book writes require the explicit commercial permission, remain owner scoped and append price history", () => {
   assert.match(route, /sameOrigin\(request\)/);
   assert.match(route, /requireInstallerTeamAccess\(request\)/);
-  assert.match(route, /canDispatch\(access\)/);
+  assert.match(route, /access\.canManagePriceBook/);
+  assert.match(route, /access\.canViewPriceBook/);
+  assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
   assert.match(route, /firebase_uid = \?/);
   assert.match(route, /PRICE_BOOK_MANAGEMENT_REQUIRED/);
   assert.match(route, /priceChanged/);
@@ -110,8 +112,9 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteUi, /Open Price book/);
   assert.doesNotMatch(quoteUi, /priceBookItems\.length > 0 && <div className="trade-quote-price-book"/);
   assert.match(quoteUi, /const linked = Boolean\(line\.priceBookItemId\)/);
-  assert.match(quoteUi, /disabled=\{linked\}/);
+  assert.match(quoteUi, /disabled=\{linked \|\| discountLocked\}/);
   assert.match(quoteUi, /readOnly=\{linked\}/);
+  assert.match(quoteUi, /readOnly=\{linked \|\| discountLocked\}/);
   assert.match(quoteUi, /Change the quantity or customer section here/);
   assert.equal((crm.match(/onOpenPriceBook=\{\(\) => \{ setPriceBookView\("items"\); setView\("pricebook"\); \}\}/g) || []).length, 1);
   assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);

@@ -85,6 +85,7 @@ export type TradeBusinessSettingsProfile = {
 
 type SettingsSection =
   | "account"
+  | "team"
   | "appearance"
   | "documents"
   | "service"
@@ -106,6 +107,7 @@ const sectionOptions: Array<{
   detail: string;
 }> = [
   { id: "account", label: "Account", detail: "Identity and verification" },
+  { id: "team", label: "Team", detail: "People, access and files" },
   { id: "appearance", label: "Appearance", detail: "Logo, banner and colours" },
   { id: "documents", label: "Customer documents", detail: "Identity and payment" },
   { id: "service", label: "Service areas", detail: "Lead types and coverage" },
@@ -1308,6 +1310,32 @@ export function TradeBusinessSettingsWorkspace({
             </div>
           </div>
         </section>
+
+        {profile.partnerType === "installer" && (
+          <section
+            id="business-settings-team"
+            className="business-settings-section"
+            aria-labelledby="business-settings-team-title"
+          >
+            <header className="business-settings-section-heading">
+              <span>Team</span>
+              <h3 id="business-settings-team-title">People, access and member files</h3>
+              <p>
+                Add staff, control exactly what they can use and keep private ID,
+                licence and compliance records with the right person.
+              </p>
+            </header>
+            <div style={summaryCardStyle}>
+              <strong>Team management has its own workspace</strong>
+              <span style={{ color: "#4f665e", fontSize: ".84rem", lineHeight: 1.5 }}>
+                Add people, assign access and manage private licence and compliance files from Team.
+              </span>
+              <a href="/direct-trade/dashboard?workspace=team" style={{ color: "var(--trade-accent)", fontSize: ".86rem", fontWeight: 850 }}>
+                Open Team
+              </a>
+            </div>
+          </section>
+        )}
 
         <section
           id="business-settings-appearance"

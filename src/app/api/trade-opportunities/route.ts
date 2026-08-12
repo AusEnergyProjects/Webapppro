@@ -140,27 +140,15 @@ async function publicLeadQuoteWorkflowOutcome(
   matchId: string,
   now: string,
 ) {
-  try {
-    return {
-      quoteWorkflow: await startPublicLeadQuoteWorkflow(
+  return {
+    quoteWorkflow: await startPublicLeadQuoteWorkflow(
         db,
         installerUid,
         matchId,
         now,
-      ),
-      warning: "",
-    };
-  } catch (error) {
-    console.error("Public lead quote workspace could not be prepared", {
-      code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
-      matchId,
-      installerUid,
-    });
-    return {
-      quoteWorkflow: null,
-      warning: "Interest is recorded, but the quote workspace could not be prepared. Select Open quote to retry.",
-    };
-  }
+    ),
+    warning: "",
+  };
 }
 
 function activityDispatchJson(
@@ -1163,17 +1151,42 @@ export async function PATCH(request: Request) {
     interested: new Set(["declined"]),
   };
   const currentStatus = String(current.status || "");
-  if (currentStatus === status) {
-    if (status === "interested" && currentPublicContact) {
-      await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
-      const outcome = await publicLeadQuoteWorkflowOutcome(
-        db,
-        user.uid,
-        matchId,
-        now,
-      );
-      return json({ ok: true, ...outcome });
+  if (status === "interested" && currentPublicContact) {
+    if (currentStatus !== status && !transitions[currentStatus]?.has(status)) {
+      return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
     }
+    try {
+      await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+      const quoteWorkflow = await startPublicLeadQuoteWorkflow(
+        db, user.uid, matchId, now, currentStatus,
+      );
+      try {
+        await createAdminNotification({
+          eventKey: `installer-response:${matchId}:interested`,
+          eventType: "installer.lead_interested", category: "response", priority: "high",
+          title: "Installer is interested in a lead",
+          summary: `${String(account.business_name || "An installer").slice(0, 160)} marked ${String(current.title || "").slice(0, 160)} as interested.`,
+          entityType: "trade_opportunity_match", entityId: matchId, actorType: "installer",
+          actorUid: user.uid, requiresAction: true,
+          metadata: { opportunityId: String(current.opportunity_id || ""), status: "interested" },
+          occurredAt: now,
+        });
+      } catch (error) {
+        console.error("Public lead interest notification failed after handoff", {
+          code: error instanceof Error ? error.message : "ADMIN_NOTIFICATION_FAILED",
+          matchId, installerUid: user.uid,
+        });
+      }
+      return json({ ok: true, quoteWorkflow, warning: "" });
+    } catch (error) {
+      console.error("Public lead interest handoff failed", {
+        code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
+        matchId, installerUid: user.uid,
+      });
+      return json({ ok: false, error: "The job and customer files could not be prepared. No interest was recorded. Try again." }, 409);
+    }
+  }
+  if (currentStatus === status) {
     return json({ ok: true });
   }
   if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);

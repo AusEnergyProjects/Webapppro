@@ -44,6 +44,7 @@ const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspac
 const TradeInvoiceWorkspace = dynamic(() => import("./TradeInvoiceWorkspace").then((module) => module.TradeInvoiceWorkspace));
 const TradeServiceFollowUpWorkspace = dynamic(() => import("./TradeServiceFollowUpWorkspace").then((module) => module.TradeServiceFollowUpWorkspace));
 const TradeRebateCalculatorWorkspace = dynamic(() => import("./TradeRebateCalculatorWorkspace").then((module) => module.TradeRebateCalculatorWorkspace));
+const TradeTeamSettings = dynamic(() => import("./TradeTeamSettings").then((module) => module.TradeTeamSettings));
 
 type DashboardProfile = TradeBusinessSettingsProfile & {
   entitlements: {
@@ -178,9 +179,10 @@ type ProtectedPhotoLightbox = {
   alt: string;
   status: "loading" | "ready" | "error";
 };
-type DashboardWorkspace = "work" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
+type DashboardWorkspace = "work" | "team" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
+  "team",
   "invoices",
   "follow-ups",
   "leads",
@@ -728,6 +730,39 @@ export function DirectTradeDashboard() {
   const evidenceObjectUrls = useRef(new Set<string>());
   const photoLightboxDialog = useRef<HTMLDivElement | null>(null);
   const photoLightboxCloseButton = useRef<HTMLButtonElement | null>(null);
+  const workspaceRouteInitialised = useRef(false);
+  const workspacePopstateSync = useRef(false);
+
+  useEffect(() => {
+    const onPopstate = () => {
+      workspacePopstateSync.current = true;
+      const nextWorkspace = dashboardWorkspaceFromSearch(window.location.search);
+      setWorkspace(nextWorkspace);
+      setActiveWorkView(new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "today");
+    };
+    window.addEventListener("popstate", onPopstate);
+    return () => window.removeEventListener("popstate", onPopstate);
+  }, []);
+
+  useEffect(() => {
+    const nextUrl = new URL(window.location.href);
+    const routeWorkspace = workspace === "work" && activeWorkView === "schedule"
+      ? "schedule"
+      : workspace;
+    let changed = nextUrl.searchParams.get("workspace") !== routeWorkspace;
+    nextUrl.searchParams.set("workspace", routeWorkspace);
+    if (workspace !== "leads") {
+      if (nextUrl.searchParams.has("matchId")) { nextUrl.searchParams.delete("matchId"); changed = true; }
+      if (nextUrl.hash === "#opportunity-inbox") { nextUrl.hash = ""; changed = true; }
+    }
+    const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+    if (changed) {
+      if (!workspaceRouteInitialised.current || workspacePopstateSync.current) window.history.replaceState(window.history.state, "", nextLocation);
+      else window.history.pushState(window.history.state, "", nextLocation);
+    }
+    workspaceRouteInitialised.current = true;
+    workspacePopstateSync.current = false;
+  }, [activeWorkView, workspace]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
@@ -1155,9 +1190,16 @@ export function DirectTradeDashboard() {
     protectedOpportunityRequestControllers.current.add(controller);
     const requestIsCurrent = () =>
       identityIsCurrent() && !controller.signal.aborted;
+    const selectedOpportunity = opportunities.find(
+      (opportunity) => opportunity.matchId === matchId,
+    );
+    const preparesCustomerQuote =
+      status === "interested" && !selectedOpportunity?.platformOnly;
     setOpportunityBusy(matchId);
     setOpportunityStatus(
-      status === "interested"
+      preparesCustomerQuote
+        ? "Creating your job and quote..."
+        : status === "interested"
         ? "Sending your expression of interest..."
         : "Updating the opportunity...",
     );
@@ -1574,7 +1616,7 @@ export function DirectTradeDashboard() {
                 aria-label="Close full image"
                 onClick={() => setPhotoLightbox(null)}
               >
-                <span aria-hidden="true">×</span>
+                <span aria-hidden="true">X</span>
               </button>
             </header>
             <div
@@ -1794,7 +1836,7 @@ export function DirectTradeDashboard() {
                 className="dashboard-workspace-nav"
                 aria-label="TLink installer account"
               >
-                <button type="button" className={workspace === "work" && activeWorkView !== "schedule" ? "active" : ""} onClick={() => {
+                <button type="button" aria-current={workspace === "work" && activeWorkView !== "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView !== "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "today", query: "", nonce: Date.now() });
                   setActiveWorkView("today");
                   setWorkspace("work");
@@ -1805,17 +1847,18 @@ export function DirectTradeDashboard() {
                     setWorkspace("work");
                   }}><span>{label}</span></button>)}
                 </div>
-                <button type="button" className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
+                <button type="button" aria-current={workspace === "team" ? "page" : undefined} className={workspace === "team" ? "active" : ""} onClick={() => setWorkspace("team")}><b aria-hidden="true">02</b><span>Team</span><small>People, access and files</small></button>
+                <button type="button" aria-current={workspace === "work" && activeWorkView === "schedule" ? "page" : undefined} className={workspace === "work" && activeWorkView === "schedule" ? "active" : ""} onClick={() => {
                   setCommandTarget({ workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() });
                   setActiveWorkView("schedule");
                   setWorkspace("work");
-                }}><b aria-hidden="true">02</b><span>Schedule</span><small>Capacity and dispatch</small></button>
-                <button type="button" className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">03</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
-                <button type="button" className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">04</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
-                <button type="button" className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">05</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
-                <button type="button" className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">06</b><span>Products</span><small>Approved trade catalogue</small></button>
-                <button type="button" className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">07</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
-                <button type="button" className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">08</b><span>Business</span><small>Settings and verification</small></button>
+                }}><b aria-hidden="true">03</b><span>Schedule</span><small>Capacity and dispatch</small></button>
+                <button type="button" aria-current={workspace === "invoices" ? "page" : undefined} className={workspace === "invoices" ? "active" : ""} onClick={() => setWorkspace("invoices")}><b aria-hidden="true">04</b><span>Invoices</span><small>Prepare drafts and get paid</small></button>
+                <button type="button" aria-current={workspace === "follow-ups" ? "page" : undefined} className={workspace === "follow-ups" ? "active" : ""} onClick={() => setWorkspace("follow-ups")}><b aria-hidden="true">05</b><span>Follow-ups</span><small>Consent-aware service preparation</small></button>
+                <button type="button" aria-current={workspace === "leads" ? "page" : undefined} className={workspace === "leads" ? "active" : ""} onClick={() => setWorkspace("leads")}><b aria-hidden="true">06</b><span>Leads{offeredCount ? ` (${offeredCount})` : ""}</span><small>Australian Energy Assessments protected opportunities</small></button>
+                <button type="button" aria-current={workspace === "products" ? "page" : undefined} className={workspace === "products" ? "active" : ""} onClick={() => setWorkspace("products")}><b aria-hidden="true">07</b><span>Products</span><small>Approved trade catalogue</small></button>
+                <button type="button" aria-current={workspace === "calculator" ? "page" : undefined} className={workspace === "calculator" ? "active" : ""} onClick={() => setWorkspace("calculator")}><b aria-hidden="true">08</b><span>Calculator</span><small>Rebates for quotes and invoices</small></button>
+                <button type="button" aria-current={workspace === "account" ? "page" : undefined} className={workspace === "account" ? "active" : ""} onClick={() => setWorkspace("account")}><b aria-hidden="true">09</b><span>Business</span><small>Settings and verification</small></button>
                 <div className="dashboard-rail-note"><strong>Privacy boundary</strong><p>Australian Energy Assessments leads remain protected. Customer contact details only belong here when the customer contacted your business directly.</p></div>
               </nav>
 
@@ -1839,6 +1882,17 @@ export function DirectTradeDashboard() {
                 onWorkViewChange={setActiveWorkView}
                 onOpenInvoices={() => setWorkspace("invoices")}
               />}
+
+              {workspace === "team" && (hasBusinessOperations && hasTeamAccess ? (
+                <section className="dashboard-panel" aria-labelledby="team-workspace-title">
+                  <div className="dashboard-panel-heading">
+                    <span>Team</span>
+                    <h2 id="team-workspace-title">People, access and member records</h2>
+                    <p>Add staff, set practical access and keep private licence and compliance records together.</p>
+                  </div>
+                  <TradeTeamSettings user={user} />
+                </section>
+              ) : <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>The administrator account record must be active and approved before team management is available.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>)}
 
               {workspace === "invoices" && (hasBusinessOperations ? <TradeInvoiceWorkspace user={user} onOpenJob={(workOrderId) => {
                 setCommandTarget({ workspace: "work", kind: "job", id: workOrderId, query: "", jobTab: "invoice", nonce: Date.now() });
@@ -1873,7 +1927,7 @@ export function DirectTradeDashboard() {
                 />
               )}
 
-              {workspace === "leads" && <div className="dashboard-main-grid">
+              {workspace === "leads" && <>
                 <section
                   id="opportunity-inbox"
                   className="dashboard-panel dashboard-opportunities"
@@ -2208,8 +2262,8 @@ export function DirectTradeDashboard() {
                                 }
                               >
                                 {opportunity.matchStatus === "interested"
-                                  ? opportunity.platformOnly ? "Interest recorded" : "Open quote"
-                                  : "I'm interested"}
+                                  ? opportunity.platformOnly ? "Interest recorded" : "Continue quote"
+                                  : opportunity.platformOnly ? "I'm interested" : "Create job and quote"}
                               </button>
                               <button
                                 type="button"
@@ -2247,15 +2301,6 @@ export function DirectTradeDashboard() {
                             </div>
                           )}
                           {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
-                          {!opportunity.platformOnly && opportunity.matchStatus === "interested" && (
-                            <section className="dashboard-opportunity-conversion" aria-label="Opportunity workflow actions">
-                              <div>
-                                <strong>Your customer quote is ready</strong>
-                                <span>Only currently shared contact and quote preparation details appear in this quote. They are not copied into your customer list.</span>
-                              </div>
-                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void respondToOpportunity(opportunity.matchId, "interested")}>Open customer quote</button>
-                            </section>
-                          )}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>
                             <InstallerArrivalWindows matchId={opportunity.matchId} initialProposal={opportunity.arrivalProposal} onStatus={setOpportunityStatus} />
                             <section className="dashboard-opportunity-conversion" aria-label="Customer contact workflow action"><div><strong>Create the CRM job when you are ready to arrange the work</strong><span>If the customer selected an arrival window, use it when creating the appointment in Work. The proposal itself does not create an appointment.</span></div><button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button></section>
@@ -2308,55 +2353,7 @@ export function DirectTradeDashboard() {
                     </div>
                   </div>
                 </section>
-
-                <aside
-                  className="dashboard-panel dashboard-readiness"
-                  aria-labelledby="dashboard-readiness-title"
-                >
-                  <div className="dashboard-panel-heading">
-                    <span>Account readiness</span>
-                    <h2 id="dashboard-readiness-title">Next steps</h2>
-                  </div>
-                  <ol>
-                    <li className="complete">
-                      <strong>Business profile</strong>
-                      <small>Address, coverage and capabilities saved</small>
-                    </li>
-                    <li>
-                      <strong>
-                        {isSupplier
-                          ? "Product and warranty evidence"
-                          : "Licence and insurance review"}
-                      </strong>
-                      <small>Review the secure verification pathway</small>
-                    </li>
-                    <li>
-                      <strong>
-                        {profile.entitlements.verified
-                          ? "Trade workspace active"
-                          : "Verification required"}
-                      </strong>
-                      <small>
-                        {profile.entitlements.verified
-                          ? "Core trade operations are available at A$0"
-                          : "Approval is required before protected tools open"}
-                      </small>
-                    </li>
-                    <li
-                      className={
-                        profile.availabilityStatus === "paused" ? "" : "complete"
-                      }
-                    >
-                      <strong>Set availability</strong>
-                      <small>
-                        {profile.availabilityStatus === "paused"
-                          ? "Choose a capacity preference below"
-                          : "Capacity preference saved"}
-                      </small>
-                    </li>
-                  </ol>
-                </aside>
-              </div>}
+              </>}
 
               {workspace === "products" && (hasMarketplaceAccess ? (
                 <InstallerProductMarketplace user={user} navigationTarget={commandTarget} />

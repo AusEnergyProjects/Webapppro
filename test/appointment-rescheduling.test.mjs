@@ -95,7 +95,8 @@ test("customer submission creates one review task and audit history without chan
 test("dispatch decisions are owner scoped, revision protected and recheck conflicts before acceptance", () => {
   assert.match(dispatchRoute, /action === "review_reschedule_request"/);
   for (const decision of ["accepted", "rejected", "alternative_proposed"]) assert.match(dispatchRoute, new RegExp(decision));
-  for (const boundary of ["canDispatch", "r.firebase_uid = ?", "expectedRequestRevision", "expectedAppointmentRevision", "REVISION_CONFLICT", "assertScheduleAvailable"]) assert.match(dispatchRoute, new RegExp(boundary));
+  for (const boundary of ["canRescheduleWithinScope", "canAssignJob", "r.firebase_uid = ?", "expectedRequestRevision", "expectedAppointmentRevision", "REVISION_CONFLICT", "assertScheduleAvailable"]) assert.match(dispatchRoute, new RegExp(boundary));
+  assert.doesNotMatch(dispatchRoute, /access\.role|canDispatch\(access\)/);
   assert.match(dispatchRoute, /INSERT OR IGNORE INTO trade_crm_appointment_revisions/);
   assert.match(dispatchRoute, /change_source[\s\S]*?'reschedule_accepted'/);
   assert.match(dispatchRoute, /WHERE id = \? AND firebase_uid = \? AND revision = \?/);

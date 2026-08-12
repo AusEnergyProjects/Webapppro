@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
@@ -16,6 +16,9 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MEDIA_CATEGORIES = new Set(["before", "progress", "after", "document"]);
 const SIGNER_ROLES = new Set(["technician", "customer"]);
+function protectedJob(job: Record<string, unknown>) {
+  return job.source_type === "opportunity" || job.customer_source === "platform_private";
+}
 const UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL = `SELECT 1
   FROM compliance_cases compliance_case
   JOIN compliance_evidence_requirements requirement
@@ -204,6 +207,8 @@ function fieldError(error: unknown) {
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to your team account." }, 403);
   if (code === "TEAM_ACCESS_RECORD_REQUIRED") return adminJson({ ok: false, error: "No active installer team access was found." }, 404);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Field tools require team access on the installer account." }, 403);
+  if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field records." }, 403);
+  if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field record changes." }, 403);
   if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Customer sign-off for an Australian Energy Assessments protected job must stay in the Australian Energy Assessments customer pathway." }, 403);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Job file storage is not available." }, 503);
   if (code === "FIELD_TRANSITION_CONFLICT") return adminJson({ ok: false, error: "The job changed on another device. Refresh before trying again." }, 409);
@@ -261,8 +266,9 @@ async function payload(access: TeamAccess, workOrderId: string) {
     db.prepare(`SELECT COUNT(*) count FROM (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})`)
       .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
   ]);
-  const direct = job?.source_type !== "opportunity" && job?.customer_source === "trade_owned";
-  const address = direct ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
+  const customerContext = job?.source_type !== "opportunity"
+    && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
+  const address = customerContext ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
   const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
@@ -276,13 +282,14 @@ async function payload(access: TeamAccess, workOrderId: string) {
   const appointmentStatus = String(job?.appointment_status || "");
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
   const action = Object.entries(FIELD_TRANSITIONS).find(([, transition]) => transition.from === appointmentStatus);
-  const fieldJob = job ? { id: job.id, workNumber: job.work_number, title: job.title, status: appointmentStatus || job.stage,
-    customerName: direct ? String(job.customer_name || "Direct customer") : job.source_type === "opportunity" ? "Australian Energy Assessments protected customer" : "Internal job",
-    serviceSite: direct ? String(job.site_label || job.suburb || "Service site") : String(job.site_area || "Protected service area"),
+  const fieldJob = job ? { id: job.id, workNumber: job.work_number,
+    title: customerContext ? job.title : "Assigned field job", status: appointmentStatus || job.stage,
+    customerName: customerContext ? String(job.customer_name || "Customer") : job.source_type === "opportunity" ? "Australian Energy Assessments protected customer" : "Internal job",
+    serviceSite: customerContext ? String(job.site_label || job.suburb || "Service site") : String(job.site_area || "Protected service area"),
     scheduledStart: job.starts_at || job.scheduled_start, scheduledEnd: job.ends_at || job.scheduled_end,
     appointmentId: String(job.appointment_id || ""), primaryAction: action ? { action: action[0], label: action[1].label } : null,
     actionUnavailableReason: !job.appointment_id ? "Schedule this job before starting travel." : fieldCompleted ? "Field work is complete." : appointmentStatus === "completed" ? "This appointment was completed outside the field workflow. Reopen or schedule it before field work." : "This appointment cannot advance from its current state.",
-    phone: direct ? String(job.customer_phone || "") : "", address, directionsUrl: address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "",
+    phone: customerContext ? String(job.customer_phone || "") : "", address, directionsUrl: address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "",
     timestamps: { travelStartedAt: job.travel_started_at || "", arrivedAt: job.arrived_at || "", workStartedAt: job.work_started_at || "", completedAt: job.completed_at || "" },
     checklist: [
       { key: "scope", label: "Scope and instructions", complete: Boolean(job.description) && !counts.plan, count: counts.plan, target: "notes" },
@@ -293,7 +300,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
       { key: "issues", label: "Open issues or blockers", complete: !counts.issues, count: counts.issues, target: "notes" },
     ], blockers, completion: { ready: blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
   return {
-    canReviewPhotoRequest: canDispatch(access),
+    canReviewPhotoRequest: access.isOwner || access.canManageFieldEvidence,
     photoRequestRevision: request && request.status !== "revoked" ? Number(request.revision) : 0,
     timeEntries: time.results.map((row) => ({ id: row.id, staffLabel: row.staff_label, workDate: row.work_date,
       durationMinutes: Number(row.duration_minutes), notes: row.notes, createdAt: row.created_at })),
@@ -318,7 +325,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     .bind(access.ownerUid, clientActionId).first<Record<string, unknown>>();
   if (receipt) {
     if (receipt.action_type !== actionType || receipt.entity_id !== workOrderId) return adminJson({ ok: false, error: "This field action reference was already used for different work." }, 409);
-    return adminJson({ ok: true, duplicate: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision), ...(await payload(access, workOrderId)) });
+    return adminJson({ ok: true, duplicate: true, protectedJob: protectedJob(job), revision: Number(job.revision), ...(await payload(access, workOrderId)) });
   }
   const appointment = await db.prepare(`SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ?
     AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
@@ -480,13 +487,14 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
   ]);
   if (!results[0]?.meta.changes) throw new Error("FIELD_TRANSITION_CONFLICT");
   await db.batch(jobSyncChangeStatements(db, { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now, audienceMemberId: String(job.assignee_member_id || "") }));
-  return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision, ...(await payload(access, workOrderId)) });
+  return adminJson({ ok: true, protectedJob: protectedJob(job), revision, ...(await payload(access, workOrderId)) });
 }
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
+    if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const url = new URL(request.url);
     const downloadId = cleanAdminText(url.searchParams.get("download"), 180);
     const previewId = cleanAdminText(url.searchParams.get("preview"), 180);
@@ -506,7 +514,7 @@ export async function GET(request: Request) {
     }
     const workOrderId = cleanAdminText(url.searchParams.get("workOrderId"), 180);
     const job = await assignedJob(access, workOrderId);
-    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision: Number(job.revision),
+    return adminJson({ ok: true, protectedJob: protectedJob(job), revision: Number(job.revision),
       ...(await payload(access, workOrderId)) });
   } catch (error) { return fieldError(error); }
 }
@@ -554,6 +562,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     if ((request.headers.get("content-type") || "").includes("multipart/form-data")) return await upload(request, access);
     const parsedBody = await readBoundedJsonRequest(request);
     if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
@@ -583,7 +592,7 @@ export async function POST(request: Request) {
       if (!SIGNER_ROLES.has(signerRole) || !signerName || body.confirmed !== true) {
         return adminJson({ ok: false, error: "Choose the signer, enter their name and confirm the statement." }, 400);
       }
-      if (job.source_type === "opportunity" && signerRole === "customer") throw new Error("PROTECTED_CUSTOMER");
+      if (protectedJob(job) && signerRole === "customer") throw new Error("PROTECTED_CUSTOMER");
       const confirmation = signerRole === "customer"
         ? "I confirm the recorded work has been presented to me for review."
         : "I confirm the field record is accurate to the best of my knowledge.";
@@ -600,7 +609,7 @@ export async function POST(request: Request) {
       ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId, revision, changedAt: now,
         audienceMemberId: job.assignee_member_id }),
     ]);
-    return adminJson({ ok: true, protectedJob: job.source_type === "opportunity", revision,
+    return adminJson({ ok: true, protectedJob: protectedJob(job), revision,
       ...(await payload(access, workOrderId)) }, 201);
   } catch (error) { return fieldError(error); }
 }
@@ -609,12 +618,17 @@ export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     const id = cleanAdminText(new URL(request.url).searchParams.get("id"), 180);
-    const record = await getD1().prepare(`SELECT m.object_key, m.work_order_id FROM trade_crm_job_media m
+    const record = await getD1().prepare(`SELECT m.object_key, m.work_order_id, m.source FROM trade_crm_job_media m
       JOIN trade_work_orders w ON w.id = m.work_order_id
       WHERE m.id = ? AND m.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
-      .bind(id, access.ownerUid, access.ownerUid).first<{ object_key: string; work_order_id: string }>();
+      .bind(id, access.ownerUid, access.ownerUid).first<{ object_key: string; work_order_id: string; source: string }>();
     if (!record) return adminJson({ ok: false, error: "Job file not found." }, 404);
+    if (record.source === "accepted_public_lead") {
+      return adminJson({ ok: false,
+        error: "Customer-shared lead files are retained with the accepted job and cannot be deleted." }, 409);
+    }
     const governedEvidence = await getD1().prepare(`SELECT 1 AS governed
       FROM compliance_case_evidence
       WHERE job_media_id = ?

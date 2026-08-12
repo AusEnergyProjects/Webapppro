@@ -93,7 +93,7 @@ test("certificate planning cascades from output type to jurisdiction program and
 test("blank guided jobs open mandatory new-customer fields while seeded jobs keep existing-customer mode", () => {
   assert.match(
     form,
-    /useState<"existing" \| "new">\(initial\?\.customerId \? "existing" : "new"\)/,
+    /useState<"existing" \| "new">\(allowCustomerSearch && initial\?\.customerId \? "existing" : "new"\)/,
   );
   assert.match(form, /<strong>New customer<\/strong>[\s\S]*?Find existing customer<\/button>/);
   assert.match(form, /<strong>Find an existing customer<\/strong>[\s\S]*?Create new customer<\/button>/);

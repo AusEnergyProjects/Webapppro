@@ -79,7 +79,8 @@ test("the additive migration stores revisioned requests and customer evidence co
 
 test("installer request management is direct-job scoped, editable and revocable", () => {
   assert.match(installerRoute, /managedDirectJob/);
-  assert.match(installerRoute, /canDispatch/);
+  assert.match(installerRoute, /canManageFieldEvidence/);
+  assert.doesNotMatch(installerRoute, /canDispatch|access\.role/);
   assert.match(installerRoute, /source_type === "opportunity"|source_type/);
   assert.match(installerRoute, /customer_source === "platform_private"|customer_source/);
   assert.match(installerRoute, /DIRECT_CUSTOMER_REQUIRED/);

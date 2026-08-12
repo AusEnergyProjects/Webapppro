@@ -80,7 +80,8 @@ test("governed field evidence is checked before object storage deletion", () => 
 
 test("installer review is manager scoped, append only and uses fixed retake guidance", () => {
   assert.match(installerRoute, /managedDirectJob/);
-  assert.match(installerRoute, /canDispatch/);
+  assert.match(installerRoute, /canManageFieldEvidence/);
+  assert.doesNotMatch(installerRoute, /canDispatch|access\.role/);
   assert.match(installerRoute, /INSERT INTO trade_crm_photo_requirement_reviews/);
   assert.doesNotMatch(installerRoute, /UPDATE trade_crm_photo_requirement_reviews/);
   assert.match(installerRoute, /photoRetakeGuidance/);
@@ -105,7 +106,8 @@ test("targeted follow-up reuses the current link and is idempotent by review and
 
 test("field and template reporting expose privacy-safe review aggregates", () => {
   assert.match(fieldRoute, /proofReview/);
-  assert.match(fieldRoute, /canReviewPhotoRequest: canDispatch\(access\)/);
+  assert.match(fieldRoute, /canReviewPhotoRequest: access\.isOwner \|\| access\.canManageFieldEvidence/);
+  assert.doesNotMatch(fieldRoute, /canDispatch|access\.role/);
   assert.match(fieldRoute, /photoRequestRevision/);
   assert.match(templateRoute, /reviewCounts/);
   assert.match(templateRoute, /acceptedCount/);

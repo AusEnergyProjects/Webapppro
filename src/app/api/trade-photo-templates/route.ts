@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import {
   normalisePhotoRequirements,
   normalisePhotoTemplateFeedback,
@@ -68,7 +68,7 @@ function responseForError(error: unknown) {
 }
 
 function requireManager(access: TeamAccess) {
-  if (!canDispatch(access)) throw new Error("PHOTO_TEMPLATE_MANAGEMENT_REQUIRED");
+  if (!access.isOwner && !access.canManageFieldEvidence) throw new Error("PHOTO_TEMPLATE_MANAGEMENT_REQUIRED");
 }
 
 function parseRequirements(value: string): PhotoRequirement[] {

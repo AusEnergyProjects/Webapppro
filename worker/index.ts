@@ -48,6 +48,11 @@ import { matchesAustralianRegulatorClock } from "../src/lib/creditex-australian-
 import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
+import { drainTradeCrmJobMediaCleanup } from "../src/lib/trade-crm-job-media-cleanup";
+import {
+  drainTradeTeamMemberFileCleanup,
+  type TradeTeamMemberCleanupBucket,
+} from "../src/lib/trade-team-member-file-cleanup";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -203,6 +208,7 @@ function queueBackgroundDispatches(
   response: Response,
   ctx: ExecutionContext,
   request: Request,
+  workerEnv: unknown,
 ) {
   const url = new URL(request.url);
   const drainsNotificationBacklog = shouldDrainOpportunityNotificationBacklog({
@@ -275,6 +281,23 @@ function queueBackgroundDispatches(
         console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
       }),
     );
+    const bucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
+    if (bucket) {
+      ctx.waitUntil(
+        drainTradeTeamMemberFileCleanup({ db: getD1(), bucket })
+          .then(() => undefined)
+          .catch((error) => {
+            console.error("Team member file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+          }),
+      );
+      ctx.waitUntil(
+        drainTradeCrmJobMediaCleanup({ db: getD1(), bucket })
+          .then(() => undefined)
+          .catch((error) => {
+            console.error("Accepted job file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+          }),
+      );
+    }
   }
   return queuePublicPlanDeliveryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
@@ -319,7 +342,7 @@ const worker = {
 
     if (!isCacheablePageRequest(request)) {
       const handled = await handler.fetch(request, env as never, ctx as never);
-      return secureResponse(queueBackgroundDispatches(handled, ctx, request), request);
+      return secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
@@ -329,7 +352,7 @@ const worker = {
     }
 
     const handled = await handler.fetch(request, env as never, ctx as never);
-    const response = secureResponse(queueBackgroundDispatches(handled, ctx, request), request);
+    const response = secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request);
     const cacheable = cacheableHtmlResponse(response);
     if (!cacheable) return response;
     if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
@@ -338,6 +361,7 @@ const worker = {
   async scheduled(controller: ScheduledController, workerEnv: unknown, ctx: ExecutionContext) {
     const tasks: Promise<unknown>[] = [];
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
+      const teamMemberBucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
       tasks.push(
         drainCustomerOpportunityDispatchJobs().catch((error) => {
           console.error("Customer opportunity dispatch failed.", error instanceof Error ? error.message : "Unknown error");
@@ -368,6 +392,14 @@ const worker = {
           console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
         }),
       );
+      if (teamMemberBucket) {
+        tasks.push(drainTradeTeamMemberFileCleanup({ db: getD1(), bucket: teamMemberBucket }).catch((error) => {
+          console.error("Team member file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+        }));
+        tasks.push(drainTradeCrmJobMediaCleanup({ db: getD1(), bucket: teamMemberBucket }).catch((error) => {
+          console.error("Accepted job file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+        }));
+      }
     }
     if (controller.cron === DAILY_MAINTENANCE_CRON) {
       const db = getD1();

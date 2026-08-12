@@ -803,6 +803,8 @@ function mediaError(error: unknown) {
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Offline uploads require installer team access." }, 403);
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_ONLY") return adminJson({ ok: false, error: "Offline uploads are available to installer teams only." }, 403);
+  if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field uploads." }, 403);
+  if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field upload changes." }, 403);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job record not found." }, 404);
   if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is no longer assigned to this device." }, 403);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Field file storage is unavailable." }, 503);
@@ -2245,6 +2247,7 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request); const url = new URL(request.url);
+    if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const deviceId = cleanAdminText(url.searchParams.get("deviceId"), 120);
     await requireRegisteredMobileDevice(request, access, deviceId);
   await sweepTerminalUploadCleanup();
@@ -2262,6 +2265,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     if ((request.headers.get("content-type") || "").includes("multipart/form-data")) {
       const form = await request.formData();
       if (cleanAdminText(form.get("action"), 30) !== "upload_part") return adminJson({ ok: false, error: "Unsupported upload action." }, 400);
@@ -2304,6 +2308,7 @@ export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request); const url = new URL(request.url);
+    if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
     const deviceId = cleanAdminText(url.searchParams.get("deviceId"), 120);
     await requireRegisteredMobileDevice(request, access, deviceId);
     await sweepTerminalUploadCleanup();

@@ -94,10 +94,10 @@ test("saved direct-customer jobs can create and recover a quick invoice without 
   assert.doesNotMatch(form, /TradeQuickInvoiceStep|invoiceMode|quickInvoiceLines/);
   assert.doesNotMatch(crmRoute, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
   assert.match(invoiceRoute, /action === "create_draft"/);
-  assert.match(invoiceRoute, /details\.customer_source = 'trade_owned'/);
+  assert.match(invoiceRoute, /details\.customer_source IN \('trade_owned', 'public_lead_released'\)/);
   assert.match(
     invoiceRoute,
-    /resolveQuickInvoiceDraft\(access\.ownerUid, body\.lines, body\.discountCents\)/,
+    /resolveQuickInvoiceDraft\(access\.ownerUid, body\.lines, body\.discountCents,[\s\S]*?access\.isOwner \|\| access\.canViewPriceBook\)/,
   );
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoices/);
   assert.match(invoiceRoute, /INSERT INTO trade_crm_quick_invoice_revisions/);

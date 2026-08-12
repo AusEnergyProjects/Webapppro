@@ -17,6 +17,12 @@ import {
   plannedComplianceIntentReplanStatements,
 } from "@/lib/trade-compliance-intent-replan-server";
 import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
+import {
+  assignedJob,
+  canManageJobs,
+  requireInstallerTeamAccess,
+  type TeamAccess,
+} from "@/lib/trade-team-server";
 
 export const runtime = "edge";
 
@@ -103,6 +109,29 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
   };
 }
 
+async function mutationIdentity(request: Request, action: string): Promise<{
+  identity: TradeIdentity;
+  teamAccess: TeamAccess | null;
+}> {
+  try {
+    return { identity: await tradeIdentity(request), teamAccess: null };
+  } catch (ownerError) {
+    if (action !== "add_task" && action !== "update_task") throw ownerError;
+    const teamAccess = await requireInstallerTeamAccess(request);
+    if (!canManageJobs(teamAccess)) throw new Error("JOB_MANAGEMENT_REQUIRED");
+    return {
+      identity: {
+        uid: teamAccess.ownerUid,
+        partnerType: "installer",
+        businessName: teamAccess.businessName,
+        fullAccess: true,
+        teamAccess: true,
+      },
+      teamAccess,
+    };
+  }
+}
+
 function errorResponse(error: unknown) {
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
   if (isTradeComplianceIntentScheduleConflict(error)) {
@@ -117,6 +146,8 @@ function errorResponse(error: unknown) {
   if (code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Business Hub is available to installer and wholesaler accounts." }, 403);
   if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before converting platform work." }, 403);
   if (code === "TEAM_ACCESS_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before assigning a crew." }, 403);
+  if (code === "TEAM_ACCESS_RECORD_REQUIRED" || code === "JOB_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "You do not have permission to manage this checklist." }, 403);
+  if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This job is not assigned to you." }, 403);
   if (code === "MEMBER_LIMIT_REACHED") return adminJson({ ok: false, error: "This workspace has reached its active work-record fair-use limit." }, 409);
   if (code === "JOB_NUMBER_UNAVAILABLE") return adminJson({ ok: false, error: "The next work number could not be reserved. Please try again." }, 503);
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
@@ -306,11 +337,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await tradeIdentity(request);
     let body: Record<string, unknown>;
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid Business Hub request." }, 400); }
     const action = cleanAdminText(body.action, 40) || "create_work_order";
+    const { identity, teamAccess } = await mutationIdentity(request, action);
     const db = getD1();
     const now = new Date().toISOString();
 
@@ -319,6 +350,7 @@ export async function POST(request: Request) {
       const title = cleanAdminText(body.title, 180);
       const dueAt = dateValue(body.dueAt);
       if (!workOrderId || !title) return adminJson({ ok: false, error: "Add a checklist item." }, 400);
+      if (teamAccess) await assignedJob(teamAccess, workOrderId);
       if (privateDataDetected(title)) throw new Error("PRIVATE_DATA");
       const order = await db.prepare(`SELECT id, stage, revision, assignee_member_id
         FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
@@ -367,7 +399,7 @@ export async function POST(request: Request) {
         updatedAt: now,
         workOrderId,
       });
-      return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
+      return adminJson(teamAccess ? { ok: true } : { ok: true, ...(await workOrderPayload(identity)) });
     }
 
     if (action !== "create_work_order") return adminJson({ ok: false, error: "Unsupported Business Hub action." }, 400);
@@ -503,11 +535,11 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await tradeIdentity(request);
     let body: Record<string, unknown>;
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid Business Hub update." }, 400); }
     const action = cleanAdminText(body.action, 40);
+    const { identity, teamAccess } = await mutationIdentity(request, action);
     const db = getD1();
     const now = new Date().toISOString();
 
@@ -522,6 +554,7 @@ export async function PATCH(request: Request) {
         WHERE t.id = ? AND t.firebase_uid = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
         .bind(taskId, identity.uid, identity.uid).first<Record<string, unknown>>();
       if (!task) throw new Error("WORK_NOT_FOUND");
+      if (teamAccess) await assignedJob(teamAccess, String(task.work_order_id));
       if (["completed", "cancelled"].includes(String(task.job_stage))) throw new Error("TERMINAL_JOB_LOCKED");
       const taskRevision = nextJobRevision(task.revision); const jobRevision = nextJobRevision(task.job_revision);
       const jobStage = String(task.job_stage);
@@ -563,7 +596,7 @@ export async function PATCH(request: Request) {
         updatedAt: now,
         workOrderId: String(task.work_order_id),
       });
-      return adminJson({ ok: true, ...(await workOrderPayload(identity)) });
+      return adminJson(teamAccess ? { ok: true } : { ok: true, ...(await workOrderPayload(identity)) });
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);

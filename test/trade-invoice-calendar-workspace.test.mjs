@@ -40,8 +40,8 @@ test("jobs expose explicit and guarded double-click navigation while schedule ap
   assert.match(schedule, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
   assert.match(schedule, />Open full job</);
   assert.match(schedule, /onOpenQuote && !selectedAppointment\.protectedJob/);
-  assert.match(schedule, />View, send or revise quote<\/button>/);
-  assert.match(crm, /onOpenQuote=\{\(id\) => openFocusedJob\(id, "quote"\)\}/);
+  assert.match(schedule, />Open quote<\/button>/);
+  assert.match(crm, /onOpenQuote=\{\(!staffPermissions \|\| staffPermissions\.canViewQuotes\) \? \(id\) => openFocusedJob\(id, "quote"\) : undefined\}/);
 });
 
 test("appointment editing uses a bounded 15-minute duration instead of a finish field", () => {

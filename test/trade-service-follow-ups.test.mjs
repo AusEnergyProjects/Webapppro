@@ -68,8 +68,9 @@ test("every static follow-up query compiles against its production migration cha
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `follow-up SQL should compile: ${sql.slice(0, 90)}`);
 });
 
-test("server readiness uses explicit preference, active account consent and customer ownership", () => {
-  for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canDispatch", "firebase_uid = ?", "customer_asset_lifecycle_preferences", "customer_consent_receipts", "customer_asset_ownerships"]) assert.match(route, new RegExp(boundary));
+test("server readiness uses explicit reporting and customer-directory permissions, preference, consent and ownership", () => {
+  for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canRunReports", "canViewCustomers", "canSearchCustomers", "firebase_uid = ?", "customer_asset_lifecycle_preferences", "customer_consent_receipts", "customer_asset_ownerships"]) assert.match(route, new RegExp(boundary));
+  assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
   assert.match(route, /preference\.id preference_id/);
   assert.match(route, /receipt\.purpose = 'customer_account'/);
   assert.match(route, /receipt\.withdrawn_at = ''/);
@@ -100,7 +101,8 @@ test("follow-up payload preserves privacy while sends require a reviewed provide
   assert.doesNotMatch(ui, /customer_email|customer_phone|mobile_e164|account\.email/);
   for (const copy of ["Prepare, review and send service reminders", "I reviewed this exact reminder", "Customer", "Site", "Asset", "Due state", "Assignee", "Consent", "Prepare reminder", "Suppression reason", "Send email", "Send SMS"]) assert.match(ui, new RegExp(copy));
   assert.match(dashboard, /workspace === "follow-ups"/); assert.match(dashboard, /<TradeServiceFollowUpWorkspace/);
-  assert.match(teamPortal, /data\.access\.canDispatch && <TradeServiceFollowUpWorkspace/);
+  assert.match(teamPortal, /permissions\.canRunReports/);
+  assert.match(teamPortal, /staffPermissions=\{permissions\}/);
 });
 
 test("new follow-up copy avoids prohibited dash characters", () => {

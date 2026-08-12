@@ -79,8 +79,10 @@ function loadRoute(db) {
     actorUid: "actor-1",
     memberId: "member-1",
     displayName: "Field Technician",
-    role: "owner",
     isOwner: true,
+    canViewFieldEvidence: true,
+    canManageFieldEvidence: true,
+    jobScope: "team",
   };
   const mocks = {
     "cloudflare:workers": { env: {} },
@@ -99,7 +101,6 @@ function loadRoute(db) {
         if (!row) throw new Error("JOB_NOT_FOUND");
         return row;
       },
-      canDispatch: () => true,
       requireInstallerTeamAccess: async () => access,
     },
     "@/lib/trade-team-sync-server": {

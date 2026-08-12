@@ -30,6 +30,7 @@ type QuickInvoice = {
   creditBlockedReason: string; credits: Credit[]; revisions: Revision[];
 };
 type EditLine = { id: string; description: string; amount: string; taxCode: "gst" | "none" };
+type QuickInvoiceResult = { invoice?: QuickInvoice | null; access?: { canManageInvoices?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string };
 
 function money(cents: number) { return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
 function amount(cents: number) { return (cents / 100).toFixed(2); }
@@ -48,7 +49,7 @@ function editLines(invoice: QuickInvoice): EditLine[] {
     amount: amount(line.unitPriceCentsExGst || line.subtotalCents), taxCode: line.taxCode }));
 }
 
-export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTitle, onOpenIntegrations, onChanged }: { user: User; workOrderId: string; customerName: string; jobTitle: string; onOpenIntegrations?: () => void; onChanged: () => Promise<void> }) {
+export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTitle, readOnly = false, onOpenIntegrations, onChanged }: { user: User; workOrderId: string; customerName: string; jobTitle: string; readOnly?: boolean; onOpenIntegrations?: () => void; onChanged: () => Promise<void> }) {
   const [invoice, setInvoice] = useState<QuickInvoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -69,6 +70,9 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   const [newDueAt, setNewDueAt] = useState(() =>
     addCalendarDays(australiaSydneyCalendarDate(), 7));
   const [rebateDraft, setRebateDraft] = useState<TradeRebateEstimateDraft | null>(null);
+  const [canApplyDiscounts, setCanApplyDiscounts] = useState(false);
+  const [serverCanManageInvoices, setServerCanManageInvoices] = useState(false);
+  const canManageInvoice = !readOnly && serverCanManageInvoices;
   const previewDialogRef = useRef<HTMLElement>(null);
   const previewCloseButtonRef = useRef<HTMLButtonElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
@@ -86,8 +90,9 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   const load = useCallback(async () => {
     const token = await user.getIdToken();
     const response = await fetch(`/api/trade-quick-invoices?workOrderId=${encodeURIComponent(workOrderId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-    const result = await response.json() as { invoice?: QuickInvoice | null; error?: string };
+    const result = await response.json() as QuickInvoiceResult;
     if (!response.ok) throw new Error(result.error || "Quick invoice could not be loaded.");
+    if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
     acceptInvoice(result.invoice || null);
   }, [acceptInvoice, user, workOrderId]);
 
@@ -158,13 +163,14 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   }, [previewOpen]);
 
   async function request(action: string, values: Record<string, unknown>, success: string) {
-    if (!invoice) return false;
+    if (!invoice || !canManageInvoice) return false;
     setBusy(action); setStatus("");
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/trade-quick-invoices", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action, invoiceId: invoice.id, ...values }) });
-      const result = await response.json() as { invoice?: QuickInvoice; error?: string };
+      const result = await response.json() as QuickInvoiceResult;
       if (!response.ok) throw new Error(result.error || "The invoice could not be updated.");
+      if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
       if (result.invoice) acceptInvoice(result.invoice);
       setStatus(success); await onChanged(); return true;
     } catch (error) {
@@ -179,8 +185,9 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   }
 
   async function createDraft() {
+    if (!canManageInvoice) return;
     const unitPriceCentsExGst = toCents(newAmount);
-    const discountCents = toCents(newDiscount);
+    const discountCents = canApplyDiscounts ? toCents(newDiscount) : 0;
     if (
       !newDescription.trim() ||
       unitPriceCentsExGst < 1 ||
@@ -214,13 +221,11 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
           }],
         }),
       });
-      const result = await response.json() as {
-        invoice?: QuickInvoice;
-        error?: string;
-      };
+      const result = await response.json() as QuickInvoiceResult;
       if (!response.ok || !result.invoice) {
         throw new Error(result.error || "The invoice draft could not be created.");
       }
+      if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
       acceptInvoice(result.invoice);
       setStatus("Invoice draft created. Check it before sending.");
       await onChanged();
@@ -236,17 +241,19 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   }
 
   async function correctDraft() {
-    if (!invoice) return;
+    if (!invoice || !canManageInvoice) return;
     const lines = draftLines.map((line) => ({ priceBookItemId: "", description: line.description.trim(), unitPriceCentsExGst: toCents(line.amount), taxCode: line.taxCode }));
-    await request("correct_draft", { expectedRevision: invoice.revision, lines, discountCents: toCents(draftDiscount), dueAt: draftDueAt, reason: draftReason }, "Draft invoice corrected. The earlier snapshot remains in history.");
+    await request("correct_draft", { expectedRevision: invoice.revision, lines, discountCents: canApplyDiscounts ? toCents(draftDiscount) : invoice.discountCents, dueAt: draftDueAt, reason: draftReason }, "Draft invoice corrected. The earlier snapshot remains in history.");
   }
 
   async function issueCredit() {
+    if (!canManageInvoice || !canApplyDiscounts) return;
     await request("issue_credit", { description: creditDescription, subtotalCents: toCents(creditAmount), taxCode: creditTaxCode, reason: creditReason }, "Credit issued and the outstanding balance recalculated.");
     setCreditDescription(""); setCreditAmount(""); setCreditReason("");
   }
 
   async function sendInvoice() {
+    if (!canManageInvoice) return;
     if (!invoice?.deliveryEmail.trim()) {
       setStatus("Add a valid email to the customer record before sending this invoice.");
       setPreviewOpen(false);
@@ -296,7 +303,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   }
 
   function applyRebateDiscount() {
-    if (!rebateDraft) return;
+    if (!canManageInvoice || !rebateDraft || !canApplyDiscounts) return;
     if (invoice?.canCorrect) {
       setDraftDiscount(amount(
         toCents(draftDiscount) + toCents(rebateDraft.customerDiscountDollars),
@@ -314,7 +321,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     setRebateDraft(null);
   }
 
-  const rebateOffer = rebateDraft && (!invoice || invoice.canCorrect) ? (
+  const rebateOffer = canManageInvoice && canApplyDiscounts && rebateDraft && (!invoice || invoice.canCorrect) ? (
     <section className="trade-rebate-document-offer">
       <div>
         <span>REBATE ESTIMATE READY</span>
@@ -330,6 +337,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   ) : null;
 
   if (loading) return null;
+  if (!invoice && !canManageInvoice) return <section className="crm-quick-invoice-panel"><header><div><span>TLink quick invoice</span><h4>No invoice created</h4><p>View only. A team member with invoice access can create this job&apos;s invoice.</p></div><strong>Not started</strong></header>{status && <p className="crm-status" role="status">{status}</p>}</section>;
   if (!invoice) return <section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>Create the invoice from this job</h4><p>Start with one line. You can add or correct lines before sending.</p></div><strong>Not started</strong></header>
     {rebateOffer}
@@ -341,13 +349,13 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
       </div>
     </div>
     <div className="crm-invoice-correction-meta">
-      <label><span>Discount (ex GST)</span><input aria-label="New invoice discount before GST" type="number" min="0" step="0.01" placeholder="0.00" value={newDiscount} onChange={(event) => setNewDiscount(event.target.value)} /></label>
+      {canApplyDiscounts && <label><span>Discount (ex GST)</span><input aria-label="New invoice discount before GST" type="number" min="0" step="0.01" placeholder="0.00" value={newDiscount} onChange={(event) => setNewDiscount(event.target.value)} /></label>}
       <label><span>Payment due</span><input type="date" min={australiaSydneyToday} value={newDueAt} onChange={(event) => setNewDueAt(event.target.value)} /></label>
     </div>
-    <button type="button" className="btn" disabled={Boolean(busy) || !newDescription.trim() || toCents(newAmount) < 1 || toCents(newDiscount) < 0 || toCents(newDiscount) >= toCents(newAmount) || !newDueAt} onClick={() => void createDraft()}>{busy === "create_draft" ? "Creating invoice..." : "Create invoice draft"}</button>
+    <button type="button" className="btn" disabled={Boolean(busy) || !newDescription.trim() || toCents(newAmount) < 1 || (canApplyDiscounts && (toCents(newDiscount) < 0 || toCents(newDiscount) >= toCents(newAmount))) || !newDueAt} onClick={() => void createDraft()}>{busy === "create_draft" ? "Creating invoice..." : "Create invoice draft"}</button>
     {status && <p className="crm-status" role="status">{status}</p>}
   </section>;
-  const canIssueCredit = ["issued", "part_credited"].includes(invoice.status) && invoice.outstandingCents > 0 && !invoice.creditBlockedReason;
+  const canIssueCredit = canApplyDiscounts && ["issued", "part_credited"].includes(invoice.status) && invoice.outstandingCents > 0 && !invoice.creditBlockedReason;
   const canSendInvoice = Boolean(invoice.deliveryEmail.trim());
   const acceptedDelivery = [
     "provider_accepted",
@@ -366,7 +374,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     (sum, line) => sum + Math.max(0, toCents(line.amount)),
     0,
   );
-  const draftDiscountCents = toCents(draftDiscount);
+  const draftDiscountCents = canApplyDiscounts ? toCents(draftDiscount) : invoice.discountCents;
   return <><section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>{invoice.invoiceNumber}</h4><p>{reconciliationRequired ? "The email provider accepted a delivery, but TLink could not verify the matching issued record. Do not resend it." : providerAccepted ? `Submitted to the email provider ${new Date(invoice.sentAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : "Saved in this job and waiting to be submitted."}</p></div><strong>{reconciliationRequired ? "Reconciliation required" : invoice.status === "paid" ? "Paid" : invoice.status === "credited" ? "Credited" : providerAccepted ? "Issued" : "Needs attention"}</strong></header>
     {rebateOffer}
@@ -391,12 +399,12 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     {invoice.credits.length > 0 && <div className="crm-invoice-credit-list"><strong>Credits</strong>{invoice.credits.map((credit) => <article key={credit.creditNumber}><span><b>{credit.creditNumber}</b><small>{credit.description} | {credit.reason}</small></span><strong>-{money(credit.totalCents)}</strong></article>)}</div>}
     {invoice.canDownloadPdf && <button type="button" className="btn" disabled={Boolean(busy)} onClick={() => void downloadPdf()}>{busy === "download_pdf" ? "Preparing PDF..." : "Download invoice PDF"}</button>}
     {reconciliationRequired && <p className="crm-wizard-message" role="alert">This invoice requires support reconciliation before any correction or resend. The customer may already have received it.</p>}
-    {!providerAccepted && !reconciliationRequired && <><button ref={previewTriggerRef} type="button" className="btn" disabled={Boolean(busy) || !canSendInvoice} onClick={() => setPreviewOpen(true)}>Preview and send invoice</button>{!canSendInvoice && <p className="crm-wizard-message" role="status">Sending is unavailable until a valid email is added to the customer record. The invoice draft remains saved in this job.</p>}</>}
-    {invoice.canCorrect && <details className="crm-invoice-correction"><summary>Correct this draft before sending</summary><p>Saving creates a new revision. Earlier invoice snapshots remain unchanged in history.</p><div className="crm-invoice-correction-lines">{draftLines.map((line) => <div key={line.id}><input aria-label="Invoice line description" maxLength={180} value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} /><input aria-label="Invoice line amount before GST" type="number" min="0.01" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} /><select aria-label="Invoice line GST" value={line.taxCode} onChange={(event) => updateLine(line.id, { taxCode: event.target.value as "gst" | "none" })}><option value="gst">Add GST</option><option value="none">GST-free</option></select><button type="button" disabled={draftLines.length === 1} onClick={() => setDraftLines((current) => current.filter((item) => item.id !== line.id))}>Remove</button></div>)}</div><button type="button" onClick={() => setDraftLines((current) => [...current, { id: crypto.randomUUID(), description: "", amount: "", taxCode: "gst" }])}>Add line</button><div className="crm-invoice-correction-meta"><label><span>Discount (ex GST)</span><input aria-label="Corrected invoice discount before GST" type="number" min="0" step="0.01" value={draftDiscount} onChange={(event) => setDraftDiscount(event.target.value)} /></label><label><span>Due date</span><input type="date" min={australiaSydneyToday} value={draftDueAt} onChange={(event) => setDraftDueAt(event.target.value)} /></label><label><span>Reason, optional</span><input maxLength={240} value={draftReason} onChange={(event) => setDraftReason(event.target.value)} placeholder="What changed?" /></label></div><button type="button" className="btn" disabled={Boolean(busy) || !draftLines.every((line) => line.description.trim() && toCents(line.amount) > 0) || draftDiscountCents < 0 || draftDiscountCents >= draftSubtotalCents || !draftDueAt} onClick={() => void correctDraft()}>{busy === "correct_draft" ? "Saving correction..." : "Save corrected draft"}</button></details>}
-    {["issued", "part_credited"].includes(invoice.status) && invoice.outstandingCents > 0 && <details className="crm-invoice-credit"><summary>Issue a credit</summary><p>The issued invoice stays unchanged. The credit reduces only its outstanding balance.</p>{invoice.creditBlockedReason ? <div className="crm-wizard-message">{invoice.creditBlockedReason} Resolve that activity before issuing a TLink credit.</div> : <><div className="crm-invoice-credit-fields"><label><span>Description</span><input maxLength={180} value={creditDescription} onChange={(event) => setCreditDescription(event.target.value)} placeholder="Credit for changed scope" /></label><label><span>Amount before GST</span><input type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} /></label><label><span>GST</span><select value={creditTaxCode} onChange={(event) => setCreditTaxCode(event.target.value as "gst" | "none")}><option value="gst">Add GST</option><option value="none">GST-free</option></select></label><label><span>Reason</span><input maxLength={500} value={creditReason} onChange={(event) => setCreditReason(event.target.value)} placeholder="Why is this credit being issued?" /></label></div><button type="button" className="btn" disabled={Boolean(busy) || !canIssueCredit || !creditDescription.trim() || !creditReason.trim() || toCents(creditAmount) < 1} onClick={() => void issueCredit()}>{busy === "issue_credit" ? "Issuing credit..." : "Issue credit"}</button></>}</details>}
+    {canManageInvoice && !providerAccepted && !reconciliationRequired && <><button ref={previewTriggerRef} type="button" className="btn" disabled={Boolean(busy) || !canSendInvoice} onClick={() => setPreviewOpen(true)}>Preview and send invoice</button>{!canSendInvoice && <p className="crm-wizard-message" role="status">Sending is unavailable until a valid email is added to the customer record. The invoice draft remains saved in this job.</p>}</>}
+    {canManageInvoice && invoice.canCorrect && <details className="crm-invoice-correction"><summary>Correct this draft before sending</summary><p>Saving creates a new revision. Earlier invoice snapshots remain unchanged in history.</p><div className="crm-invoice-correction-lines">{draftLines.map((line) => <div key={line.id}><input aria-label="Invoice line description" maxLength={180} value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} /><input aria-label="Invoice line amount before GST" type="number" min="0.01" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} /><select aria-label="Invoice line GST" value={line.taxCode} onChange={(event) => updateLine(line.id, { taxCode: event.target.value as "gst" | "none" })}><option value="gst">Add GST</option><option value="none">GST-free</option></select><button type="button" disabled={draftLines.length === 1} onClick={() => setDraftLines((current) => current.filter((item) => item.id !== line.id))}>Remove</button></div>)}</div><button type="button" onClick={() => setDraftLines((current) => [...current, { id: crypto.randomUUID(), description: "", amount: "", taxCode: "gst" }])}>Add line</button><div className="crm-invoice-correction-meta">{canApplyDiscounts && <label><span>Discount (ex GST)</span><input aria-label="Corrected invoice discount before GST" type="number" min="0" step="0.01" value={draftDiscount} onChange={(event) => setDraftDiscount(event.target.value)} /></label>}<label><span>Due date</span><input type="date" min={australiaSydneyToday} value={draftDueAt} onChange={(event) => setDraftDueAt(event.target.value)} /></label><label><span>Reason, optional</span><input maxLength={240} value={draftReason} onChange={(event) => setDraftReason(event.target.value)} placeholder="What changed?" /></label></div><button type="button" className="btn" disabled={Boolean(busy) || !draftLines.every((line) => line.description.trim() && toCents(line.amount) > 0) || draftDiscountCents < 0 || draftDiscountCents >= draftSubtotalCents || !draftDueAt} onClick={() => void correctDraft()}>{busy === "correct_draft" ? "Saving correction..." : "Save corrected draft"}</button></details>}
+    {canManageInvoice && canApplyDiscounts && ["issued", "part_credited"].includes(invoice.status) && invoice.outstandingCents > 0 && <details className="crm-invoice-credit"><summary>Issue a credit</summary><p>The issued invoice stays unchanged. The credit reduces only its outstanding balance.</p>{invoice.creditBlockedReason ? <div className="crm-wizard-message">{invoice.creditBlockedReason} Resolve that activity before issuing a TLink credit.</div> : <><div className="crm-invoice-credit-fields"><label><span>Description</span><input maxLength={180} value={creditDescription} onChange={(event) => setCreditDescription(event.target.value)} placeholder="Credit for changed scope" /></label><label><span>Amount before GST</span><input type="number" min="0.01" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} /></label><label><span>GST</span><select value={creditTaxCode} onChange={(event) => setCreditTaxCode(event.target.value as "gst" | "none")}><option value="gst">Add GST</option><option value="none">GST-free</option></select></label><label><span>Reason</span><input maxLength={500} value={creditReason} onChange={(event) => setCreditReason(event.target.value)} placeholder="Why is this credit being issued?" /></label></div><button type="button" className="btn" disabled={Boolean(busy) || !canIssueCredit || !creditDescription.trim() || !creditReason.trim() || toCents(creditAmount) < 1} onClick={() => void issueCredit()}>{busy === "issue_credit" ? "Issuing credit..." : "Issue credit"}</button></>}</details>}
     {invoice.revisions.length > 1 && <details className="crm-invoice-history"><summary>Invoice history | {invoice.revisions.length} revisions</summary>{invoice.revisions.map((revision) => <article key={revision.revision}><span><strong>Revision {revision.revision}</strong><small>{new Date(revision.createdAt).toLocaleString("en-AU")} | Due {revision.dueAt}</small></span><b>{money(revision.totalCents)}</b></article>)}</details>}
     {status && <p className="crm-status" role="status">{status}</p>}
-    {previewOpen && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreviewOpen(false); }}>
+    {canManageInvoice && previewOpen && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPreviewOpen(false); }}>
       <section ref={previewDialogRef} className="crm-invoice-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="invoice-preview-title" aria-describedby="invoice-preview-delivery" tabIndex={-1}>
         <header><div><span>Check before sending</span><strong id="invoice-preview-title">{invoice.document?.business.name || invoice.invoiceNumber}</strong><small>{invoice.invoiceNumber} | {customerName} | {jobTitle}</small></div><button ref={previewCloseButtonRef} type="button" onClick={() => setPreviewOpen(false)} aria-label="Close invoice preview">Close</button></header>
         {invoice.document && <div className="crm-invoice-credit-list">
@@ -415,7 +423,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
         <footer><button type="button" onClick={() => setPreviewOpen(false)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !canSendInvoice} onClick={() => void sendInvoice()}>{busy === "retry_delivery" ? "Sending..." : "Confirm and send"}</button></footer>
       </section>
     </div>}
-  </section>{invoice.status !== "draft" && invoice.outstandingCents > 0 && <details className="crm-quick-invoice-handoff"><summary>Accounting and payment, optional</summary><p>Reuse the remaining TLink balance without entering the customer or total again.</p>
+  </section>{canManageInvoice && onOpenIntegrations && invoice.status !== "draft" && invoice.outstandingCents > 0 && <details className="crm-quick-invoice-handoff"><summary>Accounting and payment, optional</summary><p>Reuse the remaining TLink balance without entering the customer or total again.</p>
     {invoice.creditedCents === 0 ? <TradeAccountingPanel user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer invoiceAmountCents={invoice.totalCents}
       invoiceReference={invoice.invoiceNumber} invoiceLines={invoice.lines.map((line) => ({ lineId: line.lineId, section: line.taxCode === "gst" ? "GST taxable" : "GST-free", description: line.description, quantityMilli: Math.max(1, line.quantity || 1) * 1000, totalCents: line.totalCents }))}
       invoiceSubtotalCents={invoice.subtotalCents - invoice.discountCents} invoiceTaxCents={invoice.taxCents} customerName={customerName} jobTitle={jobTitle} invoiceTerms={invoice.document?.payment.terms || ""} invoiceSource="quick_invoice" onOpenIntegrations={onOpenIntegrations} onChanged={onChanged} />

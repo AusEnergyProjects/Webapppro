@@ -1,7 +1,7 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
-import { assignedJob, canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { encryptProtectedPayload } from "@/lib/trade-integration-crypto";
 import { photoRequestDeliveryOverview, retryPhotoRequestDelivery, sendPhotoRequestDelivery } from "@/lib/photo-request-delivery-server";
 import { PHOTO_REVIEW_STATUSES, photoRetakeGuidance } from "@/lib/photo-request-review";
@@ -107,7 +107,7 @@ function eventStatement(db: D1Database, values: {
 }
 
 async function managedDirectJob(access: TeamAccess, workOrderId: string) {
-  if (!canDispatch(access)) throw new Error("PHOTO_REQUEST_MANAGEMENT_REQUIRED");
+  if (!access.isOwner && !access.canManageFieldEvidence) throw new Error("PHOTO_REQUEST_MANAGEMENT_REQUIRED");
   await assignedJob(access, workOrderId);
   const job = await getD1().prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.source_type, w.revision,
       w.assignee_member_id, d.crm_customer_id, d.customer_source

@@ -67,9 +67,10 @@ test("customer and field activity powers one unread installer review queue", () 
 
 test("newly allocated leads enter the owner scoped unread work queue without household details", () => {
   const queryMatch = route.match(
-    /db\.prepare\(`(SELECT assignment\.id opportunity_match_id, assignment\.matched_at[\s\S]*?ORDER BY assignment\.matched_at DESC LIMIT 80)`\)\s*\.bind\(access\.ownerUid, scope\.role\)/,
+    /db\.prepare\(`(SELECT assignment\.id opportunity_match_id, assignment\.matched_at[\s\S]*?ORDER BY assignment\.matched_at DESC LIMIT 80)`\)\s*\.bind\(access\.ownerUid\)/,
   );
   assert.ok(queryMatch, "the allocated lead query must remain identifiable and owner scoped");
+  assert.match(route, /access\.canViewQuotes && scope\.scope === "team" \? db\.prepare/);
 
   const db = new DatabaseSync(":memory:");
   db.exec(`CREATE TABLE trade_opportunities (
@@ -91,11 +92,10 @@ test("newly allocated leads enter the owner scoped unread work queue without hou
   insert.run("other-owner-match", "open-lead", "owner-b", "offered", "2026-07-31T00:02:00.000Z");
   insert.run("closed-match", "closed-lead", "owner-a", "offered", "2026-07-31T00:01:00.000Z");
 
-  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a", "owner").map((row) => ({ ...row })), [{
+  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a").map((row) => ({ ...row })), [{
     opportunity_match_id: "owner-match",
     matched_at: "2026-07-31T00:03:00.000Z",
   }]);
-  assert.deepEqual(db.prepare(queryMatch[1]).all("owner-a", "technician"), []);
   db.close();
 
   assert.match(route, /id: `platform-lead-allocated:\$\{String\(row\.opportunity_match_id\)\}`/);
@@ -115,7 +115,7 @@ test("private job files preview in place and retain an explicit download action"
 });
 
 test("job data refreshes preserve the active job tab", () => {
-  assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}`\}/);
+  assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{selectedJobDetail\.assigneeMemberId\}`\}/);
   assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{refreshNonce\}`\}/);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{refreshNonce\}`\}/);

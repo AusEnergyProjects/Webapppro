@@ -47,7 +47,8 @@ test("the additive migration stores owner-scoped templates, immutable versions a
 });
 
 test("template management is role protected, owner scoped, versioned and archive safe", () => {
-  assert.match(templateRoute, /canDispatch/);
+  assert.match(templateRoute, /canManageFieldEvidence/);
+  assert.doesNotMatch(templateRoute, /canDispatch|access\.role/);
   assert.match(templateRoute, /firebase_uid = \?/);
   assert.match(templateRoute, /PHOTO_TEMPLATE_MANAGEMENT_REQUIRED/);
   assert.match(templateRoute, /INSERT INTO trade_crm_photo_template_versions/);

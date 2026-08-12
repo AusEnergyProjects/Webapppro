@@ -86,7 +86,8 @@ test("installer delivery reuses current contact, consent, opt-out, provider and 
   assert.match(server, /Number\(delivery\.attempts\) >= 3/);
   assert.match(server, /PHOTO_REQUEST_RESEND_LIMIT/);
   assert.match(server, /photoRequestReminderAvailable/);
-  assert.match(route, /canDispatch/);
+  assert.match(route, /canManageFieldEvidence/);
+  assert.doesNotMatch(route, /canDispatch|access\.role/);
   assert.match(route, /consentConfirmed/);
   assert.match(route, /if \(!delivery\.ok\)/);
   assert.match(route, /encrypted_token = ''/);

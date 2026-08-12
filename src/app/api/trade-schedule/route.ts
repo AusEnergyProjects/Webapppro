@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { canAssignJob, canViewSchedule, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { addCalendarDays, appointmentEndsAt, assertFutureAppointment, australiaLocalDateTime, defaultWorkingWindow, insideWorkingWindow, localDayAndMinute, normaliseLocalDateTime, normaliseScheduleRangeWeeks, normaliseWeekStart, scheduleConflictIds } from "@/lib/trade-schedule";
 import { parsePreferredWindows } from "@/lib/appointment-rescheduling";
@@ -11,6 +11,7 @@ import {
   plannedComplianceIntentReplanStatements,
   previousTradeScheduleMutationGuardStatement,
 } from "@/lib/trade-compliance-intent-replan-server";
+import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
 
 export const runtime = "edge";
 
@@ -24,7 +25,11 @@ function errorResponse(error: unknown) {
   }
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["TEAM_ACCESS_REQUIRED", "ACCOUNT_INACTIVE", "INSTALLER_ONLY"].includes(code)) return adminJson({ ok: false, error: "This account does not currently have active installer scheduling access." }, 403);
-  if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can change the team schedule." }, 403);
+  if (code === "SCHEDULE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not include the schedule." }, 403);
+  if (code === "DISPATCH_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow this schedule change." }, 403);
+  if (code === "RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
+  if (code === "ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assigning this job to another person." }, 403);
+  if (code === "MEMBER_CAPABILITY_REQUIRED") return adminJson({ ok: false, error: "This team member is not enabled for the job's service category." }, 409);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active team member." }, 404);
   if (code === "APPOINTMENT_NOT_FOUND") return adminJson({ ok: false, error: "Appointment not found." }, 404);
   if (code === "RESCHEDULE_REQUEST_NOT_FOUND") return adminJson({ ok: false, error: "Appointment change request not found." }, 404);
@@ -43,10 +48,37 @@ function errorResponse(error: unknown) {
 }
 
 async function activeMember(ownerUid: string, memberId: string) {
-  const row = await getD1().prepare(`SELECT id, display_name, role FROM trade_team_members
+  const row = await getD1().prepare(`SELECT id, member_uid, display_name, capabilities FROM trade_team_members
     WHERE id = ? AND owner_uid = ? AND status = 'active'`).bind(memberId, ownerUid).first<Record<string, unknown>>();
   if (!row) throw new Error("MEMBER_NOT_FOUND");
   return row;
+}
+
+function parsedCapabilities(value: unknown) {
+  try { const parsed = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed.map(String) : []; }
+  catch { return []; }
+}
+
+function assertScheduleTarget(access: TeamAccess, memberId: string) {
+  if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) {
+    throw new Error("RESCHEDULE_REQUIRED");
+  }
+}
+
+function assertCurrentScheduleAssignment(access: TeamAccess, memberId: string) {
+  if (!canRescheduleWithinScope(access, memberId)) throw new Error("RESCHEDULE_REQUIRED");
+}
+
+function assertAssignmentChange(access: TeamAccess, fromMemberId: string, toMemberId: string) {
+  if (fromMemberId === toMemberId) return;
+  if (!canAssignJob(access, fromMemberId, toMemberId)) throw new Error("ASSIGN_REQUIRED");
+}
+
+function assertMemberCapability(member: Record<string, unknown>, serviceCategory: string, ownerUid: string) {
+  if (String(member.member_uid || "") !== ownerUid && serviceCategory
+    && !parsedCapabilities(member.capabilities).includes(serviceCategory)) {
+    throw new Error("MEMBER_CAPABILITY_REQUIRED");
+  }
 }
 
 async function assertScheduleAvailable(ownerUid: string, memberId: string, startsAt: string, endsAt: string, excludeAppointmentId = "") {
@@ -62,15 +94,19 @@ async function assertScheduleAvailable(ownerUid: string, memberId: string, start
   if (unavailable) throw new Error("UNAVAILABLE_CONFLICT");
 }
 
-async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks = 1) {
-  const db = getD1(); const rangeEnd = addCalendarDays(rangeStart, normaliseScheduleRangeWeeks(rangeWeeks) * 7);
+async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeeks = 1) {
+  const db = getD1(); const ownerUid = access.ownerUid;
+  const ownOnly = !access.isOwner && access.scheduleScope === "own";
+  const rangeEnd = addCalendarDays(rangeStart, normaliseScheduleRangeWeeks(rangeWeeks) * 7);
   const [members, hours, unavailable, appointmentRows, unassignedJobs, rescheduleRows] = await Promise.all([
-    db.prepare(`SELECT id, member_uid, display_name, role, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
-      ORDER BY display_name, email`).bind(ownerUid).all<Record<string, unknown>>(),
+    db.prepare(`SELECT id, member_uid, display_name, status FROM trade_team_members WHERE owner_uid = ? AND status = 'active'
+      AND (? = 0 OR id = ?) ORDER BY display_name, email`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, weekday, start_minute, end_minute, is_available FROM trade_team_working_hours
-      WHERE owner_uid = ? ORDER BY team_member_id, weekday`).bind(ownerUid).all<Record<string, unknown>>(),
+      WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) ORDER BY team_member_id, weekday`)
+      .bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
     db.prepare(`SELECT id, team_member_id, starts_at, ends_at, reason FROM trade_team_unavailability
-      WHERE owner_uid = ? AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`).bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
+      WHERE owner_uid = ? AND (? = 0 OR team_member_id = ?) AND starts_at < ? AND ends_at >= ? ORDER BY starts_at`)
+      .bind(ownerUid, ownOnly ? 1 : 0, access.memberId, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
     db.prepare(`SELECT a.id, a.work_order_id, a.appointment_type, a.title, a.starts_at, a.ends_at, a.assignee_member_id,
         a.assignee_label, a.status, a.revision, w.work_number, w.service_category, w.site_area, w.source_type,
         d.customer_source, d.quote_status, d.quoted_value_cents, c.first_name customer_first_name, c.last_name customer_last_name,
@@ -80,9 +116,10 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
       LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
       LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
       WHERE a.firebase_uid = ? AND a.status IN ('scheduled', 'en_route', 'arrived', 'in_progress') AND a.starts_at < ?
-        AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? ORDER BY a.starts_at, a.created_at`)
-      .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`).all<Record<string, unknown>>(),
-    db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.priority, w.stage, w.revision, w.source_type,
+        AND COALESCE(NULLIF(a.ends_at, ''), a.starts_at) >= ? AND (? = 0 OR a.assignee_member_id = ?)
+      ORDER BY a.starts_at, a.created_at`)
+      .bind(ownerUid, `${rangeEnd}T00:00`, `${rangeStart}T00:00`, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
+    (!access.canAssignJobs || ownOnly) ? Promise.resolve({ results: [] as Record<string, unknown>[] }) : db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.priority, w.stage, w.revision, w.source_type,
         w.assignee_member_id, w.assignee_label,
         d.customer_source, c.first_name customer_first_name, c.last_name customer_last_name,
         c.business_name customer_business_name, s.site_label, s.suburb, s.address_state, s.postcode
@@ -95,17 +132,20 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
             AND pending.firebase_uid = w.firebase_uid AND pending.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
         )
       ORDER BY w.priority = 'urgent' DESC, w.updated_at DESC LIMIT 100`).bind(ownerUid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT r.id, r.appointment_id, r.work_order_id, r.status, r.preferred_windows, r.reason, r.access_notes,
+    !access.canRescheduleJobs ? Promise.resolve({ results: [] as Record<string, unknown>[] }) : db.prepare(`SELECT r.id, r.appointment_id, r.work_order_id, r.status, r.preferred_windows, r.reason, r.access_notes,
         r.requested_appointment_revision, r.original_starts_at, r.original_ends_at, r.proposed_starts_at,
         r.proposed_ends_at, r.proposed_assignee_member_id, r.proposed_assignee_label, r.decision_note,
         r.revision, r.requested_at, r.decided_at, a.title, a.starts_at current_starts_at,
         a.ends_at current_ends_at, a.assignee_member_id current_assignee_member_id,
-        a.assignee_label current_assignee_label, a.revision appointment_revision, w.work_number
+        a.assignee_label current_assignee_label, a.revision appointment_revision, w.work_number,
+        w.service_category, w.source_type, d.customer_source
       FROM trade_crm_appointment_reschedule_requests r
       JOIN trade_crm_appointments a ON a.id = r.appointment_id AND a.firebase_uid = r.firebase_uid
       JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
+      LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
       WHERE r.firebase_uid = ? AND r.status IN ('pending', 'alternative_proposed')
-      ORDER BY r.requested_at LIMIT 100`).bind(ownerUid).all<Record<string, unknown>>(),
+        AND (? = 0 OR a.assignee_member_id = ?)
+      ORDER BY r.requested_at LIMIT 100`).bind(ownerUid, ownOnly ? 1 : 0, access.memberId).all<Record<string, unknown>>(),
   ]);
   const workingHours = hours.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, weekday: Number(row.weekday), startMinute: Number(row.start_minute), endMinute: Number(row.end_minute), isAvailable: Boolean(row.is_available) }));
   const conflictIds = scheduleConflictIds(appointmentRows.results.map((row) => ({
@@ -120,39 +160,47 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
     const savedHours = workingHoursByMemberAndDay.get(`${row.assignee_member_id}:${weekday}`);
     const workingWindow = savedHours || defaultWorkingWindow(weekday);
     const customerDisplayName = protectedJob ? "Australian Energy Assessments protected customer"
-      : row.customer_source === "trade_owned"
+      : ["trade_owned", "public_lead_released"].includes(String(row.customer_source || ""))
         ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
         : "No customer linked";
     const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
-    return { id: row.id, workOrderId: row.work_order_id, workNumber: row.work_number, title: row.title, appointmentType: row.appointment_type,
+    return { id: row.id, workOrderId: row.work_order_id, workNumber: row.work_number,
+      title: protectedJob ? `${String(row.service_category || "Service")} appointment` : row.title, appointmentType: row.appointment_type,
       startsAt: row.starts_at, endsAt: row.ends_at, assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label,
       status: row.status, revision: Number(row.revision || 1), serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
       siteSummary: protectedJob ? "Australian Energy Assessments protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
-      quoteStatus: String(row.quote_status || "not_started"), quotedValueCents: Number(row.quoted_value_cents || 0), protectedJob, conflicts,
+      quoteStatus: access.canViewQuotes ? String(row.quote_status || "not_started") : "restricted",
+      quotedValueCents: access.canViewQuotes ? Number(row.quoted_value_cents || 0) : 0, protectedJob, conflicts,
       outsideWorkingHours: !insideWorkingWindow(String(row.starts_at), String(row.ends_at || row.starts_at), workingWindow) };
   });
   return { weekStart: rangeStart, weekEnd: rangeEnd, rangeStart, rangeEnd, rangeWeeks,
-    members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, role: row.role, status: row.status, isOwner: row.member_uid === ownerUid })),
+    access: { permissions: { canAssignJobs: access.canAssignJobs, canRescheduleJobs: access.canRescheduleJobs,
+      jobScope: access.jobScope, scheduleScope: access.scheduleScope } },
+    members: members.results.map((row) => ({ id: row.id, displayName: row.display_name, status: row.status, isOwner: row.member_uid === ownerUid })),
     workingHours,
     unavailability: unavailable.results.map((row) => ({ id: row.id, teamMemberId: row.team_member_id, startsAt: row.starts_at, endsAt: row.ends_at, reason: row.reason })),
-    appointments, rescheduleRequests: rescheduleRows.results.map((row) => ({ id: row.id, appointmentId: row.appointment_id,
-      workOrderId: row.work_order_id, workNumber: row.work_number, title: row.title, status: row.status,
-      preferredWindows: parsePreferredWindows(row.preferred_windows), reason: row.reason, accessNotes: row.access_notes,
+    appointments, rescheduleRequests: rescheduleRows.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private"; return ({ id: row.id, appointmentId: row.appointment_id,
+      workOrderId: row.work_order_id, workNumber: row.work_number,
+      title: protectedJob ? "Appointment change request" : row.title, status: row.status,
+      preferredWindows: parsePreferredWindows(row.preferred_windows),
+      reason: protectedJob ? "Customer requested a schedule change" : row.reason,
+      accessNotes: protectedJob ? "" : row.access_notes,
       requestedAppointmentRevision: Number(row.requested_appointment_revision), originalStartsAt: row.original_starts_at,
       originalEndsAt: row.original_ends_at, proposedStartsAt: row.proposed_starts_at, proposedEndsAt: row.proposed_ends_at,
       proposedAssigneeMemberId: row.proposed_assignee_member_id, proposedAssigneeLabel: row.proposed_assignee_label,
       decisionNote: row.decision_note, revision: Number(row.revision), requestedAt: row.requested_at, decidedAt: row.decided_at,
       currentStartsAt: row.current_starts_at, currentEndsAt: row.current_ends_at,
       currentAssigneeMemberId: row.current_assignee_member_id, currentAssigneeLabel: row.current_assignee_label,
-      appointmentRevision: Number(row.appointment_revision) })),
-    unassignedJobs: unassignedJobs.results.map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
+      appointmentRevision: Number(row.appointment_revision) }); }),
+    unassignedJobs: (ownOnly ? [] : unassignedJobs.results).map((row) => { const protectedJob = row.source_type === "opportunity" || row.customer_source === "platform_private";
       const customerDisplayName = protectedJob ? "Australian Energy Assessments protected customer"
-        : row.customer_source === "trade_owned"
+        : ["trade_owned", "public_lead_released"].includes(String(row.customer_source || ""))
           ? String(row.customer_business_name || "").trim() || [row.customer_first_name, row.customer_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || "Customer"
           : "No customer linked";
       const suburbLabel = protectedJob ? String(row.site_area || "Protected service region") : String(row.suburb || row.site_area || "Suburb not recorded");
-      return { id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category, customerDisplayName, suburbLabel,
+      return { id: row.id, workNumber: row.work_number,
+      title: protectedJob ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category, customerDisplayName, suburbLabel,
       siteLabel: protectedJob ? row.site_area || "Protected service region" : row.site_label || "Site not selected",
       siteSummary: protectedJob ? "Australian Energy Assessments protected job" : [row.suburb, row.address_state, row.postcode].filter(Boolean).join(" "),
       priority: row.priority, stage: row.stage, revision: Number(row.revision || 1), assigneeMemberId: row.assignee_member_id, assigneeLabel: row.assignee_label }; }) };
@@ -160,19 +208,21 @@ async function schedulePayload(ownerUid: string, rangeStart: string, rangeWeeks 
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
-  try { const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
+  try { const access = await requireInstallerTeamAccess(request); if (!canViewSchedule(access)) throw new Error("SCHEDULE_VIEW_REQUIRED");
     const search = new URL(request.url).searchParams;
     const rangeStart = normaliseWeekStart(search.get("rangeStart") || search.get("weekStart"));
     const rangeWeeks = normaliseScheduleRangeWeeks(search.get("rangeWeeks"), 1);
-    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, rangeStart, rangeWeeks)) });
+    return adminJson({ ok: true, ...(await schedulePayload(access, rangeStart, rangeWeeks)) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
+    const access = await requireInstallerTeamAccess(request);
     const body = await request.json() as Record<string, unknown>; const action = cleanAdminText(body.action, 40); const db = getD1(); const now = new Date().toISOString();
+    if (!access.isOwner && !access.canRescheduleJobs) throw new Error("RESCHEDULE_REQUIRED");
+    const ownOnly = !access.isOwner && access.scheduleScope === "own";
     const rangeStart = normaliseWeekStart(body.rangeStart || body.weekStart); const rangeWeeks = normaliseScheduleRangeWeeks(body.rangeWeeks, 1);
     const account = await db.prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?").bind(access.ownerUid).first<Record<string, unknown>>();
     const localNow = australiaLocalDateTime(String(account?.address_state || "NSW"));
@@ -180,6 +230,7 @@ export async function PATCH(request: Request) {
     let syncAppointmentId = "";
     if (action === "save_working_hours") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
+      if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
       const weekday = Number(body.weekday); const startMinute = Number(body.startMinute); const endMinute = Number(body.endMinute); const isAvailable = Boolean(body.isAvailable);
       if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !Number.isInteger(startMinute) || !Number.isInteger(endMinute)
         || startMinute < 0 || endMinute > 1440 || startMinute >= endMinute) throw new Error("INVALID_HOURS");
@@ -189,23 +240,31 @@ export async function PATCH(request: Request) {
         .bind(crypto.randomUUID(), access.ownerUid, memberId, weekday, startMinute, endMinute, isAvailable ? 1 : 0, now, now).run();
     } else if (action === "add_unavailability") {
       const memberId = cleanAdminText(body.memberId, 180); await activeMember(access.ownerUid, memberId);
+      if (!access.isOwner && access.scheduleScope === "own" && memberId !== access.memberId) throw new Error("DISPATCH_REQUIRED");
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = normaliseLocalDateTime(body.endsAt); if (endsAt <= startsAt) throw new Error("INVALID_TIME");
       await db.prepare(`INSERT INTO trade_team_unavailability (id, owner_uid, team_member_id, starts_at, ends_at, reason, created_by_uid, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), access.ownerUid, memberId, startsAt, endsAt, cleanAdminText(body.reason, 200) || "Unavailable", access.actorUid, now, now).run();
     } else if (action === "remove_unavailability") {
-      await db.prepare("DELETE FROM trade_team_unavailability WHERE id = ? AND owner_uid = ?").bind(cleanAdminText(body.id, 180), access.ownerUid).run();
+      const id = cleanAdminText(body.id, 180);
+      const row = await db.prepare("SELECT team_member_id FROM trade_team_unavailability WHERE id = ? AND owner_uid = ?")
+        .bind(id, access.ownerUid).first<Record<string, unknown>>();
+      if (!row) throw new Error("MEMBER_NOT_FOUND");
+      if (!access.isOwner && access.scheduleScope === "own" && row.team_member_id !== access.memberId) throw new Error("DISPATCH_REQUIRED");
+      await db.prepare("DELETE FROM trade_team_unavailability WHERE id = ? AND owner_uid = ?").bind(id, access.ownerUid).run();
     } else if (action === "review_reschedule_request") {
       const requestId = cleanAdminText(body.requestId, 180); const decision = cleanAdminText(body.decision, 40);
       if (!["accepted", "rejected", "alternative_proposed"].includes(decision)) throw new Error("INVALID_DECISION");
       const current = await db.prepare(`SELECT r.*, a.starts_at current_starts_at, a.ends_at current_ends_at,
           a.assignee_member_id current_assignee_member_id, a.assignee_label current_assignee_label,
-          a.revision appointment_revision, a.status appointment_status, w.revision job_revision
+          a.revision appointment_revision, a.status appointment_status, w.revision job_revision,
+          w.service_category
         FROM trade_crm_appointment_reschedule_requests r
         JOIN trade_crm_appointments a ON a.id = r.appointment_id AND a.firebase_uid = r.firebase_uid
         JOIN trade_work_orders w ON w.id = r.work_order_id AND w.firebase_uid = r.firebase_uid
         WHERE r.id = ? AND r.firebase_uid = ? AND r.status IN ('pending', 'alternative_proposed')`)
         .bind(requestId, access.ownerUid).first<Record<string, unknown>>();
       if (!current || current.appointment_status !== "scheduled") throw new Error("RESCHEDULE_REQUEST_NOT_FOUND");
+      assertCurrentScheduleAssignment(access, String(current.current_assignee_member_id || ""));
       if (Number(body.expectedRequestRevision) !== Number(current.revision)
         || Number(body.expectedAppointmentRevision) !== Number(current.appointment_revision)) throw new Error("REVISION_CONFLICT");
       const requestRevision = Number(current.revision) + 1; const decisionNote = cleanAdminText(body.decisionNote, 500);
@@ -213,8 +272,13 @@ export async function PATCH(request: Request) {
         await db.batch([
           db.prepare(`UPDATE trade_crm_appointment_reschedule_requests SET status = 'rejected', active_key = ?,
             decision_note = ?, revision = ?, decided_by_uid = ?, decided_at = ?, updated_at = ?
-            WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(
-              `closed:${requestId}`, decisionNote, requestRevision, access.actorUid, now, now, requestId, access.ownerUid, current.revision),
+            WHERE id = ? AND firebase_uid = ? AND revision = ?
+              AND (? = 0 OR EXISTS (SELECT 1 FROM trade_crm_appointments current_appointment
+                WHERE current_appointment.id = trade_crm_appointment_reschedule_requests.appointment_id
+                  AND current_appointment.firebase_uid = trade_crm_appointment_reschedule_requests.firebase_uid
+                  AND current_appointment.assignee_member_id = ?))`).bind(
+              `closed:${requestId}`, decisionNote, requestRevision, access.actorUid, now, now, requestId, access.ownerUid, current.revision,
+              ownOnly ? 1 : 0, access.memberId),
           db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
             (id, request_id, appointment_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type,
              request_revision, from_starts_at, from_ends_at, summary, created_at)
@@ -228,7 +292,10 @@ export async function PATCH(request: Request) {
               crypto.randomUUID(), current.work_order_id, access.ownerUid, "Customer appointment change request rejected. The existing schedule remains unchanged.", now),
         ]);
       } else {
-        const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
+        const memberId = cleanAdminText(body.memberId, 180); assertScheduleTarget(access, memberId);
+        assertAssignmentChange(access, String(current.current_assignee_member_id || ""), memberId);
+        const member = await activeMember(access.ownerUid, memberId);
+        assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
         const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
         assertFutureAppointment(startsAt, localNow);
         await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt, String(current.appointment_id));
@@ -237,9 +304,14 @@ export async function PATCH(request: Request) {
             db.prepare(`UPDATE trade_crm_appointment_reschedule_requests SET status = 'alternative_proposed',
               proposed_starts_at = ?, proposed_ends_at = ?, proposed_assignee_member_id = ?, proposed_assignee_label = ?,
               decision_note = ?, revision = ?, decided_by_uid = ?, decided_at = ?, updated_at = ?
-              WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(
+              WHERE id = ? AND firebase_uid = ? AND revision = ?
+                AND EXISTS (SELECT 1 FROM trade_crm_appointments current_appointment
+                  WHERE current_appointment.id = trade_crm_appointment_reschedule_requests.appointment_id
+                    AND current_appointment.firebase_uid = trade_crm_appointment_reschedule_requests.firebase_uid
+                    AND current_appointment.assignee_member_id = ?)`)
+              .bind(
                 startsAt, endsAt, memberId, member.display_name, decisionNote, requestRevision, access.actorUid, now, now,
-                requestId, access.ownerUid, current.revision),
+                requestId, access.ownerUid, current.revision, current.current_assignee_member_id),
             db.prepare(`INSERT INTO trade_crm_appointment_reschedule_events
               (id, request_id, appointment_id, work_order_id, firebase_uid, actor_type, actor_uid, event_type,
                request_revision, from_starts_at, from_ends_at, to_starts_at, to_ends_at, summary, created_at)
@@ -271,11 +343,13 @@ export async function PATCH(request: Request) {
                 current.current_assignee_label, requestId, access.actorUid, now),
             db.prepare(`UPDATE trade_crm_appointments SET starts_at = ?, ends_at = ?, assignee_member_id = ?, assignee_label = ?,
               revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?
+                AND assignee_member_id = ?
                 AND EXISTS (SELECT 1 FROM trade_crm_appointment_reschedule_requests guard
                   WHERE guard.id = ? AND guard.firebase_uid = ? AND guard.revision = ?
                     AND guard.status IN ('pending', 'alternative_proposed'))`).bind(
                 startsAt, endsAt, memberId, member.display_name, appointmentRevision, now, current.appointment_id,
-                access.ownerUid, current.appointment_revision, requestId, access.ownerUid, current.revision),
+                access.ownerUid, current.appointment_revision, current.current_assignee_member_id,
+                requestId, access.ownerUid, current.revision),
             db.prepare(`INSERT INTO trade_crm_appointment_revisions
               (id, appointment_id, work_order_id, firebase_uid, revision, starts_at, ends_at, assignee_member_id,
                assignee_label, change_source, source_reference, changed_by_uid, created_at)
@@ -291,9 +365,10 @@ export async function PATCH(request: Request) {
             db.prepare(`UPDATE trade_work_order_tasks SET status = 'completed', completed_at = ?, revision = revision + 1, updated_at = ?
               WHERE id = ? AND firebase_uid = ?`).bind(now, now, `${requestId}:review-task`, access.ownerUid),
             db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?,
-              revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(
+              revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ? AND revision = ?
+                AND assignee_member_id = ?`).bind(
                 memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now,
-                current.work_order_id, access.ownerUid, current.job_revision),
+                current.work_order_id, access.ownerUid, current.job_revision, current.current_assignee_member_id),
             previousTradeScheduleMutationGuardStatement(db, {
               changedAt: now,
               ownerUid: access.ownerUid,
@@ -320,13 +395,18 @@ export async function PATCH(request: Request) {
         }
       }
     } else if (action === "schedule_appointment") {
-      const appointmentId = cleanAdminText(body.appointmentId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
+      const appointmentId = cleanAdminText(body.appointmentId, 180); const memberId = cleanAdminText(body.memberId, 180);
+      assertScheduleTarget(access, memberId); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
-      const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id, w.revision job_revision
+      const current = await db.prepare(`SELECT a.id, a.work_order_id, a.revision, a.assignee_member_id,
+          w.revision job_revision, w.service_category
         FROM trade_crm_appointments a JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
         WHERE a.id = ? AND a.firebase_uid = ? AND a.status = 'scheduled'`).bind(appointmentId, access.ownerUid).first<Record<string, unknown>>();
       if (!current) throw new Error("APPOINTMENT_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(current.revision)) throw new Error("REVISION_CONFLICT");
+      assertCurrentScheduleAssignment(access, String(current.assignee_member_id || ""));
+      assertAssignmentChange(access, String(current.assignee_member_id || ""), memberId);
+      assertMemberCapability(member, String(current.service_category || ""), access.ownerUid);
       await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt, appointmentId);
       const revision = Number(current.revision) + 1; const jobRevision = nextJobRevision(current.job_revision);
       const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
@@ -339,13 +419,13 @@ export async function PATCH(request: Request) {
       await db.batch([
         ...complianceIntentStatements,
         db.prepare(`UPDATE trade_crm_appointments SET starts_at = ?, ends_at = ?, assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(startsAt, endsAt, memberId, member.display_name, revision, now, appointmentId, access.ownerUid, current.revision),
+          WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?`).bind(startsAt, endsAt, memberId, member.display_name, revision, now, appointmentId, access.ownerUid, current.revision, current.assignee_member_id),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
         }),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, revision = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now, current.work_order_id, access.ownerUid, current.job_revision),
+          WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), jobRevision, now, current.work_order_id, access.ownerUid, current.job_revision, current.assignee_member_id),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
@@ -362,12 +442,16 @@ export async function PATCH(request: Request) {
         appointmentRevision: revision, origin: new URL(request.url).origin, occurredAt: now };
       syncAppointmentId = appointmentId;
     } else if (action === "schedule_job") {
-      const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180); const member = await activeMember(access.ownerUid, memberId);
+      const workOrderId = cleanAdminText(body.workOrderId, 180); const memberId = cleanAdminText(body.memberId, 180);
+      assertScheduleTarget(access, memberId); const member = await activeMember(access.ownerUid, memberId);
       const startsAt = normaliseLocalDateTime(body.startsAt); const endsAt = appointmentEndsAt(startsAt, body.durationMinutes);
       assertFutureAppointment(startsAt, localNow);
-      const job = await db.prepare(`SELECT id, work_number, title, revision, assignee_member_id FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
+      const job = await db.prepare(`SELECT id, work_number, title, revision, assignee_member_id, service_category FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
         AND partner_type = 'installer' AND record_status = 'active'`).bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
       if (!job) throw new Error("JOB_NOT_FOUND"); if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
+      assertCurrentScheduleAssignment(access, String(job.assignee_member_id || ""));
+      assertAssignmentChange(access, String(job.assignee_member_id || ""), memberId);
+      assertMemberCapability(member, String(job.service_category || ""), access.ownerUid);
       await assertScheduleAvailable(access.ownerUid, memberId, startsAt, endsAt); const revision = nextJobRevision(job.revision);
       const appointmentId = crypto.randomUUID();
       const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
@@ -383,7 +467,7 @@ export async function PATCH(request: Request) {
           assignee_label, status, notes, revision, created_at, updated_at) VALUES (?, ?, ?, 'work', ?, ?, ?, ?, ?, 'scheduled', '', 1, ?, ?)`)
           .bind(appointmentId, workOrderId, access.ownerUid, job.title, startsAt, endsAt, memberId, member.display_name, now, now),
         db.prepare(`UPDATE trade_work_orders SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = 'scheduled', revision = ?, updated_at = ?
-          WHERE id = ? AND firebase_uid = ? AND revision = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now, workOrderId, access.ownerUid, job.revision),
+          WHERE id = ? AND firebase_uid = ? AND revision = ? AND assignee_member_id = ?`).bind(memberId, member.display_name, startsAt.slice(0, 10), endsAt.slice(0, 10), revision, now, workOrderId, access.ownerUid, job.revision, job.assignee_member_id),
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
@@ -401,6 +485,6 @@ export async function PATCH(request: Request) {
       try { calendarSync = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, syncAppointmentId); }
       catch { calendarSync = { connected: 0, synced: 0, failed: 1 }; }
     }
-    return adminJson({ ok: true, ...(await schedulePayload(access.ownerUid, rangeStart, rangeWeeks)), calendarSync });
+    return adminJson({ ok: true, ...(await schedulePayload(access, rangeStart, rangeWeeks)), calendarSync });
   } catch (error) { return errorResponse(error); }
 }

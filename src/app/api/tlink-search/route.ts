@@ -2,10 +2,13 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import {
-  requireVerifiedTradeAccess,
+  requireVerifiedTradeIdentity,
   TradeAccessError,
+  tradeAccountProjection,
   verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
+import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { canManageTeam, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 
 export const runtime = "edge";
 
@@ -38,10 +41,22 @@ function matches(kind: SearchKind, selected: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireVerifiedTradeAccess(request);
-    const identity = access.identity;
+    const identity = await requireFirebaseIdentity(request);
+    const ownAccount = await tradeAccountProjection(identity.uid);
+    let teamAccess: TeamAccess | null = null;
+    let partnerType: "installer" | "supplier";
+    let ownerUid: string;
+    if (ownAccount) {
+      const verified = await requireVerifiedTradeIdentity(identity, { partnerTypes: ["installer", "supplier"] });
+      partnerType = verified.partnerType;
+      ownerUid = identity.uid;
+      if (partnerType === "installer") teamAccess = await requireInstallerTeamAccess(request);
+    } else {
+      teamAccess = await requireInstallerTeamAccess(request);
+      partnerType = "installer";
+      ownerUid = teamAccess.ownerUid;
+    }
     const db = getD1();
-    const partnerType = access.partnerType;
 
     const url = new URL(request.url);
     const rawQuery = cleanAdminText(url.searchParams.get("q"), 80).replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim();
@@ -49,30 +64,52 @@ export async function GET(request: Request) {
     if (!KINDS.has(selectedKind)) return adminJson({ ok: false, error: "Search category was not recognised." }, 400);
     if (rawQuery.length < 2) return adminJson({ ok: true, query: rawQuery, records: [], limit: RESULT_LIMIT });
 
-    const entitlements = await accountEntitlements(identity.uid, partnerType);
+    const entitlements = await accountEntitlements(ownerUid, partnerType);
     const term = `%${rawQuery.toLowerCase()}%`;
     const searches: Array<Promise<SearchRecord[]>> = [];
 
     if (partnerType === "installer" && entitlements.features.business_operations && matches("job", selectedKind)) {
-      searches.push(db.prepare(`SELECT id, work_number, title, service_category, site_area, stage, priority, assignee_label
-        FROM trade_work_orders
-        WHERE firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'
-          AND LOWER(work_number || ' ' || title || ' ' || service_category || ' ' || site_area || ' ' || assignee_label) LIKE ?
-        ORDER BY CASE WHEN LOWER(work_number) = LOWER(?) THEN 0 ELSE 1 END, updated_at DESC LIMIT ${KIND_LIMIT}`)
-        .bind(identity.uid, term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
-          id: String(row.id), kind: "job" as const, label: "JB", title: String(row.title || "Untitled job"),
-          detail: String(row.work_number || "Job"), meta: [readable(row.stage), row.site_area, row.assignee_label].filter(Boolean).join(" | "),
-          query: String(row.work_number || row.title || ""),
+      searches.push(db.prepare(`SELECT work.id, work.work_number, work.title, work.service_category,
+          work.site_area, work.stage, work.priority, work.assignee_label, work.source_type,
+          detail.customer_source
+        FROM trade_work_orders work
+        LEFT JOIN trade_crm_job_details detail
+          ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
+        WHERE work.firebase_uid = ? AND work.partner_type = 'installer' AND work.record_status = 'active'
+          AND (? = 'team' OR work.assignee_member_id = ?)
+          AND LOWER(work.work_number || ' ' || work.service_category || ' ' || work.assignee_label || ' ' ||
+            CASE WHEN work.source_type = 'opportunity' OR detail.customer_source = 'platform_private'
+              THEN work.source_reference
+              ELSE work.title || ' ' || work.site_area
+            END) LIKE ?
+        ORDER BY CASE WHEN LOWER(work.work_number) = LOWER(?) THEN 0 ELSE 1 END,
+          work.updated_at DESC LIMIT ${KIND_LIMIT}`)
+        .bind(ownerUid, teamAccess?.jobScope || "team", teamAccess?.memberId || "", term, rawQuery).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
+          id: String(row.id), kind: "job" as const, label: "JB",
+          title: row.source_type === "opportunity" || row.customer_source === "platform_private"
+            ? `${readable(row.service_category)} job`
+            : String(row.title || "Untitled job"),
+          detail: String(row.work_number || "Job"),
+          meta: [readable(row.stage),
+            row.source_type === "opportunity" || row.customer_source === "platform_private"
+              ? "Protected service region" : row.site_area,
+            row.assignee_label].filter(Boolean).join(" | "),
+          query: String(row.work_number || ""),
         }))));
     }
 
-    if (partnerType === "installer" && entitlements.features.business_operations && matches("customer", selectedKind)) {
+    if (partnerType === "installer" && entitlements.features.business_operations
+      && Boolean(teamAccess?.canViewCustomers && teamAccess.canSearchCustomers) && matches("customer", selectedKind)) {
       searches.push(db.prepare(`SELECT id, customer_number, customer_type, first_name, last_name, business_name,
           email, phone, suburb, address_state, postcode
         FROM trade_crm_customers
         WHERE firebase_uid = ? AND record_status = 'active'
+          AND NOT EXISTS (SELECT 1 FROM trade_crm_job_details protected_detail
+            WHERE protected_detail.firebase_uid = trade_crm_customers.firebase_uid
+              AND protected_detail.crm_customer_id = trade_crm_customers.id
+              AND protected_detail.customer_source = 'platform_private')
           AND LOWER(customer_number || ' ' || first_name || ' ' || last_name || ' ' || business_name || ' ' || email || ' ' || phone || ' ' || suburb || ' ' || address_state || ' ' || postcode) LIKE ?
-        ORDER BY updated_at DESC LIMIT ${KIND_LIMIT}`).bind(identity.uid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => {
+        ORDER BY updated_at DESC LIMIT ${KIND_LIMIT}`).bind(ownerUid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => {
           const displayName = String(row.business_name || `${String(row.first_name || "")} ${String(row.last_name || "")}`.trim() || row.customer_number || "Customer");
           return { id: String(row.id), kind: "customer" as const, label: "CU", title: displayName,
             detail: String(row.customer_number || readable(row.customer_type) || "Direct customer"),
@@ -80,7 +117,8 @@ export async function GET(request: Request) {
         })));
     }
 
-    if (partnerType === "installer" && entitlements.features.installer_marketplace && matches("product", selectedKind)) {
+    if (partnerType === "installer" && entitlements.features.installer_marketplace
+      && Boolean(teamAccess?.canViewPriceBook) && matches("product", selectedKind)) {
       searches.push(db.prepare(`SELECT p.id, p.model_number, p.brand, p.name, p.category, p.unit_price_cents_ex_gst,
           p.stock_status, p.lead_time_days, a.business_name supplier_name
         FROM supplier_products p JOIN trade_accounts a ON a.firebase_uid = p.firebase_uid
@@ -113,7 +151,8 @@ export async function GET(request: Request) {
         }))));
     }
 
-    if (entitlements.features.business_operations && matches("order", selectedKind)) {
+    if (entitlements.features.business_operations
+      && (partnerType === "supplier" || Boolean(teamAccess?.canViewPriceBook)) && matches("order", selectedKind)) {
       const ownerColumn = partnerType === "supplier" ? "supplier_uid" : "installer_uid";
       searches.push(db.prepare(`SELECT po.id, po.order_number, po.status, po.installer_reference, po.supplier_reference,
           po.total_cents_inc_gst, l.name list_name, ia.business_name installer_business, sa.business_name supplier_business
@@ -124,7 +163,7 @@ export async function GET(request: Request) {
         WHERE po.${ownerColumn} = ?
           AND LOWER(po.order_number || ' ' || po.status || ' ' || po.installer_reference || ' ' || po.supplier_reference || ' ' || l.name || ' ' || ia.business_name || ' ' || sa.business_name) LIKE ?
         ORDER BY po.updated_at DESC LIMIT ${KIND_LIMIT}`)
-        .bind(identity.uid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
+        .bind(ownerUid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
           id: String(row.id), kind: "order" as const, label: "PO", title: String(row.list_name || "Purchase order"),
           detail: String(row.order_number || "Order"),
           meta: [partnerType === "supplier" ? row.installer_business : row.supplier_business, readable(row.status), money.format(Number(row.total_cents_inc_gst || 0) / 100)].filter(Boolean).join(" | "),
@@ -132,14 +171,15 @@ export async function GET(request: Request) {
         }))));
     }
 
-    if (partnerType === "installer" && entitlements.features.team_access && matches("team", selectedKind)) {
-      searches.push(db.prepare(`SELECT id, email, display_name, role, status FROM trade_team_members
+    if (partnerType === "installer" && entitlements.features.team_access
+      && Boolean(teamAccess && canManageTeam(teamAccess)) && matches("team", selectedKind)) {
+      searches.push(db.prepare(`SELECT id, email, display_name, status FROM trade_team_members
         WHERE owner_uid = ? AND status <> 'removed'
-          AND LOWER(display_name || ' ' || email || ' ' || role || ' ' || status) LIKE ?
+          AND LOWER(display_name || ' ' || email || ' ' || status) LIKE ?
         ORDER BY status = 'active' DESC, display_name COLLATE NOCASE, email COLLATE NOCASE LIMIT ${KIND_LIMIT}`)
-        .bind(identity.uid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
+        .bind(ownerUid, term).all<Record<string, unknown>>().then((rows: { results: Record<string, unknown>[] }) => rows.results.map((row: Record<string, unknown>) => ({
           id: String(row.id), kind: "team" as const, label: "TM", title: String(row.display_name || row.email || "Team member"),
-          detail: readable(row.role), meta: [row.email, readable(row.status)].filter(Boolean).join(" | "),
+          detail: "Team member", meta: [row.email, readable(row.status)].filter(Boolean).join(" | "),
           query: String(row.display_name || row.email || ""),
         }))));
     }

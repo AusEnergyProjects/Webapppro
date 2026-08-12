@@ -1,6 +1,7 @@
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { getD1 } from "../../../../../../db";
 import {
-  canDispatch,
+  assignedJob,
   requireInstallerTeamAccess,
 } from "@/lib/trade-team-server";
 import { issuedQuickInvoicePdf } from "@/lib/trade-quick-invoice-server";
@@ -20,7 +21,7 @@ export async function GET(
   }
   try {
     const access = await requireInstallerTeamAccess(request);
-    if (!canDispatch(access)) {
+    if (!access.isOwner && !access.canViewInvoices) {
       throw new Error("QUICK_INVOICE_MANAGEMENT_REQUIRED");
     }
     const { invoiceId: rawInvoiceId } = await context.params;
@@ -28,6 +29,10 @@ export async function GET(
     if (!invoiceId) {
       return adminJson({ ok: false, error: "Choose an invoice." }, 400);
     }
+    const invoice = await getD1().prepare(`SELECT work_order_id FROM trade_crm_quick_invoices
+      WHERE id = ? AND firebase_uid = ?`).bind(invoiceId, access.ownerUid).first<Record<string, unknown>>();
+    if (!invoice) throw new Error("QUICK_INVOICE_NOT_FOUND");
+    await assignedJob(access, String(invoice.work_order_id));
     const { snapshot, bytes } = await issuedQuickInvoicePdf(
       access.ownerUid,
       invoiceId,

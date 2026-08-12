@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
-import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
+
+class BoundedJsonRequestError extends Error {
+  constructor(code, status) { super(code); this.code = code; this.status = status; }
+}
+
+const boundedJsonRequest = {
+  BoundedJsonRequestError,
+  readBoundedJsonRequest: async (request) => request.json(),
+};
 
 const source = fs.readFileSync(
   new URL("../src/app/api/trade-team/sync/route.ts", import.meta.url),
@@ -413,8 +421,12 @@ function routeHarness(database, { assigned = true } = {}) {
     ownerUid: "owner-1",
     actorUid: "actor-1",
     memberId: "member-1",
-    role: "technician",
     displayName: "Field technician",
+    isOwner: false,
+    jobScope: "own",
+    canManageJobs: true,
+    canViewFieldEvidence: true,
+    canManageFieldEvidence: true,
   };
   const route = loadRoute({
     "../../../../../db": { getD1: () => d1 },

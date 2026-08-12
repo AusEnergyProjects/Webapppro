@@ -1,6 +1,6 @@
 import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
-import { canDispatch, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { canAssignJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { serviceFollowUpDueState, serviceFollowUpReadiness, serviceReminderDraft } from "@/lib/trade-service-follow-ups";
 import { sendServiceReminderProviderMessage, serviceReminderIdempotencyKey, serviceReminderProviderConfiguration, type ReminderChannel } from "@/lib/service-reminder-delivery";
 
@@ -78,7 +78,7 @@ async function followUpPayload(ownerUid: string) {
     LEFT JOIN trade_team_members member ON member.id = follow_up.assignee_member_id AND member.owner_uid = follow_up.firebase_uid
     WHERE lifecycle.protected_job = 0 OR lifecycle.customer_uid != ''
     ORDER BY lifecycle.next_due_at, customer_name, lifecycle.asset_id LIMIT 500`).bind(ownerUid, ownerUid).all<Record<string, unknown>>(),
-    db.prepare(`SELECT id, display_name, role, status FROM trade_team_members
+    db.prepare(`SELECT id, display_name, status FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active' ORDER BY display_name, email`).bind(ownerUid).all<Record<string, unknown>>(),
     db.prepare("SELECT business_name FROM trade_accounts WHERE firebase_uid = ?").bind(ownerUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT channel, provider, enabled, sender_label, daily_limit, revision, updated_at
@@ -129,7 +129,7 @@ async function followUpPayload(ownerUid: string) {
   const providerConfiguration = serviceReminderProviderConfiguration();
   return {
     followUps,
-    members: members.results.map((row) => ({ id: String(row.id), displayName: String(row.display_name), role: String(row.role), status: String(row.status) })),
+    members: members.results.map((row) => ({ id: String(row.id), displayName: String(row.display_name), status: String(row.status) })),
     businessName: String(account?.business_name || "Your installer"),
     channels: settingRows.results.map((row) => ({ channel: String(row.channel), provider: String(row.provider), enabled: Boolean(row.enabled),
       configured: row.channel === "email" ? providerConfiguration.email.configured && providerConfiguration.email.callbacks
@@ -142,7 +142,9 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
+    if (!access.canRunReports || !access.canViewCustomers || !access.canSearchCustomers) {
+      throw new Error("DISPATCH_REQUIRED");
+    }
     return adminJson({ ok: true, ...(await followUpPayload(access.ownerUid)) });
   } catch (error) { return errorResponse(error); }
 }
@@ -233,7 +235,8 @@ export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    if (!canDispatch(access)) throw new Error("DISPATCH_REQUIRED");
+    if (!access.canManageCustomers || !access.canRunReports || !access.canViewCustomers
+      || !access.canSearchCustomers) throw new Error("DISPATCH_REQUIRED");
     const body = await request.json() as Record<string, unknown>;
     const action = cleanAdminText(body.action, 40);
     if (!ACTIONS.has(action)) return adminJson({ ok: false, error: "Unsupported follow-up action." }, 400);
@@ -250,6 +253,8 @@ export async function PATCH(request: Request) {
     if (action === "prepare_reminder" && candidate.readiness === "too_early") throw new Error("REMINDER_TOO_EARLY");
     if (action === "prepare_reminder" && candidate.readiness !== "eligible") throw new Error("CONSENT_REQUIRED");
     const memberId = cleanAdminText(body.memberId, 180);
+    if (memberId !== candidate.assigneeMemberId
+      && !canAssignJob(access, candidate.assigneeMemberId, memberId)) throw new Error("DISPATCH_REQUIRED");
     if (memberId) {
       const member = await getD1().prepare("SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active'")
         .bind(memberId, access.ownerUid).first();

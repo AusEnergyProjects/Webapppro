@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { normaliseDeviceListQuery } from "../src/lib/trade-mobile-device-list-policy.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -12,7 +13,7 @@ const deviceRoute = read("../src/app/api/trade-team/devices/route.ts");
 const mediaRoute = read("../src/app/api/trade-team/media/route.ts");
 const mobileServer = read("../src/lib/trade-mobile-server.ts");
 const syncServer = read("../src/lib/trade-team-sync-server.ts");
-const teamCentre = read("../src/components/TradeTeamCentre.tsx");
+const teamSettings = read("../src/components/TradeTeamSettings.tsx");
 const teamRoute = read("../src/app/api/trade-team/route.ts");
 const workRoute = read("../src/app/api/trade-work-orders/route.ts");
 const crmRoute = read("../src/app/api/trade-crm/route.ts");
@@ -64,7 +65,9 @@ test("the offline sync migration applies cleanly and enforces idempotency", () =
 test("the mobile sync contract is authenticated, assignment scoped and cursor bounded", () => {
   assert.match(syncRoute, /requireInstallerTeamAccess\(request\)/);
   assert.match(syncRoute, /sameOrigin\(request\)/);
-  assert.match(syncRoute, /\? <> 'technician' OR w\.assignee_member_id = \?/);
+  assert.match(syncRoute, /access\.jobScope/);
+  assert.match(syncRoute, /\? <> 'own' OR w\.assignee_member_id = \?/);
+  assert.doesNotMatch(syncRoute, /access\.role|\.role\s*===?\s*["']technician["']/);
   assert.match(syncRoute, /MAX_CHANGES = 200/);
   assert.match(syncRoute, /MAX_ACTIONS = 50/);
   assert.match(syncRoute, /\^v1:\(\\d\+\)\$/);
@@ -79,13 +82,13 @@ test("the mobile sync contract is authenticated, assignment scoped and cursor bo
 
 test("mobile payloads preserve Australian Energy Assessments customer privacy and short-lived direct addresses", () => {
   assert.match(syncRoute, /row\.source_type === "opportunity" \|\| row\.customer_source === "platform_private"/);
-  assert.match(syncRoute, /const directCustomer = !protectedJob && row\.customer_source === "trade_owned"/);
-  assert.match(syncRoute, /const serviceAddress = directCustomer \?/);
+  assert.match(syncRoute, /const customerContext = !protectedJob[\s\S]*row\.customer_source === "public_lead_released"/);
+  assert.match(syncRoute, /const serviceAddress = customerContext \?/);
   assert.doesNotMatch(syncRoute, /c\.email/);
   assert.match(syncRoute, /customerName: protectedJob \? "Australian Energy Assessments protected customer"/);
-  assert.match(syncRoute, /customerPhone: directCustomer \?/);
-  assert.match(syncRoute, /containsPersonalData: Boolean\(serviceAddress \|\| \(directCustomer && row\.customer_phone\)\)/);
-  assert.match(syncRoute, /maxAgeSeconds: serviceAddress \|\| \(directCustomer && row\.customer_phone\) \? 86_400 : 604_800/);
+  assert.match(syncRoute, /customerPhone: customerContext \?/);
+  assert.match(syncRoute, /containsPersonalData: Boolean\(serviceAddress \|\| \(customerContext && row\.customer_phone\)\)/);
+  assert.match(syncRoute, /maxAgeSeconds: serviceAddress \|\| \(customerContext && row\.customer_phone\) \? 86_400 : 604_800/);
   assert.match(mobileServer, /protectedCustomerContactDataAllowed: false/);
   assert.match(syncRoute, /purgeWhenUnassigned: true/);
   assert.match(syncRoute, /PROTECTED_CUSTOMER_DATA/);
@@ -134,8 +137,32 @@ test("field devices enforce versions, ownership and immediate revocation", () =>
   assert.match(mobileServer, /AEA_MOBILE_MIN_ANDROID_VERSION/);
   assert.match(mobileServer, /encryptedStorageRequired: true/);
   assert.match(mobileServer, /APP_VERSION_REQUIRED/);
-  assert.match(teamCentre, /Field devices/);
-  assert.match(teamCentre, /Revoke access/);
+  assert.match(teamSettings, /Field devices/);
+  assert.match(teamSettings, /Revoke access/);
+});
+
+test("device roster paging is bounded, searchable and reaches devices beyond the old first page", () => {
+  assert.match(deviceRoute, /normaliseDeviceListQuery\(url\.searchParams\)/);
+  assert.match(deviceRoute, /COUNT\(\*\) count FROM trade_mobile_devices/);
+  assert.match(deviceRoute, /LIMIT \? OFFSET \?/);
+  assert.doesNotMatch(deviceRoute, /LIMIT 200/);
+  const bounded = normaliseDeviceListQuery(new URLSearchParams({
+    page: "3", pageSize: "999", search: "100%_Field\\", status: "invalid", memberId: "member-2",
+  }));
+  assert.deepEqual(bounded, {
+    page: 3, pageSize: 100, offset: 200, search: "100%_Field\\",
+    searchLike: "%100\\%\\_field\\\\%", status: "", memberId: "member-2",
+  });
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE devices (id text PRIMARY KEY)");
+  const insert = db.prepare("INSERT INTO devices (id) VALUES (?)");
+  for (let index = 1; index <= 275; index += 1) insert.run(String(index).padStart(3, "0"));
+  const rows = db.prepare("SELECT id FROM devices ORDER BY id LIMIT ? OFFSET ?")
+    .all(bounded.pageSize, bounded.offset);
+  assert.equal(rows.length, 75);
+  assert.equal(rows[0].id, "201");
+  const invalid = normaliseDeviceListQuery(new URLSearchParams({ page: "-1", pageSize: "0" }));
+  assert.equal(invalid.page, 1); assert.equal(invalid.pageSize, 25); assert.equal(invalid.offset, 0);
 });
 
 test("field media uploads are resumable, idempotent and assignment scoped", () => {
@@ -164,5 +191,5 @@ test("the native field contract keeps the web CRM authoritative", () => {
 });
 
 test("offline sync copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${syncRoute}\n${deviceRoute}\n${mediaRoute}\n${teamCentre}\n${contract}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${syncRoute}\n${deviceRoute}\n${mediaRoute}\n${teamSettings}\n${contract}`, /[\u2013\u2014]/);
 });

@@ -113,7 +113,9 @@ function fixture(stage = "in_progress", revision = 5) {
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,
+      member_uid text NOT NULL DEFAULT '',
       display_name text NOT NULL,
+      capabilities text NOT NULL DEFAULT '[]',
       status text NOT NULL
     );
     CREATE TABLE trade_work_order_tasks (
@@ -188,8 +190,8 @@ function fixture(stage = "in_progress", revision = 5) {
     VALUES ('job-1', 'owner-1', 'installer', 'internal', '',
       'other', 'active', ?, 'standard', '', '', ?, '', '', 'initial')`).run(stage, revision);
   database.prepare(`INSERT INTO trade_team_members
-    (id, owner_uid, display_name, status)
-    VALUES ('member-2', 'owner-1', 'Technician Two', 'active')`).run();
+    (id, owner_uid, member_uid, display_name, capabilities, status)
+    VALUES ('member-2', 'owner-1', 'member-2-uid', 'Technician Two', '["other"]', 'active')`).run();
   database.prepare(`INSERT INTO trade_work_order_tasks
     (id, work_order_id, firebase_uid, title, status, revision, created_at, updated_at)
     VALUES ('task-1', 'job-1', 'owner-1', 'Existing task', 'pending', 2, 'initial', 'initial')`).run();
@@ -208,9 +210,13 @@ const access = {
   actorEmail: "actor@example.com",
   memberId: "member-1",
   displayName: "Actor",
-  role: "owner",
   isOwner: true,
   businessName: "Installer",
+  canManageJobs: true,
+  canViewFieldEvidence: true,
+  canManageFieldEvidence: true,
+  jobScope: "team",
+  scheduleScope: "team",
 };
 
 const adminServer = {
@@ -228,7 +234,7 @@ const adminServer = {
 };
 
 function assignedJobFor(db) {
-  return async (_access, workOrderId) => {
+  return async (currentAccess, workOrderId) => {
     const row = await db.prepare(`SELECT id, source_type, source_reference,
         assignee_member_id, revision
       FROM trade_work_orders
@@ -236,6 +242,8 @@ function assignedJobFor(db) {
         AND record_status = 'active'`)
       .bind(workOrderId, "owner-1").first();
     if (!row) throw new Error("JOB_NOT_FOUND");
+    if (!currentAccess.isOwner && currentAccess.jobScope === "own"
+      && row.assignee_member_id !== currentAccess.memberId) throw new Error("JOB_NOT_ASSIGNED");
     return row;
   };
 }
@@ -247,15 +255,20 @@ function teamRoute(db) {
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "actor-1" }) },
     "@/lib/trade-team-server": {
       assignedJob: assignedJobFor(db),
+      canAssignJob: () => true,
       canDispatch: () => true,
       canManageTeam: () => true,
       requireInstallerTeamAccess: async () => access,
     },
     "@/lib/trade-team-sync-server": syncHelpers,
+    "@/lib/trade-mobile-device-revocation": { abortMemberDeviceUploads: async () => {} },
+    "@/lib/trade-team-lifecycle-policy.mjs": {
+      memberLifecycleDecision: () => ({ allowed: true, reason: "allowed" }),
+    },
   });
 }
 
-function workOrdersRoute(db) {
+function workOrdersRoute(db, staffAccess = null) {
   class TradeAccessError extends Error {
     constructor(code) {
       super(code);
@@ -271,7 +284,7 @@ function workOrdersRoute(db) {
       }),
     },
     "@/lib/trade-access-server": {
-      requireVerifiedTradeAccess: async () => ({
+      requireVerifiedTradeAccess: async () => staffAccess ? Promise.reject(new TradeAccessError("PROFILE_REQUIRED")) : ({
         identity: { uid: "owner-1" },
         partnerType: "installer",
         businessName: "Installer",
@@ -291,6 +304,11 @@ function workOrdersRoute(db) {
       plannedComplianceIntentReplanStatements: async () => [],
     },
     "@/lib/energy-service-catalogue.mjs": { ENERGY_SERVICE_IDS },
+    "@/lib/trade-team-server": {
+      assignedJob: assignedJobFor(db),
+      canManageJobs: (currentAccess) => currentAccess.isOwner || currentAccess.canManageJobs,
+      requireInstallerTeamAccess: async () => staffAccess || access,
+    },
   });
 }
 
@@ -403,6 +421,43 @@ const onlineMutations = [
     })),
   },
 ];
+
+test("staff with job management can add and toggle checklist items on an own-scoped job", async () => {
+  const { database, db } = fixture();
+  database.prepare("UPDATE trade_work_orders SET assignee_member_id = 'member-1' WHERE id = 'job-1'").run();
+  const staffAccess = { ...access, isOwner: false, canManageJobs: true, jobScope: "own" };
+  const route = workOrdersRoute(db, staffAccess);
+  const added = await route.POST(postRequest({ action: "add_task", workOrderId: "job-1", title: "Staff task" }));
+  assert.equal(added.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks").get().count, 2);
+  const updated = await route.PATCH(patchRequest({ action: "update_task", taskId: "task-1", status: "done" }));
+  assert.equal(updated.status, 200);
+  assert.equal(database.prepare("SELECT status FROM trade_work_order_tasks WHERE id = 'task-1'").get().status, "done");
+});
+
+test("own-scoped staff cannot mutate another team member's checklist", async () => {
+  const { database, db } = fixture();
+  database.prepare("UPDATE trade_work_orders SET assignee_member_id = 'member-2' WHERE id = 'job-1'").run();
+  const staffAccess = { ...access, isOwner: false, canManageJobs: true, jobScope: "own" };
+  const response = await workOrdersRoute(db, staffAccess).POST(postRequest({
+    action: "add_task", workOrderId: "job-1", title: "Unauthorised task",
+  }));
+  assert.equal(response.status, 403);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks").get().count, 1);
+});
+
+test("team-scoped checklist management still requires the management permission", async () => {
+  const { database, db } = fixture();
+  database.prepare("UPDATE trade_work_orders SET assignee_member_id = 'member-2' WHERE id = 'job-1'").run();
+  const permitted = { ...access, isOwner: false, canManageJobs: true, jobScope: "team" };
+  assert.equal((await workOrdersRoute(db, permitted).POST(postRequest({
+    action: "add_task", workOrderId: "job-1", title: "Team task",
+  }))).status, 200);
+  const denied = { ...permitted, canManageJobs: false };
+  assert.equal((await workOrdersRoute(db, denied).PATCH(patchRequest({
+    action: "update_task", taskId: "task-1", status: "done",
+  }))).status, 403);
+});
 
 for (const stage of ["completed", "cancelled"]) {
   for (const mutation of onlineMutations) {

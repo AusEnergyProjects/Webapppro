@@ -690,7 +690,7 @@ test("every existing work-order date mutation path shares the atomic replanning 
   );
   assert.match(
     scheduleRoute,
-    /UPDATE trade_work_orders SET assignee_member_id[\s\S]*?AND revision = \?`\)\.bind\([\s\S]*?previousTradeScheduleMutationGuardStatement/,
+    /UPDATE trade_work_orders SET assignee_member_id[\s\S]*?AND revision = \?[\s\S]*?AND assignee_member_id = \?`\)\.bind\([\s\S]*?previousTradeScheduleMutationGuardStatement/,
   );
   assert.equal(
     crmRoute.match(/plannedComplianceIntentReplanStatements\(/g)?.length,

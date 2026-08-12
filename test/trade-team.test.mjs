@@ -9,7 +9,8 @@ const migration = read("../drizzle/0025_dizzy_spot.sql");
 const rosterMigration = read("../drizzle/0070_frictionless_team_roster.sql");
 const route = read("../src/app/api/trade-team/route.ts");
 const access = read("../src/lib/trade-team-server.ts");
-const centre = read("../src/components/TradeTeamCentre.tsx");
+const settings = read("../src/components/TradeTeamSettings.tsx");
+const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const portal = read("../src/components/TradeTeamPortal.tsx");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
@@ -51,22 +52,24 @@ test("owners and roster-only people are assignable before a separate login is cr
   assert.match(access, /ensureOwnerTeamMember/);
   assert.match(access, /memberId = await ensureOwnerTeamMember/);
   assert.match(route, /action === "add_member"/);
-  assert.match(route, /VALUES \(\?, \?, '', \?, \?, \?, 'active'/);
+  assert.match(route, /SELECT \?, \?, '', \?, \?, \?, \?, \?, \?, \?,/);
+  assert.match(route, /WHERE \$\{createGuard\.sql\}/);
   assert.match(route, /hasLogin: Boolean\(row\.member_uid\)/);
-  assert.match(centre, /You are ready to assign as Me/);
-  assert.match(centre, /Login email \(optional\)/);
-  assert.match(centre, /Create login/);
+  assert.match(settings, /Email, optional/);
+  assert.match(settings, /Roster only/);
+  assert.match(settings, /Create login link/);
   assert.match(rosterMigration, /WHERE `email` <> ''/);
 });
 
-test("owners manage people while dispatch and technician scopes are server enforced", () => {
+test("owners and delegated managers are bounded by authoritative permission flags and scopes", () => {
   assert.match(access, /export function canManageTeam/);
   assert.match(access, /return access\.isOwner/);
-  assert.match(access, /access\.role === "manager" \|\| access\.role === "coordinator"/);
-  assert.match(access, /access\.role === "technician" && row\.assignee_member_id !== access\.memberId/);
-  assert.match(route, /\? <> 'technician' OR w\.assignee_member_id = \?/);
+  assert.match(access, /access\.canManageTeam/);
+  assert.match(access, /access\.jobScope === "own" && row\.assignee_member_id !== access\.memberId/);
+  assert.match(route, /\? <> 'own' OR w\.assignee_member_id = \?/);
   assert.match(route, /if \(!canManageTeam\(access\)\) throw new Error\("OWNER_REQUIRED"\)/);
-  assert.match(route, /if \(!canDispatch\(access\)\) throw new Error\("DISPATCH_REQUIRED"\)/);
+  assert.match(route, /if \(!access\.canManageJobs\) throw new Error\("DISPATCH_REQUIRED"\)/);
+  assert.match(route, /canAssignJob\(access,/);
   assert.match(fieldRoute, /await assignedJob\(access,/);
   assert.match(access, /requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\)/);
   assert.match(access, /ownerAccount\.approvedAbnAccess/);
@@ -81,21 +84,20 @@ test("team job payloads preserve protected-customer boundaries", () => {
   assert.match(portal, /Only work assigned to you is visible/);
 });
 
-test("the owner CRM and mobile staff portal expose progressive team workflows", () => {
-  assert.match(workspace, /TradeTeamCentre/);
-  assert.match(workspace, /hasTeamAccess/);
-  assert.match(centre, /Dispatch board/);
-  assert.match(centre, /Ready for work straight away/);
-  assert.match(centre, /Assigned to/);
-  assert.match(centre, /Scheduling only\. Add a login when needed/);
-  assert.match(route, /status IN \('active', 'invited'\)/);
+test("the owner CRM and mobile staff portal expose permission-aware team workflows", () => {
+  assert.doesNotMatch(workspace, /TradeTeamCentre/);
+  assert.match(dashboard, /<TradeTeamSettings user=\{user\}/);
+  assert.match(workspace, /permissions/);
+  assert.match(route, /includeWork/);
+  assert.match(route, /workPageSize/);
+  assert.match(route, /const assigneeConditions = \["owner_uid = \?", "status = 'active'"\]/);
+  assert.match(route, /assigneePageSize = Math\.min\(50/);
   assert.match(portal, /Continue with Google/);
-  assert.match(portal, /Create team login/);
+  assert.match(portal, /canManageTeam/);
   assert.match(portal, /Work queue/);
-  assert.match(portal, /Job checklist/);
   assert.match(portal, /TradeFieldWorkPanel/);
 });
 
 test("team operations copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${access}\n${centre}\n${portal}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${route}\n${access}\n${settings}\n${portal}`, /[\u2013\u2014]/);
 });

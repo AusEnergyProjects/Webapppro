@@ -613,7 +613,6 @@ export async function GET(request: Request, context: RouteContext) {
         auditSummary,
         JSON.stringify({
           purpose: "assigned_job_compliance_review",
-          role: access.role,
           workOrderId,
           group: requestedGroupKey || "core",
           cursor: groupCursor,

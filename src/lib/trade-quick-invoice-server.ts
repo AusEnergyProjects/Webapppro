@@ -67,6 +67,7 @@ export async function resolveQuickInvoiceDraft(
   ownerUid: string,
   value: unknown,
   discountValue: unknown = 0,
+  allowPriceBook = true,
 ): Promise<QuickInvoiceDraft> {
   const input = rawLines(value);
   const ids = [
@@ -76,6 +77,7 @@ export async function resolveQuickInvoiceDraft(
         .filter(Boolean),
     ),
   ];
+  if (ids.length && !allowPriceBook) throw new Error("PRICE_BOOK_VIEW_REQUIRED");
   const rows = ids.length
     ? await getD1()
         .prepare(

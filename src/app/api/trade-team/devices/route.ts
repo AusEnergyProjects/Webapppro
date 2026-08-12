@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canManageTeam, requireInstallerTeamAccess } from "@/lib/trade-team-server";
@@ -9,51 +8,12 @@ import {
   MOBILE_PLATFORMS,
   mobileErrorResponse,
 } from "@/lib/trade-mobile-server";
+import { abortDeviceUploads } from "@/lib/trade-mobile-device-revocation";
+import { normaliseDeviceListQuery } from "@/lib/trade-mobile-device-list-policy.mjs";
 
 export const runtime = "edge";
 
 const PUSH_PROVIDERS = new Set(["fcm", "apns"]);
-
-type EvidenceBucket = {
-  resumeMultipartUpload(key: string, uploadId: string): { abort(): Promise<void> };
-  head(key: string): Promise<unknown | null>;
-  delete(key: string): Promise<void>;
-};
-
-async function abortDeviceUploads(ownerUid: string, deviceId: string) {
-  const store = (env as unknown as { EVIDENCE?: EvidenceBucket }).EVIDENCE;
-  while (true) {
-    const rows = await getD1().prepare(`SELECT id, object_key, upload_id
-      FROM trade_mobile_upload_sessions
-      WHERE owner_uid = ? AND device_id = ?
-        AND status IN ('initiated', 'uploading', 'completing')
-        AND media_id = ''
-      ORDER BY created_at, id
-      LIMIT 50`)
-      .bind(ownerUid, deviceId).all<Record<string, unknown>>();
-    if (rows.results.length === 0) return;
-    for (const row of rows.results) {
-      const now = new Date().toISOString();
-      const claim = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
-        SET status = 'aborted', last_error = 'device_revoked', updated_at = ?
-        WHERE id = ? AND owner_uid = ? AND device_id = ?
-          AND status IN ('initiated', 'uploading', 'completing')
-          AND media_id = ''`)
-        .bind(now, row.id, ownerUid, deviceId).run();
-      if (Number(claim.meta.changes || 0) !== 1) continue;
-      if (store) {
-        try {
-          await store.resumeMultipartUpload(String(row.object_key), String(row.upload_id)).abort();
-        } catch { /* the claimed multipart upload may already be assembled or absent */ }
-        try {
-          if (await store.head(String(row.object_key))) await store.delete(String(row.object_key));
-        } catch { /* the claimed terminal object may already be absent */ }
-      }
-      await getD1().prepare("DELETE FROM trade_mobile_upload_parts WHERE session_id = ?")
-        .bind(row.id).run();
-    }
-  }
-}
 
 function deviceError(error: unknown) {
   const mobile = mobileErrorResponse(error);
@@ -68,28 +28,57 @@ function deviceError(error: unknown) {
   if (code === "DEVICE_REAUTHORISATION_REQUIRED") return adminJson({ ok: false, code,
     error: "This device was revoked. The business owner must authorise it again before local data can be restored." }, 403);
   if (code === "DEVICE_NOT_FOUND") return adminJson({ ok: false, error: "Device not found." }, 404);
+  if (code === "MEMBER_INACTIVE") return adminJson({ ok: false, error: "Reactivate this team member before authorising their device." }, 409);
   if (code === "OWNER_REQUIRED") return adminJson({ ok: false, error: "Only the business owner can manage another person's device." }, 403);
   return adminJson({ ok: false, error: "The mobile device request could not be completed." }, 500);
 }
 
-async function devicePayload(ownerUid: string, actorUid: string, ownerView: boolean) {
-  const rows = await getD1().prepare(`SELECT d.id, d.actor_uid, d.member_id, d.device_id, d.platform, d.device_name,
+type DeviceListQuery = ReturnType<typeof normaliseDeviceListQuery>;
+
+function defaultDeviceListQuery() {
+  return normaliseDeviceListQuery(new URLSearchParams());
+}
+
+async function devicePayload(ownerUid: string, actorUid: string, ownerView: boolean,
+  query: DeviceListQuery = defaultDeviceListQuery()) {
+  const db = getD1();
+  const filters = `d.owner_uid = ? AND (? = 1 OR d.actor_uid = ?)
+    AND (? = '' OR d.status = ?)
+    AND (? = '' OR d.member_id = ?)
+    AND (? = '' OR LOWER(d.device_name) LIKE ? ESCAPE '\\'
+      OR LOWER(d.device_id) LIKE ? ESCAPE '\\'
+      OR LOWER(COALESCE(m.display_name, '')) LIKE ? ESCAPE '\\'
+      OR LOWER(COALESCE(m.email, '')) LIKE ? ESCAPE '\\')`;
+  const bindings = [ownerUid, ownerView ? 1 : 0, actorUid,
+    query.status, query.status, query.memberId, query.memberId,
+    query.searchLike, query.searchLike, query.searchLike, query.searchLike, query.searchLike];
+  const [rows, count, pending] = await Promise.all([
+    db.prepare(`SELECT d.id, d.actor_uid, d.member_id, d.device_id, d.platform, d.device_name,
       d.app_version, d.push_provider, d.push_token <> '' push_connected, d.status, d.registered_at,
       d.last_seen_at, d.revoked_at, d.updated_at, COALESCE(m.display_name, '') member_name,
-      COALESCE(m.email, '') member_email
+      COALESCE(m.email, '') member_email, COALESCE(m.status, 'active') member_status
     FROM trade_mobile_devices d LEFT JOIN trade_team_members m ON m.id = d.member_id AND m.owner_uid = d.owner_uid
-    WHERE d.owner_uid = ? AND (? = 1 OR d.actor_uid = ?) ORDER BY d.status = 'active' DESC, d.last_seen_at DESC`)
-    .bind(ownerUid, ownerView ? 1 : 0, actorUid).all<Record<string, unknown>>();
-  const pending = await getD1().prepare(`SELECT COUNT(*) count FROM trade_mobile_push_outbox
-    WHERE owner_uid = ? AND status = 'pending'`).bind(ownerUid).first<Record<string, unknown>>();
+    WHERE ${filters}
+    ORDER BY d.status = 'active' DESC, d.last_seen_at DESC, d.id ASC LIMIT ? OFFSET ?`)
+      .bind(...bindings, query.pageSize, query.offset).all<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_mobile_devices d
+      LEFT JOIN trade_team_members m ON m.id = d.member_id AND m.owner_uid = d.owner_uid
+      WHERE ${filters}`).bind(...bindings).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_mobile_push_outbox
+      WHERE owner_uid = ? AND status = 'pending'`).bind(ownerUid).first<Record<string, unknown>>(),
+  ]);
+  const total = Number(count?.count || 0);
   return {
     devices: rows.results.map((row) => ({
       id: row.id, deviceId: row.device_id, deviceName: row.device_name, platform: row.platform,
       appVersion: row.app_version, pushProvider: row.push_provider, pushConnected: Boolean(row.push_connected),
       status: row.status, memberId: row.member_id, memberName: row.member_name || (row.member_id ? "Team member" : "Business owner"),
       memberEmail: row.member_email, registeredAt: row.registered_at, lastSeenAt: row.last_seen_at,
+      memberStatus: row.member_status,
       revokedAt: row.revoked_at, updatedAt: row.updated_at,
     })),
+    pagination: { page: query.page, pageSize: query.pageSize, total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)) },
     pendingPushEvents: Number(pending?.count || 0),
   };
 }
@@ -98,10 +87,12 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    const platform = cleanAdminText(new URL(request.url).searchParams.get("platform"), 20);
+    const url = new URL(request.url);
+    const platform = cleanAdminText(url.searchParams.get("platform"), 20);
     const policyPlatform = MOBILE_PLATFORMS.has(platform) ? platform : "ios";
     return adminJson({ ok: true, policy: mobileAppPolicy(policyPlatform),
-      ...(await devicePayload(access.ownerUid, access.actorUid, canManageTeam(access))) });
+      ...(await devicePayload(access.ownerUid, access.actorUid, canManageTeam(access),
+        normaliseDeviceListQuery(url.searchParams))) });
   } catch (error) { return deviceError(error); }
 }
 
@@ -158,7 +149,7 @@ export async function PATCH(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "The device update is invalid." }, 400); }
     const action = cleanAdminText(body.action, 40); const id = cleanAdminText(body.id, 180);
-    const current = await getD1().prepare(`SELECT id, actor_uid, status FROM trade_mobile_devices
+    const current = await getD1().prepare(`SELECT id, actor_uid, member_id, status FROM trade_mobile_devices
       WHERE id = ? AND owner_uid = ?`).bind(id, access.ownerUid).first<Record<string, unknown>>();
     if (!current) throw new Error("DEVICE_NOT_FOUND");
     const ownDevice = current.actor_uid === access.actorUid;
@@ -167,16 +158,31 @@ export async function PATCH(request: Request) {
     if (action === "revoke_device") {
       const device = await getD1().prepare(`SELECT device_id FROM trade_mobile_devices WHERE id = ? AND owner_uid = ?`)
         .bind(id, access.ownerUid).first<Record<string, unknown>>();
-      await getD1().prepare(`UPDATE trade_mobile_devices
+      const changed = await getD1().prepare(`UPDATE trade_mobile_devices
         SET status = 'revoked', push_token = '', push_token_updated_at = ?,
           revoked_at = ?, revoked_by_uid = ?, updated_at = ?
-        WHERE id = ? AND owner_uid = ?`)
-        .bind(now, now, access.actorUid, now, id, access.ownerUid).run();
+        WHERE id = ? AND owner_uid = ? AND (actor_uid = ? OR ? = 1 OR EXISTS (
+          SELECT 1 FROM trade_team_members actor WHERE actor.id = ? AND actor.owner_uid = ?
+            AND actor.member_uid = ? AND actor.status = 'active' AND actor.can_manage_team = 1))`)
+        .bind(now, now, access.actorUid, now, id, access.ownerUid, access.actorUid,
+          access.isOwner ? 1 : 0, access.memberId, access.ownerUid, access.actorUid).run();
+      if (!changed.meta.changes) throw new Error("OWNER_REQUIRED");
       await abortDeviceUploads(access.ownerUid, String(device?.device_id || ""));
     } else if (action === "authorise_device") {
       if (!canManageTeam(access)) throw new Error("OWNER_REQUIRED");
-      await getD1().prepare(`UPDATE trade_mobile_devices SET status = 'active', revoked_at = '', revoked_by_uid = '',
-        last_seen_at = ?, updated_at = ? WHERE id = ? AND owner_uid = ?`).bind(now, now, id, access.ownerUid).run();
+      if (current.member_id) {
+        const activeTarget = await getD1().prepare(`SELECT 1 active FROM trade_team_members
+          WHERE id = ? AND owner_uid = ? AND status = 'active'`)
+          .bind(current.member_id, access.ownerUid).first();
+        if (!activeTarget) throw new Error("MEMBER_INACTIVE");
+      }
+      const changed = await getD1().prepare(`UPDATE trade_mobile_devices SET status = 'active', revoked_at = '', revoked_by_uid = '',
+        last_seen_at = ?, updated_at = ? WHERE id = ? AND owner_uid = ? AND (? = 1 OR EXISTS (
+          SELECT 1 FROM trade_team_members actor WHERE actor.id = ? AND actor.owner_uid = ?
+            AND actor.member_uid = ? AND actor.status = 'active' AND actor.can_manage_team = 1))`)
+        .bind(now, now, id, access.ownerUid, access.isOwner ? 1 : 0,
+          access.memberId, access.ownerUid, access.actorUid).run();
+      if (!changed.meta.changes) throw new Error("OWNER_REQUIRED");
     } else if (action === "update_push_token") {
       if (!ownDevice || current.status !== "active") throw new Error("DEVICE_REVOKED");
       const pushToken = cleanAdminText(body.pushToken, 4096);

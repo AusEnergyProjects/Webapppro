@@ -3,7 +3,7 @@ import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { normalisePacketLines, normaliseSuggestedCrewSize, type PacketPriceItem } from "@/lib/trade-job-packet";
 import { jobPacketLibrary } from "@/lib/trade-job-packet-server";
 import { publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
-import { canDispatch, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
+import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -17,7 +17,7 @@ function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "An active verified installer account is required." }, 403);
-  if (code === "JOB_PACKET_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage common jobs." }, 403);
+  if (code === "JOB_PACKET_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your price-book access does not allow this common-job action." }, 403);
   if (code === "JOB_PACKET_NOT_FOUND") return adminJson({ ok: false, error: "Common job not found." }, 404);
   if (code === "JOB_PACKET_LIMIT") return adminJson({ ok: false, error: "This workspace has reached its 200 job-packet limit." }, 409);
   if (code === "JOB_PACKET_NAME_EXISTS") return adminJson({ ok: false, error: "A common job with this name already exists." }, 409);
@@ -25,7 +25,9 @@ function errorResponse(error: unknown) {
   return adminJson({ ok: false, error: "The job-packet request could not be completed." }, 500);
 }
 
-function requireManager(access: TeamAccess) { if (!canDispatch(access)) throw new Error("JOB_PACKET_MANAGEMENT_REQUIRED"); }
+function requirePacketAccess(access: TeamAccess, manage = false) {
+  if (manage ? !access.canManagePriceBook : !access.canViewPriceBook) throw new Error("JOB_PACKET_MANAGEMENT_REQUIRED");
+}
 
 async function ownedPacket(ownerUid: string, id: string) {
   const row = await getD1().prepare("SELECT * FROM trade_job_packets WHERE id = ? AND firebase_uid = ?").bind(id, ownerUid).first<Row>();
@@ -71,7 +73,7 @@ async function prepared(ownerUid: string, body: Row) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const url = new URL(request.url);
+    const access = await requireInstallerTeamAccess(request); requirePacketAccess(access); const url = new URL(request.url);
     const categoryInput = cleanAdminText(url.searchParams.get("serviceCategory"), 60); const serviceCategory = SERVICE_CATEGORIES.has(categoryInput) ? categoryInput : "assessment";
     const [packets, items, templates, forms] = await Promise.all([
       jobPacketLibrary(access.ownerUid), priceItems(access.ownerUid),
@@ -88,7 +90,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requirePacketAccess(access, true); const body = await request.json() as Row;
     if (cleanAdminText(body.action, 30) !== "create") return adminJson({ ok: false, error: "Unsupported job-packet action." }, 400);
     const db = getD1(); const count = await db.prepare("SELECT COUNT(*) count FROM trade_job_packets WHERE firebase_uid = ?").bind(access.ownerUid).first<Row>();
     if (Number(count?.count || 0) >= 200) throw new Error("JOB_PACKET_LIMIT");
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request); requireManager(access); const body = await request.json() as Row;
+    const access = await requireInstallerTeamAccess(request); requirePacketAccess(access, true); const body = await request.json() as Row;
     const id = cleanAdminText(body.packetId, 180); const existing = await ownedPacket(access.ownerUid, id); const action = cleanAdminText(body.action, 30);
     const db = getD1(); const now = new Date().toISOString();
     if (action === "archive") {
