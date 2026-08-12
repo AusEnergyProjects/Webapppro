@@ -4,9 +4,9 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 12 August 2026
+Last reconciled locally: 13 August 2026
 
-Deployment evidence last verified: 12 August 2026
+Deployment evidence last verified: 13 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
@@ -186,9 +186,15 @@ This is the only current implementation and release-status document. The [dated 
 | Historical activity-date copy-corrected application source | `e01d7fc8eb80292ddfb019366355293c1103c5fe` on `codex/sites-custom-domain-migration` | Historical executable source for milestone `AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56`; differs from version 316 only in the calculator footer activity-date wording |
 | Historical Sites version 317 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_524c3bf7b99c81918281002a6aaf9aca` | Exact Sites version 317 built from `e01d7fc8eb80292ddfb019366355293c1103c5fe`; 397 files; 39,034,880 bytes; content hash `sha256:17d143da5104ac5231b50aac712b46c280b4f1af8b963d17f7786426e17364dc`; all 129 migrations |
 | Historical Sites version 317 executable identity | Sites version 317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7bf11b64a8819187ab2155e60906ad` succeeded at `2026-08-12T04:06:57.633776Z`; environment revision 20 |
-| Current durable public-lead and quote application source | `621797579ea1f2249e8679b26056066a4c824668` on `codex/sites-custom-domain-migration` | Validated, pushed to GitHub and Sites internal `main`; exact executable source for milestone `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` |
-| Current Sites version 318 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e` | Exact Sites version 318 built from `621797579ea1f2249e8679b26056066a4c824668`; 399 files; 39,157,760 bytes; content hash `sha256:8dc4ea96f8dffa646d073e8e0ca3b8106bd286bc0e3dbbf5533402df841f4cc6`; all 131 migrations through `0130_trade_issued_document_cleanup.sql` |
-| Current Sites version 318 executable identity | Sites version 318 from `621797579ea1f2249e8679b26056066a4c824668` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-12T08:12:48.019629Z`; environment revision 20 |
+| Historical durable public-lead and quote application source | `621797579ea1f2249e8679b26056066a4c824668` on `codex/sites-custom-domain-migration` | Exact executable source for historical milestone `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` |
+| Historical Sites version 318 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e` | Exact Sites version 318 built from `621797579ea1f2249e8679b26056066a4c824668`; 399 files; 39,157,760 bytes; content hash `sha256:8dc4ea96f8dffa646d073e8e0ca3b8106bd286bc0e3dbbf5533402df841f4cc6`; all 131 migrations through `0130_trade_issued_document_cleanup.sql` |
+| Historical Sites version 318 executable identity | Sites version 318 from `621797579ea1f2249e8679b26056066a4c824668` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` on provider `info294029--aea-energy-comparison` succeeded at `2026-08-12T08:12:48.019629Z`; environment revision 20; remained live through the failed version 319 attempt until version 320 succeeded |
+| Failed historical Team and one-click quote application source | `9bc981227e258dffb036a1ddf9acd6ad9117b72a` on `codex/sites-custom-domain-migration` | Complete feature source saved as Sites version 319, but never activated because the Sites migration parser rejected multiline trigger bodies |
+| Failed historical Sites version 319 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8` | Exact Sites version 319 built from `9bc981227e258dffb036a1ddf9acd6ad9117b72a`; deployment failed before activation with `incomplete input: SQLITE_ERROR` |
+| Failed historical Sites version 319 deployment identity | `appgdep_6a7c7a96fe2c8191be72871005057712` | Failed before activation with `incomplete input: SQLITE_ERROR`; deployment URL was null; version 318 remained public |
+| Current Team and one-click quote application source | `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` on `codex/sites-custom-domain-migration` | Validated, pushed to GitHub and Sites internal `main`; exact executable and Sites migration-parser repair source for milestone `TLINK-TEAM-ONE-CLICK-QUOTE-58` |
+| Current Sites version 320 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b` | Exact Sites version 320 built from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`; 408 files; 39,536,640 bytes; archive storage content hash `sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`; all 134 migrations through `0133_public_lead_job_files.sql` |
+| Current Sites version 320 executable identity | Sites version 320 from `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` succeeded on provider `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; custom home served, health returned HTTP 200 at `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned zero events |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -230,20 +236,95 @@ HTTP 500. Sites version 315 from
 reads and is historical. Full implementation Sites version 316 from
 `1e7a835a2b0f967b725a9a6400ec5872fbf7cbf1` is also historical. Sites version
 317 from `e01d7fc8eb80292ddfb019366355293c1103c5fe` is historical. Sites version
-318 from `621797579ea1f2249e8679b26056066a4c824668` is the current verified
-production release and contains the durable public-lead, email, photo-lightbox,
-quote-handoff and read-only monitor correction.
+318 from `621797579ea1f2249e8679b26056066a4c824668` is historical and remained live
+through the failed version 319 attempt. Version 319 from
+`9bc981227e258dffb036a1ddf9acd6ad9117b72a` failed before activation with
+`incomplete input: SQLITE_ERROR` and a null deployment URL. Sites version 320
+from exact repair source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is the current
+verified production release and contains the full Team system, atomic one-click
+Interested workflow and accepted lead Files custody.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current durable public lead, customer delivery and quote handoff release
+## Current TLink Team and one-click Interested release
+
+Milestone `TLINK-TEAM-ONE-CLICK-QUOTE-58` is released from exact repair and
+executable application source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`, which is
+pushed to GitHub and Sites internal `main`. Sites saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployed it through `appgdep_6a7c85c3787c8191b79ee717958643c6` as current
+Sites version 320. The public custom URL is
+`https://compare.ausenergyassessments.com`, the provider URL is
+`https://aea-energy-comparison.info294029.chatgpt.site`, and the deployment uses
+environment revision 20. Sites stored 408 files and 39,536,640 bytes with archive
+storage content hash
+`sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`.
+
+Team is now a first-class trade workspace. Owners can govern granular access
+permissions, saved permission presets, roster membership, member files and
+credential vault records, device inventory and active or inactive lifecycle
+history. Saved presets copy defaults only and never authorize access. Deactivation
+removes access while retaining historical job, file and compliance records. Job,
+assignment, rescheduling, customer, report, quote, invoice, price-book, discount,
+evidence and permission-management access remains separately controlled,
+including own-work and team-work scopes. Only an owner can close the business
+account.
+
+For an exact authorised match, one Interested action atomically creates or
+replays that accepting company's customer, primary contact, service site, numbered
+job and draft quote, copies every customer-selected quote photo into canonical
+job Files, and opens the quote tool. The same marketplace lead can therefore
+produce independent tenant-owned IDs, workflow records, media objects and replay
+state for every company that accepts it. Accepted customer context, answers and
+copied photos remain available after the source lead is withdrawn, expires or is
+removed.
+
+Accepted CRM names use a deliberate placeholder without changing consent truth.
+An unknown first name is persisted as `Redacted` and an unknown last name is
+persisted separately as `Redacted`; an available component is preserved. The
+composed CRM display is `Redacted Redacted` only when both are unavailable. The
+immutable accepted-disclosure snapshot keeps undisclosed name fields blank, and
+an authorised company user can later replace the CRM placeholders.
+
+Additive migrations `0131_trade_team_permissions_and_member_files.sql`,
+`0132_public_lead_accepted_disclosure.sql` and
+`0133_public_lead_job_files.sql` extend the deployed inventory to 134 migrations.
+Historical version 319 used source `9bc981227e258dffb036a1ddf9acd6ad9117b72a`, saved
+version
+`appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8`
+and deployment `appgdep_6a7c7a96fe2c8191be72871005057712`. It failed before
+activation with `incomplete input: SQLITE_ERROR`, returned a null URL and left
+version 318 live. Repair source `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
+keeps the three forward migrations Sites-parser compatible and installs and
+verifies the exact complete trigger statements at runtime.
+
+The intended full suite excluding the preserved unrelated stale evidence test ran
+1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed. Focused coverage
+passed 38 of 38, independent risk coverage passed 210 of
+210 and integration passed 36 of 36. Typecheck, warning-free lint, `db:check`
+across all 134 migrations, production build, Sites server-bundle audit,
+`git diff --check` and the customer-plan PDF audit passed.
+
+Raw unfiltered `npm test` is not green because preserved unrelated test
+`test/trade-field-evidence-finalisation.test.mjs` contains stale mock and source
+location expectations. It was not edited and retains SHA-256
+`6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`. This
+caveat is not counted as a pass and does not alter the validated intended-suite
+result above.
+
+The custom-domain home served successfully, `/api/health` returned HTTP 200 at
+`2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
+zero events. Release QA deliberately did not create a synthetic Interested
+workflow or perform a live quote send.
+
+## Previous durable public lead, customer delivery and quote handoff release
 
 Milestone `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` is released from exact application
 source `621797579ea1f2249e8679b26056066a4c824668`, which is pushed to GitHub and
 Sites internal `main`. Sites saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
-and deployed it through `appgdep_6a7c2aece3248191abf36ae69cdb2095` as current
+and deployed it through `appgdep_6a7c2aece3248191abf36ae69cdb2095` as historical
 Sites version 318. Deployment succeeded on provider
 `info294029--aea-energy-comparison` at `2026-08-12T08:12:48.019629Z` with
 environment revision 20 at `https://compare.ausenergyassessments.com`.
@@ -2345,7 +2426,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 318 is:
+The current verified deployed topology for Sites version 320 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

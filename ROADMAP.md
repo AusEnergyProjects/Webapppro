@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 12 August 2026
+Last reconciled: 13 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -22,7 +22,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - Access is never granted by a payment, plan, seat, lead, job or quote state.
 - A trade applicant must supply a checksum-valid Australian Business Number.
 - A valid checksum is only an input check. An authorised reviewer must verify the business against an authoritative source before any trade workspace or trade API becomes available.
-- Installer and supplier permissions remain role scoped. Licences, insurance, product evidence, privacy controls and jurisdiction rules remain separate approval gates where applicable.
+- Installer and supplier access is governed by authoritative per-member permissions and own-work or team-work scopes. Saved presets copy defaults only and never authorize access. Licences, insurance, product evidence, privacy controls and jurisdiction rules remain separate approval gates where applicable.
 - Household accounts remain free and private.
 - Household planning remains independent, brand-agnostic and advisory. It is not represented as a NatHERS assessment, certificate, quote or savings guarantee.
 - Household advice records owner or renter tenure separately from strata or common-property approval and supports several concurrent goals because authority, comfort, budget and upgrade sequencing can differ.
@@ -2066,11 +2066,83 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
+## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
+
+Release status: exact repair and executable application commit
+`732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 320 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` reconcile to that
+source. Deployment succeeded on provider
+`https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
+20. Sites stored 408 files and 39,536,640 bytes with content hash
+`sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`.
+
+Historical Sites version 319 used application source
+`9bc981227e258dffb036a1ddf9acd6ad9117b72a`, saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8`
+and deployment `appgdep_6a7c7a96fe2c8191be72871005057712`. Deployment failed
+before activation with `incomplete input: SQLITE_ERROR`, returned a null URL and
+left Sites version 318 live until version 320 succeeded.
+
+### Outcome
+
+Give growing trade businesses a complete, uncluttered Team workspace and make one
+Interested action create the company-owned job, quote and canonical job Files
+needed to start work immediately.
+
+### Implemented scope
+
+- Team is a first-class workspace with owner-governed access permissions, roster,
+  member files and credential vault, device inventory, saved permission presets,
+  active and inactive lifecycle history, immediate access revocation and retained
+  compliance records.
+- Job, quote, customer, schedule, reports, price book, discount, evidence and team
+  administration permissions support own-work and team-work boundaries. Only the
+  owner can close the business account.
+- One Interested action atomically creates or replays that exact company's
+  customer, primary contact, service site, numbered job and draft quote, then
+  opens the quote workspace. Every company accepting the same marketplace lead
+  receives its own tenant-owned IDs, records, media objects and replay boundary.
+- Every customer-selected quote photo is copied into the accepting company's
+  canonical job Files before success is returned. The accepted contact, scope,
+  answers and copied photos remain available after the source lead is withdrawn,
+  expires or is removed.
+- Missing accepted CRM first and last names are persisted independently as
+  `Redacted`, so the composed display is `Redacted Redacted` when both are
+  unavailable. The immutable accepted-disclosure snapshot remains truthful and
+  keeps undisclosed name fields blank until the company manually updates its CRM
+  record.
+- Additive migrations `0131_trade_team_permissions_and_member_files.sql`,
+  `0132_public_lead_accepted_disclosure.sql` and
+  `0133_public_lead_job_files.sql` extend the packaged inventory to 134
+  migrations. Sites-incompatible trigger bodies are installed and verified at
+  runtime from exact complete statements by the repair source.
+
+### Validation and release evidence
+
+- The intended full suite, excluding the preserved unrelated stale evidence test,
+  ran 1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed.
+  Focused coverage passed 38 of 38, independent risk coverage passed 210 of 210,
+  and integration passed 36 of 36.
+- Typecheck, warning-free lint, `db:check` across all 134 migrations, production
+  build, Sites server-bundle audit, `git diff --check` and the customer-plan PDF
+  audit passed.
+- Raw unfiltered `npm test` is not green because preserved unrelated test
+  `test/trade-field-evidence-finalisation.test.mjs` contains stale mock and source
+  location expectations. It was not edited and retains SHA-256
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- The custom-domain home served successfully, `/api/health` returned HTTP 200 at
+  `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
+  zero events. Release QA did not create a synthetic Interested workflow or send
+  a live quote.
+
+## Previous released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
 
 Release status: exact application commit
 `621797579ea1f2249e8679b26056066a4c824668` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 318 at
+Sites internal `main`, and was released as historical Sites version 318 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
 and deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` reconcile to that
@@ -2406,7 +2478,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical versions 310 and 317 and the current version 318 release.
+historical versions 310, 317 and 318 and the current version 320 release.
 
 ### Outcome
 
@@ -2550,11 +2622,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Observe first real post-release enquiry end-to-end (200 queued, customer provider acceptance/inbox, every matched trade email/dashboard).
-2. Confirm the next signed hourly monitor reports durable lead readiness HTTP 200 without false Apps Script timeout.
-3. Run a controlled signed-in Interested -> draft -> issue/send -> customer secure quote decision proof.
-4. Perform mobile/customer visual QA of submission progress, photo lightbox, and quote editor, fixing only verified gaps.
-5. Add an owner delivery-status/retry dashboard for customer email, matched-trade email, and quotes.
+1. Controlled live owner/manager/office/field permission matrix with test accounts and device revocation.
+2. Compliance expiry and credential alerts dashboard.
+3. Workload and capability-aware assignment suggestions.
+4. Permission/access review export plus periodic audit.
+5. Staff mobile rollout and field acceptance with offline/device policy.
 
 ## Global stop conditions
 

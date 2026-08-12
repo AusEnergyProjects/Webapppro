@@ -1,28 +1,40 @@
 # Next task handover
 
-Status: `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57` released as current Sites version 318; next task is first-real-enquiry delivery proof
+Status: `TLINK-TEAM-ONE-CLICK-QUOTE-58` released as current Sites version 320; next task is the controlled live permission matrix
 
-Prepared: 12 August 2026
+Prepared: 13 August 2026
 
-Milestone ID: `AEA-DURABLE-PUBLIC-LEAD-QUOTE-57`
+Milestone ID: `TLINK-TEAM-ONE-CLICK-QUOTE-58`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
+Milestone source baseline: `621797579ea1f2249e8679b26056066a4c824668`
 
-Full implementation commit: `621797579ea1f2249e8679b26056066a4c824668`
+Full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
 
-Exact release commit: `621797579ea1f2249e8679b26056066a4c824668`
+Exact release and Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 
-Current production application source: `621797579ea1f2249e8679b26056066a4c824668`
+Current production application source: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 
-Current production: Sites version 318 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 320 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
 
-Current deployment: `appgdep_6a7c2aece3248191abf36ae69cdb2095`
+Current deployment: `appgdep_6a7c85c3787c8191b79ee717958643c6`
 
-Migration inventory: all 131 migrations through `0130_trade_issued_document_cleanup.sql`
+Migration inventory: all 134 migrations through `0133_public_lead_job_files.sql`
+
+Failed historical version 319 application source: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
+
+Failed historical version 319 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8`
+
+Failed historical version 319 deployment: `appgdep_6a7c7a96fe2c8191be72871005057712`, failed before activation with `incomplete input: SQLITE_ERROR`, URL null
+
+Historical version 318 application source: `621797579ea1f2249e8679b26056066a4c824668`
+
+Historical version 318 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+
+Historical version 318 deployment: `appgdep_6a7c2aece3248191abf36ae69cdb2095`; remained live until version 320 succeeded
 
 Historical version 317 application source: `e01d7fc8eb80292ddfb019366355293c1103c5fe`
 
@@ -42,7 +54,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 399 files, 39,157,760 bytes, Sites content hash `sha256:8dc4ea96f8dffa646d073e8e0ca3b8106bd286bc0e3dbbf5533402df841f4cc6`
+Current release package: 408 files, 39,536,640 bytes, Sites archive storage content hash `sha256:3f58ebf1aab9097920b97060f4151b3397c36456c9df48fe690c4e5d4d6588bb`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -54,69 +66,85 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
+## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
 
-Status: exact application source `621797579ea1f2249e8679b26056066a4c824668`
-is pushed to GitHub and Sites internal `main` and released as current Sites
-version 318. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
-and deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` reconcile to that
-source. Deployment succeeded on provider `info294029--aea-energy-comparison` at
-`2026-08-12T08:12:48.019629Z` with environment revision 20.
+Status: exact repair and executable application source
+`732f096ca5a8d606cf616ae7ec323ae9d2ce66b7` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 320. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_6f8fcc323a708191b385cbb4384d7f2b`
+and deployment `appgdep_6a7c85c3787c8191b79ee717958643c6` reconcile to that
+source. Deployment succeeded at the public custom URL
+`https://compare.ausenergyassessments.com` and provider URL
+`https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
+20.
 
 ### Implemented outcome
 
-The first public enquiry attempt is durably accepted before expensive delivery
-work begins, customer and internal email paths retry independently, monitoring
-checks readiness without creating a lead, protected photos open in a lightbox,
-and Interest opens a deterministic prefilled quote ready for explicit issue and
-send.
+TLink now has a first-class Team system and one Interested action creates the
+accepting company's complete customer, job, quote and job-file context before the
+quote editor opens.
 
 ### Implemented capability
 
-- The reproduced first-attempt failure came from cold PDF and font preparation
-  followed by a synchronous Apps Script relay inside the public request. The
-  request reached its execution budget and aborted before success could be
-  returned.
-- The public route now persists canonical intake in D1 and R2 and creates
-  independent customer-email and internal-review outboxes before returning HTTP
-  200 with `planEmailStatus: queued`. Customer PDF generation, Resend delivery
-  and Apps Script review relay happen after acceptance with durable retries.
-- The signed lead monitor now reads D1 schema and index readiness, R2 capability
-  and provider configuration presence. It does not write a lead, call the relay,
-  send email or claim provider deliverability.
-- An exact authorised match can click a protected thumbnail to open the whole
-  image. X, backdrop and Escape close the focus-contained lightbox and object URLs
-  are revoked after use.
-- Interest creates or reuses a pseudonymous customer, contact, site, job and draft
-  quote and opens the quote editor. Issue and send are explicit and recheck the
-  current recipient and access. Issued PDF bytes and the customer secure link are
-  immutable. The product-owner override intentionally omits withdraw or change
-  after issue.
-- Migrations `0129_public_plan_delivery_outboxes.sql` and
-  `0130_trade_issued_document_cleanup.sql` bring the release inventory to 131.
-- The existing Apps Script project and deployment ID
-  `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`
-  remain unchanged. That deployment was updated in place to version 15 at 12
-  August 2026 18:10 with description `durable public-plan delivery and read-only
-  readiness monitoring`. Its exact relay SHA-256 is
-  `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2`.
+- Team provides owner-governed access permissions, a searchable roster, member
+  files and credential vault, saved permission presets, paged device inventory,
+  and active or inactive lifecycle records. Saved presets copy defaults only and
+  never authorize access. Deactivation revokes access while preserving historical
+  jobs, files and compliance records.
+- Permissions cover customer visibility and search, reports, jobs, assignment and
+  reassignment, own or team scheduling, quotes, invoices, price book, discounts,
+  evidence and permission administration. Only the owner can close the business
+  account.
+- Interested atomically creates or replays the accepting company's customer,
+  primary contact, service site, numbered job and draft quote, then opens the
+  quote tool. Every company accepting the same lead receives independent
+  tenant-owned IDs, workflow records, media objects and replay state.
+- All customer-selected quote photos are copied into canonical job Files before
+  the Interested action returns success. Accepted customer context, answers and
+  copied files survive later source withdrawal, expiry or removal.
+- An unknown accepted CRM first name persists as `Redacted` and an unknown last
+  name persists separately as `Redacted`. Available parts remain unchanged, and
+  the immutable disclosure snapshot keeps every undisclosed name field blank.
+  An authorised company user can later replace the CRM placeholders.
+- Migrations `0131_trade_team_permissions_and_member_files.sql`,
+  `0132_public_lead_accepted_disclosure.sql` and
+  `0133_public_lead_job_files.sql` bring the deployed inventory to 134. The
+  correction installs and verifies exact complete trigger statements at runtime
+  because the Sites migration parser cannot consume multiline trigger bodies.
 
 ### Validation and release evidence
 
-- `npm.cmd run validate` exited 0. Typecheck, warning-free lint, `db:check`, build,
-  Sites bundle audit and `git diff --check` passed. Integration passed 36 of 36.
-  The full suite ran 1,980 tests with 1,970 passed, 10 intentional skips and 0
-  failures. All 131 migrations passed and the customer-plan PDF audit rendered
-  24 pages.
-- Focused quote and photo tests passed 123 of 123, durable lead and email tests
-  passed 38 of 38, monitor tests passed 29 of 29, and the broader regression set
-  passed 85 of 85.
-- Live custom-domain health, plan and trade dashboard checks returned HTTP 200.
-  The 15-minute post-release Worker errors-only query returned zero events.
-- No synthetic live lead, customer email or quote was sent. The first real
-  post-release customer delivery and every matched-trade email and dashboard
-  appearance remain the next proof gate.
+- The intended full suite excluding the preserved unrelated stale evidence test
+  ran 1,941 tests: 1,932 passed, 9 intentionally skipped and 0 failed. Focused
+  coverage passed 38 of 38, independent risk coverage passed 210
+  of 210 and integration passed 36 of 36.
+- Typecheck, warning-free lint, `db:check` across all 134 migrations, production
+  build, Sites server-bundle audit, `git diff --check` and the customer-plan PDF
+  audit passed.
+- Raw unfiltered `npm test` is not green because the preserved unrelated
+  `test/trade-field-evidence-finalisation.test.mjs` still contains stale mock and
+  source-location expectations. It was not edited and retains SHA-256
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- The custom-domain home served successfully. `/api/health` returned HTTP 200 at
+  `2026-08-12T14:43:28.523Z`, and the 30-minute Worker errors-only query returned
+  zero events. No synthetic Interested action or live quote send was performed.
+
+### Failed historical Sites version 319
+
+Version 319 used source `9bc981227e258dffb036a1ddf9acd6ad9117b72a`, saved
+version
+`appgprj_6a550c378000819185caf094173422bb~appgver_f56d55c000988191a5d215afbe9f64c8`
+and deployment `appgdep_6a7c7a96fe2c8191be72871005057712`. It failed before
+activation with `incomplete input: SQLITE_ERROR`, returned a null URL and never
+became public. Version 318 remained live until corrected version 320 succeeded.
+
+## Previous released milestone: AEA-DURABLE-PUBLIC-LEAD-QUOTE-57
+
+Exact source `621797579ea1f2249e8679b26056066a4c824668`, saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_b10013e775f481919c719d4f00f2260e`
+and deployment `appgdep_6a7c2aece3248191abf36ae69cdb2095` identify historical
+Sites version 318. It remained public through the failed version 319 attempt and
+was replaced only after version 320 succeeded.
 
 ## Previous released milestone: AEA-LEAD-SUBMISSION-SERVICE-CALCULATOR-56
 
@@ -1186,11 +1214,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Observe first real post-release enquiry end-to-end (200 queued, customer provider acceptance/inbox, every matched trade email/dashboard).
-2. Confirm the next signed hourly monitor reports durable lead readiness HTTP 200 without false Apps Script timeout.
-3. Run a controlled signed-in Interested -> draft -> issue/send -> customer secure quote decision proof.
-4. Perform mobile/customer visual QA of submission progress, photo lightbox, and quote editor, fixing only verified gaps.
-5. Add an owner delivery-status/retry dashboard for customer email, matched-trade email, and quotes.
+1. Controlled live owner/manager/office/field permission matrix with test accounts and device revocation.
+2. Compliance expiry and credential alerts dashboard.
+3. Workload and capability-aware assignment suggestions.
+4. Permission/access review export plus periodic audit.
+5. Staff mobile rollout and field acceptance with offline/device policy.
 
 ## Previous released milestone
 
