@@ -14,7 +14,7 @@ export default function PublicRebateCalculatorPage() {
       <SiteHeader active="calculator" />
       <PublicRebateCalculatorWorkspace />
       <SiteFooter>
-        Estimates use the selected installation date and available official
+        Estimates use the selected activity date and available official
         scheme data. Your installer confirms the final work and discount.
       </SiteFooter>
     </main>
