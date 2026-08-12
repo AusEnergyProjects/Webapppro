@@ -183,7 +183,10 @@ test("trade lead reads split base rows from any-release context and validate bef
   assert.match(route, /customerProjectContactForMatchedLead\(/);
   assert.match(route, /arrivalProposalForMatchedLead\(/);
   assert.match(publicContextRead, /JOIN public_trade_lead_contact_releases public_contact/);
-  assert.match(publicContextRead, /public_contact\.opportunity_id = o\.id/);
+  assert.match(
+    publicContextRead,
+    /ON public_contact\.id = \([\s\S]*WHERE current_release\.opportunity_id = o\.id[\s\S]*current_release\.source_reference = o\.source_reference[\s\S]*ORDER BY datetime\(current_release\.updated_at\) DESC[\s\S]*LIMIT 1/,
+  );
   assert.doesNotMatch(publicContextRead, /public_contact\.status = 'active'/);
   assert.match(publicContextRead, /public_quote_preparation\.withdrawn_at = ''/);
   assert.match(publicPhotoRead, /preparation\.withdrawn_at = ''/);

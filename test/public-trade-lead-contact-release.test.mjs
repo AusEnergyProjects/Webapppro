@@ -10,6 +10,7 @@ import {
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "../src/lib/public-plan-enquiry.mjs";
+import { projectPublicMarketplaceEnquiry } from "../src/lib/public-marketplace-enquiry-projection.mjs";
 
 const LEGACY_V4_NOTICE = "2026-08-10-customer-selected-trade-sharing-v4";
 const LEGACY_V4_PURPOSE =
@@ -99,6 +100,47 @@ function marketplaceSyncSql() {
       '${verifiedTradeAccountPredicate("current_trade_account")}',
       "current_trade_account.status = 'approved'",
     );
+}
+
+function marketplaceReadAccessSql() {
+  const sql = tradeEnquiriesRoute.match(
+    /const currentPublicMarketplaceAccessSql = \(enquiryAlias: string\) => `([\s\S]*?)`;/,
+  )?.[1];
+  assert.ok(sql, "marketplace read-access SQL must be extractable for execution");
+  return sql
+    .replaceAll("${enquiryAlias}", "enquiry")
+    .replace(
+      '${publicPlanContactReleaseAccessSql("current_public_release")}',
+      publicPlanContactReleaseAccessSql("current_public_release"),
+    )
+    .replace(
+      '${verifiedTradeAccountPredicate("current_public_account")}',
+      "current_public_account.status = 'approved'",
+    );
+}
+
+function marketplaceProjectionSql() {
+  const sql = tradeEnquiriesRoute.match(
+    /const publicMarketplaceProjectionSql = `([\s\S]*?)`;/,
+  )?.[1];
+  assert.ok(sql, "marketplace contact projection SQL must be extractable for execution");
+  return sql;
+}
+
+function marketplaceReadJoinsSql() {
+  const sql = tradeEnquiriesRoute.match(
+    /const publicMarketplaceReadJoins = \(enquiryAlias: string\) => `([\s\S]*?)`;/,
+  )?.[1];
+  assert.ok(sql, "marketplace read joins must be extractable for execution");
+  return sql.replaceAll("${enquiryAlias}", "enquiry");
+}
+
+function marketplaceSearchTextSql() {
+  const sql = tradeEnquiriesRoute.match(
+    /const enquirySearchTextSql = \(enquiryAlias: string\) => `([\s\S]*?)`;/,
+  )?.[1];
+  assert.ok(sql, "enquiry search text SQL must be extractable for execution");
+  return sql.replaceAll("${enquiryAlias}", "enquiry");
 }
 
 test("stored public contact releases accept only exact v4, v6 and v7 policy-field pairs", () => {
@@ -345,11 +387,12 @@ test("every allocated trade sees routing fields and written notes while name and
   database.close();
 });
 
-test("legacy v6 CRM lead projection remains eligible and keeps the address private until explicitly shared", () => {
+test("public CRM lead storage stays pseudonymous while reads project only the current exact release", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(`CREATE TABLE trade_opportunities (
       id text PRIMARY KEY, source_reference text NOT NULL DEFAULT '', postcode text NOT NULL,
-      state text NOT NULL, summary text NOT NULL, priority text NOT NULL
+      state text NOT NULL, summary text NOT NULL, priority text NOT NULL,
+      status text NOT NULL, expires_at text NOT NULL
     );
     CREATE TABLE trade_opportunity_matches (
       id text PRIMARY KEY, opportunity_id text NOT NULL, firebase_uid text NOT NULL,
@@ -363,6 +406,7 @@ test("legacy v6 CRM lead projection remains eligible and keeps the address priva
       id text PRIMARY KEY, firebase_uid text NOT NULL, source_type text NOT NULL,
       source_reference text NOT NULL, external_record_id text NOT NULL, opportunity_match_id text NOT NULL,
       status text NOT NULL, customer_type text NOT NULL, first_name text NOT NULL, last_name text NOT NULL,
+      business_name text NOT NULL DEFAULT '',
       email text NOT NULL, phone text NOT NULL, address_line_1 text NOT NULL, address_line_2 text NOT NULL,
       suburb text NOT NULL, address_state text NOT NULL, postcode text NOT NULL,
       service_category text NOT NULL, service_categories text NOT NULL,
@@ -374,13 +418,13 @@ test("legacy v6 CRM lead projection remains eligible and keeps the address priva
   apply(database, baseMigration);
   apply(database, addressMigration);
   database.exec(`INSERT INTO trade_opportunities
-      (id, source_reference, postcode, state, summary, priority)
-      VALUES ('opportunity-1', 'AEA-20260810-CRM', '3000', 'VIC', 'Customer project.', 'standard');
+      (id, source_reference, postcode, state, summary, priority, status, expires_at)
+      VALUES ('opportunity-1', 'AEA-20260810-CRM', '3000', 'VIC', 'Customer project.', 'standard', 'open', '2099-08-10T04:00:00.000Z');
     INSERT INTO trade_accounts (firebase_uid, partner_type, status)
       VALUES ('trade-a', 'installer', 'approved');
     INSERT INTO trade_opportunity_matches
       (id, opportunity_id, firebase_uid, status, matched_categories, matched_at, updated_at)
-      VALUES ('match-a', 'opportunity-1', 'trade-a', 'offered', '["solar","battery"]',
+      VALUES ('match-a', 'opportunity-1', 'trade-a', 'interested', '["solar","battery"]',
         '2026-08-10T04:00:00.000Z', '2026-08-10T04:00:00.000Z');`);
   database.prepare(`INSERT INTO public_trade_lead_contact_releases
       (id, opportunity_id, source_reference, status, notice_version, consent_purpose,
@@ -400,34 +444,135 @@ test("legacy v6 CRM lead projection remains eligible and keeps the address priva
   const sync = database.prepare(marketplaceSyncSql());
   sync.run("opportunity-1", "", "");
   assert.deepEqual({ ...database.prepare(`SELECT first_name, last_name, email, phone, address_line_1, address_line_2, suburb, address_state, postcode,
-      service_categories, description FROM trade_crm_enquiries`).get() }, {
+      service_categories, description, protected_source, duplicate_decision FROM trade_crm_enquiries`).get() }, {
     first_name: "",
     last_name: "",
-    email: "jamie@example.test",
+    email: "",
     phone: "",
     address_line_1: "",
     address_line_2: "",
     suburb: "",
     address_state: "",
-    postcode: "3000",
+    postcode: "",
     service_categories: '["solar","battery"]',
+    description: "Customer project.",
+    protected_source: 1,
+    duplicate_decision: "protected",
+  });
+  const readCurrentLead = database.prepare(`SELECT enquiry.*,
+      ${marketplaceProjectionSql()}
+    FROM trade_crm_enquiries enquiry
+    ${marketplaceReadJoinsSql()}
+    WHERE ${marketplaceReadAccessSql()}`);
+  const initialProjection = projectPublicMarketplaceEnquiry(readCurrentLead.get());
+  assert.equal(initialProjection.id, "marketplace-match-a");
+  assert.deepEqual({
+    firstName: initialProjection.first_name,
+    lastName: initialProjection.last_name,
+    email: initialProjection.email,
+    phone: initialProjection.phone,
+    addressLine1: initialProjection.address_line_1,
+    postcode: initialProjection.postcode,
+    description: initialProjection.description,
+  }, {
+    firstName: "",
+    lastName: "",
+    email: "jamie@example.test",
+    phone: "",
+    addressLine1: "",
+    postcode: "3000",
     description: "Customer project. Customer message: Solar and battery help please.",
   });
+  database.prepare(`UPDATE trade_crm_enquiries SET first_name = 'Old Private',
+      last_name = 'Customer', email = 'withdrawn@example.test',
+      phone = '0499999999', description = 'Old private message needle'
+    WHERE id = 'marketplace-match-a'`).run();
+  const protectedSearch = database.prepare(`SELECT enquiry.id
+    FROM trade_crm_enquiries enquiry
+    ${marketplaceReadJoinsSql()}
+    WHERE ${marketplaceReadAccessSql()}
+      AND LOWER(${marketplaceSearchTextSql()}) LIKE '%' || ? || '%'`);
+  assert.equal(protectedSearch.get("withdrawn@example.test"), undefined,
+    "cached marketplace PII cannot affect protected search results");
+  assert.equal(protectedSearch.get("old private message needle"), undefined,
+    "a cached withdrawn message cannot be probed through search");
+  assert.equal(protectedSearch.get("customer project")?.id, "marketplace-match-a",
+    "non-private opportunity metadata remains searchable");
+  database.prepare(`INSERT INTO trade_crm_enquiries
+      (id, firebase_uid, source_type, source_reference, external_record_id, opportunity_match_id,
+       status, customer_type, first_name, last_name, email, phone, address_line_1,
+       address_line_2, suburb, address_state, postcode, service_category,
+       service_categories, description, urgency, service_region, protected_source,
+       duplicate_decision, record_status, created_at, updated_at)
+      VALUES ('legacy-unknown', 'trade-a', 'tlink_marketplace', 'legacy-match', '',
+        'legacy-match', 'new', 'residential', 'Legacy', 'Person', 'legacy@example.test',
+        '0400000000', '1 Legacy Street', '', 'Melbourne', 'VIC', '3000', 'solar',
+        '["solar"]', 'Legacy copied PII', 'standard', 'VIC', 0, 'unchecked',
+        'active', '2026-08-10T04:00:00.000Z', '2026-08-10T04:00:00.000Z')`).run();
+  assert.equal(database.prepare(`SELECT enquiry.id FROM trade_crm_enquiries enquiry
+    ${marketplaceReadJoinsSql()}
+    WHERE enquiry.id = 'legacy-unknown' AND ${marketplaceReadAccessSql()}`).get(), undefined,
+  "an unknown marketplace row without an exact current release fails closed");
   database.prepare("UPDATE public_trade_lead_contact_releases SET disclosed_fields = ?")
     .run(JSON.stringify([
       "customer_email", "postcode", "service_categories", "customer_message", "customer_name", "customer_address",
     ]));
-  sync.run("opportunity-1", "", "");
-  assert.deepEqual({ ...database.prepare(
-    "SELECT first_name, last_name, address_line_1, address_line_2, suburb, address_state FROM trade_crm_enquiries",
-  ).get() }, {
-    first_name: "Jamie",
-    last_name: "Example",
-    address_line_1: "15 Example Street",
-    address_line_2: "Unit 4",
+  const addressProjection = projectPublicMarketplaceEnquiry(readCurrentLead.get());
+  assert.deepEqual({
+    firstName: addressProjection.first_name,
+    lastName: addressProjection.last_name,
+    addressLine1: addressProjection.address_line_1,
+    addressLine2: addressProjection.address_line_2,
+    suburb: addressProjection.suburb,
+    state: addressProjection.address_state,
+  }, {
+    firstName: "Jamie",
+    lastName: "Example",
+    addressLine1: "15 Example Street",
+    addressLine2: "Unit 4",
     suburb: "MELBOURNE",
-    address_state: "VIC",
+    state: "VIC",
   });
+  const oldReleaseProjection = projectPublicMarketplaceEnquiry({
+    ...readCurrentLead.get(),
+    public_contact_status: "withdrawn",
+    public_contact_withdrawn_at: "2026-08-10T03:00:00.000Z",
+    public_contact_disclosed_fields: JSON.stringify([
+      "customer_email", "postcode", "service_categories", "customer_name",
+      "customer_phone", "customer_address", "customer_message",
+    ]),
+  });
+  assert.equal(oldReleaseProjection, null, "an older withdrawn broader release cannot project any PII");
+  database.prepare(`UPDATE public_trade_lead_contact_releases
+    SET status = 'withdrawn', withdrawn_at = '2026-08-10T05:00:00.000Z'`).run();
+  assert.equal(readCurrentLead.get(), undefined, "withdrawal blocks cached PII before cleanup runs");
+  sync.run("opportunity-1", "", "");
+  assert.deepEqual({ ...database.prepare(`SELECT first_name, last_name, email, phone,
+      address_line_1, address_line_2, suburb, address_state, postcode,
+      protected_source, duplicate_decision, description FROM trade_crm_enquiries`).get() }, {
+    first_name: "",
+    last_name: "",
+    email: "",
+    phone: "",
+    address_line_1: "",
+    address_line_2: "",
+    suburb: "",
+    address_state: "",
+    postcode: "",
+    protected_source: 1,
+    duplicate_decision: "protected",
+    description: "Customer project.",
+  });
+  database.prepare(`UPDATE public_trade_lead_contact_releases
+    SET status = 'active', withdrawn_at = ''`).run();
+  assert.equal(projectPublicMarketplaceEnquiry(readCurrentLead.get()).email, "jamie@example.test");
+  database.prepare("UPDATE trade_opportunities SET status = 'expired'").run();
+  assert.equal(readCurrentLead.get(), undefined, "expiry blocks cached PII before cleanup runs");
+  sync.run("opportunity-1", "", "");
+  assert.equal(database.prepare("SELECT email FROM trade_crm_enquiries").get().email, "");
+  database.prepare("UPDATE trade_opportunities SET status = 'open'").run();
+  database.prepare("UPDATE trade_opportunity_matches SET status = 'closed'").run();
+  assert.equal(readCurrentLead.get(), undefined, "a closed exact match blocks current released fields");
   database.close();
 });
 
@@ -445,18 +590,19 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(opportunityServer, /tradeSharing\.address \? \["customer_address"\] : \[\]/);
   assert.match(opportunityServer, /customerMessage \? \["customer_message"\] : \[\]/);
   assert.match(opportunityServer, /json_valid\(contact\.disclosed_fields\)/);
-  assert.match(opportunityServer, /disclosed\.value = 'customer_name'/);
-  assert.match(opportunityServer, /disclosed\.value = 'customer_phone'/);
-  assert.match(opportunityServer, /disclosed\.value = 'customer_address'/);
-  assert.match(opportunityServer, /disclosed\.value = 'customer_message'/);
-  assert.match(opportunityServer, /CASE WHEN contact\.id IS NULL THEN 1 ELSE 0 END/);
+  const syncSource = opportunityServer.match(/export async function syncMarketplaceEnquiries[\s\S]*?^}/m)?.[0] || "";
+  assert.match(syncSource, /'residential', '', '', '', '', '', '', '', '', ''/);
+  assert.doesNotMatch(syncSource, /THEN contact\.(?:customer_first_name|customer_email|customer_message)/);
+  assert.match(opportunityServer, /'residential', '', '', '', '', '', '', '', '', '',/);
+  assert.match(opportunityServer, /o\.summary,[\s\S]*o\.priority, o\.state, 1,[\s\S]*'protected'/);
   assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);
   assert.match(tradeRoute, /WHERE m\.firebase_uid = \?/);
   assert.match(tradeRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
   assert.doesNotMatch(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
   assert.doesNotMatch(tradeRoute, /publicPlanContactReleaseAccessSql\("(?:public_contact|active_public_contact)"\)/);
-  assert.match(tradeRoute, /JOIN public_trade_lead_contact_releases public_contact[\s\S]*public_contact\.opportunity_id = o\.id/);
+  assert.match(tradeRoute, /JOIN public_trade_lead_contact_releases public_contact[\s\S]*current_release\.opportunity_id = o\.id[\s\S]*current_release\.source_reference = o\.source_reference/);
+  assert.match(tradeRoute, /ORDER BY datetime\(current_release\.updated_at\) DESC/);
   assert.match(tradeRoute, /publicTradeContactForMatchedLead\(item\)/);
   assert.match(tradeLeadAccess, /export function publicTradeContactForMatchedLead\(/);
   assert.match(tradeLeadAccess, /publicPlanContactReleaseDisclosedFieldsAreValid\(/);
@@ -479,6 +625,15 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(tradeEnquiriesRoute, /publicPlanContactReleaseAccessSql\("current_public_release"\)/);
   assert.match(tradeEnquiriesRoute, /verifiedTradeAccountPredicate\("current_public_account"\)/);
   assert.match(tradeEnquiriesRoute, /current_public_release\.withdrawn_at = ''/);
+  assert.match(tradeEnquiriesRoute, /current_public_match\.status IN \('interested', 'connected'\)/);
+  assert.match(tradeEnquiriesRoute, /current_public_opportunity\.status = 'open'/);
+  assert.match(tradeEnquiriesRoute, /datetime\(current_public_opportunity\.expires_at\) > datetime\('now'\)/);
+  assert.match(tradeEnquiriesRoute, /publicMarketplaceReadJoins/);
+  assert.match(tradeEnquiriesRoute, /release_candidate\.source_reference = current_public_opportunity\.source_reference/);
+  assert.match(tradeEnquiriesRoute, /ORDER BY datetime\(release_candidate\.updated_at\) DESC/);
+  assert.match(tradeEnquiriesRoute, /const enquirySearchTextSql/);
+  assert.match(tradeEnquiriesRoute, /WHEN \$\{enquiryAlias\}\.source_type = 'tlink_marketplace'/);
+  assert.match(tradeEnquiriesRoute, /projectPublicMarketplaceEnquiry/);
   assert.match(adminMatchesRoute, /accountHasFeature\(firebaseUid, "installer", "installer_leads"\)/);
   assert.match(adminMatchesRoute, /qualifyingServiceArea\(account, String\(opportunity\.postcode\)\)/);
   assert.doesNotMatch(`${opportunityServer}\n${tradeRoute}\n${tradeEnquiriesRoute}\n${adminMatchesRoute}`, /trade_capability|capability_review|service qualification/i);

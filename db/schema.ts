@@ -1305,6 +1305,148 @@ export const publicTradeLeadQuoteUploadLimits = sqliteTable("public_trade_lead_q
   check("public_trade_lead_quote_upload_limits_timestamps_check", sql`json_valid(${table.timestamps}) AND json_type(${table.timestamps}) = 'array'`),
 ]);
 
+export const publicPlanLeadIntakes = sqliteTable("public_plan_lead_intakes", {
+  id: text("id").primaryKey(),
+  sourceReference: text("source_reference").notNull(),
+  submissionFingerprint: text("submission_fingerprint").notNull(),
+  payloadObjectKey: text("payload_object_key").notNull(),
+  status: text("status").notNull().default("pending"),
+  opportunityId: text("opportunity_id").notNull().default(""),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  payloadDeletedAt: text("payload_deleted_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_plan_lead_intakes_source_idx").on(table.sourceReference),
+  uniqueIndex("public_plan_lead_intakes_payload_idx").on(table.payloadObjectKey),
+  index("public_plan_lead_intakes_status_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+  check("public_plan_lead_intakes_fingerprint_check", sql`length(${table.submissionFingerprint}) = 64 AND lower(${table.submissionFingerprint}) NOT GLOB '*[^0-9a-f]*'`),
+  check("public_plan_lead_intakes_status_check", sql`${table.status} IN ('pending', 'processing', 'completed', 'failed')`),
+  check("public_plan_lead_intakes_attempts_check", sql`${table.attempts} >= 0`),
+  check("public_plan_lead_intakes_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("public_plan_lead_intakes_updated_at_check", sql`datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
+export const publicPlanCustomerEmailDeliveries = sqliteTable("public_plan_customer_email_deliveries", {
+  id: text("id").primaryKey(),
+  intakeId: text("intake_id").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  provider: text("provider").notNull().default("resend"),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  providerStatus: text("provider_status").notNull().default(""),
+  recipientEmailHash: text("recipient_email_hash").notNull().default(""),
+  idempotencyKey: text("idempotency_key").notNull(),
+  subject: text("subject").notNull().default(""),
+  body: text("body").notNull().default(""),
+  attachmentObjectKey: text("attachment_object_key").notNull().default(""),
+  attachmentFilename: text("attachment_filename").notNull().default(""),
+  attachmentContentType: text("attachment_content_type").notNull().default("application/pdf"),
+  attachmentSizeBytes: integer("attachment_size_bytes").notNull().default(0),
+  attachmentSha256: text("attachment_sha256").notNull().default(""),
+  attachmentDeletedAt: text("attachment_deleted_at").notNull().default(""),
+  attachmentCleanupNextAttemptAt: text("attachment_cleanup_next_attempt_at").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  sentAt: text("sent_at").notNull().default(""),
+  deliveredAt: text("delivered_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_plan_customer_email_intake_idx").on(table.intakeId),
+  uniqueIndex("public_plan_customer_email_source_idx").on(table.sourceReference),
+  uniqueIndex("public_plan_customer_email_idempotency_idx").on(table.idempotencyKey),
+  uniqueIndex("public_plan_customer_email_provider_idx").on(table.provider, table.providerMessageId)
+    .where(sql`${table.providerMessageId} <> ''`),
+  index("public_plan_customer_email_status_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+  index("public_plan_customer_email_recipient_idx").on(table.recipientEmailHash, table.createdAt),
+  check("public_plan_customer_email_status_check", sql`${table.status} IN ('pending', 'generating', 'sending', 'sent', 'delivered', 'failed', 'provider_failed', 'bounced', 'complained', 'suppressed', 'waiting_for_channel')`),
+  check("public_plan_customer_email_attempts_check", sql`${table.attempts} >= 0`),
+  check("public_plan_customer_email_attachment_size_check", sql`${table.attachmentSizeBytes} >= 0`),
+  check("public_plan_customer_email_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("public_plan_customer_email_updated_at_check", sql`datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
+export const publicPlanCustomerEmailDeliveryEvents = sqliteTable("public_plan_customer_email_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  providerEventKey: text("provider_event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_plan_customer_email_events_provider_idx").on(table.providerEventKey),
+  index("public_plan_customer_email_events_delivery_idx").on(table.deliveryId, table.occurredAt),
+  check("public_plan_customer_email_events_occurred_at_check", sql`datetime(${table.occurredAt}) IS NOT NULL`),
+  check("public_plan_customer_email_events_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
+export const publicPlanCustomerEmailSuppressions = sqliteTable("public_plan_customer_email_suppressions", {
+  emailHash: text("email_hash").primaryKey(),
+  reason: text("reason").notNull(),
+  provider: text("provider").notNull().default("resend"),
+  providerStatus: text("provider_status").notNull(),
+  providerMessageId: text("provider_message_id").notNull().default(""),
+  suppressedAt: text("suppressed_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  check("public_plan_customer_email_suppressions_suppressed_at_check", sql`datetime(${table.suppressedAt}) IS NOT NULL`),
+  check("public_plan_customer_email_suppressions_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("public_plan_customer_email_suppressions_updated_at_check", sql`datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
+export const publicPlanInternalRelayDeliveries = sqliteTable("public_plan_internal_relay_deliveries", {
+  id: text("id").primaryKey(),
+  intakeId: text("intake_id").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  idempotencyKey: text("idempotency_key").notNull(),
+  providerStatus: text("provider_status").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""),
+  sentAt: text("sent_at").notNull().default(""),
+  failedAt: text("failed_at").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_plan_internal_relay_intake_idx").on(table.intakeId),
+  uniqueIndex("public_plan_internal_relay_source_idx").on(table.sourceReference),
+  uniqueIndex("public_plan_internal_relay_idempotency_idx").on(table.idempotencyKey),
+  index("public_plan_internal_relay_status_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+  check("public_plan_internal_relay_status_check", sql`${table.status} IN ('pending', 'sending', 'sent', 'failed', 'waiting_for_channel')`),
+  check("public_plan_internal_relay_attempts_check", sql`${table.attempts} >= 0`),
+  check("public_plan_internal_relay_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("public_plan_internal_relay_updated_at_check", sql`datetime(${table.updatedAt}) IS NOT NULL`),
+]);
+
+export const publicPlanInternalRelayDeliveryEvents = sqliteTable("public_plan_internal_relay_delivery_events", {
+  id: text("id").primaryKey(),
+  deliveryId: text("delivery_id").notNull(),
+  eventKey: text("event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("public_plan_internal_relay_events_key_idx").on(table.eventKey),
+  index("public_plan_internal_relay_events_delivery_idx").on(table.deliveryId, table.occurredAt),
+  check("public_plan_internal_relay_events_occurred_at_check", sql`datetime(${table.occurredAt}) IS NOT NULL`),
+  check("public_plan_internal_relay_events_created_at_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+]);
+
 export const customerOpportunityDispatchJobs = sqliteTable("customer_opportunity_dispatch_jobs", {
   id: text("id").primaryKey(),
   opportunityId: text("opportunity_id").notNull(),
@@ -1944,6 +2086,34 @@ export const tradeCrmQuoteDeliveries = sqliteTable("trade_crm_quote_deliveries",
   attachmentSha256: text("attachment_sha256").notNull().default(""),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("trade_crm_quote_deliveries_idempotency_idx").on(table.idempotencyKey), index("trade_crm_quote_deliveries_version_idx").on(table.quoteVersionId, table.createdAt)]);
+
+export const tradeIssuedDocumentCleanup = sqliteTable("trade_issued_document_cleanup", {
+  objectKey: text("object_key").primaryKey(),
+  documentKind: text("document_kind").notNull(),
+  documentId: text("document_id").notNull(),
+  revision: integer("revision").notNull(),
+  sha256: text("sha256").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_issued_document_cleanup_due_idx").on(table.status, table.nextAttemptAt),
+  check("trade_issued_document_cleanup_object_key_check", sql`length(${table.objectKey}) BETWEEN 1 AND 512 AND ${table.objectKey} NOT GLOB '*[^A-Za-z0-9._/-]*'`),
+  check("trade_issued_document_cleanup_kind_check", sql`${table.documentKind} IN ('quote', 'invoice')`),
+  check("trade_issued_document_cleanup_document_id_check", sql`length(${table.documentId}) BETWEEN 1 AND 180 AND ${table.documentId} NOT GLOB '*[^A-Za-z0-9._-]*'`),
+  check("trade_issued_document_cleanup_revision_check", sql`${table.revision} > 0`),
+  check("trade_issued_document_cleanup_sha256_check", sql`length(${table.sha256}) = 64 AND ${table.sha256} = lower(${table.sha256}) AND ${table.sha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_issued_document_cleanup_size_check", sql`${table.sizeBytes} >= 5 AND ${table.sizeBytes} <= 12582912`),
+  check("trade_issued_document_cleanup_status_check", sql`${table.status} IN ('staged', 'pending')`),
+  check("trade_issued_document_cleanup_attempts_check", sql`${table.attempts} >= 0`),
+  check("trade_issued_document_cleanup_next_attempt_check", sql`datetime(${table.nextAttemptAt}) IS NOT NULL`),
+  check("trade_issued_document_cleanup_created_check", sql`datetime(${table.createdAt}) IS NOT NULL`),
+  check("trade_issued_document_cleanup_updated_check", sql`datetime(${table.updatedAt}) IS NOT NULL`),
+]);
 
 export const tradeCrmAppointments = sqliteTable("trade_crm_appointments", {
   id: text("id").primaryKey(),

@@ -134,10 +134,10 @@ test("failed delivery retries back off without losing the durable record", () =>
   assert.match(delivery, /Promise\.all/);
 });
 
-test("lead-delivery and administrator security gaps create operations events", () => {
+test("lead delivery and administrator security gaps create operations events while the readiness probe stays read only", () => {
   assert.match(leads, /platform\.lead_delivery_failed/);
   assert.match(leads, /platform\.lead_rate_limit_unavailable/);
-  assert.match(probe, /platform\.lead_delivery_probe_failed/);
+  assert.doesNotMatch(probe, /createAdminNotification|resolveSystemAdminNotifications/);
   assert.match(admins, /security\.admin_invited/);
   assert.match(admins, /security\.admin_access_changed/);
 });

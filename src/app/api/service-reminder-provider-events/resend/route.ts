@@ -44,8 +44,14 @@ export async function POST(request: Request) {
       FROM customer_project_activity_deliveries
       WHERE provider = 'resend' AND provider_message_id = ?`)
       .bind(providerMessageId).first<Record<string, unknown>>();
+  const publicPlanDelivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
+    || quickInvoiceDelivery || opportunityDelivery || activityDelivery ? null
+    : await db.prepare(`SELECT id, status, recipient_email_hash
+      FROM public_plan_customer_email_deliveries
+      WHERE provider = 'resend' AND provider_message_id = ?`)
+      .bind(providerMessageId).first<Record<string, unknown>>();
   const delivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
-    || quickInvoiceDelivery || opportunityDelivery || activityDelivery;
+    || quickInvoiceDelivery || opportunityDelivery || activityDelivery || publicPlanDelivery;
   if (!delivery) {
     return Response.json(
       {
@@ -63,7 +69,8 @@ export async function POST(request: Request) {
   const replayTable = serviceDelivery ? "service_reminder_delivery_events" : appointmentDelivery ? "appointment_notification_delivery_events"
     : photoDelivery ? "trade_crm_photo_request_delivery_events"
       : opportunityDelivery ? "trade_opportunity_notification_delivery_events"
-        : activityDelivery ? "customer_project_activity_delivery_events" : "";
+        : activityDelivery ? "customer_project_activity_delivery_events"
+          : publicPlanDelivery ? "public_plan_customer_email_delivery_events" : "";
   const quickInvoiceEventId = `quick-invoice-provider:${providerEventKey}`;
   const replay = quickInvoiceDelivery
     ? await db.prepare("SELECT id FROM trade_work_order_events WHERE id = ?").bind(quickInvoiceEventId).first()
@@ -74,7 +81,48 @@ export async function POST(request: Request) {
   const now = new Date().toISOString(); const terminal = ["bounced", "failed", "opted_out"].includes(status);
   const opportunityStatus = eventType === "email.complained" ? "complained"
     : eventType === "email.failed" ? "provider_failed" : status;
-  const statements = serviceDelivery ? [
+  const publicPlanStatus = eventType === "email.suppressed" ? "suppressed" : opportunityStatus;
+  const statements = publicPlanDelivery ? [
+    db.prepare(`INSERT OR IGNORE INTO public_plan_customer_email_delivery_events
+      (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'Authenticated Resend customer plan delivery event received.', ?, ?)`)
+      .bind(crypto.randomUUID(), delivery.id, providerEventKey, eventType, publicPlanStatus, String(event.created_at || now), now),
+    db.prepare(`UPDATE public_plan_customer_email_deliveries
+      SET status = CASE
+          WHEN status IN ('bounced', 'complained', 'suppressed') THEN status
+          WHEN ? IN ('bounced', 'complained', 'suppressed') THEN ?
+          WHEN status = 'delivered' THEN status
+          WHEN ? = 'delivered' THEN 'delivered'
+          WHEN ? = 'provider_failed' THEN 'provider_failed'
+          ELSE status
+        END,
+        provider_status = ?,
+        delivered_at = CASE WHEN ? = 'delivered' AND delivered_at = '' THEN ? ELSE delivered_at END,
+        failed_at = CASE WHEN ? = 1 THEN ? ELSE failed_at END,
+        last_error = CASE WHEN ? = 1 THEN ? WHEN ? = 'delivered' THEN '' ELSE last_error END,
+        next_attempt_at = CASE WHEN ? = 'provider_failed' THEN ? ELSE next_attempt_at END,
+        idempotency_key = CASE WHEN ? = 'provider_failed' THEN lower(hex(randomblob(32))) ELSE idempotency_key END,
+        updated_at = ? WHERE id = ?`)
+      .bind(
+        publicPlanStatus,
+        publicPlanStatus,
+        publicPlanStatus,
+        publicPlanStatus,
+        eventType,
+        publicPlanStatus,
+        now,
+        terminal ? 1 : 0,
+        now,
+        terminal ? 1 : 0,
+        eventType.slice(0, 120),
+        publicPlanStatus,
+        publicPlanStatus,
+        publicPlanStatus === "provider_failed" ? now : "",
+        publicPlanStatus,
+        now,
+        delivery.id,
+      ),
+  ] : serviceDelivery ? [
     db.prepare(`INSERT OR IGNORE INTO service_reminder_delivery_events
       (id, delivery_id, provider_event_key, event_type, provider_status, summary, occurred_at, created_at)
       VALUES (?, ?, ?, ?, ?, 'Authenticated Resend delivery event received.', ?, ?)`)
@@ -325,6 +373,25 @@ export async function POST(request: Request) {
         WHERE recipient_email_hash = ? AND id != ?
           AND status IN ('pending', 'failed', 'provider_failed', 'waiting_for_channel')`)
         .bind(eventType, now, activityDelivery.recipient_email_hash, activityDelivery.id),
+    );
+  }
+  if (publicPlanDelivery
+    && ["email.bounced", "email.complained", "email.suppressed"].includes(eventType)
+    && String(publicPlanDelivery.recipient_email_hash || "")) {
+    statements.push(
+      db.prepare(`INSERT INTO public_plan_customer_email_suppressions
+        (email_hash, reason, provider, provider_status, provider_message_id, suppressed_at, created_at, updated_at)
+        VALUES (?, ?, 'resend', ?, ?, ?, ?, ?)
+        ON CONFLICT(email_hash) DO UPDATE SET reason = excluded.reason,
+          provider_status = excluded.provider_status, provider_message_id = excluded.provider_message_id,
+          suppressed_at = excluded.suppressed_at, updated_at = excluded.updated_at`)
+        .bind(publicPlanDelivery.recipient_email_hash, eventType, eventType, providerMessageId, now, now, now),
+      db.prepare(`UPDATE public_plan_customer_email_deliveries
+        SET status = 'suppressed', provider_status = ?, next_attempt_at = '',
+          last_error = 'Provider suppression applies to this email address.', updated_at = ?
+        WHERE recipient_email_hash = ? AND id != ?
+          AND status IN ('pending', 'failed', 'provider_failed', 'waiting_for_channel')`)
+        .bind(eventType, now, publicPlanDelivery.recipient_email_hash, publicPlanDelivery.id),
     );
   }
   await db.batch(statements);

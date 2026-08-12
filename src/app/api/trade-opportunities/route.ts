@@ -25,6 +25,7 @@ import {
   PUBLIC_PLAN_CONSENT_PURPOSE,
 } from "@/lib/public-plan-enquiry.mjs";
 import { publicTradeContactForMatchedLead } from "@/lib/public-trade-lead-access.mjs";
+import { startPublicLeadQuoteWorkflow } from "@/lib/public-lead-quote-workflow-server";
 import {
   PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
   PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
@@ -131,6 +132,35 @@ function json(body: object, status = 200) {
     status,
     headers: { "Cache-Control": "no-store" },
   });
+}
+
+async function publicLeadQuoteWorkflowOutcome(
+  db: D1Database,
+  installerUid: string,
+  matchId: string,
+  now: string,
+) {
+  try {
+    return {
+      quoteWorkflow: await startPublicLeadQuoteWorkflow(
+        db,
+        installerUid,
+        matchId,
+        now,
+      ),
+      warning: "",
+    };
+  } catch (error) {
+    console.error("Public lead quote workspace could not be prepared", {
+      code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
+      matchId,
+      installerUid,
+    });
+    return {
+      quoteWorkflow: null,
+      warning: "Interest is recorded, but the quote workspace could not be prepared. Select Open quote to retry.",
+    };
+  }
 }
 
 function activityDispatchJson(
@@ -432,7 +462,16 @@ export async function GET(request: Request) {
     FROM authoritative_matches authorized_match
     JOIN trade_opportunities o ON o.id = authorized_match.opportunity_id
     JOIN public_trade_lead_contact_releases public_contact
-      ON public_contact.opportunity_id = o.id
+      ON public_contact.id = (
+        SELECT current_release.id
+        FROM public_trade_lead_contact_releases current_release
+        WHERE current_release.opportunity_id = o.id
+          AND current_release.source_reference = o.source_reference
+        ORDER BY datetime(current_release.updated_at) DESC,
+          datetime(current_release.granted_at) DESC,
+          current_release.id DESC
+        LIMIT 1
+      )
     LEFT JOIN public_trade_lead_quote_preparations public_quote_preparation
       ON public_quote_preparation.opportunity_id = o.id
         AND public_quote_preparation.source_reference = o.source_reference
@@ -481,8 +520,16 @@ export async function GET(request: Request) {
       AND datetime(preparation.granted_at) IS NOT NULL
       AND preparation.withdrawn_at = ''
     JOIN public_trade_lead_contact_releases contact
-      ON contact.opportunity_id = authorized_match.opportunity_id
-      AND contact.source_reference = authorized_match.source_reference
+      ON contact.id = (
+        SELECT current_release.id
+        FROM public_trade_lead_contact_releases current_release
+        WHERE current_release.opportunity_id = authorized_match.opportunity_id
+          AND current_release.source_reference = authorized_match.source_reference
+        ORDER BY datetime(current_release.updated_at) DESC,
+          datetime(current_release.granted_at) DESC,
+          current_release.id DESC
+        LIMIT 1
+      )
       AND preparation.source_reference = authorized_match.source_reference
       AND contact.status = 'active'
       AND contact.notice_version = '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}'
@@ -1073,7 +1120,16 @@ export async function PATCH(request: Request) {
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     JOIN public_trade_lead_contact_releases public_contact
-      ON public_contact.opportunity_id = o.id
+      ON public_contact.id = (
+        SELECT current_release.id
+        FROM public_trade_lead_contact_releases current_release
+        WHERE current_release.opportunity_id = o.id
+          AND current_release.source_reference = o.source_reference
+        ORDER BY datetime(current_release.updated_at) DESC,
+          datetime(current_release.granted_at) DESC,
+          current_release.id DESC
+        LIMIT 1
+      )
     WHERE m.id = ? AND m.firebase_uid = ?
     ORDER BY public_contact.granted_at DESC, public_contact.id DESC
     LIMIT 1`)
@@ -1107,7 +1163,19 @@ export async function PATCH(request: Request) {
     interested: new Set(["declined"]),
   };
   const currentStatus = String(current.status || "");
-  if (currentStatus === status) return json({ ok: true });
+  if (currentStatus === status) {
+    if (status === "interested" && currentPublicContact) {
+      await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+      const outcome = await publicLeadQuoteWorkflowOutcome(
+        db,
+        user.uid,
+        matchId,
+        now,
+      );
+      return json({ ok: true, ...outcome });
+    }
+    return json({ ok: true });
+  }
   if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
   const result = currentPublicContact
     ? await db.prepare(`UPDATE trade_opportunity_matches
@@ -1212,12 +1280,33 @@ export async function PATCH(request: Request) {
         current.opportunity_id,
       )
       .run();
-  if (!result.meta.changes)
+  if (!result.meta.changes) {
+    const raced = await db.prepare(`SELECT status FROM trade_opportunity_matches
+      WHERE id = ? AND firebase_uid = ? AND opportunity_id = ? LIMIT 1`)
+      .bind(matchId, user.uid, current.opportunity_id)
+      .first<Record<string, unknown>>();
+    if (String(raced?.status || "") === status) {
+      if (status === "interested" && currentPublicContact) {
+        await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+        const outcome = await publicLeadQuoteWorkflowOutcome(
+          db,
+          user.uid,
+          matchId,
+          now,
+        );
+        return json({ ok: true, ...outcome });
+      }
+      return json({ ok: true });
+    }
     return json(
       { ok: false, error: "The opportunity could not be updated." },
       404,
     );
+  }
   await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+  const quoteWorkflowOutcome = status === "interested" && currentPublicContact
+    ? await publicLeadQuoteWorkflowOutcome(db, user.uid, matchId, now)
+    : { quoteWorkflow: null, warning: "" };
   if (status === "declined") {
     if (current.opportunity_id)
       await allocateNearestInstallers(
@@ -1240,5 +1329,5 @@ export async function PATCH(request: Request) {
     metadata: { opportunityId: String(current.opportunity_id || ""), status },
     occurredAt: now,
   });
-  return json({ ok: true });
+  return json({ ok: true, ...quoteWorkflowOutcome });
 }

@@ -181,7 +181,7 @@ test("opportunities remain privacy-safe and partner responses stay owner scoped"
   assert.match(dashboard, /Platform coordination active/);
   assert.match(dashboard, /no active contact release is available/);
   assert.match(dashboard, /<InstallerPlatformQuote/);
-  assert.match(dashboard, /I’m interested/);
+  assert.match(dashboard, /I'm interested/);
 });
 
 test("operations UI covers accounts, evidence, projects, access and audit", () => {

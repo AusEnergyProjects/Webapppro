@@ -343,20 +343,21 @@ function handleEnquiry_(payload) {
       throw new Error("Enquiry reference does not match its original submission");
     }
     if (record && !record.details.deliveryState) return out_("ok");
-    const customerPlanAttachment = payload.email && !(record && record.details.deliveryState.customerAcknowledged)
+    const customerAcknowledgementManagedExternally = payload.customerPlanDeliveryManagedExternally === true;
+    const customerPlanAttachment = !customerAcknowledgementManagedExternally && payload.email && !(record && record.details.deliveryState.customerAcknowledged)
       ? customerPlanAttachment_(payload)
       : null;
     if (!record) {
       const details = enquiryDetails_(payload);
       if (submissionFingerprint) details.submissionFingerprint = submissionFingerprint;
       details.deliveryState = {
-        customerAcknowledged: !payload.email,
+        customerAcknowledged: !payload.email || customerAcknowledgementManagedExternally,
         internalNotified: false,
       };
       const rowNumber = writeLead_(payload, { details: details });
       record = { rowNumber: rowNumber, details: details };
     }
-    if (payload.email && !record.details.deliveryState.customerAcknowledged) {
+    if (!customerAcknowledgementManagedExternally && payload.email && !record.details.deliveryState.customerAcknowledged) {
       sendCustomerAcknowledgement_(payload, customerPlanAttachment);
       record.details.deliveryState.customerAcknowledged = true;
       saveLeadDetails_(record.rowNumber, record.details);

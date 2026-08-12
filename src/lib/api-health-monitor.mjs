@@ -1,5 +1,5 @@
 const CHECK_TIMEOUT_MS = 12_000;
-const LEAD_CHECK_TIMEOUT_MS = 25_000;
+const LEAD_CHECK_TIMEOUT_MS = 5_000;
 const REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 const STATE_KEY = "api-health/v1";
 
@@ -158,9 +158,10 @@ async function checkLeadDelivery({ fetchImpl, siteUrl, leadProbeToken, now }) {
     );
     const body = await response.json().catch(() => null);
     const probeId = typeof body?.probeId === "string" ? body.probeId.slice(0, 100) : "";
+    const correctMode = body?.mode === "durable_outbox_readiness";
     return {
       name: "lead_delivery",
-      ok: response.ok && body?.ok === true,
+      ok: response.ok && body?.ok === true && correctMode,
       status: response.status,
       durationMs: now() - startedAt,
       ...(probeId ? { probeId } : {}),

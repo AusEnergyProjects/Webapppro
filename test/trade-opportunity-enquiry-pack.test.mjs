@@ -312,6 +312,44 @@ test("lead card opens the complete plan and represents every returned shared fil
   assert.match(styles, /\.dashboard-enquiry-thumbnails img/);
 });
 
+test("protected lead photos open inline with an accessible closeable lightbox", () => {
+  assert.match(dashboard, /function ProtectedPhotoThumbnail/);
+  assert.match(dashboard, /aria-label=\{`View full image: \$\{alt\}`\}/);
+  assert.match(dashboard, /onViewPhoto\(\s*item,\s*photoUrls\[item\.id\]/);
+  assert.match(dashboard, /role="dialog"[\s\S]*aria-modal="true"/);
+  assert.match(dashboard, /aria-label="Close full image"/);
+  assert.match(
+    dashboard,
+    /event\.target === event\.currentTarget\) setPhotoLightbox\(null\)/,
+  );
+  assert.ok(
+    (dashboard.match(/event\.target === event\.currentTarget\) setPhotoLightbox\(null\)/g) || []).length >= 3,
+  );
+  assert.match(
+    dashboard,
+    /event\.key === "Escape"[\s\S]*setPhotoLightbox\(null\)/,
+  );
+  assert.match(
+    dashboard,
+    /event\.key !== "Tab"[\s\S]*document\.activeElement === first[\s\S]*last\.focus\(\)[\s\S]*document\.activeElement === last[\s\S]*first\.focus\(\)/,
+  );
+  assert.match(dashboard, /photoLightboxCloseButton\.current\?\.focus\(\)/);
+  assert.match(dashboard, /if \(opener\?\.isConnected\) opener\.focus\(\)/);
+  assert.match(dashboard, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(dashboard, /document\.body\.style\.overflow = previousBodyOverflow/);
+  assert.match(dashboard, /status: "loading"/);
+  assert.match(dashboard, /current\?\.item\.id === photoLightbox\.item\.id[\s\S]*status: "ready"/);
+  assert.match(dashboard, /role="alert"/);
+  assert.match(
+    dashboard,
+    /if \(!url \|\| !evidenceObjectUrls\.current\.has\(url\)\) return/,
+  );
+  assert.match(dashboard, /The full image reuses the authenticated, audited object URL/);
+  assert.match(styles, /\.dashboard-photo-lightbox-backdrop/);
+  assert.match(styles, /\.dashboard-photo-lightbox-stage img/);
+  assert.match(styles, /cursor: zoom-in/);
+});
+
 test("lead summaries explain both public-plan consent and protected customer-account projects", () => {
   assert.match(dashboard, /function opportunityBroadLocation/);
   assert.match(dashboard, /opportunity\.suburb, opportunity\.postcode/);

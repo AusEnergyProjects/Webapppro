@@ -35,58 +35,24 @@ export async function syncMarketplaceEnquiries(db: D1Database, opportunityId: st
     SELECT 'marketplace-' || m.id, m.firebase_uid, 'tlink_marketplace', m.id, '', m.id,
       CASE WHEN m.status IN ('interested', 'connected') THEN 'contacted'
            WHEN m.status IN ('declined', 'closed') THEN 'lost' ELSE 'new' END,
-      'residential', CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_name'
-      ) THEN contact.customer_first_name ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_name'
-      ) THEN contact.customer_last_name ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_email'
-      ) THEN contact.customer_email ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_phone'
-      ) THEN contact.customer_phone ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_address'
-      ) THEN contact.customer_street_address ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_address'
-      ) THEN contact.customer_unit_number ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_address'
-      ) THEN contact.customer_suburb ELSE '' END,
-      CASE WHEN contact.id IS NOT NULL AND EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-        WHERE disclosed.value = 'customer_address'
-      ) THEN contact.customer_address_state ELSE '' END,
-      CASE WHEN contact.id IS NULL THEN '' ELSE contact.postcode END,
+      'residential', '', '', '', '', '', '', '', '', '',
       COALESCE(json_extract(m.matched_categories, '$[0]'), 'other'), m.matched_categories,
-      o.summary || CASE
-        WHEN contact.id IS NOT NULL AND contact.customer_message <> '' AND EXISTS (
-          SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) disclosed
-          WHERE disclosed.value = 'customer_message'
-        )
-          THEN ' Customer message: ' || contact.customer_message
-        ELSE '' END,
-      o.priority, o.state, CASE WHEN contact.id IS NULL THEN 1 ELSE 0 END,
-      CASE WHEN contact.id IS NULL THEN 'protected' ELSE 'unchecked' END,
+      o.summary,
+      o.priority, o.state, 1,
+      'protected',
       'active', m.matched_at, m.updated_at
     FROM trade_opportunity_matches m JOIN trade_opportunities o ON o.id = m.opportunity_id
     LEFT JOIN public_trade_lead_contact_releases contact
       ON contact.opportunity_id = o.id
+        AND contact.source_reference = o.source_reference
         AND contact.status = 'active'
         AND ${publicPlanContactReleaseAccessSql("contact")}
         AND datetime(contact.granted_at) IS NOT NULL
         AND contact.withdrawn_at = ''
         AND contact.postcode = o.postcode
+        AND m.status IN ('interested', 'connected')
+        AND o.status = 'open'
+        AND datetime(o.expires_at) > datetime('now')
         AND EXISTS (
           SELECT 1 FROM json_each(CASE WHEN json_valid(contact.disclosed_fields) THEN contact.disclosed_fields ELSE '[]' END) required_email
           WHERE required_email.value = 'customer_email'

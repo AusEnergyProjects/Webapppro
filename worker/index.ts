@@ -24,6 +24,13 @@ import {
   drainPublicPlanQuotePhotoCleanup,
   shouldDrainPublicPlanQuotePhotoCleanup,
 } from "../src/lib/public-plan-quote-photo-cleanup";
+import { drainPublicPlanDeliveries } from "../src/lib/public-plan-delivery-server";
+import {
+  PUBLIC_PLAN_DELIVERY_DISPATCH_HEADER,
+  shouldDrainPublicPlanDeliveryBacklog,
+  takePublicPlanDeliveryDispatch,
+} from "../src/lib/public-plan-delivery-retry";
+import { createOpportunityFromLead } from "../src/lib/opportunity-server";
 import {
   syncCerSresProductRegistry,
   type CreditexSresArtifactStore,
@@ -40,6 +47,7 @@ import {
 import { matchesAustralianRegulatorClock } from "../src/lib/creditex-australian-regulator-date";
 import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
+import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -166,6 +174,31 @@ function queueOpportunityNotificationDispatch(
   return dispatch.response;
 }
 
+function queuePublicPlanDeliveryDispatch(
+  response: Response,
+  ctx: ExecutionContext,
+) {
+  const dispatch = takePublicPlanDeliveryDispatch(
+    response,
+    PUBLIC_PLAN_DELIVERY_DISPATCH_HEADER,
+  );
+  if (!dispatch.intakeId) return response;
+  ctx.waitUntil(
+    drainPublicPlanDeliveries({
+      intakeId: dispatch.intakeId,
+      createOpportunityFromLead,
+      dispatchOpportunityNotifications: (opportunityId) =>
+        drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId }),
+    }).then(() => undefined).catch((error) => {
+      console.error(
+        "Public plan delivery failed.",
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    }),
+  );
+  return dispatch.response;
+}
+
 function queueBackgroundDispatches(
   response: Response,
   ctx: ExecutionContext,
@@ -197,6 +230,26 @@ function queueBackgroundDispatches(
         }),
     );
   }
+  if (shouldDrainPublicPlanDeliveryBacklog({
+    method: request.method,
+    pathname: url.pathname,
+    responseOk: response.ok,
+  })) {
+    ctx.waitUntil(
+      drainPublicPlanDeliveries({
+        createOpportunityFromLead,
+        dispatchOpportunityNotifications: (opportunityId) =>
+          drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId }),
+      })
+        .then(() => undefined)
+        .catch((error) => {
+          console.error(
+            "Public plan delivery backlog failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+        }),
+    );
+  }
   if (shouldDrainPublicPlanQuotePhotoCleanup({
     method: request.method,
     pathname: url.pathname,
@@ -216,13 +269,20 @@ function queueBackgroundDispatches(
         }),
     );
   }
-  return queueCustomerProjectActivityDispatch(
+  if (request.method === "GET" && url.pathname === "/api/health" && response.ok) {
+    ctx.waitUntil(
+      cleanupUnreferencedTradeIssuedDocuments().then(() => undefined).catch((error) => {
+        console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+      }),
+    );
+  }
+  return queuePublicPlanDeliveryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
       queueCustomerOpportunityDispatch(response, ctx),
       ctx,
     ),
     ctx,
-  );
+  ), ctx);
 }
 
 function canonicalHostRedirect(request: Request) {
@@ -296,6 +356,16 @@ const worker = {
           bucket: getCustomerProjectEvidenceBucket(),
         }).catch((error) => {
           console.error("Public quote photo cleanup failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        drainPublicPlanDeliveries({
+          createOpportunityFromLead,
+          dispatchOpportunityNotifications: (opportunityId) =>
+            drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId }),
+        }).catch((error) => {
+          console.error("Public plan delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        cleanupUnreferencedTradeIssuedDocuments().catch((error) => {
+          console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
         }),
       );
     }

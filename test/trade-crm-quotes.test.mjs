@@ -215,7 +215,7 @@ test("secure quote sharing is revocable, expiring and commercially provider neut
 });
 
 test("installer quote actions preserve direct-customer ownership and immutable issued versions", () => {
-  for (const boundary of ["requireInstallerTeamAccess", "canDispatch", "sameOrigin", "d.customer_source = 'trade_owned'", "w.firebase_uid = ?"]) assert.match(installerRoute, new RegExp(boundary));
+  for (const boundary of ["requireInstallerTeamAccess", "canDispatch", "sameOrigin", "d.customer_source IN \\('trade_owned', 'public_lead_released'\\)", "w.firebase_uid = ?"]) assert.match(installerRoute, new RegExp(boundary));
   assert.match(installerRoute, /action === "save_draft"/);
   assert.match(installerRoute, /current\.status === "issued"/);
   assert.match(installerRoute, /status = 'superseded'/);
@@ -226,7 +226,8 @@ test("installer quote actions preserve direct-customer ownership and immutable i
   assert.match(installerRoute, /sendServiceReminderProviderMessage[\s\S]*?status = 'provider_accepted'/);
   assert.doesNotMatch(installerRoute, /quote_status = 'sent'/);
   assert.match(installerRoute, /authorisedEmails/);
-  assert.doesNotMatch(installerRoute, /trade_opportunities|opportunity_matches/);
+  assert.match(installerRoute, /publicLeadQuoteAccessSnapshot/);
+  assert.match(installerRoute, /PUBLIC_LEAD_QUOTE_ACCESS_ENDED/);
 });
 
 test("issued quote delivery is immutable, branded, attached and retry safe", () => {
@@ -369,7 +370,8 @@ test("customer decisions require verified matching identity and retain exact acc
 
 test("quote SQL compiles against its production migration dependencies", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql", "0126_public_trade_lead_contact_release.sql", "0127_public_trade_lead_customer_address.sql", "0128_public_plan_quote_preparation.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  db.exec("ALTER TABLE trade_work_orders ADD service_categories text DEFAULT '[]' NOT NULL");
   apply(db, issuedDocumentMigration.split("--> statement-breakpoint").slice(0, 3).join("--> statement-breakpoint"));
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));

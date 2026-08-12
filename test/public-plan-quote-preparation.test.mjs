@@ -11,6 +11,8 @@ import {
   PUBLIC_PLAN_QUOTE_MAX_IMAGE_DIMENSION,
   PUBLIC_PLAN_QUOTE_MAX_IMAGE_PIXELS,
   PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES,
+  PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
+  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
   PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
   normalizePublicPlanQuotePreparation,
   publicPlanQuoteAnswersForMatchedCategories,
@@ -25,6 +27,10 @@ import {
   validPublicPlanQuoteClientUploadId,
   validPublicPlanQuoteUploadReference,
 } from "../src/lib/public-plan-quote-preparation.mjs";
+import {
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "../src/lib/public-plan-enquiry.mjs";
 import {
   hasAllowedSignature,
   privateImageDimensions,
@@ -51,6 +57,17 @@ const SERVICES = [
 ];
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+
+function tradePhotoAccessSql() {
+  const route = read("../src/app/api/public-plan-quote-preparation/route.ts");
+  const getRoute = route.slice(route.indexOf("export async function GET"));
+  const sql = getRoute.match(/const row = await getD1\(\)\.prepare\(`([\s\S]*?)`\)/)?.[1];
+  assert.ok(sql, "trade photo access SQL must be extractable for execution");
+  return sql.replace(
+    '${verifiedTradeAccountPredicate("account")}',
+    "account.status = 'approved'",
+  );
+}
 
 function cleanupDatabaseAdapter(database) {
   return {
@@ -802,6 +819,81 @@ test("the private upload boundary rate-limits before multipart parsing and valid
   assert.match(route, /public_trade_lead_quote_photo_events/);
   assert.doesNotMatch(route, /publicUrl|signedUrl|send.*email/i);
   assert.doesNotMatch(route, /image\/webp|WebP/);
+});
+
+test("matched trade photo reads fail closed after preparation withdrawal or lead lifecycle expiry", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`CREATE TABLE public_trade_lead_quote_photos (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, status text NOT NULL,
+      service_categories text NOT NULL, object_key text NOT NULL
+    );
+    CREATE TABLE public_trade_lead_quote_preparations (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, source_reference text NOT NULL,
+      status text NOT NULL, notice_version text NOT NULL, consent_purpose text NOT NULL,
+      granted_at text NOT NULL, withdrawn_at text NOT NULL
+    );
+    CREATE TABLE trade_opportunities (
+      id text PRIMARY KEY, source_reference text NOT NULL, status text NOT NULL,
+      expires_at text NOT NULL
+    );
+    CREATE TABLE trade_opportunity_matches (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, firebase_uid text NOT NULL,
+      status text NOT NULL, matched_categories text NOT NULL
+    );
+    CREATE TABLE trade_accounts (
+      firebase_uid text PRIMARY KEY, partner_type text NOT NULL, status text NOT NULL
+    );
+    CREATE TABLE public_trade_lead_contact_releases (
+      id text PRIMARY KEY, opportunity_id text NOT NULL, source_reference text NOT NULL,
+      status text NOT NULL, notice_version text NOT NULL, consent_purpose text NOT NULL,
+      granted_at text NOT NULL, withdrawn_at text NOT NULL, updated_at text NOT NULL
+    );
+    INSERT INTO trade_opportunities VALUES
+      ('opportunity-1', 'AEA-TEST', 'open', '2099-08-12T00:00:00.000Z');
+    INSERT INTO trade_opportunity_matches VALUES
+      ('match-1', 'opportunity-1', 'trade-a', 'interested', '["hot-water"]');
+    INSERT INTO trade_accounts VALUES ('trade-a', 'installer', 'approved');
+    INSERT INTO public_trade_lead_quote_preparations VALUES
+      ('preparation-1', 'opportunity-1', 'AEA-TEST', 'active',
+       '${PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION}', '${PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE}',
+       '2026-08-12T00:00:00.000Z', '');
+    INSERT INTO public_trade_lead_contact_releases VALUES
+      ('release-1', 'opportunity-1', 'AEA-TEST', 'active',
+       '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}', '${PUBLIC_PLAN_CONSENT_PURPOSE}',
+       '2026-08-12T00:00:00.000Z', '', '2026-08-12T00:00:00.000Z');
+    INSERT INTO public_trade_lead_quote_photos VALUES
+      ('39c16039-4acd-4664-a2e5-3d8ad0dd7dd6', 'opportunity-1', 'active',
+       '["hot-water"]', 'private/object.jpg');`);
+  const query = database.prepare(tradePhotoAccessSql());
+  const bindings = [
+    PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
+    PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+    "trade-a",
+    PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    PUBLIC_PLAN_CONSENT_PURPOSE,
+    "39c16039-4acd-4664-a2e5-3d8ad0dd7dd6",
+  ];
+  assert.equal(query.get(...bindings)?.match_id, "match-1");
+  database.exec(`INSERT INTO public_trade_lead_contact_releases VALUES
+    ('release-2', 'opportunity-1', 'AEA-TEST', 'withdrawn',
+     '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}', '${PUBLIC_PLAN_CONSENT_PURPOSE}',
+     '2026-08-12T01:00:00.000Z', '2026-08-12T01:01:00.000Z',
+     '2026-08-12T01:01:00.000Z')`);
+  assert.equal(query.get(...bindings), undefined,
+    "a newer withdrawn release blocks an older active release");
+  database.prepare("DELETE FROM public_trade_lead_contact_releases WHERE id = 'release-2'").run();
+  assert.equal(query.get(...bindings)?.match_id, "match-1");
+  database.prepare("UPDATE public_trade_lead_quote_preparations SET withdrawn_at = '2026-08-12T01:00:00.000Z'").run();
+  assert.equal(query.get(...bindings), undefined);
+  database.prepare("UPDATE public_trade_lead_quote_preparations SET withdrawn_at = ''").run();
+  database.prepare("UPDATE trade_opportunities SET expires_at = '2000-01-01T00:00:00.000Z'").run();
+  assert.equal(query.get(...bindings), undefined);
+  database.prepare("UPDATE trade_opportunities SET expires_at = '2099-08-12T00:00:00.000Z', status = 'paused'").run();
+  assert.equal(query.get(...bindings), undefined);
+  database.prepare("UPDATE trade_opportunities SET status = 'open'").run();
+  database.prepare("UPDATE trade_opportunity_matches SET status = 'closed'").run();
+  assert.equal(query.get(...bindings), undefined);
+  database.close();
 });
 
 test("quote preparation persists once per source and is exposed only through signed-in matched-trade lead evidence", () => {

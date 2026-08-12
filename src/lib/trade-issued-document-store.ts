@@ -17,6 +17,7 @@ type IssuedDocumentBucket = {
     },
   ): Promise<unknown>;
   get(key: string): Promise<IssuedDocumentObject | null>;
+  delete(key: string): Promise<void>;
 };
 
 export type ImmutableIssuedPdfReference = {
@@ -86,7 +87,7 @@ export async function immutableIssuedPdfSha256(bytes: Uint8Array) {
     .join("");
 }
 
-export async function storeImmutableIssuedPdf(input: {
+export async function prepareImmutableIssuedPdfReference(input: {
   kind: "quote" | "invoice";
   documentId: string;
   revision: number;
@@ -95,25 +96,33 @@ export async function storeImmutableIssuedPdf(input: {
 }): Promise<ImmutableIssuedPdfReference> {
   assertPdfBytes(input.bytes);
   const sha256 = await immutableIssuedPdfSha256(input.bytes);
-  if (
-    input.expectedSha256 &&
-    input.expectedSha256.toLowerCase() !== sha256
-  ) {
+  if (input.expectedSha256 && input.expectedSha256.toLowerCase() !== sha256) {
     throw new Error("ISSUED_PDF_INTEGRITY");
   }
   const revision = Math.max(1, Math.trunc(input.revision || 1));
-  const objectKey = immutableIssuedPdfObjectKey(
-    {
-      kind: input.kind,
-      documentId: input.documentId,
-      revision,
-    },
+  return {
+    objectKey: immutableIssuedPdfObjectKey(
+      { kind: input.kind, documentId: input.documentId, revision },
+      sha256,
+    ),
     sha256,
-  );
+    sizeBytes: input.bytes.byteLength,
+  };
+}
+
+export async function storeImmutableIssuedPdf(input: {
+  kind: "quote" | "invoice";
+  documentId: string;
+  revision: number;
+  bytes: Uint8Array;
+  expectedSha256?: string;
+}): Promise<ImmutableIssuedPdfReference> {
+  const reference = await prepareImmutableIssuedPdfReference(input);
+  const revision = Math.max(1, Math.trunc(input.revision || 1));
   const kind = safePathSegment(input.kind, "document");
   const documentId = safePathSegment(input.documentId, "unknown");
   await issuedDocumentBucket().put(
-    objectKey,
+    reference.objectKey,
     exactArrayBuffer(input.bytes),
     {
       httpMetadata: { contentType: "application/pdf" },
@@ -121,17 +130,13 @@ export async function storeImmutableIssuedPdf(input: {
         documentKind: kind,
         documentId,
         revision: String(revision),
-        sha256,
+        sha256: reference.sha256,
         sizeBytes: String(input.bytes.byteLength),
         retention: "immutable-issued-document",
       },
     },
   );
-  return {
-    objectKey,
-    sha256,
-    sizeBytes: input.bytes.byteLength,
-  };
+  return reference;
 }
 
 export async function readImmutableIssuedPdf(
@@ -162,4 +167,16 @@ export async function readImmutableIssuedPdf(
     throw new Error("ISSUED_PDF_INTEGRITY");
   }
   return bytes;
+}
+
+export async function deleteImmutableIssuedPdf(
+  reference: ImmutableIssuedPdfReference,
+  identity: ImmutableIssuedPdfIdentity,
+) {
+  const objectKey = reference.objectKey.trim();
+  const expectedSha256 = reference.sha256.trim().toLowerCase();
+  if (objectKey !== immutableIssuedPdfObjectKey(identity, expectedSha256)) {
+    throw new Error("ISSUED_PDF_REFERENCE_INVALID");
+  }
+  await issuedDocumentBucket().delete(objectKey);
 }

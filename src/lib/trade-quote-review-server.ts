@@ -164,6 +164,19 @@ export type TradeQuoteDocumentSnapshotOverrides = {
   capturedAt?: string;
   consentStatement?: string;
   issuedAt?: string;
+  acceptanceEmail?: string;
+  releasedCustomer?: {
+    name: string;
+    email: string;
+  };
+  releasedSite?: {
+    label: string;
+    addressLine1: string;
+    addressLine2: string;
+    suburb: string;
+    state: string;
+    postcode: string;
+  };
 };
 
 function cleanText(value: unknown, maximum: number, multiline = false) {
@@ -548,12 +561,14 @@ export async function buildTradeQuoteDocumentSnapshot(
       .all<Row>(),
   ]);
   const allItems = itemRows.results.map(lineSnapshot);
+  const releasedCustomer = overrides.releasedCustomer;
+  const releasedSite = overrides.releasedSite;
   const siteSummary = [
-    row.address_line_1,
-    row.address_line_2,
-    row.suburb,
-    row.address_state,
-    row.postcode,
+    releasedSite?.addressLine1 ?? row.address_line_1,
+    releasedSite?.addressLine2 ?? row.address_line_2,
+    releasedSite?.suburb ?? row.suburb,
+    releasedSite?.state ?? row.address_state,
+    releasedSite?.postcode ?? row.postcode,
   ]
     .map((value) => cleanText(value, 300))
     .filter(Boolean)
@@ -591,17 +606,17 @@ export async function buildTradeQuoteDocumentSnapshot(
     customer: {
       id: cleanText(row.customer_id, 180),
       number: cleanText(row.customer_number, 120),
-      name: cleanText(row.customer_name, 240),
-      email: cleanText(row.customer_email, 254),
+      name: cleanText(releasedCustomer?.name ?? row.customer_name, 240),
+      email: cleanText(releasedCustomer?.email ?? row.customer_email, 254),
     },
     site: {
       id: cleanText(row.service_site_id, 180),
-      label: cleanText(row.site_label, 160),
-      addressLine1: cleanText(row.address_line_1, 300),
-      addressLine2: cleanText(row.address_line_2, 300),
-      suburb: cleanText(row.suburb, 160),
-      state: cleanText(row.address_state, 16),
-      postcode: cleanText(row.postcode, 12),
+      label: cleanText(releasedSite?.label ?? row.site_label, 160),
+      addressLine1: cleanText(releasedSite?.addressLine1 ?? row.address_line_1, 300),
+      addressLine2: cleanText(releasedSite?.addressLine2 ?? row.address_line_2, 300),
+      suburb: cleanText(releasedSite?.suburb ?? row.suburb, 160),
+      state: cleanText(releasedSite?.state ?? row.address_state, 16),
+      postcode: cleanText(releasedSite?.postcode ?? row.postcode, 12),
       summary: siteSummary,
     },
     business: {
@@ -628,7 +643,7 @@ export async function buildTradeQuoteDocumentSnapshot(
       ),
       quoteEmailIntro: cleanText(row.quote_email_intro, 1_000, true),
     },
-    acceptanceEmail: cleanText(row.acceptance_email, 254),
+    acceptanceEmail: cleanText(overrides.acceptanceEmail ?? row.acceptance_email, 254),
     subtotalCents: boundedInteger(row.subtotal_cents),
     taxCents: boundedInteger(row.tax_cents),
     totalCents: boundedInteger(row.total_cents),
@@ -680,7 +695,10 @@ export async function authoriseTradeQuoteLink(
     .prepare(
       `SELECT link.*, version.version_number, version.status version_status,
         version.document_snapshot_json, version.valid_until,
-        quote.quote_number, quote.current_version_number
+        quote.quote_number, quote.current_version_number,
+        work.source_type work_source_type,
+        work.source_reference work_source_reference,
+        detail.customer_source
       FROM trade_crm_quote_links link
       JOIN trade_crm_quote_versions version
         ON version.id = link.quote_version_id
@@ -690,6 +708,8 @@ export async function authoriseTradeQuoteLink(
       JOIN trade_work_orders work
         ON work.id = link.work_order_id AND work.firebase_uid = link.firebase_uid
         AND work.record_status = 'active'
+      LEFT JOIN trade_crm_job_details detail
+        ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
       JOIN trade_accounts trade
         ON trade.firebase_uid = link.firebase_uid
         AND trade.partner_type = 'installer'

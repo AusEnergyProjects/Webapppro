@@ -1,6 +1,8 @@
 import { getD1 } from "../../db";
 import {
+  deleteImmutableIssuedPdf,
   immutableIssuedPdfSha256,
+  prepareImmutableIssuedPdfReference,
   readImmutableIssuedPdf,
   storeImmutableIssuedPdf,
   type ImmutableIssuedPdfIdentity,
@@ -85,6 +87,59 @@ export async function storeTradeQuoteIssuedPdf(input: {
     ...identity,
     bytes: input.bytes,
   });
+}
+
+export async function prepareTradeQuoteIssuedPdfReference(input: {
+  quoteVersionId: string;
+  versionNumber: number;
+  bytes: Uint8Array;
+}) {
+  const row = await getD1()
+    .prepare(
+      `SELECT quote_id, version_number FROM trade_crm_quote_versions
+      WHERE id = ? AND version_number = ? LIMIT 1`,
+    )
+    .bind(input.quoteVersionId, input.versionNumber)
+    .first<Row>();
+  if (!row) throw new Error("QUOTE_ISSUED_PDF_UNAVAILABLE");
+  return prepareImmutableIssuedPdfReference({
+    ...quotePdfIdentity(row),
+    bytes: input.bytes,
+  });
+}
+
+export async function deleteTradeQuoteIssuedPdf(input: {
+  quoteVersionId: string;
+  versionNumber: number;
+  reference: ImmutableIssuedPdfReference;
+}) {
+  const row = await getD1()
+    .prepare(
+      `SELECT quote_id, version_number
+      FROM trade_crm_quote_versions
+      WHERE id = ? AND version_number = ?
+      LIMIT 1`,
+    )
+    .bind(input.quoteVersionId, input.versionNumber)
+    .first<Row>();
+  if (!row) throw new Error("QUOTE_ISSUED_PDF_UNAVAILABLE");
+  await deleteImmutableIssuedPdf(input.reference, quotePdfIdentity(row));
+}
+
+export async function verifyTradeQuoteIssuedPdf(input: {
+  quoteVersionId: string;
+  versionNumber: number;
+  reference: ImmutableIssuedPdfReference;
+}) {
+  const row = await getD1()
+    .prepare(
+      `SELECT quote_id, version_number FROM trade_crm_quote_versions
+      WHERE id = ? AND version_number = ? LIMIT 1`,
+    )
+    .bind(input.quoteVersionId, input.versionNumber)
+    .first<Row>();
+  if (!row) throw new Error("QUOTE_ISSUED_PDF_UNAVAILABLE");
+  return readVerifiedIssuedPdf(input.reference, quotePdfIdentity(row));
 }
 
 export async function issuedTradeQuotePdf(input: {

@@ -353,6 +353,7 @@ function pagination(url: URL) {
 function indexedJob(row: Record<string, unknown>) {
   const sourceType = String(row.source_type);
   const customerSource = sourceType === "opportunity" ? "platform_private" : String(row.customer_source || "internal");
+  const protectedCustomer = customerSource === "platform_private" || customerSource === "public_lead_released";
   const dataforceRecord = projectInstallerWorkOrderToDataforceRecord({
     identifiers: {
       appointmentId: String(row.appointment_id || ""),
@@ -368,7 +369,7 @@ function indexedJob(row: Record<string, unknown>) {
       paidValueCents: Number(row.paid_value_cents || 0),
       invoiceStatus: String(row.invoice_status || "not_started"),
     },
-    customer: customerSource === "platform_private" ? undefined : {
+    customer: protectedCustomer ? undefined : {
       firstName: String(row.first_name || ""),
       lastName: String(row.last_name || ""),
       businessName: String(row.business_name || ""),
@@ -376,25 +377,25 @@ function indexedJob(row: Record<string, unknown>) {
       phone: "",
       mobile: String(row.customer_phone || ""),
     },
-    serviceSite: customerSource === "platform_private" ? undefined : {
+    serviceSite: protectedCustomer ? undefined : {
       addressLine1: String(row.site_address_line_1 || ""),
       addressLine2: String(row.site_address_line_2 || ""),
       suburb: String(row.site_suburb || ""),
       postcode: String(row.site_postcode || ""),
     },
     technician: { displayName: String(row.assignee_label || "") },
-    customerReference: customerSource === "platform_private" ? "" : String(row.customer_reference || ""),
+    customerReference: protectedCustomer ? "" : String(row.customer_reference || ""),
     verifiedCertificateIssuance: null,
   });
   return {
     id: row.id, workNumber: row.work_number, title: row.title, serviceCategory: row.service_category,
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
     scheduledEnd: row.scheduled_end, assigneeLabel: row.assignee_label, sourceType, customerSource,
-    crmCustomerId: customerSource === "platform_private" ? "" : String(row.crm_customer_id || ""),
-    serviceSiteId: customerSource === "platform_private" ? "" : String(row.service_site_id || ""),
-    customerDisplayName: customerSource === "platform_private" ? "Australian Energy Assessments protected customer" : String(row.customer_name || ""),
+    crmCustomerId: protectedCustomer ? "" : String(row.crm_customer_id || ""),
+    serviceSiteId: protectedCustomer ? "" : String(row.service_site_id || ""),
+    customerDisplayName: protectedCustomer ? "Australian Energy Assessments protected customer" : String(row.customer_name || ""),
     pipelineStage: row.pipeline_stage || (sourceType === "opportunity" ? "qualifying" : "enquiry"), buildingType: row.building_type || "not_sure",
-    description: row.description || "", customerReference: customerSource === "platform_private" ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
+    description: row.description || "", customerReference: protectedCustomer ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
     nextAction: row.next_action || "", tags: storedList(row.job_tags), estimatedValueCents: Number(row.estimated_value_cents || 0),
     quotedValueCents: Number(row.quoted_value_cents || 0), invoicedValueCents: Number(row.invoiced_value_cents || 0),
     paidValueCents: Number(row.paid_value_cents || 0), quoteStatus: row.quote_status || "not_started",
@@ -797,7 +798,8 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
     .bind(id, identity.uid).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
-  const customerId = String(row.crm_customer_id || "");
+  const protectedCustomer = ["platform_private", "public_lead_released"].includes(String(row.customer_source || ""));
+  const customerId = protectedCustomer ? "" : String(row.crm_customer_id || "");
   const [tasks, appointments, notes, customer, sites, siteContacts, complianceCases, complianceIntents] = await Promise.all([
     db.prepare("SELECT * FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? ORDER BY status = 'done', due_at = '', due_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
     db.prepare("SELECT * FROM trade_crm_appointments WHERE work_order_id = ? AND firebase_uid = ? ORDER BY starts_at, created_at").bind(id, identity.uid).all<Record<string, unknown>>(),
@@ -1961,6 +1963,8 @@ export async function PATCH(request: Request) {
     const current = await db.prepare("SELECT * FROM trade_crm_job_details WHERE work_order_id = ? AND firebase_uid = ?")
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     const platformPrivate = job.source_type === "opportunity";
+    const releasedPublicLead = job.source_type === "public_lead"
+      && current?.customer_source === "public_lead_released";
     const pipelineStage = body.pipelineStage === undefined ? String(current?.pipeline_stage || (platformPrivate ? "qualifying" : "enquiry")) : cleanAdminText(body.pipelineStage, 30);
     const workStage = body.stage === undefined ? "" : cleanAdminText(body.stage, 30);
     const priority = body.priority === undefined ? "" : cleanAdminText(body.priority, 20);
@@ -1969,9 +1973,9 @@ export async function PATCH(request: Request) {
     if (!PIPELINE_STAGES.has(pipelineStage) || !QUOTE_STATUSES.has(quoteStatus) || !INVOICE_STATUSES.has(invoiceStatus)) return adminJson({ ok: false, error: "Choose a valid job, quote and invoice status." }, 400);
     if (workStage && !WORK_STAGES.has(workStage)) return adminJson({ ok: false, error: "Choose a valid work stage." }, 400);
     if (priority && !PRIORITIES.has(priority)) return adminJson({ ok: false, error: "Choose a valid priority." }, 400);
-    const customerId = platformPrivate ? "" : body.crmCustomerId === undefined ? String(current?.crm_customer_id || "") : cleanAdminText(body.crmCustomerId, 180);
-    let serviceSiteId = platformPrivate ? "" : body.serviceSiteId === undefined ? String(current?.service_site_id || "") : cleanAdminText(body.serviceSiteId, 180);
-    if (customerId) {
+    const customerId = platformPrivate ? "" : releasedPublicLead ? String(current?.crm_customer_id || "") : body.crmCustomerId === undefined ? String(current?.crm_customer_id || "") : cleanAdminText(body.crmCustomerId, 180);
+    let serviceSiteId = platformPrivate ? "" : releasedPublicLead ? String(current?.service_site_id || "") : body.serviceSiteId === undefined ? String(current?.service_site_id || "") : cleanAdminText(body.serviceSiteId, 180);
+    if (customerId && !releasedPublicLead) {
       await ownedCustomer(db, identity, customerId);
       if (!serviceSiteId) {
         const primarySite = await db.prepare(`SELECT id FROM trade_crm_service_sites
@@ -1985,7 +1989,7 @@ export async function PATCH(request: Request) {
     const values = {
       customerId,
       serviceSiteId,
-      customerSource: platformPrivate ? "platform_private" : customerId ? "trade_owned" : "internal",
+      customerSource: platformPrivate ? "platform_private" : releasedPublicLead ? "public_lead_released" : customerId ? "trade_owned" : "internal",
       pipelineStage,
       buildingType: body.buildingType === undefined ? String(current?.building_type || "not_sure") : cleanAdminText(body.buildingType, 40),
       description: body.description === undefined ? String(current?.description || "") : cleanAdminText(body.description, 3000),

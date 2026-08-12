@@ -20,14 +20,6 @@ import {
 
 const LEAD_SIGNING_SECRET = "test-lead-signing-secret-with-32-bytes-minimum";
 
-function signedWebhookPayload(init) {
-  const signed = JSON.parse(init.body);
-  assert.equal(signed.schemaVersion, "1");
-  assert.equal(signed.eventType, "lead.webhook");
-  assert.match(signed.signature, /^[A-Za-z0-9_-]{43}$/);
-  return JSON.parse(Buffer.from(signed.payload, "base64url").toString("utf8"));
-}
-
 function validPlanEnquiry(overrides = {}) {
   return {
     submissionType: "upgrade",
@@ -354,8 +346,9 @@ test("the public component sends the visible contact fields and bounded plan sel
 function requestHandler({
   fetchImpl,
   rateLimit = { allowed: true },
-  prepareLeadEnvelope,
-  createOpportunityFromLead,
+  enqueuePublicPlanDelivery,
+  createOpportunityFromLead = async () => ({ id: "opportunity-public-plan-1" }),
+  confirmPublicPlanIntakeOpportunity = async () => ({ opportunityId: "opportunity-public-plan-1" }),
 }) {
   return createLeadPostHandler({
     validateLeadPayload,
@@ -372,10 +365,11 @@ function requestHandler({
     async recordLeadIncident() {},
     async resolveSystemAdminNotifications() {},
     isPublicPlanEnquiry,
-    prepareLeadEnvelope,
+    enqueuePublicPlanDelivery,
     createOpportunityFromLead,
-    opportunityNotificationDispatchHeader:
-      "X-AEA-Opportunity-Notification-Dispatch",
+    confirmPublicPlanIntakeOpportunity,
+    publicPlanDeliveryDispatchHeader:
+      "X-AEA-Public-Plan-Delivery-Dispatch",
     env: {
       AEA_LEAD_WEBHOOK_URL: "https://processor.example/leads",
       AEA_LEAD_WEBHOOK_SIGNING_SECRET: LEAD_SIGNING_SECRET,
@@ -385,24 +379,17 @@ function requestHandler({
   });
 }
 
-test("an immediately submitted valid public plan enquiry prepares customer delivery then creates a stripped opportunity after acknowledgement", async () => {
-  let delivery;
-  let acknowledged = false;
-  let opportunity;
+test("a valid public plan enquiry commits one durable intake before returning queued status", async () => {
+  let intake;
+  let relayCalls = 0;
   const handler = requestHandler({
-    fetchImpl: async (url, init) => {
-      delivery = { url, init };
-      acknowledged = true;
-      return new Response("ok", { status: 200 });
+    fetchImpl: async () => {
+      relayCalls += 1;
+      throw new Error("public plan intake must not synchronously call the relay");
     },
-    prepareLeadEnvelope: async ({ envelope }) => ({
-      ...envelope,
-      customerPlanDelivery: { version: "test-customer-only" },
-    }),
-    createOpportunityFromLead: async (payload) => {
-      assert.equal(acknowledged, true);
-      opportunity = payload;
-      return { id: "opportunity-public-plan-1" };
+    enqueuePublicPlanDelivery: async (input) => {
+      intake = input;
+      return { id: "intake-public-plan-1", status: "pending" };
     },
   });
   const payload = validPlanEnquiry({ clientStartedAt: Date.now() });
@@ -419,27 +406,24 @@ test("an immediately submitted valid public plan enquiry prepares customer deliv
 
   assert.equal(response.status, 200);
   assert.equal(result.ok, true);
-  assert.equal(result.planEmailSent, true);
+  assert.equal(result.planEmailSent, false);
+  assert.equal(result.planEmailStatus, "queued");
   assert.equal(result.filtered, undefined);
   assert.match(result.reference, /^AEA-/);
   assert.equal(
-    response.headers.get("X-AEA-Opportunity-Notification-Dispatch"),
-    "opportunity-public-plan-1",
+    response.headers.get("X-AEA-Public-Plan-Delivery-Dispatch"),
+    "intake-public-plan-1",
   );
-  assert.equal(delivery.url, "https://processor.example/leads");
-  const deliveredPayload = signedWebhookPayload(delivery.init);
-  assert.equal(deliveredPayload.sourceJourney, "public-home-energy-plan");
-  assert.equal(deliveredPayload.directTradeTriage.autoSend, true);
-  assert.equal(deliveredPayload.customerPlanDelivery.version, "test-customer-only");
-  assert.equal("customerPlanDelivery" in opportunity, false);
-  assert.equal("planSnapshot" in opportunity, false);
+  assert.equal(intake.envelope.sourceJourney, "public-home-energy-plan");
+  assert.equal(intake.envelope.directTradeTriage.autoSend, true);
+  assert.equal(intake.validatedPayload.planSnapshot.propertyContext.propertyType, "townhouse");
+  assert.equal(relayCalls, 0);
 });
 
-test("a post-ack opportunity failure reports the safe receipt and offers an idempotent matching retry", async () => {
+test("a durable public-plan intake failure is not reported as accepted", async () => {
   const handler = requestHandler({
-    fetchImpl: async () => new Response("ok", { status: 200 }),
-    createOpportunityFromLead: async () => {
-      throw new Error("D1 unavailable");
+    enqueuePublicPlanDelivery: async () => {
+      throw new Error("D1 unavailable before outbox commit");
     },
   });
   const response = await handler(new Request("https://compare.example/api/leads", {
@@ -450,17 +434,16 @@ test("a post-ack opportunity failure reports the safe receipt and offers an idem
   const result = await response.json();
   assert.equal(response.status, 502);
   assert.equal(result.ok, false);
-  assert.equal(result.received, true);
-  assert.match(result.reference, /^AEA-/);
+  assert.equal(result.received, undefined);
   assert.equal(result.planEmailSent, false);
-  assert.match(result.error, /retry trade matching with the same request/i);
+  assert.equal(result.planEmailStatus, "not_queued");
+  assert.match(result.error, /could not be saved/i);
 });
 
-test("a durable notification enqueue failure cannot be reported as successful trade matching", async () => {
+test("a source fingerprint conflict fails closed", async () => {
   const handler = requestHandler({
-    fetchImpl: async () => new Response("ok", { status: 200 }),
-    createOpportunityFromLead: async () => {
-      throw new Error("OPPORTUNITY_NOTIFICATION_ENQUEUE_INCOMPLETE");
+    enqueuePublicPlanDelivery: async () => {
+      throw Object.assign(new Error("PUBLIC_PLAN_INTAKE_FINGERPRINT_MISMATCH"), { status: 409 });
     },
   });
   const response = await handler(new Request("https://compare.example/api/leads", {
@@ -469,24 +452,21 @@ test("a durable notification enqueue failure cannot be reported as successful tr
     body: JSON.stringify(validPlanEnquiry()),
   }));
   const result = await response.json();
-  assert.equal(response.status, 502);
+  assert.equal(response.status, 409);
   assert.equal(result.ok, false);
-  assert.equal(result.received, true);
-  assert.equal(response.headers.has("X-AEA-Opportunity-Notification-Dispatch"), false);
-  assert.match(result.error, /trade matching is not yet prepared/i);
+  assert.equal(response.headers.has("X-AEA-Public-Plan-Delivery-Dispatch"), false);
+  assert.match(result.error, /different details/i);
 });
 
-test("the same received enquiry can retry marketplace preparation without changing its relay identity", async () => {
-  const delivered = [];
-  let opportunityAttempts = 0;
+test("an identical retry repairs through the same durable intake identity without synchronous relay", async () => {
+  const fingerprints = [];
+  let attempts = 0;
   const handler = requestHandler({
-    fetchImpl: async (_url, init) => {
-      delivered.push(signedWebhookPayload(init));
-      return new Response("ok", { status: 200 });
-    },
-    createOpportunityFromLead: async () => {
-      opportunityAttempts += 1;
-      if (opportunityAttempts === 1) throw new Error("D1 temporarily unavailable");
+    enqueuePublicPlanDelivery: async ({ envelope }) => {
+      attempts += 1;
+      fingerprints.push(envelope.submissionFingerprint);
+      if (attempts === 1) throw new Error("batch interrupted");
+      return { id: "canonical-intake", status: "pending" };
     },
   });
   const body = JSON.stringify(validPlanEnquiry());
@@ -497,55 +477,12 @@ test("the same received enquiry can retry marketplace preparation without changi
   });
   const first = await handler(makeRequest());
   assert.equal(first.status, 502);
-  assert.equal((await first.json()).received, true);
+  assert.equal((await first.json()).planEmailStatus, "not_queued");
   const second = await handler(makeRequest());
   assert.equal(second.status, 200);
-  assert.equal((await second.json()).ok, true);
-  assert.equal(opportunityAttempts, 2);
-  assert.equal(delivered.length, 2);
-  assert.equal(delivered[0].reference, delivered[1].reference);
-  assert.equal(delivered[0].submissionFingerprint, delivered[1].submissionFingerprint);
-  assert.equal(
-    delivered[0].directTradeTriage.contactConsentReceipt.grantedAt,
-    delivered[1].directTradeTriage.contactConsentReceipt.grantedAt,
-  );
-});
-
-test("a lost relay response can be retried with the same stable reference without duplicate email or opportunity", async () => {
-  const relayedReferences = new Set();
-  let emails = 0;
-  let fetchAttempts = 0;
-  const opportunities = [];
-  const handler = requestHandler({
-    fetchImpl: async (_url, init) => {
-      fetchAttempts += 1;
-      const envelope = signedWebhookPayload(init);
-      if (!relayedReferences.has(envelope.reference)) {
-        relayedReferences.add(envelope.reference);
-        emails += 1;
-      }
-      if (fetchAttempts === 1) throw new TypeError("response lost after relay success");
-      return new Response("ok", { status: 200 });
-    },
-    createOpportunityFromLead: async (payload) => {
-      if (!opportunities.includes(payload.reference)) opportunities.push(payload.reference);
-    },
-  });
-  const body = JSON.stringify(validPlanEnquiry());
-  const makeRequest = () => new Request("https://compare.example/api/leads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
-  const first = await handler(makeRequest());
-  assert.equal(first.status, 502);
-  const second = await handler(makeRequest());
-  assert.equal(second.status, 200);
-  const result = await second.json();
-  assert.equal(result.ok, true);
-  assert.equal(emails, 1);
-  assert.equal(relayedReferences.size, 1);
-  assert.deepEqual(opportunities, [...relayedReferences]);
+  assert.equal((await second.json()).planEmailStatus, "queued");
+  assert.equal(attempts, 2);
+  assert.equal(fingerprints[0], fingerprints[1]);
 });
 
 test("lead webhook signing is deterministic for a fixed timestamp and fails closed without a distinct secret", () => {

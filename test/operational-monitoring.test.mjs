@@ -19,7 +19,7 @@ function jsonResponse(body, status = 200) {
   return Response.json(body, { status });
 }
 
-test("public leads and the protected probe share one downstream timeout", () => {
+test("legacy non-plan lead delivery retains one bounded downstream timeout", () => {
   assert.match(leadRoute, /LEAD_PROCESSOR_TIMEOUT_MS/);
   assert.doesNotMatch(
     leadRoute,
@@ -27,8 +27,8 @@ test("public leads and the protected probe share one downstream timeout", () => 
   );
 });
 
-test("the lead health check outlives the protected endpoint timeout", () => {
-  assert.match(monitorSource, /const LEAD_CHECK_TIMEOUT_MS = 25_000/);
+test("the lead health check has a bounded allowance beyond the protected endpoint deadline", () => {
+  assert.match(monitorSource, /const LEAD_CHECK_TIMEOUT_MS = 5_000/);
   assert.match(
     monitorSource,
     /new URL\("\/api\/internal\/lead-webhook-probe", siteUrl\)[\s\S]*LEAD_CHECK_TIMEOUT_MS/,
@@ -67,7 +67,15 @@ function healthyCheckResponse(url) {
       source: { listSourcesSucceeded: 3, detailPlansSucceeded: 10, plansWithLastUpdated: 10, detailApiVersion: "3", partial: false },
     });
   }
-  if (value.includes("lead-webhook-probe")) return jsonResponse({ ok: true, probeId: "probe-1" });
+  if (value.includes("lead-webhook-probe")) {
+    return jsonResponse({
+      ok: true,
+      probeId: "probe-1",
+      mode: "durable_outbox_readiness",
+      schedulerExecutionVerified: false,
+      providerDeliveryVerified: false,
+    });
+  }
   return null;
 }
 
@@ -118,6 +126,26 @@ test("first healthy monitor run records state without sending a noisy recovery a
   assert.deepEqual(result.checks.map((check) => check.name), ["site_runtime", "electricity_plans", "gas_plans", "lead_delivery"]);
   assert.equal(store.read().status, "healthy");
   assert.equal(store.read().lastAlertAt, null);
+});
+
+test("monitor rejects the retired downstream acknowledgement response contract", async () => {
+  const store = createStateStore();
+  const result = await runApiHealthMonitor({
+    siteUrl: "https://example.test",
+    leadProbeToken: "probe-secret",
+    alertWebhookUrl: "",
+    stateStore: store,
+    logger: quietLogger(),
+    now: () => 1_800_000_000_000,
+    async fetchImpl(url) {
+      if (String(url).includes("lead-webhook-probe")) {
+        return jsonResponse({ ok: true, probeId: "retired-probe" });
+      }
+      return healthyCheckResponse(url);
+    },
+  });
+  assert.equal(result.status, "unhealthy");
+  assert.equal(result.checks.find((entry) => entry.name === "lead_delivery").ok, false);
 });
 
 test("failed plan check sends a privacy-safe alert and records the notification time", async () => {
@@ -216,7 +244,7 @@ test("failed alert delivery remains pending for the next scheduled run", async (
   assert.equal(store.read().status, "unhealthy");
 });
 
-test("Google Apps monitoring checks the Sites runtime, both plan services and privacy-safe lead delivery", () => {
+test("Google Apps monitoring checks the Sites runtime, both plan services and durable lead readiness", () => {
   const script = fs.readFileSync(
     path.join(process.cwd(), "integrations/google-apps-script/lead-email-relay.gs"),
     "utf8",

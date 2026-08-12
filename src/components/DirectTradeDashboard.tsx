@@ -172,6 +172,12 @@ type DashboardOpportunity = {
     customerDecision: string;
   };
 };
+type ProtectedPhotoLightbox = {
+  item: DashboardOpportunity["evidence"][number];
+  url: string;
+  alt: string;
+  status: "loading" | "ready" | "error";
+};
 type DashboardWorkspace = "work" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
@@ -262,6 +268,38 @@ const capabilityLabels: Record<string, string> = {
   controls: "Energy controls",
 };
 
+function ProtectedPhotoThumbnail({
+  url,
+  alt,
+  onOpen,
+}: {
+  url: string;
+  alt: string;
+  onOpen: () => void;
+}) {
+  if (!url) {
+    return (
+      <div className="dashboard-enquiry-thumbnail-unavailable">
+        Preview unavailable. The protected download may still be available.
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="dashboard-enquiry-photo-button"
+      aria-label={`View full image: ${alt}`}
+      onClick={onOpen}
+    >
+      {/* Authenticated evidence is exposed as a short-lived object URL. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={alt} />
+      <span aria-hidden="true">View full image</span>
+    </button>
+  );
+}
+
 function EnquiryPack({
   opportunity,
   photoUrls,
@@ -272,6 +310,7 @@ function EnquiryPack({
   planBusy,
   planError,
   onTogglePhotos,
+  onViewPhoto,
   onDownload,
   onOpenPlan,
   onDownloadPlan,
@@ -285,6 +324,11 @@ function EnquiryPack({
   planBusy: boolean;
   planError: string;
   onTogglePhotos: () => void;
+  onViewPhoto: (
+    item: DashboardOpportunity["evidence"][number],
+    url: string,
+    alt: string,
+  ) => void;
   onDownload: (item: DashboardOpportunity["evidence"][number]) => void;
   onOpenPlan: () => void;
   onDownloadPlan: () => void;
@@ -410,20 +454,15 @@ function EnquiryPack({
           <div className="dashboard-enquiry-thumbnails">
             {photos.map((item) => (
               <article key={item.id}>
-                {photoUrls[item.id] && (
-                  // Authenticated evidence is exposed as a short-lived object URL.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photoUrls[item.id]}
-                    alt={`Customer-shared ${item.category.replaceAll("-", " ")} photo`}
-                  />
-                )}
-                {!photoUrls[item.id] && (
-                  <div className="dashboard-enquiry-thumbnail-unavailable">
-                    Preview unavailable. The protected download may still be
-                    available.
-                  </div>
-                )}
+                <ProtectedPhotoThumbnail
+                  url={photoUrls[item.id] || ""}
+                  alt={`Customer-shared ${item.category.replaceAll("-", " ")} photo`}
+                  onOpen={() => onViewPhoto(
+                    item,
+                    photoUrls[item.id],
+                    `Customer-shared ${item.category.replaceAll("-", " ")} photo`,
+                  )}
+                />
                 <div>
                   <span>Customer-shared quoting photo</span>
                   <strong>{item.category.replaceAll("-", " ")}</strong>
@@ -486,6 +525,7 @@ function PublicQuotePreparation({
   photoError,
   downloadBusy,
   onTogglePhotos,
+  onViewPhoto,
   onDownload,
 }: {
   opportunity: DashboardOpportunity;
@@ -495,6 +535,11 @@ function PublicQuotePreparation({
   photoError: string;
   downloadBusy: string;
   onTogglePhotos: () => void;
+  onViewPhoto: (
+    item: DashboardOpportunity["evidence"][number],
+    url: string,
+    alt: string,
+  ) => void;
   onDownload: (item: DashboardOpportunity["evidence"][number]) => void;
 }) {
   const preparation = opportunity.quotePreparation;
@@ -564,18 +609,15 @@ function PublicQuotePreparation({
           <div className="dashboard-enquiry-thumbnails">
             {photos.map((item) => (
               <article key={item.id}>
-                {photoUrls[item.id] ? (
-                  // Authenticated evidence is exposed as a short-lived object URL.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photoUrls[item.id]}
-                    alt={item.promptLabel || "Customer-shared quote photo"}
-                  />
-                ) : (
-                  <div className="dashboard-enquiry-thumbnail-unavailable">
-                    Preview unavailable. The protected download may still be available.
-                  </div>
-                )}
+                <ProtectedPhotoThumbnail
+                  url={photoUrls[item.id] || ""}
+                  alt={item.promptLabel || "Customer-shared quote photo"}
+                  onOpen={() => onViewPhoto(
+                    item,
+                    photoUrls[item.id],
+                    item.promptLabel || "Customer-shared quote photo",
+                  )}
+                />
                 <div>
                   <span>Customer-shared quoting photo</span>
                   <strong>{item.promptLabel || "Quote preparation photo"}</strong>
@@ -682,7 +724,11 @@ export function DirectTradeDashboard() {
   const [installerPlanBusy, setInstallerPlanBusy] = useState("");
   const [installerPlanErrors, setInstallerPlanErrors] = useState<Record<string, string>>({});
   const [installerPlanPreview, setInstallerPlanPreview] = useState<CustomerPlanReportView | null>(null);
+  const [photoLightbox, setPhotoLightbox] = useState<ProtectedPhotoLightbox | null>(null);
   const evidenceObjectUrls = useRef(new Set<string>());
+  const photoLightboxDialog = useRef<HTMLDivElement | null>(null);
+  const photoLightboxCloseButton = useRef<HTMLButtonElement | null>(null);
+  const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
   );
@@ -703,6 +749,53 @@ export function DirectTradeDashboard() {
     for (const url of evidenceObjectUrls.current) URL.revokeObjectURL(url);
     evidenceObjectUrls.current.clear();
   }, []);
+
+  const photoLightboxOpen = Boolean(photoLightbox);
+
+  useEffect(() => {
+    if (!photoLightboxOpen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      photoLightboxCloseButton.current?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setPhotoLightbox(null);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = photoLightboxDialog.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      const opener = photoLightboxOpener.current;
+      photoLightboxOpener.current = null;
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [photoLightboxOpen]);
 
   const abortProtectedOpportunityRequests = useCallback(() => {
     for (const controller of protectedOpportunityRequestControllers.current) {
@@ -759,6 +852,7 @@ export function DirectTradeDashboard() {
     setEvidencePhotoUrls({});
     setEvidencePhotoBusy("");
     setEvidencePhotoErrors({});
+    setPhotoLightbox(null);
     setExpandedOpportunityMatchIds(new Set());
     setFocusedOpportunityMatchId("");
   }, [abortProtectedOpportunityRequests, revokeAllEvidenceObjectUrls]);
@@ -1097,9 +1191,32 @@ export function DirectTradeDashboard() {
             : item,
         ),
       );
+      const quoteWorkflow = result.quoteWorkflow && typeof result.quoteWorkflow === "object"
+        ? result.quoteWorkflow as { workOrderId?: unknown; workNumber?: unknown }
+        : null;
+      const quoteWorkOrderId = typeof quoteWorkflow?.workOrderId === "string"
+        ? quoteWorkflow.workOrderId
+        : "";
+      if (status === "interested" && quoteWorkOrderId) {
+        setCommandTarget({
+          workspace: "work",
+          kind: "job",
+          id: quoteWorkOrderId,
+          query: "",
+          jobTab: "quote",
+          nonce: Date.now(),
+        });
+        setWorkspace("work");
+        setOpportunityStatus(
+          `${typeof quoteWorkflow?.workNumber === "string" ? quoteWorkflow.workNumber : "The customer quote"} is ready to edit.`,
+        );
+        return;
+      }
       setOpportunityStatus(
         status === "interested"
-          ? "Interest recorded. You can now prepare a structured platform response when the project supports it."
+          ? typeof result.warning === "string" && result.warning
+            ? result.warning
+            : "Interest recorded. You can now prepare a structured platform response when the project supports it."
           : status === "declined"
             ? "Opportunity declined. This will help improve future matching."
             : "Opportunity marked as reviewed.",
@@ -1283,6 +1400,18 @@ export function DirectTradeDashboard() {
     }
   }
 
+  function openOpportunityPhoto(
+    item: DashboardOpportunity["evidence"][number],
+    url: string,
+    alt: string,
+  ) {
+    if (!url || !evidenceObjectUrls.current.has(url)) return;
+    photoLightboxOpener.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setPhotoLightbox({ item, url, alt, status: "loading" });
+  }
+
   async function installerPlanReport(
     opportunity: DashboardOpportunity,
     activeUser: User,
@@ -1412,6 +1541,80 @@ export function DirectTradeDashboard() {
           report={installerPlanPreview}
           onClose={() => setInstallerPlanPreview(null)}
         />
+      )}
+      {authReady && user && photoLightbox && (
+        <div
+          className="dashboard-photo-lightbox-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setPhotoLightbox(null);
+          }}
+        >
+          <div
+            ref={photoLightboxDialog}
+            className="dashboard-photo-lightbox-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dashboard-photo-lightbox-title"
+            aria-describedby="dashboard-photo-lightbox-help"
+            tabIndex={-1}
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setPhotoLightbox(null);
+            }}
+          >
+            <header>
+              <div>
+                <span>Customer-shared quoting photo</span>
+                <h2 id="dashboard-photo-lightbox-title">
+                  {photoLightbox.item.promptLabel || photoLightbox.alt}
+                </h2>
+              </div>
+              <button
+                ref={photoLightboxCloseButton}
+                type="button"
+                aria-label="Close full image"
+                onClick={() => setPhotoLightbox(null)}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </header>
+            <div
+              className={`dashboard-photo-lightbox-stage ${photoLightbox.status}`}
+              aria-busy={photoLightbox.status === "loading"}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) setPhotoLightbox(null);
+              }}
+            >
+              {/* The full image reuses the authenticated, audited object URL. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoLightbox.url}
+                alt={photoLightbox.alt}
+                onLoad={() => setPhotoLightbox((current) =>
+                  current?.item.id === photoLightbox.item.id
+                    ? { ...current, status: "ready" }
+                    : current
+                )}
+                onError={() => setPhotoLightbox((current) =>
+                  current?.item.id === photoLightbox.item.id
+                    ? { ...current, status: "error" }
+                    : current
+                )}
+              />
+              {photoLightbox.status === "loading" && (
+                <p role="status">Opening the protected full image...</p>
+              )}
+              {photoLightbox.status === "error" && (
+                <p role="alert">
+                  The full image could not be displayed. Close this view and use
+                  the protected download if needed.
+                </p>
+              )}
+            </div>
+            <p id="dashboard-photo-lightbox-help">
+              Select the close button, press Escape or click outside the image to close.
+            </p>
+          </div>
+        </div>
       )}
       {!authReady || loading ? (
         <section className="dashboard-state-card" aria-live="polite">
@@ -1936,6 +2139,7 @@ export function DirectTradeDashboard() {
                               planBusy={installerPlanBusy === opportunity.matchId}
                               planError={installerPlanErrors[opportunity.matchId] || ""}
                               onTogglePhotos={() => void toggleOpportunityPhotos(opportunity)}
+                              onViewPhoto={openOpportunityPhoto}
                               onDownload={(item) => void downloadOpportunityEvidence(item)}
                               onOpenPlan={() => void openInstallerPlan(opportunity)}
                               onDownloadPlan={() => void downloadInstallerPlan(opportunity)}
@@ -1950,6 +2154,7 @@ export function DirectTradeDashboard() {
                               photoError={evidencePhotoErrors[opportunity.matchId] || ""}
                               downloadBusy={opportunityBusy}
                               onTogglePhotos={() => void toggleOpportunityPhotos(opportunity)}
+                              onViewPhoto={openOpportunityPhoto}
                               onDownload={(item) => void downloadOpportunityEvidence(item)}
                             />
                           )}
@@ -1993,7 +2198,7 @@ export function DirectTradeDashboard() {
                                 className="primary"
                                 disabled={
                                   opportunityBusy === opportunity.matchId ||
-                                  opportunity.matchStatus === "interested"
+                                  (opportunity.platformOnly && opportunity.matchStatus === "interested")
                                 }
                                 onClick={() =>
                                   void respondToOpportunity(
@@ -2003,8 +2208,8 @@ export function DirectTradeDashboard() {
                                 }
                               >
                                 {opportunity.matchStatus === "interested"
-                                  ? "Interest recorded"
-                                  : "I’m interested"}
+                                  ? opportunity.platformOnly ? "Interest recorded" : "Open quote"
+                                  : "I'm interested"}
                               </button>
                               <button
                                 type="button"
@@ -2042,13 +2247,13 @@ export function DirectTradeDashboard() {
                             </div>
                           )}
                           {opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && <InstallerPlatformQuote matchId={opportunity.matchId} initialQuote={opportunity.quote} onStatus={setOpportunityStatus} />}
-                          {!opportunity.platformOnly && ["interested", "connected"].includes(opportunity.matchStatus) && (
+                          {!opportunity.platformOnly && opportunity.matchStatus === "interested" && (
                             <section className="dashboard-opportunity-conversion" aria-label="Opportunity workflow actions">
                               <div>
-                                <strong>Move this scope into your trade workflow</strong>
-                                <span>The CRM keeps the opportunity reference, service region and protected privacy boundary.</span>
+                                <strong>Your customer quote is ready</strong>
+                                <span>Only currently shared contact and quote preparation details appear in this quote. They are not copied into your customer list.</span>
                               </div>
-                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void convertOpportunity(opportunity.matchId)}>Create job</button>
+                              <button type="button" disabled={opportunityBusy === opportunity.matchId} onClick={() => void respondToOpportunity(opportunity.matchId, "interested")}>Open customer quote</button>
                             </section>
                           )}
                           {opportunity.platformOnly && opportunity.quote?.customerDecision === "accepted" && <>

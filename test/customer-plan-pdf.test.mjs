@@ -53,6 +53,10 @@ const PUBLIC_LEAD_ROUTE_SOURCE = readFileSync(
   new URL("../src/app/api/leads/route.js", import.meta.url),
   "utf8",
 );
+const PUBLIC_PLAN_DELIVERY_SOURCE = readFileSync(
+  new URL("../src/lib/public-plan-delivery-server.ts", import.meta.url),
+  "utf8",
+);
 const PDF_FONT_SOURCE = readFileSync(
   new URL("../src/lib/customer-plan-pdf-fonts.ts", import.meta.url),
   "utf8",
@@ -691,10 +695,12 @@ test("personalised customer PDF includes the named home summary and trusted offi
 
 test("canonical public plan input produces byte-identical email and post-submit PDFs with plain staged options", async () => {
   assert.match(
-    PUBLIC_LEAD_ROUTE_SOURCE,
-    /preparedAt:\s*envelope\.submittedAt/,
+    PUBLIC_PLAN_DELIVERY_SOURCE,
+    /preparedAt:\s*input\.envelope\.submittedAt/,
     "the emailed attachment must use the canonical lead envelope date",
   );
+  assert.match(PUBLIC_LEAD_ROUTE_SOURCE, /enqueuePublicPlanDelivery/);
+  assert.doesNotMatch(PUBLIC_LEAD_ROUTE_SOURCE, /createPublicPlanCustomerPdfBundle/);
   const input = {
     name: "Jamie Customer",
     postcode: "3000",
@@ -890,7 +896,7 @@ test("emailed and post-submit public enquiry PDFs share the same neutral cover f
     emailed.report.privacyNote,
     /real name remains in the private enquiry/i,
   );
-  for (const source of [PUBLIC_LEAD_ROUTE_SOURCE, PDF_ROUTE_SOURCE]) {
+  for (const source of [PUBLIC_PLAN_DELIVERY_SOURCE, PDF_ROUTE_SOURCE]) {
     assert.match(source, /createPublicPlanCustomerPdfBundle/);
   }
 });
@@ -911,11 +917,12 @@ test("PDF route returns a clear unsupported-text response", () => {
 });
 
 test("Sites PDF font loading is bundled and shared without Worker self-fetches", () => {
-  for (const source of [PDF_ROUTE_SOURCE, PUBLIC_LEAD_ROUTE_SOURCE]) {
+  for (const source of [PDF_ROUTE_SOURCE, PUBLIC_PLAN_DELIVERY_SOURCE]) {
     assert.match(source, /loadCustomerPlanPdfFonts/);
     assert.doesNotMatch(source, /LiberationSans-(?:Regular|Bold)\.ttf/);
     assert.doesNotMatch(source, /fetch\(/);
   }
+  assert.doesNotMatch(PUBLIC_LEAD_ROUTE_SOURCE, /loadCustomerPlanPdfFonts/);
   assert.match(
     PDF_FONT_SOURCE,
     /LiberationSans-Regular\.ttf\?inline/,

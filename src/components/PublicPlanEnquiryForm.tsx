@@ -980,6 +980,7 @@ export function PublicPlanEnquiryForm({
         error?: string;
         reference?: string;
         planEmailSent?: boolean;
+        planEmailStatus?: "queued" | "sent" | "delivered" | "not_queued";
         received?: boolean;
       };
       if (result.filtered) {
@@ -1001,9 +1002,11 @@ export function PublicPlanEnquiryForm({
       const reference = result.reference || "";
       acceptedLeadReference.current = reference;
       setSharedQuotePackPrepared(preparedQuoteAnswers.length > 0 || quotePhotos.length > 0);
-      acceptedLeadSuccessMessage.current = result.planEmailSent
-        ? "Your enquiry is ready for matching trades and your personalised home plan PDF has been emailed to you. This did not create an account."
-        : "Your enquiry is ready for matching trades. Your private plan PDF could not be emailed, so you can still download it here. This did not create an account.";
+      acceptedLeadSuccessMessage.current = result.planEmailStatus === "queued"
+        ? "Your enquiry is safely queued for matching trades. Your personalised home plan PDF email is also queued and should arrive shortly. This did not create an account."
+        : result.planEmailSent
+          ? "Your enquiry is ready for matching trades and your personalised home plan PDF email has been accepted for delivery. This did not create an account."
+          : "Your enquiry is safely queued for matching trades. You can download your private plan here while its email is prepared. This did not create an account.";
       successfulPdfInput.current = {
         ...publicPlanPdfInput,
         preparedAt: preparedAtFromReference(

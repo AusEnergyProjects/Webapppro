@@ -1,9 +1,8 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { createSignedLeadWebhookEnvelope } from "./lead-route-handler.mjs";
 
-const PROBE_EVENT = "webhook.delivery_probe";
 const TOKEN_MIN_LENGTH = 32;
 export const LEAD_PROCESSOR_TIMEOUT_MS = 20_000;
+export const LEAD_READINESS_TIMEOUT_MS = 2_000;
 
 function json(body, status = 200, extraHeaders = {}) {
   return Response.json(body, {
@@ -30,12 +29,9 @@ function tokenMatches(authorization, expectedToken) {
 
 export function createLeadWebhookProbeHandler({
   env = process.env,
-  fetchImpl = fetch,
-  now = () => new Date(),
   createId = randomUUID,
-  onFailure = async () => {},
-  onRecovery = async () => {},
-  timeoutMs = LEAD_PROCESSOR_TIMEOUT_MS,
+  readReadiness,
+  timeoutMs = LEAD_READINESS_TIMEOUT_MS,
 } = {}) {
   return async function postLeadWebhookProbe(request) {
     const expectedToken = env.AEA_LEAD_WEBHOOK_TEST_TOKEN;
@@ -55,75 +51,47 @@ export function createLeadWebhookProbeHandler({
       });
     }
 
-    const webhook = env.AEA_LEAD_WEBHOOK_URL;
-    if (!webhook) {
-      await onFailure({ kind: "unconfigured", probeId: "" });
-      return json(
-        { ok: false, error: "Lead delivery is not configured." },
-        503,
-      );
-    }
-
     const probeId = createId();
-    const sentAt = now();
-    const probe = {
-      schemaVersion: "1",
-      eventType: PROBE_EVENT,
-      test: true,
-      probeId,
-      sentAt: sentAt.toISOString(),
-      source: "aea-energy",
-    };
-    let signedProbe;
-    try {
-      signedProbe = createSignedLeadWebhookEnvelope(
-        probe,
-        env.AEA_LEAD_WEBHOOK_SIGNING_SECRET,
-        { now: () => sentAt },
-      );
-    } catch {
-      await onFailure({ kind: "unconfigured", probeId });
-      return json(
-        {
-          ok: false,
-          error: "Lead webhook signing is not configured.",
-          probeId,
-        },
-        503,
-      );
+    if (typeof readReadiness !== "function") {
+      return json({
+        ok: false,
+        error: "Durable lead readiness is unavailable.",
+        probeId,
+      }, 503);
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timeout;
 
     try {
-      const response = await fetchImpl(webhook, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "X-AEA-Event-Type": PROBE_EVENT,
-          "X-AEA-Probe-Id": probeId,
-        },
-        body: JSON.stringify(signedProbe),
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      const acknowledgement = await response.text();
-      if (!response.ok || acknowledgement.trim() !== "ok") {
-        throw new Error(
-          `Lead processor did not acknowledge the signed probe (${response.status})`,
-        );
-      }
-      await onRecovery({ probeId });
-      return json({ ok: true, probeId });
+      const readiness = await Promise.race([
+        Promise.resolve().then(() => readReadiness()),
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () => reject(Object.assign(new Error("READINESS_TIMEOUT"), { name: "TimeoutError" })),
+            timeoutMs,
+          );
+        }),
+      ]);
+      const body = {
+        ok: readiness?.ok === true,
+        probeId,
+        mode: "durable_outbox_readiness",
+        checks: Array.isArray(readiness?.checks) ? readiness.checks : [],
+        schedulerExecutionVerified: readiness?.schedulerExecutionVerified === true,
+        providerDeliveryVerified: readiness?.providerDeliveryVerified === true,
+      };
+      return json(body, body.ok ? 200 : 503);
     } catch {
-      await onFailure({ kind: "delivery_failed", probeId });
       return json(
         {
           ok: false,
-          error: "The lead processor did not acknowledge the probe.",
+          error: "Durable lead readiness could not be confirmed.",
           probeId,
+          mode: "durable_outbox_readiness",
+          checks: [],
+          schedulerExecutionVerified: false,
+          providerDeliveryVerified: false,
         },
-        502,
+        503,
       );
     } finally {
       clearTimeout(timeout);

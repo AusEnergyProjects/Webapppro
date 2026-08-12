@@ -520,6 +520,30 @@ test("public enquiry delivery attaches one verified PDF only to the customer and
   assert.equal(rows.length, 2);
 });
 
+test("an externally managed customer plan email still creates the Sheet record and internal review email exactly once", () => {
+  const { context, sent, rows } = relay();
+  const payload = {
+    ...publicPlanRelayPayload(),
+    customerPlanDeliveryManagedExternally: true,
+  };
+  delete payload.customerPlanDelivery;
+
+  assert.equal(context.handleEnquiry_(payload).value, "ok");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "info@ausenergyassessments.com");
+  assert.equal("attachments" in sent[0], false);
+  assert.equal(rows.length, 2);
+  const details = JSON.parse(rows[1][rows[0].indexOf("Details")]);
+  assert.deepEqual(details.deliveryState, {
+    customerAcknowledged: true,
+    internalNotified: true,
+  });
+
+  assert.equal(context.handleEnquiry_(payload).value, "ok");
+  assert.equal(sent.length, 1);
+  assert.equal(rows.length, 2);
+});
+
 test("a partial relay failure resumes only the missing stage without another sheet row or customer PDF", () => {
   const { context, sent, rows, mailControl } = relay();
   const payload = publicPlanRelayPayload();

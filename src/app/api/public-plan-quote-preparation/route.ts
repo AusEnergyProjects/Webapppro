@@ -936,10 +936,12 @@ export async function GET(request: Request) {
       AND preparation.notice_version = ?
       AND preparation.consent_purpose = ?
       AND datetime(preparation.granted_at) IS NOT NULL
+      AND preparation.withdrawn_at = ''
     JOIN trade_opportunities opportunity
       ON opportunity.id = photo.opportunity_id
       AND opportunity.source_reference = preparation.source_reference
-      AND opportunity.status IN ('open', 'paused')
+      AND opportunity.status = 'open'
+      AND datetime(opportunity.expires_at) > datetime('now')
     JOIN trade_opportunity_matches match
       ON match.opportunity_id = opportunity.id
       AND match.firebase_uid = ?
@@ -949,8 +951,16 @@ export async function GET(request: Request) {
       AND account.partner_type = 'installer'
       AND ${verifiedTradeAccountPredicate("account")}
     JOIN public_trade_lead_contact_releases contact
-      ON contact.opportunity_id = opportunity.id
-      AND contact.source_reference = opportunity.source_reference
+      ON contact.id = (
+        SELECT current_release.id
+        FROM public_trade_lead_contact_releases current_release
+        WHERE current_release.opportunity_id = opportunity.id
+          AND current_release.source_reference = opportunity.source_reference
+        ORDER BY datetime(current_release.updated_at) DESC,
+          datetime(current_release.granted_at) DESC,
+          current_release.id DESC
+        LIMIT 1
+      )
       AND contact.status = 'active'
       AND contact.notice_version = ?
       AND contact.consent_purpose = ?

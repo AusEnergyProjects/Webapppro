@@ -54,7 +54,8 @@ test("CRM access is same-origin, installer-only, active, verification-gated and 
 
 test("platform households stay separate from installer-owned contacts", () => {
   assert.match(route, /sourceType === "opportunity" \? "platform_private"/);
-  assert.match(route, /customerSource === "platform_private" \? ""/);
+  assert.match(route, /const protectedCustomer = customerSource === "platform_private" \|\| customerSource === "public_lead_released"/);
+  assert.match(route, /crmCustomerId: protectedCustomer \? ""/);
   assert.match(route, /platformPrivate \? ""/);
   assert.match(crm, /Australian Energy Assessments manages the household relationship/);
   assert.match(crm, /project scope, broad service region and protected reference/);
@@ -169,7 +170,8 @@ test("installer jobs export every filtered page through the owner scoped Datafor
   assert.match(crm, /exportBusyLabel="Downloading all filtered jobs CSV\.\.\."/);
   assert.doesNotMatch(crm, /indexedJobs\.map\(\(job\) => job\.dataforceRecord\)/);
   assert.match(route, /w\.firebase_uid = \?/);
-  assert.match(route, /customerSource === "platform_private" \? undefined/);
+  assert.match(route, /customer: protectedCustomer \? undefined/);
+  assert.match(route, /serviceSite: protectedCustomer \? undefined/);
 });
 
 test("legacy job columns migrate to an identity first display without changing the Dataforce contract", () => {

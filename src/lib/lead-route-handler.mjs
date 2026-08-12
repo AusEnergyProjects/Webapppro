@@ -64,9 +64,10 @@ export function createLeadPostHandler({
   recordLeadIncident,
   resolveSystemAdminNotifications,
   isPublicPlanEnquiry,
-  prepareLeadEnvelope,
+  enqueuePublicPlanDelivery,
   createOpportunityFromLead,
-  opportunityNotificationDispatchHeader = "",
+  confirmPublicPlanIntakeOpportunity,
+  publicPlanDeliveryDispatchHeader = "",
   env = process.env,
   fetchImpl = fetch,
   timeoutMs = 20_000,
@@ -126,7 +127,7 @@ export function createLeadPostHandler({
     }
 
     const webhook = env.AEA_LEAD_WEBHOOK_URL;
-    if (!webhook) {
+    if (!publicPlanEnquiry && !webhook) {
       await recordLeadIncident(
         "platform.lead_delivery_unconfigured",
         "Public enquiry delivery is not configured",
@@ -166,56 +167,122 @@ export function createLeadPostHandler({
     }
 
     payload.magicLink = safeMagicLink(payload.magicLink, request.url);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      if (typeof prepareLeadEnvelope === "function") {
-        payload = await prepareLeadEnvelope({
-          request,
-          validatedPayload: result.value,
-          envelope: payload,
-        });
-      }
-      const signedWebhookEnvelope = createSignedLeadWebhookEnvelope(
-        payload,
-        env.AEA_LEAD_WEBHOOK_SIGNING_SECRET,
-      );
-      const response = await fetchImpl(webhook, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-        body: JSON.stringify(signedWebhookEnvelope),
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      const acknowledgement = await response.text();
-      if (!response.ok || acknowledgement.trim() !== "ok") {
-        throw new Error("Lead processor did not acknowledge delivery.");
-      }
-      let opportunityNotificationId = "";
-      if (publicPlanEnquiry && typeof createOpportunityFromLead === "function") {
-        const marketplacePayload = { ...payload };
-        delete marketplacePayload.customerPlanDelivery;
+      if (publicPlanEnquiry) {
+        if (typeof enqueuePublicPlanDelivery !== "function") {
+          throw new Error("PUBLIC_PLAN_DURABLE_INTAKE_UNCONFIGURED");
+        }
+        let intake;
         try {
-          const createdOpportunity = await createOpportunityFromLead(marketplacePayload);
-          opportunityNotificationId = String(createdOpportunity?.id || "").trim();
+          intake = await enqueuePublicPlanDelivery({
+            envelope: payload,
+            validatedPayload: result.value,
+          });
+        } catch (error) {
+          if (Number(error?.status) === 409) {
+            return respond({
+              ok: false,
+              error: "This enquiry reference belongs to different details. Start a new enquiry before sending again.",
+            }, 409, "submission_identity_conflict", metrics);
+          }
+          await recordLeadIncident(
+            "platform.public_plan_intake_failed",
+            "Public plan enquiry was not durably queued",
+            "The intake service could not commit the enquiry and both required delivery jobs. No customer details are included in this alert.",
+            "urgent",
+          );
+          return respond({
+            ok: false,
+            planEmailSent: false,
+            planEmailStatus: "not_queued",
+            error: "Your enquiry could not be saved. Please try again or call 1300 241 149.",
+          }, 502, "public_plan_intake_failed", {
+            ...metrics,
+            errorType: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+        const intakeId = String(intake?.id || "").trim();
+        const customerEmailStatus = String(intake?.status || "pending");
+        if (!intakeId) throw new Error("PUBLIC_PLAN_INTAKE_UNAVAILABLE");
+        if (
+          typeof createOpportunityFromLead !== "function"
+          || typeof confirmPublicPlanIntakeOpportunity !== "function"
+        ) throw new Error("PUBLIC_PLAN_OPPORTUNITY_INTAKE_UNCONFIGURED");
+        try {
+          const createdOpportunity = await createOpportunityFromLead(payload);
+          const opportunityId = String(createdOpportunity?.id || "").trim();
+          if (!opportunityId) throw new Error("PUBLIC_PLAN_OPPORTUNITY_UNAVAILABLE");
+          await confirmPublicPlanIntakeOpportunity({
+            intakeId,
+            opportunityId,
+            expectedQuotePreparation: Boolean(result.value?.quotePreparation),
+          });
         } catch (error) {
           await recordLeadIncident(
             "platform.lead_marketplace_preparation_failed",
             "Public enquiry matching was not prepared",
-            "The private processor received the enquiry, but the matching opportunity could not be prepared. No customer details are included in this alert.",
+            "The durable intake is safe, but its matching and quote preparation records could not be confirmed. No customer details are included in this alert.",
             "high",
           );
           return respond({
             ok: false,
             received: true,
             reference: payload.reference,
-            planEmailSent: Boolean(payload.customerPlanDelivery),
-            error: "Your enquiry was received, but trade matching is not yet prepared. Retry trade matching with the same request and reference.",
+            planEmailSent: false,
+            planEmailStatus: "queued",
+            error: "Your enquiry is safely queued, but matching is not ready. Please retry with the same enquiry.",
           }, 502, "marketplace_preparation_failed", {
             ...metrics,
             errorType: error instanceof Error ? error.name : "UnknownError",
           });
         }
+        await resolveSystemAdminNotifications({
+          eventTypes: [
+            "platform.lead_delivery_unconfigured",
+            "platform.lead_delivery_failed",
+            "platform.lead_marketplace_preparation_failed",
+            "platform.customer_plan_email_enqueue_failed",
+            "platform.public_plan_intake_failed",
+            "platform.lead_rate_limit_unavailable",
+          ],
+          entityType: "platform_service",
+          entityId: "comparison_lead_delivery",
+          note: "A public enquiry and its customer email were durably queued.",
+        }).catch(() => null);
+        const headers = publicPlanDeliveryDispatchHeader
+          ? { [publicPlanDeliveryDispatchHeader]: intakeId }
+          : {};
+        return respond({
+          ok: true,
+          reference: payload.reference,
+          planEmailSent: ["sent", "delivered"].includes(customerEmailStatus),
+          planEmailStatus: ["sent", "delivered"].includes(customerEmailStatus)
+            ? customerEmailStatus
+            : "queued",
+        }, 200, "durably_queued", metrics, headers);
+      }
+
+      const signedWebhookEnvelope = createSignedLeadWebhookEnvelope(
+        payload,
+        env.AEA_LEAD_WEBHOOK_SIGNING_SECRET,
+      );
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      let response;
+      try {
+        response = await fetchImpl(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+          body: JSON.stringify(signedWebhookEnvelope),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      const acknowledgement = await response.text();
+      if (!response.ok || acknowledgement.trim() !== "ok") {
+        throw new Error("Lead processor did not acknowledge delivery.");
       }
       await resolveSystemAdminNotifications({
         eventTypes: [
@@ -231,12 +298,7 @@ export function createLeadPostHandler({
       return respond({
         ok: true,
         reference: payload.reference,
-        ...(publicPlanEnquiry
-          ? { planEmailSent: Boolean(payload.customerPlanDelivery) }
-          : {}),
-      }, 200, "delivered", metrics, opportunityNotificationId && opportunityNotificationDispatchHeader
-        ? { [opportunityNotificationDispatchHeader]: opportunityNotificationId }
-        : {});
+      }, 200, "delivered", metrics);
     } catch (error) {
       await recordLeadIncident(
         "platform.lead_delivery_failed",
@@ -249,8 +311,6 @@ export function createLeadPostHandler({
         "downstream_failure",
         { ...metrics, errorType: error instanceof Error ? error.name : "UnknownError" },
       );
-    } finally {
-      clearTimeout(timeout);
     }
   };
 }
