@@ -1,6 +1,7 @@
 import { getD1 } from "../../db";
 import { cleanAdminText } from "@/lib/admin-server";
 import { DATAFORCE_JOB_CSV_HEADERS } from "@/lib/creditex-dataforce-job-csv";
+import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES } from "@/lib/trade-crm-job-register";
 
 export const PAGE_SIZES = new Set([25, 50, 100]);
 
@@ -47,6 +48,9 @@ type ListViewDefaults = {
   postcode?: string;
   suburb?: string;
   state?: string;
+  operationalStatus?: string;
+  quoteTotalMin?: string;
+  quoteTotalMax?: string;
   jobId?: string;
   model?: string;
   brand?: string;
@@ -61,14 +65,19 @@ type ListViewDefaults = {
   columns?: string[];
 };
 
-const INSTALLER_JOB_IDENTITY_COLUMNS = ["Customer", "Mobile", "Job Id"] as const;
-export const INSTALLER_JOB_DEFAULT_COLUMNS = [
-  ...INSTALLER_JOB_IDENTITY_COLUMNS,
-  ...DATAFORCE_JOB_CSV_HEADERS.filter((header) => !INSTALLER_JOB_IDENTITY_COLUMNS.includes(header as (typeof INSTALLER_JOB_IDENTITY_COLUMNS)[number])),
-];
+export const INSTALLER_JOB_DEFAULT_COLUMNS = [...JOB_REGISTER_COLUMN_KEYS];
+
+function cleanNonNegativeMoneyFilter(value: unknown) {
+  const raw = cleanAdminText(value, 20);
+  if (!raw) return "";
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount >= 0 && amount <= 100_000_000
+    ? raw
+    : "";
+}
 
 const columnsByView: Record<string, string[]> = {
-  "installer-jobs": [...DATAFORCE_JOB_CSV_HEADERS],
+  "installer-jobs": [...JOB_REGISTER_COLUMN_KEYS],
   "installer-customers": ["customer", "firstName", "lastName", "email", "phone", "suburb", "postcode", "jobs", "latestJob", "status"],
   "supplier-products": ["brand", "model", "name", "category", "price", "ordering", "stock", "lead", "warranty", "listing", "review", "kit", "action"],
   "admin-accounts": ["account", "type", "status", "updated"],
@@ -77,7 +86,7 @@ const columnsByView: Record<string, string[]> = {
 
 const defaultsByView: Record<string, ListViewDefaults> = {
   "supplier-products": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
-  "installer-jobs": { search: "", filter: "active", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
+  "installer-jobs": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "installer-customers": { search: "", filter: "all", sort: "name-asc", pageSize: 25, type: "", synthetic: "" },
   "purchasing-orders": { search: "", filter: "active", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
   "admin-accounts": { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" },
@@ -101,7 +110,7 @@ const filtersByView: Record<string, Set<string>> = {
 
 const sortsByView: Record<string, Set<string>> = {
   "supplier-products": new Set(["updated-desc", "name-asc", "name-desc", "price-asc", "price-desc", "brand-asc", "brand-desc", "model-asc", "model-desc", "category-asc", "category-desc", "stock-asc", "stock-desc", "lead-asc", "lead-desc", "warranty-asc", "warranty-desc", "listing-asc", "listing-desc", "review-asc", "review-desc"]),
-  "installer-jobs": new Set(["updated-desc", "number-asc", "number-desc", "date-asc"]),
+  "installer-jobs": new Set(["updated-desc", "number-asc", "number-desc", "first-name-asc", "last-name-asc", "phone-asc", "email-asc", "street-asc", "postcode-asc", "suburb-asc", "state-asc", "assignee-asc", "date-asc", "status-asc", "quote-total-asc", "quote-total-desc"]),
   "installer-customers": new Set(["name-asc", "name-desc", "updated-desc"]),
   "purchasing-orders": new Set(["updated-desc", "number-asc", "number-desc", "value-desc"]),
   "admin-accounts": new Set(["updated-desc", "updated-asc", "name-asc", "name-desc", "type-asc", "type-desc", "status-asc", "status-desc"]),
@@ -113,7 +122,7 @@ const sortsByView: Record<string, Set<string>> = {
 
 export function defaultListView(viewKey: string): ListViewDefaults {
   const defaults = { ...(defaultsByView[viewKey] || { search: "", filter: "all", sort: "updated-desc", pageSize: 25, type: "", synthetic: "" }) };
-  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 2, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
+  if (viewKey === "installer-jobs") return { ...defaults, jobColumnOrderVersion: 3, columns: [...INSTALLER_JOB_DEFAULT_COLUMNS] };
   return columnsByView[viewKey] ? { ...defaults, columns: [...columnsByView[viewKey]] } : defaults;
 }
 
@@ -128,13 +137,13 @@ export function cleanListView(
   const pageSize = Number(raw.pageSize);
   const legacyInstallerJobColumns = viewKey === "installer-jobs"
     && options.migrateLegacyInstallerJobColumns
-    && Number(raw.jobColumnOrderVersion || 0) < 2;
+    && Number(raw.jobColumnOrderVersion || 0) < 3;
   return {
     search: cleanAdminText(raw.search, 100),
     filter: filtersByView[viewKey]?.has(filter) ? filter : defaults.filter,
     sort: sortsByView[viewKey]?.has(sort) ? sort : defaults.sort,
     pageSize: PAGE_SIZES.has(pageSize) ? pageSize : defaults.pageSize,
-    jobColumnOrderVersion: viewKey === "installer-jobs" ? 2 : undefined,
+    jobColumnOrderVersion: viewKey === "installer-jobs" ? 3 : undefined,
     type: ["", "customer", "installer", "supplier", "admin"].includes(String(raw.type || "")) ? String(raw.type || "") : "",
     synthetic: ["", "exclude", "only"].includes(String(raw.synthetic || "")) ? String(raw.synthetic || "") : "",
     customer: cleanAdminText(raw.customer, 100),
@@ -157,6 +166,11 @@ export function cleanListView(
     postcode: cleanAdminText(raw.postcode, 12),
     suburb: cleanAdminText(raw.suburb, 100),
     state: cleanAdminText(raw.state, 12),
+    operationalStatus: ["", ...JOB_REGISTER_OPERATIONAL_STATUSES].includes(String(raw.operationalStatus || "").toLowerCase())
+      ? String(raw.operationalStatus || "").toLowerCase()
+      : "",
+    quoteTotalMin: cleanNonNegativeMoneyFilter(raw.quoteTotalMin),
+    quoteTotalMax: cleanNonNegativeMoneyFilter(raw.quoteTotalMax),
     jobId: cleanAdminText(raw.jobId, 80),
     model: cleanAdminText(raw.model, 100),
     brand: cleanAdminText(raw.brand, 100),
@@ -173,8 +187,9 @@ export function cleanListView(
         ? raw.columns.filter((value): value is string => typeof value === "string" && columnsByView[viewKey].includes(value)).filter((value, index, values) => values.indexOf(value) === index)
         : [];
       if (viewKey === "installer-jobs") {
-        const isLegacyExactOrder = columns.length === DATAFORCE_JOB_CSV_HEADERS.length
-          && columns.every((column, index) => column === DATAFORCE_JOB_CSV_HEADERS[index]);
+        const rawColumns = Array.isArray(raw.columns) ? raw.columns : [];
+        const isLegacyExactOrder = rawColumns.length === DATAFORCE_JOB_CSV_HEADERS.length
+          && rawColumns.every((column, index) => column === DATAFORCE_JOB_CSV_HEADERS[index]);
         if ((legacyInstallerJobColumns && isLegacyExactOrder) || !columns.length) return [...INSTALLER_JOB_DEFAULT_COLUMNS];
       }
       return columns.length ? columns : [...columnsByView[viewKey]];

@@ -115,7 +115,7 @@ export function TradeJobNotifications({
         <header><div><span>Review queue</span><strong id="job-update-title">Work updates</strong></div><button type="button" onClick={closeNotifications} aria-label="Close work updates">Close</button></header>
         <div className="tlink-notification-list">
           {status && <p role="status">{status}</p>}
-          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
+          {!status && !items.length && <div className="tlink-notification-empty"><strong>You are up to date</strong><span>New leads, customer decisions, quote delivery issues, questions, uploads, document expiry warnings, schedule requests and field team progress will appear here.</span></div>}
           {items.map((item) => <button type="button" key={item.id} className={item.read ? "read" : "unread"} onClick={() => void openItem(item)}>
             <span className="tlink-notification-dot" aria-hidden="true" />
             <span><strong>{item.title}</strong><small>{item.summary}</small><em>{item.source === "customer" ? "Customer" : item.source === "team" ? "Team" : "Field team"} | {item.workNumber} | {new Date(item.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</em></span>

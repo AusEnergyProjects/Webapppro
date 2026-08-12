@@ -62,6 +62,7 @@ import {
   sendServiceReminderProviderMessage,
   serviceReminderProviderConfiguration,
 } from "../src/lib/service-reminder-delivery";
+import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -404,6 +405,9 @@ const worker = {
             drainOpportunityNotificationDeliveriesForOpportunity({ opportunityId }),
         }).catch((error) => {
           console.error("Public plan delivery failed.", error instanceof Error ? error.message : "Unknown error");
+        }),
+        drainTradeQuoteDeliveries({ db: getD1() }).catch((error) => {
+          console.error("Trade quote delivery failed.", error instanceof Error ? error.message : "Unknown error");
         }),
         cleanupUnreferencedTradeIssuedDocuments().catch((error) => {
           console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");

@@ -14,6 +14,7 @@ const optionsMigration = read("../drizzle/0066_optioned_trade_quotes.sql");
 const sharingMigration = read("../drizzle/0067_secure_quote_sharing.sql");
 const documentMigration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
 const issuedDocumentMigration = read("../drizzle/0123_immutable_issued_pdf_artifacts.sql");
+const deliveryOutboxMigration = read("../drizzle/0136_trade_quote_delivery_outbox.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
@@ -30,6 +31,8 @@ const documentPdf = read("../src/lib/trade-quote-pdf.mjs");
 const documentPdfRoute = read("../src/app/api/quote-review/[token]/pdf/route.ts");
 const issuedDocumentServer = read("../src/lib/trade-quote-issued-pdf-server.ts");
 const providerDelivery = read("../src/lib/service-reminder-delivery.ts");
+const quoteDeliveryServer = read("../src/lib/trade-quote-delivery-server.ts");
+const deliveryWorker = read("../worker/index.ts");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -220,11 +223,15 @@ test("installer quote actions preserve direct-customer ownership and immutable i
   assert.match(installerRoute, /action === "save_draft"/);
   assert.match(installerRoute, /current\.status === "issued"/);
   assert.match(installerRoute, /status = 'superseded'/);
-  assert.match(installerRoute, /versionNumber \+= 1/);
+  assert.match(installerRoute, /versionNumber = Number\(current\.version_number\) \+ 1/);
   assert.match(installerRoute, /action === "issue_quote"/);
   assert.match(installerRoute, /status = 'issued'/);
   assert.match(installerRoute, /quote_status = 'issued'/);
-  assert.match(installerRoute, /sendServiceReminderProviderMessage[\s\S]*?status = 'provider_accepted'/);
+  assert.match(installerRoute, /INSERT OR IGNORE INTO trade_crm_quote_deliveries[\s\S]*?'queued'/);
+  assert.doesNotMatch(installerRoute, /sendServiceReminderProviderMessage/);
+  assert.match(quoteDeliveryServer, /sendServiceReminderProviderMessage/);
+  assert.match(quoteDeliveryServer, /SET status = 'provider_accepted'/);
+  assert.match(deliveryWorker, /drainTradeQuoteDeliveries\(\{ db: getD1\(\) \}\)/);
   assert.doesNotMatch(installerRoute, /quote_status = 'sent'/);
   assert.match(installerRoute, /authorisedEmails/);
   assert.match(installerRoute, /publicLeadQuoteAccessFingerprint/);
@@ -250,17 +257,27 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
     "parseTradeQuoteDocumentSnapshot",
     "QUOTE_DOCUMENT_INVALID",
     "idempotencyKey",
-    "status = 'sending'",
-    "status = 'failed'",
     "tradeQuoteEmailContentSha256",
     "storeTradeQuoteIssuedPdf",
     "issuedTradeQuotePdf",
+  ]) assert.match(installerRoute, new RegExp(boundary));
+  for (const column of [
+    "recipient_email_sha256",
+    "provider_idempotency_key",
+    "queued_at",
+    "next_attempt_at",
+    "lease_expires_at",
+    "failure_code",
+  ]) assert.match(deliveryOutboxMigration, new RegExp(column));
+  for (const boundary of [
+    "status = 'sending'",
+    "status = 'failed'",
     "tradeQuotePdfBase64",
     "provider_accepted",
-  ]) assert.match(installerRoute, new RegExp(boundary));
+  ]) assert.match(quoteDeliveryServer, new RegExp(boundary));
   const issueBlock = installerRoute.slice(
     installerRoute.indexOf('action === "issue_quote"'),
-    installerRoute.indexOf('["replace_link", "revoke_link", "send_quote", "answer_question"]'),
+    installerRoute.indexOf('["replace_link", "revoke_link", "send_quote", "retry_quote_delivery", "answer_question"]'),
   );
   assert.ok(issueBlock.includes("renderQuotePdfOrThrow(documentSnapshot"));
   assert.ok(issueBlock.includes("INSERT INTO trade_crm_quote_links"));
@@ -271,8 +288,9 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   );
   assert.match(installerRoute, /QUOTE_PDF_UNAVAILABLE/);
   assert.match(installerRoute, /X-TLink-Request-Id/);
-  assert.match(installerRoute, /attachments: \[\{/);
-  assert.match(installerRoute, /replyTo: emailContent\.replyTo/);
+  assert.match(quoteDeliveryServer, /attachments: \[\{/);
+  assert.match(quoteDeliveryServer, /replyTo: content\.replyTo/);
+  assert.match(quoteDeliveryServer, /idempotencyKey: String\(row\.provider_idempotency_key \|\| row\.idempotency_key\)/);
   assert.match(documentEmail, /tradeQuoteDocumentDisplayTotals/);
   assert.match(documentEmail, /html:/);
   assert.match(documentPdf, /tradeQuoteDocumentDisplayTotals/);
@@ -319,7 +337,7 @@ test("issued quote PDFs retain exact bytes and legacy backfill fails closed", ()
   const issueBlock = installerRoute.slice(
     installerRoute.indexOf('action === "issue_quote"'),
     installerRoute.indexOf(
-      '["replace_link", "revoke_link", "send_quote", "answer_question"]',
+      '["replace_link", "revoke_link", "send_quote", "retry_quote_delivery", "answer_question"]',
     ),
   );
   assert.ok(
@@ -351,11 +369,13 @@ test("issued quote PDFs retain exact bytes and legacy backfill fails closed", ()
     issuedDocumentServer,
     /concurrent request may have won the conditional backfill[\s\S]*readVerifiedIssuedPdf\(racedReference, racedIdentity\)/,
   );
+  const sendBranch = installerRoute.indexOf('["replace_link", "revoke_link", "send_quote", "retry_quote_delivery", "answer_question"]');
+  const sendEmailContent = installerRoute.indexOf("const emailContent = buildTradeQuoteEmail", sendBranch);
   const sendPdfBlock = installerRoute.slice(
-    installerRoute.indexOf("const emailContent = buildTradeQuoteEmail"),
+    sendEmailContent,
     installerRoute.indexOf(
       "const attachmentFilename",
-      installerRoute.indexOf("const emailContent = buildTradeQuoteEmail"),
+      sendEmailContent,
     ),
   );
   assert.match(sendPdfBlock, /issuedTradeQuotePdf/);
@@ -377,6 +397,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
   for (const file of ["0000_complex_absorbing_man.sql", "0001_futuristic_frog_thor.sql", "0002_closed_korg.sql", "0004_mixed_chat.sql", "0005_yielding_gideon.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0020_lying_stick.sql", "0021_mushy_gamora.sql", "0022_worried_sleepwalker.sql", "0025_dizzy_spot.sql", "0047_customer_service_site_foundation.sql", "0050_versioned_trade_quotes.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0064_trade_price_book.sql", "0065_trade_job_packets.sql", "0066_optioned_trade_quotes.sql", "0067_secure_quote_sharing.sql", "0068_accepted_quote_handoff.sql", "0069_ready_jobs_supplier_profiles.sql", "0070_frictionless_team_roster.sql", "0071_job_execution_progress.sql", "0120_trade_business_identity_and_quote_delivery.sql", "0126_public_trade_lead_contact_release.sql", "0127_public_trade_lead_customer_address.sql", "0128_public_plan_quote_preparation.sql", "0132_public_lead_accepted_disclosure.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
   db.exec("ALTER TABLE trade_work_orders ADD service_categories text DEFAULT '[]' NOT NULL");
   apply(db, issuedDocumentMigration.split("--> statement-breakpoint").slice(0, 3).join("--> statement-breakpoint"));
+  apply(db, deliveryOutboxMigration);
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
@@ -385,8 +406,18 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Accepted by email provider", "Inbox delivery is not yet confirmed"]) assert.match(installerUi, new RegExp(copy));
-  assert.match(installerUi, /async function sendPreviewedQuote\(\)[\s\S]*?action: "save_draft"[\s\S]*?action: "issue_quote"[\s\S]*?action: "send_quote"/);
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Sending", "Email accepted for delivery", "Delivered", "Needs attention", "Retry email"]) assert.match(installerUi, new RegExp(copy));
+  const sendFlow = installerUi.slice(installerUi.indexOf("async function sendPreviewedQuote"), installerUi.indexOf("async function addQuoteRecipient"));
+  assert.match(sendFlow, /action: "save_draft"/);
+  assert.match(sendFlow, /if \(!saved\.draftVersionId\)/);
+  assert.match(sendFlow, /action: "issue_quote"[\s\S]*?quoteVersionId: saved\.draftVersionId[\s\S]*?consentConfirmed: true/);
+  assert.doesNotMatch(sendFlow, /action: "send_quote"/);
+  const replay = sendFlow.indexOf("if (pendingIssueVersionId)");
+  const save = sendFlow.indexOf('action: "save_draft"');
+  assert.ok(replay >= 0 && replay < save, "a lost issue response must replay the retained exact version before another save");
+  assert.match(sendFlow.slice(replay, save), /quoteVersionId: pendingIssueVersionId[\s\S]*?consentConfirmed: true/);
+  assert.match(sendFlow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
+  assert.match(sendFlow, /quoteDeliveryMessage\(issued\.delivery, "Quote saved and issued\."\)/);
   assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
   assert.match(installerUi, /sendPreview\.displayTotals\.subtotalCents[\s\S]*?sendPreview\.displayTotals\.taxCents[\s\S]*?sendPreview\.displayTotals\.label[\s\S]*?sendPreview\.displayTotals\.totalCents/);
   assert.doesNotMatch(installerUi, /<dl><div><dt>Included before choices<\/dt>[\s\S]*?sendPreview\.base\.totalCents/);
@@ -400,7 +431,8 @@ test("installer and customer interfaces expose the version and consent contract"
     "returnFocus.focus({ preventScroll: true })",
   ]) assert.match(installerUi, new RegExp(modalBoundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(installerUi, /consentConfirmed: true/);
-  assert.match(installerUi, /Quote issued, but the email was not accepted for delivery/);
+  for (const key of ["sending", "accepted", "delivered", "attention"]) assert.match(installerUi, new RegExp(`presentation\\?\\.key === "${key}"`));
+  assert.doesNotMatch(installerUi, /setMessage\("Quote saved and issued\. The email provider accepted it for delivery/);
   assert.doesNotMatch(installerUi, /Issue for customer review/);
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
   for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));

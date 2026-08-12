@@ -2,6 +2,7 @@ import { getD1 } from "../../../../db";
 import { adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
 import { listTradeTeamDocumentExpiryWarnings } from "@/lib/trade-team-document-expiry-server";
+import { tradeQuoteDeliveryPresentation } from "@/lib/trade-quote-delivery-policy.mjs";
 
 export const runtime = "edge";
 
@@ -71,7 +72,7 @@ async function notifications(access: TeamAccess) {
   const scope = jobScope(access);
   const scheduling = scheduleScope(access);
   const none = () => Promise.resolve({ results: [] as Row[] });
-  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, documentExpiries, reads] = await Promise.all([
+  const [photoCompletions, quoteQuestions, quoteDecisions, quoteViews, appointmentRequests, fieldEvents, signoffs, allocatedProjectLeads, acceptedProjectQuotes, quoteDeliveryAlerts, documentExpiries, reads] = await Promise.all([
     access.canViewFieldEvidence ? db.prepare(`SELECT completion.id, completion.work_order_id, completion.supplied_count, completion.completed_at,
         work.work_number, work.title, work.source_type, detail.customer_source
       FROM trade_crm_photo_request_completions completion
@@ -175,6 +176,32 @@ async function notifications(access: TeamAccess) {
         AND event.event_type = 'customer_installer_accepted'
       ORDER BY event.occurred_at DESC LIMIT 80`)
       .bind(access.ownerUid).all<Row>() : none(),
+    access.canSendQuotes ? db.prepare(`SELECT delivery.id, delivery.work_order_id,
+        delivery.status, delivery.attempts, delivery.next_attempt_at,
+        delivery.failure_code,
+        delivery.delivery_generation, delivery.retry_of_delivery_id,
+        delivery.updated_at, work.work_number, work.title, work.source_type,
+        detail.customer_source, quote.quote_number
+      FROM trade_crm_quote_deliveries delivery
+      JOIN trade_work_orders work
+        ON work.id = delivery.work_order_id AND work.firebase_uid = delivery.firebase_uid
+        AND work.record_status = 'active'
+      JOIN trade_crm_job_details detail
+        ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
+      JOIN trade_crm_quotes quote
+        ON quote.id = (SELECT link.quote_id FROM trade_crm_quote_links link
+          WHERE link.id = delivery.quote_link_id LIMIT 1)
+        AND quote.firebase_uid = delivery.firebase_uid
+      WHERE delivery.firebase_uid = ?
+        AND delivery.status IN ('failed', 'bounced', 'complained', 'opted_out')
+        AND NOT EXISTS (
+          SELECT 1 FROM trade_crm_quote_deliveries successor
+          WHERE successor.firebase_uid = delivery.firebase_uid
+            AND successor.retry_of_delivery_id = delivery.id
+        )
+        AND (? <> 'own' OR work.assignee_member_id = ?)
+      ORDER BY delivery.updated_at DESC LIMIT 80`)
+      .bind(access.ownerUid, scope.scope, scope.memberId).all<Row>() : none(),
     (access.isOwner || access.canManageTeam)
       ? listTradeTeamDocumentExpiryWarnings(db, access.ownerUid)
         .then((results) => ({ results: results as unknown as Row[] }))
@@ -249,6 +276,27 @@ async function notifications(access: TeamAccess) {
       targetTab: "quote" as const,
       source: "customer" as const,
     })),
+    ...quoteDeliveryAlerts.results
+      .filter((row) => tradeQuoteDeliveryPresentation(
+        String(row.status), Number(row.attempts), String(row.next_attempt_at || ""), String(row.failure_code || ""), Number(row.delivery_generation || 1),
+      ).key === "attention")
+      .map((row) => { const presentation = tradeQuoteDeliveryPresentation(
+        String(row.status), Number(row.attempts), String(row.next_attempt_at || ""),
+        String(row.failure_code || ""), Number(row.delivery_generation || 1),
+      ); return ({
+        id: `quote-delivery-attention:${String(row.id)}`,
+        targetKind: "job" as const,
+        targetId: String(row.work_order_id),
+        workOrderId: String(row.work_order_id),
+        workNumber: String(row.work_number),
+        title: "Quote email needs attention",
+        summary: presentation.canRetry
+          ? `${String(row.quote_number)} was not delivered. Open the quote to review and retry once.`
+          : `${String(row.quote_number)} was not delivered. Review the recipient and contact support if needed.`,
+        createdAt: String(row.updated_at),
+        targetTab: "quote" as const,
+        source: "team" as const,
+      }); }),
     ...documentExpiries.results.map((row) => ({
       id: `team-document-expiry:${String(row.id)}`,
       targetKind: "team" as const,

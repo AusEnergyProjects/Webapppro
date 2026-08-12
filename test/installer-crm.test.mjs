@@ -172,23 +172,23 @@ test("installer jobs export every filtered page through the owner scoped Datafor
   assert.match(crm, /exportBusyLabel="Downloading all filtered jobs CSV\.\.\."/);
   assert.doesNotMatch(crm, /indexedJobs\.map\(\(job\) => job\.dataforceRecord\)/);
   assert.match(route, /w\.firebase_uid = \?/);
-  assert.match(route, /customer: protectedCustomer \? undefined/);
-  assert.match(route, /serviceSite: protectedCustomer \? undefined/);
+  assert.match(route, /customer: canViewCustomer \? \{/);
+  assert.match(route, /serviceSite: canViewCustomer \? \{/);
 });
 
-test("legacy job columns migrate to an identity first display without changing the Dataforce contract", () => {
-  assert.match(crm, /const DATAFORCE_JOB_COLUMN_KEYS: string\[\] = \[\.\.\.DATAFORCE_JOB_CSV_HEADERS\]/);
-  assert.match(crm, /DATAFORCE_JOB_IDENTITY_COLUMNS = \["Customer", "Mobile", "Job Id"\] as const/);
-  assert.match(crm, /DATAFORCE_JOB_DEFAULT_COLUMNS/);
-  assert.match(crm, /function safeDataforceJobColumns\(columns: unknown, migrateLegacyDefault = false\): string\[\]/);
-  assert.match(crm, /!DATAFORCE_JOB_COLUMN_KEY_SET\.has\(key\)/);
+test("the job register uses separate operational columns without changing the Dataforce export contract", () => {
+  assert.match(crm, /import \{ JOB_REGISTER_COLUMN_KEYS, type JobRegisterRecord \}/);
+  assert.match(crm, /JOB_REGISTER_DEFAULT_COLUMNS/);
+  assert.match(crm, /function safeJobRegisterColumns\(columns: unknown\): JobRegisterColumnKey\[\]/);
+  assert.match(crm, /!JOB_REGISTER_COLUMN_KEY_SET\.has\(key\)/);
   assert.match(crm, /new Set\(columns\)\.size !== columns\.length/);
-  assert.match(crm, /const isLegacyExactOrder = columns\.length === DATAFORCE_JOB_COLUMN_KEYS\.length/);
-  assert.match(crm, /if \(migrateLegacyDefault && isLegacyExactOrder\) return \[\.\.\.DATAFORCE_JOB_DEFAULT_COLUMNS\]/);
-  assert.match(crm, /return \[\.\.\.columns\] as string\[\]/);
-  assert.match(crm, /setJobColumns\(safeDataforceJobColumns\(preferences\.columns, preferences\.jobColumnOrderVersion !== 2\)\)/);
-  assert.match(crm, /setJobColumns\(safeDataforceJobColumns\(preferences\.columns\)\)/);
+  assert.match(crm, /return \[\.\.\.columns\] as JobRegisterColumnKey\[\]/);
+  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.jobColumnOrderVersion === 3 \? preferences\.columns : undefined\)\)/);
+  assert.match(crm, /setJobColumns\(safeJobRegisterColumns\(preferences\.columns\)\)/);
   assert.doesNotMatch(crm, /setJobColumns\(preferences\.columns\?\./);
+  for (const label of ["Job ID", "First name", "Last name", "Contact number", "Email", "Street address", "Postcode", "Suburb", "State", "Assigned worker", "Schedule date", "Quote total ex GST", "STC", "VEEC", "ESC", "Other certs"]) {
+    assert.match(crm, new RegExp(`label: "${label}"`));
+  }
   const headerBlock = dataforceCsv.match(/DATAFORCE_JOB_CSV_HEADERS = Object\.freeze\(\[([\s\S]*?)\] as const\)/);
   assert.ok(headerBlock);
   const headers = Array.from(headerBlock[1].matchAll(/"([^"]+)"/g), (match) => match[1]);
@@ -242,7 +242,7 @@ test("job and customer directories expose granular server filters and single-lin
   assert.match(crm, /<span>Last name<\/span>/);
   assert.match(crm, /<span>Business<\/span>/);
   assert.match(crm, /<span>Email<\/span>/);
-  assert.match(crm, /<span>Installer<\/span>/);
+  assert.match(crm, /<span>Assigned worker<\/span>/);
   assert.match(crm, /Street address/);
   assert.match(crm, /Contact number/);
   assert.match(crm, /Completion status/);
@@ -256,7 +256,7 @@ test("job and customer directories expose granular server filters and single-lin
   }
 });
 
-test("job filters persist every populated Dataforce identity, contact, schedule and invoice field", () => {
+test("job filters preserve existing saved fields and add authoritative register filters", () => {
   for (const field of ["appointmentId", "scheduledFrom", "scheduledTo", "invoiceStatus", "customerReference"]) {
     assert.match(crm, new RegExp(`${field}:`));
     assert.match(crm, new RegExp(`preferences\\.${field}`));
@@ -268,8 +268,11 @@ test("job filters persist every populated Dataforce identity, contact, schedule 
   assert.match(crm, /data-date-range-group="installer-job-scheduled"/);
   assert.match(crm, /data-date-range-role="start"/);
   assert.match(crm, /data-date-range-role="end"/);
-  assert.match(crm, /<span>Invoice status<\/span>/);
-  assert.match(crm, /<span>Customer reference<\/span>/);
+  for (const field of ["firstName", "lastName", "street", "state", "operationalStatus", "quoteTotalMin", "quoteTotalMax"]) {
+    assert.match(route, new RegExp(`searchParams\\.get\\("${field}"\\)`));
+  }
+  assert.match(crm, /Quote total ex GST from/);
+  assert.match(crm, /Quote total ex GST to/);
 });
 
 test("job and customer indexes use explicit open and direct contact actions", () => {

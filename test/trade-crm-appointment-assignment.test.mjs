@@ -333,6 +333,7 @@ function crmRoute(d1, actorAccess) {
   class DomainError extends Error {}
   const adminJson = (body, status = 200) => Response.json(body, { status });
   const syncHelpers = loadTypescriptModule("../src/lib/trade-team-sync-server.ts", {});
+  const jobRegisterHelpers = loadTypescriptModule("../src/lib/trade-crm-job-register.ts", {});
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
     "../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": {
@@ -349,6 +350,7 @@ function crmRoute(d1, actorAccess) {
       requireInstallerTeamAccess: async () => actorAccess,
     },
     "@/lib/trade-team-sync-server": syncHelpers,
+    "@/lib/trade-crm-job-register": jobRegisterHelpers,
     "@/lib/trade-schedule": {
       appointmentEndsAt: () => "2099-01-02T11:00:00.000Z",
       assertAppointmentSlot: () => {},

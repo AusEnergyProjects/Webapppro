@@ -191,7 +191,7 @@ test("delegated field work never offers the unsupported handover route", () => {
 });
 
 test("staff job creation and scoped job context do not leak directory search", () => {
-  assert.match(crm, /allowCustomerSearch=\{canSearchCustomerFields\}/);
+  assert.match(crm, /allowCustomerSearch=\{canSearchCustomerDirectory\}/);
   assert.match(crm, /canAssignJobs=\{!staffPermissions \|\| staffPermissions\.canAssignJobs\}/);
   assert.match(crm, /assignmentScope=\{staffPermissions\?\.jobScope \|\| "team"\}/);
   assert.match(crm, /canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect/);

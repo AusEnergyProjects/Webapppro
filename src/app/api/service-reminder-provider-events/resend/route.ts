@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../../db";
 import { verifyResendWebhook } from "@/lib/service-reminder-delivery";
 import { QUICK_INVOICE_PROVIDER_EVENT_UPDATE_SQL } from "@/lib/trade-quick-invoice-server";
+import { tradeQuoteDeliveryCallbackStatus } from "@/lib/trade-quote-delivery-policy.mjs";
 
 export const runtime = "edge";
 
@@ -79,6 +80,22 @@ export async function POST(request: Request) {
       : await db.prepare(`SELECT id FROM ${replayTable} WHERE provider_event_key = ?`).bind(providerEventKey).first();
   if (replay) return Response.json({ ok: true, replay: true });
   const now = new Date().toISOString(); const terminal = ["bounced", "failed", "opted_out"].includes(status);
+  const incomingQuoteStatus = ["email.complained", "email.suppressed"].includes(eventType)
+    ? "opted_out"
+    : status;
+  const quoteStatus = quoteDelivery
+    ? tradeQuoteDeliveryCallbackStatus(quoteDelivery.status, incomingQuoteStatus)
+    : incomingQuoteStatus;
+  const quoteTerminal = ["bounced", "failed", "complained", "opted_out"].includes(quoteStatus);
+  const quoteEventType = incomingQuoteStatus === "delivered" ? "delivered"
+    : `delivery_${incomingQuoteStatus}`;
+  const quoteEventSummary = incomingQuoteStatus === "delivered"
+    ? "Quote email delivered."
+    : ["sent", "provider_accepted"].includes(incomingQuoteStatus)
+      ? "Email accepted for delivery."
+      : quoteStatus === "delivered"
+        ? "A late provider failure event was recorded; delivered status was preserved."
+        : "The email provider reported a quote delivery failure.";
   const opportunityStatus = eventType === "email.complained" ? "complained"
     : eventType === "email.failed" ? "provider_failed" : status;
   const publicPlanStatus = eventType === "email.suppressed" ? "suppressed" : opportunityStatus;
@@ -293,13 +310,56 @@ export async function POST(request: Request) {
         delivery.id,
       ),
   ] : [
-    db.prepare(`UPDATE trade_crm_quote_deliveries SET status = ?, provider_status = ?, delivered_at = CASE WHEN ? = 'delivered' THEN ? ELSE delivered_at END,
-      last_error = CASE WHEN ? = 1 THEN ? ELSE '' END, updated_at = ? WHERE id = ?`)
-      .bind(status, eventType, status, now, terminal ? 1 : 0, eventType.slice(0, 120), now, delivery.id),
+    db.prepare(`UPDATE trade_crm_quote_deliveries SET
+      status = CASE
+        WHEN status IN ('bounced', 'complained', 'opted_out') THEN status
+        WHEN ? IN ('bounced', 'complained', 'opted_out') THEN ?
+        WHEN status = 'delivered' THEN status
+        WHEN ? = 'delivered' THEN 'delivered'
+        WHEN status = 'failed' THEN status
+        WHEN ? = 'failed' THEN 'failed'
+        WHEN status = 'sent' AND ? = 'provider_accepted' THEN status
+        ELSE ?
+      END,
+      provider_status = ?,
+      sent_at = CASE
+        WHEN ? = 'sent' AND sent_at = '' THEN ?
+        ELSE sent_at
+      END,
+      delivered_at = CASE
+        WHEN status NOT IN ('bounced', 'complained', 'opted_out')
+          AND ? = 'delivered' AND delivered_at = '' THEN ?
+        ELSE delivered_at
+      END,
+      next_attempt_at = '', lease_expires_at = '',
+      failure_code = CASE
+        WHEN status IN ('bounced', 'complained', 'opted_out') THEN failure_code
+        WHEN status = 'delivered' THEN ''
+        WHEN status = 'failed' AND ? NOT IN ('delivered', 'bounced', 'complained', 'opted_out') THEN failure_code
+        WHEN ? = 1 AND ? <> 'delivered' THEN 'QUOTE_DELIVERY_PROVIDER_TERMINAL'
+        ELSE ''
+      END,
+      last_error = CASE
+        WHEN status IN ('bounced', 'complained', 'opted_out') THEN last_error
+        WHEN status = 'delivered' THEN ''
+        WHEN status = 'failed' AND ? NOT IN ('delivered', 'bounced', 'complained', 'opted_out') THEN last_error
+        WHEN ? = 1 AND ? <> 'delivered' THEN 'Delivery needs attention.'
+        WHEN ? = 'delivered' THEN ''
+        ELSE ''
+      END,
+      updated_at = ? WHERE id = ?`)
+      .bind(quoteStatus, quoteStatus, quoteStatus, quoteStatus, quoteStatus,
+        quoteStatus, eventType, incomingQuoteStatus, now, quoteStatus, now,
+        incomingQuoteStatus,
+        quoteTerminal ? 1 : 0, quoteStatus,
+        incomingQuoteStatus,
+        quoteTerminal ? 1 : 0, quoteStatus, quoteStatus,
+        now, delivery.id),
     db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
       SELECT ?, delivery.quote_link_id, link.quote_id, delivery.quote_version_id, delivery.work_order_id, delivery.firebase_uid, ?, 'provider', ?, ?, ?
       FROM trade_crm_quote_deliveries delivery JOIN trade_crm_quote_links link ON link.id = delivery.quote_link_id WHERE delivery.id = ?`)
-      .bind(crypto.randomUUID(), status === "delivered" ? "delivered" : `delivery_${status}`, status === "delivered" ? "Quote email delivered." : "Quote email provider status changed.", providerEventKey, now, delivery.id),
+      .bind(crypto.randomUUID(), quoteEventType, quoteEventSummary,
+        providerEventKey, now, delivery.id),
   ];
   if (["email.bounced", "email.suppressed", "email.complained"].includes(eventType)) {
     const activityCustomerUid = activityDelivery?.audience === "customer"
@@ -332,9 +392,13 @@ export async function POST(request: Request) {
       provider_status = ?, failed_at = ?, updated_at = ? WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email'
         AND status IN ('queued', 'sent', 'failed', 'waiting_for_channel', 'waiting_for_limit')`)
       .bind(eventType, now, now, photoDelivery.firebase_uid, photoDelivery.crm_customer_id));
-    if (quoteDelivery) statements.push(db.prepare(`UPDATE trade_crm_quote_deliveries SET status = 'opted_out', provider_status = ?, last_error = ?, updated_at = ?
-      WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email' AND status IN ('queued', 'sending', 'sent', 'failed')`)
-      .bind(eventType, eventType, now, quoteDelivery.firebase_uid, quoteDelivery.crm_customer_id));
+    if (quoteDelivery) statements.push(db.prepare(`UPDATE trade_crm_quote_deliveries
+      SET status = ?, provider_status = ?, next_attempt_at = '', lease_expires_at = '',
+        failure_code = 'QUOTE_DELIVERY_PROVIDER_TERMINAL',
+        last_error = 'Delivery needs attention.', updated_at = ?
+      WHERE firebase_uid = ? AND crm_customer_id = ? AND channel = 'email'
+        AND status IN ('queued', 'sending', 'provider_accepted', 'sent', 'failed', 'waiting_for_channel')`)
+      .bind(quoteStatus, eventType, now, quoteDelivery.firebase_uid, quoteDelivery.crm_customer_id));
     if (serviceDelivery) statements.push(db.prepare(`UPDATE customer_asset_lifecycle_preferences SET email_enabled = 0, updated_at = ?
       WHERE customer_uid = ? AND asset_id = ?`).bind(now, delivery.customer_uid, delivery.asset_id));
   }

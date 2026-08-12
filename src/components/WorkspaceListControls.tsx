@@ -30,6 +30,9 @@ export type WorkspaceListPreferences = {
   postcode?: string;
   suburb?: string;
   state?: string;
+  operationalStatus?: string;
+  quoteTotalMin?: string;
+  quoteTotalMax?: string;
   jobId?: string;
   model?: string;
   brand?: string;

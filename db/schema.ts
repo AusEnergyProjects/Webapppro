@@ -2264,8 +2264,21 @@ export const tradeCrmQuoteDeliveries = sqliteTable("trade_crm_quote_deliveries",
   recipientRole: text("recipient_role").notNull().default("acceptance"), subjectSnapshot: text("subject_snapshot").notNull().default(""),
   emailContentSha256: text("email_content_sha256").notNull().default(""), attachmentFilename: text("attachment_filename").notNull().default(""),
   attachmentSha256: text("attachment_sha256").notNull().default(""),
+  recipientEmailSha256: text("recipient_email_sha256").notNull().default(""), providerIdempotencyKey: text("provider_idempotency_key").notNull().default(""),
+  publicOrigin: text("public_origin").notNull().default(""),
+  queuedAt: text("queued_at").notNull().default(""), nextAttemptAt: text("next_attempt_at").notNull().default(""),
+  lastAttemptAt: text("last_attempt_at").notNull().default(""), leaseExpiresAt: text("lease_expires_at").notNull().default(""),
+  failureCode: text("failure_code").notNull().default(""),
+  retryOfDeliveryId: text("retry_of_delivery_id").notNull().default(""),
+  deliveryGeneration: integer("delivery_generation").notNull().default(1),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
-}, (table) => [uniqueIndex("trade_crm_quote_deliveries_idempotency_idx").on(table.idempotencyKey), index("trade_crm_quote_deliveries_version_idx").on(table.quoteVersionId, table.createdAt)]);
+}, (table) => [
+  uniqueIndex("trade_crm_quote_deliveries_idempotency_idx").on(table.idempotencyKey),
+  index("trade_crm_quote_deliveries_version_idx").on(table.quoteVersionId, table.createdAt),
+  index("trade_crm_quote_deliveries_outbox_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+  uniqueIndex("trade_crm_quote_deliveries_retry_generation_idx").on(table.retryOfDeliveryId, table.deliveryGeneration)
+    .where(sql`${table.retryOfDeliveryId} <> ''`),
+]);
 
 export const tradeIssuedDocumentCleanup = sqliteTable("trade_issued_document_cleanup", {
   objectKey: text("object_key").primaryKey(),

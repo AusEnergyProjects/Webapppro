@@ -38,6 +38,12 @@ import { projectInstallerWorkOrderToDataforceRecord } from "@/lib/creditex-dataf
 import { integrationEnvironment } from "@/lib/trade-integrations-server";
 import { TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL } from "@/lib/trade-crm-job-index-sql";
 import {
+  JOB_REGISTER_CUSTOMER_CONTEXT_SQL,
+  JOB_REGISTER_OPERATIONAL_STATUSES,
+  protectedJobCustomerText,
+  projectJobRegisterRecord,
+} from "@/lib/trade-crm-job-register";
+import {
   canonicalAustralianAddress,
   resolveTradeAddressProvenance,
   TradeAddressVerificationError,
@@ -73,6 +79,7 @@ const QUOTE_STATUSES = new Set(["not_started", "draft", "issued", "sent", "accep
 const INVOICE_STATUSES = new Set(["not_started", "draft", "issued", "part_paid", "paid", "overdue", "void"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PAGE_SIZES = new Set([25, 50, 100]);
+const JOB_REGISTER_STATUS_SET = new Set<string>(JOB_REGISTER_OPERATIONAL_STATUSES);
 const CRM_REQUEST_MAX_BYTES = 96 * 1024;
 const SERVICE_LABELS: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
@@ -91,9 +98,73 @@ const crmSort = (terms: CrmSortTerm[], idExpression: string): CrmSort => {
   const stable = [...terms, crmTerm(idExpression, terms.at(-1)?.direction || "asc", "id")];
   return { orderBy: stable.map((item) => `${item.expression} ${item.direction.toUpperCase()}`).join(", "), terms: stable };
 };
+const JOB_REGISTER_AUDITED_SQL = `EXISTS (
+  SELECT 1 FROM compliance_cases register_case
+  WHERE register_case.work_order_id = w.id
+    AND register_case.installer_uid = w.firebase_uid
+    AND register_case.status = 'accepted'
+    AND register_case.evidence_status = 'verified'
+)`;
+const JOB_REGISTER_QUOTE_TOTAL_SQL = `(
+  SELECT CASE
+    WHEN current_acceptance.id IS NOT NULL THEN current_acceptance.selected_subtotal_cents
+    ELSE MAX(0, current_quote_version.subtotal_cents) + COALESCE((
+      SELECT SUM(MAX(0, default_choice.subtotal_cents))
+      FROM trade_crm_quote_choices default_choice
+      WHERE default_choice.quote_version_id = current_quote_version.id
+        AND default_choice.firebase_uid = current_quote_version.firebase_uid
+        AND default_choice.choice_kind <> 'addon'
+        AND default_choice.id = (
+          SELECT preferred_choice.id
+          FROM trade_crm_quote_choices preferred_choice
+          WHERE preferred_choice.quote_version_id = default_choice.quote_version_id
+            AND preferred_choice.firebase_uid = default_choice.firebase_uid
+            AND preferred_choice.choice_kind = default_choice.choice_kind
+            AND preferred_choice.group_key = default_choice.group_key
+          ORDER BY preferred_choice.recommended DESC,
+            CASE WHEN preferred_choice.recommended <> 0 THEN preferred_choice.position END DESC,
+            preferred_choice.position ASC
+          LIMIT 1
+        )
+    ), 0)
+  END
+  FROM trade_crm_quotes current_quote
+  JOIN trade_crm_quote_versions current_quote_version
+    ON current_quote_version.quote_id = current_quote.id
+    AND current_quote_version.firebase_uid = current_quote.firebase_uid
+    AND current_quote_version.version_number = current_quote.current_version_number
+  LEFT JOIN trade_crm_quote_acceptances current_acceptance
+    ON current_acceptance.quote_id = current_quote.id
+    AND current_acceptance.quote_version_id = current_quote_version.id
+    AND current_acceptance.work_order_id = current_quote.work_order_id
+    AND current_acceptance.firebase_uid = current_quote.firebase_uid
+    AND current_acceptance.decision = 'accepted'
+  WHERE current_quote.work_order_id = w.id
+    AND current_quote.firebase_uid = w.firebase_uid
+  LIMIT 1
+)`;
+const JOB_REGISTER_QUOTE_SORT_SQL = `COALESCE(${JOB_REGISTER_QUOTE_TOTAL_SQL}, 0)`;
+const JOB_REGISTER_STATUS_RANK_SQL = `CASE
+  WHEN w.stage = 'cancelled' OR d.pipeline_stage = 'lost' THEN 6
+  WHEN ${JOB_REGISTER_AUDITED_SQL} THEN 4
+  WHEN w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid') THEN 3
+  WHEN trim(w.assignee_member_id) <> '' OR trim(w.scheduled_start) <> '' THEN 2
+  ELSE 1 END`;
 const JOB_SORTS: Record<string, CrmSort> = {
   "number-asc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "asc", "work_number")], "w.id"),
   "number-desc": crmSort([crmTerm("w.work_number COLLATE NOCASE", "desc", "work_number")], "w.id"),
+  "first-name-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "asc", "first_name"), crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "asc", "last_name")], "w.id"),
+  "last-name-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.last_name")} COLLATE NOCASE`, "asc", "last_name"), crmTerm(`${protectedJobCustomerText("c.first_name")} COLLATE NOCASE`, "asc", "first_name")], "w.id"),
+  "phone-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.phone")} COLLATE NOCASE`, "asc", "customer_phone")], "w.id"),
+  "email-asc": crmSort([crmTerm(`${protectedJobCustomerText("c.email")} COLLATE NOCASE`, "asc", "customer_email")], "w.id"),
+  "street-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_line_1")} COLLATE NOCASE`, "asc", "site_address_line_1")], "w.id"),
+  "postcode-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.postcode")} COLLATE NOCASE`, "asc", "site_postcode")], "w.id"),
+  "suburb-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.suburb")} COLLATE NOCASE`, "asc", "site_suburb")], "w.id"),
+  "state-asc": crmSort([crmTerm(`${protectedJobCustomerText("ss.address_state")} COLLATE NOCASE`, "asc", "site_address_state")], "w.id"),
+  "assignee-asc": crmSort([crmTerm("trim(w.assignee_member_id) = ''", "asc", "assignment_empty", true), crmTerm("w.assignee_label COLLATE NOCASE", "asc", "assignee_label")], "w.id"),
+  "status-asc": crmSort([crmTerm(JOB_REGISTER_STATUS_RANK_SQL, "asc", "register_status_rank", true)], "w.id"),
+  "quote-total-asc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "asc", "quote_total_sort_cents", true)], "w.id"),
+  "quote-total-desc": crmSort([crmTerm(`${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL`, "asc", "quote_total_empty", true), crmTerm(JOB_REGISTER_QUOTE_SORT_SQL, "desc", "quote_total_sort_cents", true)], "w.id"),
   "date-asc": crmSort([crmTerm("w.scheduled_start = ''", "asc", "schedule_empty", true), crmTerm("w.scheduled_start", "asc", "scheduled_start"), crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
   "updated-desc": crmSort([crmTerm("w.updated_at", "desc", "updated_at")], "w.id"),
 };
@@ -270,6 +341,7 @@ function errorResponse(error: unknown) {
   if (code === "CUSTOMER_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer records." }, 403);
   if (code === "CUSTOMER_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer changes." }, 403);
   if (code === "CUSTOMER_SEARCH_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer directory search." }, 403);
+  if (code === "QUOTE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow quote totals." }, 403);
   if (code === "INVOICE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow invoice filters or values." }, 403);
   if (code === "REPORTS_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow business reports." }, 403);
   if (code === "MEMBER_CAPABILITY_REQUIRED") return adminJson({ ok: false, error: "The selected team member is not enabled for this service category." }, 409);
@@ -284,6 +356,7 @@ function errorResponse(error: unknown) {
   if (code === "APPOINTMENT_NOT_FOUND") return adminJson({ ok: false, error: "Appointment not found." }, 404);
   if (code === "NOTE_NOT_FOUND") return adminJson({ ok: false, error: "Note or issue not found." }, 404);
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
+  if (["INVALID_STATE", "INVALID_JOB_STATUS", "INVALID_QUOTE_TOTAL"].includes(code)) return adminJson({ ok: false, error: "Check the job register filters and try again." }, 400);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
   if (code === "INVALID_APPOINTMENT_SLOT") return adminJson({ ok: false, error: "Choose an appointment time on a 15-minute interval." }, 400);
   if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add at least one valid invoice line and check the GST choice." }, 400);
@@ -389,6 +462,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
   const sourceType = String(row.source_type);
   const customerSource = sourceType === "opportunity" ? "platform_private" : String(row.customer_source || "internal");
   const protectedCustomer = customerSource === "platform_private";
+  const canViewCustomer = !protectedCustomer;
   const dataforceRecord = projectInstallerWorkOrderToDataforceRecord({
     identifiers: {
       appointmentId: String(row.appointment_id || ""),
@@ -404,23 +478,47 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
       paidValueCents: access.canViewInvoices ? Number(row.paid_value_cents || 0) : 0,
       invoiceStatus: access.canViewInvoices ? String(row.invoice_status || "not_started") : "restricted",
     },
-    customer: protectedCustomer ? undefined : {
+    customer: canViewCustomer ? {
       firstName: String(row.first_name || ""),
       lastName: String(row.last_name || ""),
       businessName: String(row.business_name || ""),
       email: String(row.customer_email || ""),
       phone: "",
       mobile: String(row.customer_phone || ""),
-    },
-    serviceSite: protectedCustomer ? undefined : {
+    } : undefined,
+    serviceSite: canViewCustomer ? {
       addressLine1: String(row.site_address_line_1 || ""),
       addressLine2: String(row.site_address_line_2 || ""),
       suburb: String(row.site_suburb || ""),
       postcode: String(row.site_postcode || ""),
-    },
+    } : undefined,
     technician: { displayName: String(row.assignee_label || "") },
-    customerReference: protectedCustomer ? "" : String(row.customer_reference || ""),
+    customerReference: canViewCustomer ? String(row.customer_reference || "") : "",
     verifiedCertificateIssuance: null,
+  });
+  const jobRegister = projectJobRegisterRecord({
+    jobId: row.work_number,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    contactNumber: row.customer_phone,
+    email: row.customer_email,
+    addressLine1: row.site_address_line_1,
+    addressLine2: row.site_address_line_2,
+    postcode: row.site_postcode,
+    suburb: row.site_suburb,
+    state: row.site_address_state,
+    assigneeMemberId: row.assignee_member_id,
+    assignedWorker: row.assignee_label,
+    scheduleDate: row.appointment_starts_at || row.scheduled_start,
+    workStage: row.stage,
+    pipelineStage: row.pipeline_stage,
+    audited: row.register_audited,
+    certificates: { stc: 0, veec: 0, esc: 0, other: 0 },
+    service: String(row.governed_work_type || SERVICE_LABELS[String(row.service_category)] || row.service_category || ""),
+    quoteStatus: access.canViewQuotes ? row.quote_status : "restricted",
+    quoteTotalExGstCents: access.canViewQuotes ? row.quote_total_ex_gst_cents : null,
+    updatedAt: row.updated_at,
+    canViewCustomer,
   });
   return {
     id: row.id, workNumber: row.work_number,
@@ -441,7 +539,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     invoiceStatus: access.canViewInvoices ? row.invoice_status || "not_started" : "restricted",
     paymentDueAt: access.canViewInvoices ? row.payment_due_at || "" : "",
     handoverStatus: row.handover_status || "", tasks: [], appointments: [], notes: [], complianceCases: [], complianceIntents: [], complianceIntent: null,
-    dataforceRecord,
+    dataforceRecord, jobRegister,
     createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
@@ -561,16 +659,12 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       bindings.push(identity.memberId);
     }
     if (search) {
-      const searchableJobTitleSql = identity.access.canViewCustomers && identity.access.canSearchCustomers
-        ? "COALESCE(w.title, '') || ' ' || COALESCE(w.site_area, '') || ' ' ||"
-        : "";
-      const searchableCustomerSql = identity.access.canViewCustomers && identity.access.canSearchCustomers
-        ? `COALESCE(d.customer_reference, '') || ' ' ||
-          COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') || ' ' || COALESCE(c.business_name, '') || ' ' ||
-          COALESCE(c.email, '') || ' ' || COALESCE(c.phone, '') || ' ' ||
-          COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' ||
-          COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '') || ' '`
-        : "";
+      const searchableJobTitleSql = `${protectedJobCustomerText("w.title")} || ' ' || CASE WHEN w.source_type = 'opportunity' THEN '' ELSE COALESCE(w.site_area, '') END || ' ' ||`;
+      const searchableCustomerSql = `${protectedJobCustomerText("d.customer_reference")} || ' ' ||
+          ${protectedJobCustomerText("c.first_name")} || ' ' || ${protectedJobCustomerText("c.last_name")} || ' ' || ${protectedJobCustomerText("c.business_name")} || ' ' ||
+          ${protectedJobCustomerText("c.email")} || ' ' || ${protectedJobCustomerText("c.phone")} || ' ' ||
+          ${protectedJobCustomerText("ss.address_line_1")} || ' ' || ${protectedJobCustomerText("ss.address_line_2")} || ' ' ||
+          ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")} || ' '`;
       conditions.push(`LOWER(
         COALESCE(w.work_number, '') || ' ' || ${searchableJobTitleSql}
         COALESCE(w.assignee_label, '') || ' ' || COALESCE(w.stage, '') || ' ' || COALESCE(w.scheduled_start, '') || ' ' ||
@@ -602,9 +696,18 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     }
     const customer = cleanAdminText(url.searchParams.get("customer"), 100).toLowerCase();
     if (customer) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push(`LOWER(CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END) LIKE ?`);
       bindings.push(`%${customer}%`);
+    }
+    const firstName = cleanAdminText(url.searchParams.get("firstName"), 100).toLowerCase();
+    if (firstName) {
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(c.first_name) LIKE ?`);
+      bindings.push(`%${firstName}%`);
+    }
+    const lastName = cleanAdminText(url.searchParams.get("lastName"), 100).toLowerCase();
+    if (lastName) {
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(c.last_name) LIKE ?`);
+      bindings.push(`%${lastName}%`);
     }
     const service = cleanAdminText(url.searchParams.get("service"), 40);
     if (SERVICE_CATEGORIES.has(service)) { conditions.push("w.service_category = ?"); bindings.push(service); }
@@ -616,9 +719,13 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     if (assignee) { conditions.push("LOWER(w.assignee_label) LIKE ?"); bindings.push(`%${assignee}%`); }
     const location = cleanAdminText(url.searchParams.get("location"), 100).toLowerCase();
     if (location) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push(`LOWER(COALESCE(w.site_area, '') || ' ' || COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '') || ' ' || COALESCE(ss.suburb, '') || ' ' || COALESCE(ss.address_state, '') || ' ' || COALESCE(ss.postcode, '')) LIKE ?`);
+      conditions.push(`LOWER(CASE WHEN w.source_type = 'opportunity' THEN '' ELSE COALESCE(w.site_area, '') END || ' ' || ${protectedJobCustomerText("ss.address_line_1")} || ' ' || ${protectedJobCustomerText("ss.address_line_2")} || ' ' || ${protectedJobCustomerText("ss.suburb")} || ' ' || ${protectedJobCustomerText("ss.address_state")} || ' ' || ${protectedJobCustomerText("ss.postcode")}) LIKE ?`);
       bindings.push(`%${location}%`);
+    }
+    const street = cleanAdminText(url.searchParams.get("street"), 140).toLowerCase();
+    if (street) {
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(COALESCE(ss.address_line_1, '') || ' ' || COALESCE(ss.address_line_2, '')) LIKE ?`);
+      bindings.push(`%${street}%`);
     }
     const scheduledFrom = cleanAdminText(url.searchParams.get("scheduledFrom"), 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledFrom)) {
@@ -638,33 +745,64 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
     }
     const customerReference = cleanAdminText(url.searchParams.get("customerReference"), 120).toLowerCase();
     if (customerReference) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push("LOWER(d.customer_reference) LIKE ?");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(d.customer_reference) LIKE ?`);
       bindings.push(`%${customerReference}%`);
     }
     const email = cleanAdminText(url.searchParams.get("email"), 180).toLowerCase();
     if (email) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push("LOWER(c.email) LIKE ?");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(c.email) LIKE ?`);
       bindings.push(`%${email}%`);
     }
     const phone = cleanAdminText(url.searchParams.get("phone"), 50).toLowerCase();
     if (phone) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push("LOWER(c.phone) LIKE ?");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(c.phone) LIKE ?`);
       bindings.push(`%${phone}%`);
     }
     const suburb = cleanAdminText(url.searchParams.get("suburb"), 100).toLowerCase();
     if (suburb) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push("LOWER(ss.suburb) LIKE ?");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(ss.suburb) LIKE ?`);
       bindings.push(`%${suburb}%`);
     }
     const postcode = cleanAdminText(url.searchParams.get("postcode"), 12).toLowerCase();
     if (postcode) {
-      if (!identity.access.canViewCustomers || !identity.access.canSearchCustomers) throw new Error("CUSTOMER_SEARCH_REQUIRED");
-      conditions.push("LOWER(ss.postcode) LIKE ?");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND LOWER(ss.postcode) LIKE ?`);
       bindings.push(`%${postcode}%`);
+    }
+    const state = cleanAdminText(url.searchParams.get("state"), 12).toUpperCase();
+    if (state) {
+      if (!ADDRESS_STATES.has(state)) throw new Error("INVALID_STATE");
+      conditions.push(`${JOB_REGISTER_CUSTOMER_CONTEXT_SQL} AND UPPER(ss.address_state) = ?`);
+      bindings.push(state);
+    }
+    const operationalStatus = cleanAdminText(url.searchParams.get("operationalStatus"), 30).toLowerCase();
+    if (operationalStatus) {
+      if (!JOB_REGISTER_STATUS_SET.has(operationalStatus)) throw new Error("INVALID_JOB_STATUS");
+      const cancelled = "(w.stage = 'cancelled' OR d.pipeline_stage = 'lost')";
+      const completed = "(w.stage = 'completed' OR d.pipeline_stage IN ('complete', 'invoiced', 'paid'))";
+      const terminal = `(${cancelled} OR ${completed})`;
+      const assigned = "(trim(w.assignee_member_id) <> '' OR trim(w.scheduled_start) <> '')";
+      if (operationalStatus === "certified") conditions.push("0 = 1");
+      else if (operationalStatus === "cancelled") conditions.push(cancelled);
+      else if (operationalStatus === "audited") conditions.push(`NOT ${cancelled} AND ${JOB_REGISTER_AUDITED_SQL}`);
+      else if (operationalStatus === "complete") conditions.push(`NOT ${cancelled} AND NOT ${JOB_REGISTER_AUDITED_SQL} AND ${completed}`);
+      else if (operationalStatus === "assigned") conditions.push(`NOT ${JOB_REGISTER_AUDITED_SQL} AND NOT ${terminal} AND ${assigned}`);
+      else conditions.push(`NOT ${JOB_REGISTER_AUDITED_SQL} AND NOT ${terminal} AND NOT ${assigned}`);
+    }
+    const quoteTotalMin = url.searchParams.get("quoteTotalMin");
+    if (quoteTotalMin !== null && quoteTotalMin !== "") {
+      if (!identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
+      const cents = Math.round(Number(quoteTotalMin) * 100);
+      if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("INVALID_QUOTE_TOTAL");
+      conditions.push(`${JOB_REGISTER_QUOTE_TOTAL_SQL} >= ?`);
+      bindings.push(cents);
+    }
+    const quoteTotalMax = url.searchParams.get("quoteTotalMax");
+    if (quoteTotalMax !== null && quoteTotalMax !== "") {
+      if (!identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
+      const cents = Math.round(Number(quoteTotalMax) * 100);
+      if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("INVALID_QUOTE_TOTAL");
+      conditions.push(`${JOB_REGISTER_QUOTE_TOTAL_SQL} <= ?`);
+      bindings.push(cents);
     }
     if (filter === "platform") conditions.push("w.source_type = 'opportunity'");
     else if (filter === "completed") conditions.push("w.stage IN ('completed', 'cancelled')");
@@ -677,6 +815,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
       LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'`;
     const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
     const sort = JOB_SORTS[sortValue] ? sortValue : "updated-desc";
+    if (sort.startsWith("quote-total-") && !identity.access.canViewQuotes) throw new Error("QUOTE_VIEW_REQUIRED");
     const selectedSort = JOB_SORTS[sort];
     let cursor;
     try { cursor = decodeKeysetCursor(cursorInput, `jobs:${sort}`, selectedSort.terms.length); } catch { throw new Error("INVALID_CURSOR"); }
@@ -690,10 +829,19 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
         d.description, d.customer_reference,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
-        c.first_name, c.last_name, c.business_name, c.email customer_email, c.phone customer_phone,
-        ss.address_line_1 site_address_line_1, ss.address_line_2 site_address_line_2,
-        ss.suburb site_suburb, ss.address_state site_address_state, ss.postcode site_postcode,
-        CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+        ${protectedJobCustomerText("c.first_name")} first_name,
+        ${protectedJobCustomerText("c.last_name")} last_name,
+        ${protectedJobCustomerText("c.business_name")} business_name,
+        ${protectedJobCustomerText("c.email")} customer_email,
+        ${protectedJobCustomerText("c.phone")} customer_phone,
+        ${protectedJobCustomerText("ss.address_line_1")} site_address_line_1,
+        ${protectedJobCustomerText("ss.address_line_2")} site_address_line_2,
+        ${protectedJobCustomerText("ss.suburb")} site_suburb,
+        ${protectedJobCustomerText("ss.address_state")} site_address_state,
+        ${protectedJobCustomerText("ss.postcode")} site_postcode,
+        CASE WHEN ${JOB_REGISTER_CUSTOMER_CONTEXT_SQL}
+          THEN CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END
+          ELSE '' END customer_name,
         selected_appointment.id appointment_id,
         selected_appointment.starts_at appointment_starts_at,
         (SELECT json_extract(ci.intent_snapshot, '$.activity.title')
@@ -702,6 +850,12 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string) {
             AND ci.status IN ('planned', 'case_linked')
           ORDER BY ci.revision DESC, ci.created_at DESC LIMIT 1) governed_work_type,
         (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status,
+        ${JOB_REGISTER_AUDITED_SQL} register_audited,
+        ${JOB_REGISTER_STATUS_RANK_SQL} register_status_rank,
+        ${JOB_REGISTER_QUOTE_TOTAL_SQL} quote_total_ex_gst_cents,
+        ${JOB_REGISTER_QUOTE_TOTAL_SQL} IS NULL quote_total_empty,
+        ${JOB_REGISTER_QUOTE_SORT_SQL} quote_total_sort_cents,
+        trim(w.assignee_member_id) = '' assignment_empty,
         w.scheduled_start = '' schedule_empty
         ${rowJoins} WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
         .bind(...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
@@ -858,8 +1012,10 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
     (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
     FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
-    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'`)
-    .bind(id, identity.uid).first<Record<string, unknown>>();
+    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = 'active'
+      AND (? = 'team' OR w.assignee_member_id = ?)`)
+    .bind(id, identity.uid, identity.access.isOwner ? "team" : identity.access.jobScope,
+      identity.memberId).first<Record<string, unknown>>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   const protectedCustomer = String(row.customer_source || "") === "platform_private";
   const customerId = protectedCustomer ? "" : String(row.crm_customer_id || "");
