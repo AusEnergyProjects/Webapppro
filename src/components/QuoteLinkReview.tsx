@@ -4,9 +4,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
+import { isPayableQuoteDecisionInvoice } from "@/lib/trade-quote-receipt";
 
 type Line = {
   id: string;
@@ -81,11 +83,71 @@ type Quote = {
   choices: Choice[];
   questions: Question[];
 };
+type QuoteInvoiceReceipt = {
+  id: string;
+  number: string;
+  status: "issued" | "attention_required";
+  documentLabel: "Invoice" | "Tax Invoice";
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  dueAt: string;
+  issueBlockerCode: string;
+};
+type QuotePaymentReceipt = {
+  availability: "bank_transfer" | "not_configured" | "withheld";
+  method: "bank_transfer" | "none";
+  accountName: string;
+  bsb: string;
+  accountNumber: string;
+  reference: string;
+  terms: string;
+  amountDueCents: number;
+  currency: "AUD";
+  dueAt: string;
+};
+type QuoteDecisionReceipt = {
+  acceptanceId: string;
+  decision: "accepted" | "declined";
+  signerName: string;
+  decidedAt: string;
+  commercialReference: string;
+  invoice: QuoteInvoiceReceipt | null;
+  payment: QuotePaymentReceipt;
+};
 type Result = {
   ok?: boolean;
   quote?: Quote;
-  decision?: string;
+  receipt?: QuoteDecisionReceipt;
+  decision?: "accepted" | "declined";
+  duplicate?: boolean;
+  commercial?: unknown;
   error?: string;
+};
+
+type DecisionIdFactory = (
+  storage: Pick<Storage, "getItem" | "setItem">,
+  storageKey: string,
+  createId: () => string,
+) => string;
+
+export const getOrCreateQuoteDecisionId: DecisionIdFactory = (
+  storage,
+  storageKey,
+  createId,
+) => {
+  const existing = storage.getItem(storageKey);
+  if (
+    existing &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      existing,
+    )
+  ) {
+    return existing;
+  }
+  const created = createId();
+  storage.setItem(storageKey, created);
+  return created;
 };
 
 const money = (cents: number) =>
@@ -93,6 +155,154 @@ const money = (cents: number) =>
     style: "currency",
     currency: "AUD",
   }).format(cents / 100);
+
+function displayDate(value: string) {
+  if (!value) return "To be confirmed";
+  const dateOnly = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  const parsed = new Date(dateOnly ? `${dateOnly}T00:00:00` : value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function QuoteDecisionReceiptView({ receipt }: { receipt: QuoteDecisionReceipt }) {
+  if (receipt.decision === "declined") {
+    return (
+      <main className="quote-link-shell">
+        <section className="quote-link-receipt quote-link-receipt-declined">
+          <span>Decision recorded</span>
+          <h1>Quote declined</h1>
+          <p>The trade business has your signed decision.</p>
+          <dl>
+            <div>
+              <dt>Reference</dt>
+              <dd>{receipt.commercialReference}</dd>
+            </div>
+            <div>
+              <dt>Recorded</dt>
+              <dd>{displayDate(receipt.decidedAt)}</dd>
+            </div>
+          </dl>
+        </section>
+      </main>
+    );
+  }
+
+  const invoice = receipt.invoice;
+  const payment = receipt.payment;
+  const payableInvoice = isPayableQuoteDecisionInvoice(invoice);
+  const bankTransferReady =
+    payableInvoice &&
+    payment.availability === "bank_transfer" &&
+    payment.method === "bank_transfer" &&
+    Boolean(payment.accountName && payment.bsb && payment.accountNumber);
+
+  return (
+    <main className="quote-link-shell">
+      <section className="quote-link-receipt">
+        <header>
+          <span>Decision recorded</span>
+          <h1>Quote accepted</h1>
+          <p>
+            Your signed acceptance is saved. Keep this page for the invoice and
+            payment reference.
+          </p>
+        </header>
+
+        {invoice && payableInvoice ? (
+          <section
+            className="quote-link-invoice-receipt"
+            aria-label="Invoice summary"
+          >
+            <div>
+              <span>Invoice</span>
+              <strong>{invoice.number}</strong>
+            </div>
+            <dl>
+              <div>
+                <dt>Amount due</dt>
+                <dd>{money(invoice.totalCents)}</dd>
+              </div>
+              <div>
+                <dt>Due</dt>
+                <dd>{displayDate(invoice.dueAt)}</dd>
+              </div>
+              <div>
+                <dt>GST</dt>
+                <dd>{money(invoice.taxCents)}</dd>
+              </div>
+            </dl>
+          </section>
+        ) : invoice?.status === "attention_required" ? (
+          <section className="quote-link-payment-pending" role="status">
+            <strong>Acceptance recorded</strong>
+            <p>
+              The trade business is confirming the existing invoice for this
+              job. Do not make another payment until it confirms the correct
+              invoice and payment reference.
+            </p>
+          </section>
+        ) : (
+          <section className="quote-link-payment-pending" role="status">
+            <strong>Your invoice is being prepared</strong>
+            <p>
+              Your acceptance is safely recorded under{" "}
+              {receipt.commercialReference}.
+            </p>
+          </section>
+        )}
+
+        {invoice?.status === "attention_required" ? null : bankTransferReady ? (
+          <section
+            className="quote-link-bank-transfer"
+            aria-label="Bank transfer details"
+          >
+            <header>
+              <span>Pay by bank transfer</span>
+              <strong>{money(payment.amountDueCents)}</strong>
+            </header>
+            <dl>
+              <div>
+                <dt>Account name</dt>
+                <dd>{payment.accountName}</dd>
+              </div>
+              <div>
+                <dt>BSB</dt>
+                <dd>{payment.bsb}</dd>
+              </div>
+              <div>
+                <dt>Account number</dt>
+                <dd>{payment.accountNumber}</dd>
+              </div>
+              <div>
+                <dt>Reference</dt>
+                <dd>{payment.reference}</dd>
+              </div>
+            </dl>
+            {payment.terms && <p>{payment.terms}</p>}
+          </section>
+        ) : (
+          <section className="quote-link-payment-pending" role="status">
+            <strong>Payment details are being prepared</strong>
+            <p>
+              The trade business will provide its payment instructions. Do not
+              pay using details from an unexpected message.
+            </p>
+          </section>
+        )}
+
+        <footer>
+          <span>Acceptance reference</span>
+          <strong>{receipt.commercialReference}</strong>
+          <small>Recorded {displayDate(receipt.decidedAt)}</small>
+        </footer>
+      </section>
+    </main>
+  );
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -217,31 +427,48 @@ function QuoteLines({ lines }: { lines: Line[] }) {
 }
 
 export function QuoteLinkReview({ token }: { token: string }) {
+  const decisionIdFallback = useRef("");
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [receipt, setReceipt] = useState<QuoteDecisionReceipt | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [signerName, setSignerName] = useState("");
   const [consent, setConsent] = useState(false);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
-  const [finished, setFinished] = useState("");
+  const [failedDecision, setFailedDecision] = useState<"accepted" | "declined" | "">("");
+  const [opening, setOpening] = useState(true);
   const endpoint = `/api/quote-review/${encodeURIComponent(token)}`;
   const load = useCallback(async () => {
-    const response = await fetch(endpoint, { cache: "no-store" });
-    const result = (await response.json().catch(() => ({}))) as Result;
-    if (!response.ok || !result.quote) {
-      throw new Error(result.error || "This quote could not be opened.");
+    setOpening(true);
+    setMessage("");
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      const result = (await response.json().catch(() => ({}))) as Result;
+      if (!response.ok || (!result.quote && !result.receipt)) {
+        throw new Error(result.error || "This quote could not be opened.");
+      }
+      if (result.receipt) {
+        setReceipt(result.receipt);
+        setQuote(null);
+        return;
+      }
+      const nextQuote = result.quote;
+      if (!nextQuote) throw new Error("This quote could not be opened.");
+      setQuote(nextQuote);
+      setReceipt(null);
+      const required = new Map<string, Choice>();
+      for (const choice of nextQuote.choices.filter(
+        (item) => item.kind !== "addon",
+      )) {
+        const key = `${choice.kind}:${choice.groupKey}`;
+        const current = required.get(key);
+        if (!current || choice.recommended) required.set(key, choice);
+      }
+      setSelected([...required.values()].map((item) => item.id));
+    } finally {
+      setOpening(false);
     }
-    setQuote(result.quote);
-    const required = new Map<string, Choice>();
-    for (const choice of result.quote.choices.filter(
-      (item) => item.kind !== "addon",
-    )) {
-      const key = `${choice.kind}:${choice.groupKey}`;
-      const current = required.get(key);
-      if (!current || choice.recommended) required.set(key, choice);
-    }
-    setSelected([...required.values()].map((item) => item.id));
   }, [endpoint]);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() =>
@@ -317,16 +544,30 @@ export function QuoteLinkReview({ token }: { token: string }) {
     );
   }
   async function post(body: Record<string, unknown>) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const result = (await response.json().catch(() => ({}))) as Result;
-    if (!response.ok) {
-      throw new Error(result.error || "The quote could not be updated.");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const result = (await response.json().catch(() => ({}))) as Result;
+      if (!response.ok) {
+        throw new Error(result.error || "The quote could not be updated.");
+      }
+      return result;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          "The connection timed out. Retry to confirm whether it was received.",
+        );
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return result;
   }
   async function ask() {
     setBusy("question");
@@ -347,18 +588,40 @@ export function QuoteLinkReview({ token }: { token: string }) {
     }
   }
   async function decide(decision: "accepted" | "declined") {
+    if (!quote) return;
     setBusy(decision);
     setMessage("");
+    setFailedDecision("");
     try {
+      const storageKey = `quote-review:decision:${quote.linkId}:${quote.quoteVersionId}`;
+      let clientDecisionId = "";
+      try {
+        clientDecisionId = getOrCreateQuoteDecisionId(
+          window.sessionStorage,
+          storageKey,
+          () => crypto.randomUUID(),
+        );
+      } catch {
+        decisionIdFallback.current ||= crypto.randomUUID();
+        clientDecisionId = decisionIdFallback.current;
+      }
       const result = await post({
         action: "decide",
         decision,
+        clientDecisionId,
         signerName,
         consentConfirmed: consent,
         selectedChoiceIds: selected,
       });
-      setFinished(result.decision || decision);
+      if (!result.receipt) {
+        throw new Error(
+          "Your decision may have been recorded, but its receipt was not returned. Retry to confirm it safely.",
+        );
+      }
+      setReceipt(result.receipt);
+      setQuote(null);
     } catch (error) {
+      setFailedDecision(decision);
       setMessage(
         error instanceof Error
           ? error.message
@@ -368,26 +631,31 @@ export function QuoteLinkReview({ token }: { token: string }) {
       setBusy("");
     }
   }
-  if (finished) {
-    return (
-      <main className="quote-link-shell">
-        <section className="quote-link-finished">
-          <span>Decision recorded</span>
-          <h1>Quote {finished}</h1>
-          <p>
-            The trade business now has your signed decision and exact total.
-            This secure link has closed automatically.
-          </p>
-        </section>
-      </main>
-    );
-  }
+  if (receipt) return <QuoteDecisionReceiptView receipt={receipt} />;
   if (!quote) {
     return (
       <main className="quote-link-shell">
         <section className="quote-link-loading">
-          <strong>Opening secure quote</strong>
+          <strong>
+            {opening ? "Opening secure quote" : "Quote could not be opened"}
+          </strong>
           {message && <p role="alert">{message}</p>}
+          {!opening && (
+            <button
+              type="button"
+              onClick={() =>
+                void load().catch((error) =>
+                  setMessage(
+                    error instanceof Error
+                      ? error.message
+                      : "This quote could not be opened.",
+                  ),
+                )
+              }
+            >
+              Retry
+            </button>
+          )}
         </section>
       </main>
     );
@@ -636,6 +904,8 @@ export function QuoteLinkReview({ token }: { token: string }) {
             >
               {busy === "accepted"
                 ? "Recording..."
+                : failedDecision === "accepted"
+                  ? `Retry acceptance for ${money(totals.total)}`
                 : `Accept for ${money(totals.total)}`}
             </button>
             <button
@@ -645,12 +915,16 @@ export function QuoteLinkReview({ token }: { token: string }) {
               }
               onClick={() => void decide("declined")}
             >
-              {busy === "declined" ? "Recording..." : "Decline quote"}
+              {busy === "declined"
+                ? "Recording..."
+                : failedDecision === "declined"
+                  ? "Retry decline"
+                  : "Decline quote"}
             </button>
           </div>
         </section>
         {message && (
-          <p className="quote-link-message" role="status">
+          <p className="quote-link-message" role="alert">
             {message}
           </p>
         )}

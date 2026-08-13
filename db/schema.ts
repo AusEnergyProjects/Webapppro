@@ -2127,10 +2127,18 @@ export const tradeCrmQuoteAcceptances = sqliteTable("trade_crm_quote_acceptances
   tokenIssue: integer("token_issue").notNull().default(0),
   commercialReference: text("commercial_reference").notNull().default(""),
   currency: text("currency").notNull().default("AUD"),
+  decisionRequestId: text("decision_request_id").notNull().default(""),
+  decisionPayloadSha256: text("decision_payload_sha256").notNull().default(""),
+  resultInvoiceId: text("result_invoice_id").notNull().default(""),
+  invoiceCreationStatus: text("invoice_creation_status").notNull().default("not_applicable"),
+  invoiceCreationErrorCode: text("invoice_creation_error_code").notNull().default(""),
   decidedAt: text("decided_at").notNull(),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_crm_quote_acceptances_version_idx").on(table.quoteVersionId),
+  uniqueIndex("trade_crm_quote_acceptances_decision_request_idx")
+    .on(table.quoteLinkId, table.tokenIssue, table.decisionRequestId)
+    .where(sql`${table.decisionRequestId} <> ''`),
   index("trade_crm_quote_acceptances_owner_idx").on(table.firebaseUid, table.workOrderId, table.decidedAt),
   index("trade_crm_quote_acceptances_customer_idx").on(table.customerFirebaseUid, table.decidedAt),
 ]);
@@ -2162,6 +2170,48 @@ export const tradeCrmCommercialHandovers = sqliteTable("trade_crm_commercial_han
   uniqueIndex("trade_crm_commercial_handovers_acceptance_idx").on(table.acceptanceId),
   uniqueIndex("trade_crm_commercial_handovers_reference_idx").on(table.firebaseUid, table.commercialReference),
   index("trade_crm_commercial_handovers_work_idx").on(table.firebaseUid, table.workOrderId, table.acceptedAt),
+]);
+
+export const tradeCrmAcceptedInvoices = sqliteTable("trade_crm_accepted_invoices", {
+  id: text("id").primaryKey(),
+  acceptanceId: text("acceptance_id").notNull(),
+  commercialHandoffId: text("commercial_handoff_id").notNull(),
+  quoteId: text("quote_id").notNull(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  firebaseUid: text("firebase_uid").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  invoiceNumber: text("invoice_number").notNull(),
+  currency: text("currency").notNull().default("AUD"),
+  documentLabel: text("document_label").notNull().default("Invoice"),
+  sourceSnapshotSha256: text("source_snapshot_sha256").notNull(),
+  documentSnapshotJson: text("document_snapshot_json").notNull(),
+  subtotalCents: integer("subtotal_cents").notNull(),
+  taxCents: integer("tax_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  dueAt: text("due_at").notNull(),
+  status: text("status").notNull().default("issued"),
+  issueBlockerCode: text("issue_blocker_code").notNull().default(""),
+  paymentSnapshotJson: text("payment_snapshot_json").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_crm_accepted_invoices_acceptance_idx").on(table.acceptanceId),
+  uniqueIndex("trade_crm_accepted_invoices_handoff_idx").on(table.commercialHandoffId),
+  uniqueIndex("trade_crm_accepted_invoices_quote_version_idx").on(table.quoteVersionId),
+  uniqueIndex("trade_crm_accepted_invoices_owner_number_idx").on(table.firebaseUid, table.invoiceNumber),
+  uniqueIndex("trade_crm_accepted_invoices_owner_job_unique_idx").on(table.firebaseUid, table.workOrderId),
+  index("trade_crm_accepted_invoices_owner_job_idx").on(table.firebaseUid, table.workOrderId, table.updatedAt),
+  check("trade_crm_accepted_invoices_identity_check", sql`trim(${table.id}) <> '' AND trim(${table.acceptanceId}) <> '' AND trim(${table.commercialHandoffId}) <> '' AND trim(${table.quoteId}) <> '' AND trim(${table.quoteVersionId}) <> '' AND trim(${table.workOrderId}) <> '' AND trim(${table.firebaseUid}) <> '' AND trim(${table.crmCustomerId}) <> '' AND trim(${table.invoiceNumber}) <> ''`),
+  check("trade_crm_accepted_invoices_currency_check", sql`${table.currency} = 'AUD'`),
+  check("trade_crm_accepted_invoices_label_check", sql`${table.documentLabel} IN ('Invoice', 'Tax Invoice')`),
+  check("trade_crm_accepted_invoices_hash_check", sql`length(${table.sourceSnapshotSha256}) = 64 AND ${table.sourceSnapshotSha256} = lower(${table.sourceSnapshotSha256}) AND ${table.sourceSnapshotSha256} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_crm_accepted_invoices_document_check", sql`json_valid(${table.documentSnapshotJson}) AND json_type(${table.documentSnapshotJson}) = 'object' AND json_extract(${table.documentSnapshotJson}, '$.schemaVersion') = 'trade-accepted-invoice-v1' AND json_extract(${table.documentSnapshotJson}, '$.invoice.id') = ${table.id} AND json_extract(${table.documentSnapshotJson}, '$.invoice.number') = ${table.invoiceNumber} AND json_extract(${table.documentSnapshotJson}, '$.invoice.documentLabel') = ${table.documentLabel} AND json_extract(${table.documentSnapshotJson}, '$.invoice.currency') = ${table.currency} AND json_extract(${table.documentSnapshotJson}, '$.invoice.dueAt') = ${table.dueAt} AND json_extract(${table.documentSnapshotJson}, '$.source.snapshotSha256') = ${table.sourceSnapshotSha256} AND json_extract(${table.documentSnapshotJson}, '$.totals.subtotalCents') = ${table.subtotalCents} AND json_extract(${table.documentSnapshotJson}, '$.totals.taxCents') = ${table.taxCents} AND json_extract(${table.documentSnapshotJson}, '$.totals.totalCents') = ${table.totalCents}`),
+  check("trade_crm_accepted_invoices_payment_check", sql`json_valid(${table.paymentSnapshotJson}) AND json_type(${table.paymentSnapshotJson}) = 'object' AND json(${table.paymentSnapshotJson}) = json(json_extract(${table.documentSnapshotJson}, '$.payment')) AND ((json_extract(${table.paymentSnapshotJson}, '$.available') = 0 AND json_extract(${table.paymentSnapshotJson}, '$.method') = 'unavailable') OR (${table.status} = 'issued' AND json_extract(${table.paymentSnapshotJson}, '$.available') = 1 AND json_extract(${table.paymentSnapshotJson}, '$.method') = 'bank_transfer' AND trim(coalesce(json_extract(${table.paymentSnapshotJson}, '$.accountName'), '')) <> '' AND trim(coalesce(json_extract(${table.paymentSnapshotJson}, '$.bsb'), '')) <> '' AND trim(coalesce(json_extract(${table.paymentSnapshotJson}, '$.accountNumber'), '')) <> ''))`),
+  check("trade_crm_accepted_invoices_totals_check", sql`${table.subtotalCents} BETWEEN -100000000 AND 100000000 AND ${table.taxCents} BETWEEN -100000000 AND 100000000 AND ${table.totalCents} BETWEEN 1 AND 100000000 AND ${table.subtotalCents} + ${table.taxCents} = ${table.totalCents}`),
+  check("trade_crm_accepted_invoices_status_check", sql`(${table.status} = 'issued' AND ${table.issueBlockerCode} = '') OR (${table.status} = 'attention_required' AND trim(${table.issueBlockerCode}) <> '')`),
+  check("trade_crm_accepted_invoices_due_check", sql`length(${table.dueAt}) = 10 AND date(${table.dueAt}) = ${table.dueAt}`),
+  check("trade_crm_accepted_invoices_time_check", sql`datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL`),
 ]);
 
 export const tradeCrmJobPlans = sqliteTable("trade_crm_job_plans", {

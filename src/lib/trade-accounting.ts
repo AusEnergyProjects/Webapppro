@@ -1,16 +1,36 @@
 export type AccountingProvider = "xero" | "myob" | "quickbooks";
 
+export type AccountingTeamAccess = {
+  ownerUid: string;
+  isOwner: boolean;
+  canViewInvoices: boolean;
+  canManageInvoices: boolean;
+};
+
 type ProviderPayload = Record<string, unknown>;
 
 function diagnosticToken(value: unknown, limit: number) {
-  return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, limit);
+  return String(value || "")
+    .replace(/[^A-Za-z0-9_.-]/g, "")
+    .slice(0, limit);
 }
 
-export function quickBooksFailureDetail(status: number, intuitTid: unknown, payload: unknown) {
-  const body = payload && typeof payload === "object" ? payload as ProviderPayload : {};
-  const fault = body.Fault && typeof body.Fault === "object" ? body.Fault as ProviderPayload : {};
+export function quickBooksFailureDetail(
+  status: number,
+  intuitTid: unknown,
+  payload: unknown,
+) {
+  const body =
+    payload && typeof payload === "object" ? (payload as ProviderPayload) : {};
+  const fault =
+    body.Fault && typeof body.Fault === "object"
+      ? (body.Fault as ProviderPayload)
+      : {};
   const errors = Array.isArray(fault.Error) ? fault.Error : [];
-  const first = errors[0] && typeof errors[0] === "object" ? errors[0] as ProviderPayload : {};
+  const first =
+    errors[0] && typeof errors[0] === "object"
+      ? (errors[0] as ProviderPayload)
+      : {};
   const fields = [
     "provider=quickbooks",
     `status=${Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0}`,
@@ -24,16 +44,26 @@ export function quickBooksFailureDetail(status: number, intuitTid: unknown, payl
   return fields.join("; ");
 }
 
-export function isAccountingProvider(value: string): value is AccountingProvider {
+export function isAccountingProvider(
+  value: string,
+): value is AccountingProvider {
   return value === "xero" || value === "myob" || value === "quickbooks";
 }
 export function accountingReference(workNumber: string, maximumLength: number) {
-  const cleaned = `AEA-${workNumber}`.toUpperCase().replace(/[^A-Z0-9-]/g, "-").replace(/-+/g, "-");
+  const cleaned = `AEA-${workNumber}`
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "-")
+    .replace(/-+/g, "-");
   return cleaned.slice(0, maximumLength).replace(/-$/g, "") || "AEA-INVOICE";
 }
 
-export function accountingContactReference(customerNumber: string, maximumLength: number) {
-  const cleaned = `AEA${customerNumber}`.toUpperCase().replace(/[^A-Z0-9]/g, "");
+export function accountingContactReference(
+  customerNumber: string,
+  maximumLength: number,
+) {
+  const cleaned = `AEA${customerNumber}`
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
   return cleaned.slice(0, maximumLength) || "AEACUSTOMER";
 }
 
@@ -53,7 +83,11 @@ export function accountingStatus(
   const status = providerStatus.trim().toUpperCase();
   if (provider === "xero") {
     if (status === "VOIDED" || status === "DELETED") return "void";
-    if (status === "PAID" || (amountCents > 0 && paidAmountCents >= amountCents)) return "paid";
+    if (
+      status === "PAID" ||
+      (amountCents > 0 && paidAmountCents >= amountCents)
+    )
+      return "paid";
     if (paidAmountCents > 0) return "part_paid";
     if (status === "DRAFT" || status === "SUBMITTED") return "draft";
     if (status === "AUTHORISED" && dueAt && dueAt < today) return "overdue";
@@ -62,20 +96,31 @@ export function accountingStatus(
   }
   if (provider === "quickbooks") {
     if (status === "VOID" || status === "DELETED") return "void";
-    if (status === "PAID" || (amountCents > 0 && paidAmountCents >= amountCents)) return "paid";
+    if (
+      status === "PAID" ||
+      (amountCents > 0 && paidAmountCents >= amountCents)
+    )
+      return "paid";
     if (paidAmountCents > 0) return "part_paid";
     if (dueAt && dueAt < today) return "overdue";
     return "draft";
   }
   if (status === "CREDIT") return "void";
-  if (status === "CLOSED" || (amountCents > 0 && paidAmountCents >= amountCents)) return "paid";
+  if (
+    status === "CLOSED" ||
+    (amountCents > 0 && paidAmountCents >= amountCents)
+  )
+    return "paid";
   if (paidAmountCents > 0) return "part_paid";
   if (status === "OPEN" && dueAt && dueAt < today) return "overdue";
   if (status === "OPEN") return "issued";
   return "draft";
 }
 
-export function accountingProviderUrl(provider: AccountingProvider, externalDocumentId = "") {
+export function accountingProviderUrl(
+  provider: AccountingProvider,
+  externalDocumentId = "",
+) {
   if (provider === "xero") {
     return externalDocumentId
       ? `https://go.xero.com/AccountsReceivable/View.aspx?InvoiceID=${encodeURIComponent(externalDocumentId)}`
@@ -83,4 +128,33 @@ export function accountingProviderUrl(provider: AccountingProvider, externalDocu
   }
   if (provider === "quickbooks") return "https://qbo.intuit.com/app/invoices";
   return "https://app.myob.com/";
+}
+
+export async function requireAccountingJobAccess(
+  access: AccountingTeamAccess,
+  workOrderId: string,
+  manage: boolean,
+  verifyAssignment: () => Promise<unknown>,
+) {
+  if (!(
+    access.isOwner ||
+    (manage ? access.canManageInvoices : access.canViewInvoices)
+  )) {
+    throw new Error("ACCOUNTING_ACCESS_REQUIRED");
+  }
+  if (!workOrderId) throw new Error("JOB_NOT_FOUND");
+  await verifyAssignment();
+  return access.ownerUid;
+}
+
+export function assertQuickInvoiceAccountingEligibility(
+  status: unknown,
+  deliveryStatus: unknown,
+) {
+  if (
+    status !== "issued" ||
+    !["provider_accepted", "delivered"].includes(String(deliveryStatus || ""))
+  ) {
+    throw new Error("QUICK_INVOICE_NOT_ISSUED");
+  }
 }

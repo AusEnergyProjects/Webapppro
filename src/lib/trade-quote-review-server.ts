@@ -111,6 +111,11 @@ export type AuthorisedTradeQuoteLink = Row & {
   token_issue: number;
   expires_at: string;
   document_snapshot_json: string;
+  invoice_payment_account_name: string;
+  invoice_payment_bsb: string;
+  invoice_payment_account_number: string;
+  invoice_payment_reference: string;
+  invoice_default_terms: string;
 };
 
 export type TradeQuoteQuestionPayload = {
@@ -698,18 +703,28 @@ export async function authoriseTradeQuoteLink(
         quote.quote_number, quote.current_version_number,
         work.source_type work_source_type,
         work.source_reference work_source_reference,
-        detail.customer_source
+        detail.customer_source,
+        trade.invoice_payment_account_name,
+        trade.invoice_payment_bsb,
+        trade.invoice_payment_account_number,
+        trade.invoice_payment_reference,
+        trade.invoice_default_terms
       FROM trade_crm_quote_links link
       JOIN trade_crm_quote_versions version
         ON version.id = link.quote_version_id
         AND version.firebase_uid = link.firebase_uid
+        AND version.quote_id = link.quote_id
       JOIN trade_crm_quotes quote
         ON quote.id = link.quote_id AND quote.firebase_uid = link.firebase_uid
+        AND quote.work_order_id = link.work_order_id
+        AND quote.crm_customer_id = link.crm_customer_id
+        AND quote.current_version_number = version.version_number
       JOIN trade_work_orders work
         ON work.id = link.work_order_id AND work.firebase_uid = link.firebase_uid
         AND work.record_status = 'active'
       LEFT JOIN trade_crm_job_details detail
         ON detail.work_order_id = work.id AND detail.firebase_uid = work.firebase_uid
+        AND detail.crm_customer_id = link.crm_customer_id
       JOIN trade_accounts trade
         ON trade.firebase_uid = link.firebase_uid
         AND trade.partner_type = 'installer'
@@ -751,6 +766,11 @@ export async function authoriseTradeQuoteLink(
     token_issue: Number(row.token_issue),
     expires_at: String(row.expires_at),
     document_snapshot_json: String(row.document_snapshot_json || ""),
+    invoice_payment_account_name: String(row.invoice_payment_account_name || ""),
+    invoice_payment_bsb: String(row.invoice_payment_bsb || ""),
+    invoice_payment_account_number: String(row.invoice_payment_account_number || ""),
+    invoice_payment_reference: String(row.invoice_payment_reference || ""),
+    invoice_default_terms: String(row.invoice_default_terms || ""),
   };
 }
 
@@ -758,23 +778,22 @@ export async function quoteDocumentSnapshotForAuthorisedLink(
   row: AuthorisedTradeQuoteLink,
 ) {
   const storedSnapshot = row.document_snapshot_json.trim();
-  const snapshot = parseTradeQuoteDocumentSnapshot(
-    storedSnapshot,
-  );
-  if (storedSnapshot) {
-    if (
-      !snapshot ||
-      snapshot.quoteId !== row.quote_id ||
-      snapshot.quoteVersionId !== row.quote_version_id
-    ) {
-      throw new Error("QUOTE_DOCUMENT_SNAPSHOT_INVALID");
-    }
-    return snapshot;
+  const snapshot = storedSnapshot
+    ? parseTradeQuoteDocumentSnapshot(storedSnapshot)
+    : await buildTradeQuoteDocumentSnapshot(
+      row.firebase_uid,
+      row.quote_version_id,
+    );
+  if (
+    !snapshot ||
+    snapshot.quoteId !== row.quote_id ||
+    snapshot.quoteVersionId !== row.quote_version_id ||
+    snapshot.work.id !== row.work_order_id ||
+    snapshot.customer.id !== row.crm_customer_id
+  ) {
+    throw new Error("QUOTE_DOCUMENT_SNAPSHOT_INVALID");
   }
-  return buildTradeQuoteDocumentSnapshot(
-    row.firebase_uid,
-    row.quote_version_id,
-  );
+  return snapshot;
 }
 
 export async function buildTradeQuoteReviewPayload(
@@ -842,6 +861,12 @@ function publicFailureCode(error: unknown) {
       "QUOTE_DOCUMENT_SNAPSHOT_INVALID",
       "QUOTE_ISSUED_PDF_MISMATCH",
       "QUOTE_ISSUED_PDF_UNAVAILABLE",
+      "INVALID_COMMERCIAL_HANDOFF",
+      "QUOTE_DECISION_CONFLICT",
+      "QUOTE_JOB_ALREADY_ACCEPTED",
+      "INVALID_ACCEPTED_INVOICE",
+      "QUOTE_DECISION_REPLAY_MISMATCH",
+      "QUOTE_DECISION_RECEIPT_INVALID",
       "QUOTE_LINK_EXPIRED",
       "QUOTE_LINK_STOPPED",
       "QUOTE_LINK_INVALID",
@@ -886,6 +911,59 @@ export function tradeQuoteTokenErrorResponse(
         ok: false,
         error:
           "The exact issued quote PDF could not be verified. Ask the trade business to issue a replacement.",
+      },
+      409,
+    );
+  } else if (code === "INVALID_COMMERCIAL_HANDOFF") {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "This quote could not be accepted because its recorded totals could not be verified. Ask the trade business to issue a replacement.",
+        requestId,
+      },
+      409,
+    );
+  } else if (code === "QUOTE_DECISION_CONFLICT") {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "This quote changed before your decision could be recorded. Refresh the page and check its current status.",
+        requestId,
+      },
+      409,
+    );
+  } else if (code === "QUOTE_JOB_ALREADY_ACCEPTED") {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "This job already has a recorded accepted quote and invoice. Ask the trade business to review it before accepting another quote.",
+        requestId,
+      },
+      409,
+    );
+  } else if (code === "QUOTE_DECISION_REPLAY_MISMATCH") {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "This quote already has a different recorded decision. Refresh the page to see its receipt.",
+        requestId,
+      },
+      409,
+    );
+  } else if (
+    code === "INVALID_ACCEPTED_INVOICE" ||
+    code === "QUOTE_DECISION_RECEIPT_INVALID"
+  ) {
+    response = adminJson(
+      {
+        ok: false,
+        error:
+          "The decision could not be safely completed. No duplicate invoice was created. Ask the trade business to check the quote.",
+        requestId,
       },
       409,
     );

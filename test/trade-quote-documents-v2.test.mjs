@@ -234,7 +234,7 @@ test("v2 snapshot capture uses document identity, crop and signed adjustment fie
   );
   assert.match(
     reviewServer,
-    /if \(storedSnapshot\)[\s\S]*return snapshot;/,
+    /const snapshot = storedSnapshot[\s\S]*parseTradeQuoteDocumentSnapshot\(storedSnapshot\)[\s\S]*snapshot\.quoteId !== row\.quote_id[\s\S]*snapshot\.quoteVersionId !== row\.quote_version_id[\s\S]*snapshot\.work\.id !== row\.work_order_id[\s\S]*snapshot\.customer\.id !== row\.crm_customer_id[\s\S]*return snapshot;/,
   );
 });
 

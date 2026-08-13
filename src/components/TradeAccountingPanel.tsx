@@ -9,7 +9,8 @@ type Account = { id: string; code: string; name: string; taxCode: string };
 type InvoiceLine = { lineId: string; section: string; description: string; quantityMilli: number; totalCents: number };
 type Document = {
   id: string; workOrderId: string; provider: AccountingProvider; externalNumber: string; externalUrl: string;
-  exported: boolean; amountCents: number; paidAmountCents: number; status: string; providerStatus: string;
+  exported: boolean; amountCents: number; paidAmountCents: number; status: string;
+  syncState: "not_synced" | "syncing" | "synced" | "attention_required"; providerStatus: string;
   dueAt: string; lastSyncedAt: string; lastError: string; createdAt: string;
 };
 type AccountingResult = { providers?: Provider[]; documents?: Document[]; accounts?: Account[]; document?: Document; error?: string };
@@ -18,6 +19,12 @@ const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "curren
 const statusLabels: Record<string, string> = {
   exporting: "Preparing export", draft: "Draft in accounting", issued: "Awaiting payment",
   part_paid: "Part paid", paid: "Paid", overdue: "Overdue", void: "Void", error: "Needs attention",
+};
+const syncLabels: Record<Document["syncState"], string> = {
+  not_synced: "Not synced",
+  syncing: "Syncing",
+  synced: "Synced",
+  attention_required: "Sync needs attention",
 };
 
 export function TradeAccountingPanel({
@@ -84,7 +91,7 @@ export function TradeAccountingPanel({
       });
       const result = await response.json().catch(() => ({})) as AccountingResult;
       if (!response.ok || !result.document) throw new Error(result.error || "The draft invoice could not be exported.");
-      setDocuments([result.document]); setStatus(`Draft invoice ${result.document.externalNumber || "created"} is ready in ${label}. Review it there before sending.`);
+      setDocuments([result.document]); setStatus(`Invoice ${result.document.externalNumber || "created"} is synced to ${label}. Review it there before sending.`);
       await onChanged();
     } catch (error) { setStatus(error instanceof Error ? error.message : "The draft invoice could not be exported."); }
     finally { setBusy(""); }
@@ -128,7 +135,7 @@ export function TradeAccountingPanel({
       </article>
       <aside className="crm-invoice-actions">
         {document?.exported ? <article className={`crm-accounting-document accounting-${document.status}`}>
-          <div><span>{document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"} invoice</span><strong>{document.externalNumber || "Invoice created"}</strong><small>{statusLabels[document.status] || document.status} | {money(document.paidAmountCents)} paid of {money(document.amountCents)}{document.lastSyncedAt ? ` | Checked ${new Date(document.lastSyncedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}</small>{document.lastError && <em>{document.lastError === "PROVIDER_REQUEST_FAILED" ? "The last provider check failed. Reconnect the provider if this continues." : "The last sync needs attention."}</em>}</div>
+          <div><span>{document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"} invoice | {syncLabels[document.syncState] || "Sync state unknown"}</span><strong>{document.externalNumber || "Invoice created"}</strong><small>{statusLabels[document.status] || document.status} | {money(document.paidAmountCents)} paid of {money(document.amountCents)}{document.lastSyncedAt ? ` | Checked ${new Date(document.lastSyncedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}` : ""}</small>{document.lastError && <em>{document.lastError === "PROVIDER_REQUEST_FAILED" ? "The last provider check failed. Reconnect the provider if this continues." : "The last sync needs attention."}</em>}</div>
           <div><button type="button" disabled={Boolean(busy)} onClick={() => void refreshInvoice()}>{busy === "refresh" ? "Checking..." : "Refresh status"}</button>{document.externalUrl && <a href={document.externalUrl} target="_blank" rel="noreferrer">Open in {document.provider === "xero" ? "Xero" : document.provider === "myob" ? "MYOB" : "QuickBooks"}</a>}</div>
         </article> : <div className="crm-accounting-create">
           <div><span>Ready to create</span><strong>{money(invoiceAmountCents || 0)}</strong><small>Creates one draft only. Nothing is approved or emailed automatically.</small></div>

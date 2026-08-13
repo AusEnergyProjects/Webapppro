@@ -42,6 +42,7 @@ function invoiceError(error: unknown) {
   if (code === "PRICE_BOOK_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow saved price-book items." }, 403);
   if (code === "QUICK_INVOICE_NOT_FOUND") return adminJson({ ok: false, error: "Quick invoice not found." }, 404);
   if (code === "QUICK_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has a TLink invoice." }, 409);
+  if (code === "ACCEPTED_INVOICE_EXISTS") return adminJson({ ok: false, error: "This job already has the invoice created from its accepted quote." }, 409);
   if (code === "QUICK_INVOICE_JOB_NOT_FOUND") return adminJson({ ok: false, error: "Choose an active direct-customer job." }, 404);
   if (code === "QUICK_INVOICE_RECIPIENT_INVALID") return adminJson({ ok: false, error: "Add a valid email to the customer record before sending this invoice." }, 409);
   if (code === "waiting_for_channel") return adminJson({ ok: false, error: "Email delivery is not active yet. The invoice remains saved in the job." }, 503);
@@ -81,6 +82,77 @@ async function invoiceRow(ownerUid: string, clause: "id" | "work_order_id", valu
         AND document.work_order_id = q.work_order_id AND document.document_type = 'invoice') accounting_activity
     FROM trade_crm_quick_invoices q WHERE q.${clause} = ? AND q.firebase_uid = ?`)
     .bind(value, ownerUid).first<Row>();
+}
+
+async function acceptedInvoiceRow(ownerUid: string, workOrderId: string) {
+  return getD1().prepare(`SELECT id, work_order_id, firebase_uid, invoice_number,
+      document_label, subtotal_cents, tax_cents, total_cents, due_at,
+      status, issue_blocker_code, payment_snapshot_json, document_snapshot_json,
+      created_at, updated_at
+    FROM trade_crm_accepted_invoices
+    WHERE firebase_uid = ? AND work_order_id = ?
+    LIMIT 1`)
+    .bind(ownerUid, workOrderId)
+    .first<Row>();
+}
+
+function acceptedInvoicePayload(row: Row) {
+  let paymentValue: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(String(row.payment_snapshot_json || "{}"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      paymentValue = parsed as Record<string, unknown>;
+    }
+  } catch {
+    paymentValue = {};
+  }
+  let documentValue: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(String(row.document_snapshot_json || "{}"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      documentValue = parsed as Record<string, unknown>;
+    }
+  } catch {
+    documentValue = {};
+  }
+  const status = String(row.status);
+  const accountName = cleanAdminText(paymentValue.accountName, 180);
+  const bsb = cleanAdminText(paymentValue.bsb, 20);
+  const accountNumber = cleanAdminText(paymentValue.accountNumber, 40);
+  const payment = status === "issued"
+    && paymentValue.available === true
+    && paymentValue.method === "bank_transfer"
+    && accountName
+    && bsb
+    && accountNumber
+    ? {
+        method: "bank_transfer" as const,
+        available: true as const,
+        accountName,
+        bsb,
+        accountNumber,
+        reference: cleanAdminText(paymentValue.reference, 120),
+        terms: cleanAdminText(paymentValue.terms, 20_000),
+      }
+    : { method: "unavailable" as const, available: false as const };
+  return {
+    id: String(row.id),
+    workOrderId: String(row.work_order_id),
+    invoiceNumber: String(row.invoice_number),
+    documentLabel: String(row.document_label),
+    subtotalCents: Number(row.subtotal_cents),
+    taxCents: Number(row.tax_cents),
+    totalCents: Number(row.total_cents),
+    dueAt: String(row.due_at),
+    status,
+    issueBlockerCode: String(row.issue_blocker_code || ""),
+    payment,
+    document: documentValue,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    readOnly: true as const,
+    source: "accepted_quote" as const,
+  };
 }
 
 async function completePayload(row: Row) {
@@ -164,8 +236,12 @@ export async function GET(request: Request) {
     if (!workOrderId) return adminJson({ ok: false, error: "Choose a job." }, 400);
     await assignedJob(access, workOrderId);
     const row = await invoiceRow(access.ownerUid, "work_order_id", workOrderId);
+    const acceptedRow = row
+      ? null
+      : await acceptedInvoiceRow(access.ownerUid, workOrderId);
     return adminJson({ ok: true, access: invoiceAccessPayload(access),
-      invoice: row ? await completePayload(row) : null });
+      invoice: row ? await completePayload(row) : null,
+      acceptedInvoice: acceptedRow ? acceptedInvoicePayload(acceptedRow) : null });
   } catch (error) { return invoiceError(error); }
 }
 
@@ -207,6 +283,9 @@ export async function POST(request: Request) {
         .bind(workOrderId, access.ownerUid)
         .first<Row>();
       if (!job) throw new Error("QUICK_INVOICE_JOB_NOT_FOUND");
+      if (await acceptedInvoiceRow(access.ownerUid, workOrderId)) {
+        throw new Error("ACCEPTED_INVOICE_EXISTS");
+      }
       if (await invoiceRow(access.ownerUid, "work_order_id", workOrderId)) {
         throw new Error("QUICK_INVOICE_EXISTS");
       }
@@ -221,14 +300,18 @@ export async function POST(request: Request) {
       const invoiceNumber = quickInvoiceNumber(String(job.work_number));
       const linesJson = JSON.stringify(draft.lines);
       try {
-        await db.batch([
+        const results = await db.batch([
           db.prepare(`INSERT INTO trade_crm_quick_invoices
             (id, work_order_id, firebase_uid, crm_customer_id, invoice_number, currency,
              line_items_json, subtotal_cents, discount_cents, tax_cents, total_cents, due_at, status,
              delivery_status, delivery_provider, provider_message_id, consent_confirmed_at,
              attempts, last_error, sent_at, created_by_uid, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, ?, 'draft', 'queued', 'resend', '',
-              '', 0, '', '', ?, ?, ?)`)
+            SELECT ?, ?, ?, ?, ?, 'AUD', ?, ?, ?, ?, ?, ?, 'draft', 'queued', 'resend', '',
+              '', 0, '', '', ?, ?, ?
+            WHERE NOT EXISTS (
+              SELECT 1 FROM trade_crm_accepted_invoices accepted
+              WHERE accepted.firebase_uid = ? AND accepted.work_order_id = ?
+            )`)
             .bind(
               invoiceId,
               workOrderId,
@@ -244,11 +327,17 @@ export async function POST(request: Request) {
               access.actorUid,
               now,
               now,
+              access.ownerUid,
+              workOrderId,
             ),
           db.prepare(`INSERT INTO trade_crm_quick_invoice_revisions
             (id, invoice_id, firebase_uid, revision, line_items_json, subtotal_cents,
              discount_cents, tax_cents, total_cents, due_at, change_reason, created_by_uid, created_at)
-            VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'Initial invoice snapshot', ?, ?)`)
+            SELECT ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'Initial invoice snapshot', ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM trade_crm_quick_invoices invoice
+              WHERE invoice.id = ? AND invoice.firebase_uid = ?
+            )`)
             .bind(
               crypto.randomUUID(),
               invoiceId,
@@ -261,24 +350,40 @@ export async function POST(request: Request) {
               dueAt,
               access.actorUid,
               now,
+              invoiceId,
+              access.ownerUid,
             ),
           db.prepare(`UPDATE trade_crm_job_details
             SET invoiced_value_cents = ?, invoice_status = 'draft',
               payment_due_at = ?, updated_at = ?
-            WHERE work_order_id = ? AND firebase_uid = ?`)
-            .bind(draft.totalCents, dueAt, now, workOrderId, access.ownerUid),
+            WHERE work_order_id = ? AND firebase_uid = ?
+              AND EXISTS (
+                SELECT 1 FROM trade_crm_quick_invoices invoice
+                WHERE invoice.id = ? AND invoice.firebase_uid = ?
+              )`)
+            .bind(draft.totalCents, dueAt, now, workOrderId, access.ownerUid, invoiceId, access.ownerUid),
           db.prepare(`INSERT INTO trade_work_order_events
             (id, work_order_id, firebase_uid, event_type, summary, created_at)
-            VALUES (?, ?, ?, 'quick_invoice_created', ?, ?)`)
+            SELECT ?, ?, ?, 'quick_invoice_created', ?, ?
+            WHERE EXISTS (
+              SELECT 1 FROM trade_crm_quick_invoices invoice
+              WHERE invoice.id = ? AND invoice.firebase_uid = ?
+            )`)
             .bind(
               crypto.randomUUID(),
               workOrderId,
               access.ownerUid,
               `${invoiceNumber} draft created from the saved job.`,
               now,
+              invoiceId,
+              access.ownerUid,
             ),
         ]);
+        if (Number(results[0]?.meta.changes || 0) !== 1) {
+          throw new Error("ACCEPTED_INVOICE_EXISTS");
+        }
       } catch (error) {
+        if (error instanceof Error && error.message === "ACCEPTED_INVOICE_EXISTS") throw error;
         if (String(error).includes("UNIQUE")) throw new Error("QUICK_INVOICE_EXISTS");
         throw error;
       }

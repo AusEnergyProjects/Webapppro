@@ -33,8 +33,23 @@ type QuickInvoice = {
   canDownloadPdf: boolean; document: InvoiceDocument | null;
   creditBlockedReason: string; credits: Credit[]; revisions: Revision[];
 };
+type AcceptedInvoicePayment =
+  | { method: "bank_transfer"; available: true; accountName: string; bsb: string; accountNumber: string; reference: string; terms: string }
+  | { method: "unavailable"; available: false };
+type AcceptedInvoice = {
+  id: string; workOrderId: string; invoiceNumber: string; documentLabel: string;
+  subtotalCents: number; taxCents: number; totalCents: number; dueAt: string;
+  status: "issued" | "attention_required"; issueBlockerCode: string;
+  payment: AcceptedInvoicePayment; createdAt: string; updatedAt: string;
+  document: {
+    lines?: Array<{ lineId: string; section: string; description: string; quantityMilli: number; totalCents: number }>;
+    customer?: { name?: string };
+    work?: { title?: string };
+  };
+  readOnly: true; source: "accepted_quote";
+};
 type EditLine = { id: string; description: string; amount: string; taxCode: "gst" | "none" };
-type QuickInvoiceResult = { invoice?: QuickInvoice | null; access?: { canManageInvoices?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string };
+type QuickInvoiceResult = { invoice?: QuickInvoice | null; acceptedInvoice?: AcceptedInvoice | null; access?: { canManageInvoices?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string };
 
 function money(cents: number) { return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
 function amount(cents: number) { return (cents / 100).toFixed(2); }
@@ -55,6 +70,7 @@ function editLines(invoice: QuickInvoice): EditLine[] {
 
 export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTitle, readOnly = false, onOpenIntegrations, onChanged }: { user: User; workOrderId: string; customerName: string; jobTitle: string; readOnly?: boolean; onOpenIntegrations?: () => void; onChanged: () => Promise<void> }) {
   const [invoice, setInvoice] = useState<QuickInvoice | null>(null);
+  const [acceptedInvoice, setAcceptedInvoice] = useState<AcceptedInvoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
@@ -98,6 +114,7 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
     const result = await response.json() as QuickInvoiceResult;
     if (!response.ok) throw new Error(result.error || "Quick invoice could not be loaded.");
     if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
+    setAcceptedInvoice(result.acceptedInvoice || null);
     acceptInvoice(result.invoice || null);
   }, [acceptInvoice, user, workOrderId]);
 
@@ -231,10 +248,12 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
         throw new Error(result.error || "The invoice draft could not be created.");
       }
       if (result.access) { setCanApplyDiscounts(result.access.canApplyDiscounts === true); setServerCanManageInvoices(result.access.canManageInvoices === true); }
+      setAcceptedInvoice(result.acceptedInvoice || null);
       acceptInvoice(result.invoice);
       setStatus("Invoice draft created. Check it before sending.");
       await onChanged();
     } catch (error) {
+      await load().catch(() => undefined);
       setStatus(error instanceof Error ? error.message : "The invoice draft could not be created.");
     } finally {
       setBusy("");
@@ -353,6 +372,39 @@ export function TradeQuickInvoicePanel({ user, workOrderId, customerName, jobTit
   ) : null;
 
   if (loading) return null;
+  if (!invoice && acceptedInvoice) {
+    const needsReconciliation = acceptedInvoice.status === "attention_required";
+    const bankPayment = acceptedInvoice.payment.available
+      ? acceptedInvoice.payment
+      : null;
+    return <section className="crm-quick-invoice-panel">
+      <header><div><span>Invoice from accepted quote</span><h4>{acceptedInvoice.invoiceNumber}</h4><p>This read-only invoice matches the exact quote the customer accepted.</p></div><strong>{needsReconciliation ? "Reconciliation needed" : "Issued"}</strong></header>
+      <dl>
+        <div><dt>Subtotal</dt><dd>{money(acceptedInvoice.subtotalCents)}</dd></div>
+        <div><dt>GST</dt><dd>{money(acceptedInvoice.taxCents)}</dd></div>
+        <div className="total"><dt>Invoice total</dt><dd>{money(acceptedInvoice.totalCents)}</dd></div>
+        <div><dt>Due</dt><dd>{acceptedInvoice.dueAt}</dd></div>
+        {bankPayment?.reference && <div><dt>Payment reference</dt><dd>{bankPayment.reference}</dd></div>}
+      </dl>
+      {bankPayment && <div className="crm-invoice-credit-list">
+        <strong>Bank transfer</strong>
+        <article><span><b>{bankPayment.accountName}</b><small>BSB {bankPayment.bsb} | Account {bankPayment.accountNumber}</small></span></article>
+        {bankPayment.terms && <article><span><b>Payment terms</b><small>{bankPayment.terms}</small></span></article>}
+      </div>}
+      {needsReconciliation && <p className="crm-wizard-message" role="alert">This accepted invoice needs reconciliation before payment details can be used. It cannot be edited or sent again from this job.</p>}
+      {!needsReconciliation && !bankPayment && <p className="crm-wizard-message" role="status">The invoice is recorded. Contact the business for payment details.</p>}
+      {!needsReconciliation && onOpenIntegrations && <details className="crm-quick-invoice-handoff"><summary>Send to MYOB, Xero or QuickBooks</summary><p>Create one matching draft in your connected accounting system without re-entering the customer, certificate credits, GST or totals.</p><TradeAccountingPanel
+        user={user} workOrderId={workOrderId} isProtected={false} hasDirectCustomer
+        invoiceAmountCents={acceptedInvoice.totalCents} invoiceReference={acceptedInvoice.invoiceNumber}
+        invoiceLines={(acceptedInvoice.document.lines || []).map((line) => ({ lineId: line.lineId, section: line.section, description: line.description, quantityMilli: line.quantityMilli, totalCents: line.totalCents }))}
+        invoiceSubtotalCents={acceptedInvoice.subtotalCents} invoiceTaxCents={acceptedInvoice.taxCents}
+        customerName={acceptedInvoice.document.customer?.name || customerName}
+        jobTitle={acceptedInvoice.document.work?.title || jobTitle} invoiceTerms={bankPayment?.terms || ""}
+        invoiceSource="accepted_quote" onOpenIntegrations={onOpenIntegrations} onChanged={onChanged}
+      /></details>}
+      {status && <p className="crm-status" role="status">{status}</p>}
+    </section>;
+  }
   if (!invoice && !canManageInvoice) return <section className="crm-quick-invoice-panel"><header><div><span>TLink quick invoice</span><h4>No invoice created</h4><p>View only. A team member with invoice access can create this job&apos;s invoice.</p></div><strong>Not started</strong></header>{status && <p className="crm-status" role="status">{status}</p>}</section>;
   if (!invoice) return <section className="crm-quick-invoice-panel">
     <header><div><span>TLink quick invoice</span><h4>Create the invoice from this job</h4><p>Start with one line. You can add or correct lines before sending.</p></div><strong>Not started</strong></header>

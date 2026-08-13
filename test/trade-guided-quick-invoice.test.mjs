@@ -396,7 +396,9 @@ test("quick invoice reuses authoritative totals in accounting while payment init
   assert.match(accountingRoute, /commercial_reference: row\.invoice_number/);
   assert.match(accountingRoute, /accepted_total_cents: row\.quick_total_cents/);
   assert.match(accountingRoute, /invoice_source: source/);
-  assert.match(accountingRoute, /taxCents !== Number\(job\.accepted_tax_cents/);
+  assert.match(accountingRoute, /quickInvoiceAccountingScope\(lines/);
+  assert.match(accountingRoute, /taxCents: Number\(row\.quick_tax_cents\)/);
+  assert.match(accountingRoute, /assertProviderTotalsMatch\(provider, external, scope\.totals\)/);
   assert.match(accountingPanel, /invoiceSource/);
   assert.match(invoicePanel, /invoiceSource="quick_invoice"/);
 

@@ -7,7 +7,7 @@ type InvoiceItem = {
   id: string; workNumber: string; title: string; customerName: string; protectedJob: boolean;
   stage: string; status: string; invoiceStatus: string; commercialReference: string;
   totalCents: number; paidCents: number; outstandingCents: number; provider: string;
-  externalNumber: string; externalUrl: string; lastError: string; acceptedAt: string; updatedAt: string;
+  externalNumber: string; externalUrl: string; dueAt: string; lastError: string; acceptedAt: string; updatedAt: string;
 };
 type InvoiceResult = {
   ok?: boolean; error?: string; invoices?: InvoiceItem[];
@@ -72,7 +72,7 @@ export function TradeInvoiceWorkspace({ user, onOpenJob }: { user: User; onOpenJ
       {invoices.length ? invoices.map((item) => <article key={item.id} role="listitem" tabIndex={0}
         onDoubleClick={() => onOpenJob(item.id)} onKeyDown={(event) => { if (event.key === "Enter") onOpenJob(item.id); }}>
         <div><span>{item.workNumber}</span><strong>{item.title}</strong><small>{item.customerName}</small></div>
-        <div><span>Invoice</span><strong>{item.externalNumber || item.commercialReference || "Not created"}</strong><small>{item.provider ? `${item.provider.toUpperCase()} | ${statusLabels[item.status] || item.status}` : statusLabels[item.status] || item.status}</small></div>
+        <div><span>Invoice</span><strong>{item.externalNumber || item.commercialReference || "Not created"}</strong><small>{item.provider ? `${item.provider.toUpperCase()} | ${statusLabels[item.status] || item.status}` : statusLabels[item.status] || item.status}{item.dueAt ? ` | Due ${new Date(`${item.dueAt}T00:00:00`).toLocaleDateString("en-AU")}` : ""}</small>{item.lastError && <em>{item.lastError === "ACCEPTED_INVOICE_CONFLICT" ? "Acceptance recorded. Confirm the existing invoice before payment." : "The last invoice sync needs attention."}</em>}</div>
         <div><span>Total</span><strong>{item.externalNumber || item.commercialReference ? money(item.totalCents) : "Not ready"}</strong><small>{item.outstandingCents ? `${money(item.outstandingCents)} outstanding` : item.status === "credited" ? "Credited in full" : item.paidCents ? "Paid in full" : "No balance yet"}</small></div>
         <button type="button" onClick={() => onOpenJob(item.id)}>{item.externalNumber || item.commercialReference ? "Open invoice" : "Open job"}</button>
       </article>) : <div className="crm-empty"><strong>No invoices in this view</strong><span>Try All, or finish an accepted job to prepare its invoice.</span></div>}

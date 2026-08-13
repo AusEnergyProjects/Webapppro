@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { calculatePriceBookRates, normalisePriceBookInput, priceBookQuoteLineType } from "../src/lib/trade-price-book.ts";
+import { calculatePriceBookRates, normalisePriceBookInput, priceBookItemAllowsNegativeSellPrice,
+  priceBookItemRequiresZeroSupplierCost, priceBookQuoteLineType, PRICE_BOOK_TYPE_LABELS } from "../src/lib/trade-price-book.ts";
+import { normaliseTradeQuoteLineGroup } from "../src/lib/trade-quote.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -50,9 +52,43 @@ test("canonical price-book items enforce useful sell-price and GST boundaries", 
     sellPrice: "0", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_PRICE_BOOK_SELL_PRICE/);
   assert.throws(() => normalisePriceBookInput({ name: "Bad discount", itemType: "discount", supplierCost: "1",
     sellPrice: "-5", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_PRICE_BOOK_ADJUSTMENT/);
+  assert.throws(() => normalisePriceBookInput({ name: "Negative material", itemType: "material", supplierCost: "0",
+    sellPrice: "-5", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_DECIMAL|INVALID_MONEY/);
+  assert.throws(() => normalisePriceBookInput({ name: "Negative labour", itemType: "labour", supplierCost: "0",
+    sellPrice: "-5", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_DECIMAL|INVALID_MONEY/);
   assert.equal(priceBookQuoteLineType("equipment"), "product");
   assert.equal(priceBookQuoteLineType("call_out"), "labour");
   assert.equal(priceBookQuoteLineType("rebate"), "adjustment");
+});
+
+test("certificate credits are reusable negative price-book adjustments", () => {
+  for (const name of ["STC", "VEEC", "ESC"]) {
+    const certificate = normalisePriceBookInput({ name, itemType: "certificate", unitLabel: "each",
+      supplierCost: "0.00", sellPrice: "-38.00", taxCode: "gst", expectedDurationMinutes: "0" }, clean);
+    assert.equal(certificate.itemType, "certificate");
+    assert.equal(certificate.supplierCostCentsExGst, 0);
+    assert.equal(certificate.sellPriceCentsExGst, -3_800);
+    assert.equal(priceBookQuoteLineType(certificate.itemType), "adjustment");
+  }
+  assert.equal(PRICE_BOOK_TYPE_LABELS.certificate, "Certificate");
+  assert.equal(priceBookItemAllowsNegativeSellPrice("certificate"), true);
+  assert.equal(priceBookItemRequiresZeroSupplierCost("certificate"), true);
+  assert.throws(() => normalisePriceBookInput({ name: "STC", itemType: "certificate", unitLabel: "each",
+    supplierCost: "1.00", sellPrice: "-38.00", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_PRICE_BOOK_ADJUSTMENT/);
+  assert.throws(() => normalisePriceBookInput({ name: "STC", itemType: "certificate", unitLabel: "each",
+    supplierCost: "0.00", sellPrice: "38.00", taxCode: "gst", expectedDurationMinutes: "0" }, clean), /INVALID_PRICE_BOOK_ADJUSTMENT/);
+
+  const quote = normaliseTradeQuoteLineGroup([
+    { lineType: "product", description: "Heat pump", quantity: "1", unitPrice: "3500.00", taxCode: "gst" },
+    { lineType: "adjustment", description: "STC", quantity: "30", unitPrice: "-38.00", taxCode: "gst" },
+  ], (value) => clean(value, 500));
+  assert.deepEqual(quote.lines[1], {
+    lineType: "adjustment", description: "STC", quantityMilli: 30_000, unitPriceCents: -3_800,
+    taxCode: "gst", subtotalCents: -114_000, taxCents: -11_400, totalCents: -125_400,
+  });
+  assert.equal(quote.subtotalCents, 236_000);
+  assert.equal(quote.taxCents, 23_600);
+  assert.equal(quote.totalCents, 259_600);
 });
 
 test("the additive migration creates an owner-scoped price book and quote snapshots", () => {
@@ -106,6 +142,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteServer, /PRICE_BOOK_ITEM_UNAVAILABLE/);
   assert.match(quoteServer, /description: reference\.description \|\| reference\.name/);
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
+  assert.match(quoteServer, /lineType: reference\.lineType/);
   assert.match(quoteUi, /description: item\.description \|\| item\.name/);
   assert.match(quoteUi, /<span>Price book item<\/span><select/);
   assert.match(quoteUi, /<option value="">Custom line<\/option>/);
@@ -128,6 +165,7 @@ test("active price-book items become authoritative direct-quote snapshots", () =
 
 test("the trade workspace prioritises quick setup and progressive disclosure", () => {
   for (const copy of ["Price book", "Start in under a minute", "Labour hour", "Material", "Call-out",
+    "STC credit", "VEEC credit", "ESC credit", "Certificate", "negative amount per certificate",
     "Only the name, type and sell price are essential", "More details, optional", "Save and use in quotes"]) {
     assert.match(`${workspace}\n${crm}`, new RegExp(copy));
   }

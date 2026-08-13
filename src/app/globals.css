@@ -7339,6 +7339,42 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .quote-link-signature button:disabled, .quote-link-question button:disabled { cursor: not-allowed; opacity: .5; }
 .quote-link-message { background: #fff5cf; border-radius: 8px; margin: 0; padding: 10px; }
 .quote-link-loading, .quote-link-finished { background: #fff; border-radius: 16px; margin: 12vh auto 0; max-width: 620px; padding: 28px; text-align: center; }
+.quote-link-loading { display: grid; gap: 14px; }
+.quote-link-loading p { margin: 0; }
+.quote-link-loading button { background: var(--quote-accent); border: 0; border-radius: 9px; color: #fff; cursor: pointer; font: inherit; font-weight: 850; justify-self: center; min-height: 44px; padding: 10px 22px; }
+.quote-link-receipt { background: #fff; border: 1px solid var(--quote-line); border-radius: 20px; box-shadow: 0 18px 55px rgba(10, 60, 46, .12); display: grid; gap: 20px; margin: 5vh auto 0; max-width: 720px; overflow: hidden; padding: 30px; }
+.quote-link-receipt > header { border-bottom: 1px solid var(--quote-line); padding-bottom: 18px; }
+.quote-link-receipt > header > span, .quote-link-receipt-declined > span { color: var(--quote-accent); font-size: .7rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.quote-link-receipt h1 { color: var(--quote-ink); font-size: clamp(2rem, 7vw, 3.2rem); margin: 5px 0 8px; }
+.quote-link-receipt p { color: #506b63; line-height: 1.55; margin: 0; }
+.quote-link-invoice-receipt { background: var(--quote-ink); border-radius: 15px; color: #fff; display: grid; gap: 20px; padding: 22px; }
+.quote-link-invoice-receipt > div { display: grid; gap: 4px; }
+.quote-link-invoice-receipt > div span { color: #bfe5d8; font-size: .66rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.quote-link-invoice-receipt > div strong { font-size: 1.3rem; overflow-wrap: anywhere; }
+.quote-link-invoice-receipt dl { display: grid; gap: 14px; grid-template-columns: 1.2fr 1fr 1fr; margin: 0; }
+.quote-link-invoice-receipt dl div { display: grid; gap: 4px; }
+.quote-link-invoice-receipt dt { color: #bfe5d8; font-size: .68rem; }
+.quote-link-invoice-receipt dd { font-size: 1.05rem; font-weight: 900; margin: 0; }
+.quote-link-bank-transfer { background: var(--quote-soft); border: 1px solid var(--quote-line); border-radius: 15px; display: grid; gap: 16px; padding: 20px; }
+.quote-link-bank-transfer > header { align-items: end; display: flex; gap: 14px; justify-content: space-between; }
+.quote-link-bank-transfer > header span { color: var(--quote-accent); font-size: .73rem; font-weight: 900; text-transform: uppercase; }
+.quote-link-bank-transfer > header strong { color: var(--quote-ink); font-size: 1.3rem; }
+.quote-link-bank-transfer dl { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.quote-link-bank-transfer dl div { background: #fff; border: 1px solid var(--quote-line); border-radius: 10px; display: grid; gap: 4px; min-width: 0; padding: 12px; }
+.quote-link-bank-transfer dt { color: #60776f; font-size: .66rem; font-weight: 800; }
+.quote-link-bank-transfer dd { color: var(--quote-ink); font-size: .95rem; font-weight: 900; margin: 0; overflow-wrap: anywhere; }
+.quote-link-bank-transfer > p { font-size: .76rem; }
+.quote-link-payment-pending { background: #fff8df; border: 1px solid #ead28c; border-radius: 13px; display: grid; gap: 6px; padding: 17px; }
+.quote-link-payment-pending strong { color: #59430b; }
+.quote-link-payment-pending p { color: #685827; }
+.quote-link-receipt > footer { display: grid; gap: 3px; padding-top: 2px; }
+.quote-link-receipt > footer span { color: #60776f; font-size: .65rem; font-weight: 800; text-transform: uppercase; }
+.quote-link-receipt > footer strong { color: var(--quote-ink); overflow-wrap: anywhere; }
+.quote-link-receipt > footer small { color: #60776f; }
+.quote-link-receipt-declined dl { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 0; }
+.quote-link-receipt-declined dl div { background: var(--quote-soft); border-radius: 10px; display: grid; gap: 4px; padding: 12px; }
+.quote-link-receipt-declined dt { color: #60776f; font-size: .66rem; }
+.quote-link-receipt-declined dd { color: var(--quote-ink); font-weight: 850; margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
   .quote-link-shell { padding: 0; }
   .quote-link-document { border: 0; border-radius: 0; box-shadow: none; padding: 18px 14px 42px; }
@@ -7349,6 +7385,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .quote-print-button { width: 100%; }
   .quote-link-signature > div { display: grid; }
   .quote-link-total dl { justify-content: space-between; }
+  .quote-link-receipt { border: 0; border-radius: 0; box-shadow: none; margin: 0; min-height: 100vh; padding: 24px 16px; }
+  .quote-link-invoice-receipt dl { grid-template-columns: 1fr 1fr; }
+  .quote-link-invoice-receipt dl div:first-child { grid-column: 1 / -1; }
+  .quote-link-bank-transfer > header { align-items: flex-start; flex-direction: column; }
+  .quote-link-bank-transfer dl, .quote-link-receipt-declined dl { grid-template-columns: 1fr; }
 }
 @media print {
   body { background: #fff !important; }

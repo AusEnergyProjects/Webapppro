@@ -2,7 +2,7 @@ import { dollarsToCents } from "./trade-quote.ts";
 
 export const PRICE_BOOK_ITEM_TYPES = [
   "labour", "material", "equipment", "subcontractor", "travel", "call_out",
-  "disposal", "rebate", "discount", "non_billable", "one_off",
+  "disposal", "certificate", "rebate", "discount", "non_billable", "one_off",
 ] as const;
 
 export type PriceBookItemType = typeof PRICE_BOOK_ITEM_TYPES[number];
@@ -16,6 +16,7 @@ export const PRICE_BOOK_TYPE_LABELS: Record<PriceBookItemType, string> = {
   travel: "Travel",
   call_out: "Call-out",
   disposal: "Disposal",
+  certificate: "Certificate",
   rebate: "Rebate",
   discount: "Discount",
   non_billable: "Non-billable",
@@ -49,9 +50,17 @@ export function calculatePriceBookRates(costCents: number, sellCents: number) {
 }
 
 export function priceBookQuoteLineType(itemType: PriceBookItemType): "product" | "labour" | "adjustment" {
-  if (["rebate", "discount", "non_billable"].includes(itemType)) return "adjustment";
+  if (["certificate", "rebate", "discount", "non_billable"].includes(itemType)) return "adjustment";
   if (["labour", "subcontractor", "travel", "call_out", "disposal", "one_off"].includes(itemType)) return "labour";
   return "product";
+}
+
+export function priceBookItemAllowsNegativeSellPrice(itemType: PriceBookItemType) {
+  return itemType === "certificate" || itemType === "rebate" || itemType === "discount";
+}
+
+export function priceBookItemRequiresZeroSupplierCost(itemType: PriceBookItemType) {
+  return priceBookItemAllowsNegativeSellPrice(itemType);
 }
 
 export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (value: unknown, length: number) => string) {
@@ -64,7 +73,7 @@ export function normalisePriceBookInput(raw: Record<string, unknown>, clean: (va
   if (!itemTypes.has(itemType) || !name || !taxCodes.has(taxCode)) throw new Error("INVALID_PRICE_BOOK_ITEM");
 
   const supplierCostCentsExGst = dollarsToCents(raw.supplierCost || "0");
-  const allowNegative = itemType === "rebate" || itemType === "discount";
+  const allowNegative = priceBookItemAllowsNegativeSellPrice(itemType);
   const sellPriceCentsExGst = dollarsToCents(raw.sellPrice, allowNegative);
   if (allowNegative && sellPriceCentsExGst >= 0) throw new Error("INVALID_PRICE_BOOK_ADJUSTMENT");
   if (!allowNegative && itemType !== "non_billable" && sellPriceCentsExGst <= 0) throw new Error("INVALID_PRICE_BOOK_SELL_PRICE");

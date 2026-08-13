@@ -23,9 +23,9 @@ test("deposit amounts use bounded integer cents", () => {
 
 test("accepted scope includes base lines and only selected choices", () => {
   const rows = [
-    { id: "base", quote_choice_id: "", section_heading: "Work", description: "Install", quantity_milli: 1000, subtotal_cents: 1000, tax_cents: 100, total_cents: 1100 },
-    { id: "good", quote_choice_id: "good", section_heading: "Package", description: "Good", quantity_milli: 1000, subtotal_cents: 2000, tax_cents: 200, total_cents: 2200 },
-    { id: "best", quote_choice_id: "best", section_heading: "Package", description: "Best", quantity_milli: 1000, subtotal_cents: 3000, tax_cents: 300, total_cents: 3300 },
+    { id: "base", line_type: "labour", quote_choice_id: "", section_heading: "Work", description: "Install", quantity_milli: 1000, subtotal_cents: 1000, tax_cents: 100, total_cents: 1100 },
+    { id: "good", line_type: "product", quote_choice_id: "good", section_heading: "Package", description: "Good", quantity_milli: 1000, subtotal_cents: 2000, tax_cents: 200, total_cents: 2200 },
+    { id: "best", line_type: "product", quote_choice_id: "best", section_heading: "Package", description: "Best", quantity_milli: 1000, subtotal_cents: 3000, tax_cents: 300, total_cents: 3300 },
   ];
   assert.deepEqual(acceptedScopeSnapshot(rows, ["best"]).map((line) => line.lineId), ["base", "best"]);
 });
@@ -53,7 +53,7 @@ test("Xero, MYOB and QuickBooks reuse the accepted handoff", () => {
   assert.match(accountingRoute, /quickbooks\.api\.intuit\.com\/v3\/company/);
   assert.match(accountingRoute, /minorversion=75/);
   assert.match(accountingRoute, /SELECT \* FROM Item WHERE Active = true/);
-  assert.match(accountingRoute, /totalCents !== amountCents/);
+  assert.match(accountingRoute, /assertProviderTotalsMatch/);
   assert.match(accountingUi, /Create QuickBooks draft/);
 });
 

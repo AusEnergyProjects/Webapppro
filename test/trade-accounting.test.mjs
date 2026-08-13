@@ -6,13 +6,16 @@ import {
   accountingContactReference,
   accountingReference,
   accountingStatus,
+  assertQuickInvoiceAccountingEligibility,
   centsFromProvider,
   quickBooksFailureDetail,
+  requireAccountingJobAccess,
 } from "../src/lib/trade-accounting.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const migration = read("../drizzle/0022_worried_sleepwalker.sql");
 const route = read("../src/app/api/trade-accounting/route.ts");
+const providerExport = read("../src/lib/trade-accounting-export.ts");
 const schema = read("../db/schema.ts");
 const providerSettings = read("../src/lib/trade-integrations-server.ts");
 
@@ -65,15 +68,50 @@ test("server blocks protected jobs before provider export", () => {
 });
 
 test("exports are drafts, do not email, and refresh provider totals", () => {
-  assert.match(route, /Status: "DRAFT"/);
-  assert.match(route, /InvoiceDeliveryStatus: "Nothing"/);
-  assert.match(route, /IsTaxInclusive: true/);
+  assert.match(providerExport, /Status: "DRAFT"/);
+  assert.match(providerExport, /InvoiceDeliveryStatus: "Nothing"/);
+  assert.match(providerExport, /IsTaxInclusive: false/);
+  assert.match(providerExport, /DiscountLineDetail/);
+  assert.match(route, /"Idempotency-Key": identity\.xeroIdempotencyKey/);
+  assert.match(route, /requestid=\$\{requestId\}/);
   assert.match(route, /Invoices\//);
   assert.match(route, /Sale\/Invoice\/Service\//);
   assert.match(route, /paid_value_cents = MAX\(paid_value_cents, \?\)/);
   assert.match(route, /trade_crm_accounting_events/);
   assert.match(route, /EXPORT_IN_PROGRESS/);
   assert.match(route, /updated_at < \?/);
+});
+
+test("accounting access is owner-scoped, permission-aware and assigned-job bounded", async () => {
+  let assignmentChecks = 0;
+  const manager = { ownerUid: "owner", isOwner: false, canViewInvoices: true, canManageInvoices: true };
+  assert.equal(await requireAccountingJobAccess(manager, "job", false, async () => { assignmentChecks += 1; }), "owner");
+  assert.equal(await requireAccountingJobAccess(manager, "job", true, async () => { assignmentChecks += 1; }), "owner");
+  assert.equal(assignmentChecks, 2);
+  let deniedDownstreamCalls = 0;
+  await assert.rejects(() => requireAccountingJobAccess(
+    { ownerUid: "owner", isOwner: false, canViewInvoices: false, canManageInvoices: false },
+    "job",
+    true,
+    async () => { deniedDownstreamCalls += 1; },
+  ), /ACCOUNTING_ACCESS_REQUIRED/);
+  await assert.rejects(() => requireAccountingJobAccess(manager, "other-job", false, async () => {
+    deniedDownstreamCalls += 1;
+    throw new Error("JOB_NOT_ASSIGNED");
+  }), /JOB_NOT_ASSIGNED/);
+  assert.equal(deniedDownstreamCalls, 1);
+  assert.match(route, /requireInstallerTeamAccess\(request\)/);
+  assert.match(route, /assignedJob\(access, workOrderId\)/);
+  assert.match(route, /directJob\(ownerUid, workOrderId, source\)/);
+  assert.doesNotMatch(route, /requireInstallerOperations/);
+});
+
+test("mutable or unsuccessfully delivered quick invoice drafts stop before provider access", () => {
+  assert.throws(() => assertQuickInvoiceAccountingEligibility("draft", "queued"), /QUICK_INVOICE_NOT_ISSUED/);
+  assert.throws(() => assertQuickInvoiceAccountingEligibility("issued", "reconciliation_required"), /QUICK_INVOICE_NOT_ISSUED/);
+  assert.doesNotThrow(() => assertQuickInvoiceAccountingEligibility("issued", "provider_accepted"));
+  assert.doesNotThrow(() => assertQuickInvoiceAccountingEligibility("issued", "delivered"));
+  assert.ok(route.indexOf("directJob(ownerUid, workOrderId, source)") < route.indexOf("exportInvoice(ownerUid"));
 });
 
 test("MYOB requests only the scopes required for invoice sync", () => {

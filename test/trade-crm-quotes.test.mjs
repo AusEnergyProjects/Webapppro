@@ -16,6 +16,7 @@ const documentMigration = read("../drizzle/0120_trade_business_identity_and_quot
 const issuedDocumentMigration = read("../drizzle/0123_immutable_issued_pdf_artifacts.sql");
 const deliveryOutboxMigration = read("../drizzle/0136_trade_quote_delivery_outbox.sql");
 const deliveryRendererMigration = read("../drizzle/0137_trade_quote_delivery_renderer_revision.sql");
+const acceptanceInvoiceMigration = read("../drizzle/0138_trade_quote_acceptance_invoice.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
@@ -27,6 +28,8 @@ const styles = read("../src/app/globals.css");
 const linkUi = read("../src/components/QuoteLinkReview.tsx");
 const commercial = read("../src/lib/trade-commercial-reference.ts");
 const documentServer = read("../src/lib/trade-quote-review-server.ts");
+const decisionServer = read("../src/lib/trade-quote-decision-server.ts");
+const acceptedInvoice = read("../src/lib/trade-accepted-invoice.ts");
 const documentEmail = read("../src/lib/trade-quote-email.ts");
 const documentPdf = read("../src/lib/trade-quote-pdf.mjs");
 const documentPdfRoute = read("../src/app/api/quote-review/[token]/pdf/route.ts");
@@ -212,7 +215,14 @@ test("secure quote sharing is revocable, expiring and commercially provider neut
   assert.match(commercial, /subtotalCents: Math\.trunc/);
   assert.match(linkRoute, /calculateQuoteSelection/);
   assert.match(linkRoute, /providerNeutralCommercialRecord/);
-  assert.match(linkRoute, /token_hash = '', encrypted_token = ''/);
+  assert.match(installerRoute, /SET status = 'revoked', token_hash = '', encrypted_token = ''/);
+  const decidedLinkUpdate = linkRoute.slice(
+    linkRoute.indexOf("UPDATE trade_crm_quote_links"),
+    linkRoute.indexOf("UPDATE trade_crm_job_details"),
+  );
+  assert.match(decidedLinkUpdate, /SET status = \?, encrypted_token = '', updated_at = \?/);
+  assert.match(decidedLinkUpdate, /token_issue = \?[\s\S]*token_hash = \?[\s\S]*status = 'active'/);
+  assert.doesNotMatch(decidedLinkUpdate, /SET[\s\S]*token_hash = ''/);
   assert.match(installerRoute, /TLINK_SMS_SENDER_APPROVED !== "true"/);
   assert.match(installerRoute, /status = 'expired', token_hash = '', encrypted_token = ''/);
   assert.match(customerRoute, /account-decision:/);
@@ -302,15 +312,45 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
   assert.match(providerDelivery, /attachments\?: Array<\{ filename: string; content: string; contentType: string \}>/);
   assert.match(providerDelivery, /replyTo\?: string/);
   assert.match(documentServer, /QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
-  assert.match(documentServer, /if \(storedSnapshot\)[\s\S]*?QUOTE_DOCUMENT_SNAPSHOT_INVALID/);
+  assert.match(
+    documentServer,
+    /const snapshot = storedSnapshot\s*\? parseTradeQuoteDocumentSnapshot\(storedSnapshot\)\s*:\s*await buildTradeQuoteDocumentSnapshot/,
+  );
+  assert.match(
+    documentServer,
+    /!snapshot \|\|[\s\S]*snapshot\.quoteId !== row\.quote_id[\s\S]*snapshot\.quoteVersionId !== row\.quote_version_id[\s\S]*snapshot\.work\.id !== row\.work_order_id[\s\S]*snapshot\.customer\.id !== row\.crm_customer_id[\s\S]*QUOTE_DOCUMENT_SNAPSHOT_INVALID/,
+  );
   assert.match(
     documentServer,
     /options\.requireCurrentTradeAccess[\s\S]*verifiedTradeAccountPredicate\("trade"\)[\s\S]*trade\.account_status = 'active'/,
   );
   assert.match(
     linkRoute,
-    /authoriseTradeQuoteLink\([\s\S]*requireCurrentTradeAccess: true/,
+    /authoriseTradeQuoteDecisionLink\(token, \{\s*requireCurrentTradeAccess: true/,
   );
+  assert.match(
+    decisionServer,
+    /options\.requireCurrentTradeAccess[\s\S]*verifiedTradeAccountPredicate\("trade"\)/,
+  );
+  for (const evidence of [
+    "decision_request_id",
+    "decision_payload_sha256",
+    "result_invoice_id",
+    "invoice_creation_status",
+  ]) assert.match(acceptanceInvoiceMigration, new RegExp(evidence));
+  for (const durableBoundary of [
+    "buildAcceptedInvoiceSnapshot",
+    "exactQuoteDecisionReplay",
+    "trade_crm_accepted_invoices",
+    "decision_payload_sha256",
+    "payment_snapshot_json",
+  ]) assert.match(`${linkRoute}\n${decisionServer}`, new RegExp(durableBoundary));
+  assert.match(acceptanceInvoiceMigration, /CREATE UNIQUE INDEX `trade_crm_quote_acceptances_decision_request_idx`/);
+  assert.match(acceptanceInvoiceMigration, /CREATE UNIQUE INDEX `trade_crm_accepted_invoices_acceptance_idx`/);
+  assert.match(acceptanceInvoiceMigration, /CREATE UNIQUE INDEX `trade_crm_accepted_invoices_handoff_idx`/);
+  assert.match(acceptanceInvoiceMigration, /CREATE UNIQUE INDEX `trade_crm_accepted_invoices_quote_version_idx`/);
+  assert.match(acceptedInvoice, /documentLabel: "Invoice"/);
+  assert.doesNotMatch(acceptedInvoice, /documentLabel: "Tax Invoice"/);
   assert.match(documentServer, /X-TLink-Request-Id/);
   assert.match(documentPdfRoute, /tradeQuoteTokenErrorResponse\(error, "pdf"\)/);
 });
@@ -402,6 +442,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
   apply(db, issuedDocumentMigration.split("--> statement-breakpoint").slice(0, 3).join("--> statement-breakpoint"));
   apply(db, deliveryOutboxMigration);
   apply(db, deliveryRendererMigration);
+  apply(db, acceptanceInvoiceMigration);
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);
