@@ -43,7 +43,8 @@ test("admin and installer expose and search the same job ID", () => {
   assert.match(form, /TLJ-X3KHTUEF/);
   assert.match(adminDirectory, /TLJ-X3KHTUEF/);
   assert.doesNotMatch(`${form}\n${adminDirectory}`, /TLJ-00000124/);
-  assert.match(workspace, /This same ID is used by your team, the assigned compliance team and TLink support/);
+  assert.match(workspace, /<h4 id={`job-information-\$\{job\.id\}`}>Job information<\/h4>/);
+  assert.match(workspace, /<dt>Job ID<\/dt><dd>\{job\.workNumber\}<\/dd>/);
   assert.match(adminJobs, /LOWER\(w\.work_number\) LIKE/);
   assert.match(adminJobs, /LOWER\(w\.id\) LIKE/);
   assert.match(adminJobs, /installer_business/);
