@@ -1,16 +1,18 @@
 # Next task handover
 
-Status: `TLINK-RELIABLE-QUOTES-JOBS-59` released as current Sites version 322; next task is controlled quote delivery proof to a dedicated test inbox
+Status: `TLINK-QUOTE-JOB-INVOICE-USABILITY-60` released as current Sites version 323; next task is controlled test-inbox end-to-end quote delivery receipt and callback
 
 Prepared: 13 August 2026
 
-Milestone ID: `TLINK-RELIABLE-QUOTES-JOBS-59`
+Milestone ID: `TLINK-QUOTE-JOB-INVOICE-USABILITY-60`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
+Milestone source baseline: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
-Current quote-delivery and jobs-register application commit: `d15ceda44255a706c10a699347b9bd54eba60c5e`
+Current quote, job and invoice usability application commit: `e757ac2402da0830b68d0e50e95afd61281c03c0`
+
+Historical quote-delivery and jobs-register application commit: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
 Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
 
@@ -18,15 +20,21 @@ Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d
 
 Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production application source: `d15ceda44255a706c10a699347b9bd54eba60c5e`
+Current production application source: `e757ac2402da0830b68d0e50e95afd61281c03c0`
 
-Current production: Sites version 322 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 323 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
 
-Current deployment: `appgdep_6a7d06e32e9c8191ae98c3b875564465`
+Current deployment: `appgdep_6a7d163a7a608191ab3e260ed58f63a3`
 
 Migration inventory: all 137 migrations through `0136_trade_quote_delivery_outbox.sql`
+
+Historical version 322 application source: `d15ceda44255a706c10a699347b9bd54eba60c5e`
+
+Historical version 322 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
+
+Historical version 322 deployment: `appgdep_6a7d06e32e9c8191ae98c3b875564465`; succeeded and remained public until version 323 replaced it
 
 Historical version 321 application source: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
@@ -70,7 +78,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 420 files, 39,669,760 bytes, Sites archive storage content hash `sha256:87b51cd53dcc3def0962c6c3c7f3bfaee4e4acf1a0b9819392dd642880ad5a7b`
+Current release package: 420 files, Sites archive content hash `sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`; stored-byte total was not reported
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -82,11 +90,68 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
+## Released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
+
+Status: exact executable application source
+`e757ac2402da0830b68d0e50e95afd61281c03c0` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 323. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
+and deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` reconcile to that
+source. Deployment succeeded at the public custom URL
+`https://compare.ausenergyassessments.com` and provider identity
+`info294029--aea-energy-comparison` with environment revision 20. Sites stored
+420 files with archive content hash
+`sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`.
+The package contains all 137 migrations.
+
+### Implemented outcome
+
+Incomplete saved quote rows now explain exactly what needs attention and put
+focus on that field, jobs expose practical customer and assignment controls in a
+compact layout, and correctable draft invoice lines can be reordered without
+deleting and re-entering them.
+
+### Implemented capability
+
+- Quote validation identifies the exact row and missing field, highlights it,
+  scrolls it into view and focuses it. The saved blank-description failure no
+  longer collapses totals to generic `Check items` or makes Preview appear inert.
+- Valid lines retain live subtotal, GST, discount, total, cost, sell and margin.
+  The same bounded authoritative quote-choice contract runs before preview.
+- Jobs Actions exposes permission-gated `Edit customer` for a linked customer
+  the trade owns and reuses the existing customer editor and update boundary.
+  Platform-private references stay protected.
+- Overview shows separate structured job and customer information, including
+  name, phone, email, address, status, worker and schedule. TLink and Creditex
+  remain separate operating and compliance authorities.
+- Assignment is one capability-filtered active-team dropdown with one compact
+  Save action. The separate team search and load-more controls are absent.
+- Correctable draft invoice lines have desktop drag-and-drop plus 44-pixel
+  up/down controls for touch and keyboard. Reordering preserves all line data
+  and uses the existing correction revision; issued history stays immutable.
+
+### Validation and release evidence
+
+- The affected quote, jobs, invoice and team set passed 92 of 92. Independent
+  final review passed 106 of 106 relevant tests.
+- Typecheck, warning-free lint, `db:check`, production build with the Sites
+  server-bundle audit and `git diff --check` passed.
+- Signed-in production QA reproduced the stored blank quote-description defect
+  and confirmed the exact invalid control was focused. A valid `$110` quote
+  opened the exact email and PDF preview. It was not saved or sent.
+- Signed-in QA inspected the jobs register, customer editor, structured job and
+  customer cards, and compact single-dropdown assignment without saving a
+  customer or assignment change.
+- The invoice list rendered in production. The working-demo data had no
+  correctable draft invoice, so live rendering and interaction of the new reorder
+  controls remain unverified; their source regression coverage passed.
+- `/api/health` returned HTTP 200 at `2026-08-13T00:57:08.421Z`.
+
+## Previous released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
 
 Status: exact executable application source
 `d15ceda44255a706c10a699347b9bd54eba60c5e` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 322. Saved version
+internal `main` and released as historical Sites version 322. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
 and deployment `appgdep_6a7d06e32e9c8191ae98c3b875564465` reconcile to that
 source. Deployment succeeded at the public custom URL
@@ -1335,11 +1400,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Controlled quote delivery proof to a dedicated test inbox.
-2. Customer quote acceptance plus deposit/payment workflow.
-3. Creditex audited/certified/program certificate sync.
-4. Schedule/mobile operational pilot from jobs register.
-5. Team document-expiry alert delivery proof.
+1. Controlled test-inbox end-to-end quote delivery receipt and callback.
+2. Customer quote acceptance plus deposit/payment handoff.
+3. Creditex audit/certification/certificate sync.
+4. Schedule/mobile operational pilot.
+5. Document expiry notification proof.
 
 ## Previous released milestone
 

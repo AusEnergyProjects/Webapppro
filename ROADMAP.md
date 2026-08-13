@@ -2066,11 +2066,71 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
+## Released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
+
+Release status: exact executable application commit
+`e757ac2402da0830b68d0e50e95afd61281c03c0` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 323 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
+and deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison`
+with environment revision 20. Sites stored 420 files with archive content hash
+`sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`;
+the source package contains all 137 migrations.
+
+### Outcome
+
+Keep quoting usable when a saved row is incomplete, put the customer and job
+information needed for daily work in one clear workspace, simplify assignment,
+and let staff correct draft invoice order without re-entering line items.
+
+### Implemented scope
+
+- An incomplete saved quote row no longer collapses all totals to `Check items`
+  or makes Preview appear inert. Validation identifies the exact row and missing
+  field, highlights it, scrolls it into view and moves focus there. Quote-choice
+  validation uses the same bounded authoritative choice contract before preview.
+- A valid quote keeps live subtotal, GST, discount, total, cost, sell and margin
+  calculations. Preview remains a non-sending step and opens the exact email and
+  PDF review for a valid draft.
+- Jobs Actions includes permission-gated `Edit customer` for linked customers
+  the trade owns. It opens the existing customer editor and update boundary;
+  platform-private references remain protected and non-editable.
+- The job Overview presents separate structured job and customer information,
+  including name, phone, email and address components, status, assignment and
+  schedule. This is bounded operating alignment with Creditex and Dataforce, not
+  a claim that their distinct compliance and installer roles are identical.
+- Assignment uses one capability-filtered active-team dropdown plus one compact
+  Save action. The competing search and load-more controls are removed from the
+  assignment surface.
+- Correctable draft invoices support desktop drag-and-drop and 44-pixel up/down
+  controls for touch and keyboard use. Reordering preserves every line value and
+  flows through the existing correction revision; issued invoice history remains
+  immutable.
+
+### Validation and release evidence
+
+- The affected quote, jobs, invoice and team set passed 92 of 92. An independent
+  final review passed 106 of 106 relevant tests.
+- Typecheck, warning-free lint, `db:check` across all 137 migrations, production
+  build with Sites server-bundle audit and `git diff --check` passed.
+- Signed-in production QA reproduced the saved blank quote-description defect,
+  then confirmed the exact invalid field was identified and focused. A valid
+  `$110` quote opened the exact email and PDF preview. It was not saved or sent.
+- Signed-in QA inspected the jobs register, customer editor, structured job and
+  customer details, and the single-dropdown assignment surface without saving a
+  customer or assignment change.
+- The production invoice list loaded. No correctable draft invoice existed in
+  the available working-demo data, so live rendering and interaction of the new
+  reorder controls remain unverified; source regression coverage passed.
+- `/api/health` returned HTTP 200 at `2026-08-13T00:57:08.421Z`.
+
+## Previous released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
 
 Release status: exact executable application commit
 `d15ceda44255a706c10a699347b9bd54eba60c5e` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 322 at
+Sites internal `main`, and released as historical Sites version 322 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
 and deployment `appgdep_6a7d06e32e9c8191ae98c3b875564465` reconcile to that
@@ -2584,7 +2644,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical versions 310, 317, 318, 320 and 321 and the current version 322 release.
+historical versions 310, 317, 318, 320, 321 and 322 and the current version 323 release.
 
 ### Outcome
 
@@ -2728,11 +2788,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Controlled quote delivery proof to a dedicated test inbox.
-2. Customer quote acceptance plus deposit/payment workflow.
-3. Creditex audited/certified/program certificate sync.
-4. Schedule/mobile operational pilot from jobs register.
-5. Team document-expiry alert delivery proof.
+1. Controlled test-inbox end-to-end quote delivery receipt and callback.
+2. Customer quote acceptance plus deposit/payment handoff.
+3. Creditex audit/certification/certificate sync.
+4. Schedule/mobile operational pilot.
+5. Document expiry notification proof.
 
 ## Global stop conditions
 
