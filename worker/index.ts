@@ -63,6 +63,7 @@ import {
   serviceReminderProviderConfiguration,
 } from "../src/lib/service-reminder-delivery";
 import { drainTradeQuoteDeliveries } from "../src/lib/trade-quote-delivery-server";
+import { queueTradeQuoteDeliveryDispatch } from "../src/lib/trade-quote-delivery-dispatch";
 
 const HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=120, stale-while-revalidate=600";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store, max-age=0";
@@ -287,6 +288,16 @@ function queueBackgroundDispatches(
   }
   if (request.method === "GET" && url.pathname === "/api/health" && response.ok) {
     ctx.waitUntil(
+      drainTradeQuoteDeliveries({ db: getD1(), limit: 10 })
+        .then(() => undefined)
+        .catch((error) => {
+          console.error(
+            "Trade quote delivery recovery failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+        }),
+    );
+    ctx.waitUntil(
       cleanupUnreferencedTradeIssuedDocuments().then(() => undefined).catch((error) => {
         console.error("Issued document cleanup failed.", error instanceof Error ? error.message : "Unknown error");
       }),
@@ -309,13 +320,22 @@ function queueBackgroundDispatches(
       );
     }
   }
-  return queuePublicPlanDeliveryDispatch(queueCustomerProjectActivityDispatch(
+  return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
       queueCustomerOpportunityDispatch(response, ctx),
       ctx,
     ),
     ctx,
-  ), ctx);
+  ), ctx), {
+    waitUntil: (promise) => ctx.waitUntil(promise),
+    drain: (deliveryId) => drainTradeQuoteDeliveries({ db: getD1(), deliveryId }),
+    onError: (error) => {
+      console.error(
+        "Trade quote delivery dispatch failed.",
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    },
+  });
 }
 
 function canonicalHostRedirect(request: Request) {

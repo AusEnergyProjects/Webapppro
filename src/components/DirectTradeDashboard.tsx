@@ -180,6 +180,38 @@ type ProtectedPhotoLightbox = {
   alt: string;
   status: "loading" | "ready" | "error";
 };
+type PublicLeadHandoffState = {
+  matchId: string;
+  customerName: string;
+  phase: "working" | "success" | "error";
+  stageIndex: number;
+  error: string;
+  requestReference: string;
+  workNumber: string;
+};
+
+const publicLeadHandoffStages = [
+  {
+    progress: 16,
+    title: "Starting the protected handoff",
+    detail: "Preparing the customer, site, job and quote request.",
+  },
+  {
+    progress: 42,
+    title: "Processing the job and quote details",
+    detail: "Keeping the customer details connected to this exact business job.",
+  },
+  {
+    progress: 68,
+    title: "Securing shared files with the job",
+    detail: "Keeping customer-shared photos available from the new job files.",
+  },
+  {
+    progress: 86,
+    title: "Waiting for the server to confirm the quote",
+    detail: "The quote will open automatically as soon as the handoff is confirmed.",
+  },
+] as const;
 type DashboardWorkspace = "work" | "team" | "invoices" | "follow-ups" | "leads" | "products" | "calculator" | "orders" | "import" | "account";
 const dashboardWorkspaces = new Set<DashboardWorkspace>([
   "work",
@@ -694,6 +726,8 @@ export function DirectTradeDashboard() {
   const [opportunityBusy, setOpportunityBusy] = useState("");
   const [opportunityStatus, setOpportunityStatus] = useState("");
   const [opportunityLoadError, setOpportunityLoadError] = useState("");
+  const [publicLeadHandoff, setPublicLeadHandoff] =
+    useState<PublicLeadHandoffState | null>(null);
   const [opportunityNavigationStatus, setOpportunityNavigationStatus] =
     useState("");
   const [leadSearch, setLeadSearch] = useState("");
@@ -735,6 +769,10 @@ export function DirectTradeDashboard() {
   const evidenceObjectUrls = useRef(new Set<string>());
   const photoLightboxDialog = useRef<HTMLDivElement | null>(null);
   const photoLightboxCloseButton = useRef<HTMLButtonElement | null>(null);
+  const publicLeadHandoffDialog = useRef<HTMLDivElement | null>(null);
+  const publicLeadHandoffRetryButton = useRef<HTMLButtonElement | null>(null);
+  const publicLeadHandoffOpener = useRef<HTMLElement | null>(null);
+  const publicLeadHandoffRequestMatchId = useRef("");
   const workspaceRouteInitialised = useRef(false);
   const workspacePopstateSync = useRef(false);
 
@@ -837,6 +875,87 @@ export function DirectTradeDashboard() {
     };
   }, [photoLightboxOpen]);
 
+  const publicLeadHandoffOpen = Boolean(publicLeadHandoff);
+  const publicLeadHandoffPhase = publicLeadHandoff?.phase || "";
+  const publicLeadHandoffMatchId = publicLeadHandoff?.matchId || "";
+
+  useEffect(() => {
+    if (!publicLeadHandoffOpen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = publicLeadHandoffDialog.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      const opener = publicLeadHandoffOpener.current;
+      publicLeadHandoffOpener.current = null;
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [publicLeadHandoffOpen]);
+
+  useEffect(() => {
+    if (!publicLeadHandoffOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (publicLeadHandoffPhase === "error") {
+        publicLeadHandoffRetryButton.current?.focus();
+      } else {
+        publicLeadHandoffDialog.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [publicLeadHandoffMatchId, publicLeadHandoffOpen, publicLeadHandoffPhase]);
+
+  useEffect(() => {
+    if (
+      publicLeadHandoffPhase !== "working"
+      || !publicLeadHandoffMatchId
+    ) return;
+    const stageTimers = [
+      window.setTimeout(() => setPublicLeadHandoff((current) =>
+        current?.phase === "working" && current.matchId === publicLeadHandoffMatchId
+          ? { ...current, stageIndex: 1 }
+          : current
+      ), 1_600),
+      window.setTimeout(() => setPublicLeadHandoff((current) =>
+        current?.phase === "working" && current.matchId === publicLeadHandoffMatchId
+          ? { ...current, stageIndex: 2 }
+          : current
+      ), 4_000),
+      window.setTimeout(() => setPublicLeadHandoff((current) =>
+        current?.phase === "working" && current.matchId === publicLeadHandoffMatchId
+          ? { ...current, stageIndex: 3 }
+          : current
+      ), 7_000),
+    ];
+    return () => stageTimers.forEach((timer) => window.clearTimeout(timer));
+  }, [publicLeadHandoffMatchId, publicLeadHandoffPhase]);
+
   const abortProtectedOpportunityRequests = useCallback(() => {
     for (const controller of protectedOpportunityRequestControllers.current) {
       controller.abort();
@@ -877,6 +996,8 @@ export function DirectTradeDashboard() {
     setOpportunityBusy("");
     setOpportunityStatus("");
     setOpportunityLoadError("");
+    setPublicLeadHandoff(null);
+    publicLeadHandoffRequestMatchId.current = "";
     setOpportunityNavigationStatus("");
     setLeadSearch("");
     setLeadStatusFilter("");
@@ -1183,6 +1304,7 @@ export function DirectTradeDashboard() {
   ) {
     const activeUser = user;
     if (!activeUser || protectedIdentityUid.current !== activeUser.uid) return;
+    if (publicLeadHandoffRequestMatchId.current === matchId) return;
     const identityUid = activeUser.uid;
     const identityRevision = protectedIdentityRevision.current;
     const identityIsCurrent = () => protectedIdentityContinuationIsCurrent(
@@ -1200,6 +1322,30 @@ export function DirectTradeDashboard() {
     );
     const preparesCustomerQuote =
       status === "interested" && !selectedOpportunity?.platformOnly;
+    const startsCustomerQuoteHandoff = Boolean(
+      preparesCustomerQuote
+      && selectedOpportunity
+      && selectedOpportunity.matchStatus !== "interested"
+    );
+    if (startsCustomerQuoteHandoff && selectedOpportunity) {
+      publicLeadHandoffRequestMatchId.current = matchId;
+      if (!publicLeadHandoffOpen) {
+        publicLeadHandoffOpener.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      }
+      setPublicLeadHandoff({
+        matchId,
+        customerName: selectedOpportunity.customerContact?.name.trim()
+          || selectedOpportunity.title
+          || "this customer",
+        phase: "working",
+        stageIndex: 0,
+        error: "",
+        requestReference: "",
+        workNumber: "",
+      });
+    }
     setOpportunityBusy(matchId);
     setOpportunityStatus(
       preparesCustomerQuote
@@ -1208,6 +1354,7 @@ export function DirectTradeDashboard() {
         ? "Sending your expression of interest..."
         : "Updating the opportunity...",
     );
+    let requestReference = "";
     try {
       const token = await activeUser.getIdToken();
       if (!requestIsCurrent()) return;
@@ -1223,10 +1370,22 @@ export function DirectTradeDashboard() {
       if (!requestIsCurrent()) return;
       const result = await response.json().catch(() => ({}));
       if (!requestIsCurrent()) return;
+      requestReference = [result.requestId, result.errorCode]
+        .filter((item) => typeof item === "string" && item.trim())
+        .join(" | ");
       if (!response.ok || !result.ok)
         throw new Error(
           result.error || "The opportunity response could not be saved.",
         );
+      const quoteWorkflow = result.quoteWorkflow && typeof result.quoteWorkflow === "object"
+        ? result.quoteWorkflow as { workOrderId?: unknown; workNumber?: unknown; quoteId?: unknown }
+        : null;
+      const quoteTarget = publicLeadQuoteNavigationTarget(quoteWorkflow);
+      if (startsCustomerQuoteHandoff && !quoteTarget) {
+        throw new Error(
+          "The handoff was saved, but the editable quote was not returned. Retry to reopen the same job safely.",
+        );
+      }
       setOpportunities((current) =>
         current.map((item) =>
           item.matchId === matchId
@@ -1238,19 +1397,35 @@ export function DirectTradeDashboard() {
             : item,
         ),
       );
-      const quoteWorkflow = result.quoteWorkflow && typeof result.quoteWorkflow === "object"
-        ? result.quoteWorkflow as { workOrderId?: unknown; workNumber?: unknown; quoteId?: unknown }
-        : null;
-      const quoteTarget = publicLeadQuoteNavigationTarget(quoteWorkflow);
       if (status === "interested" && quoteTarget) {
+        const workNumber = typeof quoteWorkflow?.workNumber === "string"
+          ? quoteWorkflow.workNumber
+          : "The customer quote";
+        if (startsCustomerQuoteHandoff) {
+          setPublicLeadHandoff((current) =>
+            current?.matchId === matchId
+              ? {
+                  ...current,
+                  phase: "success",
+                  stageIndex: publicLeadHandoffStages.length - 1,
+                  error: "",
+                  requestReference,
+                  workNumber,
+                }
+              : current
+          );
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          if (!requestIsCurrent()) return;
+        }
         setCommandTarget({
           ...quoteTarget,
           nonce: Date.now(),
         });
         setWorkspace("work");
         setOpportunityStatus(
-          `${typeof quoteWorkflow?.workNumber === "string" ? quoteWorkflow.workNumber : "The customer quote"} is ready to edit.`,
+          `${workNumber} is ready to edit.`,
         );
+        if (startsCustomerQuoteHandoff) setPublicLeadHandoff(null);
         return;
       }
       setOpportunityStatus(
@@ -1264,13 +1439,29 @@ export function DirectTradeDashboard() {
       );
     } catch (responseError) {
       if (!requestIsCurrent()) return;
+      const responseMessage = responseError instanceof Error
+        ? responseError.message
+        : "The opportunity response could not be saved.";
+      if (startsCustomerQuoteHandoff) {
+        setPublicLeadHandoff((current) =>
+          current?.matchId === matchId
+            ? {
+                ...current,
+                phase: "error",
+                error: responseMessage,
+                requestReference,
+              }
+            : current
+        );
+      }
       setOpportunityStatus(
-        responseError instanceof Error
-          ? responseError.message
-          : "The opportunity response could not be saved.",
+        responseMessage,
       );
     } finally {
       protectedOpportunityRequestControllers.current.delete(controller);
+      if (publicLeadHandoffRequestMatchId.current === matchId) {
+        publicLeadHandoffRequestMatchId.current = "";
+      }
       if (requestIsCurrent()) setOpportunityBusy("");
     }
   }
@@ -1657,6 +1848,114 @@ export function DirectTradeDashboard() {
           </div>
         </div>
       )}
+      {authReady && user && publicLeadHandoff && (() => {
+        const stage = publicLeadHandoffStages[
+          Math.min(publicLeadHandoff.stageIndex, publicLeadHandoffStages.length - 1)
+        ];
+        const progress = publicLeadHandoff.phase === "success"
+          ? 100
+          : stage.progress;
+        const phaseLabel = publicLeadHandoff.phase === "success"
+          ? "Job and quote ready"
+          : publicLeadHandoff.phase === "error"
+            ? "We could not confirm the handoff"
+            : "Creating the job and quote";
+        const progressText = publicLeadHandoff.phase === "success"
+          ? "Server confirmed. Opening the Quote tab."
+          : publicLeadHandoff.phase === "error"
+            ? "The request needs attention before continuing."
+            : stage.title;
+        return (
+          <div className="dashboard-lead-handoff-backdrop">
+            <div
+              ref={publicLeadHandoffDialog}
+              className={`dashboard-lead-handoff-dialog is-${publicLeadHandoff.phase}`}
+              role="dialog"
+              aria-modal="true"
+              aria-busy={publicLeadHandoff.phase === "working"}
+              aria-labelledby="dashboard-lead-handoff-title"
+              aria-describedby="dashboard-lead-handoff-description"
+              tabIndex={-1}
+            >
+              <div className="dashboard-lead-handoff-visual" aria-hidden="true">
+                <span>{publicLeadHandoff.phase === "success" ? "Ready" : publicLeadHandoff.phase === "error" ? "!" : ""}</span>
+              </div>
+              <div className="dashboard-lead-handoff-heading">
+                <span>Protected lead handoff</span>
+                <h2 id="dashboard-lead-handoff-title">{phaseLabel}</h2>
+                <p>{publicLeadHandoff.customerName}</p>
+              </div>
+              <div
+                className="dashboard-lead-handoff-progress"
+                role="progressbar"
+                aria-label="Create job and quote progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                aria-valuetext={progressText}
+              >
+                <span style={{ width: `${progress}%` }}><i /></span>
+              </div>
+              {publicLeadHandoff.phase === "error" ? (
+                <div className="dashboard-lead-handoff-error" role="alert">
+                  <strong>{publicLeadHandoff.error}</strong>
+                  <p>
+                    We could not confirm whether the protected request finished.
+                    It is safe to retry. TLink will reuse the same customer, job
+                    and quote if the first request reached the server.
+                  </p>
+                  {publicLeadHandoff.requestReference && (
+                    <small>Request {publicLeadHandoff.requestReference}</small>
+                  )}
+                </div>
+              ) : (
+                <div className="dashboard-lead-handoff-status" role="status" aria-live="polite">
+                  <strong>
+                    {publicLeadHandoff.phase === "success"
+                      ? `${publicLeadHandoff.workNumber} is ready`
+                      : stage.title}
+                  </strong>
+                  <p>
+                    {publicLeadHandoff.phase === "success"
+                      ? "Opening the exact job on the Quote tab now."
+                      : stage.detail}
+                  </p>
+                </div>
+              )}
+              <div className="dashboard-lead-handoff-scope" aria-label="Protected handoff includes">
+                <span>Customer and site</span>
+                <span>Job and draft quote</span>
+                <span>Shared job files</span>
+              </div>
+              <p id="dashboard-lead-handoff-description" className="dashboard-lead-handoff-note">
+                TLink processes these records together. The activity bar completes
+                only after the server confirms the editable quote is ready.
+              </p>
+              {publicLeadHandoff.phase === "error" && (
+                <div className="dashboard-lead-handoff-actions">
+                  <button
+                    type="button"
+                    onClick={() => setPublicLeadHandoff(null)}
+                  >
+                    Back to lead
+                  </button>
+                  <button
+                    ref={publicLeadHandoffRetryButton}
+                    type="button"
+                    className="primary"
+                    onClick={() => void respondToOpportunity(
+                      publicLeadHandoff.matchId,
+                      "interested",
+                    )}
+                  >
+                    Try again safely
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {!authReady || loading ? (
         <section className="dashboard-state-card" aria-live="polite">
           <p>Preparing your TLink dashboard...</p>

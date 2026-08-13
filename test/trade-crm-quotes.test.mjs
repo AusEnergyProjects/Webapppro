@@ -471,7 +471,8 @@ test("saved quote row order is persisted monotonically and rendered without glob
   const sections = contiguousTradeQuoteSections(items);
   assert.deepEqual(sections.map(({ heading }) => heading), ["A", "B", "A"]);
   assert.deepEqual(sections.flatMap(({ items: rows }) => rows.map(({ description }) => description)), ["A first", "B middle", "A last"]);
-  assert.match(documentPdf, /const sections = contiguousTradeQuoteSections\(snapshot\.items\)/);
+  assert.match(documentPdf, /const includedItems = snapshot\.items\?\.filter\(\(item\) => !isFinalPercentDiscount\(item\)\)/);
+  assert.match(documentPdf, /const sections = contiguousTradeQuoteSections\(includedItems\)/);
   assert.doesNotMatch(documentPdf, /new Set\([\s\S]*?snapshot\.items\.map/);
 });
 

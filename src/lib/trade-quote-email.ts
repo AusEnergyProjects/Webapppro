@@ -101,6 +101,10 @@ function summaryLines(linesToDisplay: TradeQuoteDocumentSnapshot["items"]) {
   };
 }
 
+const FINAL_PERCENT_DISCOUNT_SECTION = "Overall percentage discount";
+const isFinalPercentDiscount = (item: TradeQuoteDocumentSnapshot["items"][number]) =>
+  item.sectionHeading === FINAL_PERCENT_DISCOUNT_SECTION;
+
 export function buildTradeQuoteEmail(
   input: BuildTradeQuoteEmailInput,
 ): TradeQuoteEmail {
@@ -126,14 +130,28 @@ export function buildTradeQuoteEmail(
       )
       .flatMap((choice) => choice.items),
   ];
-  const lines = summaryLines(headlineItems);
-  const discountSubtotalCents = headlineItems.reduce(
+  const lines = summaryLines(headlineItems.filter((item) => !isFinalPercentDiscount(item)));
+  const finalPercentItems = headlineItems.filter(isFinalPercentDiscount);
+  const finalPercentSubtotalCents = finalPercentItems.reduce(
+    (sum, item) => sum + Math.min(0, item.subtotalCents),
+    0,
+  );
+  const otherDiscountSubtotalCents = headlineItems.reduce(
     (sum, item) =>
-      item.subtotalCents < 0 ? sum + item.subtotalCents : sum,
+      !isFinalPercentDiscount(item) && item.subtotalCents < 0 ? sum + item.subtotalCents : sum,
     0,
   );
   const grossSubtotalCents =
-    displayTotals.subtotalCents - discountSubtotalCents;
+    displayTotals.subtotalCents - otherDiscountSubtotalCents - finalPercentSubtotalCents;
+  const finalPercentBasisPoints = finalPercentItems.length === 1
+    ? Math.round(finalPercentItems[0].quantityMilli)
+    : 0;
+  const finalPercentDescription = finalPercentItems.length === 1
+    ? cleanText(finalPercentItems[0].description, 120)
+    : "";
+  const finalPercentLabel = finalPercentBasisPoints > 0
+    ? `${finalPercentDescription ? `${finalPercentDescription} | ` : ""}Final ${finalPercentBasisPoints / 10}% discount on included items ex GST`
+    : "Final percentage discount on included items ex GST";
   const contact = [snapshot.business.phone, snapshot.business.email]
     .map((value) => cleanText(value, 160))
     .filter(Boolean)
@@ -155,8 +173,11 @@ export function buildTradeQuoteEmail(
     lines.remaining ? `- Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"}` : "",
     "",
     `Subtotal ex GST: ${money(grossSubtotalCents)}`,
-    discountSubtotalCents < 0
-      ? `Discount ex GST: ${money(discountSubtotalCents)}`
+    otherDiscountSubtotalCents < 0
+      ? `Rebates and dollar discounts ex GST: ${money(otherDiscountSubtotalCents)}`
+      : "",
+    finalPercentSubtotalCents < 0
+      ? `${finalPercentLabel}: ${money(finalPercentSubtotalCents)}`
       : "",
     `GST: ${money(displayTotals.taxCents)}`,
     `Total incl GST: ${money(displayTotals.totalCents)}`,
@@ -208,7 +229,8 @@ export function buildTradeQuoteEmail(
                 <div style="padding-top:5px;font-size:28px;font-weight:700">${escapeHtml(money(displayTotals.totalCents))}</div>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding-top:10px;font-size:13px;color:#d9f6ed">
                   <tr><td>Subtotal ex GST</td><td align="right">${escapeHtml(money(grossSubtotalCents))}</td></tr>
-                  ${discountSubtotalCents < 0 ? `<tr><td>Discount ex GST</td><td align="right">${escapeHtml(money(discountSubtotalCents))}</td></tr>` : ""}
+                  ${otherDiscountSubtotalCents < 0 ? `<tr><td>Rebates and dollar discounts ex GST</td><td align="right">${escapeHtml(money(otherDiscountSubtotalCents))}</td></tr>` : ""}
+                  ${finalPercentSubtotalCents < 0 ? `<tr><td>${escapeHtml(finalPercentLabel)}</td><td align="right">${escapeHtml(money(finalPercentSubtotalCents))}</td></tr>` : ""}
                   <tr><td>GST</td><td align="right">${escapeHtml(money(displayTotals.taxCents))}</td></tr>
                 </table>
               </td></tr>

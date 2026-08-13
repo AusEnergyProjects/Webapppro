@@ -16,6 +16,8 @@ const A4_HEIGHT = 841.89;
 const MARGIN = 42;
 const CONTENT_WIDTH = A4_WIDTH - MARGIN * 2;
 const MAX_FONT_BYTES = 2_000_000;
+const FINAL_PERCENT_DISCOUNT_SECTION = "Overall percentage discount";
+const isFinalPercentDiscount = (item) => item?.sectionHeading === FINAL_PERCENT_DISCOUNT_SECTION;
 
 const THEMES = {
   emerald_navy: {
@@ -360,15 +362,26 @@ export async function createTradeQuotePdfBytes(
           )
       : []),
   ];
-  const discountSubtotalCents = headlineItems.reduce(
+  const finalPercentItems = headlineItems.filter(isFinalPercentDiscount);
+  const finalPercentSubtotalCents = finalPercentItems.reduce(
+    (sum, item) => sum + Math.min(0, Number(item.subtotalCents) || 0),
+    0,
+  );
+  const otherDiscountSubtotalCents = headlineItems.reduce(
     (sum, item) =>
-      Number(item.subtotalCents) < 0
+      !isFinalPercentDiscount(item) && Number(item.subtotalCents) < 0
         ? sum + Number(item.subtotalCents)
         : sum,
     0,
   );
   const grossSubtotalCents =
-    displayTotals.subtotalCents - discountSubtotalCents;
+    displayTotals.subtotalCents - otherDiscountSubtotalCents - finalPercentSubtotalCents;
+  const finalPercentBasisPoints = finalPercentItems.length === 1
+    ? Math.round(Number(finalPercentItems[0].quantityMilli) || 0)
+    : 0;
+  const finalPercentDescription = finalPercentItems.length === 1
+    ? String(finalPercentItems[0].description || "").trim().slice(0, 32)
+    : "";
   const pages = [];
   let page;
   let y;
@@ -685,8 +698,9 @@ export async function createTradeQuotePdfBytes(
     });
   }
 
-  if (snapshot.items?.length) {
-    const sections = contiguousTradeQuoteSections(snapshot.items);
+  const includedItems = snapshot.items?.filter((item) => !isFinalPercentDiscount(item)) || [];
+  if (includedItems.length) {
+    const sections = contiguousTradeQuoteSections(includedItems);
     for (const section of sections) {
       if (sections.length > 1 || section.heading !== "Included work") {
         ensureSpace(34);
@@ -732,8 +746,13 @@ export async function createTradeQuotePdfBytes(
   });
   const breakdownRows = [
     ["Subtotal ex GST", grossSubtotalCents],
-    ...(discountSubtotalCents < 0
-      ? [["Discount ex GST", discountSubtotalCents]]
+    ...(otherDiscountSubtotalCents < 0
+      ? [["Rebates and dollar discounts ex GST", otherDiscountSubtotalCents]]
+      : []),
+    ...(finalPercentSubtotalCents < 0
+      ? [[finalPercentBasisPoints > 0
+        ? `${finalPercentDescription ? `${finalPercentDescription}\n` : ""}Final ${finalPercentBasisPoints / 10}% on included items ex GST`
+        : "Final discount on included items ex GST", finalPercentSubtotalCents]]
       : []),
     ["GST", displayTotals.taxCents],
   ];
@@ -746,6 +765,7 @@ export async function createTradeQuotePdfBytes(
       y: rowY,
       font: regular,
       size: 8,
+      lineHeight: 7,
       color: rgb(0.87, 0.94, 0.93),
     });
     page.drawText(amountText, {
@@ -806,7 +826,7 @@ export async function createTradeQuotePdfBytes(
           gapAfter: 5,
         });
       }
-      choice.items?.forEach(lineItem);
+      choice.items?.filter((item) => !isFinalPercentDiscount(item)).forEach(lineItem);
       drawText(
         `${
           choice.kind === "addon" ? "Optional extra" : "This choice"

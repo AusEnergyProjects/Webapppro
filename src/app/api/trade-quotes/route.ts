@@ -25,6 +25,7 @@ import {
   tradeQuoteDeliveryStatus,
   tradeQuoteRecipientEmailSha256,
 } from "@/lib/trade-quote-delivery-server";
+import { withTradeQuoteDeliveryDispatch } from "@/lib/trade-quote-delivery-dispatch";
 import {
   assertTradeQuoteIssueDeliveryAccess,
   tradeQuoteDeliveryPresentation,
@@ -749,7 +750,7 @@ export async function POST(request: Request) {
           );
         }
         const accepted = ["provider_accepted", "sent", "delivered"].includes(delivery.status);
-        return adminJson({
+        return withTradeQuoteDeliveryDispatch(adminJson({
           ok: true,
           quoteIssued: true,
           deliveryAccepted: accepted,
@@ -758,7 +759,7 @@ export async function POST(request: Request) {
           access: quoteAccessPayload(access),
           quote: await quotePayload(access.ownerUid, workOrderId,
             access.isOwner || access.canViewPriceBook, new URL(request.url).origin),
-        }, accepted ? 200 : 202);
+        }, accepted ? 200 : 202), String(delivery.id));
       }
       if (requestedVersion.status !== "draft" && requestedVersion.status !== "issuing") {
         throw new Error("IMMUTABLE_VERSION");
@@ -1041,7 +1042,7 @@ export async function POST(request: Request) {
             "issue_delivery_status",
           );
         }
-        return adminJson({
+        return withTradeQuoteDeliveryDispatch(adminJson({
           ok: true,
           quoteIssued: true,
           deliveryAccepted: false,
@@ -1049,7 +1050,7 @@ export async function POST(request: Request) {
           delivery,
           access: quoteAccessPayload(access),
           quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin),
-        }, 202);
+        }, 202), String(delivery.id));
       } catch (error) {
         const canonical = await db.prepare(`SELECT version.status, link.id link_id,
             link.status link_status, version.issued_pdf_object_key,
@@ -1086,7 +1087,7 @@ export async function POST(request: Request) {
                 "issue_recovery_delivery_status",
               );
             }
-            return adminJson({
+            return withTradeQuoteDeliveryDispatch(adminJson({
               ok: true,
               quoteIssued: true,
               deliveryAccepted: ["provider_accepted", "sent", "delivered"]
@@ -1096,7 +1097,7 @@ export async function POST(request: Request) {
               access: quoteAccessPayload(access),
               quote: await quotePayload(access.ownerUid, workOrderId,
                 access.isOwner || access.canViewPriceBook, origin),
-            }, 202);
+            }, 202), String(delivery.id));
           } catch (recoveryError) {
             if (
               recoveryError instanceof Error
@@ -1279,14 +1280,14 @@ export async function POST(request: Request) {
               delivery: retryDelivery,
             }, 409);
           }
-          return adminJson({
+          return withTradeQuoteDeliveryDispatch(adminJson({
             ok: true,
             deliveryAccepted: retryAccepted,
             delivery: retryDelivery,
             access: quoteAccessPayload(access),
             quote: await quotePayload(access.ownerUid, workOrderId,
               access.isOwner || access.canViewPriceBook, new URL(request.url).origin),
-          }, retryAccepted ? 200 : 202);
+          }, retryAccepted ? 200 : 202), String(retryDelivery?.id || ""));
         }
         if (action === "send_quote" && existingLeaf
           && String(existingLeaf.id) !== String(existing?.id || "")) {
@@ -1308,14 +1309,14 @@ export async function POST(request: Request) {
               delivery: leafDelivery,
             }, 409);
           }
-          return adminJson({
+          return withTradeQuoteDeliveryDispatch(adminJson({
             ok: true,
             deliveryAccepted: leafAccepted,
             delivery: leafDelivery,
             access: quoteAccessPayload(access),
             quote: await quotePayload(access.ownerUid, workOrderId,
               access.isOwner || access.canViewPriceBook, new URL(request.url).origin),
-          }, leafAccepted ? 200 : 202);
+          }, leafAccepted ? 200 : 202), String(leafDelivery?.id || ""));
         }
         if (existing && ["provider_accepted", "sent", "delivered"].includes(String(existing.status))) {
           return adminJson({ ok: true, delivery: await tradeQuoteDeliveryStatus(db, String(existing.id), access.ownerUid), access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
@@ -1328,17 +1329,27 @@ export async function POST(request: Request) {
             || (existing.status === "failed" && Boolean(String(existing.next_attempt_at || "")))
           )
         ) {
-          return adminJson({
+          const queuedDelivery = await tradeQuoteDeliveryStatus(
+            db,
+            String(existing.id),
+            access.ownerUid,
+          );
+          return withTradeQuoteDeliveryDispatch(adminJson({
             ok: true,
             deliveryAccepted: false,
-            delivery: await tradeQuoteDeliveryStatus(db, String(existing.id), access.ownerUid),
+            delivery: queuedDelivery,
             access: quoteAccessPayload(access),
             quote: await quotePayload(access.ownerUid, workOrderId,
               access.isOwner || access.canViewPriceBook, new URL(request.url).origin),
-          }, 202);
+          }, 202), String(queuedDelivery?.id || ""));
         }
         if (existing && existing.status === "sending" && Date.parse(String(existing.updated_at || "")) > Date.now() - 10 * 60 * 1000) {
-          return adminJson({ ok: true, delivery: await tradeQuoteDeliveryStatus(db, String(existing.id), access.ownerUid), access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) }, 202);
+          const sendingDelivery = await tradeQuoteDeliveryStatus(
+            db,
+            String(existing.id),
+            access.ownerUid,
+          );
+          return withTradeQuoteDeliveryDispatch(adminJson({ ok: true, delivery: sendingDelivery, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) }, 202), String(sendingDelivery?.id || ""));
         }
         if (action === "send_quote" && existing?.status === "failed" && !existing.next_attempt_at) {
           return adminJson({
@@ -1474,14 +1485,14 @@ export async function POST(request: Request) {
         const delivery = await tradeQuoteDeliveryStatus(db, authoritativeDeliveryId, access.ownerUid);
         const status = delivery?.status || "queued";
         const accepted = ["provider_accepted", "sent", "delivered"].includes(status);
-        return adminJson({
+        return withTradeQuoteDeliveryDispatch(adminJson({
           ok: true,
           deliveryAccepted: accepted,
           delivery,
           access: quoteAccessPayload(access),
           quote: await quotePayload(access.ownerUid, workOrderId,
             access.isOwner || access.canViewPriceBook, origin),
-        }, accepted ? 200 : 202);
+        }, accepted ? 200 : 202), authoritativeDeliveryId);
       }
       return adminJson({ ok: true, access: quoteAccessPayload(access), quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, new URL(request.url).origin) });
     }

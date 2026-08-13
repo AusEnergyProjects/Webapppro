@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { User } from "firebase/auth";
 import {
+  consolidateTradeQuotePercentDiscountLines,
   moveTradeQuoteLine,
   normaliseTradeQuoteLineGroup,
   overallTradeQuoteDiscountKind,
@@ -13,7 +14,6 @@ import {
   tradeQuoteLineValidationIssues,
   OVERALL_FIXED_DISCOUNT_SECTION,
   OVERALL_PERCENT_DISCOUNT_SECTION,
-  type OverallTradeQuoteDiscountKind,
   type TradeQuoteChoiceValidationIssue,
   type TradeQuoteLineValidationField,
   type TradeQuoteLineValidationIssue,
@@ -70,6 +70,10 @@ type QuoteEditorValidationIssue = (TradeQuoteLineValidationIssue & { kind: "line
 
 const money = (cents: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
 const blankLine = (): QuoteLine => ({ lineType: "product", description: "", quantity: "1", unitPrice: "0.00", taxCode: "gst", sectionHeading: "Included work" });
+const appendBeforeFinalPercent = (lines: QuoteLine[], line: QuoteLine) => {
+  const percentIndex = lines.findIndex((candidate) => overallTradeQuoteDiscountKind(candidate) === "percent");
+  return percentIndex < 0 ? [...lines, line] : [...lines.slice(0, percentIndex), line, ...lines.slice(percentIndex)];
+};
 const editLine = (line: SavedLine, activeIds: Set<string>): QuoteLine => {
   return { ...line, priceBookItemId: activeIds.has(line.priceBookItemId) ? line.priceBookItemId : "",
     quantity: (line.quantityMilli / 1000).toString(), unitPrice: persistedOverallDiscountUnitPrice(line) };
@@ -213,8 +217,9 @@ function firstQuoteEditorValidationIssue(lines: QuoteLine[], choices: QuoteChoic
 function liveOverallDiscountCents(lines: QuoteLine[]) {
   try {
     const totals = previewGroup(lines, true);
-    const withoutOverallDiscount = previewGroup(lines.filter((line) => !overallTradeQuoteDiscountKind(line)), true);
-    return Math.max(0, withoutOverallDiscount.totalCents - totals.totalCents);
+    const positiveOnly = previewGroup(lines.filter((line) => !overallTradeQuoteDiscountKind(line))
+      .map((line) => Number(line.unitPrice) < 0 ? { ...line, unitPrice: "0" } : line), true);
+    return Math.max(0, positiveOnly.totalCents - totals.totalCents);
   } catch { return 0; }
 }
 
@@ -298,7 +303,9 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       ? result.quote.versions.find((version) => version.id === result.quote?.editableDraft?.id)
       : result.quote?.versions.find((version) => version.versionNumber === result.quote?.currentVersionNumber);
     if (current) {
-      const activeIds = new Set(activeItems.map((item) => item.id)); const currentLines = current.items.map((line) => editLine(line, activeIds)); setLines(currentLines.length ? currentLines : [blankLine()]);
+      const activeIds = new Set(activeItems.map((item) => item.id));
+      const currentLines = consolidateTradeQuotePercentDiscountLines(current.items.map((line) => editLine(line, activeIds)));
+      setLines(currentLines.length ? currentLines : [blankLine()]);
       setChoices(current.choices.map((choice) => ({ ...choice, lines: choice.items.map((line) => editLine(line, activeIds)) })));
       setCustomerEmail(current.customerEmail || result.authorisedEmails?.[0] || ""); setTerms(current.terms); setCustomerMessage(current.customerMessage || ""); setValidUntil(current.validUntil);
     } else {
@@ -480,7 +487,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       sectionHeading: "Rebate and discounts",
     };
     setLines((current) => (
-      current.length === 1 && !current[0].description ? [line] : [...current, line]
+      current.length === 1 && !current[0].description ? [line] : appendBeforeFinalPercent(current, line)
     ));
     clearTradeRebateEstimateDraft(window.sessionStorage, user.uid);
     setRebateDraft(null);
@@ -490,7 +497,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   function applyPacket(asPackages: boolean) {
     const packet = jobPackets.find((candidate) => candidate.id === packetId); if (!packet?.canApply) return;
     if (!asPackages) {
-      setLines((current) => [...current.filter((line) => line.description && line.jobPacketId !== packet.id), ...packetLines(packet, "Included work")]);
+      setLines((current) => packetLines(packet, "Included work").reduce(
+        (next, line) => appendBeforeFinalPercent(next, line),
+        current.filter((line) => line.description && line.jobPacketId !== packet.id),
+      ));
       setMessage(`${packet.name} added as one standard scope.`); return;
     }
     const groupKey = choiceKey("package");
@@ -516,13 +526,22 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     ]);
   }
 
-  function addOverallDiscount(kind: OverallTradeQuoteDiscountKind) {
+  function addFinalPercentDiscount() {
     if (!canEditQuote || !canApplyDiscounts) return;
-    const next: QuoteLine = kind === "percent"
-      ? { lineType: "adjustment", description: "Discount", quantity: "0.10", unitPrice: "0.00", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION }
-      : { lineType: "adjustment", description: "Discount", quantity: "1", unitPrice: "100.00", taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
-    setLines((current) => [...current, next]);
-    setMessage(kind === "percent" ? "Percentage discount added as a separate line. Enter its label and percentage." : "Dollar discount added as a separate line. Enter its label and amount including GST.");
+    setLines((current) => current.some((line) => overallTradeQuoteDiscountKind(line) === "percent") ? current : [...current, {
+      lineType: "adjustment", description: "Final discount", quantity: "percent:10", unitPrice: "0.00",
+      taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION,
+    }]);
+    setMessage("Final percentage discount added. It is calculated after included rebates and dollar discounts.");
+  }
+
+  function addFixedDiscount() {
+    if (!canEditQuote || !canApplyDiscounts) return;
+    setLines((current) => appendBeforeFinalPercent(current, {
+      lineType: "adjustment", description: "Discount", quantity: "1", unitPrice: "100.00",
+      taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION,
+    }));
+    setMessage("Dollar discount added as a separate line. Enter its label and amount including GST.");
   }
 
   function updateBaseLine(index: number, field: keyof QuoteLine, value: string) { setLines((current) => current.map((line, position) => position === index ? { ...line, [field]: value } : line)); }
@@ -808,6 +827,25 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const draftMode = !current || current.status === "draft";
   const latestDelivery = quote?.deliveries?.[0] || null;
   const openQuestions = quote?.questions?.filter((item) => item.status === "open") || [];
+  const finalPercentIndex = lines.findIndex((line) => overallTradeQuoteDiscountKind(line) === "percent");
+  const finalPercentLine = finalPercentIndex >= 0 ? lines[finalPercentIndex] : null;
+  const reorderableBaseLineCount = lines.length - (finalPercentLine ? 1 : 0);
+  const finalPercentIssue = quoteValidationIssue?.kind === "line" && quoteValidationIssue.scopeKey === "base"
+    && quoteValidationIssue.lineIndex === finalPercentIndex ? quoteValidationIssue : null;
+  const finalPercentErrorId = "quote-final-percent-error";
+  const previewHeadlineLines = sendPreview ? [
+    ...sendPreview.base.lines,
+    ...sendPreview.choices.filter((choice) => sendPreview.displayTotals.selectedChoiceIds.includes(choice.selectionId))
+      .flatMap((choice) => choice.totals.lines),
+  ] : [];
+  const previewFinalPercentLine = previewHeadlineLines.find((line) => line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION) || null;
+  const previewFinalPercentSubtotalCents = previewHeadlineLines.reduce((sum, line) =>
+    line.sectionHeading === OVERALL_PERCENT_DISCOUNT_SECTION ? sum + Math.min(0, line.subtotalCents) : sum, 0);
+  const previewOtherDiscountSubtotalCents = previewHeadlineLines.reduce((sum, line) =>
+    line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION && line.subtotalCents < 0 ? sum + line.subtotalCents : sum, 0);
+  const previewGrossSubtotalCents = sendPreview
+    ? sendPreview.displayTotals.subtotalCents - previewOtherDiscountSubtotalCents - previewFinalPercentSubtotalCents
+    : 0;
   return <section className="trade-quote-panel">
     <header><div><span>Clear customer quote</span><h4>{quote?.quoteNumber || "New quote"}{current ? ` | Version ${current.versionNumber}` : ""}</h4><p>Keep a simple quote fast, or build clear choices without retyping standard work. Issued versions are immutable.</p></div>{current && <strong className={`quote-status ${current.status}`}>{current.status.replaceAll("_", " ")}</strong>}</header>
     {jobSummary?.enquiryReference && <section className="trade-quote-enquiry-brief" aria-label="Customer enquiry brief">
@@ -843,8 +881,8 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     {canEditQuote && canApplyDiscounts && rebateDraft && <section className="trade-rebate-document-offer"><div><span>REBATE ESTIMATE READY</span><strong>{rebateDraft.quantity} {rebateDraft.unit} | ${rebateDraft.customerDiscountDollars} customer discount</strong><small>{rebateDraft.activityTitle}</small></div><button type="button" onClick={applyRebateDiscount}>Add discount to this quote</button></section>}
     <fieldset disabled={!canEditQuote} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
     {jobPackets.length > 0 && <div className="trade-quote-packets"><label><span>Start from a common job</span><select value={packetId} onChange={(event) => setPacketId(event.target.value)}><option value="">Choose saved common work</option>{jobPackets.map((packet) => <option key={packet.id} value={packet.id} disabled={!packet.canApply}>{packet.name} | {packet.lines.length} items | {money(packet.summary.sellCentsExGst)} ex GST{packet.canApply ? "" : " | needs attention"}</option>)}</select></label><div className="trade-quote-packet-actions"><button type="button" disabled={!packetId} onClick={() => applyPacket(false)}>Use standard job</button><button type="button" disabled={!packetId} onClick={() => applyPacket(true)}>Build Good, Better, Best</button></div><small>One common job can stay simple or become three customer choices. Edit only what differs.</small></div>}
-    {lines.length > 0 && <section className="trade-quote-base"><header><div><strong>Quote items</strong><span>{choices.length ? "These items are included before any customer choices." : "Choose a saved price-book item on any row, or leave it as Custom line."}</span></div></header><div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Order</span><span>Price book item</span><span>Description and section</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => lineEditor(line, index, "base", (field, value) => updateBaseLine(index, field, value), (replacement) => replaceBaseLine(index, replacement), () => setLines((currentLines) => currentLines.filter((_, position) => position !== index)), lines.length > 1 || choices.length > 0, lines.length, (fromIndex, toIndex) => moveQuoteLine("base", fromIndex, toIndex)))}</div></section>}
-    <div className="trade-quote-builder-actions"><button className="quote-add-line" type="button" onClick={() => setLines((current) => [...current, blankLine()])}>Add included line</button><button type="button" onClick={addAddon}>Add optional extra</button><button type="button" onClick={addChooseOne}>Add choose-one pair</button><button type="button" onClick={onOpenPriceBook}>Manage price book</button>{canApplyDiscounts && <><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("percent")}>+ Percent discount</button><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("fixed")}>+ Dollar discount</button></>}</div>
+    {reorderableBaseLineCount > 0 && <section className="trade-quote-base"><header><div><strong>Quote items</strong><span>{choices.length ? "These items are included before any customer choices." : "Choose a saved price-book item on any row, or leave it as Custom line."}</span></div></header><div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Order</span><span>Price book item</span><span>Description and section</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => overallTradeQuoteDiscountKind(line) === "percent" ? null : lineEditor(line, index, "base", (field, value) => updateBaseLine(index, field, value), (replacement) => replaceBaseLine(index, replacement), () => setLines((currentLines) => currentLines.filter((_, position) => position !== index)), reorderableBaseLineCount > 1 || choices.length > 0, reorderableBaseLineCount, (fromIndex, toIndex) => moveQuoteLine("base", fromIndex, toIndex)))}</div></section>}
+    <div className="trade-quote-builder-actions"><button className="quote-add-line" type="button" onClick={() => setLines((current) => appendBeforeFinalPercent(current, blankLine()))}>Add included line</button><button type="button" onClick={addAddon}>Add optional extra</button><button type="button" onClick={addChooseOne}>Add choose-one pair</button><button type="button" onClick={onOpenPriceBook}>Manage price book</button>{canApplyDiscounts && <button className="quote-discount-action" type="button" onClick={addFixedDiscount}>+ Dollar discount</button>}</div>
     {choices.length > 0 && <section className="trade-quote-choice-builder"><header><div><span>Customer choices</span><h5>Make the decision easy</h5><p>Packages use one clear selection. Optional extras are independent. Choose-one pairs require one answer.</p></div><button type="button" onClick={() => setChoices([])}>Remove all choices</button></header><div className="trade-quote-choice-grid">{choices.map(choiceEditor)}</div></section>}
     <div className="trade-quote-settings">
       <div className="trade-quote-recipient wide"><label><span>Send quote to</span><select value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)}><option value="">Choose authorised contact</option>{emails.map((email) => <option key={email}>{email}</option>)}</select><small>{jobSummary?.publicLead ? "This address is projected from the customer's current release for this exact lead and is checked again before issue and send." : "The secure link needs no customer account. Every added address becomes an authorised contact on this customer record."}</small></label><div className="trade-quote-recipient-actions">{serverCanManageCustomers && !jobSummary?.publicLead && <button type="button" onClick={() => setAddingRecipient((value) => !value)}>{addingRecipient ? "Cancel new email" : "Add another email"}</button>}{jobSummary?.customerId && !jobSummary.publicLead && onOpenCustomer && <button type="button" onClick={() => onOpenCustomer(jobSummary.customerId)}>Open customer details</button>}</div></div>
@@ -854,6 +892,15 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       <label className="wide"><span>Recorded terms</span><textarea rows={4} maxLength={4000} value={terms} onChange={(event) => setTerms(event.target.value)} placeholder="Scope assumptions, exclusions and completion terms" /></label>
       <label className="trade-quote-save-default wide"><input type="checkbox" checked={saveAsBusinessDefault} onChange={(event) => setSaveAsBusinessDefault(event.target.checked)} /><span>Use this introduction and these terms as the editable default for future quotes.</span></label>
     </div>
+    <section className={`trade-quote-final-percent${finalPercentIssue ? " invalid" : ""}`} aria-label="Final percentage discount on included items">
+      <div><span>Final percentage discount</span><strong>{finalPercentLine ? "Applied after rebates and dollar discounts" : "No final percentage discount"}</strong><small>This applies once to the net included items. Customer choices and optional extras are unchanged.</small></div>
+      {finalPercentLine ? <>
+        <label><span>Label / details</span><input aria-label="Final percentage discount label" aria-invalid={finalPercentIssue?.field === "description" || undefined} aria-describedby={finalPercentIssue?.field === "description" ? finalPercentErrorId : undefined} data-quote-validation-target={`base:${finalPercentIndex}:description`} value={finalPercentLine.description} maxLength={500} readOnly={!canApplyDiscounts} onChange={(event) => updateBaseLine(finalPercentIndex, "description", event.target.value)} /></label>
+        <label><span>Percent off</span><input aria-label="Final percentage discount percent" aria-invalid={finalPercentIssue?.field === "quantity" || undefined} aria-describedby={finalPercentIssue?.field === "quantity" ? finalPercentErrorId : undefined} data-quote-validation-target={`base:${finalPercentIndex}:quantity`} value={quantityToPercentInput(finalPercentLine.quantity)} inputMode="decimal" readOnly={!canApplyDiscounts} onChange={(event) => { const quantity = percentInputToQuantity(event.target.value); if (quantity !== null) updateBaseLine(finalPercentIndex, "quantity", quantity || ""); }} /></label>
+        {canApplyDiscounts && <button type="button" onClick={() => setLines((current) => current.filter((_, index) => index !== finalPercentIndex))}>Remove</button>}
+      </> : canApplyDiscounts && <button type="button" className="primary" onClick={addFinalPercentDiscount}>Add final percentage discount</button>}
+      {finalPercentIssue && <p id={finalPercentErrorId} className="trade-quote-line-error" role="alert">{finalPercentIssue.message}</p>}
+    </section>
     {quoteValidationIssue && <p className="trade-quote-validation-summary" role="alert"><strong>Fix before preview</strong><span>{quoteValidationIssue.message}</span></p>}
     <div className="trade-quote-totals"><div><span>Subtotal</span><small>Subtotal ex GST</small><strong aria-live="polite">{liveSummary.error ? "Fix highlighted item" : money(liveSummary.subtotalCents)}</strong></div><div><span>GST</span><strong>{liveSummary.error ? "Fix highlighted item" : money(liveSummary.taxCents)}</strong></div><div><span>Discount incl GST</span><strong>{liveSummary.error ? "Fix highlighted item" : money(liveDiscountCents)}</strong></div><div><span>Total</span><small>Total incl GST</small><strong>{liveSummary.error ? "Fix highlighted item" : money(liveSummary.totalCents)}</strong></div></div>
     {(current?.internalSummary || priceBookItems.length > 0) && <aside className="trade-quote-internal" aria-label="Internal commercial summary"><div><span>Internal only</span><strong>Live editable scope</strong></div><dl><div><dt>Cost ex GST</dt><dd>{liveSummary.error ? "Fix highlighted item" : money(liveSummary.costCentsExGst)}</dd></div><div><dt>Sell ex GST</dt><dd>{liveSummary.error ? "Fix highlighted item" : money(liveSummary.subtotalCents)}</dd></div><div><dt>Margin ex GST</dt><dd>{liveSummary.error ? "Fix highlighted item" : money(liveSummary.marginCentsExGst)}</dd></div></dl><small>Customers never receive supplier cost, markup or margin.</small></aside>}
@@ -880,22 +927,18 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     {canSendQuote && sendPreview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setSendPreview(null); }}>
       <section ref={previewDialogRef} className="crm-invoice-preview-dialog crm-quote-preview-dialog" role="dialog" aria-modal="true" aria-busy={Boolean(busy)} aria-labelledby="quote-send-preview-title" tabIndex={-1}>
         <header><div><span>{sendPreview.delivery.identityKnown ? "Exact customer delivery" : "Pre-save customer delivery preview"}</span><strong id="quote-send-preview-title">{sendPreview.delivery.subject}</strong><small>{sendPreview.delivery.identityKnown ? `To ${customerEmail} | Issues ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} | PDF attachment ${sendPreview.delivery.attachmentName}` : `To ${customerEmail} | Quote number, version and PDF filename will be confirmed by the server when this draft is saved.`}</small></div><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Close</button></header>
-        <section className="trade-quote-send-consent" aria-label="Confirm customer email consent">
-          <label><input type="checkbox" checked={sendConsent} disabled={Boolean(busy) || sendOutcome.kind === "success" || sendOutcome.kind === "attention"} onChange={(event) => setSendConsent(event.target.checked)} /><span><strong>Confirm before sending</strong>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>
-          {sendOutcome.message && <p className={sendOutcome.kind} role={sendOutcome.kind === "error" || sendOutcome.kind === "attention" ? "alert" : "status"} aria-live="polite">{sendOutcome.message}</p>}
-        </section>
         <div className="trade-quote-send-preview" data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
           <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The sent email opens a secure customer review. This preview button opens the matching PDF content below.</p><button type="button" aria-controls="trade-quote-pdf-preview" onClick={() => { previewPdfRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); previewPdfRef.current?.focus({ preventScroll: true }); }}>Review quote PDF</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
           <section ref={previewPdfRef} id="trade-quote-pdf-preview" className="trade-quote-pdf-attachment" tabIndex={-1}><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Submitted as attachment</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
-            <section><span>Included work</span><div className="trade-quote-preview-lines">{sendPreview.base.lines.length ? sendPreview.base.lines.map((line, index) => <article key={`${line.description}:${index}`}><div><strong>{line.description}</strong><small>{line.sectionHeading} | {(line.quantityMilli / 1000).toLocaleString("en-AU")} x {money(line.unitPriceCents)}{line.taxCode === "gst" ? " plus GST" : " no GST"}</small></div><b>{money(line.totalCents)}</b></article>) : <p>No work is included before the customer chooses an option.</p>}</div></section>
+            <section><span>Included work</span><div className="trade-quote-preview-lines">{sendPreview.base.lines.some((line) => line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION) ? sendPreview.base.lines.filter((line) => line.sectionHeading !== OVERALL_PERCENT_DISCOUNT_SECTION).map((line, index) => <article key={`${line.description}:${index}`}><div><strong>{line.description}</strong><small>{line.sectionHeading} | {(line.quantityMilli / 1000).toLocaleString("en-AU")} x {money(line.unitPriceCents)}{line.taxCode === "gst" ? " plus GST" : " no GST"}</small></div><b>{money(line.totalCents)}</b></article>) : <p>No work is included before the customer chooses an option.</p>}</div></section>
             {sendPreview.choices.length > 0 && <section><span>Customer choices</span><div className="trade-quote-preview-choices">{sendPreview.choices.map((choice) => <article key={choice.clientKey}><div><strong>{choice.name}{choice.recommended ? " | Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Customer choice")}</small></div><b>{choice.kind === "addon" ? `Adds ${money(choice.totals.totalCents)}` : `${money(sendPreview.base.totalCents + choice.totals.totalCents)} total`}</b></article>)}</div></section>}
-            <dl><div><dt>Subtotal</dt><dd>{money(sendPreview.displayTotals.subtotalCents)}</dd></div><div><dt>GST</dt><dd>{money(sendPreview.displayTotals.taxCents)}</dd></div><div className="total"><dt>{sendPreview.displayTotals.label}</dt><dd>{money(sendPreview.displayTotals.totalCents)}</dd></div></dl>
+            <dl><div><dt>Subtotal ex GST</dt><dd>{money(previewGrossSubtotalCents)}</dd></div>{previewOtherDiscountSubtotalCents < 0 && <div><dt>Rebates and dollar discounts ex GST</dt><dd>{money(previewOtherDiscountSubtotalCents)}</dd></div>}{previewFinalPercentLine && <div><dt>{previewFinalPercentLine.description} | Final {(previewFinalPercentLine.quantityMilli / 10).toLocaleString("en-AU")}% discount on included items ex GST</dt><dd>{money(previewFinalPercentSubtotalCents)}</dd></div>}<div><dt>GST</dt><dd>{money(sendPreview.displayTotals.taxCents)}</dd></div><div className="total"><dt>{sendPreview.displayTotals.label}</dt><dd>{money(sendPreview.displayTotals.totalCents)}</dd></div></dl>
             <section className="trade-quote-preview-terms"><span>Recorded terms</span><p>{terms}</p></section>
           </article></section>
         </div>
-        <footer>{sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)
+        <footer className="trade-quote-send-footer"><div className="trade-quote-send-consent" aria-label="Confirm customer email consent"><label><input type="checkbox" checked={sendConsent} disabled={Boolean(busy) || sendOutcome.kind === "success" || sendOutcome.kind === "attention"} onChange={(event) => setSendConsent(event.target.checked)} /><span><strong>Confirm before sending</strong>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>{sendOutcome.message && <p className={sendOutcome.kind} role={sendOutcome.kind === "error" || sendOutcome.kind === "attention" ? "alert" : "status"} aria-live="polite">{sendOutcome.message}</p>}</div><div className="trade-quote-send-footer-actions">{sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)
           ? <button type="button" className="btn" onClick={() => setSendPreview(null)}>Done</button>
-          : <><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : sendOutcome.kind === "error" ? "Try again safely" : "Confirm and submit email"}</button></>}
+          : <><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : sendOutcome.kind === "error" ? "Try again safely" : "Confirm and submit email"}</button></>}</div>
         </footer>
       </section>
     </div>}

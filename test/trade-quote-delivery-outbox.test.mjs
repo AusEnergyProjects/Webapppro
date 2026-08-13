@@ -7,6 +7,11 @@ import {
   tradeQuoteDeliveryStatus,
 } from "../src/lib/trade-quote-delivery-server.ts";
 import {
+  queueTradeQuoteDeliveryDispatch,
+  TRADE_QUOTE_DELIVERY_DISPATCH_HEADER,
+  withTradeQuoteDeliveryDispatch,
+} from "../src/lib/trade-quote-delivery-dispatch.ts";
+import {
   TRADE_QUOTE_DELIVERY_MAX_ATTEMPTS,
   assertTradeQuoteIssueDeliveryAccess,
   tradeQuoteDeliveryCallbackStatus,
@@ -240,6 +245,71 @@ test("a hanging provider cannot hold the browser route because dispatch exists o
     new Promise((resolve) => setTimeout(() => resolve({ status: 500 }), 25)),
   ]);
   assert.deepEqual(observed, { status: 202, delivery: { presentation: { label: "Queued for email" } } });
+});
+
+test("a queued quote schedules its exact delivery and strips the private dispatch header", async () => {
+  const waits = [];
+  const drained = [];
+  let releaseProvider;
+  const provider = new Promise((resolve) => { releaseProvider = resolve; });
+  const routed = withTradeQuoteDeliveryDispatch(
+    Response.json({ ok: true }, { status: 202 }),
+    "delivery-exact",
+  );
+  assert.equal(routed.headers.get(TRADE_QUOTE_DELIVERY_DISPATCH_HEADER), "delivery-exact");
+
+  const browserResponse = queueTradeQuoteDeliveryDispatch(routed, {
+    waitUntil(promise) { waits.push(promise); },
+    async drain(deliveryId) {
+      drained.push(deliveryId);
+      await provider;
+    },
+  });
+  assert.equal(browserResponse.status, 202);
+  assert.equal(browserResponse.headers.has(TRADE_QUOTE_DELIVERY_DISPATCH_HEADER), false);
+  assert.deepEqual(drained, []);
+  await Promise.resolve();
+  assert.deepEqual(drained, ["delivery-exact"]);
+  assert.equal(waits.length, 1);
+  releaseProvider();
+  await waits[0];
+
+  const noDispatch = queueTradeQuoteDeliveryDispatch(
+    Response.json({ ok: true }, { status: 200, headers: {
+      [TRADE_QUOTE_DELIVERY_DISPATCH_HEADER]: "must-not-run",
+    } }),
+    {
+      waitUntil() { throw new Error("unexpected waitUntil"); },
+      async drain() { throw new Error("unexpected drain"); },
+    },
+  );
+  assert.equal(noDispatch.status, 200);
+  assert.equal(noDispatch.headers.has(TRADE_QUOTE_DELIVERY_DISPATCH_HEADER), false);
+
+  const absentDispatch = queueTradeQuoteDeliveryDispatch(
+    Response.json({ ok: true }, { status: 202 }),
+    {
+      waitUntil() { throw new Error("unexpected waitUntil"); },
+      async drain() { throw new Error("unexpected drain"); },
+    },
+  );
+  assert.equal(absentDispatch.status, 202);
+
+  let capturedError = "";
+  const failedWaits = [];
+  queueTradeQuoteDeliveryDispatch(withTradeQuoteDeliveryDispatch(
+    Response.json({ ok: true }, { status: 202 }),
+    "delivery-fails",
+  ), {
+    waitUntil(promise) { failedWaits.push(promise); },
+    async drain() { throw new Error("provider unavailable"); },
+    onError(error) { capturedError = error instanceof Error ? error.message : "unknown"; },
+  });
+  await failedWaits[0];
+  assert.equal(capturedError, "provider unavailable");
+  assert.match(route, /withTradeQuoteDeliveryDispatch/);
+  assert.match(worker, /drainTradeQuoteDeliveries\(\{ db: getD1\(\), deliveryId \}\)/);
+  assert.match(worker, /Trade quote delivery recovery failed\./);
 });
 
 test("an expired fifth-attempt lease becomes terminal attention instead of Sending forever", async () => {

@@ -177,13 +177,31 @@ test("PDF rendering remains compatible with v1 and supports signed v2 discounts"
     assert.equal(Buffer.from(bytes).subarray(0, 4).toString("ascii"), "%PDF");
   }
   assert.doesNotMatch(pdfSource, /Math\.max\(0,\s*Number\(cents\)/);
-  assert.match(pdfSource, /Discount ex GST/);
+  assert.match(pdfSource, /Rebates and dollar discounts ex GST/);
+  assert.match(pdfSource, /finalPercentDescription.*Final.*on included items ex GST/s);
   assert.match(pdfSource, /TOTAL INCL GST/);
   assert.match(pdfSource, /rectangle\(0, boxBottom, A4_WIDTH, boxHeight\)/);
   assert.match(
     pdfSource,
     /if \(snapshot\.customerMessage\)[\s\S]*?messageHeight = Math\.max[\s\S]*?y: y - messageHeight \+ 5,[\s\S]*?height: messageHeight/,
   );
+});
+
+test("final percentage is rendered by the PDF totals breakdown instead of the item body", async () => {
+  const finalSnapshot = snapshot();
+  finalSnapshot.subtotalCents = 81_000;
+  finalSnapshot.taxCents = 8_100;
+  finalSnapshot.totalCents = 89_100;
+  finalSnapshot.items.push({
+    id: "line-3", lineType: "adjustment", description: "Final spring sale", quantityMilli: 100,
+    unitPriceCents: -90_000, subtotalCents: -9_000, taxCents: -900, totalCents: -9_900,
+    sectionHeading: "Overall percentage discount",
+  });
+  const bytes = await createTradeQuotePdfBytes(finalSnapshot);
+  assert.ok(bytes.byteLength > 1_000);
+  assert.match(pdfSource, /snapshot\.items\?\.filter\(\(item\) => !isFinalPercentDiscount\(item\)\)/);
+  assert.match(emailSource, /summaryLines\(headlineItems\.filter\(\(item\) => !isFinalPercentDiscount\(item\)\)\)/);
+  assert.match(emailSource, /Final \$\{finalPercentBasisPoints \/ 10\}% discount on included items ex GST/);
 });
 
 test("v2 snapshot capture uses document identity, crop and signed adjustment fields", () => {
@@ -234,7 +252,8 @@ test("customer quote surfaces share one crop and explicit discount breakdown", (
   assert.match(pdfSource, /pushGraphicsState\(\)[\s\S]*clip\(\)/);
   assert.match(pdfSource, /label\("Quote from"\);\s*if \(logo\)/);
   assert.match(emailSource, /Subtotal ex GST/);
-  assert.match(emailSource, /Discount ex GST/);
+  assert.match(emailSource, /Rebates and dollar discounts ex GST/);
+  assert.match(emailSource, /Final percentage discount on included items ex GST/);
   assert.match(emailSource, /Total incl GST/);
   assert.doesNotMatch(emailSource, />Work<\/div>/);
 });

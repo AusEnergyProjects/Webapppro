@@ -101,6 +101,35 @@ export function quantityToPercentInput(value: string) {
   return Number.isFinite(quantity) ? String(quantity * 100) : "";
 }
 
+function overallPercentQuantityMilli(line: Record<string, unknown>) {
+  if (Number.isInteger(Number(line.quantityMilli))) return Number(line.quantityMilli);
+  const rawQuantity = String(line.quantity || "");
+  return rawQuantity.startsWith("percent:")
+    ? Math.round(Number(rawQuantity.slice("percent:".length)) * 10)
+    : quantityToMilli(rawQuantity);
+}
+
+export function consolidateTradeQuotePercentDiscountLines<T extends object>(rawLines: readonly T[]) {
+  const percentLines = rawLines.filter((line) => overallTradeQuoteDiscountKind(line) === "percent");
+  if (percentLines.length < 2) {
+    const percentLine = percentLines[0];
+    return percentLine
+      ? [...rawLines.filter((line) => line !== percentLine), percentLine]
+      : [...rawLines];
+  }
+  const quantityMilli = percentLines.reduce((sum, line) => sum + overallPercentQuantityMilli(line as Record<string, unknown>), 0);
+  const description = [...new Set(percentLines.map((line) => String((line as Record<string, unknown>).description || "").trim()).filter(Boolean))]
+    .join(" + ")
+    .slice(0, 500) || "Final discount";
+  const finalLine = {
+    ...percentLines.at(-1),
+    description,
+    quantity: `percent:${quantityMilli / 10}`,
+    ...("quantityMilli" in percentLines.at(-1)! ? { quantityMilli } : {}),
+  } as T;
+  return [...rawLines.filter((line) => overallTradeQuoteDiscountKind(line) !== "percent"), finalLine];
+}
+
 export function persistedOverallDiscountUnitPrice(line: { sectionHeading?: unknown; totalCents?: unknown; unitPriceCents?: unknown }) {
   const cents = overallTradeQuoteDiscountKind(line) === "fixed"
     ? Math.abs(Number(line.totalCents || 0))
@@ -158,6 +187,7 @@ export function tradeQuoteLineValidationIssues(
   const records = rawLines.map((line) => line && typeof line === "object" ? line as Record<string, unknown> : null);
   const issues: TradeQuoteLineValidationIssue[] = [];
   const overallDiscountIndexes: number[] = [];
+  const percentDiscountIndexes: number[] = [];
 
   records.forEach((record, lineIndex) => {
     if (!record) {
@@ -169,6 +199,7 @@ export function tradeQuoteLineValidationIssues(
     const description = cleanDescription(record.description);
     const overallDiscount = overallTradeQuoteDiscountKind(record);
     if (overallDiscount) overallDiscountIndexes.push(lineIndex);
+    if (overallDiscount === "percent") percentDiscountIndexes.push(lineIndex);
 
     if (!LINE_TYPES.has(lineType)) {
       issues.push(quoteLineIssue(lineIndex, "lineType", "INVALID_LINES", "choose Product, Labour or Adjustment.", lineLabel));
@@ -229,6 +260,12 @@ export function tradeQuoteLineValidationIssues(
         : "enter a price of $0 or more with no more than 2 decimal places.", lineLabel));
     }
   });
+
+  if (percentDiscountIndexes.length > 1) {
+    issues.push(quoteLineIssue(percentDiscountIndexes.at(-1)!, "quantity", "INVALID_LINES", "use one final percentage discount.", lineLabel));
+  } else if (percentDiscountIndexes.length === 1 && percentDiscountIndexes[0] !== records.length - 1) {
+    issues.push(quoteLineIssue(percentDiscountIndexes[0], "quantity", "INVALID_LINES", "keep the percentage discount as the final control.", lineLabel));
+  }
 
   if (issues.length) return issues;
 
@@ -320,6 +357,11 @@ export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription
   const overallDiscountIndexes = records
     .map((record, index) => overallTradeQuoteDiscountKind(record) ? index : -1)
     .filter((index) => index >= 0);
+  const percentDiscountIndexes = records
+    .map((record, index) => overallTradeQuoteDiscountKind(record) === "percent" ? index : -1)
+    .filter((index) => index >= 0);
+  if (percentDiscountIndexes.length > 1) throw new Error("INVALID_LINES");
+  if (percentDiscountIndexes.length === 1 && percentDiscountIndexes[0] !== records.length - 1) throw new Error("INVALID_LINES");
 
   const parsed = records.map((record, index) => {
     const lineType = String(record.lineType || "") as TradeQuoteLine["lineType"];
@@ -338,49 +380,77 @@ export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription
   });
 
   const ordinaryLines = parsed.flatMap((entry) => entry.line ? [entry.line] : []);
-  const eligibleSubtotalCents = ordinaryLines.reduce((sum, line) => sum + Math.max(0, line.subtotalCents), 0);
-  const eligibleTaxCents = ordinaryLines.reduce((sum, line) => line.subtotalCents > 0 ? sum + Math.max(0, line.taxCents) : sum, 0);
-  const eligibleTotalCents = eligibleSubtotalCents + eligibleTaxCents;
+  const ordinarySubtotalCents = ordinaryLines.reduce((sum, line) => sum + line.subtotalCents, 0);
+  const ordinaryTaxCents = ordinaryLines.reduce((sum, line) => sum + line.taxCents, 0);
+  const ordinaryTotalCents = ordinarySubtotalCents + ordinaryTaxCents;
+  if (ordinarySubtotalCents < 0 || ordinaryTaxCents < 0 || ordinaryTotalCents < 0) throw new Error("INVALID_TOTAL");
+  const overallTaxCode: TradeQuoteLine["taxCode"] = ordinaryTaxCents > 0 ? "gst" : "none";
+  const fixedEntries = parsed.filter((candidate) => candidate.overallDiscount === "fixed").map((entry) => ({
+    entry,
+    discountTotalCents: Math.abs(dollarsToCents(entry.record.unitPrice, true)),
+  }));
+  const requestedFixedDiscountTotalCents = fixedEntries.reduce((sum, value) => sum + value.discountTotalCents, 0);
+  if (fixedEntries.some((value) => value.discountTotalCents <= 0)
+    || requestedFixedDiscountTotalCents > ordinaryTotalCents) throw new Error("INVALID_TOTAL");
+  const fixedLines = new Map<number, TradeQuoteLine>();
+  let allocatedFixedTotalCents = 0;
+  let allocatedFixedSubtotalCents = 0;
+  for (const { entry, discountTotalCents } of fixedEntries) {
+    allocatedFixedTotalCents += discountTotalCents;
+    const targetSubtotalMagnitude = roundRatioHalfAwayFromZero(
+      BigInt(allocatedFixedTotalCents) * BigInt(ordinarySubtotalCents),
+      BigInt(ordinaryTotalCents),
+    );
+    const subtotalMagnitude = targetSubtotalMagnitude - allocatedFixedSubtotalCents;
+    const taxMagnitude = discountTotalCents - subtotalMagnitude;
+    fixedLines.set(entry.index, { lineType: entry.lineType, description: entry.description, quantityMilli: 1000,
+      unitPriceCents: -subtotalMagnitude, taxCode: overallTaxCode, subtotalCents: -subtotalMagnitude,
+      taxCents: -taxMagnitude, totalCents: -discountTotalCents });
+    allocatedFixedSubtotalCents = targetSubtotalMagnitude;
+  }
+  const fixedDiscountSubtotalCents = [...fixedLines.values()].reduce((sum, line) => sum - line.subtotalCents, 0);
+  const fixedDiscountTaxCents = [...fixedLines.values()].reduce((sum, line) => sum - line.taxCents, 0);
+  const fixedDiscountTotalCents = fixedDiscountSubtotalCents + fixedDiscountTaxCents;
+  if (fixedDiscountTotalCents > ordinaryTotalCents) throw new Error("INVALID_TOTAL");
+  const finalPercentBasisSubtotalCents = ordinarySubtotalCents - fixedDiscountSubtotalCents;
+  const finalPercentBasisTaxCents = ordinaryTaxCents - fixedDiscountTaxCents;
+  const finalPercentBasisTotalCents = finalPercentBasisSubtotalCents + finalPercentBasisTaxCents;
+  if (finalPercentBasisSubtotalCents < 0 || finalPercentBasisTaxCents < 0 || finalPercentBasisTotalCents < 0) throw new Error("INVALID_TOTAL");
 
   const lines = parsed.map((entry) => {
     if (entry.line) return entry.line;
-    if (eligibleSubtotalCents <= 0 || eligibleTotalCents <= 0) throw new Error("INVALID_TOTAL");
-    const taxCode: TradeQuoteLine["taxCode"] = eligibleTaxCents > 0 ? "gst" : "none";
+    if (ordinarySubtotalCents <= 0 || ordinaryTotalCents <= 0) throw new Error("INVALID_TOTAL");
+    const taxCode = overallTaxCode;
     if (entry.overallDiscount === "percent") {
       // The persisted quantity is the percentage as a factor: 25% is 0.250.
       // The submitted unit price is deliberately ignored so the server always
-      // recalculates the discount from the current positive quote scope.
+      // recalculates one final discount from the signed included scope after
+      // ordinary rebate lines and fixed dollar discounts.
       const rawQuantity = String(entry.record.quantity || "");
       const quantityMilli = rawQuantity.startsWith("percent:")
         ? Math.round(Number(rawQuantity.slice("percent:".length)) * 10)
         : quantityToMilli(rawQuantity);
       if (!Number.isInteger(quantityMilli) || quantityMilli < 1) throw new Error("INVALID_QUANTITY");
       if (quantityMilli >= 1000) throw new Error("INVALID_TOTAL");
-      const subtotalCents = -roundRatioHalfAwayFromZero(BigInt(eligibleSubtotalCents) * BigInt(quantityMilli), BigInt(1000));
-      const taxCents = -roundRatioHalfAwayFromZero(BigInt(eligibleTaxCents) * BigInt(quantityMilli), BigInt(1000));
+      if (finalPercentBasisSubtotalCents <= 0 || finalPercentBasisTaxCents < 0 || finalPercentBasisTotalCents <= 0) throw new Error("INVALID_TOTAL");
+      const discountTotalMagnitude = roundRatioHalfAwayFromZero(BigInt(finalPercentBasisTotalCents) * BigInt(quantityMilli), BigInt(1000));
+      const subtotalMagnitude = roundRatioHalfAwayFromZero(
+        BigInt(discountTotalMagnitude) * BigInt(finalPercentBasisSubtotalCents),
+        BigInt(finalPercentBasisTotalCents),
+      );
+      const subtotalCents = -subtotalMagnitude;
+      const taxCents = -(discountTotalMagnitude - subtotalMagnitude);
       const totalCents = subtotalCents + taxCents;
       return { lineType: entry.lineType, description: entry.description, quantityMilli,
-        unitPriceCents: -eligibleSubtotalCents, taxCode, subtotalCents, taxCents, totalCents };
+        unitPriceCents: -finalPercentBasisSubtotalCents, taxCode, subtotalCents, taxCents, totalCents };
     }
 
-    // Fixed discounts are entered as the exact customer-facing amount including
-    // GST. Allocate the reduction across subtotal and GST in the same proportion
-    // as the eligible positive quote scope.
-    const discountTotalCents = Math.abs(dollarsToCents(entry.record.unitPrice, true));
-    if (discountTotalCents <= 0 || discountTotalCents > eligibleTotalCents) throw new Error("INVALID_TOTAL");
-    const subtotalMagnitude = roundRatioHalfAwayFromZero(
-      BigInt(discountTotalCents) * BigInt(eligibleSubtotalCents),
-      BigInt(eligibleTotalCents),
-    );
-    const taxMagnitude = discountTotalCents - subtotalMagnitude;
-    return { lineType: entry.lineType, description: entry.description, quantityMilli: 1000,
-      unitPriceCents: -subtotalMagnitude, taxCode, subtotalCents: -subtotalMagnitude,
-      taxCents: -taxMagnitude, totalCents: -discountTotalCents };
+    return fixedLines.get(entry.index)!;
   });
   const overallDiscountTotalCents = parsed.reduce((sum, entry, index) => (
     entry.overallDiscount ? sum + Math.max(0, -lines[index].totalCents) : sum
   ), 0);
-  if (!Number.isSafeInteger(overallDiscountTotalCents) || overallDiscountTotalCents > eligibleTotalCents) {
+  if (!Number.isSafeInteger(overallDiscountTotalCents) || overallDiscountTotalCents > ordinaryTotalCents) {
     throw new Error("INVALID_TOTAL");
   }
   const subtotalCents = lines.reduce((sum, line) => sum + line.subtotalCents, 0);

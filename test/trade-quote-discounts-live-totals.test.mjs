@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
+  consolidateTradeQuotePercentDiscountLines,
   normaliseTradeQuoteLineGroup,
   moveTradeQuoteLine,
   overallTradeQuoteDiscountKind,
@@ -18,6 +19,8 @@ import {
 const clean = (value) => String(value || "").trim().slice(0, 500);
 const ui = fs.readFileSync(new URL("../src/components/TradeQuotePanel.tsx", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+const pdf = fs.readFileSync(new URL("../src/lib/trade-quote-pdf.mjs", import.meta.url), "utf8");
+const email = fs.readFileSync(new URL("../src/lib/trade-quote-email.ts", import.meta.url), "utf8");
 
 const product = (unitPrice = "1000.00", taxCode = "gst") => ({
   lineType: "product",
@@ -134,14 +137,14 @@ test("fixed discount save reload resave keeps the entered incl GST amount", () =
   assert.equal(reloaded.totalCents, original.totalCents);
 });
 
-test("multiple separately labelled discounts stack without reducing below zero", () => {
+test("fixed discount rows apply before the one final percentage without reducing below zero", () => {
   const percent = { lineType: "adjustment", description: "Sale", quantity: "0.25", unitPrice: "0", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION };
   const fixed = { lineType: "adjustment", description: "Referral", quantity: "1", unitPrice: "50", taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
-  const stacked = normaliseTradeQuoteLineGroup([product(), percent, fixed], clean);
-  assert.deepEqual(stacked.lines.map((line) => line.description), ["Installed system", "Sale", "Referral"]);
+  const stacked = normaliseTradeQuoteLineGroup([product(), fixed, percent], clean);
+  assert.deepEqual(stacked.lines.map((line) => line.description), ["Installed system", "Referral", "Sale"]);
   assert.deepEqual(
     { subtotalCents: stacked.subtotalCents, taxCents: stacked.taxCents, totalCents: stacked.totalCents },
-    { subtotalCents: 70_455, taxCents: 7_045, totalCents: 77_500 },
+    { subtotalCents: 71_591, taxCents: 7_159, totalCents: 78_750 },
   );
   const certificates = normaliseTradeQuoteLineGroup([product(),
     { ...fixed, description: "STC x 10", unitPrice: "400" },
@@ -162,6 +165,79 @@ test("multiple separately labelled discounts stack without reducing below zero",
   assert.equal(free.totalCents, 0);
 });
 
+test("screenshot STC line reduces the net basis before the final 10 percent discount", () => {
+  const quote = normaliseTradeQuoteLineGroup([
+    { ...product("200"), quantity: "6", description: "Call-out" },
+    { ...product("-38"), lineType: "adjustment", quantity: "30", description: "STC" },
+    { lineType: "adjustment", description: "Final sale", quantity: "percent:10", unitPrice: "0",
+      taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION },
+  ], clean);
+  assert.deepEqual(
+    { subtotalCents: quote.subtotalCents, taxCents: quote.taxCents, totalCents: quote.totalCents },
+    { subtotalCents: 5_400, taxCents: 540, totalCents: 5_940 },
+  );
+  assert.deepEqual(
+    { subtotalCents: quote.lines[2].subtotalCents, taxCents: quote.lines[2].taxCents, totalCents: quote.lines[2].totalCents },
+    { subtotalCents: -600, taxCents: -60, totalCents: -660 },
+  );
+});
+
+test("final percentage uses one rounded incl GST amount and preserves cent parity", () => {
+  const percent = { lineType: "adjustment", description: "Final", quantity: "percent:50", unitPrice: "0",
+    taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION };
+  const edge = normaliseTradeQuoteLineGroup([product("0.05", "gst"), percent], clean);
+  assert.equal(edge.lines[1].totalCents, -3);
+  assert.equal(edge.lines[1].subtotalCents + edge.lines[1].taxCents, -3);
+  assert.equal(edge.totalCents, 3);
+
+  const fixedCent = { lineType: "adjustment", description: "Fixed cent", quantity: "1", unitPrice: "0.01",
+    taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
+  const mixed = normaliseTradeQuoteLineGroup([
+    product("0.05", "gst"), product("0.05", "none"), fixedCent, { ...fixedCent, description: "Second cent" }, percent,
+  ], clean);
+  assert.equal(mixed.lines[4].totalCents, -5);
+  assert.equal(mixed.lines[4].subtotalCents + mixed.lines[4].taxCents, -5);
+  assert.equal(mixed.totalCents, 4);
+});
+
+test("many one-cent fixed discounts allocate cumulatively without making subtotal or GST negative", () => {
+  const fixedCents = Array.from({ length: 6 }, (_, index) => ({
+    lineType: "adjustment", description: `Fixed cent ${index + 1}`, quantity: "1", unitPrice: "0.01",
+    taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION,
+  }));
+  const quote = normaliseTradeQuoteLineGroup([product("0.05", "gst"), ...fixedCents], clean);
+  assert.deepEqual(
+    { subtotalCents: quote.subtotalCents, taxCents: quote.taxCents, totalCents: quote.totalCents },
+    { subtotalCents: 0, taxCents: 0, totalCents: 0 },
+  );
+  assert.equal(quote.lines.slice(1).reduce((sum, line) => sum + line.totalCents, 0), -6);
+  assert.equal(quote.lines.slice(1).reduce((sum, line) => sum + line.subtotalCents, 0), -5);
+  assert.equal(quote.lines.slice(1).reduce((sum, line) => sum + line.taxCents, 0), -1);
+  assert.ok(quote.lines.every((line) => line.subtotalCents + line.taxCents === line.totalCents));
+});
+
+test("legacy multiple percentage rows consolidate deterministically then resave as one final row", () => {
+  const legacy = [product(),
+    { lineType: "adjustment", description: "Winter", quantityMilli: 100, quantity: "0.1", unitPrice: "0", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION },
+    { lineType: "adjustment", description: "Loyalty", quantityMilli: 150, quantity: "0.15", unitPrice: "0", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION },
+  ];
+  const consolidated = consolidateTradeQuotePercentDiscountLines(legacy);
+  assert.equal(consolidated.length, 2);
+  assert.equal(consolidated.at(-1).quantity, "percent:25");
+  assert.equal(consolidated.at(-1).quantityMilli, 250);
+  assert.equal(consolidated.at(-1).description, "Winter + Loyalty");
+  const saved = normaliseTradeQuoteLineGroup(consolidated, clean);
+  const reloaded = normaliseTradeQuoteLineGroup(consolidateTradeQuotePercentDiscountLines([
+    product(), { ...consolidated.at(-1), quantity: (saved.lines[1].quantityMilli / 1000).toString() },
+  ]), clean);
+  assert.equal(saved.totalCents, 82_500);
+  assert.equal(reloaded.totalCents, saved.totalCents);
+  assert.throws(() => normaliseTradeQuoteLineGroup(legacy, clean), /INVALID_LINES/);
+  const oneLegacyMiddle = consolidateTradeQuotePercentDiscountLines([legacy[0], legacy[1], product("200")]);
+  assert.equal(overallTradeQuoteDiscountKind(oneLegacyMiddle.at(-1)), "percent");
+  assert.throws(() => normaliseTradeQuoteLineGroup([legacy[0], legacy[1], product("200")], clean), /INVALID_LINES/);
+});
+
 test("persisted adjustment discriminator round-trips and customer label stays editable", () => {
   const persistedPercent = { lineType: "adjustment", description: "Winter offer", quantityMilli: 150, unitPriceCents: -100_000, taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION };
   const persistedFixed = { ...persistedPercent, sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
@@ -171,13 +247,21 @@ test("persisted adjustment discriminator round-trips and customer label stays ed
   assert.match(ui, /onChange=\{\(event\) => onChange\("description", event\.target\.value\)\}/);
 });
 
-test("UI exposes two compact permission-gated actions and appends separate discount lines", () => {
-  assert.match(ui, /canApplyDiscounts && <><button className="quote-discount-action"/);
-  assert.match(ui, />\+ Percent discount<\/button>/);
+test("UI exposes repeatable fixed rows and one final percentage control", () => {
   assert.match(ui, />\+ Dollar discount<\/button>/);
-  assert.match(ui, /setLines\(\(current\) => \[\.\.\.current, next\]\)/);
+  assert.doesNotMatch(ui, />\+ Percent discount<\/button>/);
+  assert.match(ui, /Add final percentage discount/);
+  assert.match(ui, /This applies once to the net included items\. Customer choices and optional extras are unchanged\./);
+  assert.match(ui, /consolidateTradeQuotePercentDiscountLines\(current\.items\.map/);
+  assert.match(ui, /appendBeforeFinalPercent\(current, line\)/);
+  assert.match(ui, /packetLines\(packet, "Included work"\)\.reduce\([\s\S]*?appendBeforeFinalPercent\(next, line\)/);
   assert.match(ui, /readOnly=\{!canApplyDiscounts\}/);
-  assert.match(ui, /The submitted unit price is deliberately ignored|normaliseTradeQuoteLineGroup/);
+  assert.match(ui, /data-quote-validation-target=\{`base:\$\{finalPercentIndex\}:description`\}/);
+  assert.match(ui, /data-quote-validation-target=\{`base:\$\{finalPercentIndex\}:quantity`\}/);
+  assert.match(pdf, /filter\(\(item\) => !isFinalPercentDiscount\(item\)\)/);
+  assert.match(pdf, /finalPercentDescription.*Final.*on included items ex GST/s);
+  assert.match(email, /Final percentage discount on included items ex GST/);
+  assert.match(email, /finalPercentDescription.*Final.*discount on included items ex GST/s);
 });
 
 test("quote rows retain complete objects when reordered", () => {
@@ -223,11 +307,20 @@ test("every base and choice row uses one price-book dropdown or an editable cust
   assert.match(ui, /replaceChoiceLine\(choice\.clientKey, index, replacement\)/);
 });
 
-test("preview exposes consent and a working PDF review control before the tall document", () => {
+test("preview keeps one consent control in the sticky footer beside send actions", () => {
   const modal = ui.slice(ui.indexOf('className="crm-invoice-preview-dialog crm-quote-preview-dialog"'));
   const consent = modal.indexOf('className="trade-quote-send-consent"');
   const pdf = modal.indexOf('id="trade-quote-pdf-preview"');
-  assert.ok(consent >= 0 && consent < pdf);
+  assert.ok(consent > pdf);
+  assert.equal(modal.match(/className="trade-quote-send-consent"/g)?.length, 1);
+  assert.match(modal, /className="trade-quote-send-footer"/);
+  assert.match(css, /\.trade-quote-send-footer \{[^}]*position: sticky;[^}]*bottom: 0/);
+  assert.match(css, /\.trade-quote-send-footer-actions[^}]*display: flex/);
+  assert.match(css, /\.trade-quote-send-footer \{ grid-template-columns: 1fr; \}/);
+  assert.match(modal, /disabled=\{Boolean\(busy\) \|\| !sendConsent\}/);
+  assert.match(modal, /previewGrossSubtotalCents/);
+  assert.match(modal, /previewOtherDiscountSubtotalCents/);
+  assert.match(modal, /previewFinalPercentSubtotalCents/);
   assert.match(modal, /Review quote PDF/);
   assert.match(modal, /previewPdfRef\.current\?\.scrollIntoView/);
   assert.match(modal, /aria-controls="trade-quote-pdf-preview"/);
