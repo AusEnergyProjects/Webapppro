@@ -95,6 +95,122 @@
   outline: none;
 }
 
+.detailSection {
+  background: #f8fbfa;
+  border: 1px solid #c9ddd8;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.detailSection > h4,
+.detailHeading {
+  align-items: center;
+  background: #eaf4f1;
+  border-bottom: 1px solid #c9ddd8;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.detailHeading h4 { margin: 0; }
+.detailHeading > div { display: grid; gap: 2px; }
+.detailHeading > div > span { color: #5a736d; font-size: 9px; font-weight: 850; letter-spacing: .03em; text-transform: uppercase; }
+
+.detailHeading button {
+  background: white;
+  border: 1px solid #8eb7ad;
+  border-radius: 7px;
+  color: #0a5649;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 5px 10px;
+}
+
+.detailGrid {
+  background: #dce8e4;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.detailGrid > div {
+  background: #fff;
+  min-width: 0;
+  padding: 9px 12px;
+}
+
+.detailGrid .wideDetail { grid-column: 1 / -1; }
+
+.detailGrid dt {
+  color: #5a736d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.detailGrid dd {
+  color: #123f37;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.detailGrid a { color: #087f68; }
+
+.contextNote {
+  color: #536963;
+  font-size: 11px;
+  margin: 0;
+  padding: 9px 12px 11px;
+}
+
+.protectedCustomer { background: #f4f8fb; }
+.protectedCustomer > div:last-child { margin: 12px; }
+
+.assignmentForm {
+  align-items: end;
+  background: #f7faf9;
+  border: 1px solid #c9ddd8;
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 420px) auto;
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.assignmentForm label { display: grid; gap: 5px; }
+.assignmentForm label span { color: #45645c; font-size: 11px; font-weight: 800; }
+
+.assignmentForm select {
+  background: white;
+  border: 1px solid #b9d1c9;
+  border-radius: 8px;
+  color: #123f37;
+  font: inherit;
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.assignmentForm button { min-height: 40px; white-space: nowrap; }
+
 @media (max-width: 900px) {
   .toolbar { grid-template-columns: 1fr 1fr; }
+  .assignmentForm { grid-template-columns: minmax(0, 1fr) auto; }
+}
+
+@media (max-width: 560px) {
+  .detailGrid { grid-template-columns: 1fr; }
+  .detailGrid .wideDetail { grid-column: auto; }
+  .assignmentForm { align-items: stretch; grid-template-columns: 1fr; }
 }

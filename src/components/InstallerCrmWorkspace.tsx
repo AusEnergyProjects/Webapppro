@@ -814,6 +814,15 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     setScheduleWeekStart(weekStart || "");
     setView("schedule");
   }
+  function openJobCustomerEditor(job: Job) {
+    if (!job.crmCustomerId || job.customerSource === "platform_private") return;
+    setJobActionId("");
+    setFocusedJobId("");
+    setSelectedJobDetail(null);
+    setSelectedCustomerDetail(null);
+    setSelectedCustomerId(job.crmCustomerId);
+    setView("customers");
+  }
   function openJobActions(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, jobId: string) {
     if ("button" in event && event.button !== 2) return;
     event.preventDefault();
@@ -824,7 +833,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     const requestedTop = pointer ? event.clientY : rect.top + 36;
     setJobActionPosition({
       left: Math.max(8, Math.min(requestedLeft, window.innerWidth - 196)),
-      top: Math.max(8, Math.min(requestedTop, window.innerHeight - 196)),
+      top: Math.max(8, Math.min(requestedTop, window.innerHeight - 236)),
     });
     setJobActionId(jobId);
   }
@@ -836,7 +845,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         const rect = event.currentTarget.getBoundingClientRect();
         setJobActionPosition({
           left: Math.max(8, Math.min(rect.right - 180, window.innerWidth - 196)),
-          top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 196)),
+          top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 236)),
         });
         setJobActionId(job.id);
       }}>Actions</button>
@@ -850,6 +859,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       }}>
         <button autoFocus role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "summary"); }}>View details</button>
         {(!staffPermissions || staffPermissions.canManageJobs) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "summary"); }}>Edit details</button>}
+        {(!staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canManageCustomers)) && job.customerSource !== "platform_private" && job.crmCustomerId && <button role="menuitem" type="button" onClick={() => openJobCustomerEditor(job)}>Edit customer</button>}
         {(!staffPermissions || staffPermissions.canAssignJobs) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "assignment"); }}>Assign job</button>}
         {(!staffPermissions || staffPermissions.canRescheduleJobs) && <button role="menuitem" type="button" onClick={() => { setJobActionId(""); openFocusedJob(job.id, "schedule"); }}>Schedule job</button>}
       </div>, document.body)}
@@ -1187,6 +1197,8 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   const siteAddressSummary = jobSite
     ? [jobSite.addressLine1, jobSite.addressLine2, jobSite.suburb, jobSite.addressState, jobSite.postcode].filter(Boolean).join(", ")
     : "";
+  const hasCustomerContext = Boolean(customerContactSummary || siteAddressSummary);
+  const customerContextLabel = isReleasedLead ? "Customer-authorised lead" : customer ? "Your customer record" : "Internal job";
   const complianceCases = job.complianceCases || [];
   const complianceIntents = job.complianceIntents?.length ? job.complianceIntents : job.complianceIntent ? [job.complianceIntent] : [];
   const unlinkedComplianceIntents = complianceIntents.filter((intent) => !intent.complianceCaseId);
@@ -1200,6 +1212,7 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   const canManageQuotes = !permissions || permissions.canManageQuotes;
   const canSendQuotes = !permissions || permissions.canSendQuotes;
   const canViewCustomerRecords = !permissions || permissions.canViewCustomers;
+  const canManageCustomerRecords = !permissions || (permissions.canViewCustomers && permissions.canManageCustomers);
   const canSearchCustomerRecords = !permissions || (permissions.canViewCustomers && permissions.canSearchCustomers);
   const canViewInvoices = !permissions || permissions.canViewInvoices;
   const canManageInvoices = !permissions || permissions.canManageInvoices;
@@ -1268,6 +1281,35 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
       setAppointmentAssigneesLoading(false);
     }
   }, [canAssignJobs, job.serviceCategory, user]);
+  const loadAllJobAssignees = useCallback(async () => {
+    if (!canAssignJobs) return;
+    setAppointmentAssigneesLoading(true);
+    setAssignmentStatus("");
+    try {
+      const token = await user.getIdToken();
+      const firstParams = new URLSearchParams({ assigneePage: "1", assigneePageSize: "50", assigneeCapability: job.serviceCategory });
+      const firstResponse = await fetch(`/api/trade-team?${firstParams}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const firstResult = await firstResponse.json().catch(() => ({})) as { assignees?: TeamMember[]; assigneeRoster?: AssigneeRoster; error?: string };
+      if (!firstResponse.ok) throw new Error(firstResult.error || "Available team members could not be loaded.");
+      const roster = firstResult.assigneeRoster;
+      const combined = [...(firstResult.assignees || [])];
+      for (let page = 2; page <= (roster?.totalPages || 1); page += 1) {
+        const params = new URLSearchParams({ assigneePage: String(page), assigneePageSize: "50", assigneeCapability: job.serviceCategory });
+        const response = await fetch(`/api/trade-team?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const result = await response.json().catch(() => ({})) as { assignees?: TeamMember[]; error?: string };
+        if (!response.ok) throw new Error(result.error || "Available team members could not be loaded.");
+        combined.push(...(result.assignees || []));
+      }
+      setAppointmentAssignees(combined.filter((member, index) => combined.findIndex((candidate) => candidate.id === member.id) === index));
+      setAppointmentAssigneeRoster(roster || null);
+    } catch (error) {
+      setAppointmentAssignees([]);
+      setAppointmentAssigneeRoster(null);
+      setAssignmentStatus(error instanceof Error ? error.message : "Available team members could not be loaded.");
+    } finally {
+      setAppointmentAssigneesLoading(false);
+    }
+  }, [canAssignJobs, job.serviceCategory, user]);
   const mainTabs: Array<readonly [JobDetailTab, string]> = [["summary", "Overview"]];
   if (canAssignJobs) mainTabs.push(["assignment", "Assign"]);
   if (canViewJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);
@@ -1282,15 +1324,43 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   const moreActive = moreTabs.some(([value]) => value === activeTab);
   useEffect(() => {
     if (!canAssignJobs || (activeTab !== "schedule" && activeTab !== "assignment")) return;
-    const frame = window.requestAnimationFrame(() => { void loadAppointmentAssignees(); });
+    const frame = window.requestAnimationFrame(() => {
+      if (activeTab === "assignment") void loadAllJobAssignees();
+      else void loadAppointmentAssignees();
+    });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeTab, canAssignJobs, loadAppointmentAssignees]);
+  }, [activeTab, canAssignJobs, loadAllJobAssignees, loadAppointmentAssignees]);
   return <article className="crm-job-card"><header className="crm-job-card-header"><div><span>{job.workNumber}</span><h3>{job.title}</h3><small>{serviceLabels[job.serviceCategory] || job.serviceCategory}{job.siteArea ? ` | ${job.siteArea}` : ""}</small></div><div className="crm-job-header-actions"><strong>{pipelineLabels[job.pipelineStage] || job.pipelineStage}</strong><span className={isProtected ? "protected" : "owned"}>{isProtected ? "Australian Energy Assessments protected" : customer ? "Your customer" : "Internal"}</span>{canViewFieldEvidence && !isProtected && customer && <button type="button" className="crm-request-info-button" onClick={() => setTab("field")}>Request info</button>}</div></header>
     <nav className="crm-job-tabs" aria-label="Job card sections">{mainTabs.map(([value, label]) => <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setTab(value)}>{label}</button>)}<AccessibleMenu className="crm-job-more" active={moreActive} label={moreActive ? activeTab[0].toUpperCase() + activeTab.slice(1) : "More"}>{(close) => moreTabs.map(([value, label]) => <button role="menuitem" key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => { setTab(value); close(); }}>{label}</button>)}</AccessibleMenu></nav>
     {activeTab === "summary" && <section className="crm-job-section crm-summary-workspace">
+        <section className={registerStyles.detailSection} aria-labelledby={`job-information-${job.id}`}>
+          <h4 id={`job-information-${job.id}`}>Job information</h4>
+          <dl className={registerStyles.detailGrid}>
+            <div><dt>Job ID</dt><dd>{job.workNumber}</dd></div>
+            <div><dt>Status</dt><dd>{job.jobRegister?.operationalStatus ? job.jobRegister.operationalStatus[0].toUpperCase() + job.jobRegister.operationalStatus.slice(1) : pipelineLabels[job.pipelineStage] || job.pipelineStage}</dd></div>
+            <div><dt>Work type</dt><dd>{serviceLabels[job.serviceCategory] || job.serviceCategory || "Not added"}</dd></div>
+            <div><dt>Assigned worker</dt><dd>{job.assigneeLabel || "Unassigned"}</dd></div>
+            <div><dt>Scheduled date</dt><dd>{job.scheduledStart ? dateLabel(job.scheduledStart, true) : "Unassigned"}</dd></div>
+            <div><dt>Priority</dt><dd>{job.priority ? job.priority[0].toUpperCase() + job.priority.slice(1) : "Standard"}</dd></div>
+          </dl>
+        </section>
+        <section className={`${registerStyles.detailSection} ${isProtected ? registerStyles.protectedCustomer : ""}`} aria-labelledby={`customer-information-${job.id}`}>
+          <div className={registerStyles.detailHeading}><div><span>{customerContextLabel}</span><h4 id={`customer-information-${job.id}`}>Customer information</h4></div>{canManageCustomerRecords && !isProtected && customer?.id && <button type="button" onClick={() => onOpenCustomer(customer.id)}>Edit customer</button>}</div>
+          {isProtected ? <div className="crm-customer-boundary protected"><span>Australian Energy Assessments protected customer</span><strong>Protected reference {job.customerReference || job.workNumber}</strong><p>Australian Energy Assessments manages the household relationship. Only the project scope, broad service region and protected reference are available until the customer authorises contact.</p></div> : customer ? <>
+            <dl className={registerStyles.detailGrid}>
+              <div><dt>First name</dt><dd>{customer.firstName || "Not added"}</dd></div>
+              <div><dt>Last name</dt><dd>{customer.lastName || "Not added"}</dd></div>
+              <div><dt>Contact number</dt><dd>{customer.phone ? <a href={phoneHref(customer.phone)}>{customer.phone}</a> : "Not added"}</dd></div>
+              <div><dt>Email</dt><dd>{customer.email ? <a href={`mailto:${customer.email}`}>{customer.email}</a> : "Not added"}</dd></div>
+              <div className={registerStyles.wideDetail}><dt>Street address</dt><dd>{[jobSite?.addressLine1 || customer.addressLine1, jobSite?.addressLine2 || customer.addressLine2].filter(Boolean).join(", ") || "Not added"}</dd></div>
+              <div><dt>Suburb</dt><dd>{jobSite?.suburb || customer.suburb || "Not added"}</dd></div>
+              <div><dt>State</dt><dd>{jobSite?.addressState || customer.addressState || "Not added"}</dd></div>
+              <div><dt>Postcode</dt><dd>{jobSite?.postcode || customer.postcode || "Not added"}</dd></div>
+            </dl>
+            <p className={registerStyles.contextNote}>{isReleasedLead ? "This accepted job contains only the customer-disclosed contact and property details saved for your business." : hasCustomerContext ? "This customer contacted your business directly." : "The customer is linked, but contact and address details have not been added."}</p>
+          </> : <p className={registerStyles.contextNote}>No customer is linked to this internal job.</p>}
+        </section>
       <form className="crm-form" onSubmit={saveSummary}><fieldset disabled={!canManageJobs} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
-        <div className="crm-readonly-id"><span>TLink job ID</span><strong>{job.workNumber}</strong><small>This same ID is used by your team, the assigned compliance team and TLink support.</small></div>
-        <div className={isProtected ? "crm-customer-boundary protected" : "crm-customer-boundary owned"}><span>{isReleasedLead ? "Customer-authorised lead" : isProtected ? "Australian Energy Assessments protected customer" : "Your customer record"}</span><strong>{isProtected ? `Protected reference ${job.customerReference || job.workNumber}` : jobCustomerName}</strong><p>{isProtected ? "Australian Energy Assessments manages the household relationship. The installer sees only the project scope, broad service region and protected reference." : isReleasedLead ? [customerContactSummary, siteAddressSummary].filter(Boolean).join(" | ") || "Only the contact and property fields the customer chose to share are stored with this accepted job." : customer ? [customerContactSummary, siteAddressSummary].filter(Boolean).join(" | ") : "Link a customer who contacted your business directly, or keep this as internal work."}</p>{isReleasedLead && <small>This accepted job contains only the customer-disclosed contact and property details saved for your business.</small>}</div>
         {complianceIntents.map((intent) => <section className="crm-job-compliance" key={intent.id}><header><div><span>Planned government activity</span><h4>{intent.programCode} | {intent.registryActivityCode || intent.activityKey} | {intent.activityTitle}</h4></div><strong>{intent.status === "case_linked" ? "Case linked" : "Setup required"}</strong></header><p>{intent.siteJurisdiction} | {serviceLabels[intent.serviceCategory] || intent.serviceCategory} | planned {dateLabel(intent.plannedStart, true)}</p><p>{intent.status === "case_linked" ? "This activity is linked to its compliance case." : "Confirm the governed activity, product, scenario and evidence requirements before work starts."}</p>{intent.officialSourceUrl && <a href={intent.officialSourceUrl} target="_blank" rel="noreferrer">Open official program source</a>}</section>)}
         <div className="crm-form-grid">{canSearchCustomerRecords && !isProtected && !isReleasedLead && <CustomerLookupSelect user={user} initialCustomer={customer} />}{!isProtected && !isReleasedLead && customer && <label><span>Authoritative service site</span><select name="serviceSiteId" defaultValue={job.serviceSiteId}><option value="">Choose later</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel} | {[site.suburb, site.addressState, site.postcode].filter(Boolean).join(" ") || "Address not added"}</option>)}</select></label>}<label><span>Sales stage</span><select name="pipelineStage" defaultValue={job.pipelineStage}>{Object.entries(pipelineLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Work stage</span><select name="stage" defaultValue={job.stage}>{Object.entries(workStageLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Building type</span><select name="buildingType" defaultValue={job.buildingType || "not_sure"}>{[["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]].map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Priority</span><select name="priority" defaultValue={job.priority}><option value="low">Low</option><option value="standard">Standard</option><option value="high">High</option><option value="urgent">Urgent</option></select></label></div>
         {canManageJobs && <button className="btn" disabled={busy === `job:${job.id}`}>Save summary</button>}
@@ -1299,7 +1369,7 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
       {!permissions && canManageFieldEvidence && !isProtected && customer && complianceIntents.length === 0 && complianceCases.length === 0 && <TradeComplianceIntake user={user} workOrderId={job.id} onChanged={onReload} />}
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
-    {activeTab === "assignment" && canAssignJobs && <section className="crm-job-section"><div className="crm-section-heading"><div><span>Job ownership</span><h4>Assign or reassign this job</h4><p>Choose an active team member who performs this work. This changes job access, not the appointment time.</p></div></div><form className="crm-inline-form" onSubmit={assignJob}><label><span>Assigned team member</span><select value={jobAssigneeId} disabled={assignmentBusy || appointmentAssigneesLoading} onChange={(event) => setJobAssigneeId(event.target.value)}><option value="">Unassigned</option>{jobAssigneeId && !allowedJobAssignees.some((member) => member.id === jobAssigneeId) && <option value={jobAssigneeId}>{job.assigneeLabel || "Current assignee"}</option>}{allowedJobAssignees.map((member) => <option value={member.id} key={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><label><span>Find an active teammate</span><input type="search" value={appointmentAssigneeSearch} onChange={(event) => setAppointmentAssigneeSearch(event.target.value)} placeholder="Search by name" /></label><button type="button" disabled={appointmentAssigneesLoading} onClick={() => void loadAppointmentAssignees(appointmentAssigneeSearch)}>{appointmentAssigneesLoading ? "Searching..." : "Search team"}</button>{appointmentAssigneeRoster && appointmentAssigneeRoster.page < appointmentAssigneeRoster.totalPages && <button type="button" disabled={appointmentAssigneesLoading} onClick={() => void loadAppointmentAssignees(appointmentAssigneeRoster.search, appointmentAssigneeRoster.page + 1, true)}>Load more</button>}<button className="btn" disabled={assignmentBusy}>{assignmentBusy ? "Saving..." : "Save assignment"}</button></form>{assignmentStatus && <p role="status">{assignmentStatus}</p>}</section>}
+    {activeTab === "assignment" && canAssignJobs && <section className="crm-job-section"><div className="crm-section-heading"><div><span>Job ownership</span><h4>Assign or reassign this job</h4><p>Choose an active team member who performs this work. This changes job access, not the appointment time.</p></div></div><form className={registerStyles.assignmentForm} onSubmit={assignJob}><label><span>Assigned team member</span><select value={jobAssigneeId} disabled={assignmentBusy || appointmentAssigneesLoading} onChange={(event) => setJobAssigneeId(event.target.value)}><option value="">Unassigned</option>{jobAssigneeId && !allowedJobAssignees.some((member) => member.id === jobAssigneeId) && <option value={jobAssigneeId}>{job.assigneeLabel || "Current assignee"}</option>}{allowedJobAssignees.map((member) => <option value={member.id} key={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><button className="btn" disabled={assignmentBusy || appointmentAssigneesLoading}>{appointmentAssigneesLoading ? "Loading team..." : assignmentBusy ? "Saving..." : "Save assignment"}</button></form>{assignmentStatus && <p role="status">{assignmentStatus}</p>}</section>}
     {activeTab === "field" && canViewFieldEvidence && <section className="crm-job-section"><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} />{!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary"><summary>Customer photo request</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}{!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}</section>}
     {activeTab === "forms" && canViewFieldEvidence && <section className="crm-job-section"><TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section>}
     {activeTab === "schedule" && <section className="crm-job-section"><div className="crm-section-heading"><div><span>Appointments</span><h4>Calls, visits and installations</h4></div></div>{visibleJobAppointments.length ? <ol className="crm-job-appointments">{visibleJobAppointments.map((item) => <li key={item.id}><div><span>{appointmentLabels[item.appointmentType] || item.appointmentType}</span><strong>{item.title}</strong><small>{dateLabel(item.startsAt, true)} | {durationLabel(appointmentDurationMinutes(item.startsAt, item.endsAt))}{item.assigneeLabel ? ` | ${item.assigneeLabel}` : ""}</small>{item.notes && <p>{item.notes}</p>}</div>{canCompleteAppointment(item) && <button type="button" disabled={item.status !== "scheduled" || busy === `appointment:${item.id}`} onClick={() => void onCrm("PATCH", { action: "update_appointment", appointmentId: item.id, status: "completed" }, `appointment:${item.id}`, "Appointment marked complete.")}>{item.status === "scheduled" ? "Complete" : item.status.replaceAll("_", " ")}</button>}</li>)}</ol> : <div className="crm-empty"><strong>No appointments in your schedule</strong><span>{permissions?.scheduleScope === "own" ? "Only appointments assigned to you appear here." : "Add the next call, site visit or installation."}</span></div>}{canAddJobAppointment && <form className="crm-inline-form" onSubmit={addAppointment}><select name="appointmentType" aria-label="Appointment type">{Object.entries(appointmentLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>{canChooseTeamAppointmentAssignee ? <><select name="assigneeMemberId" aria-label="Assigned team member" value={appointmentAssigneeId} required onChange={(event) => setAppointmentAssigneeId(event.target.value)}><option value="">Choose team member</option>{allowedAppointmentAssignees.map((member) => <option value={member.id} key={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select><label><span>Find an active teammate</span><input type="search" value={appointmentAssigneeSearch} onChange={(event) => setAppointmentAssigneeSearch(event.target.value)} placeholder="Search by name" /></label><button type="button" disabled={appointmentAssigneesLoading} onClick={() => void loadAppointmentAssignees(appointmentAssigneeSearch)}>{appointmentAssigneesLoading ? "Searching..." : "Search team"}</button>{appointmentAssigneeRoster && appointmentAssigneeRoster.page < appointmentAssigneeRoster.totalPages && <button type="button" disabled={appointmentAssigneesLoading} onClick={() => void loadAppointmentAssignees(appointmentAssigneeRoster.search, appointmentAssigneeRoster.page + 1, true)}>Load more</button>}</> : <><input type="hidden" name="assigneeMemberId" value={scheduleMemberId} /><span>{job.assigneeLabel || selfMember?.displayName || "Assigned to you"}</span></>}<input type="datetime-local" name="startsAt" min={minimumStart} step="900" required aria-label="Start time" /><label className="schedule-duration"><span>Duration <strong>{durationLabel(appointmentDuration)}</strong></span><input type="range" min="15" max="480" step="15" value={appointmentDuration} onChange={(event) => setAppointmentDuration(Number(event.target.value))} /></label><input name="notes" maxLength={1000} placeholder="Visit notes" /><button disabled={busy === `appointment-new:${job.id}`}>Add appointment</button></form>}</section>}

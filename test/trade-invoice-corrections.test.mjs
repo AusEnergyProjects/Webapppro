@@ -5,6 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { creditTotals, invoiceBalance } from "../src/lib/trade-invoice-balance.ts";
 import {
+  moveInvoiceLine,
+  moveInvoiceLineTo,
+} from "../src/lib/trade-invoice-line-reorder.ts";
+import {
   normaliseQuickInvoiceDocumentSnapshot,
   quickInvoiceTotals,
 } from "../src/lib/trade-quick-invoice.ts";
@@ -42,6 +46,40 @@ test("invoice balances retain exact cents and reject over-allocation", () => {
   assert.throws(() => invoiceBalance({ totalCents: 1000, creditedCents: 600, paidCents: 500 }), /INVOICE_BALANCE_EXCEEDED/);
 });
 
+test("draft invoice line ordering preserves each line and its entered values", () => {
+  const lines = [
+    { id: "line-a", description: "Assessment", amount: "165.00", taxCode: "gst" },
+    { id: "line-b", description: "Report", amount: "85.50", taxCode: "none" },
+    { id: "line-c", description: "Travel", amount: "24.00", taxCode: "gst" },
+  ];
+
+  const movedDown = moveInvoiceLine(lines, "line-a", 1);
+  assert.deepEqual(movedDown.map((line) => line.id), ["line-b", "line-a", "line-c"]);
+  assert.strictEqual(movedDown[1], lines[0]);
+  assert.deepEqual(movedDown[1], {
+    id: "line-a",
+    description: "Assessment",
+    amount: "165.00",
+    taxCode: "gst",
+  });
+
+  const droppedAtEnd = moveInvoiceLineTo(movedDown, "line-b", "line-c");
+  assert.deepEqual(droppedAtEnd.map((line) => line.id), ["line-a", "line-c", "line-b"]);
+  assert.strictEqual(droppedAtEnd[2], lines[1]);
+  const droppedAtStart = moveInvoiceLineTo(droppedAtEnd, "line-b", "line-a");
+  assert.deepEqual(droppedAtStart.map((line) => line.id), ["line-b", "line-a", "line-c"]);
+  assert.deepEqual(lines.map((line) => line.id), ["line-a", "line-b", "line-c"]);
+
+  assert.deepEqual(
+    moveInvoiceLine(lines, "line-a", -1).map((line) => line.id),
+    ["line-a", "line-b", "line-c"],
+  );
+  assert.deepEqual(
+    moveInvoiceLine(lines, "line-c", 1).map((line) => line.id),
+    ["line-a", "line-b", "line-c"],
+  );
+});
+
 test("invoice correction migration preserves the initial snapshot and creates bounded ledgers", () => {
   const db = new DatabaseSync(":memory:");
   apply(db, quickInvoiceMigration);
@@ -75,6 +113,42 @@ test("draft correction and issued credit are explicit guarded actions", () => {
   assert.match(panel, /Correct this draft before sending/);
   assert.match(panel, /Issue a credit/);
   assert.match(panel, /outstandingCents/);
+});
+
+test("correctable draft invoices expose touch arrows and desktop drag ordering", () => {
+  const correctionStart = panel.indexOf(
+    "canManageInvoice && invoice.canCorrect && <details",
+  );
+  const creditStart = panel.indexOf(
+    "canManageInvoice && canApplyDiscounts",
+    correctionStart,
+  );
+  assert.ok(correctionStart >= 0 && creditStart > correctionStart);
+  const correctionUi = panel.slice(correctionStart, creditStart);
+
+  assert.match(correctionUi, /draftLines\.map\(\(line, index\)/);
+  assert.match(correctionUi, /draggable aria-label=/);
+  assert.match(correctionUi, /onDragStart=/);
+  assert.match(correctionUi, /onDragOver=/);
+  assert.match(correctionUi, /onDrop=/);
+  assert.match(correctionUi, /title="Move up"/);
+  assert.match(correctionUi, /disabled=\{index === 0\}/);
+  assert.match(correctionUi, /title="Move down"/);
+  assert.match(correctionUi, /disabled=\{index === draftLines\.length - 1\}/);
+  assert.match(correctionUi, /minWidth: "44px", minHeight: "44px"/);
+  assert.match(correctionUi, /moveDraftLine\(line, -1\)/);
+  assert.match(correctionUi, /moveDraftLine\(line, 1\)/);
+  assert.equal(panel.match(/draggable aria-label=/g)?.length, 1);
+
+  const correctionAction = panel.slice(
+    panel.indexOf("async function correctDraft"),
+    panel.indexOf("async function issueCredit"),
+  );
+  assert.match(correctionAction, /draftLines\.map\(\(line\) => \(\{/);
+  assert.match(correctionAction, /request\("correct_draft", \{ expectedRevision: invoice\.revision, lines/);
+  assert.match(route, /current\.status !== "draft"/);
+  assert.match(route, /line_items_json = \?,/);
+  assert.match(route, /INSERT INTO trade_crm_quick_invoice_revisions/);
 });
 
 test("invoice discounts retain deterministic cents across taxable and GST-free lines", () => {

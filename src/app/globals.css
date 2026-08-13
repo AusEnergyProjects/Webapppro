@@ -6904,6 +6904,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-overall-discount small { color: var(--color-aea-muted); font-size: .66rem; line-height: 1.35; }
 .trade-quote-overall-discount input { background: #fff; border: 1px solid #9fc5b7; border-radius: 7px; min-width: 0; padding: 9px; }
 .trade-quote-overall-discount button { background: #fff; border: 1px solid #d6c8c8; border-radius: 7px; color: #7d3e3e; cursor: pointer; min-height: 39px; padding: 8px 11px; }
+.trade-quote-overall-discount.invalid, .trade-quote-line.invalid { background: #fff7f4; border: 1px solid #c94f3d; border-radius: 9px; box-shadow: 0 0 0 2px rgba(201, 79, 61, .09); padding: 9px; }
+.trade-quote-line :is(input, select)[aria-invalid="true"], .trade-quote-overall-discount input[aria-invalid="true"] { border-color: #b83c2c; box-shadow: 0 0 0 2px rgba(184, 60, 44, .14); }
+.trade-quote-line-error { color: #8e2f24; font-size: .67rem; font-weight: 850; grid-column: 1 / -1; margin: 0; }
 .trade-quote-packet-actions button:last-child { background: var(--color-aea-green-dark); border-color: var(--color-aea-green-dark); color: #fff; }
 .trade-quote-packet-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .trade-quote-price-book label, .trade-quote-packets label { display: grid; gap: 5px; }
@@ -6938,6 +6941,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-choice-grid { display: grid; gap: 12px; }
 .trade-quote-choice-grid > article { background: #fff; border: 1px solid #d4e3dc; border-radius: 12px; display: grid; gap: 10px; padding: 13px; }
 .trade-quote-choice-grid > article.recommended { border-color: #2f9673; box-shadow: inset 4px 0 #2f9673; }
+.trade-quote-choice-grid > article.invalid { background: #fff7f4; border-color: #c94f3d; box-shadow: 0 0 0 2px rgba(201, 79, 61, .09); }
+.trade-quote-choice-grid [aria-invalid="true"] { border-color: #b83c2c; box-shadow: 0 0 0 2px rgba(184, 60, 44, .14); }
+.trade-quote-choice-error { color: #8e2f24; font-size: .67rem; font-weight: 850; margin: 0; }
 .trade-quote-choice-grid article > header { align-items: flex-start; display: flex; gap: 10px; justify-content: space-between; }
 .trade-quote-choice-grid article > header > div { display: grid; gap: 4px; width: min(420px, 100%); }
 .trade-quote-choice-grid article > header input, .trade-quote-choice-grid article textarea, .trade-quote-choice-add select { background: #fff; border: 1px solid #bed3ca; border-radius: 8px; color: var(--color-aea-ink); font: inherit; padding: 8px; width: 100%; }
@@ -6970,6 +6976,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .trade-quote-totals span { color: var(--color-aea-muted); font-size: .66rem; text-transform: uppercase; }
 .trade-quote-totals small { color: var(--color-aea-muted); font-size: .6rem; text-transform: uppercase; }
 .trade-quote-totals strong { color: var(--color-aea-green-dark); }
+.trade-quote-validation-summary { align-items: flex-start; background: #fff4ef; border: 1px solid #d97b68; border-radius: 9px; color: #7f2f24; display: flex; gap: 8px; margin: 0; padding: 11px 12px; }
+.trade-quote-validation-summary strong { white-space: nowrap; }
 .trade-quote-internal { align-items: center; background: #062d3d; border-radius: 10px; color: #fff; display: grid; gap: 12px; grid-template-columns: auto 1fr; padding: 12px; }
 .trade-quote-internal > div, .trade-quote-internal dl div { display: grid; gap: 2px; }
 .trade-quote-internal span, .trade-quote-internal dt, .trade-quote-internal small { color: #b8d4d7; font-size: .6rem; }

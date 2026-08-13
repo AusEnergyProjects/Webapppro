@@ -1,3 +1,5 @@
+import { normaliseQuoteChoices } from "./trade-quote-options.ts";
+
 export type TradeQuoteLine = {
   lineType: "product" | "labour" | "adjustment";
   description: string;
@@ -14,8 +16,25 @@ export const OVERALL_FIXED_DISCOUNT_SECTION = "Overall dollar discount";
 
 export type OverallTradeQuoteDiscountKind = "percent" | "fixed";
 
+export type TradeQuoteLineValidationField = "lineType" | "description" | "quantity" | "unitPrice" | "taxCode";
+
+export type TradeQuoteLineValidationIssue = {
+  lineIndex: number;
+  field: TradeQuoteLineValidationField;
+  code: string;
+  message: string;
+};
+
+export type TradeQuoteChoiceValidationIssue = {
+  scopeKey: string;
+  field: "name" | "recommended" | "remove" | "addLine";
+  code: "INVALID_QUOTE_CHOICES";
+  message: string;
+};
+
 const LINE_TYPES = new Set<TradeQuoteLine["lineType"]>(["product", "labour", "adjustment"]);
 const TAX_CODES = new Set<TradeQuoteLine["taxCode"]>(["gst", "none"]);
+const KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const MAX_QUANTITY_MILLI = 999_999_999;
 const MAX_ABS_CENTS = 100_000_000;
 
@@ -98,6 +117,196 @@ export function calculateTradeQuoteLine(quantityMilli: number, unitPriceCents: n
   const totalCents = subtotalCents + taxCents;
   if (![subtotalCents, taxCents, totalCents].every(Number.isSafeInteger)) throw new Error("QUOTE_TOTAL_TOO_LARGE");
   return { subtotalCents, taxCents, totalCents };
+}
+
+function quoteLineIssue(
+  lineIndex: number,
+  field: TradeQuoteLineValidationField,
+  code: string,
+  reason: string,
+  lineLabel: string,
+): TradeQuoteLineValidationIssue {
+  return { lineIndex, field, code, message: `${lineLabel} ${lineIndex + 1}: ${reason}` };
+}
+
+export function tradeQuoteLineValidationIssues(
+  rawLines: unknown,
+  cleanDescription: (value: unknown) => string,
+  allowEmpty = false,
+  lineLabel = "Quote item",
+): TradeQuoteLineValidationIssue[] {
+  if (!Array.isArray(rawLines)) {
+    return [quoteLineIssue(0, "description", "INVALID_LINES", "add a quote item.", lineLabel)];
+  }
+  if (!rawLines.length) {
+    return allowEmpty ? [] : [quoteLineIssue(0, "description", "INVALID_LINES", "add a quote item.", lineLabel)];
+  }
+  if (rawLines.length > 100) {
+    return [quoteLineIssue(99, "description", "INVALID_LINES", "remove items so the quote has no more than 100 lines.", lineLabel)];
+  }
+
+  const records = rawLines.map((line) => line && typeof line === "object" ? line as Record<string, unknown> : null);
+  const issues: TradeQuoteLineValidationIssue[] = [];
+  const overallDiscountIndexes: number[] = [];
+
+  records.forEach((record, lineIndex) => {
+    if (!record) {
+      issues.push(quoteLineIssue(lineIndex, "description", "INVALID_LINES", "add a description.", lineLabel));
+      return;
+    }
+    const lineType = String(record.lineType || "") as TradeQuoteLine["lineType"];
+    const taxCode = String(record.taxCode || "") as TradeQuoteLine["taxCode"];
+    const description = cleanDescription(record.description);
+    const overallDiscount = overallTradeQuoteDiscountKind(record);
+    if (overallDiscount) overallDiscountIndexes.push(lineIndex);
+
+    if (!LINE_TYPES.has(lineType)) {
+      issues.push(quoteLineIssue(lineIndex, "lineType", "INVALID_LINES", "choose Product, Labour or Adjustment.", lineLabel));
+    }
+    if (!description) {
+      issues.push(quoteLineIssue(lineIndex, "description", "INVALID_LINES", "add a description.", lineLabel));
+    }
+    if (!TAX_CODES.has(taxCode)) {
+      issues.push(quoteLineIssue(lineIndex, "taxCode", "INVALID_TAX", "choose GST 10% or No GST.", lineLabel));
+    }
+    if (overallDiscount && lineType !== "adjustment") {
+      issues.push(quoteLineIssue(lineIndex, "lineType", "INVALID_LINES", "use Adjustment for an overall discount.", lineLabel));
+    }
+
+    if (overallDiscount === "percent") {
+      const rawQuantity = String(record.quantity || "");
+      let validPercentage = false;
+      if (rawQuantity.startsWith("percent:")) {
+        const percentageInput = rawQuantity.slice("percent:".length);
+        validPercentage = percentInputToQuantity(percentageInput) !== null
+          && percentageInput !== ""
+          && Number(percentageInput) > 0
+          && Number(percentageInput) < 100;
+      } else {
+        try {
+          const quantityMilli = quantityToMilli(rawQuantity);
+          validPercentage = quantityMilli < 1000;
+        } catch {
+          validPercentage = false;
+        }
+      }
+      if (!validPercentage) {
+        issues.push(quoteLineIssue(lineIndex, "quantity", "INVALID_QUANTITY", "enter a discount greater than 0% and less than 100%.", lineLabel));
+      }
+      return;
+    }
+
+    if (overallDiscount === "fixed") {
+      try {
+        if (Math.abs(dollarsToCents(record.unitPrice, true)) <= 0) throw new Error("INVALID_MONEY");
+      } catch {
+        issues.push(quoteLineIssue(lineIndex, "unitPrice", "INVALID_MONEY", "enter a dollar discount greater than $0 with no more than 2 decimal places.", lineLabel));
+      }
+      return;
+    }
+
+    try {
+      quantityToMilli(record.quantity);
+    } catch {
+      issues.push(quoteLineIssue(lineIndex, "quantity", "INVALID_QUANTITY", "enter a quantity greater than 0 with no more than 3 decimal places.", lineLabel));
+    }
+    try {
+      const unitPriceCents = dollarsToCents(record.unitPrice, lineType === "adjustment");
+      if (lineType !== "adjustment" && unitPriceCents < 0) throw new Error("INVALID_MONEY");
+    } catch {
+      issues.push(quoteLineIssue(lineIndex, "unitPrice", "INVALID_MONEY", lineType === "adjustment"
+        ? "enter a dollar amount with no more than 2 decimal places."
+        : "enter a price of $0 or more with no more than 2 decimal places.", lineLabel));
+    }
+  });
+
+  if (overallDiscountIndexes.length > 1) {
+    const lineIndex = overallDiscountIndexes[1];
+    const field = overallTradeQuoteDiscountKind(records[lineIndex]) === "percent" ? "quantity" : "unitPrice";
+    issues.push(quoteLineIssue(lineIndex, field, "INVALID_LINES", "remove this discount because only one overall discount can be applied.", lineLabel));
+  }
+  if (issues.length) return issues;
+
+  try {
+    normaliseTradeQuoteLineGroup(rawLines, cleanDescription, allowEmpty);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "INVALID_LINES";
+    const lineIndex = overallDiscountIndexes.at(-1) ?? Math.max(0, records.length - 1);
+    const field: TradeQuoteLineValidationField = overallTradeQuoteDiscountKind(records[lineIndex]) === "percent" ? "quantity" : "unitPrice";
+    const reason = overallDiscountIndexes.length
+      ? "reduce the discount so it does not exceed the included quote total."
+      : code === "QUOTE_TOTAL_TOO_LARGE"
+        ? "reduce this amount so the quote can be calculated safely."
+        : "change this amount so the quote total is greater than $0.";
+    return [quoteLineIssue(lineIndex, field, code, reason, lineLabel)];
+  }
+  return [];
+}
+
+export function tradeQuoteChoiceValidationIssue(
+  rawChoices: unknown,
+  clean: (value: unknown, maximum?: number) => string,
+): TradeQuoteChoiceValidationIssue | null {
+  if (!Array.isArray(rawChoices) || rawChoices.length > 20) {
+    const record = Array.isArray(rawChoices) && rawChoices[20] && typeof rawChoices[20] === "object"
+      ? rawChoices[20] as Record<string, unknown>
+      : null;
+    return { scopeKey: clean(record?.clientKey, 64), field: "remove", code: "INVALID_QUOTE_CHOICES", message: "Customer choices: remove choices so there are no more than 20." };
+  }
+  const records = rawChoices.map((value) => value && typeof value === "object" ? value as Record<string, unknown> : null);
+  const seenChoiceKeys = new Set<string>();
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) return { scopeKey: "", field: "remove", code: "INVALID_QUOTE_CHOICES", message: `Customer choice ${index + 1}: remove this invalid choice and add it again.` };
+    const clientKey = clean(record.clientKey, 64).toLowerCase();
+    const kind = clean(record.kind, 20);
+    const groupKey = clean(record.groupKey, 64).toLowerCase() || (kind === "addon" ? clientKey : `${kind}-1`);
+    const name = clean(record.name, 120);
+    const prefix = name || "Unnamed customer choice";
+    if (!name) return { scopeKey: clientKey, field: "name", code: "INVALID_QUOTE_CHOICES", message: "Customer choice: add a clear name." };
+    if (!KEY_PATTERN.test(clientKey) || seenChoiceKeys.has(clientKey) || !KEY_PATTERN.test(groupKey) || !["package", "addon", "choose_one"].includes(kind)) {
+      return { scopeKey: clientKey, field: "remove", code: "INVALID_QUOTE_CHOICES", message: `${prefix}: remove this invalid choice and add it again.` };
+    }
+    seenChoiceKeys.add(clientKey);
+    const lines = Array.isArray(record.lines) ? record.lines : [];
+    if (!lines.length) return { scopeKey: clientKey, field: "addLine", code: "INVALID_QUOTE_CHOICES", message: `${prefix}: add at least one priced line.` };
+    if (lines.length > 100) return { scopeKey: clientKey, field: "remove", code: "INVALID_QUOTE_CHOICES", message: `${prefix}: remove lines so this choice has no more than 100 items.` };
+  }
+
+  const requiredGroups = new Map<string, Record<string, unknown>[]>();
+  for (const record of records as Record<string, unknown>[]) {
+    const kind = clean(record.kind, 20);
+    if (kind === "addon") continue;
+    const groupKey = clean(record.groupKey, 64).toLowerCase() || `${kind}-1`;
+    const key = `${kind}:${groupKey}`;
+    requiredGroups.set(key, [...(requiredGroups.get(key) || []), record]);
+  }
+  for (const [key, group] of requiredGroups) {
+    const groupLabel = key.startsWith("package:") ? "package" : "choose-one group";
+    if (group.length < 2) {
+      const record = group[0];
+      const name = clean(record.name, 120);
+      return { scopeKey: clean(record.clientKey, 64).toLowerCase(), field: "remove", code: "INVALID_QUOTE_CHOICES", message: `${name}: this ${groupLabel} needs at least 2 choices. Remove it or create the complete group again.` };
+    }
+    if (key.startsWith("package:") && group.length > 3) {
+      const record = group[3];
+      const name = clean(record.name, 120);
+      return { scopeKey: clean(record.clientKey, 64).toLowerCase(), field: "remove", code: "INVALID_QUOTE_CHOICES", message: `${name}: a package group can contain no more than 3 choices. Remove this extra choice.` };
+    }
+    const recommended = group.filter((record) => record.recommended === true);
+    if (recommended.length > 1) {
+      const record = recommended[1];
+      const name = clean(record.name, 120);
+      return { scopeKey: clean(record.clientKey, 64).toLowerCase(), field: "recommended", code: "INVALID_QUOTE_CHOICES", message: `${name}: only one choice in this group can be recommended.` };
+    }
+  }
+  try {
+    normaliseQuoteChoices(rawChoices, clean);
+  } catch {
+    const record = records[0];
+    return record ? { scopeKey: clean(record.clientKey, 64).toLowerCase(), field: "remove", code: "INVALID_QUOTE_CHOICES", message: `${clean(record.name, 120) || "Customer choice"}: remove this invalid choice and add it again.` } : null;
+  }
+  return null;
 }
 
 export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription: (value: unknown) => string, allowEmpty = false) {

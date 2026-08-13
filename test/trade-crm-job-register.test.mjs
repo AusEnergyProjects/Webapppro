@@ -267,10 +267,51 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   assert.match(ui, /aria-label=\{`Actions for/);
   assert.match(ui, /View details/);
   assert.match(ui, /Edit details/);
+  assert.match(ui, /Edit customer/);
+  assert.match(ui, /staffPermissions\.canViewCustomers && staffPermissions\.canManageCustomers/);
+  assert.match(ui, /job\.customerSource !== "platform_private" && job\.crmCustomerId/);
+  assert.match(ui, /openJobCustomerEditor\(job\)/);
   assert.match(ui, /Assign job/);
   assert.match(ui, /Schedule job/);
   assert.match(ui, /openFocusedJob\(job\.id, "assignment"\)/);
   assert.match(ui, /fetch\("\/api\/trade-team",/);
   assert.match(ui, /action: "assign_job", workOrderId: job\.id, memberId: jobAssigneeId/);
   assert.match(ui, /activeTab === "assignment"/);
+});
+
+test("job workspace exposes authorised customer context, preserves the private boundary and uses the real customer editor", () => {
+  const route = read("../src/app/api/trade-crm/route.ts");
+  const ui = read("../src/components/InstallerCrmWorkspace.tsx");
+  assert.match(route, /const protectedCustomer = String\(row\.customer_source \|\| ""\) === "platform_private"/);
+  assert.match(route, /const customerId = protectedCustomer \? "" : String\(row\.crm_customer_id \|\| ""\)/);
+  assert.match(route, /if \(resource === "customer"\) await assertCustomerDetailAccess\(identity, id\)/);
+  assert.match(route, /customerMutationActions\.has\(action\) && !identity\.access\.canManageCustomers/);
+  assert.match(route, /if \(action === "update_customer"\)/);
+  assert.match(route, /WHERE id = \? AND firebase_uid = \? AND record_status = 'active'/);
+  assert.match(ui, /setSelectedCustomerId\(job\.crmCustomerId\)/);
+  assert.match(ui, /<CustomerDetail[\s\S]*onSave=\{crmRequest\}/);
+  assert.match(ui, /action: "update_customer", customerId: customer\.id/);
+  for (const label of ["Job information", "Customer information", "First name", "Last name", "Contact number", "Street address", "Postcode"]) {
+    assert.match(ui, new RegExp(label));
+  }
+  assert.match(ui, /isProtected \? <div className="crm-customer-boundary protected"/);
+  assert.match(ui, /This accepted job contains only the customer-disclosed contact and property details saved for your business/);
+});
+
+test("job assignment loads every capability-filtered roster page into one compact selector", () => {
+  const [teamRoute, ui, styles] = [
+    read("../src/app/api/trade-team/route.ts"),
+    read("../src/components/InstallerCrmWorkspace.tsx"),
+    read("../src/components/InstallerCrmJobRegister.module.css"),
+  ];
+  assert.match(teamRoute, /assigneeConditions = \["owner_uid = \?", "status = 'active'"\]/);
+  assert.match(teamRoute, /json_each\(trade_team_members\.capabilities\)/);
+  assert.match(teamRoute, /assigneePageSize = Math\.min\(50/);
+  assert.match(ui, /assigneePageSize: "50", assigneeCapability: job\.serviceCategory/);
+  assert.match(ui, /for \(let page = 2; page <= \(roster\?\.totalPages \|\| 1\); page \+= 1\)/);
+  const assignmentSection = ui.match(/\{activeTab === "assignment"[\s\S]*?\{activeTab === "field"/)?.[0] || "";
+  assert.match(assignmentSection, /<select value=\{jobAssigneeId\}/);
+  assert.match(assignmentSection, /Save assignment/);
+  assert.doesNotMatch(assignmentSection, /Search team|Find an active teammate|type="search"|Load more/);
+  assert.match(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
 });

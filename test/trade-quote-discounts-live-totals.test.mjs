@@ -10,6 +10,8 @@ import {
   percentInputToQuantity,
   persistedOverallDiscountUnitPrice,
   quantityToPercentInput,
+  tradeQuoteChoiceValidationIssue,
+  tradeQuoteLineValidationIssues,
 } from "../src/lib/trade-quote.ts";
 
 const clean = (value) => String(value || "").trim().slice(0, 500);
@@ -22,6 +24,15 @@ const product = (unitPrice = "1000.00", taxCode = "gst") => ({
   unitPrice,
   taxCode,
   sectionHeading: "Included work",
+});
+const choice = (clientKey, kind, groupKey, name = "Option") => ({
+  clientKey,
+  kind,
+  groupKey,
+  name,
+  summary: "",
+  recommended: false,
+  lines: [product()],
 });
 
 test("percentage discount is recalculated from positive scope and ignores client price", () => {
@@ -157,6 +168,117 @@ test("live totals and internal sell margin derive from current editable lines", 
   assert.match(ui, /liveOverallDiscountCents\(lines\)/);
   assert.match(ui, /Live editable scope/);
   assert.match(ui, /money\(liveSummary\.costCentsExGst\)[\s\S]*money\(liveSummary\.subtotalCents\)[\s\S]*money\(liveSummary\.marginCentsExGst\)/);
+});
+
+test("malformed lines identify the exact row and field instead of collapsing to Check items", () => {
+  const issues = tradeQuoteLineValidationIssues([
+    { ...product(), description: "" },
+    { ...product(), quantity: "0" },
+    { ...product(), unitPrice: "four hundred" },
+    { ...product(), taxCode: "maybe" },
+  ], clean);
+  assert.deepEqual(issues.map(({ lineIndex, field, message }) => ({ lineIndex, field, message })), [
+    { lineIndex: 0, field: "description", message: "Quote item 1: add a description." },
+    { lineIndex: 1, field: "quantity", message: "Quote item 2: enter a quantity greater than 0 with no more than 3 decimal places." },
+    { lineIndex: 2, field: "unitPrice", message: "Quote item 3: enter a price of $0 or more with no more than 2 decimal places." },
+    { lineIndex: 3, field: "taxCode", message: "Quote item 4: choose GST 10% or No GST." },
+  ]);
+});
+
+test("invalid overall discounts identify the editable discount control", () => {
+  const percentIssue = tradeQuoteLineValidationIssues([product(), {
+    lineType: "adjustment", description: "Invalid sale", quantity: "percent:100", unitPrice: "0",
+    taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION,
+  }], clean)[0];
+  assert.deepEqual(
+    { lineIndex: percentIssue.lineIndex, field: percentIssue.field, message: percentIssue.message },
+    { lineIndex: 1, field: "quantity", message: "Quote item 2: enter a discount greater than 0% and less than 100%." },
+  );
+
+  const fixedIssue = tradeQuoteLineValidationIssues([product("100"), {
+    lineType: "adjustment", description: "Excess discount", quantity: "1", unitPrice: "111",
+    taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION,
+  }], clean)[0];
+  assert.deepEqual(
+    { lineIndex: fixedIssue.lineIndex, field: fixedIssue.field, message: fixedIssue.message },
+    { lineIndex: 1, field: "unitPrice", message: "Quote item 2: reduce the discount so it does not exceed the included quote total." },
+  );
+});
+
+test("blank choice names and malformed choice groups fail before preview with an exact action", () => {
+  assert.deepEqual(tradeQuoteChoiceValidationIssue([
+    choice("option-a", "addon", "option-a", ""),
+  ], clean), {
+    scopeKey: "option-a",
+    field: "name",
+    code: "INVALID_QUOTE_CHOICES",
+    message: "Customer choice: add a clear name.",
+  });
+
+  assert.deepEqual(tradeQuoteChoiceValidationIssue([
+    choice("only-option", "choose_one", "controls", "Only option"),
+  ], clean), {
+    scopeKey: "only-option",
+    field: "remove",
+    code: "INVALID_QUOTE_CHOICES",
+    message: "Only option: this choose-one group needs at least 2 choices. Remove it or create the complete group again.",
+  });
+
+  assert.deepEqual(tradeQuoteChoiceValidationIssue([
+    choice("good", "package", "systems", "Good"),
+  ], clean), {
+    scopeKey: "good",
+    field: "remove",
+    code: "INVALID_QUOTE_CHOICES",
+    message: "Good: this package needs at least 2 choices. Remove it or create the complete group again.",
+  });
+});
+
+test("valid package and choose-one groups match the authoritative choice contract", () => {
+  const choices = [
+    choice("good", "package", "systems", "Good"),
+    { ...choice("better", "package", "systems", "Better"), recommended: true },
+    choice("wall", "choose_one", "mount", "Wall mounted"),
+    choice("floor", "choose_one", "mount", "Floor mounted"),
+  ];
+  assert.equal(tradeQuoteChoiceValidationIssue(choices, clean), null);
+});
+
+test("the pictured saved-item quote remains valid and produces live numbers", () => {
+  const picturedLines = [
+    { ...product("200.00"), lineType: "labour", description: "Call-out" },
+    { ...product("3500.00"), description: "Istore Heatpump" },
+    { ...product("1000.00"), lineType: "labour", description: "Kris extra fee" },
+    {
+      lineType: "adjustment",
+      description: "Discount x mas special",
+      quantity: percentInputToQuantity("10"),
+      unitPrice: "0.00",
+      taxCode: "gst",
+      sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION,
+    },
+  ];
+  assert.deepEqual(tradeQuoteLineValidationIssues(picturedLines, clean), []);
+  const quote = normaliseTradeQuoteLineGroup(picturedLines, clean);
+  assert.deepEqual(
+    { subtotalCents: quote.subtotalCents, taxCents: quote.taxCents, totalCents: quote.totalCents },
+    { subtotalCents: 423_000, taxCents: 42_300, totalCents: 465_300 },
+  );
+});
+
+test("preview click exposes, scrolls to and focuses the exact invalid control", () => {
+  const flow = ui.slice(ui.indexOf("function openSendPreview"), ui.indexOf("async function sendPreviewedQuote"));
+  assert.match(flow, /if \(quoteValidationIssue\)/);
+  assert.match(flow, /data-quote-validation-target/);
+  assert.match(flow, /scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
+  assert.match(flow, /focus\(\{ preventScroll: true \}\)/);
+  assert.match(flow, /throw new Error\(quoteValidationIssue\.message\)/);
+  assert.match(ui, /aria-invalid/);
+  assert.match(ui, /className="trade-quote-line-error" role="alert"/);
+  assert.match(ui, /tradeQuoteChoiceValidationIssue\(choices, cleanChoiceText\)/);
+  assert.match(ui, /className="trade-quote-choice-error" role="alert"/);
+  assert.match(ui, /Fix before preview/);
+  assert.doesNotMatch(ui, /Check items/);
 });
 
 test("send status copy is derived from the authoritative delivery presentation", () => {
