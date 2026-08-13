@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import {
+  contiguousTradeQuoteSections,
   createTradeQuotePdfBytes,
   tradeQuoteBannerCropForImage,
 } from "../src/lib/trade-quote-pdf.mjs";
@@ -147,6 +148,23 @@ test("banner crop produces the same bounded 5 to 1 source geometry", () => {
   assert.ok(boundedCrop.y >= 180);
   assert.ok(boundedCrop.x + boundedCrop.width <= 1_440);
   assert.ok(boundedCrop.y + boundedCrop.height <= 720);
+});
+
+test("PDF keeps the exact saved A/B/A line order instead of regrouping headings", () => {
+  const items = [
+    { description: "A first", sectionHeading: "A" },
+    { description: "B middle", sectionHeading: "B" },
+    { description: "A last", sectionHeading: "A" },
+  ];
+  const sections = contiguousTradeQuoteSections(items);
+  assert.deepEqual(sections.map(({ heading }) => heading), ["A", "B", "A"]);
+  assert.deepEqual(sections.flatMap(({ items: groupItems }) => groupItems.map(({ description }) => description)), [
+    "A first",
+    "B middle",
+    "A last",
+  ]);
+  assert.equal(sections[0].items[0], items[0]);
+  assert.equal(sections[2].items[0], items[2]);
 });
 
 test("PDF rendering remains compatible with v1 and supports signed v2 discounts", async () => {

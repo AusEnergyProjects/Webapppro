@@ -1404,21 +1404,145 @@ function CustomerDetail({ user, customer, contacts, sites, jobs, busy, readOnly 
     const saved = await onSave("POST", { action: "create_service_site", customerId: customer.id, siteLabel: data.get("siteLabel"), addressLine1: data.get("addressLine1"), addressLine2: data.get("addressLine2"), suburb: data.get("suburb"), addressState: data.get("addressState"), postcode: data.get("postcode"), accessInstructions: data.get("accessInstructions"), parkingInstructions: data.get("parkingInstructions"), hazardNotes: data.get("hazardNotes"), customerContactId: data.get("customerContactId") }, `site-new:${customer.id}`, "Service site added.");
     if (saved) form.reset();
   }
-  async function saveSite(event: FormEvent<HTMLFormElement>, siteId: string) {
+  async function saveSite(event: FormEvent<HTMLFormElement>, site: ServiceSite) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    await onSave("PATCH", { action: "update_service_site", customerId: customer.id, serviceSiteId: siteId, siteLabel: data.get("siteLabel"), addressLine1: data.get("addressLine1"), addressLine2: data.get("addressLine2"), suburb: data.get("suburb"), addressState: data.get("addressState"), postcode: data.get("postcode"), accessInstructions: data.get("accessInstructions"), parkingInstructions: data.get("parkingInstructions"), hazardNotes: data.get("hazardNotes") }, `site:${siteId}`, "Service site saved.");
+    const update: Record<string, unknown> = {
+      action: "update_service_site",
+      customerId: customer.id,
+      serviceSiteId: site.id,
+      siteLabel: data.get("siteLabel"),
+      accessInstructions: data.get("accessInstructions"),
+      parkingInstructions: data.get("parkingInstructions"),
+      hazardNotes: data.get("hazardNotes"),
+    };
+    if (!site.isPrimary) {
+      Object.assign(update, {
+        addressLine1: data.get("addressLine1"),
+        addressLine2: data.get("addressLine2"),
+        suburb: data.get("suburb"),
+        addressState: data.get("addressState"),
+        postcode: data.get("postcode"),
+      });
+    }
+    await onSave("PATCH", update, `site:${site.id}`, "Service site saved.");
   }
   async function linkContact(event: FormEvent<HTMLFormElement>, siteId: string) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     const saved = await onSave("POST", { action: "link_site_contact", customerId: customer.id, serviceSiteId: siteId, customerContactId: data.get("customerContactId"), roleLabel: data.get("roleLabel") }, `site-contact:${siteId}`, "Service contact assigned.");
     if (saved) form.reset();
   }
-  return <section className="crm-customer-detail"><fieldset disabled={readOnly} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
-    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customer.customerType === "business" ? "Business customer account" : "Residential customer account"} | {contacts.length} contact{contacts.length === 1 ? "" : "s"} | {sites.length} site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <a className="crm-customer-email-action" href={`mailto:${customer.email}`}>Email customer</a>}</div></div></header>
-    <details className="crm-customer-section" open><summary>Account and primary details</summary><form className="crm-form" onSubmit={saveAccount}><div className="crm-form-grid"><label><span>Primary first name</span><input name="firstName" defaultValue={customer.firstName} /></label><label><span>Primary last name</span><input name="lastName" defaultValue={customer.lastName} /></label><label><span>Business name</span><input name="businessName" defaultValue={customer.businessName} /></label><label><span>Primary email</span><input type="email" name="email" defaultValue={customer.email} /></label><label><span>Primary phone</span><input type="tel" name="phone" defaultValue={customer.phone} /></label><label className="wide"><span>Primary site address</span><input name="addressLine1" defaultValue={customer.addressLine1} /></label><label className="wide"><span>Address line 2</span><input name="addressLine2" defaultValue={customer.addressLine2} /></label><label><span>Suburb</span><input name="suburb" defaultValue={customer.suburb} /></label><label><span>State</span><input name="addressState" defaultValue={customer.addressState} /></label><label><span>Postcode</span><input name="postcode" defaultValue={customer.postcode} /></label><label className="wide"><span>Tags</span><input name="tags" defaultValue={customer.tags.join(", ")} /></label><label className="wide"><span>Private account notes</span><textarea name="privateNotes" defaultValue={customer.privateNotes} rows={4} /></label></div><button className="btn" disabled={busy === `customer:${customer.id}`}>Save account</button></form></details>
-    <section className="crm-customer-section"><div className="crm-section-heading"><div><span>People</span><h4>Customer contacts</h4><p>Keep billing, owner and on-site contacts on the same customer account.</p></div></div><div className="crm-customer-entities">{contacts.map((contact) => <form key={contact.id} className="crm-entity-card" onSubmit={(event) => void saveContact(event, contact.id)}><header><strong>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</strong><small>{contact.isPrimary ? "Primary account contact" : contact.roleLabel || "Additional contact"}</small></header><div className="crm-form-grid"><label><span>First name</span><input name="firstName" defaultValue={contact.firstName} /></label><label><span>Last name</span><input name="lastName" defaultValue={contact.lastName} /></label><label><span>Role</span><input name="roleLabel" defaultValue={contact.roleLabel} placeholder="Owner, accounts, tenant" /></label><label><span>Email</span><input type="email" name="email" defaultValue={contact.email} /></label><label><span>Phone</span><input type="tel" name="phone" defaultValue={contact.phone} /></label></div><button disabled={busy === `contact:${contact.id}`}>Save contact</button></form>)}</div><details className="crm-add-entity"><summary>Add another contact</summary><form className="crm-form" onSubmit={createContact}><div className="crm-form-grid"><label><span>First name</span><input name="firstName" required /></label><label><span>Last name</span><input name="lastName" /></label><label><span>Role</span><input name="roleLabel" placeholder="Owner, accounts, tenant" /></label><label><span>Email</span><input type="email" name="email" /></label><label><span>Phone</span><input type="tel" name="phone" /></label><label><span>Assign to site</span><select name="serviceSiteId"><option value="">Not yet</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel}</option>)}</select></label></div><button disabled={busy === `contact-new:${customer.id}`}>Add contact</button></form></details></section>
-    <section className="crm-customer-section"><div className="crm-section-heading"><div><span>Locations</span><h4>Service sites</h4><p>Each site keeps its own access, parking, hazard and service-contact instructions.</p></div></div><div className="crm-customer-entities">{sites.map((site) => <article key={site.id} className="crm-entity-card"><form onSubmit={(event) => void saveSite(event, site.id)}><header><strong>{site.siteLabel}</strong><small>{site.isPrimary ? "Primary service site" : "Additional service site"}</small></header><div className="crm-form-grid"><label><span>Site name</span><input name="siteLabel" defaultValue={site.siteLabel} required /></label><label className="wide"><span>Street address</span><input name="addressLine1" defaultValue={site.addressLine1} /></label><label className="wide"><span>Address line 2</span><input name="addressLine2" defaultValue={site.addressLine2} /></label><label><span>Suburb</span><input name="suburb" defaultValue={site.suburb} /></label><label><span>State</span><input name="addressState" defaultValue={site.addressState} /></label><label><span>Postcode</span><input name="postcode" defaultValue={site.postcode} /></label><label className="wide"><span>Access instructions</span><textarea name="accessInstructions" defaultValue={site.accessInstructions} rows={2} /></label><label className="wide"><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={site.parkingInstructions} rows={2} /></label><label className="wide"><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={site.hazardNotes} rows={3} placeholder="Record site hazards only. Confirm controls before work starts." /></label></div><button disabled={busy === `site:${site.id}`}>Save site</button></form><div className="crm-site-contacts"><strong>Service contacts</strong>{site.contacts.length ? <ul>{site.contacts.map((contact) => <li key={contact.id}><span>{contact.displayName}</span><small>{contact.roleLabel}{contact.phone ? ` | ${contact.phone}` : ""}</small></li>)}</ul> : <p>No service contact assigned.</p>}{contacts.length > site.contacts.length && <form onSubmit={(event) => void linkContact(event, site.id)}><select name="customerContactId" required defaultValue=""><option value="" disabled>Choose contact</option>{contacts.filter((contact) => !site.contacts.some((assigned) => assigned.customerContactId === contact.id)).map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ")}</option>)}</select><input name="roleLabel" placeholder="Site contact role" /><button disabled={busy === `site-contact:${site.id}`}>Assign</button></form>}</div></article>)}</div><details className="crm-add-entity"><summary>Add another service site</summary><form className="crm-form" onSubmit={createSite}><div className="crm-form-grid"><label><span>Site name</span><input name="siteLabel" required placeholder="Warehouse, rental, northern office" /></label><label><span>Service contact</span><select name="customerContactId"><option value="">Not yet</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ")}</option>)}</select></label><label className="wide"><span>Street address</span><input name="addressLine1" /></label><label className="wide"><span>Address line 2</span><input name="addressLine2" /></label><label><span>Suburb</span><input name="suburb" /></label><label><span>State</span><input name="addressState" /></label><label><span>Postcode</span><input name="postcode" /></label><label className="wide"><span>Access instructions</span><textarea name="accessInstructions" rows={2} /></label><label className="wide"><span>Parking instructions</span><textarea name="parkingInstructions" rows={2} /></label><label className="wide"><span>Hazards and controls</span><textarea name="hazardNotes" rows={3} /></label></div><button disabled={busy === `site-new:${customer.id}`}>Add service site</button></form></details></section>
-    <section className="crm-customer-jobs"><h4>Jobs for this customer</h4>{jobs.length ? jobs.map((job) => <button type="button" key={job.id} onClick={() => onOpenJob(job.id)}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{sites.find((site) => site.id === job.serviceSiteId)?.siteLabel || "Site not selected"} | {pipelineLabels[job.pipelineStage] || job.pipelineStage} | {job.scheduledStart ? `Scheduled ${dateLabel(job.scheduledStart)}` : `Created ${dateLabel(job.createdAt)}`}</small></button>) : <p>No jobs linked yet.</p>}</section>
-    {!readOnly && !hideAssets && <TradeAssetWorkspace user={user} customerId={customer.id} sites={sites} compact onOpenJob={onOpenJob} />}
+  const primarySite = sites.find((site) => site.isPrimary);
+  const additionalContacts = contacts.filter((contact) => !contact.isPrimary);
+  const additionalSites = sites.filter((site) => !site.isPrimary);
+  const customerKind = customer.customerType === "business" ? "Business customer" : "Residential customer";
+  const serviceContactEditor = (site: ServiceSite) => {
+    const availableContacts = contacts.filter((contact) => !site.contacts.some((assigned) => assigned.customerContactId === contact.id));
+    return <div className={registerStyles.serviceContacts}>
+      <strong>Service contacts</strong>
+      {site.contacts.length ? <ul>{site.contacts.map((contact) => <li key={contact.id}><span>{contact.displayName}</span><small>{contact.roleLabel}{contact.phone ? ` | ${contact.phone}` : ""}</small></li>)}</ul> : <p>No service contact assigned.</p>}
+      {!readOnly && availableContacts.length > 0 && <form className={registerStyles.linkContactForm} onSubmit={(event) => void linkContact(event, site.id)}>
+        <label><span>Contact</span><select name="customerContactId" required defaultValue=""><option value="" disabled>Choose contact</option>{availableContacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label>
+        <label><span>Site role</span><input name="roleLabel" placeholder="Owner, tenant, site manager" /></label>
+        <button disabled={busy === `site-contact:${site.id}`}>{busy === `site-contact:${site.id}` ? "Assigning..." : "Assign"}</button>
+      </form>}
+    </div>;
+  };
+
+  return <section className={`crm-customer-detail ${registerStyles.customerEditor}`}><fieldset className={registerStyles.customerFieldset} disabled={readOnly}>
+    <header><div><span>{customer.customerNumber}</span><h3>{customer.displayName}</h3><small>{customerKind} | {additionalContacts.length} additional contact{additionalContacts.length === 1 ? "" : "s"} | {sites.length} service site{sites.length === 1 ? "" : "s"}</small></div><div className="crm-customer-header-actions"><strong>Private installer record</strong><div className="crm-customer-contact-actions">{customer.phone && <a className="crm-customer-call-action" href={phoneHref(customer.phone)}>Call {customer.phone}</a>}{customer.email && <a className="crm-customer-email-action" href={`mailto:${customer.email}`}>Email customer</a>}</div></div></header>
+
+    <details className={registerStyles.customerPanel} open>
+      <summary><span><strong>Customer details</strong><small>Name, contact information and main address</small></span><b>{readOnly ? "View" : "Edit"}</b></summary>
+      <div className={registerStyles.panelBody}>
+        <form className={registerStyles.customerForm} onSubmit={saveAccount}>
+          <div className={registerStyles.customerFormGrid}>
+            <label><span>First name</span><input name="firstName" defaultValue={customer.firstName} maxLength={80} autoComplete="given-name" /></label>
+            <label><span>Last name</span><input name="lastName" defaultValue={customer.lastName} maxLength={80} autoComplete="family-name" /></label>
+            <label><span>Business name</span><input name="businessName" defaultValue={customer.businessName} maxLength={140} autoComplete="organization" /></label>
+            <label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" defaultValue={customer.email} maxLength={180} autoComplete="email" /></label>
+            <label><span>Phone</span><input type="tel" name="phone" defaultValue={customer.phone} maxLength={40} inputMode="tel" autoComplete="tel" /></label>
+            <label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" defaultValue={customer.addressLine1} autoComplete="address-line1" /></label>
+            <label><span>Address line 2</span><input name="addressLine2" defaultValue={customer.addressLine2} autoComplete="address-line2" /></label>
+            <label><span>Suburb</span><input name="suburb" defaultValue={customer.suburb} autoComplete="address-level2" /></label>
+            <label><span>State</span><input name="addressState" defaultValue={customer.addressState} maxLength={20} autoComplete="address-level1" /></label>
+            <label><span>Postcode</span><input name="postcode" defaultValue={customer.postcode} maxLength={12} inputMode="numeric" autoComplete="postal-code" /></label>
+            <label className={registerStyles.wideField}><span>Tags</span><input name="tags" defaultValue={customer.tags.join(", ")} placeholder="VIP, property manager, preferred customer" /></label>
+            <label className={registerStyles.wideField}><span>Private account notes</span><textarea name="privateNotes" defaultValue={customer.privateNotes} rows={4} maxLength={2000} /></label>
+          </div>
+          {!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `customer:${customer.id}`}>{busy === `customer:${customer.id}` ? "Saving..." : "Save customer"}</button></div>}
+        </form>
+        <p className={registerStyles.recordDates}>Created {dateLabel(customer.createdAt)} | Last updated {dateLabel(customer.updatedAt, true)}</p>
+      </div>
+    </details>
+
+    {primarySite && <details className={registerStyles.customerPanel}>
+      <summary><span><strong>Main site instructions</strong><small>Access, parking and hazards for {primarySite.siteLabel}</small></span><b>Optional</b></summary>
+      <div className={registerStyles.panelBody}>
+        <form className={registerStyles.customerForm} onSubmit={(event) => void saveSite(event, primarySite)}>
+          <div className={registerStyles.customerFormGrid}>
+            <label><span>Site name</span><input name="siteLabel" defaultValue={primarySite.siteLabel} required maxLength={100} /></label>
+            <label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" defaultValue={primarySite.accessInstructions} rows={2} maxLength={2000} /></label>
+            <label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={primarySite.parkingInstructions} rows={2} maxLength={1000} /></label>
+            <label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={primarySite.hazardNotes} rows={3} maxLength={2000} placeholder="Record site hazards only. Confirm controls before work starts." /></label>
+          </div>
+          {!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `site:${primarySite.id}`}>{busy === `site:${primarySite.id}` ? "Saving..." : "Save site instructions"}</button></div>}
+        </form>
+        {serviceContactEditor(primarySite)}
+      </div>
+    </details>}
+
+    <details className={registerStyles.customerPanel}>
+      <summary><span><strong>Additional contacts</strong><small>Billing, tenants and other people for this customer</small></span><b>{additionalContacts.length}</b></summary>
+      <div className={registerStyles.panelBody}>
+        {additionalContacts.length ? <div className={registerStyles.entityList}>{additionalContacts.map((contact) => <details key={contact.id} className={registerStyles.entityDetails}>
+          <summary><span><strong>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</strong><small>{contact.roleLabel || "Additional contact"}</small></span><em>{contact.phone || contact.email || "Open to edit"}</em></summary>
+          <div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={(event) => void saveContact(event, contact.id)}><div className={registerStyles.customerFormGrid}>
+            <label><span>First name</span><input name="firstName" defaultValue={contact.firstName} maxLength={80} /></label>
+            <label><span>Last name</span><input name="lastName" defaultValue={contact.lastName} maxLength={80} /></label>
+            <label><span>Role</span><input name="roleLabel" defaultValue={contact.roleLabel} maxLength={80} placeholder="Owner, accounts, tenant" /></label>
+            <label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" defaultValue={contact.email} maxLength={180} /></label>
+            <label><span>Phone</span><input type="tel" name="phone" defaultValue={contact.phone} maxLength={40} inputMode="tel" /></label>
+          </div>{!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `contact:${contact.id}`}>{busy === `contact:${contact.id}` ? "Saving..." : "Save contact"}</button></div>}</form></div>
+        </details>)}</div> : <p className={registerStyles.emptyMessage}>No additional contacts. The customer details above are the main contact record.</p>}
+        {!readOnly && <details className={registerStyles.addPanel}><summary>Add contact</summary><div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={createContact}><div className={registerStyles.customerFormGrid}>
+          <label><span>First name</span><input name="firstName" required maxLength={80} /></label><label><span>Last name</span><input name="lastName" maxLength={80} /></label><label><span>Role</span><input name="roleLabel" maxLength={80} placeholder="Owner, accounts, tenant" /></label><label className={registerStyles.spanTwo}><span>Email</span><input type="email" name="email" maxLength={180} /></label><label><span>Phone</span><input type="tel" name="phone" maxLength={40} inputMode="tel" /></label><label><span>Assign to site</span><select name="serviceSiteId"><option value="">Not yet</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.siteLabel}</option>)}</select></label>
+        </div><div className={registerStyles.formActions}><button disabled={busy === `contact-new:${customer.id}`}>{busy === `contact-new:${customer.id}` ? "Adding..." : "Add contact"}</button></div></form></div></details>}
+      </div>
+    </details>
+
+    <details className={registerStyles.customerPanel}>
+      <summary><span><strong>Additional service sites</strong><small>Other properties with their own address and work instructions</small></span><b>{additionalSites.length}</b></summary>
+      <div className={registerStyles.panelBody}>
+        {additionalSites.length ? <div className={registerStyles.entityList}>{additionalSites.map((site) => <details key={site.id} className={registerStyles.entityDetails}>
+          <summary><span><strong>{site.siteLabel}</strong><small>Additional service site</small></span><em>{[site.addressLine1, site.suburb, site.addressState, site.postcode].filter(Boolean).join(", ") || "Address not added"}</em></summary>
+          <div className={registerStyles.entityBody}>
+            <form className={registerStyles.customerForm} onSubmit={(event) => void saveSite(event, site)}><div className={registerStyles.customerFormGrid}>
+              <label><span>Site name</span><input name="siteLabel" defaultValue={site.siteLabel} required maxLength={100} /></label>
+              <label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" defaultValue={site.addressLine1} /></label>
+              <label><span>Address line 2</span><input name="addressLine2" defaultValue={site.addressLine2} /></label>
+              <label><span>Suburb</span><input name="suburb" defaultValue={site.suburb} /></label>
+              <label><span>State</span><input name="addressState" defaultValue={site.addressState} maxLength={20} /></label>
+              <label><span>Postcode</span><input name="postcode" defaultValue={site.postcode} maxLength={12} inputMode="numeric" /></label>
+              <label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" defaultValue={site.accessInstructions} rows={2} maxLength={2000} /></label>
+              <label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" defaultValue={site.parkingInstructions} rows={2} maxLength={1000} /></label>
+              <label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" defaultValue={site.hazardNotes} rows={3} maxLength={2000} placeholder="Record site hazards only. Confirm controls before work starts." /></label>
+            </div>{!readOnly && <div className={registerStyles.formActions}><button disabled={busy === `site:${site.id}`}>{busy === `site:${site.id}` ? "Saving..." : "Save site"}</button></div>}</form>
+            {serviceContactEditor(site)}
+          </div>
+        </details>)}</div> : <p className={registerStyles.emptyMessage}>No additional sites. The main address is saved in Customer details.</p>}
+        {!readOnly && <details className={registerStyles.addPanel}><summary>Add service site</summary><div className={registerStyles.entityBody}><form className={registerStyles.customerForm} onSubmit={createSite}><div className={registerStyles.customerFormGrid}>
+          <label><span>Site name</span><input name="siteLabel" required maxLength={100} placeholder="Warehouse, rental, northern office" /></label><label className={registerStyles.spanTwo}><span>Service contact</span><select name="customerContactId"><option value="">Not yet</option>{contacts.map((contact) => <option key={contact.id} value={contact.id}>{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Customer contact"}</option>)}</select></label><label className={registerStyles.spanTwo}><span>Street address</span><input name="addressLine1" /></label><label><span>Address line 2</span><input name="addressLine2" /></label><label><span>Suburb</span><input name="suburb" /></label><label><span>State</span><input name="addressState" maxLength={20} /></label><label><span>Postcode</span><input name="postcode" maxLength={12} inputMode="numeric" /></label><label className={registerStyles.wideField}><span>Access instructions</span><textarea name="accessInstructions" rows={2} maxLength={2000} /></label><label className={registerStyles.wideField}><span>Parking instructions</span><textarea name="parkingInstructions" rows={2} maxLength={1000} /></label><label className={registerStyles.wideField}><span>Hazards and controls</span><textarea name="hazardNotes" rows={3} maxLength={2000} /></label>
+        </div><div className={registerStyles.formActions}><button disabled={busy === `site-new:${customer.id}`}>{busy === `site-new:${customer.id}` ? "Adding..." : "Add service site"}</button></div></form></div></details>}
+      </div>
+    </details>
+
+    <details className={registerStyles.customerPanel}>
+      <summary><span><strong>Jobs</strong><small>Work linked to this customer</small></span><b>{jobs.length}</b></summary>
+      <div className={registerStyles.panelBody}>{jobs.length ? <div className={registerStyles.customerJobs}>{jobs.map((job) => <button type="button" key={job.id} onClick={() => onOpenJob(job.id)}><span>{job.workNumber}</span><strong>{job.title}</strong><small>{sites.find((site) => site.id === job.serviceSiteId)?.siteLabel || "Site not selected"} | {pipelineLabels[job.pipelineStage] || job.pipelineStage} | {job.scheduledStart ? `Scheduled ${dateLabel(job.scheduledStart)}` : `Created ${dateLabel(job.createdAt)}`}</small></button>)}</div> : <p className={registerStyles.emptyMessage}>No jobs linked yet.</p>}</div>
+    </details>
+    {!readOnly && !hideAssets && <details className={registerStyles.customerPanel}>
+      <summary><span><strong>Assets and history</strong><small>Installed products, warranties and the private customer timeline</small></span><b>Open</b></summary>
+      <div className={registerStyles.assetPanel}><TradeAssetWorkspace user={user} customerId={customer.id} sites={sites} compact onOpenJob={onOpenJob} /></div>
+    </details>}
   </fieldset></section>;
 }

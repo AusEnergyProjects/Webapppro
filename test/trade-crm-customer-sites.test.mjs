@@ -9,7 +9,7 @@ const crmMigration = read("../drizzle/0019_melodic_unus.sql");
 const customerSiteMigration = read("../drizzle/0047_customer_service_site_foundation.sql");
 const route = read("../src/app/api/trade-crm/route.ts");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
-const styles = read("../src/app/globals.css");
+const styles = read("../src/components/InstallerCrmJobRegister.module.css");
 
 const apply = (db, sql) => {
   for (const statement of sql.split("--> statement-breakpoint").map((item) => item.trim()).filter(Boolean)) db.exec(statement);
@@ -63,15 +63,22 @@ test("contact and site APIs enforce the account owner boundary", () => {
   assert.match(route, /ownedServiceSite\(db, identity, serviceSiteId, customerId\)/);
 });
 
-test("the CRM can create, edit and assign contacts and service sites", () => {
-  for (const label of ["Customer contacts", "Add another contact", "Service sites", "Access instructions", "Parking instructions", "Hazards and controls", "Authoritative service site"]) {
+test("the customer editor shows primary data once and progressively discloses additional records", () => {
+  for (const label of ["Customer details", "Main site instructions", "Additional contacts", "Add contact", "Additional service sites", "Add service site", "Access instructions", "Parking instructions", "Hazards and controls", "Assets and history"]) {
     assert.match(workspace, new RegExp(label));
   }
-  assert.match(workspace, /contacts\.map/);
-  assert.match(workspace, /sites\.map/);
+  assert.match(workspace, /const primarySite = sites\.find\(\(site\) => site\.isPrimary\)/);
+  assert.match(workspace, /const additionalContacts = contacts\.filter\(\(contact\) => !contact\.isPrimary\)/);
+  assert.match(workspace, /const additionalSites = sites\.filter\(\(site\) => !site\.isPrimary\)/);
+  assert.match(workspace, /additionalContacts\.map/);
+  assert.match(workspace, /additionalSites\.map/);
+  assert.doesNotMatch(workspace, /Primary account contact/);
+  assert.match(workspace, /action: "update_customer", customerId: customer\.id/);
+  assert.match(workspace, /if \(!site\.isPrimary\) \{\s*Object\.assign\(update, \{\s*addressLine1:/s);
   assert.match(workspace, /action: "link_site_contact"/);
-  assert.match(styles, /\.crm-customer-entities \{[^}]*grid-template-columns: repeat\(2/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.crm-customer-entities \{ grid-template-columns: 1fr; \}/);
+  assert.match(styles, /\.customerForm input,[\s\S]*\.linkContactForm select \{/);
+  assert.match(styles, /\.customerForm textarea \{[\s\S]*min-height: 74px/);
+  assert.match(styles, /@media \(max-width: 560px\)[\s\S]*\.customerFormGrid \{ grid-template-columns: 1fr; \}/);
 });
 
 test("new customer and service-site copy avoids prohibited dash characters", () => {

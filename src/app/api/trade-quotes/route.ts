@@ -63,6 +63,12 @@ type StagedQuoteError = Error & { stage?: string };
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function stagedQuoteError(code: string, stage: string) {
+  const error = new Error(code) as StagedQuoteError;
+  error.stage = stage;
+  return error;
+}
+
 async function installerAccess(request: Request, permission: "view" | "manage" | "send") {
   const access = await requireInstallerTeamAccess(request);
   if (permission === "view" && !canViewQuotes(access)) throw new Error("QUOTE_VIEW_REQUIRED");
@@ -158,6 +164,25 @@ function errorResponse(error: unknown) {
   if (code === "INVALID_QUOTE_CHOICES") return adminJson({ ok: false, error: "Each customer choice needs a clear name, valid group and at least one priced line." }, 400);
   if (["INVALID_LINES", "INVALID_DECIMAL", "INVALID_QUANTITY", "INVALID_MONEY", "INVALID_TAX", "INVALID_TOTAL", "QUOTE_TOTAL_TOO_LARGE"].includes(code)) return adminJson({ ok: false, error: "Check every line description, quantity, price and tax selection." }, 400);
   const requestId = crypto.randomUUID();
+  if (["QUOTE_ISSUE_STORAGE_FAILED", "QUOTE_ISSUE_DELIVERY_MISSING"].includes(code)) {
+    console.error("Trade quote issue failed", {
+      code,
+      requestId,
+      stage: String((error as StagedQuoteError | null)?.stage || "issue"),
+    });
+    const response = adminJson({
+      ok: false,
+      error: code === "QUOTE_ISSUE_DELIVERY_MISSING"
+        ? "The quote was issued but its email delivery record is missing. No email was submitted. Contact support with this reference."
+        : "The quote could not be issued and no email was submitted. Try again. If it still fails, contact support with this reference.",
+      errorCode: code,
+      deliveryState: "not_queued",
+      retryable: code === "QUOTE_ISSUE_STORAGE_FAILED",
+      requestId,
+    }, code === "QUOTE_ISSUE_STORAGE_FAILED" ? 503 : 409);
+    response.headers.set("X-TLink-Request-Id", requestId);
+    return response;
+  }
   console.error("Trade quote private request failed", {
     code: code === "QUOTE_PDF_UNAVAILABLE" ? code : "QUOTE_PRIVATE_REQUEST_FAILED",
     requestId,
@@ -718,16 +743,17 @@ export async function POST(request: Request) {
           access.ownerUid,
         );
         if (!delivery) {
-          return adminJson({
-            ok: false,
-            error: "This quote is issued but has no delivery record. Use Send once to queue it.",
-          }, 409);
+          throw stagedQuoteError(
+            "QUOTE_ISSUE_DELIVERY_MISSING",
+            "issue_replay_delivery_status",
+          );
         }
         const accepted = ["provider_accepted", "sent", "delivered"].includes(delivery.status);
         return adminJson({
           ok: true,
           quoteIssued: true,
           deliveryAccepted: accepted,
+          deliveryState: delivery.status,
           delivery,
           access: quoteAccessPayload(access),
           quote: await quotePayload(access.ownerUid, workOrderId,
@@ -930,7 +956,7 @@ export async function POST(request: Request) {
             SELECT ?, ?, ?, ?, ?, ?, 'issued', 'office', 'Secure quote link issued.', ?, ?
             WHERE ${claimStillHeld}`)
             .bind(crypto.randomUUID(), linkId, quote.id, version.id, workOrderId,
-              access.ownerUid, `issued:${version.id}`, now, version.id,
+              access.ownerUid, `issued:${version.id}`, now,
               ...claimBindings),
           db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_deliveries
             (id, quote_link_id, quote_version_id, work_order_id, firebase_uid,
@@ -952,7 +978,7 @@ export async function POST(request: Request) {
               attachmentFilename, issuedPdf.sha256,
               await tradeQuoteRecipientEmailSha256(customerEmail), providerIdempotencyKey,
               publicOrigin,
-              now, now, now, ...claimBindings),
+              now, now, now, now, ...claimBindings),
           db.prepare(`INSERT INTO trade_crm_quote_events
             (id, quote_link_id, quote_id, quote_version_id, work_order_id,
              firebase_uid, event_type, actor_type, summary, evidence_key,
@@ -975,7 +1001,9 @@ export async function POST(request: Request) {
               issuedPdf.sizeBytes, now, version.id, access.ownerUid,
               issueClaimToken, quote.id, access.ownerUid, version.id,
               ...publicAccessHeld.bindings),
-        ]);
+        ]).catch(() => {
+          throw stagedQuoteError("QUOTE_ISSUE_STORAGE_FAILED", "issue_transaction");
+        });
         if (Number(issueResults[issueResults.length - 1]?.meta.changes || 0) !== 1) {
           throw new Error("QUOTE_DELIVERY_PENDING");
         }
@@ -1002,10 +1030,23 @@ export async function POST(request: Request) {
           || String(canonical.issued_pdf_sha256 || "") !== issuedPdf.sha256
           || Number(canonical.issued_pdf_size_bytes || 0) !== issuedPdf.sizeBytes
         ) throw new Error("QUOTE_ISSUE_IN_PROGRESS");
+        const delivery = await latestTradeQuoteDeliveryStatus(
+          db,
+          String(version.id),
+          access.ownerUid,
+        );
+        if (!delivery) {
+          throw stagedQuoteError(
+            "QUOTE_ISSUE_DELIVERY_MISSING",
+            "issue_delivery_status",
+          );
+        }
         return adminJson({
           ok: true,
           quoteIssued: true,
-          delivery: await latestTradeQuoteDeliveryStatus(db, String(version.id), access.ownerUid),
+          deliveryAccepted: false,
+          deliveryState: delivery.status,
+          delivery,
           access: quoteAccessPayload(access),
           quote: await quotePayload(access.ownerUid, workOrderId, access.isOwner || access.canViewPriceBook, origin),
         }, 202);
@@ -1034,15 +1075,35 @@ export async function POST(request: Request) {
               versionNumber: Number(version.version_number),
               reference: issuedPdf,
             });
+            const delivery = await latestTradeQuoteDeliveryStatus(
+              db,
+              String(version.id),
+              access.ownerUid,
+            );
+            if (!delivery) {
+              throw stagedQuoteError(
+                "QUOTE_ISSUE_DELIVERY_MISSING",
+                "issue_recovery_delivery_status",
+              );
+            }
             return adminJson({
               ok: true,
               quoteIssued: true,
-              delivery: await latestTradeQuoteDeliveryStatus(db, String(version.id), access.ownerUid),
+              deliveryAccepted: ["provider_accepted", "sent", "delivered"]
+                .includes(delivery.status),
+              deliveryState: delivery.status,
+              delivery,
               access: quoteAccessPayload(access),
               quote: await quotePayload(access.ownerUid, workOrderId,
                 access.isOwner || access.canViewPriceBook, origin),
             }, 202);
-          } catch { throw error; }
+          } catch (recoveryError) {
+            if (
+              recoveryError instanceof Error
+              && recoveryError.message === "QUOTE_ISSUE_DELIVERY_MISSING"
+            ) throw recoveryError;
+            throw error;
+          }
         }
         if (issuedPdf) {
           await activateTradeIssuedDocumentCleanup(issuedPdf.objectKey)

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { User } from "firebase/auth";
 import {
+  moveTradeQuoteLine,
   normaliseTradeQuoteLineGroup,
   overallTradeQuoteDiscountKind,
   percentInputToQuantity,
@@ -31,7 +32,7 @@ type JobPacket = { id: string; packetCode: string; name: string; revision: numbe
 type QuoteChoice = { id?: string; clientKey: string; kind: "package" | "addon" | "choose_one"; groupKey: string; name: string; summary: string; recommended: boolean; subtotalCents?: number; taxCents?: number; totalCents?: number; lines: QuoteLine[] };
 type SavedChoice = Omit<QuoteChoice, "lines"> & { id: string; items: SavedLine[]; subtotalCents: number; taxCents: number; totalCents: number };
 type QuoteVersion = { id: string; versionNumber: number; status: string; customerEmail: string; subtotalCents: number; taxCents: number; totalCents: number; terms: string; customerMessage: string; validUntil: string; consentStatement: string; issuedAt: string; items: SavedLine[]; choices: SavedChoice[]; internalSummary?: { costCentsExGst: number; sellCentsExGst: number; marginCentsExGst: number }; acceptance: null | { decision: string; actorEmail: string; actorType: string; signerName: string; decidedAt: string; consentStatement: string; selectionSummary: string; selectedTotalCents: number } };
-type QuoteDelivery = { id: string; channel: string; status: string; recipientPreview: string; sentAt: string; deliveredAt: string; createdAt: string; nextAttemptAt?: string; presentation?: { key: "sending" | "accepted" | "delivered" | "attention"; label: "Sending" | "Email accepted for delivery" | "Delivered" | "Needs attention"; canRetry: boolean } };
+type QuoteDelivery = { id: string; channel: string; status: string; recipientPreview: string; sentAt: string; deliveredAt: string; createdAt: string; nextAttemptAt?: string; presentation?: { key: "sending" | "accepted" | "delivered" | "attention"; label: string; canRetry: boolean } };
 type QuoteDeliveryStatus = Pick<QuoteDelivery, "id" | "status" | "presentation"> & { attempts?: number; nextAttemptAt?: string; updatedAt?: string };
 type Quote = { id: string; quoteNumber: string; currentVersionNumber: number; status: string; versions: QuoteVersion[];
   editableDraft: null | { id: string; versionNumber: number; updatedAt: string };
@@ -41,7 +42,7 @@ type Quote = { id: string; quoteNumber: string; currentVersionNumber: number; st
   deliveries: QuoteDelivery[] };
 type QuoteJob = { customerId: string; customerNumber: string; customerName: string; workNumber: string; title: string; siteLabel: string; siteSummary: string; enquiryReference: string; enquiryServices: string[]; enquiryBrief: string; publicLead: boolean };
 type QuoteBusiness = { businessName: string; quoteEmailSubjectTemplate: string; quoteEmailIntro: string; quoteDefaultTerms: string; brandThemeKey: string; brandBorderStyle: string; hasLogo: boolean; hasBanner: boolean };
-type QuoteResult = { ok?: boolean; revoked?: boolean; authorisedEmails?: string[]; priceBookItems?: PriceBookItem[]; jobPackets?: JobPacket[]; quote?: Quote | null; job?: QuoteJob; business?: QuoteBusiness; delivery?: QuoteDeliveryStatus | null; draftVersionId?: string; draftVersionNumber?: number; access?: { canManageQuotes?: boolean; canSendQuotes?: boolean; canManageCustomers?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string };
+type QuoteResult = { ok?: boolean; revoked?: boolean; authorisedEmails?: string[]; priceBookItems?: PriceBookItem[]; jobPackets?: JobPacket[]; quote?: Quote | null; job?: QuoteJob; business?: QuoteBusiness; delivery?: QuoteDeliveryStatus | null; draftVersionId?: string; draftVersionNumber?: number; access?: { canManageQuotes?: boolean; canSendQuotes?: boolean; canManageCustomers?: boolean; canViewPriceBook?: boolean; canApplyDiscounts?: boolean }; error?: string; errorCode?: string; requestId?: string };
 type AcceptedQuotePhoto = { id: string; label: string; contentType: string; sizeBytes: number; serviceCategories: string[]; privacyStatus: string; acceptedAt: string; contentUrl: string };
 type AcceptedQuotePhotoResult = { ok?: boolean; acceptedPhotos?: AcceptedQuotePhoto[]; error?: string };
 type QuotePreviewLine = { description: string; sectionHeading: string; quantityMilli: number; unitPriceCents: number; taxCode: string; subtotalCents: number; taxCents: number; totalCents: number };
@@ -62,6 +63,8 @@ type QuoteSendPreview = {
   displayTotals: ReturnType<typeof tradeQuoteDocumentDisplayTotals>;
   delivery: QuoteDeliveryPreview;
 };
+type QuoteSendOutcome = { kind: "idle" | "sending" | "success" | "attention" | "error"; message: string };
+type DraggedQuoteLine = { scopeKey: string; index: number };
 type QuoteEditorValidationIssue = (TradeQuoteLineValidationIssue & { kind: "line"; scopeKey: string }) |
   (TradeQuoteChoiceValidationIssue & { kind: "choice"; lineIndex: -1 });
 
@@ -145,11 +148,20 @@ function previewError(error: unknown) {
 }
 
 function quoteDeliveryMessage(delivery: QuoteDeliveryStatus | null | undefined, prefix: string) {
-  if (delivery?.presentation?.key === "sending") return `${prefix} Email is sending automatically.`;
-  if (delivery?.presentation?.key === "accepted") return `${prefix} Email accepted for delivery.`;
-  if (delivery?.presentation?.key === "delivered") return `${prefix} Email delivered.`;
-  if (delivery?.presentation?.key === "attention") return `${prefix} Email delivery needs attention. Use Retry email below when available.`;
-  return `${prefix} Email delivery status is shown below.`;
+  const label = cleanDeliveryText(delivery?.presentation?.label, 120);
+  if (delivery?.presentation?.key === "sending") return `${prefix} ${label || "Email is sending automatically"}.`;
+  if (delivery?.presentation?.key === "accepted") return `${prefix} ${label || "Email accepted for delivery"}.`;
+  if (delivery?.presentation?.key === "delivered") return `${prefix} ${label || "Email delivered"}.`;
+  if (delivery?.presentation?.key === "attention") return `${prefix} ${label || "Email delivery needs attention"}. Use Retry email below when available.`;
+  return `${prefix} The server did not return an email delivery status. Check the delivery record before resending.`;
+}
+
+function quoteDeliveryOutcome(delivery: QuoteDeliveryStatus | null | undefined, prefix: string): QuoteSendOutcome {
+  const key = delivery?.presentation?.key;
+  return {
+    kind: key === "sending" ? "sending" : key && key !== "attention" ? "success" : "attention",
+    message: quoteDeliveryMessage(delivery, prefix),
+  };
 }
 
 function liveQuoteSummary(lines: QuoteLine[], priceBookItems: PriceBookItem[]) {
@@ -223,6 +235,9 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const [busy, setBusy] = useState(""); const [message, setMessage] = useState("");
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false); const [answer, setAnswer] = useState(""); const [answeringId, setAnsweringId] = useState("");
   const [sendPreview, setSendPreview] = useState<QuoteSendPreview | null>(null); const [sendConsent, setSendConsent] = useState(false);
+  const [sendOutcome, setSendOutcome] = useState<QuoteSendOutcome>({ kind: "idle", message: "" });
+  const [draggedQuoteLine, setDraggedQuoteLine] = useState<DraggedQuoteLine | null>(null);
+  const [dragTargetQuoteLine, setDragTargetQuoteLine] = useState<DraggedQuoteLine | null>(null);
   const [pendingIssueVersionId, setPendingIssueVersionId] = useState("");
   const [rebateDraft, setRebateDraft] = useState<TradeRebateEstimateDraft | null>(null);
   const [canApplyDiscounts, setCanApplyDiscounts] = useState(false);
@@ -241,6 +256,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   const quoteValidationIssue = useMemo(() => firstQuoteEditorValidationIssue(lines, choices), [choices, lines]);
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLElement | null>(null);
+  const previewPdfRef = useRef<HTMLElement | null>(null);
   const acceptedPhotoDialogRef = useRef<HTMLDivElement | null>(null);
   const acceptedPhotoCloseRef = useRef<HTMLButtonElement | null>(null);
   const acceptedPhotoOpenerRef = useRef<HTMLElement | null>(null);
@@ -250,7 +266,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     if (init.body) headers.set("Content-Type", "application/json");
     const response = await fetch(`/api/trade-quotes${init.method ? "" : `?workOrderId=${encodeURIComponent(workOrderId)}`}`, { ...init, headers, cache: "no-store" });
     const result = await response.json().catch(() => ({})) as QuoteResult;
-    if (!response.ok || result.ok === false) throw new Error(result.error || "The quote could not be loaded.");
+    if (!response.ok || result.ok === false) {
+      const reference = cleanDeliveryText(result.requestId, 100);
+      throw new Error(`${result.error || "The quote could not be loaded."}${reference ? ` Reference ${reference}.` : ""}`);
+    }
     return result;
   }, [user, workOrderId]);
 
@@ -450,13 +469,6 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     };
   }, [acceptedPhotoPreview]);
 
-  function addSavedLine(itemId: string, targetChoiceKey = "") {
-    const item = priceBookItems.find((candidate) => candidate.id === itemId); if (!item) return;
-    const line: QuoteLine = { priceBookItemId: item.id, lineType: item.lineType, description: item.description || item.name, quantity: "1", unitPrice: (item.sellPriceCentsExGst / 100).toFixed(2), taxCode: item.taxCode, sectionHeading: "Included work" };
-    if (targetChoiceKey) setChoices((current) => current.map((choice) => choice.clientKey === targetChoiceKey ? { ...choice, lines: [...choice.lines.filter((row) => row.description), line] } : choice));
-    else setLines((current) => current.length === 1 && !current[0].description ? [line] : [...current, line]);
-  }
-
   function applyRebateDiscount() {
     if (!rebateDraft || !canApplyDiscounts) return;
     const line: QuoteLine = {
@@ -509,11 +521,23 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     const next: QuoteLine = kind === "percent"
       ? { lineType: "adjustment", description: "Discount", quantity: "0.10", unitPrice: "0.00", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION }
       : { lineType: "adjustment", description: "Discount", quantity: "1", unitPrice: "100.00", taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
-    setLines((current) => [...current.filter((line) => !overallTradeQuoteDiscountKind(line)), next]);
-    setMessage(kind === "percent" ? "Percentage discount added. Enter the offer label and percentage." : "Dollar discount added. Enter the offer label and amount including GST.");
+    setLines((current) => [...current, next]);
+    setMessage(kind === "percent" ? "Percentage discount added as a separate line. Enter its label and percentage." : "Dollar discount added as a separate line. Enter its label and amount including GST.");
   }
 
   function updateBaseLine(index: number, field: keyof QuoteLine, value: string) { setLines((current) => current.map((line, position) => position === index ? { ...line, [field]: value } : line)); }
+  function replaceBaseLine(index: number, replacement: QuoteLine) { setLines((current) => current.map((line, position) => position === index ? replacement : line)); }
+  function moveQuoteLine(scopeKey: string, fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    if (scopeKey === "base") {
+      setLines((current) => moveTradeQuoteLine(current, fromIndex, toIndex));
+    } else {
+      setChoices((current) => current.map((choice) => choice.clientKey === scopeKey
+        ? { ...choice, lines: moveTradeQuoteLine(choice.lines, fromIndex, toIndex) }
+        : choice));
+    }
+    setMessage(`Quote line moved to position ${toIndex + 1}.`);
+  }
   function updateChoice(key: string, patch: Partial<QuoteChoice>) {
     setChoices((current) => current.map((choice) => {
       if (choice.clientKey === key) return { ...choice, ...patch };
@@ -522,6 +546,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     }));
   }
   function updateChoiceLine(key: string, index: number, field: keyof QuoteLine, value: string) { setChoices((current) => current.map((choice) => choice.clientKey === key ? { ...choice, lines: choice.lines.map((line, position) => position === index ? { ...line, [field]: value } : line) } : choice)); }
+  function replaceChoiceLine(key: string, index: number, replacement: QuoteLine) { setChoices((current) => current.map((choice) => choice.clientKey === key ? { ...choice, lines: choice.lines.map((line, position) => position === index ? replacement : line) } : choice)); }
 
   async function saveDraft() {
     if (!canEditQuote) return;
@@ -536,7 +561,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   }
   function openSendPreview() {
     if (!canSendQuote) return;
-    setMessage("");
+    setMessage(""); setSendOutcome({ kind: "idle", message: "" });
     try {
       if (quoteValidationIssue) {
         const targetKey = `${quoteValidationIssue.scopeKey}:${quoteValidationIssue.lineIndex}:${quoteValidationIssue.field}`;
@@ -596,6 +621,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
   async function sendPreviewedQuote() {
     if (!canSendQuote || !sendPreview || !sendConsent) return;
     setBusy("preview_send"); setMessage("");
+    setSendOutcome({ kind: "sending", message: "Saving this exact quote and submitting its email..." });
     let draftSaved = false;
     try {
       if (pendingIssueVersionId) {
@@ -606,8 +632,9 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
           consentConfirmed: true,
         }) });
         applyResult({ ...replayed, authorisedEmails: emails, priceBookItems, jobPackets });
-        setPendingIssueVersionId(""); setSendPreview(null); setSendConsent(false);
-        setMessage(quoteDeliveryMessage(replayed.delivery, "Quote saved and issued.")); await onChanged?.();
+        const outcome = quoteDeliveryOutcome(replayed.delivery, "Quote saved and issued.");
+        setPendingIssueVersionId(""); setSendOutcome(outcome);
+        setMessage(outcome.message); await onChanged?.();
         return;
       }
       const saved = await request({ method: "POST", body: JSON.stringify({ action: "save_draft", workOrderId, lines, choices, customerEmail, terms, customerMessage, validUntil, saveAsBusinessDefault }) });
@@ -621,12 +648,15 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
         quoteVersionId: saved.draftVersionId,
         consentConfirmed: true,
       }) });
-      applyResult({ ...issued, authorisedEmails: emails, priceBookItems, jobPackets }); setPendingIssueVersionId(""); setSendPreview(null); setSendConsent(false);
-      setMessage(quoteDeliveryMessage(issued.delivery, "Quote saved and issued.")); await onChanged?.();
+      const outcome = quoteDeliveryOutcome(issued.delivery, "Quote saved and issued.");
+      applyResult({ ...issued, authorisedEmails: emails, priceBookItems, jobPackets }); setPendingIssueVersionId("");
+      setSendOutcome(outcome); setMessage(outcome.message); await onChanged?.();
     } catch (error) {
       const reason = error instanceof Error ? error.message : "The quote could not be sent.";
-      if (draftSaved || pendingIssueVersionId) setMessage(`The exact saved quote is retained. Submit again to safely confirm its issue and email status. ${reason}`);
-      else setMessage(reason);
+      const outcome = draftSaved || pendingIssueVersionId
+        ? `The exact saved quote is retained. Submit again to safely confirm its issue and email status. ${reason}`
+        : reason;
+      setSendOutcome({ kind: "error", message: outcome }); setMessage(outcome);
     } finally { setBusy(""); }
   }
   async function addQuoteRecipient() {
@@ -656,7 +686,17 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     catch { setMessage("Copy was blocked by this browser. Select the link and copy it manually."); }
   }
 
-  function lineEditor(line: QuoteLine, index: number, scopeKey: string, onChange: (field: keyof QuoteLine, value: string) => void, onRemove: () => void, canRemove: boolean) {
+  function lineEditor(
+    line: QuoteLine,
+    index: number,
+    scopeKey: string,
+    onChange: (field: keyof QuoteLine, value: string) => void,
+    onReplace: (replacement: QuoteLine) => void,
+    onRemove: () => void,
+    canRemove: boolean,
+    lineCount: number,
+    onMove: (fromIndex: number, toIndex: number) => void,
+  ) {
     const linked = Boolean(line.priceBookItemId);
     const overallDiscount = overallTradeQuoteDiscountKind(line);
     const discountLocked = !canApplyDiscounts && Number(line.unitPrice) < 0;
@@ -674,7 +714,49 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       if (discountLocked && ["lineType", "quantity", "unitPrice", "taxCode"].includes(field)) return;
       onChange(field, value);
     };
-    if (overallDiscount) return <div className={`trade-quote-overall-discount${lineIssue ? " invalid" : ""}`} key={`${index}:${line.id || "overall-discount"}`}>
+    const selectPriceBookItem = (itemId: string) => {
+      if (!itemId) {
+        onReplace({ ...line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" });
+        return;
+      }
+      const item = priceBookItems.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      onReplace({
+        ...line,
+        priceBookItemId: item.id,
+        jobPacketId: "",
+        jobPacketLineId: "",
+        lineType: item.lineType,
+        description: item.description || item.name,
+        quantity: "1",
+        unitPrice: (item.sellPriceCentsExGst / 100).toFixed(2),
+        taxCode: item.taxCode,
+      });
+    };
+    const isDragTarget = dragTargetQuoteLine?.scopeKey === scopeKey && dragTargetQuoteLine.index === index;
+    const rowDragProps = {
+      onDragOver: (event: DragEvent<HTMLDivElement>) => {
+        if (draggedQuoteLine?.scopeKey !== scopeKey) return;
+        event.preventDefault(); event.dataTransfer.dropEffect = "move";
+        setDragTargetQuoteLine({ scopeKey, index });
+      },
+      onDrop: (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        if (draggedQuoteLine?.scopeKey === scopeKey) onMove(draggedQuoteLine.index, index);
+        setDraggedQuoteLine(null); setDragTargetQuoteLine(null);
+      },
+    };
+    const orderControls = <div className="trade-quote-order-controls" aria-label={`Reorder ${line.description || `quote line ${index + 1}`}`}>
+      <button type="button" className="trade-quote-drag-handle" draggable={!busy} disabled={Boolean(busy)} aria-label={`Drag ${line.description || `quote line ${index + 1}`}`} title="Drag to reorder" onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", `${scopeKey}:${index}`);
+        setDraggedQuoteLine({ scopeKey, index }); setDragTargetQuoteLine({ scopeKey, index });
+      }} onDragEnd={() => { setDraggedQuoteLine(null); setDragTargetQuoteLine(null); }}>Drag</button>
+      <button type="button" disabled={Boolean(busy) || index === 0} aria-label={`Move ${line.description || `quote line ${index + 1}`} up`} title="Move up" onClick={() => onMove(index, index - 1)}>Up</button>
+      <button type="button" disabled={Boolean(busy) || index === lineCount - 1} aria-label={`Move ${line.description || `quote line ${index + 1}`} down`} title="Move down" onClick={() => onMove(index, index + 1)}>Down</button>
+    </div>;
+    if (overallDiscount) return <div {...rowDragProps} className={`trade-quote-overall-discount${lineIssue ? " invalid" : ""}${isDragTarget ? " drag-target" : ""}`} key={`${index}:${line.id || "overall-discount"}`}>
+      {orderControls}
       <div><span>{overallDiscount === "percent" ? "Percentage discount" : "Dollar discount"}</span><small>{overallDiscount === "percent" ? "Applied to the positive included scope. GST reduces in the same proportion." : "Customer discount including GST. GST is reduced in the same proportion as the included scope."}</small></div>
       <label><span>Label / details</span><input {...validationAttributes("description")} aria-label="Overall discount label or details" value={line.description} maxLength={500} readOnly={!canApplyDiscounts} onChange={(event) => onChange("description", event.target.value)} placeholder={overallDiscount === "percent" ? "Xmas sale" : "STC x 10 or refer a friend"} /></label>
       <label><span>{overallDiscount === "percent" ? "Percent off" : "Dollars off incl GST"}</span><input {...validationAttributes(overallDiscount === "percent" ? "quantity" : "unitPrice")} aria-label={overallDiscount === "percent" ? "Overall discount percent" : "Overall discount dollars"} value={overallDiscount === "percent" ? quantityToPercentInput(line.quantity) : line.unitPrice.startsWith("-") ? line.unitPrice.slice(1) : line.unitPrice} inputMode="decimal" readOnly={!canApplyDiscounts} onChange={(event) => {
@@ -686,9 +768,10 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       {canApplyDiscounts && <button type="button" onClick={onRemove}>Remove</button>}
       {lineIssue && <p id={validationErrorId} className="trade-quote-line-error" role="alert">{lineIssue.message}</p>}
     </div>;
-    return <div className={`trade-quote-line${lineIssue ? " invalid" : ""}`} key={`${index}:${line.id || "new"}`}>
-      <label className="trade-quote-field"><span>Type</span><select {...validationAttributes("lineType")} aria-label={`Line ${index + 1} type`} value={line.lineType} disabled={linked || discountLocked} onChange={(event) => changeLine("lineType", event.target.value)}><option value="product">Product</option><option value="labour">Labour</option><option value="adjustment">Adjustment</option></select></label>
-      <label className="trade-quote-description"><span>Description and section</span><input {...validationAttributes("description")} aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} readOnly={linked} onChange={(event) => onChange("description", event.target.value)} placeholder="Description" /><input className="trade-quote-section-input" aria-label={`Line ${index + 1} section heading`} value={line.sectionHeading} maxLength={120} onChange={(event) => onChange("sectionHeading", event.target.value)} placeholder="Customer section heading" />{line.priceBookItemId && <small>{line.jobPacketId ? "Common job item" : "Saved item"}, description, type, price and GST come from the current price book. Change the quantity or customer section here.</small>}</label>
+    return <div {...rowDragProps} className={`trade-quote-line${lineIssue ? " invalid" : ""}${isDragTarget ? " drag-target" : ""}`} key={`${index}:${line.id || "new"}`}>
+      {orderControls}
+      <label className="trade-quote-field trade-quote-price-book-field"><span>Price book item</span><select {...validationAttributes("lineType")} aria-label={`Line ${index + 1} price book item`} value={line.priceBookItemId || ""} disabled={discountLocked} onChange={(event) => selectPriceBookItem(event.target.value)}><option value="">Custom line</option>{priceBookItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} ex GST</option>)}</select>{linked && <small>Current price book details are checked again when saved.</small>}</label>
+      <label className="trade-quote-description"><span>Description and section</span><input {...validationAttributes("description")} aria-label={`Line ${index + 1} description`} value={line.description} maxLength={500} readOnly={linked} onChange={(event) => onChange("description", event.target.value)} placeholder="Description" /><input className="trade-quote-section-input" aria-label={`Line ${index + 1} section heading`} value={line.sectionHeading} maxLength={120} onChange={(event) => onChange("sectionHeading", event.target.value)} placeholder="Customer section heading" />{line.priceBookItemId && <small>{line.jobPacketId ? "Common job item" : "Saved item"}, description, price and GST come from the current price book. Change the quantity or customer section here.</small>}</label>
       <label className="trade-quote-field"><span>Quantity</span><input {...validationAttributes("quantity")} aria-label={`Line ${index + 1} quantity`} value={line.quantity} inputMode="decimal" readOnly={discountLocked} onChange={(event) => changeLine("quantity", event.target.value)} /></label>
       <label className="trade-quote-field"><span>Unit price</span><input {...validationAttributes("unitPrice")} aria-label={`Line ${index + 1} unit price`} value={line.unitPrice} inputMode="decimal" readOnly={linked || discountLocked} onChange={(event) => changeLine("unitPrice", event.target.value)} />{discountLocked && <small>Discount amount is read-only for your access.</small>}</label>
       <label className="trade-quote-field"><span>Tax</span><select {...validationAttributes("taxCode")} aria-label={`Line ${index + 1} tax`} value={line.taxCode} disabled={linked || discountLocked} onChange={(event) => changeLine("taxCode", event.target.value)}><option value="gst">GST 10%</option><option value="none">No GST</option></select></label>
@@ -711,8 +794,7 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
       <header><div><span>{choice.kind === "package" ? "Package" : choice.kind === "addon" ? "Optional extra" : "Choose one"}</span><input {...validationAttributes("name")} aria-label="Customer choice name" value={choice.name} maxLength={120} onChange={(event) => updateChoice(choice.clientKey, { name: event.target.value })} /></div><button {...validationAttributes("remove")} type="button" onClick={() => setChoices((currentChoices) => currentChoices.filter((item) => item.clientKey !== choice.clientKey))}>Remove</button></header>
       <textarea aria-label={`${choice.name || "Customer choice"} summary`} value={choice.summary} maxLength={500} rows={2} onChange={(event) => updateChoice(choice.clientKey, { summary: event.target.value })} />
       <label className="trade-quote-recommended"><input {...validationAttributes("recommended")} type="checkbox" checked={choice.recommended} onChange={(event) => updateChoice(choice.clientKey, { recommended: event.target.checked })} /><span>Show as recommended</span></label>
-      <label className="trade-quote-choice-add"><span>Quick add saved item</span><select value="" onChange={(event) => addSavedLine(event.target.value, choice.clientKey)}><option value="">Choose price-book item</option>{priceBookItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} ex GST</option>)}</select></label>
-      <div className="trade-quote-choice-lines">{choice.lines.map((line, index) => lineEditor(line, index, choice.clientKey, (field, value) => updateChoiceLine(choice.clientKey, index, field, value), () => updateChoice(choice.clientKey, { lines: choice.lines.filter((_, position) => position !== index) }), choice.lines.length > 1))}</div>
+      <div className="trade-quote-choice-lines">{choice.lines.map((line, index) => lineEditor(line, index, choice.clientKey, (field, value) => updateChoiceLine(choice.clientKey, index, field, value), (replacement) => replaceChoiceLine(choice.clientKey, index, replacement), () => updateChoice(choice.clientKey, { lines: choice.lines.filter((_, position) => position !== index) }), choice.lines.length > 1, choice.lines.length, (fromIndex, toIndex) => moveQuoteLine(choice.clientKey, fromIndex, toIndex)))}</div>
       <button {...validationAttributes("addLine")} className="quote-add-line" type="button" onClick={() => updateChoice(choice.clientKey, { lines: [...choice.lines, blankLine()] })}>Add line to this choice</button>
       {choiceIssue && <p id={validationErrorId} className="trade-quote-choice-error" role="alert">{choiceIssue.message}</p>}
       {choice.totalCents != null && <strong className="trade-quote-choice-total">{money(choice.totalCents)} incl GST</strong>}
@@ -760,10 +842,9 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     {(quote?.questions?.length || 0) > 0 && <section className={`trade-quote-questions ${openQuestions.length ? "needs-attention" : ""}`} id="quote-questions"><span>{openQuestions.length ? `${openQuestions.length} customer ${openQuestions.length === 1 ? "question needs" : "questions need"} a reply` : "Customer questions"}</span><h5>{openQuestions.length ? "Reply before the job moves on" : "Questions and replies"}</h5>{quote?.questions?.map((item) => <article key={item.id}><div><strong>{item.question}</strong><small>Asked {new Date(item.askedAt).toLocaleString("en-AU")}</small>{item.answer && <p>{item.answer}</p>}</div>{canSendQuote && item.status === "open" && (answeringId === item.id ? <div><textarea aria-label="Quote question response" rows={3} maxLength={1000} value={answer} onChange={(event) => setAnswer(event.target.value)} /><button type="button" disabled={answer.trim().length < 2 || Boolean(busy)} onClick={() => void linkAction("answer_question", { questionId: item.id, answer })}>Send response</button></div> : <button type="button" onClick={() => setAnsweringId(item.id)}>Answer</button>)}</article>)}</section>}
     {canEditQuote && canApplyDiscounts && rebateDraft && <section className="trade-rebate-document-offer"><div><span>REBATE ESTIMATE READY</span><strong>{rebateDraft.quantity} {rebateDraft.unit} | ${rebateDraft.customerDiscountDollars} customer discount</strong><small>{rebateDraft.activityTitle}</small></div><button type="button" onClick={applyRebateDiscount}>Add discount to this quote</button></section>}
     <fieldset disabled={!canEditQuote} style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}>
-    <div className="trade-quote-price-book"><label><span>Add a saved item</span><select aria-label="Add a saved price-book item" value="" disabled={!priceBookItems.length} onChange={(event) => addSavedLine(event.target.value)}><option value="">{priceBookItems.length ? "Choose a saved item" : "No saved items yet"}</option>{priceBookItems.map((item) => <option key={item.id} value={item.id}>{item.name} | {money(item.sellPriceCentsExGst)} ex GST / {item.unitLabel}</option>)}</select></label>{priceBookItems.length ? <small>Select an item once, then adjust only its quantity. Current description, type, price and GST are checked again when the draft is saved.</small> : <div><small>Save your common labour, materials and call-outs once, then reuse them here.</small><button type="button" onClick={onOpenPriceBook}>Open Price book</button></div>}</div>
     {jobPackets.length > 0 && <div className="trade-quote-packets"><label><span>Start from a common job</span><select value={packetId} onChange={(event) => setPacketId(event.target.value)}><option value="">Choose saved common work</option>{jobPackets.map((packet) => <option key={packet.id} value={packet.id} disabled={!packet.canApply}>{packet.name} | {packet.lines.length} items | {money(packet.summary.sellCentsExGst)} ex GST{packet.canApply ? "" : " | needs attention"}</option>)}</select></label><div className="trade-quote-packet-actions"><button type="button" disabled={!packetId} onClick={() => applyPacket(false)}>Use standard job</button><button type="button" disabled={!packetId} onClick={() => applyPacket(true)}>Build Good, Better, Best</button></div><small>One common job can stay simple or become three customer choices. Edit only what differs.</small></div>}
-    {lines.length > 0 && <section className="trade-quote-base"><header><div><strong>Quote items</strong><span>{choices.length ? "These items are included before any customer choices." : "The fastest path for straightforward work."}</span></div></header><div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Type</span><span>Description and section</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => lineEditor(line, index, "base", (field, value) => updateBaseLine(index, field, value), () => setLines((currentLines) => currentLines.filter((_, position) => position !== index)), lines.length > 1 || choices.length > 0))}</div></section>}
-    <div className="trade-quote-builder-actions"><button className="quote-add-line" type="button" onClick={() => setLines((current) => [...current, blankLine()])}>Add included line</button><button type="button" onClick={addAddon}>Add optional extra</button><button type="button" onClick={addChooseOne}>Add choose-one pair</button>{canApplyDiscounts && <><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("percent")}>+ Percent discount</button><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("fixed")}>+ Dollar discount</button></>}</div>
+    {lines.length > 0 && <section className="trade-quote-base"><header><div><strong>Quote items</strong><span>{choices.length ? "These items are included before any customer choices." : "Choose a saved price-book item on any row, or leave it as Custom line."}</span></div></header><div className="trade-quote-lines"><div className="trade-quote-line headings" aria-hidden="true"><span>Order</span><span>Price book item</span><span>Description and section</span><span>Quantity</span><span>Unit price</span><span>Tax</span><span></span></div>{lines.map((line, index) => lineEditor(line, index, "base", (field, value) => updateBaseLine(index, field, value), (replacement) => replaceBaseLine(index, replacement), () => setLines((currentLines) => currentLines.filter((_, position) => position !== index)), lines.length > 1 || choices.length > 0, lines.length, (fromIndex, toIndex) => moveQuoteLine("base", fromIndex, toIndex)))}</div></section>}
+    <div className="trade-quote-builder-actions"><button className="quote-add-line" type="button" onClick={() => setLines((current) => [...current, blankLine()])}>Add included line</button><button type="button" onClick={addAddon}>Add optional extra</button><button type="button" onClick={addChooseOne}>Add choose-one pair</button><button type="button" onClick={onOpenPriceBook}>Manage price book</button>{canApplyDiscounts && <><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("percent")}>+ Percent discount</button><button className="quote-discount-action" type="button" onClick={() => addOverallDiscount("fixed")}>+ Dollar discount</button></>}</div>
     {choices.length > 0 && <section className="trade-quote-choice-builder"><header><div><span>Customer choices</span><h5>Make the decision easy</h5><p>Packages use one clear selection. Optional extras are independent. Choose-one pairs require one answer.</p></div><button type="button" onClick={() => setChoices([])}>Remove all choices</button></header><div className="trade-quote-choice-grid">{choices.map(choiceEditor)}</div></section>}
     <div className="trade-quote-settings">
       <div className="trade-quote-recipient wide"><label><span>Send quote to</span><select value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)}><option value="">Choose authorised contact</option>{emails.map((email) => <option key={email}>{email}</option>)}</select><small>{jobSummary?.publicLead ? "This address is projected from the customer's current release for this exact lead and is checked again before issue and send." : "The secure link needs no customer account. Every added address becomes an authorised contact on this customer record."}</small></label><div className="trade-quote-recipient-actions">{serverCanManageCustomers && !jobSummary?.publicLead && <button type="button" onClick={() => setAddingRecipient((value) => !value)}>{addingRecipient ? "Cancel new email" : "Add another email"}</button>}{jobSummary?.customerId && !jobSummary.publicLead && onOpenCustomer && <button type="button" onClick={() => onOpenCustomer(jobSummary.customerId)}>Open customer details</button>}</div></div>
@@ -799,17 +880,23 @@ export function TradeQuotePanel({ user, workOrderId, available, readOnly = false
     {canSendQuote && sendPreview && <div className="crm-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setSendPreview(null); }}>
       <section ref={previewDialogRef} className="crm-invoice-preview-dialog crm-quote-preview-dialog" role="dialog" aria-modal="true" aria-busy={Boolean(busy)} aria-labelledby="quote-send-preview-title" tabIndex={-1}>
         <header><div><span>{sendPreview.delivery.identityKnown ? "Exact customer delivery" : "Pre-save customer delivery preview"}</span><strong id="quote-send-preview-title">{sendPreview.delivery.subject}</strong><small>{sendPreview.delivery.identityKnown ? `To ${customerEmail} | Issues ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} | PDF attachment ${sendPreview.delivery.attachmentName}` : `To ${customerEmail} | Quote number, version and PDF filename will be confirmed by the server when this draft is saved.`}</small></div><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Close</button></header>
+        <section className="trade-quote-send-consent" aria-label="Confirm customer email consent">
+          <label><input type="checkbox" checked={sendConsent} disabled={Boolean(busy) || sendOutcome.kind === "success" || sendOutcome.kind === "attention"} onChange={(event) => setSendConsent(event.target.checked)} /><span><strong>Confirm before sending</strong>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>
+          {sendOutcome.message && <p className={sendOutcome.kind} role={sendOutcome.kind === "error" || sendOutcome.kind === "attention" ? "alert" : "status"} aria-live="polite">{sendOutcome.message}</p>}
+        </section>
         <div className="trade-quote-send-preview" data-theme={business?.brandThemeKey || "emerald_navy"} data-border={business?.brandBorderStyle || "soft"}>
-          <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The email includes a secure review button where the customer can ask a question, choose options, sign, accept or decline.</p><button type="button" disabled>Review quote securely</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
-          <section className="trade-quote-pdf-attachment"><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Submitted as attachment</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
+          <section className="trade-quote-email-preview"><span>Email preview</span><article><strong>{business?.businessName || "Your trade business"}</strong><h5>{sendPreview.delivery.subject}</h5><p>Hello {jobSummary?.customerName || "customer"},</p><p>{customerMessage || business?.quoteEmailIntro || "Thank you for the opportunity to quote for your project."}</p><p>The sent email opens a secure customer review. This preview button opens the matching PDF content below.</p><button type="button" aria-controls="trade-quote-pdf-preview" onClick={() => { previewPdfRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); previewPdfRef.current?.focus({ preventScroll: true }); }}>Review quote PDF</button><small>{validUntil ? `Quote valid until ${new Date(`${validUntil}T00:00:00`).toLocaleDateString("en-AU")}` : "Secure link expires 30 days after issue"}</small></article></section>
+          <section ref={previewPdfRef} id="trade-quote-pdf-preview" className="trade-quote-pdf-attachment" tabIndex={-1}><span>PDF attachment preview</span><header><div><b>PDF</b><p><strong>{sendPreview.delivery.attachmentName}</strong><small>{sendPreview.delivery.identityKnown ? `Server-generated from ${sendPreview.delivery.quoteNumber} version ${sendPreview.delivery.versionNumber} after issue` : "Pre-save document preview. The server assigns the final quote identity before issue."}</small></p></div><em>Submitted as attachment</em></header><article className="trade-quote-document-sheet"><header><div><small>Quote from</small><strong>{business?.businessName || "Your trade business"}</strong><span>{sendPreview.delivery.identityKnown ? `${sendPreview.delivery.quoteNumber} | Version ${sendPreview.delivery.versionNumber}` : "Quote identity pending server save"}</span></div><div><small>Prepared for</small><strong>{jobSummary?.customerName || "Customer"}</strong><span>{jobSummary?.siteSummary || ""}</span></div></header>
             <section><span>Included work</span><div className="trade-quote-preview-lines">{sendPreview.base.lines.length ? sendPreview.base.lines.map((line, index) => <article key={`${line.description}:${index}`}><div><strong>{line.description}</strong><small>{line.sectionHeading} | {(line.quantityMilli / 1000).toLocaleString("en-AU")} x {money(line.unitPriceCents)}{line.taxCode === "gst" ? " plus GST" : " no GST"}</small></div><b>{money(line.totalCents)}</b></article>) : <p>No work is included before the customer chooses an option.</p>}</div></section>
             {sendPreview.choices.length > 0 && <section><span>Customer choices</span><div className="trade-quote-preview-choices">{sendPreview.choices.map((choice) => <article key={choice.clientKey}><div><strong>{choice.name}{choice.recommended ? " | Recommended" : ""}</strong><small>{choice.summary || (choice.kind === "addon" ? "Optional extra" : "Customer choice")}</small></div><b>{choice.kind === "addon" ? `Adds ${money(choice.totals.totalCents)}` : `${money(sendPreview.base.totalCents + choice.totals.totalCents)} total`}</b></article>)}</div></section>}
             <dl><div><dt>Subtotal</dt><dd>{money(sendPreview.displayTotals.subtotalCents)}</dd></div><div><dt>GST</dt><dd>{money(sendPreview.displayTotals.taxCents)}</dd></div><div className="total"><dt>{sendPreview.displayTotals.label}</dt><dd>{money(sendPreview.displayTotals.totalCents)}</dd></div></dl>
             <section className="trade-quote-preview-terms"><span>Recorded terms</span><p>{terms}</p></section>
           </article></section>
-          <label className="trade-quote-delivery-confirm"><input type="checkbox" checked={sendConsent} disabled={Boolean(busy)} onChange={(event) => setSendConsent(event.target.checked)} /><span>I confirm this customer asked to receive this quote at {customerEmail}.</span></label>
         </div>
-        <footer><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : "Confirm and submit email"}</button></footer>
+        <footer>{sendOutcome.kind === "success" || sendOutcome.kind === "attention" || (sendOutcome.kind === "sending" && !busy)
+          ? <button type="button" className="btn" onClick={() => setSendPreview(null)}>Done</button>
+          : <><button type="button" disabled={Boolean(busy)} onClick={() => setSendPreview(null)}>Go back and edit</button><button type="button" className="btn" disabled={Boolean(busy) || !sendConsent} onClick={() => void sendPreviewedQuote()}>{busy === "preview_send" ? "Saving and submitting..." : sendOutcome.kind === "error" ? "Try again safely" : "Confirm and submit email"}</button></>}
+        </footer>
       </section>
     </div>}
   </section>;

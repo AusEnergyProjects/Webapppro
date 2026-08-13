@@ -107,9 +107,14 @@ test("active price-book items become authoritative direct-quote snapshots", () =
   assert.match(quoteServer, /description: reference\.description \|\| reference\.name/);
   assert.match(quoteServer, /unitPrice: \(reference\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)/);
   assert.match(quoteUi, /description: item\.description \|\| item\.name/);
-  assert.match(quoteUi, /Add a saved item/);
-  assert.match(quoteUi, /No saved items yet/);
-  assert.match(quoteUi, /Open Price book/);
+  assert.match(quoteUi, /<span>Price book item<\/span><select/);
+  assert.match(quoteUi, /<option value="">Custom line<\/option>/);
+  assert.match(quoteUi, /priceBookItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
+  assert.match(quoteUi, /const selectPriceBookItem = \(itemId: string\) =>/);
+  assert.match(quoteUi, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(quoteUi, /onReplace\(\{ \.\.\.line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
+  assert.match(quoteUi, /Manage price book/);
+  assert.doesNotMatch(quoteUi, /Add a saved item|No saved items yet/);
   assert.doesNotMatch(quoteUi, /priceBookItems\.length > 0 && <div className="trade-quote-price-book"/);
   assert.match(quoteUi, /const linked = Boolean\(line\.priceBookItemId\)/);
   assert.match(quoteUi, /disabled=\{linked \|\| discountLocked\}/);

@@ -108,6 +108,16 @@ export function persistedOverallDiscountUnitPrice(line: { sectionHeading?: unkno
   return (cents / 100).toFixed(2);
 }
 
+export function moveTradeQuoteLine<T>(lines: readonly T[], fromIndex: number, toIndex: number) {
+  const next = [...lines];
+  if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)
+    || fromIndex < 0 || toIndex < 0 || fromIndex >= next.length || toIndex >= next.length
+    || fromIndex === toIndex) return next;
+  const [line] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, line);
+  return next;
+}
+
 export function calculateTradeQuoteLine(quantityMilli: number, unitPriceCents: number, taxCode: TradeQuoteLine["taxCode"]) {
   if (!Number.isSafeInteger(quantityMilli) || quantityMilli < 1 || quantityMilli > MAX_QUANTITY_MILLI) throw new Error("INVALID_QUANTITY");
   if (!Number.isSafeInteger(unitPriceCents) || Math.abs(unitPriceCents) > MAX_ABS_CENTS) throw new Error("INVALID_MONEY");
@@ -220,11 +230,6 @@ export function tradeQuoteLineValidationIssues(
     }
   });
 
-  if (overallDiscountIndexes.length > 1) {
-    const lineIndex = overallDiscountIndexes[1];
-    const field = overallTradeQuoteDiscountKind(records[lineIndex]) === "percent" ? "quantity" : "unitPrice";
-    issues.push(quoteLineIssue(lineIndex, field, "INVALID_LINES", "remove this discount because only one overall discount can be applied.", lineLabel));
-  }
   if (issues.length) return issues;
 
   try {
@@ -315,7 +320,6 @@ export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription
   const overallDiscountIndexes = records
     .map((record, index) => overallTradeQuoteDiscountKind(record) ? index : -1)
     .filter((index) => index >= 0);
-  if (overallDiscountIndexes.length > 1) throw new Error("INVALID_LINES");
 
   const parsed = records.map((record, index) => {
     const lineType = String(record.lineType || "") as TradeQuoteLine["lineType"];
@@ -373,6 +377,12 @@ export function normaliseTradeQuoteLineGroup(rawLines: unknown, cleanDescription
       unitPriceCents: -subtotalMagnitude, taxCode, subtotalCents: -subtotalMagnitude,
       taxCents: -taxMagnitude, totalCents: -discountTotalCents };
   });
+  const overallDiscountTotalCents = parsed.reduce((sum, entry, index) => (
+    entry.overallDiscount ? sum + Math.max(0, -lines[index].totalCents) : sum
+  ), 0);
+  if (!Number.isSafeInteger(overallDiscountTotalCents) || overallDiscountTotalCents > eligibleTotalCents) {
+    throw new Error("INVALID_TOTAL");
+  }
   const subtotalCents = lines.reduce((sum, line) => sum + line.subtotalCents, 0);
   const taxCents = lines.reduce((sum, line) => sum + line.taxCents, 0);
   const totalCents = subtotalCents + taxCents;

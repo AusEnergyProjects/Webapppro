@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   normaliseTradeQuoteLineGroup,
+  moveTradeQuoteLine,
   overallTradeQuoteDiscountKind,
   OVERALL_FIXED_DISCOUNT_SECTION,
   OVERALL_PERCENT_DISCOUNT_SECTION,
@@ -16,6 +17,7 @@ import {
 
 const clean = (value) => String(value || "").trim().slice(0, 500);
 const ui = fs.readFileSync(new URL("../src/components/TradeQuotePanel.tsx", import.meta.url), "utf8");
+const css = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
 const product = (unitPrice = "1000.00", taxCode = "gst") => ({
   lineType: "product",
@@ -132,11 +134,29 @@ test("fixed discount save reload resave keeps the entered incl GST amount", () =
   assert.equal(reloaded.totalCents, original.totalCents);
 });
 
-test("overall discounts cannot stack or reduce a quote to zero", () => {
+test("multiple separately labelled discounts stack without reducing below zero", () => {
   const percent = { lineType: "adjustment", description: "Sale", quantity: "0.25", unitPrice: "0", taxCode: "gst", sectionHeading: OVERALL_PERCENT_DISCOUNT_SECTION };
   const fixed = { lineType: "adjustment", description: "Referral", quantity: "1", unitPrice: "50", taxCode: "gst", sectionHeading: OVERALL_FIXED_DISCOUNT_SECTION };
-  assert.throws(() => normaliseTradeQuoteLineGroup([product(), percent, fixed], clean), /INVALID_LINES/);
+  const stacked = normaliseTradeQuoteLineGroup([product(), percent, fixed], clean);
+  assert.deepEqual(stacked.lines.map((line) => line.description), ["Installed system", "Sale", "Referral"]);
+  assert.deepEqual(
+    { subtotalCents: stacked.subtotalCents, taxCents: stacked.taxCents, totalCents: stacked.totalCents },
+    { subtotalCents: 70_455, taxCents: 7_045, totalCents: 77_500 },
+  );
+  const certificates = normaliseTradeQuoteLineGroup([product(),
+    { ...fixed, description: "STC x 10", unitPrice: "400" },
+    { ...fixed, description: "VEEC x 5", unitPrice: "250" },
+  ], clean);
+  assert.deepEqual(certificates.lines.slice(1).map((line) => [line.description, line.totalCents]), [
+    ["STC x 10", -40_000],
+    ["VEEC x 5", -25_000],
+  ]);
+  assert.equal(certificates.totalCents, 45_000);
   assert.throws(() => normaliseTradeQuoteLineGroup([product("100", "none"), { ...fixed, unitPrice: "100.01" }], clean), /INVALID_TOTAL/);
+  assert.throws(() => normaliseTradeQuoteLineGroup([product("100", "none"),
+    { ...fixed, description: "STC", unitPrice: "60" },
+    { ...fixed, description: "VEEC", unitPrice: "41" },
+  ], clean), /INVALID_TOTAL/);
   assert.throws(() => normaliseTradeQuoteLineGroup([product("100"), { ...percent, quantity: "1" }], clean), /INVALID_TOTAL/);
   const free = normaliseTradeQuoteLineGroup([product("100", "none"), { ...fixed, unitPrice: "100" }], clean);
   assert.equal(free.totalCents, 0);
@@ -151,13 +171,78 @@ test("persisted adjustment discriminator round-trips and customer label stays ed
   assert.match(ui, /onChange=\{\(event\) => onChange\("description", event\.target\.value\)\}/);
 });
 
-test("UI exposes two compact permission-gated actions and replaces rather than stacks discount", () => {
+test("UI exposes two compact permission-gated actions and appends separate discount lines", () => {
   assert.match(ui, /canApplyDiscounts && <><button className="quote-discount-action"/);
   assert.match(ui, />\+ Percent discount<\/button>/);
   assert.match(ui, />\+ Dollar discount<\/button>/);
-  assert.match(ui, /current\.filter\(\(line\) => !overallTradeQuoteDiscountKind\(line\)\)/);
+  assert.match(ui, /setLines\(\(current\) => \[\.\.\.current, next\]\)/);
   assert.match(ui, /readOnly=\{!canApplyDiscounts\}/);
   assert.match(ui, /The submitted unit price is deliberately ignored|normaliseTradeQuoteLineGroup/);
+});
+
+test("quote rows retain complete objects when reordered", () => {
+  const rows = [
+    { ...product(), description: "Call-out", marker: { id: 1 } },
+    { ...product(), description: "Heat pump", marker: { id: 2 } },
+    { ...product(), description: "STC", marker: { id: 3 } },
+  ];
+  const moved = moveTradeQuoteLine(rows, 2, 0);
+  assert.deepEqual(moved.map((line) => line.description), ["STC", "Call-out", "Heat pump"]);
+  assert.equal(moved[0], rows[2]);
+  assert.deepEqual(rows.map((line) => line.description), ["Call-out", "Heat pump", "STC"]);
+  assert.deepEqual(moveTradeQuoteLine(rows, 0, 99), rows);
+});
+
+test("quote and choice rows expose desktop drag and 44px touch reorder controls", () => {
+  assert.match(ui, /className="trade-quote-drag-handle" draggable=\{!busy\}/);
+  assert.match(ui, /onDragStart=\{\(event\)/);
+  assert.match(ui, /onDrop: \(event: DragEvent<HTMLDivElement>\)/);
+  assert.match(ui, /title="Move up"/);
+  assert.match(ui, /title="Move down"/);
+  assert.match(ui, />Up<\/button>/);
+  assert.match(ui, />Down<\/button>/);
+  assert.doesNotMatch(ui, /â†|↑|↓/);
+  assert.match(ui, /moveQuoteLine\("base", fromIndex, toIndex\)/);
+  assert.match(ui, /moveQuoteLine\(choice\.clientKey, fromIndex, toIndex\)/);
+  assert.match(css, /\.trade-quote-order-controls[^}]*grid-template-columns: repeat\(3, 44px\)/);
+  assert.match(css, /\.trade-quote-order-controls button[^}]*height: 44px[^}]*min-height: 44px[^}]*width: 44px/);
+});
+
+test("every base and choice row uses one price-book dropdown or an editable custom line", () => {
+  const selection = ui.slice(ui.indexOf("const selectPriceBookItem"), ui.indexOf("const isDragTarget"));
+  assert.match(ui, /<span>Price book item<\/span><select/);
+  assert.match(ui, /<option value="">Custom line<\/option>/);
+  assert.match(ui, /priceBookItems\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}>/);
+  assert.doesNotMatch(ui, /aria-label=\{`Line \$\{index \+ 1\} type`\}/);
+  assert.match(selection, /const item = priceBookItems\.find\(\(candidate\) => candidate\.id === itemId\)/);
+  assert.match(selection, /onReplace\(\{[\s\S]*?priceBookItemId: item\.id[\s\S]*?lineType: item\.lineType[\s\S]*?description: item\.description \|\| item\.name[\s\S]*?quantity: "1"[\s\S]*?unitPrice: \(item\.sellPriceCentsExGst \/ 100\)\.toFixed\(2\)[\s\S]*?taxCode: item\.taxCode/);
+  assert.match(selection, /onReplace\(\{ \.\.\.line, priceBookItemId: "", jobPacketId: "", jobPacketLineId: "" \}\)/);
+  assert.match(ui, /readOnly=\{linked\}/);
+  assert.match(ui, /disabled=\{linked \|\| discountLocked\}/);
+  assert.match(ui, /replaceBaseLine\(index, replacement\)/);
+  assert.match(ui, /replaceChoiceLine\(choice\.clientKey, index, replacement\)/);
+});
+
+test("preview exposes consent and a working PDF review control before the tall document", () => {
+  const modal = ui.slice(ui.indexOf('className="crm-invoice-preview-dialog crm-quote-preview-dialog"'));
+  const consent = modal.indexOf('className="trade-quote-send-consent"');
+  const pdf = modal.indexOf('id="trade-quote-pdf-preview"');
+  assert.ok(consent >= 0 && consent < pdf);
+  assert.match(modal, /Review quote PDF/);
+  assert.match(modal, /previewPdfRef\.current\?\.scrollIntoView/);
+  assert.match(modal, /aria-controls="trade-quote-pdf-preview"/);
+  assert.doesNotMatch(modal, /<button type="button" disabled>Review quote securely<\/button>/);
+});
+
+test("submit outcome stays visible in the modal and exact API errors can include a request reference", () => {
+  const flow = ui.slice(ui.indexOf("async function sendPreviewedQuote"), ui.indexOf("async function addQuoteRecipient"));
+  assert.match(flow, /setSendOutcome\(\{ kind: "sending"/);
+  assert.match(flow, /setSendOutcome\(outcome\)/);
+  assert.match(flow, /setSendOutcome\(\{ kind: "error", message: outcome \}\)/);
+  assert.doesNotMatch(flow, /setSendPreview\(null\)/);
+  assert.match(ui, /result\.requestId/);
+  assert.match(ui, /Reference \$\{reference\}/);
+  assert.match(ui, /role=\{sendOutcome\.kind === "error" \|\| sendOutcome\.kind === "attention" \? "alert" : "status"\}/);
 });
 
 test("live totals and internal sell margin derive from current editable lines", () => {
@@ -282,7 +367,7 @@ test("preview click exposes, scrolls to and focuses the exact invalid control", 
 });
 
 test("send status copy is derived from the authoritative delivery presentation", () => {
-  assert.match(ui, /quoteDeliveryMessage\(issued\.delivery, "Quote saved and issued\."\)/);
+  assert.match(ui, /quoteDeliveryOutcome\(issued\.delivery, "Quote saved and issued\."\)/);
   for (const key of ["sending", "accepted", "delivered", "attention"]) {
     assert.match(ui, new RegExp(`presentation\\?\\.key === "${key}"`));
   }
@@ -295,7 +380,7 @@ test("preview confirmation performs one consented exact-version issue and no red
   assert.match(flow, /if \(!saved\.draftVersionId\)/);
   assert.match(flow, /action: "issue_quote"[\s\S]*quoteVersionId: saved\.draftVersionId[\s\S]*consentConfirmed: true/);
   assert.doesNotMatch(flow, /action: "send_quote"/);
-  assert.match(flow, /quoteDeliveryMessage\(issued\.delivery/);
+  assert.match(flow, /quoteDeliveryOutcome\(issued\.delivery/);
 });
 
 test("a lost issue response replays the retained exact version before any new save", () => {

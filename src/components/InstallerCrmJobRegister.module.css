@@ -204,13 +204,384 @@
 
 .assignmentForm button { min-height: 40px; white-space: nowrap; }
 
+.customerEditor {
+  overflow: hidden;
+}
+
+.customerFieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.customerPanel {
+  border-top: 1px solid #c9ddd8;
+}
+
+.customerPanel > summary {
+  align-items: center;
+  background: #fff;
+  color: #123f37;
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 58px;
+  padding: 12px 18px;
+}
+
+.customerPanel > summary::-webkit-details-marker,
+.entityDetails > summary::-webkit-details-marker,
+.addPanel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.customerPanel > summary:hover,
+.customerPanel > summary:focus-visible,
+.customerPanel[open] > summary {
+  background: #f2f8f6;
+  outline: none;
+}
+
+.customerPanel > summary > span,
+.entityDetails > summary > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.customerPanel > summary strong {
+  font-size: 13px;
+}
+
+.customerPanel > summary small,
+.entityDetails > summary small {
+  color: #60756f;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.customerPanel > summary b {
+  background: #e4f3ee;
+  border-radius: 999px;
+  color: #176348;
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 5px 9px;
+}
+
+.customerPanel > summary b::after { content: " +"; }
+.customerPanel[open] > summary b::after { content: " -"; }
+
+.panelBody {
+  background: #fbfdfc;
+  border-top: 1px solid #d9e6e2;
+  padding: 16px 18px 18px;
+}
+
+.customerForm {
+  margin: 0;
+}
+
+.customerFormGrid {
+  display: grid;
+  gap: 13px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.customerFormGrid label,
+.linkContactForm label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.customerFormGrid label > span,
+.linkContactForm label > span {
+  color: #45645c;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.customerForm input,
+.customerForm select,
+.customerForm textarea,
+.linkContactForm input,
+.linkContactForm select {
+  appearance: auto;
+  background: #fff;
+  border: 1px solid #abcac1;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #123f37;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  min-height: 42px;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.customerForm textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.customerForm input:hover,
+.customerForm select:hover,
+.customerForm textarea:hover,
+.linkContactForm input:hover,
+.linkContactForm select:hover {
+  border-color: #6ea995;
+}
+
+.customerForm input:focus-visible,
+.customerForm select:focus-visible,
+.customerForm textarea:focus-visible,
+.linkContactForm input:focus-visible,
+.linkContactForm select:focus-visible {
+  border-color: #087f68;
+  box-shadow: 0 0 0 3px rgb(8 127 104 / 16%);
+  outline: none;
+}
+
+.customerForm input:disabled,
+.customerForm select:disabled,
+.customerForm textarea:disabled {
+  background: #f1f5f4;
+  color: #536963;
+  opacity: 1;
+}
+
+.spanTwo { grid-column: span 2; }
+.wideField { grid-column: 1 / -1; }
+
+.formActions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.formActions button,
+.linkContactForm button {
+  background: #176c52;
+  border: 1px solid #176c52;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 40px;
+  padding: 8px 13px;
+}
+
+.formActions button:hover,
+.formActions button:focus-visible,
+.linkContactForm button:hover,
+.linkContactForm button:focus-visible {
+  background: #0d5741;
+  outline: 3px solid rgb(8 127 104 / 18%);
+  outline-offset: 1px;
+}
+
+.formActions button:disabled,
+.linkContactForm button:disabled {
+  cursor: wait;
+  opacity: .58;
+}
+
+.recordDates {
+  color: #6a7e79;
+  font-size: 10px;
+  margin: 13px 0 0;
+}
+
+.entityList {
+  display: grid;
+  gap: 8px;
+}
+
+.entityDetails,
+.addPanel {
+  background: #fff;
+  border: 1px solid #c9ddd8;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.entityDetails > summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr);
+  list-style: none;
+  padding: 11px 13px;
+}
+
+.entityDetails > summary:hover,
+.entityDetails > summary:focus-visible,
+.entityDetails[open] > summary,
+.addPanel > summary:hover,
+.addPanel > summary:focus-visible,
+.addPanel[open] > summary {
+  background: #edf7f3;
+  outline: none;
+}
+
+.entityDetails > summary strong {
+  color: #123f37;
+  font-size: 12px;
+}
+
+.entityDetails > summary em {
+  color: #60756f;
+  font-size: 11px;
+  font-style: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.entityDetails > summary em::after { content: " +"; font-weight: 850; }
+.entityDetails[open] > summary em::after { content: " -"; }
+
+.entityBody {
+  border-top: 1px solid #d9e6e2;
+  padding: 14px;
+}
+
+.addPanel {
+  border-style: dashed;
+  margin-top: 10px;
+}
+
+.addPanel > summary {
+  color: #0a604c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  list-style: none;
+  padding: 11px 13px;
+}
+
+.addPanel > summary::after { content: "+"; float: right; }
+.addPanel[open] > summary::after { content: "-"; }
+
+.emptyMessage {
+  color: #5d736d;
+  font-size: 12px;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.serviceContacts {
+  border-top: 1px solid #d9e6e2;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.serviceContacts > strong {
+  color: #123f37;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.serviceContacts ul {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.serviceContacts li {
+  align-items: center;
+  background: #f4f8f7;
+  border-radius: 7px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 7px 9px;
+}
+
+.serviceContacts li span { color: #123f37; font-size: 12px; font-weight: 700; }
+.serviceContacts li small,
+.serviceContacts p { color: #60756f; font-size: 11px; margin: 0; }
+
+.linkContactForm {
+  align-items: end;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  margin-top: 10px;
+}
+
+.customerJobs {
+  display: grid;
+  gap: 7px;
+}
+
+.customerJobs button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c9ddd8;
+  border-radius: 9px;
+  color: #123f37;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 110px minmax(160px, 1fr) minmax(210px, auto);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.customerJobs button:hover,
+.customerJobs button:focus-visible {
+  background: #edf7f3;
+  border-color: #6ea995;
+  outline: none;
+}
+
+.customerJobs span,
+.customerJobs small { color: #60756f; font-size: 11px; }
+.customerJobs strong { font-size: 12px; }
+.customerJobs small { text-align: right; }
+
+.assetPanel {
+  background: #fbfdfc;
+  border-top: 1px solid #d9e6e2;
+  padding: 12px;
+}
+
 @media (max-width: 900px) {
   .toolbar { grid-template-columns: 1fr 1fr; }
   .assignmentForm { grid-template-columns: minmax(0, 1fr) auto; }
+  .customerFormGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spanTwo,
+  .wideField { grid-column: 1 / -1; }
+  .customerJobs button { grid-template-columns: 100px minmax(0, 1fr); }
+  .customerJobs small { grid-column: 1 / -1; text-align: left; }
 }
 
 @media (max-width: 560px) {
   .detailGrid { grid-template-columns: 1fr; }
   .detailGrid .wideDetail { grid-column: auto; }
   .assignmentForm { align-items: stretch; grid-template-columns: 1fr; }
+  .customerPanel > summary { align-items: flex-start; padding: 12px 14px; }
+  .panelBody { padding: 14px; }
+  .customerFormGrid { grid-template-columns: 1fr; }
+  .spanTwo,
+  .wideField { grid-column: 1; }
+  .entityDetails > summary { grid-template-columns: 1fr; gap: 4px; }
+  .entityDetails > summary em { text-align: left; }
+  .linkContactForm { align-items: stretch; grid-template-columns: 1fr; }
+  .customerJobs button { grid-template-columns: 1fr; gap: 4px; }
+  .customerJobs small { grid-column: auto; }
 }

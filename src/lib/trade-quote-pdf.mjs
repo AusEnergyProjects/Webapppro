@@ -265,6 +265,19 @@ export function tradeQuoteBannerCropForImage(
   return { x, y, width, height };
 }
 
+export function contiguousTradeQuoteSections(items = []) {
+  return items.reduce((sections, item) => {
+    const heading = item.sectionHeading || "Included work";
+    const current = sections.at(-1);
+    if (current?.heading === heading) {
+      current.items.push(item);
+    } else {
+      sections.push({ heading, items: [item] });
+    }
+    return sections;
+  }, []);
+}
+
 async function embeddedImage(pdf, asset) {
   if (
     !asset ||
@@ -673,17 +686,11 @@ export async function createTradeQuotePdfBytes(
   }
 
   if (snapshot.items?.length) {
-    const headings = [
-      ...new Set(
-        snapshot.items.map(
-          (item) => item.sectionHeading || "Included work",
-        ),
-      ),
-    ];
-    for (const heading of headings) {
-      if (headings.length > 1 || heading !== "Included work") {
+    const sections = contiguousTradeQuoteSections(snapshot.items);
+    for (const section of sections) {
+      if (sections.length > 1 || section.heading !== "Included work") {
         ensureSpace(34);
-        drawText(heading, {
+        drawText(section.heading, {
           font: bold,
           size: 10,
           color: palette.primary,
@@ -691,12 +698,7 @@ export async function createTradeQuotePdfBytes(
           gapAfter: 5,
         });
       }
-      snapshot.items
-        .filter(
-          (item) =>
-            (item.sectionHeading || "Included work") === heading,
-        )
-        .forEach(lineItem);
+      section.items.forEach(lineItem);
       y -= 7;
     }
   }

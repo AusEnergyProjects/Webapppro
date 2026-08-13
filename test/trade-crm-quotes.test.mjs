@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { calculateTradeQuoteLine, dollarsToCents, normaliseTradeQuoteLines, quantityToMilli } from "../src/lib/trade-quote.ts";
 import { calculateQuoteSelection, normaliseQuoteChoices } from "../src/lib/trade-quote-options.ts";
 import { tradeQuoteDocumentDisplayTotals } from "../src/lib/trade-quote-document-totals.mjs";
-import { createTradeQuotePdfBytes } from "../src/lib/trade-quote-pdf.mjs";
+import { contiguousTradeQuoteSections, createTradeQuotePdfBytes } from "../src/lib/trade-quote-pdf.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
@@ -406,7 +406,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Sending", "Email accepted for delivery", "Delivered", "Needs attention", "Retry email"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
   const sendFlow = installerUi.slice(installerUi.indexOf("async function sendPreviewedQuote"), installerUi.indexOf("async function addQuoteRecipient"));
   assert.match(sendFlow, /action: "save_draft"/);
   assert.match(sendFlow, /if \(!saved\.draftVersionId\)/);
@@ -417,7 +417,7 @@ test("installer and customer interfaces expose the version and consent contract"
   assert.ok(replay >= 0 && replay < save, "a lost issue response must replay the retained exact version before another save");
   assert.match(sendFlow.slice(replay, save), /quoteVersionId: pendingIssueVersionId[\s\S]*?consentConfirmed: true/);
   assert.match(sendFlow, /setPendingIssueVersionId\(saved\.draftVersionId\)/);
-  assert.match(sendFlow, /quoteDeliveryMessage\(issued\.delivery, "Quote saved and issued\."\)/);
+  assert.match(sendFlow, /quoteDeliveryOutcome\(issued\.delivery, "Quote saved and issued\."\)/);
   assert.match(installerUi, /tradeQuoteDocumentDisplayTotals\(\{[\s\S]*?groupKey: choice\.groupKey[\s\S]*?recommended: choice\.recommended/);
   assert.match(installerUi, /sendPreview\.displayTotals\.subtotalCents[\s\S]*?sendPreview\.displayTotals\.taxCents[\s\S]*?sendPreview\.displayTotals\.label[\s\S]*?sendPreview\.displayTotals\.totalCents/);
   assert.doesNotMatch(installerUi, /<dl><div><dt>Included before choices<\/dt>[\s\S]*?sendPreview\.base\.totalCents/);
@@ -432,6 +432,8 @@ test("installer and customer interfaces expose the version and consent contract"
   ]) assert.match(installerUi, new RegExp(modalBoundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(installerUi, /consentConfirmed: true/);
   for (const key of ["sending", "accepted", "delivered", "attention"]) assert.match(installerUi, new RegExp(`presentation\\?\\.key === "${key}"`));
+  assert.match(installerUi, /latestDelivery\.presentation\.label/);
+  assert.match(installerUi, /const label = cleanDeliveryText\(delivery\?\.presentation\?\.label, 120\)/);
   assert.doesNotMatch(installerUi, /setMessage\("Quote saved and issued\. The email provider accepted it for delivery/);
   assert.doesNotMatch(installerUi, /Issue for customer review/);
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
@@ -457,10 +459,27 @@ test("installer quote controls use plain totals and a consistently styled PDF ac
   assert.match(installerUi, /line\.sectionHeading/);
 });
 
+test("saved quote row order is persisted monotonically and rendered without global section regrouping", () => {
+  assert.match(installerRoute, /resolved\.calculated\.lines\.forEach\(\(line, index\) =>/);
+  assert.match(installerRoute, /startPosition \+ index/);
+  assert.match(installerRoute, /ORDER BY quote_version_id, position/);
+  const items = [
+    { description: "A first", sectionHeading: "A" },
+    { description: "B middle", sectionHeading: "B" },
+    { description: "A last", sectionHeading: "A" },
+  ];
+  const sections = contiguousTradeQuoteSections(items);
+  assert.deepEqual(sections.map(({ heading }) => heading), ["A", "B", "A"]);
+  assert.deepEqual(sections.flatMap(({ items: rows }) => rows.map(({ description }) => description)), ["A first", "B middle", "A last"]);
+  assert.match(documentPdf, /const sections = contiguousTradeQuoteSections\(snapshot\.items\)/);
+  assert.doesNotMatch(documentPdf, /new Set\([\s\S]*?snapshot\.items\.map/);
+});
+
 test("customer quote questions are visible and actionable before quote editing", () => {
   assert.match(installerUi, /question needs/);
   assert.match(installerUi, />Answer<\/button>/);
-  assert.ok(installerUi.indexOf('id="quote-questions"') < installerUi.indexOf('className="trade-quote-price-book"'));
+  const returnedPanel = installerUi.slice(installerUi.indexOf("return <section className=\"trade-quote-panel\">"));
+  assert.ok(returnedPanel.indexOf('id="quote-questions"') < returnedPanel.indexOf('className="trade-quote-base"'));
   assert.match(styles, /\.trade-quote-questions\.needs-attention/);
 });
 

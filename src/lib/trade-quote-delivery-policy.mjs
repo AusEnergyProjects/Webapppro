@@ -43,12 +43,21 @@ export function tradeQuoteDeliveryPresentation(status, attempts = 0, nextAttempt
   if (["provider_accepted", "sent"].includes(state)) {
     return { key: "accepted", label: "Email accepted for delivery", canRetry: false };
   }
-  const automaticallyRetrying = ["queued", "sending", "waiting_for_channel"].includes(state)
-    || (state === "failed"
-      && Number(attempts) < TRADE_QUOTE_DELIVERY_MAX_ATTEMPTS
-      && Boolean(String(nextAttemptAt || "")));
-  if (automaticallyRetrying) {
-    return { key: "sending", label: "Sending", canRetry: false };
+  if (state === "queued") {
+    return { key: "sending", label: "Queued for email", canRetry: false };
+  }
+  if (state === "sending") {
+    return { key: "sending", label: "Submitting to email provider", canRetry: false };
+  }
+  if (state === "waiting_for_channel") {
+    return { key: "sending", label: "Waiting for email service", canRetry: false };
+  }
+  if (
+    state === "failed"
+    && Number(attempts) < TRADE_QUOTE_DELIVERY_MAX_ATTEMPTS
+    && Boolean(String(nextAttemptAt || ""))
+  ) {
+    return { key: "sending", label: "Retry scheduled", canRetry: false };
   }
   return {
     key: "attention",

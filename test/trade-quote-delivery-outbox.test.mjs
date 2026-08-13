@@ -33,6 +33,12 @@ const callbackUpdateSql = callback.match(/db\.prepare\(`(UPDATE trade_crm_quote_
 const issueClaimSql = route.match(/const issueClaim = await db\.prepare\(`(UPDATE trade_crm_quote_versions[\s\S]*?updated_at = \?)`\)/)?.[1];
 const replacementDraftInsertSql = route.match(/db\.prepare\(`(INSERT OR IGNORE INTO trade_crm_quote_versions[\s\S]*?)`\)\.bind\(versionId/)?.[1];
 const revokeLinkSql = route.match(/db\.prepare\(`(UPDATE trade_crm_quote_links[\s\S]*?NOT EXISTS \([\s\S]*?\n        \))`\)\s*\.bind\(now, now, row\.link_id/)?.[1];
+const issuedEventSqlTemplate = route.match(
+  /(INSERT INTO trade_crm_quote_events\s*\([\s\S]*?SELECT \?, \?, \?, \?, \?, \?, 'issued',[\s\S]*?WHERE \$\{claimStillHeld\})/,
+)?.[1];
+const queuedDeliverySqlTemplate = route.match(
+  /(INSERT OR IGNORE INTO trade_crm_quote_deliveries\s*\([\s\S]*?SELECT \?, \?, \?, \?, \?, \?, 'email', 'resend', 'queued',[\s\S]*?WHERE \$\{claimStillHeld\})/,
+)?.[1];
 
 function apply(database, sql) {
   for (const statement of sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
@@ -227,13 +233,13 @@ test("a hanging provider cannot hold the browser route because dispatch exists o
   assert.doesNotMatch(route, /sendServiceReminderProviderMessage/);
   assert.doesNotMatch(route, /await drainTradeQuoteDeliveries/);
   const never = new Promise(() => {});
-  const routeContract = Promise.resolve({ status: 202, delivery: { presentation: { label: "Sending" } } });
+  const routeContract = Promise.resolve({ status: 202, delivery: { presentation: { label: "Queued for email" } } });
   void never;
   const observed = await Promise.race([
     routeContract,
     new Promise((resolve) => setTimeout(() => resolve({ status: 500 }), 25)),
   ]);
-  assert.deepEqual(observed, { status: 202, delivery: { presentation: { label: "Sending" } } });
+  assert.deepEqual(observed, { status: 202, delivery: { presentation: { label: "Queued for email" } } });
 });
 
 test("an expired fifth-attempt lease becomes terminal attention instead of Sending forever", async () => {
@@ -349,6 +355,18 @@ test("provider absence preserves intent but becomes attention after five bounded
 });
 
 test("retry policy stops automatically and exposes one manual retry", () => {
+  assert.deepEqual(tradeQuoteDeliveryPresentation("queued", 0, "2026-08-13T00:00:00Z"), {
+    key: "sending", label: "Queued for email", canRetry: false,
+  });
+  assert.deepEqual(tradeQuoteDeliveryPresentation("sending", 1), {
+    key: "sending", label: "Submitting to email provider", canRetry: false,
+  });
+  assert.deepEqual(tradeQuoteDeliveryPresentation("waiting_for_channel", 1, "2026-08-13T00:05:00Z"), {
+    key: "sending", label: "Waiting for email service", canRetry: false,
+  });
+  assert.deepEqual(tradeQuoteDeliveryPresentation("failed", 1, "2026-08-13T00:05:00Z"), {
+    key: "sending", label: "Retry scheduled", canRetry: false,
+  });
   assert.equal(tradeQuoteDeliveryRetryAt(TRADE_QUOTE_DELIVERY_MAX_ATTEMPTS, Date.parse("2026-08-13T00:00:00Z")), "");
   assert.deepEqual(tradeQuoteDeliveryPresentation("failed", 5, ""), {
     key: "attention", label: "Needs attention", canRetry: true,
@@ -480,6 +498,143 @@ test("route queues before returning 202 and never invokes provider synchronously
   assert.match(route, /delivery_generation = 2/);
   assert.match(route, /latestTradeQuoteDeliveryStatus/);
   assert.match(route, /quoteIssued: true/);
+});
+
+test("the exact issue transaction bindings persist an event and a durable queued response", async () => {
+  assert.ok(issuedEventSqlTemplate, "issued quote event SQL must be discoverable");
+  assert.ok(queuedDeliverySqlTemplate, "queued quote delivery SQL must be discoverable");
+  const claimStillHeld = `EXISTS (
+    SELECT 1 FROM trade_crm_quote_versions claimed
+    WHERE claimed.id = ? AND claimed.firebase_uid = ?
+      AND claimed.status = 'issuing' AND claimed.consent_statement = ?
+  ) AND NOT EXISTS (
+    SELECT 1 FROM trade_crm_quote_deliveries pending_delivery
+    JOIN trade_crm_quote_links pending_link
+      ON pending_link.id = pending_delivery.quote_link_id
+      AND pending_link.firebase_uid = pending_delivery.firebase_uid
+    WHERE pending_link.quote_id = ? AND pending_link.firebase_uid = ?
+      AND pending_delivery.quote_version_id <> ?
+      AND (
+        pending_delivery.status IN ('queued','sending','waiting_for_channel','provider_accepted','sent')
+        OR (pending_delivery.status = 'failed' AND pending_delivery.next_attempt_at <> '')
+      )
+  ) AND 1 = 1`;
+  const eventSql = issuedEventSqlTemplate.replace("${claimStillHeld}", claimStillHeld);
+  const deliverySql = queuedDeliverySqlTemplate.replace("${claimStillHeld}", claimStillHeld);
+  const { database, db } = fixture();
+  apply(database, migration);
+  database.exec("ALTER TABLE trade_crm_quote_versions ADD consent_statement text DEFAULT '' NOT NULL");
+  database.prepare(`INSERT INTO trade_crm_quote_versions
+    (id, firebase_uid, status, consent_statement)
+    VALUES ('version-1', 'owner-1', 'issuing', 'issue-claim-1')`).run();
+
+  const timestamp = "2026-08-13T01:00:00.000Z";
+  const result = await db.batch([
+    db.prepare(eventSql).bind(
+      "event-1", "link-1", "quote-1", "version-1", "work-1", "owner-1",
+      "issued:version-1", timestamp,
+      "version-1", "owner-1", "issue-claim-1",
+      "quote-1", "owner-1", "version-1",
+    ),
+    db.prepare(deliverySql).bind(
+      "delivery-new", "link-1", "version-1", "work-1", "owner-1", "customer-1",
+      "c***@example.com", "primary_customer", "quote:version-1:1:email:initial",
+      "Quote Q-1", "content-sha", "Q-1-v1.pdf", "attachment-sha",
+      "recipient-sha", "provider-key", "https://compare.ausenergyassessments.com",
+      timestamp, timestamp, timestamp, timestamp,
+      "version-1", "owner-1", "issue-claim-1",
+      "quote-1", "owner-1", "version-1",
+    ),
+  ]);
+
+  assert.deepEqual(result.map((entry) => entry.meta.changes), [1, 1]);
+  assert.equal(database.prepare("SELECT event_type FROM trade_crm_quote_events WHERE id = 'event-1'").get().event_type, "issued");
+  const delivery = await tradeQuoteDeliveryStatus(db, "delivery-new", "owner-1");
+  assert.deepEqual({
+    ok: true,
+    quoteIssued: true,
+    deliveryAccepted: false,
+    deliveryState: delivery.status,
+    delivery,
+  }, {
+    ok: true,
+    quoteIssued: true,
+    deliveryAccepted: false,
+    deliveryState: "queued",
+    delivery: {
+      id: "delivery-new",
+      status: "queued",
+      attempts: 0,
+      generation: 1,
+      retryOfDeliveryId: "",
+      nextAttemptAt: timestamp,
+      updatedAt: timestamp,
+      presentation: { key: "sending", label: "Queued for email", canRetry: false },
+    },
+  });
+  const issuedEventBind = route.match(/'Secure quote link issued\.', \?, \?[\s\S]*?\.bind\(([\s\S]*?)\),\n\s*db\.prepare\(`INSERT OR IGNORE INTO trade_crm_quote_deliveries/)?.[1] || "";
+  assert.match(issuedEventBind, /`issued:\$\{version\.id\}`, now,\s*\.\.\.claimBindings/);
+  assert.doesNotMatch(issuedEventBind, /now, version\.id,\s*\.\.\.claimBindings/);
+  const queuedDeliveryBind = route.match(/INSERT OR IGNORE INTO trade_crm_quote_deliveries[\s\S]*?\.bind\(([\s\S]*?)\),\n\s*db\.prepare\(`INSERT INTO trade_crm_quote_events/)?.[1] || "";
+  assert.match(queuedDeliveryBind, /providerIdempotencyKey,\s*publicOrigin,\s*now, now, now, now,\s*\.\.\.claimBindings/);
+  database.close();
+});
+
+test("the D1 issue batch rolls back the event when a delivery binding fails", async () => {
+  assert.ok(issuedEventSqlTemplate, "issued quote event SQL must be discoverable");
+  assert.ok(queuedDeliverySqlTemplate, "queued quote delivery SQL must be discoverable");
+  const claimStillHeld = `EXISTS (
+    SELECT 1 FROM trade_crm_quote_versions claimed
+    WHERE claimed.id = ? AND claimed.firebase_uid = ?
+      AND claimed.status = 'issuing' AND claimed.consent_statement = ?
+  ) AND NOT EXISTS (
+    SELECT 1 FROM trade_crm_quote_deliveries pending_delivery
+    JOIN trade_crm_quote_links pending_link
+      ON pending_link.id = pending_delivery.quote_link_id
+      AND pending_link.firebase_uid = pending_delivery.firebase_uid
+    WHERE pending_link.quote_id = ? AND pending_link.firebase_uid = ?
+      AND pending_delivery.quote_version_id <> ?
+  ) AND 1 = 1`;
+  const eventSql = issuedEventSqlTemplate.replace("${claimStillHeld}", claimStillHeld);
+  const deliverySql = queuedDeliverySqlTemplate.replace("${claimStillHeld}", claimStillHeld);
+  const { database, db } = fixture();
+  apply(database, migration);
+  database.exec("ALTER TABLE trade_crm_quote_versions ADD consent_statement text DEFAULT '' NOT NULL");
+  database.prepare(`INSERT INTO trade_crm_quote_versions
+    (id, firebase_uid, status, consent_statement)
+    VALUES ('version-1', 'owner-1', 'issuing', 'issue-claim-1')`).run();
+  const timestamp = "2026-08-13T01:00:00.000Z";
+
+  await assert.rejects(db.batch([
+    db.prepare(eventSql).bind(
+      "event-1", "link-1", "quote-1", "version-1", "work-1", "owner-1",
+      "issued:version-1", timestamp,
+      "version-1", "owner-1", "issue-claim-1",
+      "quote-1", "owner-1", "version-1",
+    ),
+    db.prepare(deliverySql).bind(
+      "delivery-new", "link-1", "version-1", "work-1", "owner-1", "customer-1",
+      "c***@example.com", "primary_customer", "quote:version-1:1:email:initial",
+      "Quote Q-1", "content-sha", "Q-1-v1.pdf", "attachment-sha",
+      "recipient-sha", "provider-key", "https://compare.ausenergyassessments.com",
+      timestamp, timestamp, timestamp, timestamp,
+      "version-1", "owner-1", "issue-claim-1",
+      "quote-1", "owner-1", "version-1", "unexpected-extra-binding",
+    ),
+  ]));
+
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quote_events").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_quote_deliveries").get().count, 0);
+  database.close();
+});
+
+test("issue transaction failures are safe, actionable and cannot imply delivery", () => {
+  assert.match(route, /QUOTE_ISSUE_STORAGE_FAILED/);
+  assert.match(route, /stage: String\(\(error as StagedQuoteError \| null\)\?\.stage \|\| "issue"\)/);
+  assert.match(route, /deliveryState: "not_queued"/);
+  assert.match(route, /retryable: code === "QUOTE_ISSUE_STORAGE_FAILED"/);
+  assert.match(route, /deliveryState: delivery\.status/);
+  assert.match(route, /deliveryAccepted: false/);
 });
 
 test("a repeated plain send returns the durable queued or retrying state before rebuilding content", () => {
