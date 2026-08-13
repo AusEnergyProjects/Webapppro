@@ -1,30 +1,38 @@
 # Next task handover
 
-Status: `TLINK-TEAM-ONE-CLICK-QUOTE-58` released as current Sites version 321; next task is the controlled signed-in permission matrix
+Status: `TLINK-RELIABLE-QUOTES-JOBS-59` released as current Sites version 322; next task is controlled quote delivery proof to a dedicated test inbox
 
 Prepared: 13 August 2026
 
-Milestone ID: `TLINK-TEAM-ONE-CLICK-QUOTE-58`
+Milestone ID: `TLINK-RELIABLE-QUOTES-JOBS-59`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `621797579ea1f2249e8679b26056066a4c824668`
+Milestone source baseline: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
+Current quote-delivery and jobs-register application commit: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
-Exact release and Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
+Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`
 
-Current Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
+Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 
-Current production application source: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
+Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production: Sites version 321 at `https://compare.ausenergyassessments.com`
+Current production application source: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
+Current production: Sites version 322 at `https://compare.ausenergyassessments.com`
 
-Current deployment: `appgdep_6a7c9aa092088191896d869614891e2f`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
 
-Migration inventory: all 136 migrations through `0135_team_document_expiry_warnings.sql`
+Current deployment: `appgdep_6a7d06e32e9c8191ae98c3b875564465`
+
+Migration inventory: all 137 migrations through `0136_trade_quote_delivery_outbox.sql`
+
+Historical version 321 application source: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
+
+Historical version 321 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
+
+Historical version 321 deployment: `appgdep_6a7c9aa092088191896d869614891e2f`; succeeded and remained public until version 322 replaced it
 
 Historical version 320 application source: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`
 
@@ -62,7 +70,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 412 files, 39,546,880 bytes, Sites archive storage content hash `sha256:a071cd89ac2137ff5877943785decf00cdefa983056c9d029226e21fbc086424`
+Current release package: 420 files, 39,669,760 bytes, Sites archive storage content hash `sha256:87b51cd53dcc3def0962c6c3c7f3bfaee4e4acf1a0b9819392dd642880ad5a7b`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -74,11 +82,80 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
+## Released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
+
+Status: exact executable application source
+`d15ceda44255a706c10a699347b9bd54eba60c5e` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 322. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
+and deployment `appgdep_6a7d06e32e9c8191ae98c3b875564465` reconcile to that
+source. Deployment succeeded at the public custom URL
+`https://compare.ausenergyassessments.com` and provider URL
+`https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
+20. Sites stored 420 files and 39,669,760 bytes with archive storage content hash
+`sha256:87b51cd53dcc3def0962c6c3c7f3bfaee4e4acf1a0b9819392dd642880ad5a7b`.
+
+### Implemented outcome
+
+Quotes now calculate discounts and totals live, issue through a durable delivery
+ledger instead of a fragile browser request, and surface an operational jobs
+register with the separate columns and actions a trade business needs each day.
+
+### Implemented capability
+
+- `+ Percent discount` and `+ Dollar discount` add one overall discount with
+  editable customer-facing details. Percentage and fixed values use the same
+  authoritative server calculation as saved and issued quotes.
+- Quote totals update live for subtotal excluding GST, GST, discount including
+  GST and total including GST. Internal cost, sell value and margin update from
+  the same line projection. Fixed discounts are capped at the quote total.
+- Issue atomically persists the exact immutable quote version, secure link, PDF
+  and queued outbox before returning. Replaying a lost response claims the same
+  version and cannot duplicate delivery.
+- The worker uses compare-and-set leasing, provider idempotency, bounded backoff
+  and at most five automatic attempts. The visible states are `Sending`, `Email
+  accepted for delivery`, `Delivered` and `Needs attention`. One manual retry
+  creates an immutable successor delivery. Complaints and opt-outs stay
+  suppressed.
+- Jobs is a dense tenant-bound register with separate Job ID, first name, last
+  name, phone, email, street address, postcode, suburb, state, assigned worker,
+  schedule, status, quote total excluding GST and certificate-bucket columns.
+  Filters, sorting, paging, saved columns, right-click, keyboard and visible
+  Actions controls are supported.
+- Controlled job status precedence is `Cancelled`, `Certified`, `Audited`,
+  `Complete`, `Assigned`, `Quoting`. Certificates remain `Pending` with a zero
+  count until an authoritative program source exists.
+- Migration `0136_trade_quote_delivery_outbox.sql` brings the deployed inventory
+  to 137 and owns the durable delivery ledger.
+
+### Validation and release evidence
+
+- Integrated product coverage passed 102 of 102, the broad stale-repair set
+  passed 80 of 80 and integration passed 36 of 36.
+- Typecheck, warning-free lint, `db:check`, production build, Sites server-bundle
+  audit, `git diff --check` and the customer-plan PDF audit passed.
+- Raw unfiltered `npm test` reported 2,114 total: 2,090 passed, 7 failed, 7
+  cancelled and 10 skipped. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  SHA-256 remains
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- Signed-in production QA opened existing job `TLJ-X23Z3GL9`. Jobs showed 1
+  through 13 of 13 rows, the requested separate columns, zero page horizontal
+  overflow and `$4,700` excluding GST on the first quoted job.
+- Quote lines `$200`, `$3,500` and `$1,000` showed live subtotal `$4,700`
+  excluding GST, GST `$470`, total `$5,170`, cost `$3,191` and margin `$1,509`.
+  A temporary 10 percent discount changed subtotal to `$4,230`, GST to `$423`,
+  discount including GST to `$517` and total to `$4,653`. It was removed without
+  saving.
+- Release QA did not issue, send or retry a quote. Provider inbox receipt remains
+  unverified. `/api/health` returned HTTP 200 at
+  `2026-08-12T23:57:03.130Z`.
+
+## Previous released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
 
 Status: exact repair and executable application source
 `523b517c4027ef72f2b267c95ae8c36fd26af92d` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 321. Saved version
+internal `main` and released as historical Sites version 321. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
 and deployment `appgdep_6a7c9aa092088191896d869614891e2f` reconcile to that
 source. Deployment succeeded at the public custom URL
@@ -1258,11 +1335,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Controlled signed-in permission matrix for owner, delegated manager, office and field accounts across own and team scopes.
-2. User-approved live Interested-to-draft proof on a test lead without sending email.
-3. Quote options, customer email, acceptance and deposit workflow.
-4. Schedule and mobile operational pilot covering colours, availability, assignment and rescheduling.
-5. Expiry renewal and alert-delivery operational audit.
+1. Controlled quote delivery proof to a dedicated test inbox.
+2. Customer quote acceptance plus deposit/payment workflow.
+3. Creditex audited/certified/program certificate sync.
+4. Schedule/mobile operational pilot from jobs register.
+5. Team document-expiry alert delivery proof.
 
 ## Previous released milestone
 

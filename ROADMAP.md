@@ -2066,11 +2066,84 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
+## Released milestone: TLINK-RELIABLE-QUOTES-JOBS-59
+
+Release status: exact executable application commit
+`d15ceda44255a706c10a699347b9bd54eba60c5e` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 322 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c`
+and deployment `appgdep_6a7d06e32e9c8191ae98c3b875564465` reconcile to that
+source. Deployment succeeded on provider
+`https://aea-energy-comparison.info294029.chatgpt.site` with environment revision
+20. Sites stored 420 files and 39,669,760 bytes with content hash
+`sha256:87b51cd53dcc3def0962c6c3c7f3bfaee4e4acf1a0b9819392dd642880ad5a7b`.
+
+### Outcome
+
+Make quote pricing immediately understandable, make quote delivery durable and
+truthful when a provider fails, and give trade businesses one dense jobs register
+that exposes the fields and actions needed for daily operation.
+
+### Implemented scope
+
+- The quote editor has explicit percentage and dollar discount actions. Each
+  overall discount has editable customer-facing details for labels such as a
+  sale, referral credit or certificate value.
+- Quote lines and totals update live from one authoritative calculation. The
+  editor shows subtotal excluding GST, GST, discount including GST, total
+  including GST, internal cost, sell value and margin. A fixed discount cannot
+  reduce the quote below zero.
+- Issuing a quote atomically records the immutable issued version, secure link,
+  PDF and durable delivery outbox before the browser receives success. A lost
+  browser response replays the same version without sending a duplicate.
+- Delivery processing uses a compare-and-set lease, provider idempotency and at
+  most five automatic attempts. The customer-facing states are exactly
+  `Sending`, `Email accepted for delivery`, `Delivered` and `Needs attention`.
+  One manual retry creates an immutable successor delivery rather than mutating
+  the failed attempt. Complaints and opt-outs remain suppressed.
+- Jobs is a dense configurable register with separate Job ID, first name, last
+  name, phone, email, street address, postcode, suburb, state, assigned worker,
+  schedule, status, quote total excluding GST and certificate-bucket columns.
+  Server-side filters, sorting, paging and saved column choices remain
+  tenant-bound. Right-click, keyboard and visible Actions controls open the same
+  view, edit, assign and schedule operations.
+- Job status follows the controlled precedence `Cancelled`, `Certified`,
+  `Audited`, `Complete`, `Assigned`, `Quoting`. Certificate buckets remain
+  `Pending` with a zero count until an authoritative program source exists.
+- Additive migration `0136_trade_quote_delivery_outbox.sql` extends the packaged
+  inventory to 137 migrations and owns the durable quote-delivery ledger.
+
+### Validation and release evidence
+
+- The integrated quote-delivery, discount, live-total and jobs-register set
+  passed 102 of 102. The broad stale-repair set passed 80 of 80 and integration
+  passed 36 of 36.
+- Typecheck, warning-free lint, `db:check` across all 137 migrations, production
+  build, Sites server-bundle audit, `git diff --check` and the customer-plan PDF
+  audit passed.
+- Raw unfiltered `npm test` reported 2,114 total: 2,090 passed, 7 failed, 7
+  cancelled and 10 skipped. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  SHA-256 remains
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- Signed-in production QA opened existing job `TLJ-X23Z3GL9`. Jobs showed rows 1
+  through 13 of 13, the requested separate columns and zero page-level horizontal
+  overflow. The first quoted job showed `$4,700` excluding GST.
+- Quote lines `$200`, `$3,500` and `$1,000` rendered a live `$4,700` subtotal
+  excluding GST, `$470` GST, `$5,170` total, `$3,191` cost and `$1,509` margin.
+  Both discount actions were visible. A temporary 10 percent discount changed
+  the subtotal to `$4,230`, GST to `$423`, discount including GST to `$517` and
+  total to `$4,653`; it was removed without saving.
+- Release QA did not issue, send or retry a quote and did not prove provider inbox
+  receipt. `/api/health` returned HTTP 200 at
+  `2026-08-12T23:57:03.130Z`.
+
+## Previous released milestone: TLINK-TEAM-ONE-CLICK-QUOTE-58
 
 Release status: exact repair and executable application commit
 `523b517c4027ef72f2b267c95ae8c36fd26af92d` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 321 at
+Sites internal `main`, and released as historical Sites version 321 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_e6fdbb289b9081918f4eaeb2167d71bf`
 and deployment `appgdep_6a7c9aa092088191896d869614891e2f` reconcile to that
@@ -2511,7 +2584,7 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical versions 310, 317, 318 and 320 and the current version 321 release.
+historical versions 310, 317, 318, 320 and 321 and the current version 322 release.
 
 ### Outcome
 
@@ -2655,11 +2728,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Controlled signed-in permission matrix for owner, delegated manager, office and field accounts across own and team scopes.
-2. User-approved live Interested-to-draft proof on a test lead without sending email.
-3. Quote options, customer email, acceptance and deposit workflow.
-4. Schedule and mobile operational pilot covering colours, availability, assignment and rescheduling.
-5. Expiry renewal and alert-delivery operational audit.
+1. Controlled quote delivery proof to a dedicated test inbox.
+2. Customer quote acceptance plus deposit/payment workflow.
+3. Creditex audited/certified/program certificate sync.
+4. Schedule/mobile operational pilot from jobs register.
+5. Team document-expiry alert delivery proof.
 
 ## Global stop conditions
 
