@@ -1,16 +1,20 @@
 # Next task handover
 
-Status: `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61` released as current Sites version 324; next task is controlled test-inbox quote receipt and callback proof
+Status: `TLINK-VERSIONED-QUOTE-DELIVERY-63` released as current Sites version 326; provider delivered, Gmail inbox unverified
 
 Prepared: 13 August 2026
 
-Milestone ID: `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61`
+Milestone ID: `TLINK-VERSIONED-QUOTE-DELIVERY-63`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `e757ac2402da0830b68d0e50e95afd61281c03c0`
+Milestone source baseline: `37a4faf2e9cbbc6eee5ffdf007366d7944152761`
 
-Current quote editor and delivery correction application commit: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
+Current versioned quote-delivery application commit: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
+
+Historical quote-delivery workflow application commit: `37a4faf2e9cbbc6eee5ffdf007366d7944152761`
+
+Historical quote editor and delivery correction application commit: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
 
 Historical quote, job and invoice usability application commit: `e757ac2402da0830b68d0e50e95afd61281c03c0`
 
@@ -22,15 +26,27 @@ Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d
 
 Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production application source: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
+Current production application source: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
 
-Current production: Sites version 324 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 326 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2`
 
-Current deployment: `appgdep_6a7d2c7a471c819192d6390b0d59e9fc`
+Current deployment: `appgdep_6a7d472339648191843e05066c7d576b`
 
-Migration inventory: all 137 migrations through `0136_trade_quote_delivery_outbox.sql`
+Migration inventory: all 138 migrations through `0137_trade_quote_delivery_renderer_revision.sql`
+
+Historical version 325 application source: `37a4faf2e9cbbc6eee5ffdf007366d7944152761`
+
+Historical version 325 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4815104beb548191a5f747deee51c8b7`
+
+Historical version 325 deployment: succeeded on provider `info294029--aea-energy-comparison` with environment revision 20; the deployment ID was not retained in the release evidence
+
+Historical version 324 application source: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
+
+Historical version 324 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
+
+Historical version 324 deployment: `appgdep_6a7d2c7a471c819192d6390b0d59e9fc`; succeeded and remained public until version 325 replaced it
 
 Historical version 323 application source: `e757ac2402da0830b68d0e50e95afd61281c03c0`
 
@@ -86,7 +102,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 420 files, 39,761,920 bytes, Sites archive content hash `sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`
+Current release package: 422 files, 39,833,600 bytes, Sites archive content hash `sha256:8ef0f48632dac835b45ab48c1a14d4c70d4d2f191f4def5a43aff50c4aa55b5f`; local archive 12,128,693 bytes, 436 tar entries and SHA-256 `3164A99777EE66ECF8C6B5F35A2F2364C3A4296FFACEC60B347ED08700E24239`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -98,11 +114,99 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
+## Released milestone: TLINK-VERSIONED-QUOTE-DELIVERY-63
+
+Status: exact executable application source
+`852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 326. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2`
+and deployment `appgdep_6a7d472339648191843e05066c7d576b` reconcile to that
+source. Deployment succeeded at the public custom URL
+`https://compare.ausenergyassessments.com` and provider URL
+`https://aea-energy-comparison.info294029.chatgpt.site` under provider identity
+`info294029--aea-energy-comparison` with environment revision 20. Sites stored
+422 files and 39,833,600 bytes with content hash
+`sha256:8ef0f48632dac835b45ab48c1a14d4c70d4d2f191f4def5a43aff50c4aa55b5f`.
+The local 12,128,693-byte archive has 436 tar entries and SHA-256
+`3164A99777EE66ECF8C6B5F35A2F2364C3A4296FFACEC60B347ED08700E24239`. The package
+contains all 138 migrations through
+`0137_trade_quote_delivery_renderer_revision.sql`.
+
+### Implemented outcome
+
+Delayed quote delivery now rebuilds an issued email with the same immutable
+renderer revision that created its integrity hash. Historical queued rows use
+frozen renderer revision 1, newly issued rows use revision 2, and an unknown
+revision still fails closed. The subject, recipient, email hash, PDF filename
+and PDF hash remain integrity-checked before any provider request.
+
+The quote editor has one final percentage-discount control outside line-item
+ordering. It applies after the net included scope, including negative STC, VEEC
+or rebate lines and fixed-dollar discounts, while optional and choose-one rows
+remain excluded. This prevents a percentage discount from being calculated
+against a rebate as though it were positive work. Consent is in the sticky
+submit footer, and the lead `Create job and quote` action opens a visible staged
+progress modal while customer, job, accepted details and files are prepared.
+
+### Incident and current delivery truth
+
+- Quote `Q-TLJ-X4LMAQXU`, delivery
+  `66499ae8-f1a7-406b-befb-4cebca78ed7c`, was durably queued under version 324.
+  No scheduled cron invocation was available to drain it.
+- Version 325 added exact-delivery request draining plus a bounded health-route
+  fallback. Its first drain correctly stopped before Resend because the current
+  renderer no longer reproduced the older row's stored content hash. The
+  `QUOTE_DELIVERY_CONTENT_CHANGED` guard prevented changed customer content
+  from being sent; this was not a provider or Gmail loss.
+- Version 326 records `email_renderer_revision`, migrates existing rows to the
+  frozen revision 1 contract and issues new rows with revision 2. Automatic and
+  manual retries use the stored or inherited revision and verify predecessor
+  metadata before provider submission.
+- The third automatic attempt used frozen renderer revision 1 and preserved the
+  immutable email and PDF hashes. Provider acceptance occurred at
+  `2026-08-13T04:49:50.861Z` with message ID
+  `bcee0035-743e-4795-acb0-7512b731e740`. The callback ledger then recorded
+  `delivery_sent` at `2026-08-13T04:49:56.651Z` and `delivered` at
+  `2026-08-13T04:50:00.168Z` with provider status `email.delivered`.
+- The exact row is now `delivered`, attempts equal 3, and failure, last-error,
+  next-attempt and lease fields are cleared. Provider acceptance, sent callback
+  and delivered callback are proven. Visible placement in the recipient's Gmail
+  inbox remains unverified and is not claimed.
+
+### Validation and release evidence
+
+- Quote, delivery, PDF, discount and migration-inventory coverage passed in the
+  focused release sets. Typecheck, warning-free lint, all 138 migrations,
+  production build with Sites bundle audit and `git diff --check` passed.
+- The protected unrelated
+  `test/trade-field-evidence-finalisation.test.mjs` remains outside this change
+  with SHA-256
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+  Its known failures and cancellations mean raw unfiltered `npm test` is not a
+  clean release signal and is not represented as passing.
+- Deployment `appgdep_6a7d472339648191843e05066c7d576b` succeeded. Runtime
+  evidence proves provider acceptance and the delivered callback for the
+  affected quote. Visible Gmail inbox placement was not independently observed.
+
+## Previous released milestone: TLINK-QUOTE-DELIVERY-WORKFLOW-62
+
+Version 325 used exact application source
+`37a4faf2e9cbbc6eee5ffdf007366d7944152761` and saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_4815104beb548191a5f747deee51c8b7`.
+Its deployment succeeded on provider `info294029--aea-energy-comparison` with
+environment revision 20; the deployment ID was not retained. Sites stored 420
+files and 39,823,360 bytes with content hash
+`sha256:a9df49e58bcd5462037cfc2ec37b8eaaef38612d9aa447d57de2a1fabbd0646f`.
+It added exact-delivery request draining, a bounded health-route queue drain,
+the final percentage-discount control, sticky-footer consent and the staged
+lead-to-job progress modal. Its runtime drain exposed the cross-version renderer
+integrity mismatch and stopped safely before the provider.
+
+## Previous released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
 
 Status: exact executable application source
 `c12fa0613901aa7cb4c1c2167b0e4720e57b0900` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 324. Saved version
+internal `main` and released as historical Sites version 324. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
 and deployment `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` reconcile to that
 source. Deployment succeeded at the public custom URL

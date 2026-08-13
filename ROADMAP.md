@@ -2066,11 +2066,89 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
+## Released milestone: TLINK-VERSIONED-QUOTE-DELIVERY-63
+
+Release status: exact executable application commit
+`852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 326 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2`
+and deployment `appgdep_6a7d472339648191843e05066c7d576b` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison`
+with environment revision 20. The local 12,128,693-byte archive has 436 tar
+entries and SHA-256
+`3164A99777EE66ECF8C6B5F35A2F2364C3A4296FFACEC60B347ED08700E24239`. Sites
+stored 422 files and 39,833,600 bytes with content hash
+`sha256:8ef0f48632dac835b45ab48c1a14d4c70d4d2f191f4def5a43aff50c4aa55b5f`;
+the package contains all 138 migrations through
+`0137_trade_quote_delivery_renderer_revision.sql`.
+
+### Outcome
+
+Preserve the immutable email and PDF content of a quote across delayed delivery
+and deployment changes, while keeping percentage discounts mathematically clear
+when STC, VEEC or other rebate lines are negative.
+
+### Implemented scope
+
+- Record the email renderer revision on every durable quote-delivery row.
+  Existing rows use frozen revision 1 and newly issued rows use revision 2.
+- Rebuild delayed and manually retried email with the stored or inherited
+  renderer revision, then verify subject, recipient, email hash, PDF filename
+  and PDF hash before any provider request. Unknown revisions fail closed.
+- Keep one final percentage-discount control outside line-item ordering. Apply
+  it after net included lines, including negative rebate lines and fixed-dollar
+  discounts. Exclude optional and choose-one rows from its base.
+- Keep confirmation inside the sticky submit footer so it stays beside the send
+  action throughout PDF review.
+- Open a staged progress modal immediately after `Create job and quote`, with
+  clear customer, job, accepted-detail and file-transfer phases during the
+  roughly ten-second handoff.
+
+### Incident and release evidence
+
+- Quote `Q-TLJ-X4LMAQXU`, delivery
+  `66499ae8-f1a7-406b-befb-4cebca78ed7c`, was queued under version 324. No cron
+  invocation was available to drain it.
+- Version 325 health-route draining attempted delivery but correctly stopped
+  before Resend with `QUOTE_DELIVERY_CONTENT_CHANGED`: its new renderer did not
+  reproduce the older row's stored integrity hash. This was an integrity guard,
+  not provider acceptance or Gmail loss.
+- Version 326 supplies frozen v1 and current v2 renderers. The third automatic
+  attempt used renderer revision 1 without changing the immutable email or PDF
+  hashes. Provider acceptance occurred at `2026-08-13T04:49:50.861Z` with
+  message ID `bcee0035-743e-4795-acb0-7512b731e740`; callbacks recorded sent at
+  `2026-08-13T04:49:56.651Z` and delivered at `2026-08-13T04:50:00.168Z` with
+  provider status `email.delivered`. The exact row is now `delivered`, attempts
+  equal 3, and failure, error, retry and lease state is cleared. Visible Gmail
+  inbox placement remains unverified and is not claimed.
+- Focused quote, delivery, PDF, discount and migration-inventory coverage,
+  typecheck, warning-free lint, all 138 migrations, production build with Sites
+  bundle audit and `git diff --check` passed.
+- Raw unfiltered `npm test` is not represented as passing. Its known failures
+  and cancellations remain confined to the preserved unrelated
+  `test/trade-field-evidence-finalisation.test.mjs`, SHA-256
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+
+## Previous released milestone: TLINK-QUOTE-DELIVERY-WORKFLOW-62
+
+Version 325 used exact application source
+`37a4faf2e9cbbc6eee5ffdf007366d7944152761` and saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_4815104beb548191a5f747deee51c8b7`.
+Its deployment succeeded on provider `info294029--aea-energy-comparison` with
+environment revision 20; the deployment ID was not retained. Sites stored 420
+files and 39,823,360 bytes with content hash
+`sha256:a9df49e58bcd5462037cfc2ec37b8eaaef38612d9aa447d57de2a1fabbd0646f`.
+The release added exact-delivery request draining, a bounded health-route drain,
+the final percentage-discount control, sticky-footer consent and the staged
+lead-to-job progress modal. Its live drain exposed the historical renderer
+integrity mismatch and stopped safely before the provider.
+
+## Previous released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
 
 Release status: exact executable application commit
 `c12fa0613901aa7cb4c1c2167b0e4720e57b0900` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 324 at
+Sites internal `main`, and released as historical Sites version 324 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
 and deployment `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` reconcile to that
