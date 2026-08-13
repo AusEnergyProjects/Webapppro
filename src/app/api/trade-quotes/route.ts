@@ -38,6 +38,9 @@ import {
 } from "@/lib/trade-quote-review-server";
 import {
   buildTradeQuoteEmail,
+  buildTradeQuoteEmailForRevision,
+  CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION,
+  resolveTradeQuoteEmailRendererRevision,
   tradeQuoteEmailContentSha256,
 } from "@/lib/trade-quote-email";
 import {
@@ -964,18 +967,19 @@ export async function POST(request: Request) {
              crm_customer_id, channel, provider, status, recipient_preview,
              recipient_role, consent_basis, idempotency_key, provider_message_id,
              provider_status, attempts, last_error, sent_at, delivered_at,
-             subject_snapshot, email_content_sha256, attachment_filename,
+              subject_snapshot, email_content_sha256, email_renderer_revision, attachment_filename,
              attachment_sha256, recipient_email_sha256, provider_idempotency_key,
              public_origin, queued_at,
              next_attempt_at, last_attempt_at, lease_expires_at, failure_code,
              created_at, updated_at)
             SELECT ?, ?, ?, ?, ?, ?, 'email', 'resend', 'queued', ?, ?,
               'installer_confirmed_current_quote', ?, '', '', 0, '', '', '',
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', ?, ?
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', ?, ?
             WHERE ${claimStillHeld}`)
             .bind(deliveryId, linkId, version.id, workOrderId, access.ownerUid,
               job.crm_customer_id, maskPhotoRequestEmail(customerEmail), recipientRole,
-              idempotencyKey, emailContent.subject, emailContentSha256,
+               idempotencyKey, emailContent.subject, emailContentSha256,
+               CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION,
               attachmentFilename, issuedPdf.sha256,
               await tradeQuoteRecipientEmailSha256(customerEmail), providerIdempotencyKey,
               publicOrigin,
@@ -1245,7 +1249,9 @@ export async function POST(request: Request) {
         let predecessor: Row | null = null;
         if (action === "retry_quote_delivery") {
           predecessor = await db.prepare(`SELECT id, status, attempts, failure_code,
-              retry_of_delivery_id, delivery_generation
+              retry_of_delivery_id, delivery_generation, email_renderer_revision,
+              subject_snapshot, email_content_sha256, attachment_filename,
+              attachment_sha256, recipient_email_sha256, public_origin
             FROM trade_crm_quote_deliveries
             WHERE id = ? AND firebase_uid = ? AND quote_version_id = ?
               AND quote_link_id = ? AND idempotency_key = ? LIMIT 1`)
@@ -1359,6 +1365,24 @@ export async function POST(request: Request) {
           }, 409);
         }
 
+        const manualRetryRequested = action === "retry_quote_delivery";
+        if (manualRetryRequested && (
+          Number(predecessor?.delivery_generation || 1) !== 1
+          || predecessor?.retry_of_delivery_id
+          || predecessor?.status !== "failed"
+          || !(
+            predecessor?.failure_code === "QUOTE_DELIVERY_LEGACY_RETRY_REQUIRED"
+            || predecessor?.failure_code === "QUOTE_DELIVERY_PROVIDER_TERMINAL"
+            || Number(predecessor?.attempts || 0) >= 5
+          )
+        )) {
+          return adminJson({
+            ok: false,
+            error: "This delivery is already sending or no longer allows a retry.",
+            delivery: await tradeQuoteDeliveryStatus(db, requestedDeliveryId, access.ownerUid),
+          }, 409);
+        }
+
         let snapshot = parseTradeQuoteDocumentSnapshot(version.document_snapshot_json);
         if (!snapshot) {
           if (String(version.document_snapshot_json || "").trim()) throw new Error("QUOTE_DOCUMENT_INVALID");
@@ -1379,7 +1403,13 @@ export async function POST(request: Request) {
         const secret = await recoverQuoteLinkSecret(String(link.encrypted_token), String(link.id), Number(link.token_issue), String(link.token_hash));
         const origin = tradeQuoteDeliveryPublicOrigin(new URL(request.url).origin);
         const shareUrl = `${origin}${quoteReviewPath(String(link.id), secret)}`;
-        const emailContent = buildTradeQuoteEmail({ snapshot, shareUrl, expiresAt: String(link.expires_at) });
+        const emailRendererRevision = resolveTradeQuoteEmailRendererRevision(
+          manualRetryRequested ? predecessor?.email_renderer_revision : undefined,
+        );
+        const emailContent = await buildTradeQuoteEmailForRevision(
+          emailRendererRevision,
+          { snapshot, shareUrl, expiresAt: String(link.expires_at) },
+        );
         const issuedPdf = await issuedTradeQuotePdf({
           ownerUid: access.ownerUid,
           quoteVersionId: String(version.id),
@@ -1389,25 +1419,19 @@ export async function POST(request: Request) {
         const emailContentSha256 = await tradeQuoteEmailContentSha256(emailContent);
         const attachmentSha256 = issuedPdf.reference.sha256;
         const attachmentFilename = tradeQuotePdfFilename(snapshot);
+        const recipientEmailSha256 = await tradeQuoteRecipientEmailSha256(email);
         const recipientRole = String(job.customer_email || "").trim().toLowerCase() === email
           ? "primary_customer"
           : "authorised_contact";
-        const manualRetryRequested = action === "retry_quote_delivery";
         if (manualRetryRequested && (
-          Number(predecessor?.delivery_generation || 1) !== 1
-          || predecessor?.retry_of_delivery_id
-          || predecessor?.status !== "failed"
-          || !(
-            predecessor?.failure_code === "QUOTE_DELIVERY_LEGACY_RETRY_REQUIRED"
-            || predecessor?.failure_code === "QUOTE_DELIVERY_PROVIDER_TERMINAL"
-            || Number(predecessor?.attempts || 0) >= 5
-          )
+          emailContent.subject !== String(predecessor?.subject_snapshot || "")
+          || emailContentSha256 !== String(predecessor?.email_content_sha256 || "")
+          || attachmentFilename !== String(predecessor?.attachment_filename || "")
+          || attachmentSha256 !== String(predecessor?.attachment_sha256 || "")
+          || recipientEmailSha256 !== String(predecessor?.recipient_email_sha256 || "")
+          || origin !== String(predecessor?.public_origin || "")
         )) {
-          return adminJson({
-            ok: false,
-            error: "This delivery is already sending or no longer allows a retry.",
-            delivery: await tradeQuoteDeliveryStatus(db, requestedDeliveryId, access.ownerUid),
-          }, 409);
+          throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
         }
         const deliveryId = crypto.randomUUID();
         const generation = manualRetryRequested ? 2 : 1;
@@ -1420,13 +1444,14 @@ export async function POST(request: Request) {
            channel, provider, status, recipient_preview, recipient_role, consent_basis,
            idempotency_key, provider_message_id, provider_status, attempts, last_error,
            sent_at, delivered_at, subject_snapshot, email_content_sha256,
+           email_renderer_revision,
            attachment_filename, attachment_sha256, recipient_email_sha256,
            provider_idempotency_key,
            public_origin, queued_at, next_attempt_at, last_attempt_at,
            lease_expires_at, failure_code, retry_of_delivery_id,
             delivery_generation, created_at, updated_at)
           SELECT ?, ?, ?, ?, ?, ?, 'email', 'resend', 'queued', ?, ?,
-            'installer_confirmed_current_quote', ?, '', '', 0, '', '', '', ?, ?, ?, ?,
+             'installer_confirmed_current_quote', ?, '', '', 0, '', '', '', ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, '', '', '', ?, ?, ?, ?
           WHERE EXISTS (
             SELECT 1 FROM trade_crm_quote_links current_link
@@ -1437,8 +1462,10 @@ export async function POST(request: Request) {
           )`)
           .bind(deliveryId, link.id, version.id, workOrderId, access.ownerUid, job.crm_customer_id,
             maskPhotoRequestEmail(email), recipientRole, generationIdempotencyKey, emailContent.subject,
-            emailContentSha256, attachmentFilename, attachmentSha256,
-            await tradeQuoteRecipientEmailSha256(email), generationProviderKey,
+            emailContentSha256,
+            emailRendererRevision,
+            attachmentFilename, attachmentSha256,
+            recipientEmailSha256, generationProviderKey,
             origin, now, now, manualRetryRequested ? requestedDeliveryId : "",
             generation, now, now, link.id, access.ownerUid, version.id,
             link.token_issue, link.token_hash, link.updated_at).run();

@@ -7,6 +7,12 @@ import {
   tradeQuoteDeliveryStatus,
 } from "../src/lib/trade-quote-delivery-server.ts";
 import {
+  buildTradeQuoteEmailForRevision,
+  buildVerifiedTradeQuoteEmailForRevision,
+  resolveTradeQuoteEmailRendererRevision,
+  tradeQuoteEmailContentSha256,
+} from "../src/lib/trade-quote-email.ts";
+import {
   queueTradeQuoteDeliveryDispatch,
   TRADE_QUOTE_DELIVERY_DISPATCH_HEADER,
   withTradeQuoteDeliveryDispatch,
@@ -21,6 +27,10 @@ import {
 
 const migration = fs.readFileSync(
   new URL("../drizzle/0136_trade_quote_delivery_outbox.sql", import.meta.url),
+  "utf8",
+);
+const rendererMigration = fs.readFileSync(
+  new URL("../drizzle/0137_trade_quote_delivery_renderer_revision.sql", import.meta.url),
   "utf8",
 );
 const route = fs.readFileSync(new URL("../src/app/api/trade-quotes/route.ts", import.meta.url), "utf8");
@@ -157,6 +167,240 @@ function initialiseOutbox(database, now = "2026-08-13T01:00:00.000Z") {
     failure_code = '', last_error = '', updated_at = ? WHERE id = 'delivery-1'`)
     .run(now, now, now);
 }
+
+function rendererSnapshot() {
+  return {
+    schemaVersion: "trade-quote-document-v2",
+    capturedAt: "2026-08-13T03:15:00.000Z",
+    quoteId: "quote-1",
+    quoteVersionId: "version-1",
+    quoteNumber: "Q-TLJ-X23NSK46",
+    versionNumber: 1,
+    work: {
+      id: "work-1",
+      number: "TLJ-X23NSK46",
+      title: "Heat pump and certificate project",
+    },
+    customer: {
+      id: "customer-1",
+      number: "CUS-1",
+      name: "James William",
+      email: "customer@example.com",
+    },
+    site: {
+      id: "site-1",
+      label: "Primary site",
+      addressLine1: "1 Test Street",
+      addressLine2: "",
+      suburb: "Melbourne",
+      state: "VIC",
+      postcode: "3000",
+      summary: "1 Test Street, Melbourne VIC 3000",
+    },
+    business: {
+      name: "Australian Energy Assessments",
+      email: "quotes@ausenergyassessments.com",
+      phone: "1300 000 001",
+      abn: "12345678901",
+      website: "https://ausenergyassessments.com",
+      address: "Level 4, Melbourne VIC 3000",
+      themeKey: "emerald_navy",
+      borderStyle: "soft",
+      logo: null,
+      banner: null,
+      bannerCrop: null,
+      quoteEmailSubjectTemplate: "{business_name} sent quote {quote_number}",
+      quoteEmailIntro: "Thank you for the opportunity to quote.",
+    },
+    acceptanceEmail: "customer@example.com",
+    subtotalCents: 5_400,
+    taxCents: 540,
+    totalCents: 5_940,
+    customerMessage: "Review the scope, choices and total below.",
+    terms: "Installation is subject to safe site access.",
+    validUntil: "2026-09-12",
+    consentStatement: "I accept this exact quote.",
+    issuedAt: "2026-08-13T03:15:00.000Z",
+    items: [
+      {
+        id: "line-callout",
+        lineType: "labour",
+        description: "Call-out",
+        quantityMilli: 6_000,
+        unitPriceCents: 20_000,
+        subtotalCents: 120_000,
+        taxCents: 12_000,
+        totalCents: 132_000,
+        sectionHeading: "Included work",
+      },
+      {
+        id: "line-stc",
+        lineType: "adjustment",
+        description: "STC rebate",
+        quantityMilli: 30_000,
+        unitPriceCents: -3_800,
+        subtotalCents: -114_000,
+        taxCents: -11_400,
+        totalCents: -125_400,
+        sectionHeading: "Included work",
+      },
+      {
+        id: "line-final-percent",
+        lineType: "adjustment",
+        description: "Final spring sale",
+        quantityMilli: 100,
+        unitPriceCents: -6_000,
+        subtotalCents: -600,
+        taxCents: -60,
+        totalCents: -660,
+        sectionHeading: "Overall percentage discount",
+      },
+    ],
+    choices: [],
+  };
+}
+
+test("0137 pins existing deliveries to renderer v1 and fresh issuance to v2", () => {
+  const { database } = fixture();
+  insertLegacy(database, { status: "delivered" });
+  apply(database, migration);
+  apply(database, rendererMigration);
+  const row = database.prepare(`SELECT email_renderer_revision
+    FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'`).get();
+  assert.equal(row.email_renderer_revision, 1);
+  assert.equal(resolveTradeQuoteEmailRendererRevision(1), 1);
+  assert.equal(resolveTradeQuoteEmailRendererRevision(), 2);
+  assert.throws(
+    () => resolveTradeQuoteEmailRendererRevision(99),
+    /QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED/,
+  );
+  assert.match(rendererMigration, /email_renderer_revision.*DEFAULT 1 NOT NULL/);
+  assert.match(route, /CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION/);
+  assert.match(route, /email_renderer_revision, attachment_filename/);
+  database.close();
+});
+
+test("frozen v1 and current v2 rebuild and dispatch their exact immutable email content", async () => {
+  const email = {
+    snapshot: rendererSnapshot(),
+    shareUrl: "https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret",
+    expiresAt: "2026-09-12T23:59:59.999Z",
+  };
+  const v1 = await buildTradeQuoteEmailForRevision(1, email);
+  const v2 = await buildTradeQuoteEmailForRevision(2, email);
+  const v1Hash = await tradeQuoteEmailContentSha256(v1);
+  const v2Hash = await tradeQuoteEmailContentSha256(v2);
+  assert.equal(v1Hash, "670db8730fbe710377b66b20304699467c2eab12f5dda6213f138a9d4b05eec5");
+  assert.notEqual(v2Hash, v1Hash);
+  assert.match(v1.text, /Discount ex GST/);
+  assert.match(v1.text, /Final spring sale/);
+  assert.match(v2.text, /Final 10% discount on included items ex GST/);
+
+  for (const [revision, content, hash] of [[1, v1, v1Hash], [2, v2, v2Hash]]) {
+    const { database, db } = fixture();
+    insertLegacy(database);
+    apply(database, migration);
+    apply(database, rendererMigration);
+    initialiseOutbox(database);
+    database.prepare(`UPDATE trade_crm_quote_deliveries
+      SET email_renderer_revision = ?, subject_snapshot = ?, email_content_sha256 = ?
+      WHERE id = 'delivery-1'`).run(revision, content.subject, hash);
+    let sends = 0;
+    const result = await drainTradeQuoteDeliveries({
+      db,
+      deliveryId: "delivery-1",
+      now: new Date("2026-08-13T01:00:00.000Z"),
+      emailConfigured: true,
+      loadContext: async () => database.prepare(
+        "SELECT * FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'",
+      ).get(),
+      prepareMessage: async (row) => {
+        const verified = await buildVerifiedTradeQuoteEmailForRevision({
+          revision: Number(row.email_renderer_revision),
+          email,
+          expectedSubject: String(row.subject_snapshot),
+          expectedContentSha256: String(row.email_content_sha256),
+        });
+        return {
+          channel: "email",
+          recipient: "customer@example.com",
+          subject: verified.subject,
+          body: verified.text,
+          html: verified.html,
+          idempotencyKey: String(row.provider_idempotency_key),
+          callbackUrl: "https://compare.ausenergyassessments.com/callback",
+        };
+      },
+      sendEmail: async () => {
+        sends += 1;
+        return {
+          provider: "test",
+          providerMessageId: `message-v${revision}`,
+          providerStatus: "accepted",
+        };
+      },
+    });
+    assert.equal(result.outcomes[0].outcome, "provider_accepted");
+    assert.equal(sends, 1);
+    database.close();
+  }
+});
+
+test("unknown renderer revisions fail before the email provider is called", async () => {
+  const email = {
+    snapshot: rendererSnapshot(),
+    shareUrl: "https://compare.ausenergyassessments.com/quote-review/link-1.legacy-secret",
+    expiresAt: "2026-09-12T23:59:59.999Z",
+  };
+  const legacy = await buildTradeQuoteEmailForRevision(1, email);
+  const { database, db } = fixture();
+  insertLegacy(database);
+  apply(database, migration);
+  apply(database, rendererMigration);
+  initialiseOutbox(database);
+  database.prepare(`UPDATE trade_crm_quote_deliveries
+    SET email_renderer_revision = 99, subject_snapshot = ?, email_content_sha256 = ?
+    WHERE id = 'delivery-1'`).run(
+    legacy.subject,
+    await tradeQuoteEmailContentSha256(legacy),
+  );
+  let sends = 0;
+  const result = await drainTradeQuoteDeliveries({
+    db,
+    deliveryId: "delivery-1",
+    now: new Date("2026-08-13T01:00:00.000Z"),
+    emailConfigured: true,
+    loadContext: async () => database.prepare(
+      "SELECT * FROM trade_crm_quote_deliveries WHERE id = 'delivery-1'",
+    ).get(),
+    prepareMessage: async (row) => {
+      const verified = await buildVerifiedTradeQuoteEmailForRevision({
+        revision: Number(row.email_renderer_revision),
+        email,
+        expectedSubject: String(row.subject_snapshot),
+        expectedContentSha256: String(row.email_content_sha256),
+      });
+      return {
+        channel: "email",
+        recipient: "customer@example.com",
+        subject: verified.subject,
+        body: verified.text,
+        idempotencyKey: "provider-key",
+        callbackUrl: "https://compare.ausenergyassessments.com/callback",
+      };
+    },
+    sendEmail: async () => {
+      sends += 1;
+      throw new Error("provider must not be called");
+    },
+  });
+  assert.equal(sends, 0);
+  assert.equal(
+    result.outcomes[0].code,
+    "QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED",
+  );
+  database.close();
+});
 
 test("0136 quarantines every legacy retryable state instead of auto-emailing customers", async () => {
   const { database, db } = fixture();
@@ -554,6 +798,11 @@ test("manual retry creates one immutable successor with a new provider identity"
   assert.match(route, /generationProviderKey = await tradeQuoteRecipientEmailSha256/);
   assert.match(route, /existingRetry/);
   assert.match(route, /failure_code === "QUOTE_DELIVERY_PROVIDER_TERMINAL"/);
+  assert.match(route, /delivery_generation, email_renderer_revision,[\s\S]*subject_snapshot, email_content_sha256, attachment_filename,[\s\S]*attachment_sha256, recipient_email_sha256, public_origin/);
+  assert.match(route, /resolveTradeQuoteEmailRendererRevision\([\s\S]*manualRetryRequested \? predecessor\?\.email_renderer_revision : undefined/);
+  assert.match(route, /buildTradeQuoteEmailForRevision\([\s\S]*emailRendererRevision/);
+  assert.match(route, /emailContent\.subject !== String\(predecessor\?\.subject_snapshot[\s\S]*emailContentSha256 !== String\(predecessor\?\.email_content_sha256[\s\S]*attachmentFilename !== String\(predecessor\?\.attachment_filename[\s\S]*attachmentSha256 !== String\(predecessor\?\.attachment_sha256[\s\S]*recipientEmailSha256 !== String\(predecessor\?\.recipient_email_sha256[\s\S]*origin !== String\(predecessor\?\.public_origin/);
+  assert.match(route, /email_content_sha256,[\s\S]*email_renderer_revision,[\s\S]*\.bind\([\s\S]*emailContentSha256,[\s\S]*emailRendererRevision/);
   assert.doesNotMatch(route, /SET status = 'queued',[\s\S]{0,1000}failure_code = 'QUOTE_DELIVERY_LEGACY_RETRY_REQUIRED'/);
 });
 
@@ -593,6 +842,7 @@ test("the exact issue transaction bindings persist an event and a durable queued
   const deliverySql = queuedDeliverySqlTemplate.replace("${claimStillHeld}", claimStillHeld);
   const { database, db } = fixture();
   apply(database, migration);
+  apply(database, rendererMigration);
   database.exec("ALTER TABLE trade_crm_quote_versions ADD consent_statement text DEFAULT '' NOT NULL");
   database.prepare(`INSERT INTO trade_crm_quote_versions
     (id, firebase_uid, status, consent_statement)
@@ -609,7 +859,7 @@ test("the exact issue transaction bindings persist an event and a durable queued
     db.prepare(deliverySql).bind(
       "delivery-new", "link-1", "version-1", "work-1", "owner-1", "customer-1",
       "c***@example.com", "primary_customer", "quote:version-1:1:email:initial",
-      "Quote Q-1", "content-sha", "Q-1-v1.pdf", "attachment-sha",
+      "Quote Q-1", "content-sha", 2, "Q-1-v1.pdf", "attachment-sha",
       "recipient-sha", "provider-key", "https://compare.ausenergyassessments.com",
       timestamp, timestamp, timestamp, timestamp,
       "version-1", "owner-1", "issue-claim-1",
@@ -620,6 +870,8 @@ test("the exact issue transaction bindings persist an event and a durable queued
   assert.deepEqual(result.map((entry) => entry.meta.changes), [1, 1]);
   assert.equal(database.prepare("SELECT event_type FROM trade_crm_quote_events WHERE id = 'event-1'").get().event_type, "issued");
   const delivery = await tradeQuoteDeliveryStatus(db, "delivery-new", "owner-1");
+  assert.equal(database.prepare(`SELECT email_renderer_revision
+    FROM trade_crm_quote_deliveries WHERE id = 'delivery-new'`).get().email_renderer_revision, 2);
   assert.deepEqual({
     ok: true,
     quoteIssued: true,
@@ -669,6 +921,7 @@ test("the D1 issue batch rolls back the event when a delivery binding fails", as
   const deliverySql = queuedDeliverySqlTemplate.replace("${claimStillHeld}", claimStillHeld);
   const { database, db } = fixture();
   apply(database, migration);
+  apply(database, rendererMigration);
   database.exec("ALTER TABLE trade_crm_quote_versions ADD consent_statement text DEFAULT '' NOT NULL");
   database.prepare(`INSERT INTO trade_crm_quote_versions
     (id, firebase_uid, status, consent_statement)
@@ -685,7 +938,7 @@ test("the D1 issue batch rolls back the event when a delivery binding fails", as
     db.prepare(deliverySql).bind(
       "delivery-new", "link-1", "version-1", "work-1", "owner-1", "customer-1",
       "c***@example.com", "primary_customer", "quote:version-1:1:email:initial",
-      "Quote Q-1", "content-sha", "Q-1-v1.pdf", "attachment-sha",
+      "Quote Q-1", "content-sha", 2, "Q-1-v1.pdf", "attachment-sha",
       "recipient-sha", "provider-key", "https://compare.ausenergyassessments.com",
       timestamp, timestamp, timestamp, timestamp,
       "version-1", "owner-1", "issue-claim-1",

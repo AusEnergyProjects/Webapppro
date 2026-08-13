@@ -15,6 +15,7 @@ const sharingMigration = read("../drizzle/0067_secure_quote_sharing.sql");
 const documentMigration = read("../drizzle/0120_trade_business_identity_and_quote_delivery.sql");
 const issuedDocumentMigration = read("../drizzle/0123_immutable_issued_pdf_artifacts.sql");
 const deliveryOutboxMigration = read("../drizzle/0136_trade_quote_delivery_outbox.sql");
+const deliveryRendererMigration = read("../drizzle/0137_trade_quote_delivery_renderer_revision.sql");
 const installerRoute = read("../src/app/api/trade-quotes/route.ts");
 const customerRoute = read("../src/app/api/customer-trade-quotes/route.ts");
 const linkRoute = read("../src/app/api/quote-review/[token]/route.ts");
@@ -269,6 +270,8 @@ test("issued quote delivery is immutable, branded, attached and retry safe", () 
     "lease_expires_at",
     "failure_code",
   ]) assert.match(deliveryOutboxMigration, new RegExp(column));
+  assert.match(deliveryRendererMigration, /email_renderer_revision.*DEFAULT 1 NOT NULL/);
+  assert.match(schema, /emailRendererRevision: integer\("email_renderer_revision"\)\.notNull\(\)\.default\(1\)/);
   for (const boundary of [
     "status = 'sending'",
     "status = 'failed'",
@@ -370,7 +373,7 @@ test("issued quote PDFs retain exact bytes and legacy backfill fails closed", ()
     /concurrent request may have won the conditional backfill[\s\S]*readVerifiedIssuedPdf\(racedReference, racedIdentity\)/,
   );
   const sendBranch = installerRoute.indexOf('["replace_link", "revoke_link", "send_quote", "retry_quote_delivery", "answer_question"]');
-  const sendEmailContent = installerRoute.indexOf("const emailContent = buildTradeQuoteEmail", sendBranch);
+  const sendEmailContent = installerRoute.indexOf("const emailContent = await buildTradeQuoteEmailForRevision", sendBranch);
   const sendPdfBlock = installerRoute.slice(
     sendEmailContent,
     installerRoute.indexOf(
@@ -398,6 +401,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
   db.exec("ALTER TABLE trade_work_orders ADD service_categories text DEFAULT '[]' NOT NULL");
   apply(db, issuedDocumentMigration.split("--> statement-breakpoint").slice(0, 3).join("--> statement-breakpoint"));
   apply(db, deliveryOutboxMigration);
+  apply(db, deliveryRendererMigration);
   for (const [label, source] of [["installer", installerRoute], ["customer", customerRoute], ["secure link", linkRoute]]) {
     const queries = [...source.matchAll(/prepare\(`([\s\S]*?)`\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
     assert.ok(queries.length > 5, `${label} route should expose compiled prepared statements`);

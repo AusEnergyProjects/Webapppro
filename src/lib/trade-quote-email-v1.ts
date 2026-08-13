@@ -1,66 +1,6 @@
 import type { TradeQuoteDocumentSnapshot } from "./trade-quote-review-server.ts";
 import { tradeQuoteDocumentDisplayTotals } from "./trade-quote-document-totals.mjs";
-
-export type TradeQuoteEmail = {
-  subject: string;
-  text: string;
-  html: string;
-  replyTo?: string;
-};
-
-export type BuildTradeQuoteEmailInput = {
-  snapshot: TradeQuoteDocumentSnapshot;
-  shareUrl: string;
-  expiresAt: string;
-  subjectTemplate?: string;
-};
-
-export const CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION = 2;
-
-export function resolveTradeQuoteEmailRendererRevision(
-  predecessorRevision?: unknown,
-) {
-  const revision = predecessorRevision === undefined
-    ? CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION
-    : Number(predecessorRevision);
-  if (revision !== 1 && revision !== CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION) {
-    throw new Error("QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED");
-  }
-  return revision;
-}
-
-export async function buildTradeQuoteEmailForRevision(
-  revision: number,
-  input: BuildTradeQuoteEmailInput,
-) {
-  if (resolveTradeQuoteEmailRendererRevision(revision) === 1) {
-    const { buildTradeQuoteEmailV1 } = await import("./trade-quote-email-v1.ts");
-    return buildTradeQuoteEmailV1(input);
-  }
-  if (revision === CURRENT_TRADE_QUOTE_EMAIL_RENDERER_REVISION) {
-    return buildTradeQuoteEmail(input);
-  }
-  throw new Error("QUOTE_DELIVERY_RENDERER_REVISION_UNSUPPORTED");
-}
-
-export async function buildVerifiedTradeQuoteEmailForRevision(input: {
-  revision: number;
-  email: BuildTradeQuoteEmailInput;
-  expectedSubject: string;
-  expectedContentSha256: string;
-}): Promise<TradeQuoteEmail> {
-  const content = await buildTradeQuoteEmailForRevision(
-    input.revision,
-    input.email,
-  );
-  if (
-    content.subject !== input.expectedSubject
-    || await tradeQuoteEmailContentSha256(content) !== input.expectedContentSha256
-  ) {
-    throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
-  }
-  return content;
-}
+import type { BuildTradeQuoteEmailInput, TradeQuoteEmail } from "./trade-quote-email.ts";
 
 function cleanText(value: unknown, maximum = 2_000) {
   return String(value || "")
@@ -101,10 +41,7 @@ function safeShareUrl(value: string) {
   return parsed.toString();
 }
 
-function subjectFromTemplate(
-  template: string,
-  snapshot: TradeQuoteDocumentSnapshot,
-) {
+function subjectFromTemplate(template: string, snapshot: TradeQuoteDocumentSnapshot) {
   const values: Record<string, string> = {
     business_name: snapshot.business.name,
     quote_number: snapshot.quoteNumber,
@@ -116,135 +53,70 @@ function subjectFromTemplate(
     subject = subject.replaceAll(`{${key}}`, cleanText(value, 120));
   }
   subject = cleanText(subject, 180);
-  if (!subject) {
-    subject = `${snapshot.business.name} sent quote ${snapshot.quoteNumber}`;
-  }
-  if (
-    !subject.toLocaleLowerCase("en-AU").includes(
-      snapshot.business.name.toLocaleLowerCase("en-AU"),
-    )
-  ) {
+  if (!subject) subject = `${snapshot.business.name} sent quote ${snapshot.quoteNumber}`;
+  if (!subject.toLocaleLowerCase("en-AU").includes(snapshot.business.name.toLocaleLowerCase("en-AU"))) {
     subject = `${snapshot.business.name}: ${subject}`.slice(0, 180);
   }
-  if (!subject.includes(snapshot.quoteNumber)) {
-    subject = `${subject} | ${snapshot.quoteNumber}`.slice(0, 180);
-  }
+  if (!subject.includes(snapshot.quoteNumber)) subject = `${subject} | ${snapshot.quoteNumber}`.slice(0, 180);
   return subject;
 }
 
 function summaryLines(linesToDisplay: TradeQuoteDocumentSnapshot["items"]) {
   const lines = linesToDisplay.slice(0, 8);
   return {
-    text: lines
-      .map((line) => `- ${line.description}: ${money(line.totalCents)}`)
-      .join("\n"),
-    html: lines
-      .map(
-        (line) =>
-          `<tr><td style="padding:8px 0;color:#173f3b;border-bottom:1px solid #d9e8e5">${escapeHtml(line.description)}</td><td style="padding:8px 0 8px 16px;text-align:right;font-weight:700;color:#063b42;border-bottom:1px solid #d9e8e5">${escapeHtml(money(line.totalCents))}</td></tr>`,
-      )
-      .join(""),
+    text: lines.map((line) => `- ${line.description}: ${money(line.totalCents)}`).join("\n"),
+    html: lines.map((line) =>
+      `<tr><td style="padding:8px 0;color:#173f3b;border-bottom:1px solid #d9e8e5">${escapeHtml(line.description)}</td><td style="padding:8px 0 8px 16px;text-align:right;font-weight:700;color:#063b42;border-bottom:1px solid #d9e8e5">${escapeHtml(money(line.totalCents))}</td></tr>`,
+    ).join(""),
     remaining: Math.max(0, linesToDisplay.length - lines.length),
   };
 }
 
-const FINAL_PERCENT_DISCOUNT_SECTION = "Overall percentage discount";
-const isFinalPercentDiscount = (item: TradeQuoteDocumentSnapshot["items"][number]) =>
-  item.sectionHeading === FINAL_PERCENT_DISCOUNT_SECTION;
-
-export function buildTradeQuoteEmail(
-  input: BuildTradeQuoteEmailInput,
-): TradeQuoteEmail {
+// Frozen renderer for quote deliveries whose content hash was recorded before
+// the v2 percentage-discount email layout. Do not change this output.
+export function buildTradeQuoteEmailV1(input: BuildTradeQuoteEmailInput): TradeQuoteEmail {
   const { snapshot } = input;
   const shareUrl = safeShareUrl(input.shareUrl);
   const subject = subjectFromTemplate(
-    input.subjectTemplate ||
-      snapshot.business.quoteEmailSubjectTemplate ||
-      "{business_name} sent quote {quote_number}",
+    input.subjectTemplate || snapshot.business.quoteEmailSubjectTemplate || "{business_name} sent quote {quote_number}",
     snapshot,
   );
-  const intro =
-    cleanText(snapshot.customerMessage, 1_000) ||
-    cleanText(snapshot.business.quoteEmailIntro, 1_000) ||
-    "Thank you for the opportunity to quote for your project. Review the scope, choices and total below.";
+  const intro = cleanText(snapshot.customerMessage, 1_000)
+    || cleanText(snapshot.business.quoteEmailIntro, 1_000)
+    || "Thank you for the opportunity to quote for your project. Review the scope, choices and total below.";
   const expires = cleanText(input.expiresAt, 40).slice(0, 10);
   const displayTotals = tradeQuoteDocumentDisplayTotals(snapshot);
   const headlineItems = [
     ...snapshot.items,
     ...snapshot.choices
-      .filter((choice) =>
-        displayTotals.selectedChoiceIds.includes(String(choice.id || "")),
-      )
+      .filter((choice) => displayTotals.selectedChoiceIds.includes(String(choice.id || "")))
       .flatMap((choice) => choice.items),
   ];
-  const lines = summaryLines(headlineItems.filter((item) => !isFinalPercentDiscount(item)));
-  const finalPercentItems = headlineItems.filter(isFinalPercentDiscount);
-  const finalPercentSubtotalCents = finalPercentItems.reduce(
-    (sum, item) => sum + Math.min(0, item.subtotalCents),
+  const lines = summaryLines(headlineItems);
+  const discountSubtotalCents = headlineItems.reduce(
+    (sum, item) => item.subtotalCents < 0 ? sum + item.subtotalCents : sum,
     0,
   );
-  const otherDiscountSubtotalCents = headlineItems.reduce(
-    (sum, item) =>
-      !isFinalPercentDiscount(item) && item.subtotalCents < 0 ? sum + item.subtotalCents : sum,
-    0,
-  );
-  const grossSubtotalCents =
-    displayTotals.subtotalCents - otherDiscountSubtotalCents - finalPercentSubtotalCents;
-  const finalPercentBasisPoints = finalPercentItems.length === 1
-    ? Math.round(finalPercentItems[0].quantityMilli)
-    : 0;
-  const finalPercentDescription = finalPercentItems.length === 1
-    ? cleanText(finalPercentItems[0].description, 120)
-    : "";
-  const finalPercentLabel = finalPercentBasisPoints > 0
-    ? `${finalPercentDescription ? `${finalPercentDescription} | ` : ""}Final ${finalPercentBasisPoints / 10}% discount on included items ex GST`
-    : "Final percentage discount on included items ex GST";
+  const grossSubtotalCents = displayTotals.subtotalCents - discountSubtotalCents;
   const contact = [snapshot.business.phone, snapshot.business.email]
-    .map((value) => cleanText(value, 160))
-    .filter(Boolean)
-    .join(" | ");
-  const optionalText =
-    snapshot.choices.length > 0
-      ? `\nThis quote includes ${snapshot.choices.length} customer choice${snapshot.choices.length === 1 ? "" : "s"} to review online.`
-      : "";
+    .map((value) => cleanText(value, 160)).filter(Boolean).join(" | ");
+  const optionalText = snapshot.choices.length > 0
+    ? `\nThis quote includes ${snapshot.choices.length} customer choice${snapshot.choices.length === 1 ? "" : "s"} to review online.`
+    : "";
   const text = [
-    `Quote from ${snapshot.business.name}`,
-    "",
-    `Hi ${snapshot.customer.name || "there"},`,
-    "",
-    intro,
-    "",
-    `${snapshot.work.title} | ${snapshot.work.number}`,
-    snapshot.site.summary,
-    lines.text,
-    lines.remaining ? `- Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"}` : "",
-    "",
+    `Quote from ${snapshot.business.name}`, "", `Hi ${snapshot.customer.name || "there"},`, "", intro, "",
+    `${snapshot.work.title} | ${snapshot.work.number}`, snapshot.site.summary, lines.text,
+    lines.remaining ? `- Plus ${lines.remaining} more included item${lines.remaining === 1 ? "" : "s"}` : "", "",
     `Subtotal ex GST: ${money(grossSubtotalCents)}`,
-    otherDiscountSubtotalCents < 0
-      ? `Rebates and dollar discounts ex GST: ${money(otherDiscountSubtotalCents)}`
-      : "",
-    finalPercentSubtotalCents < 0
-      ? `${finalPercentLabel}: ${money(finalPercentSubtotalCents)}`
-      : "",
-    `GST: ${money(displayTotals.taxCents)}`,
-    `Total incl GST: ${money(displayTotals.totalCents)}`,
+    discountSubtotalCents < 0 ? `Discount ex GST: ${money(discountSubtotalCents)}` : "",
+    `GST: ${money(displayTotals.taxCents)}`, `Total incl GST: ${money(displayTotals.totalCents)}`,
     optionalText.trim(),
-    displayTotals.hasChoices
-      ? "Your final total is calculated from the options you choose in the secure review."
-      : "",
-    "",
-    "Review the quote, ask a question, choose options, sign or decline:",
-    shareUrl,
-    "",
-    expires ? `This private link expires ${expires}.` : "",
-    "A PDF copy is attached for your records.",
-    "",
+    displayTotals.hasChoices ? "Your final total is calculated from the options you choose in the secure review." : "",
+    "", "Review the quote, ask a question, choose options, sign or decline:", shareUrl, "",
+    expires ? `This private link expires ${expires}.` : "", "A PDF copy is attached for your records.", "",
     contact ? `${snapshot.business.name} | ${contact}` : snapshot.business.name,
     snapshot.business.abn ? `ABN ${snapshot.business.abn}` : "",
-  ]
-    .filter((line, index, all) => line || all[index - 1] !== "")
-    .join("\n")
-    .trim();
+  ].filter((line, index, all) => line || all[index - 1] !== "").join("\n").trim();
 
   const html = `<!doctype html>
 <html lang="en">
@@ -276,8 +148,7 @@ export function buildTradeQuoteEmail(
                 <div style="padding-top:5px;font-size:28px;font-weight:700">${escapeHtml(money(displayTotals.totalCents))}</div>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding-top:10px;font-size:13px;color:#d9f6ed">
                   <tr><td>Subtotal ex GST</td><td align="right">${escapeHtml(money(grossSubtotalCents))}</td></tr>
-                  ${otherDiscountSubtotalCents < 0 ? `<tr><td>Rebates and dollar discounts ex GST</td><td align="right">${escapeHtml(money(otherDiscountSubtotalCents))}</td></tr>` : ""}
-                  ${finalPercentSubtotalCents < 0 ? `<tr><td>${escapeHtml(finalPercentLabel)}</td><td align="right">${escapeHtml(money(finalPercentSubtotalCents))}</td></tr>` : ""}
+                  ${discountSubtotalCents < 0 ? `<tr><td>Discount ex GST</td><td align="right">${escapeHtml(money(discountSubtotalCents))}</td></tr>` : ""}
                   <tr><td>GST</td><td align="right">${escapeHtml(money(displayTotals.taxCents))}</td></tr>
                 </table>
               </td></tr>
@@ -295,21 +166,5 @@ export function buildTradeQuoteEmail(
     </table>
   </body>
 </html>`;
-
-  return {
-    subject,
-    text,
-    html,
-    replyTo: cleanText(snapshot.business.email, 254) || undefined,
-  };
-}
-
-export async function tradeQuoteEmailContentSha256(email: TradeQuoteEmail) {
-  const bytes = new TextEncoder().encode(
-    `${email.subject}\n${email.text}\n${email.html}`,
-  );
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
+  return { subject, text, html, replyTo: cleanText(snapshot.business.email, 254) || undefined };
 }

@@ -207,7 +207,7 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     import("./trade-quote-pdf-server.ts"),
     import("./trade-quote-review-server.ts"),
   ]);
-  const { buildTradeQuoteEmail, tradeQuoteEmailContentSha256 } = emailModule;
+  const { buildVerifiedTradeQuoteEmailForRevision } = emailModule;
   const { issuedTradeQuotePdf } = issuedPdfModule;
   const { quoteReviewPath, recoverQuoteLinkSecret } = linkModule;
   const { tradeQuotePdfBase64, tradeQuotePdfFilename } = pdfModule;
@@ -237,7 +237,12 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     String(row.token_hash),
   );
   const shareUrl = `${origin}${quoteReviewPath(String(row.quote_link_id), secret)}`;
-  const content = buildTradeQuoteEmail({ snapshot, shareUrl, expiresAt: String(row.expires_at) });
+  const content = await buildVerifiedTradeQuoteEmailForRevision({
+    revision: Number(row.email_renderer_revision),
+    email: { snapshot, shareUrl, expiresAt: String(row.expires_at) },
+    expectedSubject: String(row.subject_snapshot || ""),
+    expectedContentSha256: String(row.email_content_sha256 || ""),
+  });
   const issuedPdf = await issuedTradeQuotePdf({
     ownerUid: String(row.firebase_uid),
     quoteVersionId: String(row.quote_version_id),
@@ -245,11 +250,8 @@ async function defaultPrepareMessage(db: D1Database, row: Row, now: Date) {
     origin,
   });
   const filename = tradeQuotePdfFilename(snapshot);
-  const contentHash = await tradeQuoteEmailContentSha256(content);
   if (
-    content.subject !== String(row.subject_snapshot || "")
-    || contentHash !== String(row.email_content_sha256 || "")
-    || filename !== String(row.attachment_filename || "")
+    filename !== String(row.attachment_filename || "")
     || issuedPdf.reference.sha256 !== String(row.attachment_sha256 || "")
   ) throw new Error("QUOTE_DELIVERY_CONTENT_CHANGED");
   return {
