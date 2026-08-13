@@ -210,9 +210,12 @@ This is the only current implementation and release-status document. The [dated 
 | Historical quote-delivery workflow application source | `37a4faf2e9cbbc6eee5ffdf007366d7944152761` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical milestone `TLINK-QUOTE-DELIVERY-WORKFLOW-62` |
 | Historical Sites version 325 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_4815104beb548191a5f747deee51c8b7` | Exact Sites version 325 built from `37a4faf2e9cbbc6eee5ffdf007366d7944152761`; 420 files; 39,823,360 bytes; content hash `sha256:a9df49e58bcd5462037cfc2ec37b8eaaef38612d9aa447d57de2a1fabbd0646f`; all 137 migrations |
 | Historical Sites version 325 executable identity | Sites version 325 from `37a4faf2e9cbbc6eee5ffdf007366d7944152761` at `https://compare.ausenergyassessments.com` | Deployment succeeded on provider `info294029--aea-energy-comparison` with environment revision 20; deployment ID was not retained; the first live drain stopped before the provider on a historical renderer integrity mismatch |
-| Current versioned quote-delivery application source | `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-VERSIONED-QUOTE-DELIVERY-63` |
-| Current Sites version 326 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2` | Exact Sites version 326 built from `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`; 422 files; 39,833,600 bytes; content hash `sha256:8ef0f48632dac835b45ab48c1a14d4c70d4d2f191f4def5a43aff50c4aa55b5f`; local archive 12,128,693 bytes, 436 tar entries and SHA-256 `3164A99777EE66ECF8C6B5F35A2F2364C3A4296FFACEC60B347ED08700E24239`; all 138 migrations through `0137_trade_quote_delivery_renderer_revision.sql` |
-| Current Sites version 326 executable identity | Sites version 326 from `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d472339648191843e05066c7d576b` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; affected delivery `66499ae8-f1a7-406b-befb-4cebca78ed7c` reached provider status `email.delivered`; visible Gmail inbox placement remains unverified |
+| Historical versioned quote-delivery application source | `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical milestone `TLINK-VERSIONED-QUOTE-DELIVERY-63` |
+| Historical Sites version 326 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2` | Exact Sites version 326 built from `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`; 422 files; 39,833,600 bytes; content hash `sha256:8ef0f48632dac835b45ab48c1a14d4c70d4d2f191f4def5a43aff50c4aa55b5f`; local archive 12,128,693 bytes, 436 tar entries and SHA-256 `3164A99777EE66ECF8C6B5F35A2F2364C3A4296FFACEC60B347ED08700E24239`; all 138 migrations through `0137_trade_quote_delivery_renderer_revision.sql` |
+| Historical Sites version 326 executable identity | Sites version 326 from `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d472339648191843e05066c7d576b` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; affected delivery `66499ae8-f1a7-406b-befb-4cebca78ed7c` reached provider status `email.delivered`; remained public until version 327 replaced it; visible Gmail inbox placement remains unverified |
+| Current quote-acceptance, accepted-invoice and accounting application source | `9624507b9f4ed274169b67076a40ddb34cd26acb` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64` |
+| Current Sites version 327 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a` | Exact Sites version 327 built from `9624507b9f4ed274169b67076a40ddb34cd26acb`; 424 files; 39,966,720 bytes; content hash `sha256:288982ce37c09394283008a4591df411ef860c53835705001d5261bbb3030afb`; local `aea-energy-sites-v327.tar.gz` archive 12,164,300 bytes, 438 tar entries and SHA-256 `95DE14D1809A290898236FF65026F6AD9447EB37A91126D61710CA9FDA31C347`; all 140 migrations through `0139_trade_accepted_invoice_one_per_job.sql` |
+| Current Sites version 327 executable identity | Sites version 327 from `9624507b9f4ed274169b67076a40ddb34cd26acb` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d96af6830819193ccc0f33ff86abf` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; live provider exports were not executed |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -268,21 +271,90 @@ from exact application source `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
 and Sites version 325 from exact application source
 `37a4faf2e9cbbc6eee5ffdf007366d7944152761` are historical. Sites version 326
 from exact application source `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
-is the current verified deployed source. It adds versioned quote-email rendering
-without weakening content-integrity checks. The exact affected production
-delivery reached provider status `email.delivered`; visible Gmail inbox placement
-remains unverified.
+is historical. It added versioned quote-email rendering without weakening
+content-integrity checks, and its affected production delivery reached provider
+status `email.delivered`; visible Gmail inbox placement remains unverified. Sites
+version 327 from exact application source
+`9624507b9f4ed274169b67076a40ddb34cd26acb` is the current verified deployed
+source. It adds replay-safe signed quote acceptance, one immutable accepted
+invoice per job, reusable negative certificate Price Book items and exact Xero,
+MYOB and QuickBooks Online draft-export adapters. No live provider export was
+executed during release validation.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current versioned quote delivery release
+## Current quote acceptance, accepted invoice and accounting release
 
-Milestone `TLINK-VERSIONED-QUOTE-DELIVERY-63` is released from exact executable
+Milestone `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64` is released from exact
+executable application source `9624507b9f4ed274169b67076a40ddb34cd26acb`,
+committed at `2026-08-13T20:01:03+10:00` and pushed to GitHub and Sites internal
+`main`. Sites saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
+and deployed it through `appgdep_6a7d96af6830819193ccc0f33ff86abf` as current
+Sites version 327. The public custom URL is
+`https://compare.ausenergyassessments.com`, the deployment URL is
+`https://aea-energy-comparison.info294029.chatgpt.site`, the provider identity
+is `info294029--aea-energy-comparison`, and the deployment uses environment
+revision 20. Sites stored 424 files and 39,966,720 bytes with content hash
+`sha256:288982ce37c09394283008a4591df411ef860c53835705001d5261bbb3030afb`.
+Local archive `aea-energy-sites-v327.tar.gz` is 12,164,300 bytes with 438 tar
+entries and SHA-256
+`95DE14D1809A290898236FF65026F6AD9447EB37A91126D61710CA9FDA31C347`.
+The package contains all 140 migrations through
+`0139_trade_accepted_invoice_one_per_job.sql`.
+
+Acceptance now preserves signed certificate, rebate and other adjustment rows
+from the immutable quote snapshot. Product and labour rows stay non-negative,
+and the signed line sum must reconcile exactly to the accepted subtotal, GST and
+total. A stable customer-decision identifier and payload hash make a lost-response
+replay return the same exact receipt without a second decision or finance change.
+
+The acceptance transaction creates at most one immutable accepted invoice per
+job. It freezes the accepted lines, signed totals, due date and complete
+bank-transfer details when available. Manual, quick and accounting finance state
+is never silently overwritten. The job and invoice register expose the accepted
+invoice with deterministic precedence, one row per job and preserved attention
+or reconciliation states.
+
+The Price Book accepts reusable certificate items with zero cost and a required
+negative sell price. Selecting one maps it to a signed quote adjustment; ordinary
+product and labour rows still reject negative prices. This supports separate STC,
+VEEC and ESC lines without disguising them as a general percentage discount.
+
+The accounting boundary exports the exact accepted invoice as a provider draft
+to Xero, MYOB or QuickBooks Online. Each adapter preserves signed line-level
+subtotal, GST and total arithmetic, uses stable provider idempotency and checks
+an existing provider record for an exact reference, customer and amount collision
+before any provider write. QuickBooks Online requires actual Australian tax-code
+entity IDs for ten-percent GST and GST-free lines rather than United States
+`TAX` and `NON` pseudo codes. Platform-private customer sources remain denied;
+released-lead sources require the immutable disclosure needed for that export.
+
+Independent acceptance, invoice, register, certificate and accounting review
+passed 101 of 101. The integrated regression set passed 103 of 103 and the
+release-document set passed 6 of 6. Typecheck, warning-free lint, `db:check`
+across all 140 migrations, production build with Sites bundle audit and
+`git diff --check` passed.
+
+Raw unfiltered `npm test` reported 2,202 total: 2,178 passed, 10 skipped, 7
+failed and 7 cancelled. Every failure and cancellation is confined to the
+preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+SHA-256 remains
+`6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+
+No live Xero, MYOB or QuickBooks provider export was executed. Provider-side
+draft creation, connected-account tax mapping and round-trip reconciliation are
+unverified and are the first controlled follow-up. This release does not initiate
+or reconcile a card or bank transaction.
+
+## Previous versioned quote delivery release
+
+Milestone `TLINK-VERSIONED-QUOTE-DELIVERY-63` is released from historical exact executable
 application source `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`, which is
 pushed to GitHub and Sites internal `main`. Sites saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2`
-and deployed it through `appgdep_6a7d472339648191843e05066c7d576b` as current
+and deployed it through `appgdep_6a7d472339648191843e05066c7d576b` as historical
 Sites version 326. The public custom URL is
 `https://compare.ausenergyassessments.com`, the deployment URL is
 `https://aea-energy-comparison.info294029.chatgpt.site`, the provider identity
@@ -425,11 +497,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Controlled test-inbox quote receipt and callback proof.
-2. Customer quote acceptance/deposit/payment.
-3. Creditex audited/certified/certificate sync.
-4. Schedule/mobile field pilot.
-5. Member document expiry warning delivery proof.
+1. Provider sandbox and controlled live draft-export QA for connected Xero, MYOB and QuickBooks accounts.
+2. Accepted-invoice PDF download and acceptance-confirmation outbox delivery.
+3. Bank-transfer reconciliation, deposits and progress invoices.
+4. Stripe and Square payment collection only on an approved transaction host.
+5. Accounting polling and webhooks plus credit-note and refund handling.
 
 ## Previous quote, job and invoice usability release
 
@@ -2776,7 +2848,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 326 is:
+The current verified deployed topology for Sites version 327 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
@@ -2827,6 +2899,7 @@ The audit recommends withdrawing the generic Database Console because broad cata
 - Production Resend inbox receipt for the version-238 quote-submitted delivery and the version-239 business-contact handover wording.
 - Controlled Gmail and Outlook delivery, receipt and callback reconciliation for both milestone-45 quote and invoice documents; release QA sent neither.
 - A production invoice delivery through the provider boundary.
+- Controlled connected-account draft export, tax mapping and exact round-trip reconciliation for Xero, MYOB and QuickBooks Online.
 - An approved Australian address provider reused across customer, site and job.
 - Independently approved complete manual VEU, SRES/STC and NSW governed bundles.
 - Exact review and disposition of the retained prior and current

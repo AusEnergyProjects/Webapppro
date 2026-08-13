@@ -2066,11 +2066,73 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-VERSIONED-QUOTE-DELIVERY-63
+## Released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
 
 Release status: exact executable application commit
+`9624507b9f4ed274169b67076a40ddb34cd26acb` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 327 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
+and deployment `appgdep_6a7d96af6830819193ccc0f33ff86abf` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison`
+with environment revision 20. Local archive `aea-energy-sites-v327.tar.gz` is
+12,164,300 bytes with 438 tar entries and SHA-256
+`95DE14D1809A290898236FF65026F6AD9447EB37A91126D61710CA9FDA31C347`. Sites
+stored 424 files and 39,966,720 bytes with content hash
+`sha256:288982ce37c09394283008a4591df411ef860c53835705001d5261bbb3030afb`;
+the package contains all 140 migrations through
+`0139_trade_accepted_invoice_one_per_job.sql`.
+
+### Outcome
+
+Make customer quote acceptance reliable and turn one accepted quote into one
+immutable invoice and one exact accounting handoff without re-entering customer,
+line, certificate, GST or total details.
+
+### Implemented scope
+
+- Accept immutable quote snapshots containing negative STC, VEEC, ESC and other
+  certificate or rebate adjustments while keeping product and labour values
+  non-negative and requiring the signed line sum to equal the accepted totals.
+- Make acceptance replay-safe with a stable decision identifier and payload hash.
+  A lost response can return the same exact accepted receipt without a second
+  decision, invoice or finance mutation.
+- Create at most one immutable accepted invoice per job inside the acceptance
+  transaction. Freeze the accepted lines, signed subtotal, GST and total, due
+  date and complete bank-transfer details without overwriting manual, quick or
+  accounting finance state.
+- Show the accepted invoice in the job and invoice register with deterministic
+  precedence, one row per job and reconciliation or attention states preserved.
+- Add reusable Price Book certificate items with zero cost and a required
+  negative sell price. Quote use maps them to signed adjustment rows while
+  ordinary product and labour rows still reject negative values.
+- Export the exact accepted invoice to Xero, MYOB and QuickBooks Online through
+  provider-specific draft-invoice adapters. Preserve signed line-level subtotal,
+  GST and total arithmetic, use actual Australian QuickBooks tax-code IDs, stable
+  provider idempotency keys and exact found-record collision checks before any
+  provider write.
+
+### Release and validation evidence
+
+- Independent acceptance, invoice, register, certificate and accounting review
+  passed 101 of 101. The integrated regression set passed 103 of 103 and the
+  release-document set passed 6 of 6.
+- Typecheck, warning-free lint, `db:check` across all 140 migrations, production
+  build with Sites bundle audit and `git diff --check` passed.
+- Raw unfiltered `npm test` reported 2,202 total: 2,178 passed, 10 skipped, 7
+  failed and 7 cancelled. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  SHA-256 remains
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- No live Xero, MYOB or QuickBooks provider export was executed during release
+  validation. Provider-side draft creation, connected-account tax mapping and
+  round-trip reconciliation remain the first controlled follow-up.
+
+## Previous released milestone: TLINK-VERSIONED-QUOTE-DELIVERY-63
+
+Historical release status: exact executable application commit
 `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 326 at
+Sites internal `main`, and released as historical Sites version 326 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_adb266d1b0a88191bb7df8841d02c1f2`
 and deployment `appgdep_6a7d472339648191843e05066c7d576b` reconcile to that
@@ -2938,11 +3000,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Controlled test-inbox quote receipt and callback proof.
-2. Customer quote acceptance/deposit/payment.
-3. Creditex audited/certified/certificate sync.
-4. Schedule/mobile field pilot.
-5. Member document expiry warning delivery proof.
+1. Provider sandbox and controlled live draft-export QA for connected Xero, MYOB and QuickBooks accounts.
+2. Accepted-invoice PDF download and acceptance-confirmation outbox delivery.
+3. Bank-transfer reconciliation, deposits and progress invoices.
+4. Stripe and Square payment collection only on an approved transaction host.
+5. Accounting polling and webhooks plus credit-note and refund handling.
 
 ## Global stop conditions
 
