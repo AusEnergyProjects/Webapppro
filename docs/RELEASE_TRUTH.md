@@ -201,9 +201,12 @@ This is the only current implementation and release-status document. The [dated 
 | Historical reliable quote-delivery and jobs-register application source | `d15ceda44255a706c10a699347b9bd54eba60c5e` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical milestone `TLINK-RELIABLE-QUOTES-JOBS-59` |
 | Historical Sites version 322 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_a8e54fbf4cac81919d1167626542cc2c` | Exact Sites version 322 built from `d15ceda44255a706c10a699347b9bd54eba60c5e`; 420 files; 39,669,760 bytes; archive storage content hash `sha256:87b51cd53dcc3def0962c6c3c7f3bfaee4e4acf1a0b9819392dd642880ad5a7b`; all 137 migrations through `0136_trade_quote_delivery_outbox.sql` |
 | Historical Sites version 322 executable identity | Sites version 322 from `d15ceda44255a706c10a699347b9bd54eba60c5e` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d06e32e9c8191ae98c3b875564465` succeeded on provider `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; remained public until version 323 replaced it |
-| Current quote, job and invoice usability application source | `e757ac2402da0830b68d0e50e95afd61281c03c0` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-QUOTE-JOB-INVOICE-USABILITY-60` |
-| Current Sites version 323 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3` | Exact Sites version 323 built from `e757ac2402da0830b68d0e50e95afd61281c03c0`; 420 files; archive content hash `sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`; all 137 migrations; stored-byte total was not reported |
-| Current Sites version 323 executable identity | Sites version 323 from `e757ac2402da0830b68d0e50e95afd61281c03c0` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` succeeded on provider `info294029--aea-energy-comparison`; environment revision 20; signed-in quote, job, customer and assignment QA completed without saving or sending |
+| Historical quote, job and invoice usability application source | `e757ac2402da0830b68d0e50e95afd61281c03c0` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical milestone `TLINK-QUOTE-JOB-INVOICE-USABILITY-60` |
+| Historical Sites version 323 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3` | Exact Sites version 323 built from `e757ac2402da0830b68d0e50e95afd61281c03c0`; 420 files; archive content hash `sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`; all 137 migrations; stored-byte total was not reported |
+| Historical Sites version 323 executable identity | Sites version 323 from `e757ac2402da0830b68d0e50e95afd61281c03c0` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` succeeded on provider `info294029--aea-energy-comparison`; environment revision 20; remained public until version 324 replaced it |
+| Current quote editor and delivery correction application source | `c12fa0613901aa7cb4c1c2167b0e4720e57b0900` on `codex/sites-custom-domain-migration` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61` |
+| Current Sites version 324 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc` | Exact Sites version 324 built from `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`; 420 files; 39,761,920-byte archive; content hash `sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`; all 137 migrations |
+| Current Sites version 324 executable identity | Sites version 324 from `c12fa0613901aa7cb4c1c2167b0e4720e57b0900` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in non-sending quote and PDF QA passed; controlled live email receipt remains unverified |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -254,21 +257,100 @@ Sites version 321 from exact application source
 `523b517c4027ef72f2b267c95ae8c36fd26af92d` and Sites version 322 from exact
 application source `d15ceda44255a706c10a699347b9bd54eba60c5e` are historical.
 Sites version 323 from exact application source
-`e757ac2402da0830b68d0e50e95afd61281c03c0` is the current verified production
-release and adds actionable quote-row validation, clearer job and customer
-operations, one compact assignment selector and correctable draft-invoice line
-reordering.
+`e757ac2402da0830b68d0e50e95afd61281c03c0` is historical. Sites version 324
+from exact application source `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
+is the current verified production release and adds a de-duplicated customer
+editor, per-row price-book selection, multiple labelled discounts, complete
+quote-row reordering, exact PDF order and the D1 issue-batch binding correction.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
 
-## Current quote, job and invoice usability release
+## Current quote editor and delivery correction release
+
+Milestone `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61` is released from exact
+executable application source `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`,
+which is pushed to GitHub and Sites internal `main`. Sites saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
+and deployed it through `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` as current
+Sites version 324. The public custom URL is
+`https://compare.ausenergyassessments.com`, the deployment URL is
+`https://aea-energy-comparison.info294029.chatgpt.site`, the provider identity
+is `info294029--aea-energy-comparison`, and the deployment uses environment
+revision 20. Sites stored 420 files from a 39,761,920-byte archive with content
+hash `sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`.
+The source package contains all 137 migrations.
+
+The customer editor now presents the primary name, contact details and address
+once. Secondary contacts, sites, jobs, assets and history stay available through
+bounded progressive disclosure. Editable text boxes, selects and actions remain
+visible and consistently formatted.
+
+Each normal and choice quote row now owns a `Price book item` selector. Choosing
+an item applies its current authoritative description, type, unit price and GST
+together. Choosing `Custom line` clears the item reference and leaves a random
+line editable. Percentage and fixed-dollar discounts are independent repeatable
+rows with editable customer-facing labels. Multiple STC, VEEC, referral and sale
+adjustments can remain separate while aggregate discount stays capped at the
+positive included scope and GST is reduced proportionally.
+
+Normal, choice and discount rows expose desktop drag-and-drop and 44-pixel `Up`
+and `Down` controls for touch, keyboard and mobile. The complete line object
+moves, saved positions persist and the PDF renderer preserves the exact authored
+A/B/A sequence rather than regrouping rows by section.
+
+Consent now appears above the preview. `Review quote PDF` scrolls to and focuses
+the generated PDF. Delivery status remains visible through queued, sending,
+accepted, delivered and needs-attention states with the request reference.
+
+The reproduced production HTTP 500 had two exact D1 binding-count causes inside
+the atomic issue batch. The issued-event statement had an extra quote-version ID
+binding, and the delivery-outbox insert omitted one timestamp binding. Both are
+corrected. The endpoint reports queued success only when the immutable version,
+event, secure link, PDF and non-null durable delivery row commit together. A
+storage failure returns an actionable request reference and cannot silently
+present an unsaved or unqueued quote as sent.
+
+Focused integrated customer, quote, PDF, reorder and delivery coverage passed 83
+of 83. The combined quote and delivery set passed 89 of 89, and price-book
+coverage passed 7 of 7. Typecheck, warning-free lint, `db:check` across all 137
+migrations, production build with the Sites server-bundle audit and
+`git diff --check` passed.
+
+Raw unfiltered `npm test` reported 2,134 total: 2,110 passed, 7 failed, 7
+cancelled and 10 skipped. Every failure and cancellation is confined to the
+preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+SHA-256 remains
+`6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+
+`/api/health` returned HTTP 200 at `2026-08-13T02:32:28.712Z`. Signed-in
+production QA opened job `TLJ-X23Z3GL9`; its overview and customer details were
+visible. Draft version 1 loaded three quote rows and three customer-shared
+photos. Each row exposed `Custom line`, `Call-out`, `Istore Heatpump`, `Kris
+extra fee` and `Labour`, plus Drag and bounded Up/Down controls. Totals remained
+`$4,700` excluding GST, `$470` GST and `$5,170` including GST.
+
+Preview opened the real delivery dialog with consent at the top. `Review quote
+PDF` was operable and the PDF preserved the same three items and totals. Consent
+was not checked, Confirm and submit was not pressed, and the temporary UI state
+was discarded by returning to edit and reloading. No controlled live email was
+sent or received and no provider callback was reconciled.
+
+## Next five logical product steps
+
+1. Controlled test-inbox quote receipt and callback proof.
+2. Customer quote acceptance/deposit/payment.
+3. Creditex audited/certified/certificate sync.
+4. Schedule/mobile field pilot.
+5. Member document expiry warning delivery proof.
+
+## Previous quote, job and invoice usability release
 
 Milestone `TLINK-QUOTE-JOB-INVOICE-USABILITY-60` is released from exact
 executable application source `e757ac2402da0830b68d0e50e95afd61281c03c0`, which
 is pushed to GitHub and Sites internal `main`. Sites saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
-and deployed it through `appgdep_6a7d163a7a608191ab3e260ed58f63a3` as current
+and deployed it through `appgdep_6a7d163a7a608191ab3e260ed58f63a3` as historical
 Sites version 323. The public custom URL is
 `https://compare.ausenergyassessments.com`, the provider identity is
 `info294029--aea-energy-comparison`, and the deployment uses environment revision
@@ -2607,7 +2689,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 323 is:
+The current verified deployed topology for Sites version 324 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

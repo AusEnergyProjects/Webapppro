@@ -2066,11 +2066,82 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
+## Released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
+
+Release status: exact executable application commit
+`c12fa0613901aa7cb4c1c2167b0e4720e57b0900` is validated, pushed to GitHub and
+Sites internal `main`, and released as current Sites version 324 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
+and deployment `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` reconcile to that
+source. Deployment succeeded on provider `info294029--aea-energy-comparison`
+with environment revision 20. Sites stored 420 files from a 39,761,920-byte
+archive with content hash
+`sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`;
+the package contains all 137 migrations.
+
+### Outcome
+
+Make quote creation easy to correct and reorder, make the customer editor clear,
+and repair the two production database binding defects that prevented quote
+issue from durably queuing customer email.
+
+### Implemented scope
+
+- The customer editor shows the primary name, contact details and address once.
+  Secondary contacts, sites, linked jobs, assets and history use bounded
+  progressive disclosure, and every editable control remains visible and
+  consistently formatted.
+- Every normal and choice quote row has its own `Price book item` selector.
+  Selecting an item fills its current description, type, price and GST together;
+  selecting `Custom line` clears the authoritative item reference and keeps a
+  random line editable.
+- Percentage and fixed-dollar discounts are independent repeatable rows with
+  editable customer-facing labels, so STC, VEEC, referral and sale adjustments
+  can remain separate. The authoritative calculation prevents total discount
+  from exceeding the positive included scope and reduces GST proportionally.
+- Normal rows, choice rows and discount rows support desktop drag-and-drop plus
+  44-pixel `Up` and `Down` controls for touch, keyboard and mobile use. The full
+  line object moves, saved positions persist and the issued PDF preserves the
+  exact authored A/B/A order instead of regrouping by section.
+- Quote consent is visible above the preview. `Review quote PDF` scrolls to and
+  focuses the generated PDF, while sending, accepted, delivered and attention
+  states remain visible with their request reference.
+- The production issue failure was caused by two D1 binding-count defects in the
+  atomic issue batch: the issued-event statement bound an extra quote-version ID,
+  and the delivery-outbox insert omitted one timestamp binding. Both are fixed.
+  The route now reports queued success only after the immutable version, event,
+  secure link, PDF and non-null durable delivery row commit together.
+
+### Validation and release evidence
+
+- Focused integrated customer, quote, PDF, reorder and delivery coverage passed
+  83 of 83. The combined quote and delivery set passed 89 of 89, and price-book
+  coverage passed 7 of 7.
+- Typecheck, warning-free lint, `db:check` across all 137 migrations, production
+  build with Sites server-bundle audit and `git diff --check` passed.
+- Raw unfiltered `npm test` reported 2,134 total: 2,110 passed, 7 failed, 7
+  cancelled and 10 skipped. Every failure and cancellation is confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  SHA-256 remains
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- `/api/health` returned HTTP 200 at `2026-08-13T02:32:28.712Z`.
+- Signed-in production QA opened job `TLJ-X23Z3GL9`. Overview and customer
+  details were visible. Draft version 1 loaded three quote rows and three
+  customer-shared photos; each row exposed `Custom line`, the three saved items
+  and `Labour`, plus enabled Drag and bounded Up/Down controls. Totals remained
+  `$4,700` excluding GST, `$470` GST and `$5,170` including GST.
+- Preview opened the real delivery dialog with consent at the top. `Review quote
+  PDF` was operable and the PDF showed the same three items and totals. Consent
+  was not checked, Confirm and submit was not pressed, and the temporary UI state
+  was discarded by returning to edit and reloading. No controlled live email was
+  sent or received and no provider callback was reconciled.
+
+## Previous released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
 
 Release status: exact executable application commit
 `e757ac2402da0830b68d0e50e95afd61281c03c0` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 323 at
+Sites internal `main`, and released as historical Sites version 323 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
 and deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` reconcile to that
@@ -2644,7 +2715,8 @@ Status: historical exact executable application commit
 released as historical Sites version 308 through deployment
 `appgdep_6a79e3700444819191ac709f0bd509c6` with environment revision 20 at
 `https://compare.ausenergyassessments.com`. Sites version 308 is superseded by
-historical versions 310, 317, 318, 320, 321 and 322 and the current version 323 release.
+historical versions 310, 317, 318, 320, 321, 322 and 323 and the current version
+324 release.
 
 ### Outcome
 
@@ -2788,11 +2860,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Controlled test-inbox end-to-end quote delivery receipt and callback.
-2. Customer quote acceptance plus deposit/payment handoff.
-3. Creditex audit/certification/certificate sync.
-4. Schedule/mobile operational pilot.
-5. Document expiry notification proof.
+1. Controlled test-inbox quote receipt and callback proof.
+2. Customer quote acceptance/deposit/payment.
+3. Creditex audited/certified/certificate sync.
+4. Schedule/mobile field pilot.
+5. Member document expiry warning delivery proof.
 
 ## Global stop conditions
 

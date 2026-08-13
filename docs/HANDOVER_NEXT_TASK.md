@@ -1,16 +1,18 @@
 # Next task handover
 
-Status: `TLINK-QUOTE-JOB-INVOICE-USABILITY-60` released as current Sites version 323; next task is controlled test-inbox end-to-end quote delivery receipt and callback
+Status: `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61` released as current Sites version 324; next task is controlled test-inbox quote receipt and callback proof
 
 Prepared: 13 August 2026
 
-Milestone ID: `TLINK-QUOTE-JOB-INVOICE-USABILITY-60`
+Milestone ID: `TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61`
 
 Working branch: `codex/sites-custom-domain-migration`
 
-Milestone source baseline: `d15ceda44255a706c10a699347b9bd54eba60c5e`
+Milestone source baseline: `e757ac2402da0830b68d0e50e95afd61281c03c0`
 
-Current quote, job and invoice usability application commit: `e757ac2402da0830b68d0e50e95afd61281c03c0`
+Current quote editor and delivery correction application commit: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
+
+Historical quote, job and invoice usability application commit: `e757ac2402da0830b68d0e50e95afd61281c03c0`
 
 Historical quote-delivery and jobs-register application commit: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
@@ -20,15 +22,21 @@ Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d
 
 Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production application source: `e757ac2402da0830b68d0e50e95afd61281c03c0`
+Current production application source: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`
 
-Current production: Sites version 323 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 324 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
 
-Current deployment: `appgdep_6a7d163a7a608191ab3e260ed58f63a3`
+Current deployment: `appgdep_6a7d2c7a471c819192d6390b0d59e9fc`
 
 Migration inventory: all 137 migrations through `0136_trade_quote_delivery_outbox.sql`
+
+Historical version 323 application source: `e757ac2402da0830b68d0e50e95afd61281c03c0`
+
+Historical version 323 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
+
+Historical version 323 deployment: `appgdep_6a7d163a7a608191ab3e260ed58f63a3`; succeeded and remained public until version 324 replaced it
 
 Historical version 322 application source: `d15ceda44255a706c10a699347b9bd54eba60c5e`
 
@@ -78,7 +86,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 420 files, Sites archive content hash `sha256:e3d9ba2384f9442bce46646b36db3af857287481333097aa4c10eb8d45bc7522`; stored-byte total was not reported
+Current release package: 420 files, 39,761,920 bytes, Sites archive content hash `sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -90,11 +98,81 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
+## Released milestone: TLINK-QUOTE-EDITOR-DELIVERY-CORRECTION-61
+
+Status: exact executable application source
+`c12fa0613901aa7cb4c1c2167b0e4720e57b0900` is pushed to GitHub and Sites
+internal `main` and released as current Sites version 324. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_c3f6022a453c8191a29d5e356267d7bc`
+and deployment `appgdep_6a7d2c7a471c819192d6390b0d59e9fc` reconcile to that
+source. Deployment succeeded at the public custom URL
+`https://compare.ausenergyassessments.com` and provider URL
+`https://aea-energy-comparison.info294029.chatgpt.site` under provider identity
+`info294029--aea-energy-comparison` with environment revision 20. Sites stored
+420 files from a 39,761,920-byte archive with content hash
+`sha256:18b106a2a7edb790229f2a947b3ec47b52864aab53b81fc2e1f46973adb18e7d`.
+The package contains all 137 migrations.
+
+### Implemented outcome
+
+The customer editor is one clear record, every quote line can use the price book
+or stay custom, all line and discount rows can be reordered, the PDF keeps that
+exact order, and quote issue no longer fails before the customer delivery is
+durably queued.
+
+### Implemented capability
+
+- Primary name, contact and address fields appear once in the customer editor.
+  Secondary contacts, sites, jobs, assets and history stay available through
+  bounded progressive disclosure, with visible consistently styled controls.
+- Normal and choice rows expose a per-row `Price book item` selector. Selecting
+  an item fills its authoritative description, type, unit price and GST;
+  selecting `Custom line` clears that item reference and keeps the line editable.
+- Percentage and fixed-dollar discounts are independent repeatable rows with
+  editable labels. Multiple STC, VEEC, referral and sale adjustments can remain
+  separate while the server caps aggregate discount at the positive included
+  scope and apportions GST correctly.
+- Normal, choice and discount rows expose desktop drag-and-drop and 44-pixel
+  `Up` and `Down` controls for touch, keyboard and mobile. Full line objects and
+  saved positions move together, and the PDF preserves the authored A/B/A order.
+- Consent is above the preview and `Review quote PDF` scrolls to and focuses the
+  generated document. Submission keeps queued, sending, accepted, delivered and
+  attention states visible with their request reference.
+- The production HTTP 500 came from two exact D1 bind-count faults inside the
+  atomic issue batch. The issued-event statement had one extra quote-version ID
+  binding, and the outbox insert was missing one timestamp binding. Both are
+  corrected. Queued success is returned only after the immutable version, event,
+  secure link, PDF and non-null durable delivery row commit together.
+
+### Validation and release evidence
+
+- Focused integrated coverage passed 83 of 83, the combined quote and delivery
+  set passed 89 of 89, and price-book coverage passed 7 of 7.
+- Typecheck, warning-free lint, `db:check`, production build with Sites
+  server-bundle audit and `git diff --check` passed.
+- Raw unfiltered `npm test` reported 2,134 total: 2,110 passed, 7 failed, 7
+  cancelled and 10 skipped. All failures and cancellations are confined to the
+  preserved unrelated `test/trade-field-evidence-finalisation.test.mjs`, whose
+  SHA-256 remains
+  `6E972EED70B34832B314C32D59B27C72296AC5C0D5A7BCA378733B115A819EA6`.
+- `/api/health` returned HTTP 200 at `2026-08-13T02:32:28.712Z`.
+- Signed-in production QA opened job `TLJ-X23Z3GL9`. Overview and customer
+  details were visible. Draft version 1 loaded three rows and three
+  customer-shared photos. Each row exposed `Custom line`, `Call-out`, `Istore
+  Heatpump`, `Kris extra fee` and `Labour`, plus Drag and bounded Up/Down
+  controls. Totals remained `$4,700` excluding GST, `$470` GST and `$5,170`
+  including GST.
+- Preview opened the real delivery dialog with consent at the top. `Review quote
+  PDF` was operable and the PDF preserved the same three items and totals.
+  Consent was not checked, Confirm and submit was not pressed, and the temporary
+  UI state was discarded by returning to edit and reloading. No controlled live
+  email was sent or received and no provider callback was reconciled.
+
+## Previous released milestone: TLINK-QUOTE-JOB-INVOICE-USABILITY-60
 
 Status: exact executable application source
 `e757ac2402da0830b68d0e50e95afd61281c03c0` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 323. Saved version
+internal `main` and released as historical Sites version 323. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_2b0ec0ac2ba881918f97c0bc77756ca3`
 and deployment `appgdep_6a7d163a7a608191ab3e260ed58f63a3` reconcile to that
 source. Deployment succeeded at the public custom URL
@@ -1400,11 +1478,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Controlled test-inbox end-to-end quote delivery receipt and callback.
-2. Customer quote acceptance plus deposit/payment handoff.
-3. Creditex audit/certification/certificate sync.
-4. Schedule/mobile operational pilot.
-5. Document expiry notification proof.
+1. Controlled test-inbox quote receipt and callback proof.
+2. Customer quote acceptance/deposit/payment.
+3. Creditex audited/certified/certificate sync.
+4. Schedule/mobile field pilot.
+5. Member document expiry warning delivery proof.
 
 ## Previous released milestone
 
