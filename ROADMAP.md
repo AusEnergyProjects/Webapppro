@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 13 August 2026
+Last reconciled: 14 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -27,6 +27,7 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - Household planning remains independent, brand-agnostic and advisory. It is not represented as a NatHERS assessment, certificate, quote or savings guarantee.
 - Household advice records owner or renter tenure separately from strata or common-property approval and supports several concurrent goals because authority, comfort, budget and upgrade sequencing can differ.
 - TLink remains the authoritative trade record until an approved migration changes that boundary.
+- The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
 ## Released milestone: CUSTOMER-ADVISOR-CONTEXT-02
@@ -2066,11 +2067,86 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
+## Released milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
+
+Release status: exact executable application commit
+`b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` is validated and pushed to GitHub
+branch `codex/job-schedule-week-calendar` and Sites internal `main`. It is
+released as current Sites version 330 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
+and deployment `appgdep_6a7e775d85888191b6607c767ff40259` reconcile to
+that source. Deployment succeeded on provider
+`info294029--aea-energy-comparison` with environment revision 20. Sites stored
+424 files and 39,649,280 bytes with content hash
+`sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`.
+The local version-330 archive is 12,175,852 bytes with 438 tar entries and
+SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`.
+
+### Outcome
+
+Let a trade user see the relevant Monday-to-Sunday calendar while assigning and
+scheduling a job, without crowding a large team into one unreadable view or
+allowing stale client state to bypass worker-specific conflicts.
+
+### Implemented scope
+
+- One job `Schedule` tab now contains assignment, current appointments, booking
+  controls and the focused week calendar. The replaced `Assign` tab and action
+  are removed.
+- Previous, next, today and direct-week controls navigate without an artificial
+  future horizon. The job date recentres the calendar, while deliberate manual
+  browsing remains independent until that date changes.
+- Team-scope viewers can show All workers or one named worker. Own-scope viewers
+  receive only their own server-authorised calendar. The signed-in viewer, not
+  the business owner flag, controls the `Me` label.
+- Same-worker overlap and unavailability are blocked in the live preview and an
+  atomic D1 guard. Different workers can be scheduled at the same time.
+- A missing or inactive assignee, an unloaded or hidden proposal week, and any
+  latest calendar-load failure keep appointment submission disabled with a
+  recoverable status and retry path.
+- Direct-owned quote completion retains `Done` and adds
+  `Schedule and assign job`, which closes the delivery preview and opens the
+  combined tab. Released AEA leads remain assignable before acceptance, but all
+  appointment and rescheduling mutations require an accepted row for the exact
+  current quote version, including a transaction-time race guard.
+
+### Release and validation evidence
+
+- Full `npm.cmd run validate` passed on the exact final application source:
+  typecheck, warning-free lint, 36 of 36 integration tests, 2,214 passed tests,
+  10 intentional skips and zero failures, all 140 migrations, customer-plan PDF
+  audit, production build and Sites server-bundle audit. The affected scheduling
+  and CRM regression set passed 157 of 157; `git diff --check` passed.
+- Signed-in owner/team-scope live QA passed at 1440 by 1000 and 390 by 844. The
+  assignment panel, form and button are contained; the document has no horizontal
+  overflow; the phone week remains internally scrollable; Next week advanced
+  from 10 to 17 August; and the filter changed from All workers to `test`.
+- Historical version 328 from
+  `510a3eca360ccdce45411f2fcdcc6237a0804923` first exposed the completed feature,
+  but live QA found the assignment button clipped. Version 329 from
+  `c082239d88a8debd112ee0a304885bb6626b01e8` was also superseded after its
+  same-specificity rule lost to a later component stylesheet. Version 330 uses
+  the stronger scoped selector and is the verified current release.
+- Health returned HTTP 200. The recent error-only Worker query contained no
+  exception or failed Worker outcome; one handled HTTP 403 was the expected
+  compliance denial for the inspected AEA lead. A separate signed-in own-scope
+  staff identity was unavailable, so live own-role presentation remains
+  unverified while route, permission and UI coverage is green.
+
+### Next bounded sequence
+
+1. Make assignment plus first appointment one atomic server action.
+2. Add guarded inline editing and rescheduling for the focused appointment.
+3. Suggest the next few clear slots for the selected worker.
+4. Prepare and rehearse the bounded pre-launch data-reset runbook and launch gate.
+5. Add focused schedule and quote-handoff telemetry.
+
+## Previous released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
 
 Release status: exact executable application commit
 `9624507b9f4ed274169b67076a40ddb34cd26acb` is validated, pushed to GitHub and
-Sites internal `main`, and released as current Sites version 327 at
+Sites internal `main`, and released as historical Sites version 327 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
 and deployment `appgdep_6a7d96af6830819193ccc0f33ff86abf` reconcile to that
@@ -3000,11 +3076,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Provider sandbox and controlled live draft-export QA for connected Xero, MYOB and QuickBooks accounts.
-2. Accepted-invoice PDF download and acceptance-confirmation outbox delivery.
-3. Bank-transfer reconciliation, deposits and progress invoices.
-4. Stripe and Square payment collection only on an approved transaction host.
-5. Accounting polling and webhooks plus credit-note and refund handling.
+1. Make assignment plus first appointment one atomic server action.
+2. Allow guarded inline editing and rescheduling for the focused appointment.
+3. Suggest the next few clear slots for the selected worker.
+4. Prepare and rehearse the bounded pre-launch data-reset runbook and launch gate.
+5. Add focused schedule and quote-handoff telemetry.
 
 ## Global stop conditions
 

@@ -1,16 +1,22 @@
 # Next task handover
 
-Status: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64` released as current Sites version 327; connected-provider draft export QA remains unverified
+Status: `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` released as current Sites version 330; signed-in own-scope role QA and connected-provider draft export QA remain unverified
 
-Prepared: 13 August 2026
+Prepared: 14 August 2026
 
-Milestone ID: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64`
+Milestone ID: `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65`
 
-Working branch: `codex/sites-custom-domain-migration`
+Working branch: `codex/job-schedule-week-calendar`
 
-Milestone source baseline: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
+Milestone source baseline: `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`
 
-Current quote-acceptance, accepted-invoice and accounting application commit: `9624507b9f4ed274169b67076a40ddb34cd26acb`
+Current weekly job-schedule application commit: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+
+Historical initial weekly job-schedule application commit: `510a3eca360ccdce45411f2fcdcc6237a0804923`
+
+Historical first assignment-containment application commit: `c082239d88a8debd112ee0a304885bb6626b01e8`
+
+Historical quote-acceptance, accepted-invoice and accounting application commit: `9624507b9f4ed274169b67076a40ddb34cd26acb`
 
 Historical versioned quote-delivery application commit: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
 
@@ -28,15 +34,33 @@ Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d
 
 Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production application source: `9624507b9f4ed274169b67076a40ddb34cd26acb`
+Current production application source: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
 
-Current production: Sites version 327 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 330 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
 
-Current deployment: `appgdep_6a7d96af6830819193ccc0f33ff86abf`
+Current deployment: `appgdep_6a7e775d85888191b6607c767ff40259`
 
 Migration inventory: all 140 migrations through `0139_trade_accepted_invoice_one_per_job.sql`
+
+Historical version 329 application source: `c082239d88a8debd112ee0a304885bb6626b01e8`
+
+Historical version 329 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e495fff0d8b48191aec0eba61cab3efa`
+
+Historical version 329 deployment: `appgdep_6a7e75f70ef48191a2e9444906ca96a0`; succeeded but live QA proved the later-loaded component module still overrode the one-column assignment rule, so version 330 replaced it
+
+Historical version 328 application source: `510a3eca360ccdce45411f2fcdcc6237a0804923`
+
+Historical version 328 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_911202a646708191afee5671a2cc4864`
+
+Historical version 328 deployment: `appgdep_6a7e7374057481919de9371f323d37d0`; succeeded but signed-in desktop QA found the assignment button clipped outside its panel, so it was immediately superseded
+
+Historical version 327 application source: `9624507b9f4ed274169b67076a40ddb34cd26acb`
+
+Historical version 327 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
+
+Historical version 327 deployment: `appgdep_6a7d96af6830819193ccc0f33ff86abf`; succeeded and remained public until version 328 replaced it
 
 Historical version 326 application source: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
 
@@ -110,7 +134,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 424 files, 39,966,720 bytes, Sites archive content hash `sha256:288982ce37c09394283008a4591df411ef860c53835705001d5261bbb3030afb`; local `aea-energy-sites-v327.tar.gz` archive 12,164,300 bytes, 438 tar entries and SHA-256 `95DE14D1809A290898236FF65026F6AD9447EB37A91126D61710CA9FDA31C347`
+Current release package: 424 files, 39,649,280 bytes, Sites archive content hash `sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`; local version-330 archive 12,175,852 bytes, 438 tar entries and SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -122,7 +146,7 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
-## Active milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
+## Released milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
 
 ### User outcome
 
@@ -243,9 +267,11 @@ flow.
   `C:\Webproject\aea-energy-schedule-week-calendar`, branch
   `codex/job-schedule-week-calendar`, from baseline
   `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`.
-- Full validation is green and the user has authorised the standard automatic
-  commit, push, Sites publication and live inspection workflow. Exact release
-  identifiers are recorded only after the published source reconciles.
+- Exact application source `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+  is committed and pushed to GitHub branch
+  `codex/job-schedule-week-calendar` and Sites internal `main`. It is saved as
+  Sites version 330 and deployed through
+  `appgdep_6a7e775d85888191b6607c767ff40259`.
 - The separate `Assign` tab/action is removed. Assignment, current
   appointments, booking controls and the focused weekly calendar now share one
   `Schedule` tab.
@@ -278,11 +304,24 @@ flow.
   10 intentional skips and 0 failures, `git diff --check` passed, all 140
   migrations replayed, customer-plan PDF audit passed and the production build
   and Sites server-bundle audit passed.
-- Responsive local markup and exact stylesheet inspection confirmed the
-  calendar-first desktop layout, calendar-first tablet stacking and a 390-class
-  phone layout with the 838-pixel week contained by internal horizontal
-  scrolling. Signed-in live owner, team-scope and own-scope desktop and phone
-  inspection remains the final post-publication check.
+- Signed-in live owner/team-scope QA passed at 1440 by 1000 and 390 by 844.
+  Desktop panel, assignment form and button scroll widths now equal their client
+  widths; the document has no horizontal overflow. Phone QA keeps the 838-pixel
+  week inside its own horizontal scroller, contains the assignment control,
+  changes from All workers to one named worker and advances from 10 to 17 August
+  without document overflow. The current AEA lead correctly remains assignable
+  while appointment creation waits for exact-current customer quote acceptance.
+  A separate signed-in own-scope staff identity was not available, so that live
+  role view remains unverified; route, permission and component coverage passed.
+- Sites versions 328 and 329 were successful but deliberately superseded during
+  live QA: version 328 exposed the original clipped desktop assignment control,
+  and version 329 proved a same-specificity global rule still lost to the
+  later-loaded component module. Version 330 adds the stronger scoped selector
+  and is the current visually verified release.
+- `GET /api/health` returned HTTP 200 with `ok: true`; the signed-out dashboard
+  shell returned HTTP 200. The 30-minute error-only Worker query contained no
+  exception or failed Worker outcome. It contained one handled HTTP 403 from the
+  expected compliance denial for the inspected AEA lead.
 
 ### Next five product steps
 
@@ -299,11 +338,11 @@ flow.
    abandoned bookings, post-send scheduling uptake and time-to-book so the next
    workflow improvement is evidence-led.
 
-## Released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
+## Previous released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
 
 Status: exact executable application source
 `9624507b9f4ed274169b67076a40ddb34cd26acb` is pushed to GitHub and Sites
-internal `main` and released as current Sites version 327. Saved version
+internal `main` and released as historical Sites version 327. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_02b29fe421e08191aa90224edfd0335a`
 and deployment `appgdep_6a7d96af6830819193ccc0f33ff86abf` reconcile to that
 source. Deployment succeeded at the public custom URL
@@ -1819,11 +1858,11 @@ Remaining controlled limitations:
 
 ## Next five logical product steps
 
-1. Provider sandbox and controlled live draft-export QA for connected Xero, MYOB and QuickBooks accounts.
-2. Accepted-invoice PDF download and acceptance-confirmation outbox delivery.
-3. Bank-transfer reconciliation, deposits and progress invoices.
-4. Stripe and Square payment collection only on an approved transaction host.
-5. Accounting polling and webhooks plus credit-note and refund handling.
+1. Make assignment plus first appointment one atomic server action.
+2. Allow guarded inline editing and rescheduling for the focused appointment.
+3. Suggest the next few clear slots for the selected worker.
+4. Prepare and rehearse the bounded pre-launch data-reset runbook and launch gate.
+5. Add focused schedule and quote-handoff telemetry.
 
 ## Previous released milestone
 
