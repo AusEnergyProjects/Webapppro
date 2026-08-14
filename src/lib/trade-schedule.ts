@@ -219,6 +219,11 @@ export function normaliseAppointmentDuration(value: unknown, fallback = 60) {
   return duration;
 }
 
+export function scheduleAppointmentBlockHeight(durationMinutes: unknown, quarterHeight = 16) {
+  if (!Number.isFinite(quarterHeight) || quarterHeight <= 0) throw new Error("INVALID_SCHEDULE_GRID");
+  return (normaliseAppointmentDuration(durationMinutes) / APPOINTMENT_DURATION_STEP_MINUTES) * quarterHeight;
+}
+
 export function appointmentEndsAt(startsAt: unknown, durationMinutes: unknown, fallback = 60) {
   const start = normaliseLocalDateTime(startsAt);
   const duration = normaliseAppointmentDuration(durationMinutes, fallback);

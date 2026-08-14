@@ -5,6 +5,7 @@ import {
   adjacentScheduleWeek,
   applyScheduleChangeDrafts,
   invalidateScheduleProposal,
+  scheduleAppointmentBlockHeight,
   scheduleChangeConflictIds,
   scheduleDragEdgeDirection,
   scheduleMemberLabel,
@@ -141,6 +142,13 @@ test("calendar placement and proposal resizing snap to exact 15 minute boundarie
   assert.equal(scheduleProposalDurationFromEndMinute(11 * 60, 12 * 60 + 7, 19 * 60), 60);
   assert.equal(scheduleProposalDurationFromEndMinute(11 * 60, 10 * 60, 19 * 60), 15);
   assert.equal(scheduleProposalDurationFromEndMinute(18 * 60 + 30, 22 * 60, 19 * 60), 30);
+  assert.equal(scheduleProposalDurationFromEndMinute(18 * 60 + 45, 22 * 60, 19 * 60), 15);
+  assert.equal(scheduleProposalDurationFromEndMinute(7 * 60, 19 * 60, 19 * 60), 480);
+  assert.equal(scheduleAppointmentBlockHeight(15), 16);
+  assert.equal(scheduleAppointmentBlockHeight(30), 32);
+  assert.equal(scheduleAppointmentBlockHeight(45), 48);
+  assert.equal(scheduleAppointmentBlockHeight(60), 64);
+  assert.equal(scheduleAppointmentBlockHeight(480), 512);
 });
 
 test("the job calendar exposes guarded pointer and keyboard proposal gestures with aligned controls", () => {
@@ -151,12 +159,28 @@ test("the job calendar exposes guarded pointer and keyboard proposal gestures wi
   assert.match(scheduleUi, /onPointerMove=\{resizeProposalFromPointer\}/);
   assert.match(scheduleUi, /data-schedule-appointment\], \[data-schedule-proposal\]/);
   assert.match(scheduleUi, /event\.key === "ArrowUp"[\s\S]*event\.key === "ArrowDown"/);
-  assert.match(scheduleUi, /const height = Math\.max\(16, \(duration \/ 15\) \* GRID_QUARTER_HEIGHT\)/);
+  assert.match(scheduleUi, /const height = scheduleAppointmentBlockHeight\(duration, GRID_QUARTER_HEIGHT\)/);
   assert.match(scheduleStyles, /\.schedule-week-nav \{ align-items: flex-end;/);
   assert.match(scheduleStyles, /\.schedule-time-track span\.first \{ transform: none; \}/);
   assert.match(scheduleStyles, /\.schedule-time-track span\.last \{ transform: translateY\(-100%\); \}/);
   assert.match(scheduleStyles, /\.schedule-proposal-resize[\s\S]*touch-action: none/);
-  assert.match(scheduleStyles, /\.schedule-proposal-resize \{[^}]*height: 32px/);
+  assert.match(scheduleStyles, /\.schedule-proposal-resize, \.schedule-appointment-resize \{[^}]*height: 32px/);
+});
+
+test("saved appointments keep exact height and expose an independent staged resize edge", () => {
+  assert.doesNotMatch(scheduleUi, /Math\.max\(62, \(duration \/ 15\) \* GRID_QUARTER_HEIGHT\)/);
+  assert.match(scheduleUi, /data-schedule-appointment-resize className="schedule-appointment-resize"/);
+  assert.match(scheduleUi, /role="slider"[\s\S]*aria-label=\{`Resize appointment for \$\{item\.customerDisplayName\}`\}/);
+  assert.match(scheduleUi, /function startAppointmentResize[\s\S]*dataset\.resizeAppointmentId = appointment\.id[\s\S]*dataset\.resizePointerId = String\(event\.pointerId\)[\s\S]*dataset\.resizeGrabOffsetPx = String\(resizeGrabOffset/);
+  assert.match(scheduleUi, /onPointerMove=\{\(event\) => resizeAppointmentFromPointer\(event, item\)\}/);
+  assert.match(scheduleUi, /event\.clientY - Number\(event\.currentTarget\.dataset\.resizeGrabOffsetPx \|\| 0\) - grid\.getBoundingClientRect\(\)\.top/);
+  assert.match(scheduleUi, /onLostPointerCapture=\{cancelAppointmentResize\}/);
+  assert.match(scheduleUi, /onKeyDown=\{\(event\) => resizeAppointmentFromKeyboard\(event, item\)\}/);
+  assert.match(scheduleUi, /stageScheduleChange\(appointment, appointment\.startsAt\.slice\(0, 10\), startMinute, appointment\.assigneeMemberId, durationMinutes\)/);
+  assert.match(scheduleUi, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
+  assert.match(scheduleStyles, /\.schedule-proposal-resize, \.schedule-appointment-resize \{[^}]*height: 32px[^}]*touch-action: none/);
+  assert.match(scheduleStyles, /\.schedule-appointment-resize::before \{[^}]*background:/);
+  assert.match(scheduleUi, /const resizeWidth = `min\(32px, calc\(\$\{100 \/ lane\.laneCount\}% - 8px\)\)`/);
 });
 
 test("whole-card moves remain local until one deliberate schedule save", () => {

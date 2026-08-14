@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
 import type { User } from "firebase/auth";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
@@ -24,6 +24,7 @@ import {
   scheduleMemberLabel,
   scheduleMinuteFromGridPosition,
   scheduleAppointmentLanes,
+  scheduleAppointmentBlockHeight,
   scheduleChangeConflictIds,
   scheduleDisplayWindow,
   scheduleProposalDurationFromEndMinute,
@@ -52,11 +53,11 @@ type RescheduleRequest = { id: string; appointmentId: string; workOrderId: strin
   requestedAt: string; decidedAt: string; currentStartsAt: string; currentEndsAt: string;
   currentAssigneeMemberId: string; currentAssigneeLabel: string; appointmentRevision: number };
 type Job = { id: string; workNumber: string; title: string; serviceCategory: string; customerDisplayName: string; suburbLabel: string; siteLabel: string; siteSummary: string; priority: string; stage: string; revision: number; assigneeMemberId: string; assigneeLabel: string };
-type AppointmentCalendarSync = { connected: number; synced: number; failed: number };
+type AppointmentCalendarSync = { connected: number; attempted: number; created: number; updated: number; unchanged: number; synced: number; failed: number };
 type ScheduleResult = { ok?: boolean; error?: string; weekStart?: string; weekEnd?: string; rangeStart?: string; rangeEnd?: string; rangeWeeks?: number; calendarSync?: AppointmentCalendarSync; access?: { memberId: string; isOwner: boolean; permissions?: Pick<TradeTeamPermissions, "canAssignJobs" | "canRescheduleJobs" | "canManageTeam" | "jobScope" | "scheduleScope"> }; members?: Member[]; availabilityMembers?: Member[]; workingHours?: WorkingHours[]; unavailability?: Unavailability[]; appointments?: Appointment[]; rescheduleRequests?: RescheduleRequest[]; unassignedJobs?: Job[] };
 type Edit = { memberId: string; date: string; time: string; durationMinutes: number };
 type CalendarConnection = { provider: "google_calendar" | "microsoft_calendar"; label: string; configured: boolean; status: "connected" | "not_connected"; lastSyncAt: string; lastError: string };
-type CalendarResult = { ok?: boolean; error?: string; providers?: CalendarConnection[]; synced?: number; failed?: number };
+type CalendarResult = { ok?: boolean; error?: string; providers?: CalendarConnection[]; attempted?: number; created?: number; updated?: number; unchanged?: number; synced?: number; failed?: number };
 type ScheduleProposal = { startsAt: string; durationMinutes: number; assigneeMemberId: string; assigneeLabel: string; title: string };
 type ScheduleProposalChange = { startsAt: string; durationMinutes: number };
 type PendingScheduleChange = ScheduleChangeDraft & { appointment: Appointment };
@@ -176,7 +177,6 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const pendingWeekStartRef = useRef(initialTarget);
   const weekSwipeStartRef = useRef<{ x: number; y: number; startedOnAppointment: boolean; atStartBoundary: boolean; atEndBoundary: boolean } | null>(null);
   const suppressCardClickRef = useRef(false);
-  const proposalResizePointerIdRef = useRef<number | null>(null);
   const lastInitialWeekStartRef = useRef(initialWeekStart);
   const lastFocusedMemberIdRef = useRef(focusedMemberId);
   const displayRangeStart = data.rangeStart || rangeStart;
@@ -345,7 +345,8 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       const changesAppointment = ["schedule_appointment", "schedule_job", "save_schedule_changes"].includes(String(body.action))
         || (body.action === "review_reschedule_request" && body.decision === "accepted");
       if (changesAppointment && result.calendarSync?.failed) setStatus(`${success} TLink is saved. A connected calendar item needs another sync.`);
-      else if (changesAppointment && result.calendarSync?.synced) setStatus(`${success} Connected calendars are up to date.`);
+      else if (changesAppointment && ((result.calendarSync?.created || 0) + (result.calendarSync?.updated || 0)) > 0) setStatus(`${success} Connected calendars were updated and verified.`);
+      else if (changesAppointment && result.calendarSync?.unchanged) setStatus(`${success} Connected calendars were checked and unchanged.`);
       else setStatus(success);
       return true;
     } catch (error) { setStatus(error instanceof Error ? error.message : "The schedule change could not be saved."); return false; }
@@ -371,7 +372,10 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       const result = await response.json().catch(() => ({})) as CalendarResult;
       if (!response.ok || !result.ok) throw new Error(result.error || "The calendar sync could not be completed.");
       setCalendars(result.providers || calendars);
-      setStatus(result.failed ? `${result.synced || 0} calendar items synced. ${result.failed} need another try.` : `${result.synced || 0} calendar items are up to date.`);
+      const changed = (result.created || 0) + (result.updated || 0);
+      if (result.failed) setStatus(`${changed} calendar items updated. ${result.failed} need another try.`);
+      else if (changed) setStatus(`${changed} calendar items were updated and verified.`);
+      else setStatus("No scheduled appointments needed syncing for this week.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "The calendar sync could not be completed."); }
     finally { setBusy(""); }
   }
@@ -723,12 +727,68 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     onProposalChange({ startsAt: `${date}T${minuteLabel(selectedMinute)}`, durationMinutes: 60 });
   }
 
+  function resizeGrabOffset(element: HTMLElement, clientY: number, startsAt: string, durationMinutes: number) {
+    const grid = element.closest(".schedule-day-grid") as HTMLElement | null;
+    if (!grid) return 0;
+    const endMinute = minuteValue(startsAt.slice(11, 16)) + durationMinutes;
+    const endY = grid.getBoundingClientRect().top
+      + ((endMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT;
+    return clientY - endY;
+  }
+
+  function startProposalResize(event: ReactPointerEvent<HTMLElement>, startsAt: string, durationMinutes: number) {
+    event.preventDefault(); event.stopPropagation();
+    event.currentTarget.dataset.resizePointerId = String(event.pointerId);
+    event.currentTarget.dataset.resizeGrabOffsetPx = String(resizeGrabOffset(event.currentTarget, event.clientY, startsAt, durationMinutes));
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function finishProposalResize(event: ReactPointerEvent<HTMLElement>) {
+    resizeProposalFromPointer(event);
+    delete event.currentTarget.dataset.resizePointerId;
+    delete event.currentTarget.dataset.resizeGrabOffsetPx;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function cancelProposalResize(event: ReactPointerEvent<HTMLElement>) {
+    delete event.currentTarget.dataset.resizePointerId;
+    delete event.currentTarget.dataset.resizeGrabOffsetPx;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function startAppointmentResize(event: ReactPointerEvent<HTMLElement>, appointment: Appointment, durationMinutes: number) {
+    event.preventDefault(); event.stopPropagation(); suppressCardClickRef.current = true;
+    event.currentTarget.dataset.resizeAppointmentId = appointment.id;
+    event.currentTarget.dataset.resizePointerId = String(event.pointerId);
+    event.currentTarget.dataset.resizeGrabOffsetPx = String(resizeGrabOffset(event.currentTarget, event.clientY, appointment.startsAt, durationMinutes));
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function clearAppointmentResize(element: HTMLElement) {
+    delete element.dataset.resizeAppointmentId;
+    delete element.dataset.resizePointerId;
+    delete element.dataset.resizeGrabOffsetPx;
+    window.setTimeout(() => { suppressCardClickRef.current = false; }, 0);
+  }
+
+  function finishAppointmentResize(event: ReactPointerEvent<HTMLElement>, appointment: Appointment) {
+    resizeAppointmentFromPointer(event, appointment);
+    clearAppointmentResize(event.currentTarget);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function cancelAppointmentResize(event: ReactPointerEvent<HTMLElement>) {
+    clearAppointmentResize(event.currentTarget);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
   function resizeProposalFromPointer(event: ReactPointerEvent<HTMLElement>) {
-    if (proposalResizePointerIdRef.current !== event.pointerId || !proposal || !onProposalChange) return;
+    if (Number(event.currentTarget.dataset.resizePointerId) !== event.pointerId || !proposal || !onProposalChange) return;
     const grid = event.currentTarget.closest(".schedule-day-grid") as HTMLElement | null;
     if (!grid) return;
     const requestedEndMinute = scheduleMinuteFromGridPosition(
-      event.clientY - grid.getBoundingClientRect().top, gridStartMinute, gridEndMinute, 0, GRID_QUARTER_HEIGHT,
+      event.clientY - Number(event.currentTarget.dataset.resizeGrabOffsetPx || 0) - grid.getBoundingClientRect().top,
+      gridStartMinute, gridEndMinute, 0, GRID_QUARTER_HEIGHT,
     );
     const startMinute = minuteValue(proposal.startsAt.slice(11, 16));
     const durationMinutes = scheduleProposalDurationFromEndMinute(startMinute, requestedEndMinute, gridEndMinute);
@@ -750,6 +810,41 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     event.preventDefault(); event.stopPropagation();
     durationMinutes = Math.max(APPOINTMENT_MIN_DURATION_MINUTES, Math.min(maximum, durationMinutes));
     if (durationMinutes !== proposal.durationMinutes) onProposalChange({ startsAt: proposal.startsAt, durationMinutes });
+  }
+
+  function resizeAppointmentFromPointer(event: ReactPointerEvent<HTMLElement>, appointment: Appointment) {
+    if (Number(event.currentTarget.dataset.resizePointerId) !== event.pointerId
+      || event.currentTarget.dataset.resizeAppointmentId !== appointment.id) return;
+    const grid = event.currentTarget.closest(".schedule-day-grid") as HTMLElement | null;
+    if (!grid) return;
+    const requestedEndMinute = scheduleMinuteFromGridPosition(
+      event.clientY - Number(event.currentTarget.dataset.resizeGrabOffsetPx || 0) - grid.getBoundingClientRect().top,
+      gridStartMinute, gridEndMinute, 0, GRID_QUARTER_HEIGHT,
+    );
+    const startMinute = minuteValue(appointment.startsAt.slice(11, 16));
+    const durationMinutes = scheduleProposalDurationFromEndMinute(startMinute, requestedEndMinute, gridEndMinute);
+    if (durationMinutes !== appointmentDurationMinutes(appointment.startsAt, appointment.endsAt)) {
+      stageScheduleChange(appointment, appointment.startsAt.slice(0, 10), startMinute, appointment.assigneeMemberId, durationMinutes);
+    }
+  }
+
+  function resizeAppointmentFromKeyboard(event: ReactKeyboardEvent<HTMLElement>, appointment: Appointment) {
+    const startMinute = minuteValue(appointment.startsAt.slice(11, 16));
+    const currentDuration = appointmentDurationMinutes(appointment.startsAt, appointment.endsAt);
+    const maximum = scheduleProposalDurationFromEndMinute(startMinute, gridEndMinute, gridEndMinute);
+    let durationMinutes = currentDuration;
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") durationMinutes -= 15;
+    else if (event.key === "ArrowDown" || event.key === "ArrowRight") durationMinutes += 15;
+    else if (event.key === "PageUp") durationMinutes -= 60;
+    else if (event.key === "PageDown") durationMinutes += 60;
+    else if (event.key === "Home") durationMinutes = APPOINTMENT_MIN_DURATION_MINUTES;
+    else if (event.key === "End") durationMinutes = maximum;
+    else return;
+    event.preventDefault(); event.stopPropagation();
+    durationMinutes = Math.max(APPOINTMENT_MIN_DURATION_MINUTES, Math.min(maximum, durationMinutes));
+    if (durationMinutes !== currentDuration) {
+      stageScheduleChange(appointment, appointment.startsAt.slice(0, 10), startMinute, appointment.assigneeMemberId, durationMinutes);
+    }
   }
 
   function stageScheduleChange(
@@ -880,20 +975,38 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
                 return <article key={item.id} aria-label={`${label} unavailable from ${formatTime(item.startsAt)}`} className="schedule-block unavailable" style={{ top: `${Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT)}px`, height: `${Math.max(44, (duration / 15) * GRID_QUARTER_HEIGHT)}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}><strong>Unavailable</strong><small>{label}</small><span>{formatTime(item.startsAt)} | busy time</span></article>;
               })}
               {dayAppointments.map((item) => {
-                const startMinute = minuteValue(item.startsAt.slice(11, 16)); const duration = appointmentDurationMinutes(item.startsAt, item.endsAt); const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT); const height = Math.max(62, (duration / 15) * GRID_QUARTER_HEIGHT);
+                const startMinute = minuteValue(item.startsAt.slice(11, 16)); const duration = appointmentDurationMinutes(item.startsAt, item.endsAt); const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT); const height = scheduleAppointmentBlockHeight(duration, GRID_QUARTER_HEIGHT);
                 const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
                 const cardLabel = `${item.customerDisplayName}, ${item.assigneeLabel || "Unassigned"}, ${item.suburbLabel}, ${formatTime(item.startsAt)}`;
                 const proposalConflict = proposalValidation.status === "conflict" && proposalConflictIds.has(item.id);
                 const pendingConflict = pendingConflictIds.has(item.id) || pendingUnavailableIds.has(item.id);
                 const effectiveConflict = item.scheduleDraft ? pendingConflict : item.conflicts || pendingConflict;
-                return <article key={item.id} data-schedule-appointment draggable={calendarCanReschedule && !busy && !loading} tabIndex={pageIsActive ? 0 : -1} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block moveable ${colourFor(item.assigneeMemberId)}${effectiveConflict || proposalConflict ? " conflict" : ""}${item.scheduleDraft ? " draft" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}
+                const maximumDuration = scheduleProposalDurationFromEndMinute(startMinute, gridEndMinute, gridEndMinute);
+                const left = `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`;
+                const width = `calc(${100 / lane.laneCount}% - 8px)`;
+                const resizeWidth = `min(32px, calc(${100 / lane.laneCount}% - 8px))`;
+                const resizeLeft = `max(calc(${lane.lane * 100 / lane.laneCount}% + 4px), calc(${(lane.lane + 1) * 100 / lane.laneCount}% - 36px))`;
+                return <Fragment key={item.id}><article data-schedule-appointment draggable={calendarCanReschedule && !busy && !loading} tabIndex={pageIsActive ? 0 : -1} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block moveable ${colourFor(item.assigneeMemberId)}${height < 62 ? " compact" : ""}${height <= 16 ? " micro" : ""}${effectiveConflict || proposalConflict ? " conflict" : ""}${item.scheduleDraft ? " draft" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left, right: "auto", width }}
                   onClick={(event) => openAppointment(item.id, event.currentTarget)}
                   onDoubleClick={(event) => { event.stopPropagation(); leaveSchedule(() => onOpenJob(item.workOrderId)); }}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAppointment(item.id, event.currentTarget); } }}
                   onDragStart={(event) => { suppressCardClickRef.current = true; draggedAppointmentRef.current = item; dragDropCommittedRef.current = false; dragEdgeLockRef.current = 0; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setDraggingId(item.id); setDropMinute(startMinute); }}
                   onDragEnd={() => { const dragged = draggedAppointmentRef.current; clearDragEdge(true); if (dragged && !dragDropCommittedRef.current) { const sourceWeek = monday(new Date(`${dragged.startsAt.slice(0, 10)}T12:00:00`)); setActiveWeekStart(sourceWeek); if (!scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, sourceWeek)) setRangeStart(addDays(sourceWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7)); } draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); window.setTimeout(() => { suppressCardClickRef.current = false; }, 0); }}>
                   <strong>{item.customerDisplayName}</strong><small>{item.assigneeLabel || "Unassigned"}</small><em>{item.suburbLabel}</em><span>{formatTime(item.startsAt)} | {durationLabel(duration)}</span>{item.scheduleDraft && <b>Unsaved</b>}{item.outsideWorkingHours && <b>Outside hours</b>}{effectiveConflict && <b>Conflict</b>}{proposalConflict && <b>Overlaps selected time</b>}
-                </article>;
+                </article>{calendarCanReschedule && !busy && !loading && <span
+                  data-schedule-appointment data-schedule-appointment-resize className="schedule-appointment-resize"
+                  style={{ top: `${top + height - 16}px`, left: resizeLeft, right: "auto", width: resizeWidth }}
+                  role="slider" tabIndex={pageIsActive ? 0 : -1} aria-label={`Resize appointment for ${item.customerDisplayName}`}
+                  aria-orientation="vertical" aria-valuemin={APPOINTMENT_MIN_DURATION_MINUTES} aria-valuemax={maximumDuration}
+                  aria-valuenow={duration} aria-valuetext={durationLabel(duration)}
+                  onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => startAppointmentResize(event, item, duration)}
+                  onPointerMove={(event) => resizeAppointmentFromPointer(event, item)}
+                  onPointerUp={(event) => finishAppointmentResize(event, item)}
+                  onPointerCancel={(event) => cancelAppointmentResize(event)}
+                  onLostPointerCapture={cancelAppointmentResize}
+                  onKeyDown={(event) => resizeAppointmentFromKeyboard(event, item)}><i aria-hidden="true" />
+                </span>}</Fragment>;
               })}
               {proposalOnDay && (() => {
                 const startMinute = minuteValue(proposalOnDay.startsAt.slice(11, 16));
@@ -901,10 +1014,24 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
                 const lane = appointmentLanes.get(proposalOnDay.id) || { lane: 0, laneCount: 1 };
                 const maximumDuration = scheduleProposalDurationFromEndMinute(startMinute, gridEndMinute, gridEndMinute);
                 const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT);
-                const height = Math.max(16, (duration / 15) * GRID_QUARTER_HEIGHT);
+                const height = scheduleAppointmentBlockHeight(duration, GRID_QUARTER_HEIGHT);
                 const left = `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`;
                 const width = `calc(${100 / lane.laneCount}% - 8px)`;
-                return <><article data-schedule-proposal draggable={Boolean(onProposalChange) && !busy && !loading} tabIndex={onProposalChange && pageIsActive ? 0 : -1} aria-label={`Proposed booking for ${proposal?.title || "this job"}. Drag to move it.`} onDoubleClick={(event) => event.stopPropagation()} onDragStart={(event) => { draggedProposalRef.current = true; draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "job-schedule-proposal"); setDraggingId("job-schedule-proposal"); setDropMinute(startMinute); }} onDragEnd={() => { clearDragEdge(true); draggedProposalRef.current = false; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); }} className={`schedule-block moveable proposal ${colourFor(proposal?.assigneeMemberId || "")}${proposalHasConflict ? " conflict" : ""}${draggingId === "job-schedule-proposal" ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left, right: "auto", width }}><strong>{proposal?.title || "This job"}</strong><small>{proposal?.assigneeLabel || "Selected person"}</small><em>Proposed booking</em><span>{formatTime(proposalOnDay.startsAt)} | {durationLabel(duration)}</span>{proposalHasConflict && <b>{proposalValidation.status === "unavailable" ? "Unavailable" : "Conflict"}</b>}</article>{onProposalChange && <span data-schedule-proposal className="schedule-proposal-resize" style={{ top: `${top + height - 16}px`, left, right: "auto", width }} role="slider" tabIndex={pageIsActive ? 0 : -1} aria-label="Resize proposed booking" aria-orientation="vertical" aria-valuemin={APPOINTMENT_MIN_DURATION_MINUTES} aria-valuemax={maximumDuration} aria-valuenow={duration} aria-valuetext={durationLabel(duration)} onDoubleClick={(event) => event.stopPropagation()} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); proposalResizePointerIdRef.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={resizeProposalFromPointer} onPointerUp={(event) => { resizeProposalFromPointer(event); proposalResizePointerIdRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { proposalResizePointerIdRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onKeyDown={resizeProposalFromKeyboard}><i aria-hidden="true" /></span>}</>;
+                const resizeWidth = `min(32px, calc(${100 / lane.laneCount}% - 8px))`;
+                const resizeLeft = `max(calc(${lane.lane * 100 / lane.laneCount}% + 4px), calc(${(lane.lane + 1) * 100 / lane.laneCount}% - 36px))`;
+                return <><article data-schedule-proposal draggable={Boolean(onProposalChange) && !busy && !loading} tabIndex={onProposalChange && pageIsActive ? 0 : -1} aria-label={`Proposed booking for ${proposal?.title || "this job"}. Drag to move it.`} onDoubleClick={(event) => event.stopPropagation()} onDragStart={(event) => { draggedProposalRef.current = true; draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "job-schedule-proposal"); setDraggingId("job-schedule-proposal"); setDropMinute(startMinute); }} onDragEnd={() => { clearDragEdge(true); draggedProposalRef.current = false; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); }} className={`schedule-block moveable proposal ${colourFor(proposal?.assigneeMemberId || "")}${proposalHasConflict ? " conflict" : ""}${draggingId === "job-schedule-proposal" ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left, right: "auto", width }}><strong>{proposal?.title || "This job"}</strong><small>{proposal?.assigneeLabel || "Selected person"}</small><em>Proposed booking</em><span>{formatTime(proposalOnDay.startsAt)} | {durationLabel(duration)}</span>{proposalHasConflict && <b>{proposalValidation.status === "unavailable" ? "Unavailable" : "Conflict"}</b>}</article>{onProposalChange && <span
+                  data-schedule-proposal className="schedule-proposal-resize"
+                  style={{ top: `${top + height - 16}px`, left: resizeLeft, right: "auto", width: resizeWidth }}
+                  role="slider" tabIndex={pageIsActive ? 0 : -1} aria-label="Resize proposed booking"
+                  aria-orientation="vertical" aria-valuemin={APPOINTMENT_MIN_DURATION_MINUTES} aria-valuemax={maximumDuration}
+                  aria-valuenow={duration} aria-valuetext={durationLabel(duration)} onDoubleClick={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => startProposalResize(event, proposalOnDay.startsAt, duration)}
+                  onPointerMove={resizeProposalFromPointer}
+                  onPointerUp={finishProposalResize}
+                  onPointerCancel={cancelProposalResize}
+                  onLostPointerCapture={cancelProposalResize}
+                  onKeyDown={resizeProposalFromKeyboard}><i aria-hidden="true" />
+                </span>}</>;
               })()}
               {dayIsToday && !dayAppointments.length && !dayUnavailability.length && !proposalOnDay && <span className="schedule-free-day">No jobs today</span>}
             </div>

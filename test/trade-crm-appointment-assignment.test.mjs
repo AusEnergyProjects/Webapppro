@@ -721,10 +721,25 @@ test("job detail GET applies scheduleScope before loading appointment rows", asy
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.job.assigneeMemberId, "member-b");
+  assert.equal(payload.job.revision, 3);
   assert.equal(payload.job.scheduleReady, true);
   assert.deepEqual(payload.job.appointments, []);
   assert.equal(payload.job.customerDisplayName, "Alex Customer");
   assert.equal(payload.job.description, "Customer disclosed details");
+});
+
+test("job detail GET returns the revision required by Assign and add appointment", async () => {
+  const { d1 } = fixture();
+  const { GET, POST } = crmRoute(d1, access());
+
+  const detailResponse = await GET(new Request("https://example.test/api/trade-crm?mode=detail&resource=job&id=job-1"));
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json();
+  assert.equal(detail.job.revision, 3);
+
+  const appointmentResponse = await POST(appointmentRequest("member-a", detail.job.revision));
+  assert.equal(appointmentResponse.status, 201);
+  assert.equal((await appointmentResponse.json()).ok, true);
 });
 
 test("job detail GET returns authoritative appointment assignee IDs within team schedule scope", async () => {

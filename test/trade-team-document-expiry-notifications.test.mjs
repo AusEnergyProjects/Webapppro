@@ -318,7 +318,7 @@ test("the minute worker drains durable warnings and the owner or team manager dr
   assert.match(notificationsDrawer, /item\.targetKind === "team"/);
   assert.match(notificationsDrawer, /workspace: "team"/);
   assert.match(notificationsDrawer, /item\.source === "team" \? "Team"/);
-  assert.match(dashboard, /search\.get\("teamMemberId"\)/);
+  assert.match(dashboard, /parameters\.get\("teamMemberId"\)/);
   assert.match(dashboard, /<TradeTeamSettings user=\{user\} navigationTarget=\{commandTarget\}/);
   assert.match(teamSettings, /navigationTarget\.id/);
   assert.match(worker, /Team document expiry notification failed/);

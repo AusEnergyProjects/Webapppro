@@ -249,7 +249,7 @@ function customerIndexCell(customer: Customer, key: string, onOpen: () => void):
   return <em>{customer.latestPipelineStage ? pipelineLabels[customer.latestPipelineStage] || customer.latestPipelineStage : "No status"}</em>;
 }
 
-export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, onOpenSchedule, onViewChange, onOpenInvoices }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void }) {
+export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navigationTarget, onOpenSchedule, onViewChange, onOpenInvoices, onCloseJobNavigation }: { user: User; teamAccess: boolean; staffPermissions?: TradeTeamPermissions; navigationTarget?: TLinkCommandTarget | null; onOpenSchedule?: (weekStart?: string) => void; onViewChange?: (view: View) => void; onOpenInvoices?: () => void; onCloseJobNavigation?: () => void }) {
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [view, setView] = useState<View>(() => staffPermissions ? "jobs" : "today");
@@ -782,6 +782,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   function closeFocusedJob() {
     setFocusedJobId("");
     setSelectedJobDetail(null);
+    onCloseJobNavigation?.();
     if (jobReturnTarget.kind === "customer") {
       setSelectedCustomerId(jobReturnTarget.customerId);
       setView("customers");
@@ -796,8 +797,14 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       const response = await fetch("/api/trade-crm", {
         method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
       });
-      const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; calendarSync?: AppointmentCalendarSync };
-      if (!response.ok || !result.ok) throw new Error(result.error || "The CRM update could not be saved.");
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; code?: string; error?: string; calendarSync?: AppointmentCalendarSync };
+      if (!response.ok || !result.ok) {
+        if (result.code === "REVISION_CONFLICT" && body.workOrderId === focusedJobId) {
+          setFocusedJobRefreshing(true);
+          setRefreshNonce((value) => value + 1);
+        }
+        throw new Error(result.error || "The CRM update could not be saved.");
+      }
       const calendarFailed = Number(result.calendarSync?.failed || 0);
       await load(); setRefreshNonce((value) => value + 1);
       setStatus(calendarFailed

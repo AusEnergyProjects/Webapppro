@@ -802,13 +802,17 @@ export async function PATCH(request: Request) {
       syncAppointmentIds.push(appointmentId);
     } else return adminJson({ ok: false, error: "Unsupported schedule action." }, 400);
     for (const notification of notifications) await queueAppointmentNotifications(notification);
-    const calendarSync = { connected: 0, synced: 0, failed: 0 };
+    const calendarSync = { connected: 0, attempted: 0, created: 0, updated: 0, unchanged: 0, synced: 0, failed: 0 };
     for (const appointmentId of Array.from(new Set(syncAppointmentIds))) {
       try {
-        const result = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, appointmentId);
-        calendarSync.connected += result.connected;
-        calendarSync.synced += result.synced;
-        calendarSync.failed += result.failed;
+        const result = await syncCreatedAppointmentToConnectedCalendars(access.ownerUid, appointmentId, { force: true });
+        calendarSync.connected = Math.max(calendarSync.connected, Number(result.connected || 0));
+        calendarSync.attempted += Number(result.attempted || 0);
+        calendarSync.created += Number(result.created || 0);
+        calendarSync.updated += Number(result.updated || 0);
+        calendarSync.unchanged += Number(result.unchanged || 0);
+        calendarSync.synced += Number(result.synced || 0);
+        calendarSync.failed += Number(result.failed || 0);
       } catch { calendarSync.failed += 1; }
     }
     return adminJson({ ok: true, ...(await schedulePayload(access, rangeStart, rangeWeeks)), calendarSync });

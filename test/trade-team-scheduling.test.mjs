@@ -233,7 +233,7 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(route, /normaliseScheduleRangeWeeks\(search\.get\("rangeWeeks"\), 1\)/);
   assert.match(route, /schedulePayload\(access, rangeStart, rangeWeeks\)/);
   assert.match(route, /for \(const appointmentId of Array\.from\(new Set\(syncAppointmentIds\)\)\)/);
-  assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, appointmentId\)/);
+  assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, appointmentId, \{ force: true \}\)/);
   assert.doesNotMatch(dashboard, /workspace === "schedule"/);
   assert.match(dashboard, /kind: "crm-view", id: "schedule"/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);

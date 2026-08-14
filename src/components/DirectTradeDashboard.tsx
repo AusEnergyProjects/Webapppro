@@ -234,6 +234,29 @@ function dashboardWorkspaceFromSearch(search: string): DashboardWorkspace {
     : "work";
 }
 
+const workOrderIdPattern = /^[A-Za-z0-9:_-]{1,180}$/;
+
+function jobNavigationFromSearch(search: string): TLinkCommandTarget | null {
+  const parameters = new URLSearchParams(search);
+  const jobId = parameters.get("jobId") || "";
+  if (dashboardWorkspaceFromSearch(search) !== "work" || !workOrderIdPattern.test(jobId)) return null;
+  return { workspace: "work", kind: "job", id: jobId, query: "", jobTab: "schedule", nonce: Date.now() };
+}
+
+function dashboardCommandTargetFromSearch(search: string): TLinkCommandTarget | null {
+  const jobTarget = jobNavigationFromSearch(search);
+  if (jobTarget) return jobTarget;
+  const parameters = new URLSearchParams(search);
+  if (parameters.get("workspace") === "schedule") {
+    return { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() };
+  }
+  const teamMemberId = parameters.get("teamMemberId") || "";
+  if (parameters.get("workspace") === "team" && teamMemberId) {
+    return { workspace: "team", kind: "team", id: teamMemberId, query: "", nonce: Date.now() };
+  }
+  return null;
+}
+
 const opportunityMatchIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -749,14 +772,7 @@ export function DirectTradeDashboard() {
       : "today"
   );
   const [commandTarget, setCommandTarget] = useState<TLinkCommandTarget | null>(() =>
-    typeof window === "undefined" ? null : (() => {
-      const search = new URLSearchParams(window.location.search);
-      if (search.get("workspace") === "schedule") return { workspace: "work", kind: "crm-view", id: "schedule", query: "", nonce: Date.now() };
-      const teamMemberId = search.get("teamMemberId");
-      return search.get("workspace") === "team" && teamMemberId
-        ? { workspace: "team", kind: "team", id: teamMemberId, query: "", nonce: Date.now() }
-        : null;
-    })()
+    typeof window === "undefined" ? null : dashboardCommandTargetFromSearch(window.location.search)
   );
   const [visibleEvidenceMatches, setVisibleEvidenceMatches] = useState<Record<string, boolean>>({});
   const [evidencePhotoUrls, setEvidencePhotoUrls] = useState<Record<string, Record<string, string>>>({});
@@ -782,6 +798,10 @@ export function DirectTradeDashboard() {
       const nextWorkspace = dashboardWorkspaceFromSearch(window.location.search);
       setWorkspace(nextWorkspace);
       setActiveWorkView(new URLSearchParams(window.location.search).get("workspace") === "schedule" ? "schedule" : "today");
+      const nextTarget = dashboardCommandTargetFromSearch(window.location.search);
+      setCommandTarget((current) => nextTarget || (current?.kind === "job" && nextWorkspace === "work"
+        ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
+        : null));
     };
     window.addEventListener("popstate", onPopstate);
     return () => window.removeEventListener("popstate", onPopstate);
@@ -798,6 +818,14 @@ export function DirectTradeDashboard() {
       if (nextUrl.searchParams.has("matchId")) { nextUrl.searchParams.delete("matchId"); changed = true; }
       if (nextUrl.hash === "#opportunity-inbox") { nextUrl.hash = ""; changed = true; }
     }
+    const openJobId = workspace === "work" && commandTarget?.kind === "job" ? commandTarget.id : "";
+    if (openJobId && nextUrl.searchParams.get("jobId") !== openJobId) {
+      nextUrl.searchParams.set("jobId", openJobId);
+      changed = true;
+    } else if (!openJobId && nextUrl.searchParams.has("jobId")) {
+      nextUrl.searchParams.delete("jobId");
+      changed = true;
+    }
     const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
     if (changed) {
       if (!workspaceRouteInitialised.current || workspacePopstateSync.current) window.history.replaceState(window.history.state, "", nextLocation);
@@ -805,7 +833,7 @@ export function DirectTradeDashboard() {
     }
     workspaceRouteInitialised.current = true;
     workspacePopstateSync.current = false;
-  }, [activeWorkView, workspace]);
+  }, [activeWorkView, commandTarget, workspace]);
   const photoLightboxOpener = useRef<HTMLElement | null>(null);
   const protectedOpportunityRequestControllers = useRef(
     new Set<AbortController>(),
@@ -2179,6 +2207,9 @@ export function DirectTradeDashboard() {
                 }}
                 onWorkViewChange={setActiveWorkView}
                 onOpenInvoices={() => setWorkspace("invoices")}
+                onCloseJobNavigation={() => setCommandTarget((current) => current?.kind === "job"
+                  ? { workspace: "work", kind: "crm-view", id: "jobs", query: "", nonce: Date.now() }
+                  : current)}
               />}
 
               {workspace === "team" && (hasBusinessOperations && hasTeamAccess ? (

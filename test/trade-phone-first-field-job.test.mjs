@@ -81,7 +81,7 @@ test("guided creation mirrors its saved appointment to every connected calendar"
   assert.doesNotMatch(crmRoute, /sendPhotoRequestDelivery|sendQuickInvoiceDelivery/);
   assert.match(calendarSync, /provider IN \('google_calendar', 'microsoft_calendar'\) AND status = 'connected'/);
   assert.match(calendarSync, /a\.firebase_uid = \? AND a\.id = \? AND a\.status = 'scheduled'/);
-  assert.match(calendarSync, /syncCalendarConnections\(ownerUid, connections\.results, \[appointment\]\)/);
+  assert.match(calendarSync, /syncCalendarConnections\(ownerUid, connections\.results, \[appointment\], options\)/);
   assert.match(calendarSync, /appointment_revision/);
   assert.match(calendarSync, /CALENDAR_PROVIDER_TIMEOUT_MS = 4_000/);
   assert.match(calendarSync, /signal: AbortSignal\.timeout\(CALENDAR_PROVIDER_TIMEOUT_MS\)/);

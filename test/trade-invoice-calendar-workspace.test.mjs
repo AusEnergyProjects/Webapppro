@@ -228,7 +228,9 @@ test("calendar mirroring is provider-neutral, revision mapped and privacy safe",
   assert.match(calendarServer, /appointment_revision/);
   assert.match(calendarServer, /TLink protected job/);
   assert.match(calendarServer, /Customer identity and exact location are not shared/);
-  assert.match(calendarServer, /protectedJob \? ""/);
+  assert.match(calendarServer, /const location = customerContext/);
+  assert.match(calendarServer, /location: \{ displayName: location \}/);
+  assert.match(calendarServer, /locations: location \? \[\{ displayName: location \}\] : \[\]/);
   assert.match(schedule, /TLink is saved\. A connected calendar item needs another sync/);
   assert.match(schedule, /TLink stays authoritative/);
   assert.match(schedule, /Available to connect/);

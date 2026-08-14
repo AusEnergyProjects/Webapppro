@@ -132,12 +132,13 @@ export function TradeBusinessHub(props: {
   onOpenSchedule?: (weekStart?: string) => void;
   onWorkViewChange?: (view: string) => void;
   onOpenInvoices?: () => void;
+  onCloseJobNavigation?: () => void;
 }) {
   if (!props.fullAccess) {
     return <section className="dashboard-panel dashboard-upgrade-callout"><strong>Verification required</strong><p>Complete business verification to open CRM, jobs, scheduling, team, forms and purchasing. No payment details are required.</p><a href="/direct-trade/dashboard/verification">Open verification centre</a></section>;
   }
   if (props.partnerType === "installer" && props.fullAccess) {
-    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} navigationTarget={props.navigationTarget} onOpenSchedule={props.onOpenSchedule} onViewChange={props.onWorkViewChange} onOpenInvoices={props.onOpenInvoices} />;
+    return <InstallerCrmWorkspace user={props.user} teamAccess={props.teamAccess} navigationTarget={props.navigationTarget} onOpenSchedule={props.onOpenSchedule} onViewChange={props.onWorkViewChange} onOpenInvoices={props.onOpenInvoices} onCloseJobNavigation={props.onCloseJobNavigation} />;
   }
   return <BusinessHubFoundation {...props} />;
 }

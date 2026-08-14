@@ -539,6 +539,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
   });
   return {
     id: row.id, workNumber: row.work_number,
+    revision: Number(row.revision || 1),
     title: protectedCustomer ? `${String(row.service_category || "Service")} job` : row.title, serviceCategory: row.service_category,
     siteArea: row.site_area, stage: row.stage, priority: row.priority, scheduledStart: row.scheduled_start,
     scheduledEnd: row.scheduled_end, assigneeMemberId: String(row.assignee_member_id || ""),

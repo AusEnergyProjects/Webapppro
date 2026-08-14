@@ -242,9 +242,9 @@ function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess
       queueAppointmentNotifications: async (notification) => notifications.push(notification),
     },
     "@/lib/trade-calendar-sync-server": {
-      syncCreatedAppointmentToConnectedCalendars: async (ownerUid, appointmentId) => {
-        synced.push({ ownerUid, appointmentId });
-        return { connected: 1, synced: 1, failed: 0 };
+      syncCreatedAppointmentToConnectedCalendars: async (ownerUid, appointmentId, options) => {
+        synced.push({ ownerUid, appointmentId, options });
+        return { connected: 1, attempted: 1, created: 0, updated: 1, unchanged: 0, synced: 1, failed: 0 };
       },
     },
     "@/lib/trade-compliance-intent-replan-server": {
@@ -299,7 +299,7 @@ test("save_schedule_changes atomically swaps two appointments and records every 
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.ok, true);
-  assert.deepEqual(payload.calendarSync, { connected: 2, synced: 2, failed: 0 });
+  assert.deepEqual(payload.calendarSync, { connected: 1, attempted: 2, created: 0, updated: 2, unchanged: 0, synced: 2, failed: 0 });
   assert.deepEqual(database.prepare("SELECT id, starts_at, revision FROM trade_crm_appointments ORDER BY id").all().map((row) => ({ ...row })), [
     { id: "appointment-a", starts_at: "2099-01-05T11:00", revision: 2 },
     { id: "appointment-b", starts_at: "2099-01-05T10:00", revision: 2 },
@@ -311,6 +311,7 @@ test("save_schedule_changes atomically swaps two appointments and records every 
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointment_revisions").get().count, 4);
   assert.equal(notifications.length, 2);
   assert.deepEqual(synced.map((item) => item.appointmentId).sort(), ["appointment-a", "appointment-b"]);
+  assert.ok(synced.every((item) => item.options?.force === true));
 });
 
 test("save_schedule_changes rolls back every requested move when one appointment changes concurrently", async () => {

@@ -45,19 +45,36 @@ export async function POST(request: Request) {
     const weekStart = normaliseWeekStart(body.weekStart); const weekEnd = addCalendarDays(weekStart, 7); const db = getD1();
     const [connections, appointmentResult] = await Promise.all([
       db.prepare(`SELECT * FROM trade_crm_integrations WHERE firebase_uid = ? AND provider IN ('google_calendar', 'microsoft_calendar') AND status = 'connected'`).bind(identity.uid).all<Row>(),
-      db.prepare(`SELECT a.id, a.starts_at, a.ends_at, a.assignee_label, a.revision, w.work_number, w.title,
-          w.service_category, w.site_area, w.source_type, d.customer_source, s.address_line_1, s.address_line_2,
-          s.suburb, s.address_state site_state, s.postcode, t.address_state account_state
+      db.prepare(`SELECT a.id, a.appointment_type, a.notes, a.starts_at, a.ends_at, a.assignee_label, a.revision,
+          w.id AS work_order_id, w.work_number, w.title, w.service_category, w.site_area, w.source_type, d.customer_source,
+          CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
+          TRIM(COALESCE(cc.first_name, '') || ' ' || COALESCE(cc.last_name, '')) site_contact_name,
+          c.email customer_email, c.phone customer_phone, cc.email site_contact_email, cc.phone site_contact_phone,
+          COALESCE(NULLIF(s.address_line_1, ''), c.address_line_1) address_line_1,
+          COALESCE(NULLIF(s.address_line_2, ''), c.address_line_2) address_line_2,
+          COALESCE(NULLIF(s.suburb, ''), c.suburb) suburb,
+          COALESCE(NULLIF(s.address_state, ''), c.address_state) site_state,
+          COALESCE(NULLIF(s.postcode, ''), c.postcode) postcode,
+          s.access_instructions, s.parking_instructions, s.hazard_notes, t.address_state account_state
         FROM trade_crm_appointments a
         JOIN trade_work_orders w ON w.id = a.work_order_id AND w.firebase_uid = a.firebase_uid
         JOIN trade_accounts t ON t.firebase_uid = a.firebase_uid
         LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+        LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid AND c.record_status = 'active'
         LEFT JOIN trade_crm_service_sites s ON s.id = d.service_site_id AND s.firebase_uid = w.firebase_uid
+          AND s.customer_id = c.id AND s.record_status = 'active'
+        LEFT JOIN trade_crm_site_contacts sc ON sc.id = (
+          SELECT candidate.id FROM trade_crm_site_contacts candidate
+          WHERE candidate.firebase_uid = w.firebase_uid AND candidate.service_site_id = s.id AND candidate.record_status = 'active'
+          ORDER BY candidate.is_primary DESC, candidate.created_at, candidate.id LIMIT 1
+        )
+        LEFT JOIN trade_crm_customer_contacts cc ON cc.id = sc.customer_contact_id
+          AND cc.firebase_uid = w.firebase_uid AND cc.customer_id = c.id AND cc.record_status = 'active'
         WHERE a.firebase_uid = ? AND a.status = 'scheduled' AND a.starts_at < ? AND a.ends_at >= ?
         ORDER BY a.starts_at LIMIT 250`).bind(identity.uid, `${weekEnd}T00:00`, `${weekStart}T00:00`).all<Row>(),
     ]);
     if (!connections.results.length) return adminJson({ ok: false, error: "Connect Google Calendar or Outlook before syncing." }, 409);
-    const { synced, failed } = await syncCalendarConnections(identity.uid, connections.results, appointmentResult.results);
-    return adminJson({ ok: true, synced, failed, providers: await providerRows(identity.uid) });
+    const result = await syncCalendarConnections(identity.uid, connections.results, appointmentResult.results, { force: true });
+    return adminJson({ ok: true, ...result, providers: await providerRows(identity.uid) });
   } catch (error) { return calendarError(error); }
 }
