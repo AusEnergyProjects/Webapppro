@@ -2070,41 +2070,52 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 ## Released milestone: TLINK-JOB-SCHEDULE-PLANNING-66
 
 Release status: exact corrective application commit
-`d35fdb8d52056fec6b62b6b56a4739a0443cadcf` is validated and pushed to GitHub
+`df86aa3ced0ee8d67022626369ebb0412af0b8da` is validated and pushed to GitHub
 branch `codex/job-schedule-week-calendar` and Sites internal `main`. It is
-released as current Sites version 333 at
+released as current Sites version 335 at
 `https://compare.ausenergyassessments.com`. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c`
-and deployment `appgdep_6a7ed5605fd881918d2f288f2194f66e` reconcile to
+`appgprj_6a550c378000819185caf094173422bb~appgver_bfbac71cff188191af22d0819944fb4d`
+and deployment `appgdep_6a7eec87402c81918ed74c29a8f03755` reconcile to
 that source. Deployment succeeded on provider
 `info294029--aea-energy-comparison` with environment revision 20. Sites stored
-424 files and 39,731,200 bytes with content hash
-`sha256:08a58d94d2e72271e709964b5580c9790f160c2d530f6be45c0c8d464e1b64d5`
-and sediment `file_00000000d950820bacd2ce7904ce9afc`. The local version-333
-archive is 12,190,974 bytes with 438 tar entries and SHA-256
-`3EFC66E6088161095065EC694D8198A11DB877C4FAB3D6A2D592FF8D7810911E`.
+424 files and 39,761,920 bytes with content hash
+`sha256:e70ba30cd399229086af36c1565e202a7558b097294e69798f23f69b3af4122b`
+and sediment `file_000000009fb0820ba1573cc5b72a19f4`. The local version-335
+archive is 12,198,748 bytes with 438 tar entries and SHA-256
+`48d2a866ff37c0df7bf13525b5d551a35f0bd8b6abcc0eabcc1da15bc13f7f20`.
 
 ### Outcome
 
 Let a trade user assign and schedule a job in one save, inspect and adjust
 existing appointments directly on the visible week, stage several guarded
 changes and deliberately save or discard the complete plan without duplicate
-booking prompts.
+booking prompts, and keep the internal and connected calendars consistent with
+the exact saved duration and useful authorised job details.
 
 ### Implemented scope
 
 - Assignment and the first appointment commit atomically with revision,
-  accepted-quote, active-member, capability and conflict guards.
+  accepted-quote, active-member, capability and conflict guards. Job detail GET
+  projects the revision needed by that compare-and-swap write.
 - A saved appointment appears once. Another form opens only through the explicit
   `Add another` action.
 - Appointment cards open a dismissible detail dialog with the accepted quote,
   authorised phone and email, service address, directions and 15-minute controls.
-- Whole appointments move in 15-minute steps and their edges resize duration.
-  Up to five distinct changes remain local with one `Unsaved` state until Save
-  commits the batch or Discard restores server truth without a write.
+  Closing the dialog retains the exact selected-job deep link; `Back to all jobs`
+  clears it deliberately.
+- Whole appointments move in 15-minute steps and their accessible bottom edges
+  resize duration. A 30-minute appointment occupies 32 pixels against a 64-pixel
+  hour, and typed or saved duration changes use the same geometry. Up to five
+  distinct changes remain local with one `Unsaved` state until Save commits the
+  batch or Discard restores server truth without a write.
 - Batch scheduling preserves appointment and job revisions, assignment,
   accepted-quote, capability, same-worker overlap, unavailability,
   compliance-intent, notification and external calendar-sync boundaries.
+- Every connected-calendar mutation forces a provider PATCH and verifies the
+  returned start and end before recording the sync as current. Authorised events
+  include the customer name and contact details, full service location, job
+  reference, appointment type, notes and exact TLink job URL while protected-lead
+  privacy remains enforced.
 - Different workers may overlap. Final same-worker conflicts, including
   conflicts created inside one batch, fail closed.
 - The unsupported direct-customer compliance intake is hidden for accepted
@@ -2112,37 +2123,61 @@ booking prompts.
 
 ### Release and validation evidence
 
-- Full `npm.cmd run validate` passed on the exact corrective source: typecheck,
-  warning-free lint, 36 of 36 integration tests, 2,255 total Node tests with
-  2,245 passed, 10 intentionally skipped and zero failed, all 140 migrations,
-  database checks, customer-plan PDF audit, production build and Sites bundle
-  audit. Focused installer CRM coverage passed 30 of 30.
-- Signed-in owner desktop and 390 by 844 phone QA confirmed one real
-  appointment, combined assignment and scheduling, All, Me and named-worker
-  filters, weekly controls and `Add another` without a duplicate proposal. The
-  accepted job Overview no longer mounted the unsupported compliance intake.
-  No mutation was performed during version-333 QA.
-- Version-332 QA opened the appointment dialog, staged a 3:00 pm to 3:30 pm
-  move, showed one `Unsaved` card and restored 3:00 pm with Discard and no write.
-  All workers showed six cards, the chosen named worker showed zero, and Me,
-  Next week and Today restoration passed.
-- `/api/health` returned HTTP 200. Version-333 browser error and warning capture
-  and the post-QA Sites errors-only Worker query were empty.
-- A signed-in staff identity with team or own schedule permission was
-  unavailable. Live staff-role presentation and permission mutations remain
-  unverified while authoritative server permission tests remain green.
+- Full `npm.cmd run validate` passed in 74.3 seconds on exact corrective source
+  `df86aa3ced0ee8d67022626369ebb0412af0b8da`, including typecheck,
+  warning-free lint, integration and Node tests, all 140 migrations, database
+  checks, customer-plan PDF audit, production build and Sites bundle audit. This
+  release changes no schema and adds no migration.
+- Signed-in owner desktop QA measured an exact 32-pixel 30-minute card against a
+  64-pixel hour and confirmed the accessible bottom-edge resize control.
+- Accepted AEA job `TLJ-X5JVPTHX` was booked exactly once for Saturday 15 August
+  2026 from 2:00 pm to 4:00 pm and produced a rich Google Calendar event. The
+  exact job deep link remained selected when appointment details closed and
+  `Back to all jobs` cleared it.
+- At 390 by 844 there was no horizontal overflow and the appointment-details
+  dialog remained usable. The `Test 123` Google event displayed 4:00 pm to
+  4:30 pm, matching the saved 30-minute appointment.
+- Controlled provider PATCH proof changed James William job `TLJ-X5JVPTHX` from
+  2:00-4:00 pm to 2:00-3:45 pm through the phone dialog. TLink reported `1
+  appointment saved. Connected calendars were updated and verified`, and Google
+  reloaded at exactly 2:00-3:45 pm. The job was restored to 2:00-4:00 pm;
+  authoritative TLink reload showed two hours and Google reload showed exactly
+  2:00-4:00 pm with no remaining 3:45 occurrence.
+- `/api/health` returned HTTP 200 with `Cache-Control: no-store`,
+  `Content-Type: application/json` and
+  `{ "ok": true, "service": "aea-energy" }`. The Sites errors-only 120-minute
+  query returned one information-level cancelled job-detail GET caused by the QA
+  browser reload, request `a2af48cb9998e7d1`, and no exception or error. Widened
+  45-minute logs showed both schedule PATCH requests, `a2af47a15e5fe7d1` and
+  `a2af489e3eb1e7d1`, with outcome `ok`, followed by successful CRM and schedule
+  GETs.
+- Historical version 334 from
+  `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb` was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_df433c53dcc481919d1a7474c8426cd5`
+  and deployed through `appgdep_6a7ee956504881918dbe3752c62d1080`. It carried
+  the duration, connected-calendar, rich-event and job-revision corrections but
+  was superseded by version 335 to preserve the exact job deep link while
+  appointment details are open.
+- Historical corrective version 333 from
+  `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c`
+  and deployed through `appgdep_6a7ed5605fd881918d2f288f2194f66e`. Its release
+  gate passed 36 of 36 integration tests and 2,255 total Node tests with
+  2,245 passed, 10 intentionally skipped and zero failed.
 - Intermediate version 332 from
   `362be0632b5e1a1d89a312c791c3665924f037d7` was saved as
   `appgprj_6a550c378000819185caf094173422bb~appgver_8c462e5b0ef08191850c4ac79373a180`
-  and deployed successfully through `appgdep_6a7ed1cbcc0c81919e2204380055f04b`.
-  Sites stored 424 files and 39,731,200 bytes with content hash
-  `sha256:2761c5235a0e4a83cd11f77f4bd3a562788e1b712288f2589b9262273bb95fba`
-  and sediment `file_00000000078081faa8bb76de3f85046a`; the local 438-entry,
-  12,195,010-byte archive had SHA-256
+  and deployed through `appgdep_6a7ed1cbcc0c81919e2204380055f04b`. Its package
+  content hash was
+  `sha256:2761c5235a0e4a83cd11f77f4bd3a562788e1b712288f2589b9262273bb95fba`,
+  and its local archive SHA-256 was
   `5FCA9C6CAA92BDF4780378C276A561DDC57ED68021D886B02F5CCC3CC816C5A1`.
-  Its schedule UX passed live QA, but an incorrectly mounted direct-customer
-  compliance intake produced one expected HTTP 403. There was no data or
-  privacy bypass; version 333 superseded it with the UI gate.
+  Live QA exposed an incorrectly mounted direct-customer compliance intake and
+  one expected HTTP 403. There was no data or privacy bypass; version 333
+  superseded it with the UI gate.
+- Separate signed-in staff identities with team or own schedule permission were
+  unavailable. Live staff-role presentation and permission mutations remain
+  unverified while authoritative server permission tests remain green.
 - The hosted product remains a pre-launch test environment. Test records may be
   replaced, but the final wipe remains a separately authorised launch operation.
 

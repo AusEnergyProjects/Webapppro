@@ -231,9 +231,15 @@ This is the only current implementation and release-status document. The [dated 
 | Historical atomic schedule-planning application source | `362be0632b5e1a1d89a312c791c3665924f037d7` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; historical intermediate source for `TLINK-JOB-SCHEDULE-PLANNING-66` |
 | Historical Sites version 332 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_8c462e5b0ef08191850c4ac79373a180` | Exact version 332 from `362be0632b5e1a1d89a312c791c3665924f037d7`; 424 files; 39,731,200 bytes; content hash `sha256:2761c5235a0e4a83cd11f77f4bd3a562788e1b712288f2589b9262273bb95fba`; local archive 12,195,010 bytes, 438 tar entries and SHA-256 `5FCA9C6CAA92BDF4780378C276A561DDC57ED68021D886B02F5CCC3CC816C5A1`; sediment `file_00000000078081faa8bb76de3f85046a`; all 140 migrations |
 | Historical Sites version 332 executable identity | Sites version 332 from `362be0632b5e1a1d89a312c791c3665924f037d7` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7ed1cbcc0c81919e2204380055f04b` succeeded on provider `info294029--aea-energy-comparison`; environment revision 20; live schedule QA passed but exposed an incorrectly mounted unsupported compliance intake, so version 333 superseded it |
-| Current schedule-planning corrective application source | `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-JOB-SCHEDULE-PLANNING-66` |
-| Current Sites version 333 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c` | Exact version 333 from `d35fdb8d52056fec6b62b6b56a4739a0443cadcf`; 424 files; 39,731,200 bytes; content hash `sha256:08a58d94d2e72271e709964b5580c9790f160c2d530f6be45c0c8d464e1b64d5`; local archive 12,190,974 bytes, 438 tar entries and SHA-256 `3EFC66E6088161095065EC694D8198A11DB877C4FAB3D6A2D592FF8D7810911E`; sediment `file_00000000d950820bacd2ce7904ce9afc`; all 140 migrations |
-| Current Sites version 333 executable identity | Sites version 333 from `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7ed5605fd881918d2f288f2194f66e` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in owner desktop and 390 by 844 QA passed, while staff team and own-role QA remains unverified |
+| Historical schedule-planning corrective application source | `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical Sites version 333 under milestone `TLINK-JOB-SCHEDULE-PLANNING-66` |
+| Historical Sites version 333 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c` | Exact version 333 from `d35fdb8d52056fec6b62b6b56a4739a0443cadcf`; 424 files; 39,731,200 bytes; content hash `sha256:08a58d94d2e72271e709964b5580c9790f160c2d530f6be45c0c8d464e1b64d5`; local archive 12,190,974 bytes, 438 tar entries and SHA-256 `3EFC66E6088161095065EC694D8198A11DB877C4FAB3D6A2D592FF8D7810911E`; sediment `file_00000000d950820bacd2ce7904ce9afc`; all 140 migrations |
+| Historical Sites version 333 executable identity | Sites version 333 from `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7ed5605fd881918d2f288f2194f66e` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; superseded by version 334 |
+| Historical schedule-duration and calendar-sync corrective application source | `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical Sites version 334 under milestone `TLINK-JOB-SCHEDULE-PLANNING-66` |
+| Historical Sites version 334 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_df433c53dcc481919d1a7474c8426cd5` | Exact version 334 from `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`; 424 files; 39,761,920 bytes; content hash `sha256:cde0a7384d705af650c8b61cb60f97d976c04bbfd8915438325740433043200b`; local archive 12,198,859 bytes, 438 tar entries and SHA-256 `97e0db5955ca340a7e22d195f733adcaf9fe4ab0bf6a2e4decc7689a967dedd9`; all 140 migrations |
+| Historical Sites version 334 executable identity | Sites version 334 from `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7ee956504881918dbe3752c62d1080` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; superseded by version 335 to preserve the exact job deep link while appointment details are open |
+| Current schedule-duration, calendar-sync and deep-link corrective application source | `df86aa3ced0ee8d67022626369ebb0412af0b8da` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-JOB-SCHEDULE-PLANNING-66` |
+| Current Sites version 335 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_bfbac71cff188191af22d0819944fb4d` | Exact version 335 from `df86aa3ced0ee8d67022626369ebb0412af0b8da`; 424 files; 39,761,920 bytes; content hash `sha256:e70ba30cd399229086af36c1565e202a7558b097294e69798f23f69b3af4122b`; local archive 12,198,748 bytes, 438 tar entries and SHA-256 `48d2a866ff37c0df7bf13525b5d551a35f0bd8b6abcc0eabcc1da15bc13f7f20`; sediment `file_000000009fb0820ba1573cc5b72a19f4`; all 140 migrations |
+| Current Sites version 335 executable identity | Sites version 335 from `df86aa3ced0ee8d67022626369ebb0412af0b8da` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7eec87402c81918ed74c29a8f03755` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in owner desktop and 390 by 844 QA passed, while staff team and own-role identities remain unavailable for live QA |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -307,9 +313,15 @@ booking, guarded staged appointment movement and resizing, appointment details
 and an explicit add-another path. Its live schedule QA passed, but it mounted a
 direct-customer compliance intake on an accepted released lead and produced an
 expected permission-denied request. Corrective Sites version 333 from exact
-application source `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` is the current
-verified deployed source and hides that unsupported intake without weakening the
-API permission boundary.
+application source `d35fdb8d52056fec6b62b6b56a4739a0443cadcf` hid that unsupported
+intake without weakening the API permission boundary and is historical. Sites
+version 334 from exact source `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`
+corrected duration geometry, connected-calendar updates, rich event details and
+the job-detail revision projection. It is also historical. Current corrective
+Sites version 335 from exact source
+`df86aa3ced0ee8d67022626369ebb0412af0b8da` additionally preserves the exact
+job deep link while appointment details are open and clears it only through
+Back.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
@@ -317,70 +329,87 @@ Certificate creation, submission, trading and settlement remain disabled.
 ## Current atomic job scheduling and planning release
 
 Milestone `TLINK-JOB-SCHEDULE-PLANNING-66` is released from exact corrective
-application source `d35fdb8d52056fec6b62b6b56a4739a0443cadcf`, pushed to GitHub
+application source `df86aa3ced0ee8d67022626369ebb0412af0b8da`, pushed to GitHub
 branch `codex/job-schedule-week-calendar` and Sites internal `main`. Sites saved
 version
-`appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c`
-and deployed it through `appgdep_6a7ed5605fd881918d2f288f2194f66e` as current
-Sites version 333. The public custom URL is
+`appgprj_6a550c378000819185caf094173422bb~appgver_bfbac71cff188191af22d0819944fb4d`
+and deployed it through `appgdep_6a7eec87402c81918ed74c29a8f03755` as current
+Sites version 335. The public custom URL is
 `https://compare.ausenergyassessments.com`, the deployment URL is
 `https://aea-energy-comparison.info294029.chatgpt.site`, provider identity is
 `info294029--aea-energy-comparison`, and environment revision is 20. Sites stored
-424 files and 39,731,200 bytes with content hash
-`sha256:08a58d94d2e72271e709964b5580c9790f160c2d530f6be45c0c8d464e1b64d5`
-and sediment `file_00000000d950820bacd2ce7904ce9afc`. The local version-333
-archive is 12,190,974 bytes with 438 tar entries and SHA-256
-`3EFC66E6088161095065EC694D8198A11DB877C4FAB3D6A2D592FF8D7810911E`. The
-package contains all 140 migrations.
+424 files and 39,761,920 bytes with content hash
+`sha256:e70ba30cd399229086af36c1565e202a7558b097294e69798f23f69b3af4122b`
+and sediment `file_000000009fb0820ba1573cc5b72a19f4`. The local version-335
+archive is 12,198,748 bytes with 438 tar entries and SHA-256
+`48d2a866ff37c0df7bf13525b5d551a35f0bd8b6abcc0eabcc1da15bc13f7f20`.
+The package contains all 140 migrations.
 
-The focused job workspace now treats assignment and first scheduling as one
-deliberate save. The selected active worker and first appointment are
-authorised, accepted-quote checked, conflict checked and committed together, so
-the user is not pushed away after saving assignment. After creation, the real
-appointment appears once and the form remains closed behind the explicit `Add
-another` action rather than showing a duplicate proposal.
+The focused job workspace continues to assign an active worker and create the
+first appointment in one guarded save. Job detail responses now project the
+revision used by that compare-and-swap operation, so `Assign and add
+appointment` does not fail merely because the detail response omitted its
+revision. A completed booking appears once, and another form opens only through
+the explicit `Add another` action.
 
-Existing appointment cards open a dismissible detail dialog with the accepted
-quote, authorised customer phone and email, service address and directions, and
-15-minute adjustment controls. A whole appointment can be moved in 15-minute
-steps and its edges can change duration. Calendar changes remain local and are
-marked `Unsaved` until one `Save schedule` action commits the guarded batch.
-`Discard changes` restores the authoritative server schedule without a write.
-The server preserves revision, assignment, service-capability, accepted-quote,
-same-worker overlap, unavailability, notification and calendar-sync guards for
-every changed appointment.
+The visible week now uses truthful 15-minute geometry: a 30-minute appointment
+occupies 32 pixels when one hour occupies 64 pixels. A whole appointment moves
+in 15-minute steps, while its accessible bottom-edge control resizes duration in
+the same increments. Typed duration changes and saved server values use the same
+geometry. Several changes may remain local as `Unsaved` until one guarded `Save
+schedule`, while `Discard changes` restores authoritative server state.
 
-Full `npm.cmd run validate` passed on exact corrective source
-`d35fdb8d52056fec6b62b6b56a4739a0443cadcf`: typecheck, warning-free lint, 36 of
-36 integration tests, 2,255 total Node tests with 2,245 passed, 10 intentionally
-skipped and zero failed, all 140 migrations, database checks, the customer-plan
-PDF audit, production build and Sites server-bundle audit. The focused installer
-CRM set passed 30 of 30.
+Every connected-calendar mutation now forces a provider PATCH and verifies that
+the provider response contains the requested start and end before recording the
+sync as current. Authorised events carry the customer name, phone and email,
+full service location, job reference, appointment type, notes and exact TLink
+job URL needed in the field, while protected-lead privacy remains enforced. The
+appointment-details dialog retains that exact job URL. Its close control keeps
+the selected job deep link, and `Back to all jobs` deliberately clears it.
 
-Signed-in owner QA passed on desktop and at 390 by 844. The accepted
-`TLJ-X2UBP25W` Overview no longer mounted the unsupported compliance intake or
-showed its permission error. Schedule showed one real appointment, combined
-assignment and scheduling, All, Me and named-worker filters, week controls and
-`Add another` without a duplicate proposal. Version-332 QA had also opened the
-appointment dialog with accepted quote, authorised contact and service-site
-details and staged a move from 3:00 pm to 3:30 pm. That produced one `Unsaved`
-card with Save and Discard actions; Discard restored 3:00 pm and performed no
-write. No assignment, appointment or permission mutation was performed during
-version-333 QA. `/api/health` returned HTTP 200, browser error and warning
-capture was empty, and the post-QA Sites errors-only Worker query was empty.
+Full `npm.cmd run validate` passed in 74.3 seconds on exact corrective source
+`df86aa3ced0ee8d67022626369ebb0412af0b8da`, including typecheck, warning-free
+lint, integration and Node tests, all 140 migrations, database checks, PDF audit,
+production build and Sites server-bundle audit. This release changes no schema
+and adds no migration.
 
-Intermediate Sites version 332 came from exact application source
-`362be0632b5e1a1d89a312c791c3665924f037d7`, saved as
-`appgprj_6a550c378000819185caf094173422bb~appgver_8c462e5b0ef08191850c4ac79373a180`
-and deployed successfully through `appgdep_6a7ed1cbcc0c81919e2204380055f04b`.
-Its owner desktop and 390-pixel schedule QA passed, but the errors-only log
-exposed one outcome-ok HTTP 403 from an incorrectly mounted direct-customer
-compliance intake on the accepted released lead. There was no data or privacy
-bypass. Corrective version 333 hides that unsupported UI while preserving the
-API denial.
+Signed-in owner desktop QA measured an exact 32-pixel 30-minute card against a
+64-pixel hour and confirmed the accessible bottom-edge resize control. Accepted
+AEA job `TLJ-X5JVPTHX` was booked exactly once for Saturday 15 August 2026 from
+2:00 pm to 4:00 pm and produced a rich Google Calendar event. The exact job deep
+link remained selected when its appointment details closed and `Back to
+schedule` cleared it. At 390 by 844 there was no horizontal overflow and the
+details dialog remained usable. The `Test 123` Google event displayed 4:00 pm to
+4:30 pm, matching the saved 30-minute appointment.
 
-A separate signed-in staff identity with team or own schedule permission was
-unavailable, so staff role presentation and permission mutations remain
+Controlled provider PATCH proof changed James William job `TLJ-X5JVPTHX` through
+the phone dialog from 2:00-4:00 pm to 2:00-3:45 pm. TLink reported `1 appointment
+saved. Connected calendars were updated and verified`, and Google reloaded at
+exactly 2:00-3:45 pm. Restoring the job to 2:00-4:00 pm produced an authoritative
+TLink two-hour duration and a Google reload at exactly 2:00-4:00 pm with no
+remaining 3:45 occurrence.
+
+`/api/health` returned HTTP 200 with `Cache-Control: no-store`,
+`Content-Type: application/json` and `{ "ok": true, "service": "aea-energy" }`.
+The Sites errors-only 120-minute query returned one information-level cancelled
+job-detail GET caused by the QA browser reload, request `a2af48cb9998e7d1`, and
+no exception or error. Widened 45-minute logs showed both schedule PATCH requests,
+`a2af47a15e5fe7d1` and `a2af489e3eb1e7d1`, with outcome `ok`, followed by
+successful CRM and schedule GETs.
+
+Historical Sites version 334 came from exact source
+`f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_df433c53dcc481919d1a7474c8426cd5`
+and deployed through `appgdep_6a7ee956504881918dbe3752c62d1080`. It carried the
+duration, connected-calendar, rich-event and job-revision corrections, but
+version 335 superseded it to preserve the exact job deep link while details are
+open. Historical corrective version 333 came from
+`d35fdb8d52056fec6b62b6b56a4739a0443cadcf`, saved as
+`appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c`
+and deployed through `appgdep_6a7ed5605fd881918d2f288f2194f66e`.
+
+Separate signed-in staff identities with team or own schedule permission were
+unavailable, so staff-role presentation and permission mutations remain
 unverified live. Authoritative server permission tests remain green. The hosted
 environment remains pre-launch test data; test records may be replaced, but the
 final wipe remains a separately authorised launch operation.
@@ -3043,7 +3072,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 333 is:
+The current verified deployed topology for Sites version 335 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.
