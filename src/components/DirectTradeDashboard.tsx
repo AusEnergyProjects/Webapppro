@@ -808,6 +808,11 @@ export function DirectTradeDashboard() {
   }, []);
 
   useEffect(() => {
+    const initialJobTarget = dashboardCommandTargetFromSearch(window.location.search);
+    if (!commandTarget && workspace === "work" && initialJobTarget?.kind === "job") {
+      setCommandTarget(initialJobTarget);
+      return;
+    }
     const nextUrl = new URL(window.location.href);
     const routeWorkspace = workspace === "work" && activeWorkView === "schedule"
       ? "schedule"

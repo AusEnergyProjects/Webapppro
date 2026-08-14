@@ -173,6 +173,9 @@ test("calendar job links open the exact authorised TLink job schedule", () => {
   assert.match(calendarSource, /jobId=\$\{encodeURIComponent\(eventText\(appointment\.work_order_id, 180\)\)\}/);
   assert.match(dashboardSource, /function jobNavigationFromSearch\(search: string\)/);
   assert.match(dashboardSource, /kind: "job", id: jobId, query: "", jobTab: "schedule"/);
+  assert.match(dashboardSource,
+    /const initialJobTarget = dashboardCommandTargetFromSearch\(window\.location\.search\);[\s\S]{0,260}!commandTarget[\s\S]{0,160}initialJobTarget\?\.kind === "job"[\s\S]{0,160}setCommandTarget\(initialJobTarget\);[\s\S]{0,80}return;/,
+    "hydration must consume the incoming jobId before route synchronisation can remove it");
 });
 
 async function withProviderFetch(handler, run) {
