@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` released as current Sites version 330; signed-in own-scope role QA and connected-provider draft export QA remain unverified
+Status: `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` released as current Sites version 331; signed-in own-scope role QA and connected-provider draft export QA remain unverified
 
 Prepared: 14 August 2026
 
@@ -10,7 +10,9 @@ Working branch: `codex/job-schedule-week-calendar`
 
 Milestone source baseline: `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`
 
-Current weekly job-schedule application commit: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+Current schedule-interaction and acceptance-receipt application commit: `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`
+
+Historical weekly job-schedule application commit: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
 
 Historical initial weekly job-schedule application commit: `510a3eca360ccdce45411f2fcdcc6237a0804923`
 
@@ -34,15 +36,21 @@ Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d
 
 Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`
 
-Current production application source: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+Current production application source: `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`
 
-Current production: Sites version 330 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 331 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_27287ed04e3c8191be9b208dcedeb705`
 
-Current deployment: `appgdep_6a7e775d85888191b6607c767ff40259`
+Current deployment: `appgdep_6a7e857ee3588191bd857fe21cd8ec41`
 
 Migration inventory: all 140 migrations through `0139_trade_accepted_invoice_one_per_job.sql`
+
+Historical version 330 application source: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+
+Historical version 330 saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
+
+Historical version 330 deployment: `appgdep_6a7e775d85888191b6607c767ff40259`; succeeded and remained public until version 331 replaced it
 
 Historical version 329 application source: `c082239d88a8debd112ee0a304885bb6626b01e8`
 
@@ -134,7 +142,7 @@ Historical version 315 saved version: `appgprj_6a550c378000819185caf094173422bb~
 
 Historical version 315 deployment: `appgdep_6a7b42f0ec288191b1c79b062233cf81`
 
-Current release package: 424 files, 39,649,280 bytes, Sites archive content hash `sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`; local version-330 archive 12,175,852 bytes, 438 tar entries and SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`
+Current release package: 424 files, 39,690,240 bytes, Sites archive content hash `sha256:085383d397d4deec9ce80f277bc9971dc32b0988c4d7b3dc375be97120893fbd`; local version-331 archive 12,184,305 bytes, 438 tar entries and SHA-256 `9FFD9B378B089EAEC882BC1E2FF5C3222B7A929F9B80DF3DB0805B7422F64508`
 
 Production URL: `https://compare.ausenergyassessments.com`
 
@@ -267,11 +275,11 @@ flow.
   `C:\Webproject\aea-energy-schedule-week-calendar`, branch
   `codex/job-schedule-week-calendar`, from baseline
   `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`.
-- Exact application source `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`
+- Exact application source `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`
   is committed and pushed to GitHub branch
   `codex/job-schedule-week-calendar` and Sites internal `main`. It is saved as
-  Sites version 330 and deployed through
-  `appgdep_6a7e775d85888191b6607c767ff40259`.
+  Sites version 331 and deployed through
+  `appgdep_6a7e857ee3588191bd857fe21cd8ec41`.
 - The separate `Assign` tab/action is removed. Assignment, current
   appointments, booking controls and the focused weekly calendar now share one
   `Schedule` tab.
@@ -281,6 +289,9 @@ flow.
 - It opens on the saved or draft-selected worker to avoid crowding, and
   authorised team viewers can switch the dropdown to all workers or one named
   worker. Own-scope staff still receive only their server-authorised calendar.
+- Toolbar and boundary time labels align without clipping. Double-click creates
+  a one-hour proposal at the open position; its bottom edge resizes in exact
+  15-minute increments through a 32-pixel touch target and keyboard controls.
 - Booking stays disabled until the selected week is loaded, visible and clear.
   Conflict/loading changes are announced through a live status linked to the
   booking controls, any failed latest calendar load blocks stale submission, a
@@ -298,30 +309,43 @@ flow.
   appointment mutations require the customer's acceptance row for the exact
   current accepted quote version. A stale historical acceptance and a
   concurrent change back to an unaccepted version both fail closed.
+- Focus, visibility, same-job navigation and bounded polling refresh acceptance
+  eligibility without remounting the workspace or discarding draft schedule and
+  assignment choices. Booking and assignment mutations fail closed while that
+  refresh is pending.
+- The accepted customer view exposes `Save acceptance PDF`. The accepted-only
+  token-authorised route returns private secure PDF headers and the retained
+  signed acceptance, selected scope, invoice and payment snapshot. Attention or
+  unconfigured payment state is redacted and test payment details preserve the
+  `DO NOT PAY` warning.
 - Confirmed checks on the exact implementation source: typecheck passed,
-  warning-free lint passed, integration 36/36 passed, affected scheduling and
-  CRM regression set 157/157 passed, the complete suite passed 2,214 tests with
-  10 intentional skips and 0 failures, `git diff --check` passed, all 140
-  migrations replayed, customer-plan PDF audit passed and the production build
-  and Sites server-bundle audit passed.
+  warning-free lint passed, integration 36/36 passed, and the complete Node run
+  reported 2,235 total, 2,225 passed, 10 intentional skips and 0 failures. The
+  final focused set passed 63/63 after the last refinements and the preceding
+  broader calendar/PDF audit passed 111/111. `git diff --check`, all 140
+  migrations, PDF audit, production build and Sites server-bundle audit passed.
 - Signed-in live owner/team-scope QA passed at 1440 by 1000 and 390 by 844.
-  Desktop panel, assignment form and button scroll widths now equal their client
-  widths; the document has no horizontal overflow. Phone QA keeps the 838-pixel
-  week inside its own horizontal scroller, contains the assignment control,
-  changes from All workers to one named worker and advances from 10 to 17 August
-  without document overflow. The current AEA lead correctly remains assignable
-  while appointment creation waits for exact-current customer quote acceptance.
-  A separate signed-in own-scope staff identity was not available, so that live
-  role view remains unverified; route, permission and component coverage passed.
+  Calendar alignment, contained phone scrolling, All/Me filters, one-hour
+  double-click proposal and 60-to-45-to-60-minute resize all passed. The accepted
+  AEA job no longer showed acceptance-wait copy; its server-saved assignment is
+  still `Unassigned`, so it correctly required assignment before booking. No
+  assignment or appointment was saved. A separate signed-in own-scope staff
+  identity was unavailable, so that live role view remains unverified;
+  authoritative route, permission and component coverage passed.
+- `Save acceptance PDF` was visible on desktop and phone, and the live receipt
+  GET returned HTTP 200 twice. Two invalid OCR transcriptions produced expected
+  handled 404 `QUOTE_LINK_NOT_FOUND` probes before the exact accepted link
+  returned 200. No quote decision or message was submitted, and no connected
+  accounting-provider draft export was executed.
 - Sites versions 328 and 329 were successful but deliberately superseded during
   live QA: version 328 exposed the original clipped desktop assignment control,
   and version 329 proved a same-specificity global rule still lost to the
-  later-loaded component module. Version 330 adds the stronger scoped selector
-  and is the current visually verified release.
-- `GET /api/health` returned HTTP 200 with `ok: true`; the signed-out dashboard
-  shell returned HTTP 200. The 30-minute error-only Worker query contained no
-  exception or failed Worker outcome. It contained one handled HTTP 403 from the
-  expected compliance denial for the inspected AEA lead.
+  later-loaded component module. Version 330 from
+  `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` corrected the layout and is now
+  historical; version 331 is the current visually verified release.
+- `GET /api/health` returned HTTP 200 with `ok: true`. The final one-minute
+  error-only Worker query returned zero events; the handled OCR 404 probes were
+  not Worker crashes or failed Worker outcomes.
 
 ### Next five product steps
 

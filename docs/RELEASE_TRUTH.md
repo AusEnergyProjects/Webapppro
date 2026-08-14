@@ -222,9 +222,12 @@ This is the only current implementation and release-status document. The [dated 
 | First assignment-containment application source | `c082239d88a8debd112ee0a304885bb6626b01e8` on `codex/job-schedule-week-calendar` | Validated and pushed to both sources; historical Sites version 329 |
 | Historical Sites version 329 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_e495fff0d8b48191aec0eba61cab3efa` | Exact version 329 from `c082239d88a8debd112ee0a304885bb6626b01e8`; 424 files; 39,649,280 bytes; content hash `sha256:f4e2b689cef6b67e714ad1fc29e5e8e13885dd5fd6588ea18e80c105afb5ddfa`; local archive 12,175,913 bytes, 438 tar entries and SHA-256 `30609BE43A3803172880CDEEB7D955DC31D8116DFA112C01681256999C9DF50F` |
 | Historical Sites version 329 executable identity | Sites version 329 from `c082239d88a8debd112ee0a304885bb6626b01e8` | Deployment `appgdep_6a7e75f70ef48191a2e9444906ca96a0` succeeded; live QA proved the later component module still overrode its same-specificity rule, so version 330 replaced it |
-| Current weekly job-schedule application source | `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` |
-| Current Sites version 330 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e` | Exact version 330 from `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`; 424 files; 39,649,280 bytes; content hash `sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`; local archive 12,175,852 bytes, 438 tar entries and SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`; all 140 migrations |
-| Current Sites version 330 executable identity | Sites version 330 from `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7e775d85888191b6607c767ff40259` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in owner/team-scope desktop and phone QA passed |
+| Historical weekly job-schedule application source | `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for historical Sites version 330 |
+| Historical Sites version 330 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e` | Exact version 330 from `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`; 424 files; 39,649,280 bytes; content hash `sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`; local archive 12,175,852 bytes, 438 tar entries and SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`; all 140 migrations |
+| Historical Sites version 330 executable identity | Sites version 330 from `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7e775d85888191b6607c767ff40259` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; remained public until version 331 replaced it |
+| Current schedule-interaction and acceptance-receipt application source | `4d3463ec1173be50e3b76ef92fa92e9cb1f81993` on `codex/job-schedule-week-calendar` | Validated and pushed to GitHub and Sites internal `main`; exact executable source for current milestone `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` |
+| Current Sites version 331 saved-version identity | `appgprj_6a550c378000819185caf094173422bb~appgver_27287ed04e3c8191be9b208dcedeb705` | Exact version 331 from `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`; 424 files; 39,690,240 bytes; content hash `sha256:085383d397d4deec9ce80f277bc9971dc32b0988c4d7b3dc375be97120893fbd`; local archive 12,184,305 bytes, 438 tar entries and SHA-256 `9FFD9B378B089EAEC882BC1E2FF5C3222B7A929F9B80DF3DB0805B7422F64508`; all 140 migrations |
+| Current Sites version 331 executable identity | Sites version 331 from `4d3463ec1173be50e3b76ef92fa92e9cb1f81993` at `https://compare.ausenergyassessments.com` | Deployment `appgdep_6a7e857ee3588191bd857fe21cd8ec41` succeeded on provider `info294029--aea-energy-comparison` at `https://aea-energy-comparison.info294029.chatgpt.site`; environment revision 20; signed-in owner/team-scope desktop and phone QA passed |
 | Current Google Apps Script relay source state | Existing deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW` | Existing project and deployment unchanged; updated in place to version 15 at 12 August 2026 18:10 with description `durable public-plan delivery and read-only readiness monitoring`; exact relay SHA-256 `8afa2f66415f30c1220509585935f4167a43a3d2b3170f70fcb0fc943b851be2` |
 | Contract cleanup | `0080_retire_legacy_trade_commercial_data.sql`, SHA-256 `2CA1A250D9B6C637010480DEE0528906A932F40835EFBC786D90AD561CE99BA4` | Deployed from `698a5057cc384d43112e5ccff38a99effbb01fa8` |
 
@@ -290,10 +293,12 @@ negative certificate Price Book items and exact Xero, MYOB and QuickBooks Online
 draft-export adapters. No live provider export was executed during its release
 validation. Sites versions 328 and 329 were successful but intentionally
 superseded during signed-in layout QA. Sites version 330 from exact application
-source `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` is the current verified deployed
-source. It combines job assignment and weekly scheduling, preserves permission
-scope, allows cross-worker overlap while atomically rejecting same-worker
-conflicts, and gates AEA-lead appointments on exact-current quote acceptance.
+source `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` is historical. Sites version 331
+from exact application source `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`
+is the current verified deployed source. It retains permission-aware weekly job
+scheduling and exact worker-conflict enforcement, adds direct calendar proposal
+and resize interactions, refreshes accepted-job eligibility without discarding
+drafts, and gives an accepted customer a token-protected acceptance PDF.
 GEMS-backed calculators remain fail-closed after an unresolved reviewed
 official-row decrease.
 Certificate creation, submission, trading and settlement remain disabled.
@@ -301,19 +306,19 @@ Certificate creation, submission, trading and settlement remain disabled.
 ## Current weekly job scheduling and quote handoff release
 
 Milestone `TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65` is released from exact executable
-application source `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`, pushed to
+application source `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`, pushed to
 GitHub branch `codex/job-schedule-week-calendar` and Sites internal `main`. Sites
 saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
-and deployed it through `appgdep_6a7e775d85888191b6607c767ff40259` as current
-Sites version 330. The public custom URL is
+`appgprj_6a550c378000819185caf094173422bb~appgver_27287ed04e3c8191be9b208dcedeb705`
+and deployed it through `appgdep_6a7e857ee3588191bd857fe21cd8ec41` as current
+Sites version 331. The public custom URL is
 `https://compare.ausenergyassessments.com`, the deployment URL is
 `https://aea-energy-comparison.info294029.chatgpt.site`, provider identity is
 `info294029--aea-energy-comparison`, and environment revision is 20. Sites stored
-424 files and 39,649,280 bytes with content hash
-`sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`.
-The local version-330 archive is 12,175,852 bytes with 438 tar entries and
-SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`.
+424 files and 39,690,240 bytes with content hash
+`sha256:085383d397d4deec9ce80f277bc9971dc32b0988c4d7b3dc375be97120893fbd`.
+The local version-331 archive is 12,184,305 bytes with 438 tar entries and
+SHA-256 `9FFD9B378B089EAEC882BC1E2FF5C3222B7A929F9B80DF3DB0805B7422F64508`.
 The package contains all 140 migrations.
 
 The focused job workspace has one `Schedule` tab and no separate `Assign` tab.
@@ -321,7 +326,11 @@ Assignment, existing appointments, new-booking controls and a visible
 Monday-to-Sunday calendar share the same workspace. Previous, next, today and
 direct-week navigation can reach any valid future week without an artificial
 horizon. Team-scope viewers can show All workers or one named worker, while
-own-scope responses contain only the signed-in member's authorised calendar.
+own-scope responses contain only the signed-in member's authorised calendar. The
+toolbar and edge time labels now align without clipping. A double-click on an
+open calendar position creates a one-hour proposal at that time. Its bottom edge
+resizes in exact 15-minute increments through a 32-pixel touch target, with
+equivalent keyboard controls, while the booking form stays synchronised.
 
 Booking validation uses unfiltered authorised calendar data even when display is
 filtered to one worker. It blocks a missing or inactive assignee, an unloaded or
@@ -335,34 +344,53 @@ which closes the delivery preview and opens the combined Schedule tab. An AEA
 released lead remains assignable before acceptance but every actual appointment
 or reschedule requires an authoritative accepted row for the exact current quote
 version. Historical acceptance of an older version and a concurrent switch back
-to an unaccepted draft both fail closed.
+to an unaccepted draft both fail closed. The focused job refreshes on focus,
+visibility, same-job navigation and a bounded timer so a newly accepted current
+quote unlocks scheduling promptly. Refresh preserves unsaved schedule drafts and
+assignment choices while booking and assignment mutations fail closed until the
+latest state arrives.
+
+The accepted customer view now offers `Save acceptance PDF`. Its accepted-only
+GET route requires the exact signed customer token, returns private no-store
+PDF headers, and renders the stored signed acceptance, accepted scope, invoice
+and payment snapshot. Attention or unconfigured payment state redacts payable
+bank fields, and test payment details retain the prominent `DO NOT PAY` warning.
+No connected Xero, MYOB or QuickBooks Online draft export was executed.
 
 Full `npm.cmd run validate` passed on the exact final application source:
-typecheck, warning-free lint, 36 integration tests, 2,214 passed tests, 10
-intentional skips and zero failures, all 140 migrations, customer-plan PDF audit,
-production build and Sites server-bundle audit. The affected scheduling and CRM
-regression set passed 157 of 157, and `git diff --check` passed.
+typecheck, warning-free lint, 36 of 36 integration tests, 2,235 total Node tests
+with 2,225 passed, 10 intentionally skipped and zero failed, all 140 migrations,
+PDF audit, production build and Sites server-bundle audit. The final focused set
+passed 63 of 63 after the last refinements; the preceding broader calendar and
+acceptance-PDF audit passed 111 of 111. `git diff --check` passed.
 
 Signed-in owner/team-scope QA passed at desktop 1440 by 1000 and phone 390 by
-844. The panel, form and assignment button are contained, page client and scroll
-widths match, and the phone calendar keeps its 838-pixel timetable inside an
-internal horizontal scroller. Next week advanced from 10 to 17 August and the
-worker filter changed from All workers to `test`. The inspected AEA lead remained
-assignable while appointment creation displayed the exact-current-acceptance wait
-copy. A separate signed-in own-scope staff identity was unavailable, so that live
-role presentation remains unverified; server, permission and UI coverage passed.
+844. Calendar alignment, contained phone scrolling and All/Me worker filters
+passed. Double-click created the expected one-hour proposal and resize changed 60
+to 45 to 60 minutes. The accepted AEA job no longer showed the acceptance-wait
+copy; because its server-saved assignee remains `Unassigned`, the interface
+correctly required assignment before the first appointment. No assignment or
+appointment was saved. A separate signed-in own-scope staff identity was
+unavailable, so that live role presentation remains unverified; authoritative
+route, permission and UI coverage passed.
+
+The accepted-customer receipt and `Save acceptance PDF` control were visible on
+desktop and phone, and the live receipt GET returned HTTP 200 twice. Two earlier
+invalid OCR transcriptions produced expected handled 404 `QUOTE_LINK_NOT_FOUND`
+probes; the exact accepted link then returned 200. No quote decision or message
+was submitted during QA.
 
 Sites version 328 from `510a3eca360ccdce45411f2fcdcc6237a0804923`
 successfully deployed the complete feature but live QA found the assignment
 button clipped. Version 329 from `c082239d88a8debd112ee0a304885bb6626b01e8`
 also succeeded, but its same-specificity global rule lost to the later-loaded
-component stylesheet. Both were deliberately superseded. Version 330's stronger
-scoped selector is the current visually verified release.
+component stylesheet. Both were deliberately superseded. Version 330 from
+`b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` corrected that layout and is now
+historical. Version 331 is the current visually verified refinement release.
 
-`GET /api/health` returned HTTP 200 with `ok: true`, and the signed-out dashboard
-shell returned HTTP 200. The recent error-only Worker query contained no
-exception or failed Worker outcome. One handled HTTP 403 was the expected
-compliance denial for the inspected AEA lead.
+`GET /api/health` returned HTTP 200 with `ok: true`. The final one-minute
+error-only Worker query returned zero events. The handled OCR 404 probes were
+application responses, not Worker crashes or failed Worker outcomes.
 
 The hosted environment remains pre-launch test. Test records may be created or
 replaced, but no final customer, wholesaler, trade-account or job wipe is implied
@@ -2932,7 +2960,7 @@ The product owner stated on 28 July 2026 that the environment contains working-d
 
 ## Active deployed platform
 
-The current verified deployed topology for Sites version 330 is:
+The current verified deployed topology for Sites version 331 is:
 
 - Web and API runtime: OpenAI Sites using a Vinext Cloudflare Worker build.
 - Relational data: Sites binding `DB`, implemented with Cloudflare D1.

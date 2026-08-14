@@ -2070,18 +2070,18 @@ retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 ## Released milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
 
 Release status: exact executable application commit
-`b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` is validated and pushed to GitHub
+`4d3463ec1173be50e3b76ef92fa92e9cb1f81993` is validated and pushed to GitHub
 branch `codex/job-schedule-week-calendar` and Sites internal `main`. It is
-released as current Sites version 330 at
+released as current Sites version 331 at
 `https://compare.ausenergyassessments.com`. Saved version
-`appgprj_6a550c378000819185caf094173422bb~appgver_67cd53f5286c8191b8b89132318a9f7e`
-and deployment `appgdep_6a7e775d85888191b6607c767ff40259` reconcile to
+`appgprj_6a550c378000819185caf094173422bb~appgver_27287ed04e3c8191be9b208dcedeb705`
+and deployment `appgdep_6a7e857ee3588191bd857fe21cd8ec41` reconcile to
 that source. Deployment succeeded on provider
 `info294029--aea-energy-comparison` with environment revision 20. Sites stored
-424 files and 39,649,280 bytes with content hash
-`sha256:ac674d405a045e30fe3865c3311938d3258a201c6cc6bc8c0b4252d7ce9c929b`.
-The local version-330 archive is 12,175,852 bytes with 438 tar entries and
-SHA-256 `FB01E3DD88B828888C92174C36F39B61872FDBA64A9DF523429A2F30D64E1BD4`.
+424 files and 39,690,240 bytes with content hash
+`sha256:085383d397d4deec9ce80f277bc9971dc32b0988c4d7b3dc375be97120893fbd`.
+The local version-331 archive is 12,184,305 bytes with 438 tar entries and
+SHA-256 `9FFD9B378B089EAEC882BC1E2FF5C3222B7A929F9B80DF3DB0805B7422F64508`.
 
 ### Outcome
 
@@ -2100,6 +2100,10 @@ allowing stale client state to bypass worker-specific conflicts.
 - Team-scope viewers can show All workers or one named worker. Own-scope viewers
   receive only their own server-authorised calendar. The signed-in viewer, not
   the business owner flag, controls the `Me` label.
+- Calendar toolbar and boundary time labels align without clipping. A
+  double-click on an open position creates a one-hour proposal, and its bottom
+  edge resizes in 15-minute increments through a 32-pixel touch target with an
+  equivalent keyboard path.
 - Same-worker overlap and unavailability are blocked in the live preview and an
   atomic D1 guard. Different workers can be scheduled at the same time.
 - A missing or inactive assignee, an unloaded or hidden proposal week, and any
@@ -2110,29 +2114,49 @@ allowing stale client state to bypass worker-specific conflicts.
   combined tab. Released AEA leads remain assignable before acceptance, but all
   appointment and rescheduling mutations require an accepted row for the exact
   current quote version, including a transaction-time race guard.
+- Focus, visibility, same-job navigation and bounded polling refresh accepted-job
+  eligibility without remounting the job workspace or discarding draft schedule
+  and assignment choices. Mutations fail closed while that refresh is pending.
+- An accepted customer can use `Save acceptance PDF`. The accepted-only route is
+  token-authorised, returns private secure PDF headers and renders the retained
+  signed acceptance, selected scope, invoice and payment snapshot. Test payment
+  state preserves the `DO NOT PAY` warning.
 
 ### Release and validation evidence
 
 - Full `npm.cmd run validate` passed on the exact final application source:
-  typecheck, warning-free lint, 36 of 36 integration tests, 2,214 passed tests,
-  10 intentional skips and zero failures, all 140 migrations, customer-plan PDF
-  audit, production build and Sites server-bundle audit. The affected scheduling
-  and CRM regression set passed 157 of 157; `git diff --check` passed.
+  typecheck, warning-free lint, 36 of 36 integration tests, 2,235 total Node
+  tests with 2,225 passed, 10 intentionally skipped and zero failed, all 140
+  migrations, PDF audit, production build and Sites server-bundle audit. The
+  final focused set passed 63 of 63 after the last refinements; the preceding
+  broader calendar and acceptance-PDF audit passed 111 of 111; `git diff
+  --check` passed.
 - Signed-in owner/team-scope live QA passed at 1440 by 1000 and 390 by 844. The
-  assignment panel, form and button are contained; the document has no horizontal
-  overflow; the phone week remains internally scrollable; Next week advanced
-  from 10 to 17 August; and the filter changed from All workers to `test`.
+  calendar stayed aligned and contained, the phone week remained internally
+  scrollable, All/Me filters passed, double-click produced a one-hour proposal,
+  and proposal resize changed 60 to 45 to 60 minutes. The accepted AEA job no
+  longer showed acceptance-wait copy; its server-saved assignment remains
+  `Unassigned`, so it correctly required assignment before booking. No assignment
+  or appointment was saved.
+- The accepted-customer receipt control was visible on desktop and phone. Its
+  live PDF GET returned HTTP 200 twice. Two earlier invalid OCR transcriptions
+  produced expected handled 404 `QUOTE_LINK_NOT_FOUND` probes; the exact link
+  returned 200. No quote decision or message was submitted, and no connected
+  accounting-provider draft export was executed.
 - Historical version 328 from
   `510a3eca360ccdce45411f2fcdcc6237a0804923` first exposed the completed feature,
   but live QA found the assignment button clipped. Version 329 from
   `c082239d88a8debd112ee0a304885bb6626b01e8` was also superseded after its
-  same-specificity rule lost to a later component stylesheet. Version 330 uses
-  the stronger scoped selector and is the verified current release.
-- Health returned HTTP 200. The recent error-only Worker query contained no
-  exception or failed Worker outcome; one handled HTTP 403 was the expected
-  compliance denial for the inspected AEA lead. A separate signed-in own-scope
-  staff identity was unavailable, so live own-role presentation remains
-  unverified while route, permission and UI coverage is green.
+  same-specificity rule lost to a later component stylesheet. Version 330 from
+  `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` corrected the layout and is now
+  historical; version 331 is the verified current release.
+- Health returned HTTP 200 with `ok: true`. The final one-minute error-only
+  Worker query returned zero events; the handled OCR 404 probes were not crashes
+  or failed Worker outcomes. A separate signed-in own-scope staff identity was
+  unavailable, so live own-role presentation remains unverified while
+  authoritative route, permission and UI coverage is green.
+- The hosted product remains a pre-launch test environment. Test records may be
+  replaced, but the final wipe remains a separately authorised launch operation.
 
 ### Next bounded sequence
 
