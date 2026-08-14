@@ -327,5 +327,5 @@ test("the combined Schedule tab loads every capability-filtered assignee and kee
   assert.match(scheduleSection, /variant="job"/);
   assert.ok(scheduleSection.indexOf("<TradeScheduleWorkspace") < scheduleSection.indexOf("registerStyles.assignmentForm"));
   assert.match(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
-  assert.match(globalStyles, /\.crm-job-assignment-form \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(globalStyles, /\.crm-job-schedule-panel \.crm-job-assignment-form \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
 });
