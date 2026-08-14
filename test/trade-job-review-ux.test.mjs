@@ -120,6 +120,13 @@ test("job data refreshes preserve the active job tab", () => {
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{refreshNonce\}`\}/);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{refreshNonce\}`\}/);
   assert.match(fieldPanel, /await refreshAfterReview\(\)/);
+  assert.match(crm, /const handleFocus = \(\) => refreshFocusedJob\(true\)/);
+  assert.match(crm, /const handleVisibilityChange = \(\) => refreshFocusedJob\(true\)/);
+  assert.match(crm, /window\.setInterval\(\(\) => refreshFocusedJob\(\), 30_000\)/);
+  assert.match(crm, /if \(failClosed\) setFocusedJobRefreshing\(true\)/);
+  assert.match(crm, /refreshing=\{focusedJobRefreshing\}/);
+  assert.match(crm, /const bookingControlsBlocked = refreshing \|\| assignmentBusy/);
+  assert.match(crm, /navigationTarget\.kind === "job"[\s\S]*setFocusedJobRefreshing\(true\)[\s\S]*setRefreshNonce\(\(value\) => value \+ 1\)/);
 });
 
 test("both quick invoice send paths require a visible preview confirmation", () => {

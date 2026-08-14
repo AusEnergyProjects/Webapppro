@@ -211,9 +211,11 @@ test("job scheduling uses the authoritative assignee ID and loads every capabili
   assert.match(crm, /assigneeMemberId: string; assigneeLabel: string/);
   assert.doesNotMatch(crm, /teamMembers\.find\(\(member\) => member\.displayName === job\.assigneeLabel\)/);
   assert.doesNotMatch(crm, /teamMembers\[0\]\?\.id/);
-  assert.match(crm, /if \(!canRescheduleJobs \|\| !job\.assigneeMemberId \|\| assignmentBusy/);
+  assert.match(crm, /if \(refreshing \|\| !canRescheduleJobs \|\| !job\.assigneeMemberId \|\| assignmentBusy/);
   assert.match(crm, /jobAssigneeId !== job\.assigneeMemberId/);
-  assert.match(crm, /const bookingControlsBlocked = assignmentBusy \|\| assignmentDirty \|\| appointmentBusy/);
+  assert.match(crm, /const bookingControlsBlocked = refreshing \|\| assignmentBusy \|\| assignmentDirty \|\| appointmentBusy/);
+  assert.match(crm, /if \(refreshing \|\| !canAssignJobs \|\| assignmentBusy/);
+  assert.match(crm, /disabled=\{refreshing \|\| assignmentBusy \|\| jobAssigneesLoading \|\| appointmentBusy\}/);
   assert.match(crm, /const bookingCalendarReady = appointmentScheduleValidation\.key === bookingProposalKey && appointmentScheduleValidation\.status === "clear"/);
   assert.match(crm, /const bookingSubmitBlocked = bookingControlsBlocked \|\| !bookingCalendarReady/);
   assert.match(crm, /appointmentScheduleValidation\.status !== "clear"/);

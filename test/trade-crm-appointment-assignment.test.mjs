@@ -627,6 +627,7 @@ test("job detail GET applies scheduleScope before loading appointment rows", asy
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.job.assigneeMemberId, "member-b");
+  assert.equal(payload.job.scheduleReady, true);
   assert.deepEqual(payload.job.appointments, []);
   assert.equal(payload.job.customerDisplayName, "Alex Customer");
   assert.equal(payload.job.description, "Customer disclosed details");
@@ -646,6 +647,18 @@ test("job detail GET returns authoritative appointment assignee IDs within team 
   assert.equal(payload.job.appointments.length, 1);
   assert.equal(payload.job.appointments[0].assigneeMemberId, "member-a");
   assert.equal(payload.job.appointments[0].notes, "Bring access equipment");
+});
+
+test("job detail GET only enables scheduling for the accepted current quote version", async () => {
+  const { database, d1 } = fixture();
+  database.prepare("UPDATE trade_crm_quotes SET current_version_number = 2 WHERE id = 'quote-1'").run();
+  database.prepare("INSERT INTO trade_crm_quote_versions VALUES ('quote-version-2', 'quote-1', 'owner-1', 2, 'accepted')").run();
+  const { GET } = crmRoute(d1, access());
+
+  const response = await GET(new Request("https://example.test/api/trade-crm?mode=detail&resource=job&id=job-1"));
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.job.scheduleReady, false);
 });
 
 function updateJobRequest(expectedRevision, description = "Updated customer instructions") {

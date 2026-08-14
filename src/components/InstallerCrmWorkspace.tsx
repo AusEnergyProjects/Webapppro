@@ -318,6 +318,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
   const [boardJobs, setBoardJobs] = useState<Record<string, Job[]>>({});
   const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
   const [selectedJobDetail, setSelectedJobDetail] = useState<Job | null>(null);
+  const [focusedJobRefreshing, setFocusedJobRefreshing] = useState(false);
   const [selectedJobCustomer, setSelectedJobCustomer] = useState<Customer | null>(null);
   const [selectedJobSites, setSelectedJobSites] = useState<ServiceSite[]>([]);
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
@@ -630,10 +631,29 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
     })).then(async (response) => {
       const result = await response.json().catch(() => ({})) as CrmDetailResult;
       if (!response.ok || !result.ok || !result.job) throw new Error(result.error || "The job record could not be loaded.");
-      if (active) { setSelectedJobDetail(result.job); setSelectedJobCustomer(result.customer || null); setSelectedJobSites(result.sites || []); }
+      if (active) { setSelectedJobDetail(result.job); setSelectedJobCustomer(result.customer || null); setSelectedJobSites(result.sites || []); setFocusedJobRefreshing(false); }
     }).catch((error) => active && !controller.signal.aborted && setStatus(error instanceof Error ? error.message : "The job record could not be loaded."));
     return () => { active = false; controller.abort(); };
   }, [focusedJobId, refreshNonce, user, view]);
+
+  useEffect(() => {
+    if (view !== "jobs" || !focusedJobId) return;
+    const refreshFocusedJob = (failClosed = false) => {
+      if (document.visibilityState !== "visible") return;
+      if (failClosed) setFocusedJobRefreshing(true);
+      setRefreshNonce((value) => value + 1);
+    };
+    const handleFocus = () => refreshFocusedJob(true);
+    const handleVisibilityChange = () => refreshFocusedJob(true);
+    const interval = window.setInterval(() => refreshFocusedJob(), 30_000);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [focusedJobId, view]);
 
   useEffect(() => {
     if (view !== "customers" || !selectedCustomerId) return;
@@ -711,10 +731,12 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
         setCreating("");
         setSearch("");
         setJobReturnTarget({ kind: "jobs" });
+        setFocusedJobRefreshing(true);
         setFocusedJobId(navigationTarget.id);
         setFocusedJobTab(navigationTarget.jobTab || "summary");
         setJobLayout("list");
         setView("jobs");
+        setRefreshNonce((value) => value + 1);
       } else if (navigationTarget.kind === "customer") {
         setCreating("");
         setSelectedCustomerId(navigationTarget.id);
@@ -1068,7 +1090,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
 
     {view === "jobs" && creating !== "job" && focusedJobId && <div className="crm-view crm-job-workspace">
       <div className="crm-page-heading"><div><span>Job workspace</span><h3>{selectedJobDetail?.id === focusedJobId ? selectedJobDetail.workNumber : "Opening job"}</h3><p>Edit the job, schedule, quote, field record and invoice from one focused page.</p></div><button type="button" className="crm-back-button" onClick={closeFocusedJob}>{jobReturnTarget.kind === "customer" ? `Back to ${jobReturnTarget.customerName}` : "Back to all jobs"}</button></div>
-      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}:${selectedJobDetail.assigneeMemberId}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => setRefreshNonce((value) => value + 1)} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
+      {selectedJobDetail?.id === focusedJobId ? <JobDetail key={`${selectedJobDetail.id}:${focusedJobTab}:${selectedJobDetail.assigneeMemberId}`} job={selectedJobDetail} customer={selectedJobCustomer || undefined} sites={selectedJobSites} user={user} busy={busy} refreshing={focusedJobRefreshing} teamMembers={teamMembers} permissions={staffPermissions} initialTab={focusedJobTab} onCrm={crmRequest} onWorkOrder={crmRequest} onOpenJob={(workOrderId) => openFocusedJob(workOrderId, "schedule")} onOpenPriceBook={() => { setPriceBookView("items"); setView("pricebook"); }} onOpenCustomer={(customerId) => { setFocusedJobId(""); setSelectedJobDetail(null); setSelectedCustomerId(customerId); setView("customers"); }} onOpenIntegrations={() => setView("integrations")} onReload={async () => { setFocusedJobRefreshing(true); setRefreshNonce((value) => value + 1); }} /> : <div className="crm-empty"><strong>Loading job...</strong><span>The full job record will open here.</span></div>}
     </div>}
 
     {view === "jobs" && creating !== "job" && !focusedJobId && <div className="crm-view">
@@ -1186,7 +1208,7 @@ function CustomerForm({ busy, onSubmit }: { busy: string; onSubmit: (event: Form
   return <form className="crm-form" onSubmit={onSubmit}><div className="crm-form-grid"><label><span>Customer type</span><select name="customerType"><option value="residential">Residential</option><option value="business">Business</option></select></label><label><span>First name</span><input name="firstName" maxLength={80} /></label><label><span>Last name</span><input name="lastName" maxLength={80} /></label><label><span>Business name</span><input name="businessName" maxLength={140} /></label><label><span>Email</span><input type="email" name="email" maxLength={180} /></label><label><span>Phone</span><input type="tel" name="phone" maxLength={40} /></label><label className="wide"><span>Street address</span><input name="addressLine1" maxLength={140} placeholder="Street number and name" /></label><label className="wide"><span>Address line 2</span><input name="addressLine2" maxLength={140} placeholder="Unit, level or building, optional" /></label><label><span>Suburb</span><input name="suburb" maxLength={80} /></label><label><span>State</span><select name="addressState" defaultValue=""><option value="">Select state</option>{["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"].map((state) => <option key={state}>{state}</option>)}</select></label><label><span>Postcode</span><input name="postcode" inputMode="numeric" maxLength={4} pattern="[0-9]{4}" /></label><label><span>Tags</span><input name="tags" maxLength={300} placeholder="repeat customer, builder" /></label></div><p className="crm-form-note">Only add contacts who came directly to your business. Do not copy Australian Energy Assessments household details into this CRM.</p><button className="btn" disabled={busy === "create-customer"}>{busy === "create-customer" ? "Adding..." : "Add customer"}</button></form>;
 }
 
-function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions, initialTab = "summary", onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
+function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamMembers, permissions, initialTab = "summary", onCrm, onWorkOrder, onOpenJob, onOpenPriceBook, onOpenCustomer, onOpenIntegrations, onReload }: { job: Job; customer?: Customer; sites: ServiceSite[]; user: User; busy: string; refreshing?: boolean; teamMembers: TeamMember[]; permissions?: TradeTeamPermissions; initialTab?: JobTab; onCrm: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onWorkOrder: (method: "POST" | "PATCH", body: Record<string, unknown>, key: string, success: string) => Promise<boolean>; onOpenJob: (workOrderId: string) => void; onOpenPriceBook: () => void; onOpenCustomer: (customerId: string) => void; onOpenIntegrations: () => void; onReload: () => Promise<void> }) {
   const [tab, setTab] = useState<JobDetailTab>(initialTab);
   const [appointmentDuration, setAppointmentDuration] = useState(60);
   const [appointmentStartsAt, setAppointmentStartsAt] = useState(() => nextAppointmentSlot());
@@ -1231,7 +1253,7 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   async function addTask(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!canManageJobs) return; const form = event.currentTarget; const data = new FormData(form); if (await onWorkOrder("POST", { action: "add_task", workOrderId: job.id, title: data.get("title"), dueAt: data.get("dueAt") }, `task:${job.id}`, "Task added.")) form.reset(); }
   async function addAppointment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canRescheduleJobs || !job.assigneeMemberId || assignmentBusy
+    if (refreshing || !canRescheduleJobs || !job.assigneeMemberId || assignmentBusy
       || jobAssigneeId !== job.assigneeMemberId || busy === `appointment-new:${job.id}`
       || appointmentScheduleValidation.key !== scheduleProposalKey(appointmentStartsAt, appointmentDuration, job.assigneeMemberId)
       || appointmentScheduleValidation.status !== "clear") return;
@@ -1246,7 +1268,7 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   }
   async function assignJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canAssignJobs || assignmentBusy || busy === `appointment-new:${job.id}`) return;
+    if (refreshing || !canAssignJobs || assignmentBusy || busy === `appointment-new:${job.id}`) return;
     setAssignmentBusy(true); setAssignmentStatus("Saving assignment...");
     try {
       const token = await user.getIdToken();
@@ -1288,10 +1310,11 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   const appointmentBusy = busy === `appointment-new:${job.id}`;
   const assignmentDirty = jobAssigneeId !== job.assigneeMemberId;
   const bookingProposalKey = scheduleProposalKey(appointmentStartsAt, appointmentDuration, job.assigneeMemberId);
-  const bookingControlsBlocked = assignmentBusy || assignmentDirty || appointmentBusy;
+  const bookingControlsBlocked = refreshing || assignmentBusy || assignmentDirty || appointmentBusy;
   const bookingCalendarReady = appointmentScheduleValidation.key === bookingProposalKey && appointmentScheduleValidation.status === "clear";
   const bookingSubmitBlocked = bookingControlsBlocked || !bookingCalendarReady;
-  const bookingButtonLabel = appointmentBusy ? "Adding..."
+  const bookingButtonLabel = refreshing ? "Refreshing job..."
+    : appointmentBusy ? "Adding..."
     : assignmentDirty ? "Save assignment first"
       : appointmentScheduleValidation.key !== bookingProposalKey || appointmentScheduleValidation.status === "loading" ? "Checking calendar..."
         : appointmentScheduleValidation.status === "load_error" ? "Calendar unavailable"
@@ -1302,6 +1325,10 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
   const handleProposalValidation = useCallback((validation: ScheduleProposalValidation) => {
     setAppointmentScheduleValidation((current) => current.key === validation.key
       && current.status === validation.status && current.conflict === validation.conflict ? current : validation);
+  }, []);
+  const handleScheduleProposalChange = useCallback((next: { startsAt: string; durationMinutes: number }) => {
+    setAppointmentStartsAt(next.startsAt);
+    setAppointmentDuration(next.durationMinutes);
   }, []);
   const allowedJobAssignees = [...jobAssignees, ...(job.assigneeMemberId ? [{ id: job.assigneeMemberId, displayName: job.assigneeLabel || "Current assignee", status: "active", isOwner: false }] : [])]
     .filter((member, index, values) => values.findIndex((candidate) => candidate.id === member.id) === index);
@@ -1407,10 +1434,11 @@ function JobDetail({ job, customer, sites, user, busy, teamMembers, permissions,
           refreshNonce={jobScheduleRefreshNonce}
           proposalStatusId={proposalStatusId}
           onProposalValidation={handleProposalValidation}
+          onProposalChange={canAddJobAppointment && !assignmentDirty && !refreshing ? handleScheduleProposalChange : undefined}
           onOpenJob={onOpenJob}
         />
         <div className="crm-job-schedule-controls">
-          {canAssignJobs && <section className="crm-job-schedule-panel"><div className="crm-section-heading"><div><span>Job ownership</span><h4>Assign this job</h4><p>Save the person first so job access and calendar ownership stay together.</p></div></div><form className={`${registerStyles.assignmentForm} crm-job-assignment-form`} onSubmit={assignJob}><label><span>Assigned team member</span><select value={jobAssigneeId} disabled={assignmentBusy || jobAssigneesLoading || appointmentBusy} onChange={(event) => setJobAssigneeId(event.target.value)}><option value="">Unassigned</option>{jobAssigneeId && !allowedJobAssignees.some((member) => member.id === jobAssigneeId) && <option value={jobAssigneeId}>{job.assigneeLabel || "Current assignee"}</option>}{allowedJobAssignees.map((member) => <option value={member.id} key={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><button className="btn" disabled={assignmentBusy || jobAssigneesLoading || appointmentBusy || !assignmentDirty}>{jobAssigneesLoading ? "Loading team..." : assignmentBusy ? "Saving..." : "Save assignment"}</button></form>{assignmentStatus && <p className="crm-status" role="status">{assignmentStatus}</p>}</section>}
+          {canAssignJobs && <section className="crm-job-schedule-panel"><div className="crm-section-heading"><div><span>Job ownership</span><h4>Assign this job</h4><p>Save the person first so job access and calendar ownership stay together.</p></div></div><form className={`${registerStyles.assignmentForm} crm-job-assignment-form`} onSubmit={assignJob}><label><span>Assigned team member</span><select value={jobAssigneeId} disabled={refreshing || assignmentBusy || jobAssigneesLoading || appointmentBusy} onChange={(event) => setJobAssigneeId(event.target.value)}><option value="">Unassigned</option>{jobAssigneeId && !allowedJobAssignees.some((member) => member.id === jobAssigneeId) && <option value={jobAssigneeId}>{job.assigneeLabel || "Current assignee"}</option>}{allowedJobAssignees.map((member) => <option value={member.id} key={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><button className="btn" disabled={refreshing || assignmentBusy || jobAssigneesLoading || appointmentBusy || !assignmentDirty}>{refreshing ? "Refreshing job..." : jobAssigneesLoading ? "Loading team..." : assignmentBusy ? "Saving..." : "Save assignment"}</button></form>{assignmentStatus && <p className="crm-status" role="status">{assignmentStatus}</p>}</section>}
           <section className="crm-job-schedule-panel"><div className="crm-section-heading"><div><span>Appointments</span><h4>Calls, visits and installations</h4><p>{assignmentDirty ? "Save the changed assignment before booking." : job.assigneeMemberId ? `Booking for ${job.assigneeLabel || "the assigned team member"}.` : "Assign the job before adding its first appointment."}</p></div></div>{visibleJobAppointments.length ? <ol className="crm-job-appointments">{visibleJobAppointments.map((item) => <li key={item.id}><div><span>{appointmentLabels[item.appointmentType] || item.appointmentType}</span><strong>{item.title}</strong><small>{dateLabel(item.startsAt, true)} | {durationLabel(appointmentDurationMinutes(item.startsAt, item.endsAt))}{item.assigneeLabel ? ` | ${item.assigneeLabel}` : ""}</small>{item.notes && <p>{item.notes}</p>}</div>{canCompleteAppointment(item) && <button type="button" disabled={item.status !== "scheduled" || busy === `appointment:${item.id}`} onClick={() => void completeAppointment(item.id)}>{item.status === "scheduled" ? "Complete" : item.status.replaceAll("_", " ")}</button>}</li>)}</ol> : <div className="crm-empty"><strong>No appointments in your schedule</strong><span>{permissions?.scheduleScope === "own" ? "Only appointments assigned to you appear here." : "Add the next call, site visit or installation."}</span></div>}
             {canAddJobAppointment && <form className="crm-job-booking-form" onSubmit={addAppointment}><fieldset disabled={bookingControlsBlocked} aria-describedby={proposalStatusId}><label><span>Appointment type</span><select name="appointmentType">{Object.entries(appointmentLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label><span>Start time</span><input type="datetime-local" min={minimumStart} step="900" required value={appointmentStartsAt} onChange={(event) => setAppointmentStartsAt(event.target.value)} /></label><label className="schedule-duration"><span>Duration <strong>{durationLabel(appointmentDuration)}</strong></span><input type="range" min="15" max="480" step="15" value={appointmentDuration} onChange={(event) => setAppointmentDuration(Number(event.target.value))} /></label><label><span>Visit notes</span><textarea name="notes" maxLength={1000} rows={3} placeholder="Access, preparation or visit notes" /></label><button className="btn" disabled={bookingSubmitBlocked}>{bookingButtonLabel}</button></fieldset></form>}
             {!jobReadyForScheduling && isReleasedLead && <p className="crm-form-note">Wait for the customer to accept the current quote before adding an appointment.</p>}

@@ -1,17 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   adjacentScheduleWeek,
   invalidateScheduleProposal,
   mergeDraggedScheduleAppointment,
   scheduleDragEdgeDirection,
   scheduleMemberLabel,
+  scheduleMinuteFromGridPosition,
   scheduleProposalKey,
+  scheduleProposalDurationFromEndMinute,
   scheduleProposalValidation,
   scheduleRangeContainsWeek,
   scheduleWeekDays,
   scheduleWeekSwipeDirection,
 } from "../src/lib/trade-schedule.ts";
+
+const scheduleUi = fs.readFileSync(new URL("../src/components/TradeScheduleWorkspace.tsx", import.meta.url), "utf8");
+const scheduleStyles = fs.readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
 test("schedule navigation exposes one exact Monday to Sunday week", () => {
   assert.deepEqual(scheduleWeekDays("2026-07-20"), [
@@ -109,4 +115,30 @@ test("edge week changes only arm near a boundary during an appointment drag", ()
   assert.equal(scheduleDragEdgeDirection(500, 0, 1000, true), 0);
   assert.equal(scheduleDragEdgeDirection(20, 0, 1000, false), 0);
   assert.equal(scheduleDragEdgeDirection(980, 0, 1000, false), 0);
+});
+
+test("calendar placement and proposal resizing snap to exact 15 minute boundaries", () => {
+  assert.equal(scheduleMinuteFromGridPosition(4 * 16, 7 * 60, 19 * 60, 60), 8 * 60);
+  assert.equal(scheduleMinuteFromGridPosition(4.6 * 16, 7 * 60, 19 * 60, 60), 8 * 60 + 15);
+  assert.equal(scheduleMinuteFromGridPosition(9999, 7 * 60, 19 * 60, 60), 18 * 60);
+  assert.equal(scheduleProposalDurationFromEndMinute(11 * 60, 11 * 60 + 44, 19 * 60), 45);
+  assert.equal(scheduleProposalDurationFromEndMinute(11 * 60, 12 * 60 + 7, 19 * 60), 60);
+  assert.equal(scheduleProposalDurationFromEndMinute(11 * 60, 10 * 60, 19 * 60), 15);
+  assert.equal(scheduleProposalDurationFromEndMinute(18 * 60 + 30, 22 * 60, 19 * 60), 30);
+});
+
+test("the job calendar exposes guarded pointer and keyboard proposal gestures with aligned controls", () => {
+  assert.match(scheduleUi, /onDoubleClick=\{\(event\) => \{ selectProposalFromCalendar/);
+  assert.match(scheduleUi, /durationMinutes: 60/);
+  assert.match(scheduleUi, /role="slider"[\s\S]*aria-valuemin=\{APPOINTMENT_MIN_DURATION_MINUTES\}/);
+  assert.match(scheduleUi, /setPointerCapture\(event\.pointerId\)/);
+  assert.match(scheduleUi, /onPointerMove=\{resizeProposalFromPointer\}/);
+  assert.match(scheduleUi, /data-schedule-appointment\], \[data-schedule-proposal\]/);
+  assert.match(scheduleUi, /event\.key === "ArrowUp"[\s\S]*event\.key === "ArrowDown"/);
+  assert.match(scheduleUi, /const height = Math\.max\(16, \(duration \/ 15\) \* GRID_QUARTER_HEIGHT\)/);
+  assert.match(scheduleStyles, /\.schedule-week-nav \{ align-items: flex-end;/);
+  assert.match(scheduleStyles, /\.schedule-time-track span\.first \{ transform: none; \}/);
+  assert.match(scheduleStyles, /\.schedule-time-track span\.last \{ transform: translateY\(-100%\); \}/);
+  assert.match(scheduleStyles, /\.schedule-proposal-resize[\s\S]*touch-action: none/);
+  assert.match(scheduleStyles, /\.schedule-proposal-resize \{[^}]*height: 32px/);
 });

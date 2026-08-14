@@ -44,6 +44,7 @@ export type QuoteDecisionReceipt = {
   decision: QuoteDecision;
   signerName: string;
   decidedAt: string;
+  consentStatement: string;
   commercialReference: string;
   invoice: null | {
     id: string;
@@ -243,7 +244,8 @@ export async function storedQuoteDecision(
 ): Promise<StoredQuoteDecision | null> {
   const row = await getD1().prepare(`SELECT
       acceptance.id acceptance_id, acceptance.decision, acceptance.signer_name,
-      acceptance.decided_at, acceptance.commercial_reference,
+      acceptance.decided_at, acceptance.consent_statement,
+      acceptance.commercial_reference,
       acceptance.selected_choice_ids_json, acceptance.selected_subtotal_cents,
       acceptance.selected_tax_cents, acceptance.selected_total_cents,
       acceptance.decision_request_id, acceptance.decision_payload_sha256,
@@ -317,6 +319,7 @@ export async function storedQuoteDecision(
       decision,
       signerName: clean(row.signer_name, 160),
       decidedAt: clean(row.decided_at, 40),
+      consentStatement: clean(row.consent_statement, 20_000),
       commercialReference: commercial.reference,
       invoice,
       payment: {

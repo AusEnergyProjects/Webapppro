@@ -80,6 +80,10 @@ test("accepted receipt is simple and reveals bank details only when complete", (
   assert.match(receiptUi, /payment\.availability === "bank_transfer"/);
   assert.match(receiptUi, /payment\.accountName && payment\.bsb && payment\.accountNumber/);
   assert.match(receiptUi, /Payment details are being prepared/);
+  assert.match(receiptUi, /Customer PDF record/);
+  assert.match(receiptUi, /Save acceptance PDF/);
+  assert.match(receiptUi, /href=\{receiptPdfUrl\}/);
+  assert.match(receiptUi, /download/);
   assert.doesNotMatch(
     receiptUi,
     /Stripe|Square|Tax Invoice|payment received|paid in full/i,
@@ -112,6 +116,7 @@ test("quote links are private, uncached and responsive", () => {
   assert.match(page, /referrer: "no-referrer"/);
   assert.match(css, /\.quote-link-receipt \{/);
   assert.match(css, /\.quote-link-bank-transfer \{/);
+  assert.match(css, /\.quote-link-receipt-download \{/);
   assert.match(
     css,
     /@media \(max-width: 720px\)[\s\S]*?\.quote-link-receipt \{[^}]*min-height: 100vh/,
@@ -119,5 +124,9 @@ test("quote links are private, uncached and responsive", () => {
   assert.match(
     css,
     /\.quote-link-bank-transfer dl, \.quote-link-receipt-declined dl \{ grid-template-columns: 1fr; \}/,
+  );
+  assert.match(
+    css,
+    /\.quote-link-receipt-download \{ align-items: stretch; flex-direction: column; \}/,
   );
 });

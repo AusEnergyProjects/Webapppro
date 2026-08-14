@@ -111,6 +111,7 @@ type QuoteDecisionReceipt = {
   decision: "accepted" | "declined";
   signerName: string;
   decidedAt: string;
+  consentStatement: string;
   commercialReference: string;
   invoice: QuoteInvoiceReceipt | null;
   payment: QuotePaymentReceipt;
@@ -168,7 +169,13 @@ function displayDate(value: string) {
   }).format(parsed);
 }
 
-function QuoteDecisionReceiptView({ receipt }: { receipt: QuoteDecisionReceipt }) {
+function QuoteDecisionReceiptView({
+  receipt,
+  receiptPdfUrl,
+}: {
+  receipt: QuoteDecisionReceipt;
+  receiptPdfUrl: string;
+}) {
   if (receipt.decision === "declined") {
     return (
       <main className="quote-link-shell">
@@ -293,6 +300,23 @@ function QuoteDecisionReceiptView({ receipt }: { receipt: QuoteDecisionReceipt }
             </p>
           </section>
         )}
+
+        <section
+          className="quote-link-receipt-download"
+          aria-label="Customer PDF record"
+        >
+          <div>
+            <span>Customer record</span>
+            <strong>Keep an offline copy</strong>
+            <p>
+              Save the server-prepared acceptance, invoice summary and payment
+              reference as a PDF.
+            </p>
+          </div>
+          <a href={receiptPdfUrl} download>
+            Save acceptance PDF
+          </a>
+        </section>
 
         <footer>
           <span>Acceptance reference</span>
@@ -631,7 +655,14 @@ export function QuoteLinkReview({ token }: { token: string }) {
       setBusy("");
     }
   }
-  if (receipt) return <QuoteDecisionReceiptView receipt={receipt} />;
+  if (receipt) {
+    return (
+      <QuoteDecisionReceiptView
+        receipt={receipt}
+        receiptPdfUrl={`${endpoint}/receipt`}
+      />
+    );
+  }
   if (!quote) {
     return (
       <main className="quote-link-shell">

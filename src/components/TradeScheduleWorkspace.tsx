@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TouchEvent as ReactTouchEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, TouchEvent as ReactTouchEvent } from "react";
 import type { User } from "firebase/auth";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import {
@@ -21,8 +21,10 @@ import {
   scheduleProposalValidation,
   scheduleDragEdgeDirection,
   scheduleMemberLabel,
+  scheduleMinuteFromGridPosition,
   scheduleAppointmentLanes,
   scheduleDisplayWindow,
+  scheduleProposalDurationFromEndMinute,
   scheduleRangeContainsWeek,
   scheduleWeekDays,
   scheduleWeekSwipeDirection,
@@ -53,6 +55,7 @@ type Edit = { memberId: string; date: string; time: string; durationMinutes: num
 type CalendarConnection = { provider: "google_calendar" | "microsoft_calendar"; label: string; configured: boolean; status: "connected" | "not_connected"; lastSyncAt: string; lastError: string };
 type CalendarResult = { ok?: boolean; error?: string; providers?: CalendarConnection[]; synced?: number; failed?: number };
 type ScheduleProposal = { startsAt: string; durationMinutes: number; assigneeMemberId: string; assigneeLabel: string; title: string };
+type ScheduleProposalChange = { startsAt: string; durationMinutes: number };
 type TradeScheduleWorkspaceProps = {
   user: User;
   permissions?: TradeTeamPermissions;
@@ -65,6 +68,7 @@ type TradeScheduleWorkspaceProps = {
   focusedMemberId?: string;
   proposalStatusId?: string;
   onProposalValidation?: (validation: ScheduleProposalValidation) => void;
+  onProposalChange?: (proposal: ScheduleProposalChange) => void;
 };
 
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -130,7 +134,7 @@ function DurationControl({ id, value, onChange }: { id: string; value: number; o
   return <label className="schedule-duration" htmlFor={id}><span>Duration <strong>{durationLabel(value)}</strong></span><input id={id} type="range" min={APPOINTMENT_MIN_DURATION_MINUTES} max={APPOINTMENT_MAX_DURATION_MINUTES} step="15" value={value} onChange={(event) => onChange(Number(event.target.value))} /><small>15 min</small><small>8 hours</small></label>;
 }
 
-export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => undefined, onOpenQuote, initialWeekStart, variant = "full", proposal, refreshNonce = 0, focusedMemberId, proposalStatusId = "trade-schedule-proposal-status", onProposalValidation }: TradeScheduleWorkspaceProps) {
+export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => undefined, onOpenQuote, initialWeekStart, variant = "full", proposal, refreshNonce = 0, focusedMemberId, proposalStatusId = "trade-schedule-proposal-status", onProposalValidation, onProposalChange }: TradeScheduleWorkspaceProps) {
   const jobCalendar = variant === "job";
   const [initialTarget] = useState(() => initialScheduleWeekStart(initialWeekStart));
   const [initialFocusDate] = useState(() => initialScheduleFocusDate(initialWeekStart));
@@ -162,6 +166,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const pendingWeekStartRef = useRef(initialTarget);
   const weekSwipeStartRef = useRef<{ x: number; y: number; startedOnAppointment: boolean; atStartBoundary: boolean; atEndBoundary: boolean } | null>(null);
   const suppressCardClickRef = useRef(false);
+  const proposalResizePointerIdRef = useRef<number | null>(null);
   const lastInitialWeekStartRef = useRef(initialWeekStart);
   const lastFocusedMemberIdRef = useRef(focusedMemberId);
   const displayRangeStart = data.rangeStart || rangeStart;
@@ -553,7 +558,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     weekSwipeStartRef.current = {
       x: touch.clientX,
       y: touch.clientY,
-      startedOnAppointment: Boolean((event.target as HTMLElement).closest("[data-schedule-appointment]")),
+      startedOnAppointment: Boolean((event.target as HTMLElement).closest("[data-schedule-appointment], [data-schedule-proposal]")),
       atStartBoundary: !container || container.scrollLeft <= 2,
       atEndBoundary: !container || container.scrollLeft + container.clientWidth >= container.scrollWidth - 2,
     };
@@ -610,9 +615,53 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   function closeAppointment() { setSelectedAppointmentId(""); }
 
   function minuteFromPointer(element: HTMLElement, clientY: number, durationMinutes: number) {
-    const quarter = Math.round((clientY - element.getBoundingClientRect().top) / GRID_QUARTER_HEIGHT);
-    const requested = gridStartMinute + quarter * 15;
-    return Math.max(gridStartMinute, Math.min(gridEndMinute - durationMinutes, requested));
+    return scheduleMinuteFromGridPosition(clientY - element.getBoundingClientRect().top,
+      gridStartMinute, gridEndMinute, durationMinutes, GRID_QUARTER_HEIGHT);
+  }
+
+  function selectProposalFromCalendar(element: HTMLElement, date: string, clientY: number) {
+    if (!jobCalendar || !onProposalChange || !proposal?.assigneeMemberId || loading || date < minimumStart.slice(0, 10)) return;
+    if (memberFilter && memberFilter !== proposal.assigneeMemberId) {
+      onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key));
+      return;
+    }
+    const earliestMinute = date === minimumStart.slice(0, 10)
+      ? Math.max(gridStartMinute, minuteValue(minimumStart.slice(11, 16)))
+      : gridStartMinute;
+    if (earliestMinute > gridEndMinute - 60) return;
+    const selectedMinute = Math.max(earliestMinute,
+      scheduleMinuteFromGridPosition(clientY - element.getBoundingClientRect().top,
+        gridStartMinute, gridEndMinute, 60, GRID_QUARTER_HEIGHT));
+    onProposalChange({ startsAt: `${date}T${minuteLabel(selectedMinute)}`, durationMinutes: 60 });
+  }
+
+  function resizeProposalFromPointer(event: ReactPointerEvent<HTMLElement>) {
+    if (proposalResizePointerIdRef.current !== event.pointerId || !proposal || !onProposalChange) return;
+    const grid = event.currentTarget.closest(".schedule-day-grid") as HTMLElement | null;
+    if (!grid) return;
+    const requestedEndMinute = scheduleMinuteFromGridPosition(
+      event.clientY - grid.getBoundingClientRect().top, gridStartMinute, gridEndMinute, 0, GRID_QUARTER_HEIGHT,
+    );
+    const startMinute = minuteValue(proposal.startsAt.slice(11, 16));
+    const durationMinutes = scheduleProposalDurationFromEndMinute(startMinute, requestedEndMinute, gridEndMinute);
+    if (durationMinutes !== proposal.durationMinutes) onProposalChange({ startsAt: proposal.startsAt, durationMinutes });
+  }
+
+  function resizeProposalFromKeyboard(event: ReactKeyboardEvent<HTMLElement>) {
+    if (!proposal || !onProposalChange) return;
+    const startMinute = minuteValue(proposal.startsAt.slice(11, 16));
+    const maximum = scheduleProposalDurationFromEndMinute(startMinute, gridEndMinute, gridEndMinute);
+    let durationMinutes = proposal.durationMinutes;
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") durationMinutes -= 15;
+    else if (event.key === "ArrowDown" || event.key === "ArrowRight") durationMinutes += 15;
+    else if (event.key === "PageUp") durationMinutes -= 60;
+    else if (event.key === "PageDown") durationMinutes += 60;
+    else if (event.key === "Home") durationMinutes = APPOINTMENT_MIN_DURATION_MINUTES;
+    else if (event.key === "End") durationMinutes = maximum;
+    else return;
+    event.preventDefault(); event.stopPropagation();
+    durationMinutes = Math.max(APPOINTMENT_MIN_DURATION_MINUTES, Math.min(maximum, durationMinutes));
+    if (durationMinutes !== proposal.durationMinutes) onProposalChange({ startsAt: proposal.startsAt, durationMinutes });
   }
 
   async function moveAppointment(appointment: Appointment, targetDate: string, targetMinute: number) {
@@ -649,7 +698,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       const edit = edits[request.id] || editFromRange(request.proposedAssigneeMemberId || request.currentAssigneeMemberId, baseStart, baseEnd); const startsAt = editStart(edit); const invalidTime = startsAt <= minimumStart;
       return <article key={request.id}><header><div><span>{request.workNumber} | {readable(request.status)}</span><strong>{request.title}</strong><small>Current: {request.currentStartsAt} | {durationLabel(appointmentDurationMinutes(request.currentStartsAt, request.currentEndsAt))}</small></div></header><p><strong>Reason</strong>{request.reason}</p>{request.accessNotes && <p><strong>Access notes</strong>{request.accessNotes}</p>}{canRescheduleJobs && <><div className="schedule-request-decision">{canAssignJobs ? <select aria-label={`Assigned staff for request ${request.workNumber}`} value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select> : <span>{request.currentAssigneeLabel || "Assigned worker"}</span>}<input type="datetime-local" min={minimumStart} step="900" aria-label={`Reviewed start for ${request.workNumber}`} value={startsAt} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, date: event.target.value.slice(0, 10), time: event.target.value.slice(11, 16) } }))} /><DurationControl id={`request-duration-${request.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [request.id]: { ...edit, durationMinutes } }))} /><input maxLength={500} value={decisionNotes[request.id] || ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Optional customer-facing response" /></div><div className="schedule-request-actions"><button type="button" disabled={busy === `reject:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "rejected", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "" }, `reject:${request.id}`, `${request.workNumber} request rejected without changing the schedule.`)}>Reject</button><button type="button" disabled={!edit.memberId || invalidTime || busy === `alternative:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "alternative_proposed", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `alternative:${request.id}`, `${request.workNumber} alternative proposed without changing the schedule.`)}>Propose alternative</button><button className="primary" type="button" disabled={!edit.memberId || invalidTime || busy === `accept:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "accepted", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `accept:${request.id}`, `${request.workNumber} appointment change accepted.`)}>Accept and reschedule</button></div></>}</article>;
     })}</div></details>}
-    <p className="schedule-drag-note" id={jobCalendar ? proposalStatusId : undefined} role={jobCalendar ? "status" : undefined} aria-live={jobCalendar ? "polite" : undefined}>{jobCalendar ? proposalGuidance : canRescheduleJobs ? "Drag within this week. Hold at the left or right edge to open the adjacent week." : "This schedule is read only for your access."} {!jobCalendar && "Tap or press Enter for exact details."} {jobCalendar && proposalValidation.status === "not_visible" && proposal?.startsAt && <button type="button" onClick={showProposal}>Show selected booking</button>} {jobCalendar && proposalValidation.status === "load_error" && <button type="button" onClick={retryProposalWeek}>Retry selected week</button>}</p>
+    <p className="schedule-drag-note" id={jobCalendar ? proposalStatusId : undefined} role={jobCalendar ? "status" : undefined} aria-live={jobCalendar ? "polite" : undefined}>{jobCalendar ? proposalGuidance : canRescheduleJobs ? "Drag within this week. Hold at the left or right edge to open the adjacent week." : "This schedule is read only for your access."} {!jobCalendar && "Tap or press Enter for exact details."} {jobCalendar && onProposalChange && "Double-click an open time to select one hour. Drag the bottom edge of the proposed booking to change its length in 15 minute steps."} {jobCalendar && proposalValidation.status === "not_visible" && proposal?.startsAt && <button type="button" onClick={showProposal}>Show selected booking</button>} {jobCalendar && proposalValidation.status === "load_error" && <button type="button" onClick={retryProposalWeek}>Retry selected week</button>}</p>
     <div className="schedule-week-viewport" onTouchStart={startWeekSwipe} onTouchEnd={(event) => finishWeekSwipe(event, true)} onTouchCancel={() => { weekSwipeStartRef.current = null; }} onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
       {!jobCalendar && draggingId && <><span className={`schedule-drag-edge previous${dragEdgeDirection === -1 ? " active" : ""}`}>Hold for previous week</span><span className={`schedule-drag-edge next${dragEdgeDirection === 1 ? " active" : ""}`}>Hold for next week</span></>}
       <div className="schedule-week-pages" style={{ transform: `translateX(-${activeWeekIndex * 100}%)` }}>
@@ -659,7 +708,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
         return <section key={bufferedWeekStart} className="schedule-week-page" aria-hidden={!pageIsActive}>
         <div ref={pageIsActive ? timetableScrollRef : undefined} className="schedule-timetable-scroll" onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
         <div className="schedule-timetable">
-        <div className="schedule-time-rail" style={{ background: "#fff", left: 0, position: "sticky", zIndex: 20 }}><div className="schedule-time-heading">Time</div><div className="schedule-time-track" style={{ height: `${gridHeight}px` }}>{timeLabels.map((minute) => <span key={minute} style={{ top: `${((minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`2000-01-01T${minuteLabel(minute)}`)}</span>)}</div></div>
+        <div className="schedule-time-rail" style={{ background: "#fff", left: 0, position: "sticky", zIndex: 20 }}><div className="schedule-time-heading">Time</div><div className="schedule-time-track" style={{ height: `${gridHeight}px` }}>{timeLabels.map((minute) => <span className={minute === gridStartMinute ? "first" : minute === gridEndMinute ? "last" : undefined} key={minute} style={{ top: `${((minute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`2000-01-01T${minuteLabel(minute)}`)}</span>)}</div></div>
         {days.map((date) => {
           const dayIsPast = date < minimumStart.slice(0, 10);
           const dayIsToday = date === todayDate;
@@ -672,7 +721,8 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
           const appointmentLanes = scheduleAppointmentLanes(laneItems);
           return <section key={date} aria-label={`${dayIsToday ? "Today, " : ""}${formatDay(date)}`} className={`schedule-day-track${dropTarget === date ? " drop-target" : ""}${dayIsPast ? " past" : ""}${dayIsToday ? " today" : ""}`}>
             <header aria-current={dayIsToday ? "date" : undefined}><strong>{dayIsToday ? "Today" : shortDays[new Date(`${date}T00:00:00Z`).getUTCDay()]}</strong><span>{date.slice(5)}</span></header>
-            <div className="schedule-day-grid" style={{ height: `${gridHeight}px` }}
+            <div className={`schedule-day-grid${jobCalendar && onProposalChange && !dayIsPast ? " proposal-selectable" : ""}`} style={{ height: `${gridHeight}px` }}
+              onDoubleClick={(event) => { selectProposalFromCalendar(event.currentTarget, date, event.clientY); }}
               onDragOver={(event) => {
                 const appointment = draggedAppointmentRef.current || appointmentsById.get(draggingId);
                 if (!dayIsPast && appointment) {
@@ -709,7 +759,12 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
                 const startMinute = minuteValue(proposalOnDay.startsAt.slice(11, 16));
                 const duration = appointmentDurationMinutes(proposalOnDay.startsAt, proposalOnDay.endsAt);
                 const lane = appointmentLanes.get(proposalOnDay.id) || { lane: 0, laneCount: 1 };
-                return <article aria-label={`Proposed booking for ${proposal?.title || "this job"}`} className={`schedule-block proposal ${colourFor(proposal?.assigneeMemberId || "")}${proposalHasConflict ? " conflict" : ""}`} style={{ top: `${Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT)}px`, height: `${Math.max(62, (duration / 15) * GRID_QUARTER_HEIGHT)}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}><strong>{proposal?.title || "This job"}</strong><small>{proposal?.assigneeLabel || "Selected person"}</small><em>Proposed booking</em><span>{formatTime(proposalOnDay.startsAt)} | {durationLabel(duration)}</span>{proposalHasConflict && <b>{proposalValidation.status === "unavailable" ? "Unavailable" : "Conflict"}</b>}</article>;
+                const maximumDuration = scheduleProposalDurationFromEndMinute(startMinute, gridEndMinute, gridEndMinute);
+                const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT);
+                const height = Math.max(16, (duration / 15) * GRID_QUARTER_HEIGHT);
+                const left = `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`;
+                const width = `calc(${100 / lane.laneCount}% - 8px)`;
+                return <><article data-schedule-proposal aria-label={`Proposed booking for ${proposal?.title || "this job"}`} onDoubleClick={(event) => event.stopPropagation()} className={`schedule-block proposal ${colourFor(proposal?.assigneeMemberId || "")}${proposalHasConflict ? " conflict" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left, right: "auto", width }}><strong>{proposal?.title || "This job"}</strong><small>{proposal?.assigneeLabel || "Selected person"}</small><em>Proposed booking</em><span>{formatTime(proposalOnDay.startsAt)} | {durationLabel(duration)}</span>{proposalHasConflict && <b>{proposalValidation.status === "unavailable" ? "Unavailable" : "Conflict"}</b>}</article>{onProposalChange && <span data-schedule-proposal className="schedule-proposal-resize" style={{ top: `${top + height - 16}px`, left, right: "auto", width }} role="slider" tabIndex={pageIsActive ? 0 : -1} aria-label="Resize proposed booking" aria-orientation="vertical" aria-valuemin={APPOINTMENT_MIN_DURATION_MINUTES} aria-valuemax={maximumDuration} aria-valuenow={duration} aria-valuetext={durationLabel(duration)} onDoubleClick={(event) => event.stopPropagation()} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); proposalResizePointerIdRef.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={resizeProposalFromPointer} onPointerUp={(event) => { resizeProposalFromPointer(event); proposalResizePointerIdRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { proposalResizePointerIdRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onKeyDown={resizeProposalFromKeyboard}><i aria-hidden="true" /></span>}</>;
               })()}
               {dayIsToday && !dayAppointments.length && !dayUnavailability.length && !proposalOnDay && <span className="schedule-free-day">No jobs today</span>}
             </div>

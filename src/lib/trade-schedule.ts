@@ -110,6 +110,37 @@ export function scheduleDragEdgeDirection(clientX: number, left: number, right: 
   return 0;
 }
 
+export function scheduleMinuteFromGridPosition(
+  offsetPixels: number,
+  gridStartMinute: number,
+  gridEndMinute: number,
+  durationMinutes = 0,
+  quarterHeight = 16,
+) {
+  if (![offsetPixels, gridStartMinute, gridEndMinute, durationMinutes, quarterHeight].every(Number.isFinite)
+    || quarterHeight <= 0 || gridEndMinute <= gridStartMinute) throw new Error("INVALID_SCHEDULE_GRID");
+  const duration = Math.max(0, durationMinutes);
+  const latestStart = Math.max(gridStartMinute, gridEndMinute - duration);
+  const requested = gridStartMinute
+    + Math.round(offsetPixels / quarterHeight) * APPOINTMENT_DURATION_STEP_MINUTES;
+  return Math.max(gridStartMinute, Math.min(latestStart, requested));
+}
+
+export function scheduleProposalDurationFromEndMinute(
+  startMinute: number,
+  requestedEndMinute: number,
+  gridEndMinute: number,
+) {
+  if (![startMinute, requestedEndMinute, gridEndMinute].every(Number.isFinite)
+    || gridEndMinute <= startMinute) throw new Error("INVALID_SCHEDULE_GRID");
+  const available = Math.min(APPOINTMENT_MAX_DURATION_MINUTES, gridEndMinute - startMinute);
+  const maximum = Math.max(APPOINTMENT_MIN_DURATION_MINUTES,
+    Math.floor(available / APPOINTMENT_DURATION_STEP_MINUTES) * APPOINTMENT_DURATION_STEP_MINUTES);
+  const requested = Math.round((requestedEndMinute - startMinute) / APPOINTMENT_DURATION_STEP_MINUTES)
+    * APPOINTMENT_DURATION_STEP_MINUTES;
+  return Math.max(APPOINTMENT_MIN_DURATION_MINUTES, Math.min(maximum, requested));
+}
+
 export function mergeDraggedScheduleAppointment<T extends { id: string }>(appointments: T[], dragged: T | null) {
   if (!dragged || appointments.some((appointment) => appointment.id === dragged.id)) return appointments;
   return [...appointments, dragged];
