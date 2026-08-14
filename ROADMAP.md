@@ -2067,12 +2067,91 @@ The held candidate has 7,499 unique rows with SHA-256
 The exact missing record is unknown without authorised read-only access to the
 retained R2 bytes, so no GEMS-backed pathway may be represented as current.
 
-## Released milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
+## Released milestone: TLINK-JOB-SCHEDULE-PLANNING-66
+
+Release status: exact corrective application commit
+`d35fdb8d52056fec6b62b6b56a4739a0443cadcf` is validated and pushed to GitHub
+branch `codex/job-schedule-week-calendar` and Sites internal `main`. It is
+released as current Sites version 333 at
+`https://compare.ausenergyassessments.com`. Saved version
+`appgprj_6a550c378000819185caf094173422bb~appgver_55bd301f865c8191b6987afa0b940f9c`
+and deployment `appgdep_6a7ed5605fd881918d2f288f2194f66e` reconcile to
+that source. Deployment succeeded on provider
+`info294029--aea-energy-comparison` with environment revision 20. Sites stored
+424 files and 39,731,200 bytes with content hash
+`sha256:08a58d94d2e72271e709964b5580c9790f160c2d530f6be45c0c8d464e1b64d5`
+and sediment `file_00000000d950820bacd2ce7904ce9afc`. The local version-333
+archive is 12,190,974 bytes with 438 tar entries and SHA-256
+`3EFC66E6088161095065EC694D8198A11DB877C4FAB3D6A2D592FF8D7810911E`.
+
+### Outcome
+
+Let a trade user assign and schedule a job in one save, inspect and adjust
+existing appointments directly on the visible week, stage several guarded
+changes and deliberately save or discard the complete plan without duplicate
+booking prompts.
+
+### Implemented scope
+
+- Assignment and the first appointment commit atomically with revision,
+  accepted-quote, active-member, capability and conflict guards.
+- A saved appointment appears once. Another form opens only through the explicit
+  `Add another` action.
+- Appointment cards open a dismissible detail dialog with the accepted quote,
+  authorised phone and email, service address, directions and 15-minute controls.
+- Whole appointments move in 15-minute steps and their edges resize duration.
+  Up to five distinct changes remain local with one `Unsaved` state until Save
+  commits the batch or Discard restores server truth without a write.
+- Batch scheduling preserves appointment and job revisions, assignment,
+  accepted-quote, capability, same-worker overlap, unavailability,
+  compliance-intent, notification and external calendar-sync boundaries.
+- Different workers may overlap. Final same-worker conflicts, including
+  conflicts created inside one batch, fail closed.
+- The unsupported direct-customer compliance intake is hidden for accepted
+  released leads while the API permission denial remains unchanged.
+
+### Release and validation evidence
+
+- Full `npm.cmd run validate` passed on the exact corrective source: typecheck,
+  warning-free lint, 36 of 36 integration tests, 2,255 total Node tests with
+  2,245 passed, 10 intentionally skipped and zero failed, all 140 migrations,
+  database checks, customer-plan PDF audit, production build and Sites bundle
+  audit. Focused installer CRM coverage passed 30 of 30.
+- Signed-in owner desktop and 390 by 844 phone QA confirmed one real
+  appointment, combined assignment and scheduling, All, Me and named-worker
+  filters, weekly controls and `Add another` without a duplicate proposal. The
+  accepted job Overview no longer mounted the unsupported compliance intake.
+  No mutation was performed during version-333 QA.
+- Version-332 QA opened the appointment dialog, staged a 3:00 pm to 3:30 pm
+  move, showed one `Unsaved` card and restored 3:00 pm with Discard and no write.
+  All workers showed six cards, the chosen named worker showed zero, and Me,
+  Next week and Today restoration passed.
+- `/api/health` returned HTTP 200. Version-333 browser error and warning capture
+  and the post-QA Sites errors-only Worker query were empty.
+- A signed-in staff identity with team or own schedule permission was
+  unavailable. Live staff-role presentation and permission mutations remain
+  unverified while authoritative server permission tests remain green.
+- Intermediate version 332 from
+  `362be0632b5e1a1d89a312c791c3665924f037d7` was saved as
+  `appgprj_6a550c378000819185caf094173422bb~appgver_8c462e5b0ef08191850c4ac79373a180`
+  and deployed successfully through `appgdep_6a7ed1cbcc0c81919e2204380055f04b`.
+  Sites stored 424 files and 39,731,200 bytes with content hash
+  `sha256:2761c5235a0e4a83cd11f77f4bd3a562788e1b712288f2589b9262273bb95fba`
+  and sediment `file_00000000078081faa8bb76de3f85046a`; the local 438-entry,
+  12,195,010-byte archive had SHA-256
+  `5FCA9C6CAA92BDF4780378C276A561DDC57ED68021D886B02F5CCC3CC816C5A1`.
+  Its schedule UX passed live QA, but an incorrectly mounted direct-customer
+  compliance intake produced one expected HTTP 403. There was no data or
+  privacy bypass; version 333 superseded it with the UI gate.
+- The hosted product remains a pre-launch test environment. Test records may be
+  replaced, but the final wipe remains a separately authorised launch operation.
+
+## Previous released milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
 
 Release status: exact executable application commit
 `4d3463ec1173be50e3b76ef92fa92e9cb1f81993` is validated and pushed to GitHub
-branch `codex/job-schedule-week-calendar` and Sites internal `main`. It is
-released as current Sites version 331 at
+branch `codex/job-schedule-week-calendar` and Sites internal `main`. It was
+released as historical Sites version 331 at
 `https://compare.ausenergyassessments.com`. Saved version
 `appgprj_6a550c378000819185caf094173422bb~appgver_27287ed04e3c8191be9b208dcedeb705`
 and deployment `appgdep_6a7e857ee3588191bd857fe21cd8ec41` reconcile to
@@ -2148,8 +2227,9 @@ allowing stale client state to bypass worker-specific conflicts.
   but live QA found the assignment button clipped. Version 329 from
   `c082239d88a8debd112ee0a304885bb6626b01e8` was also superseded after its
   same-specificity rule lost to a later component stylesheet. Version 330 from
-  `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` corrected the layout and is now
-  historical; version 331 is the verified current release.
+  `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d` corrected the layout. Version 331
+  was the verified refinement release and is historical after version 332
+  replaced it.
 - Health returned HTTP 200 with `ok: true`. The final one-minute error-only
   Worker query returned zero events; the handled OCR 404 probes were not crashes
   or failed Worker outcomes. A separate signed-in own-scope staff identity was
@@ -2158,13 +2238,10 @@ allowing stale client state to bypass worker-specific conflicts.
 - The hosted product remains a pre-launch test environment. Test records may be
   replaced, but the final wipe remains a separately authorised launch operation.
 
-### Next bounded sequence
+### Historical follow-on outcome
 
-1. Make assignment plus first appointment one atomic server action.
-2. Add guarded inline editing and rescheduling for the focused appointment.
-3. Suggest the next few clear slots for the selected worker.
-4. Prepare and rehearse the bounded pre-launch data-reset runbook and launch gate.
-5. Add focused schedule and quote-handoff telemetry.
+The first two recorded follow-on actions were delivered by versions 332 and 333.
+The current priority order is the single next-five sequence below.
 
 ## Previous released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
 
@@ -3100,11 +3177,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Make assignment plus first appointment one atomic server action.
-2. Allow guarded inline editing and rescheduling for the focused appointment.
-3. Suggest the next few clear slots for the selected worker.
-4. Prepare and rehearse the bounded pre-launch data-reset runbook and launch gate.
-5. Add focused schedule and quote-handoff telemetry.
+1. Suggest conflict-free slots using working hours, travel time and service duration.
+2. Add customer confirmations, reminders and arrival updates.
+3. Add route-aware multi-stop planning.
+4. Rehearse the bounded pre-launch data reset and enforce the launch gate.
+5. Add schedule conversion telemetry and operational alerts.
 
 ## Global stop conditions
 
