@@ -300,11 +300,12 @@ test("job workspace exposes authorised customer context, preserves the private b
 });
 
 test("the combined Schedule tab loads every capability-filtered assignee and keeps assignment beside the focused calendar", () => {
-  const [teamRoute, route, ui, styles] = [
+  const [teamRoute, route, ui, styles, globalStyles] = [
     read("../src/app/api/trade-team/route.ts"),
     read("../src/app/api/trade-crm/route.ts"),
     read("../src/components/InstallerCrmWorkspace.tsx"),
     read("../src/components/InstallerCrmJobRegister.module.css"),
+    read("../src/app/globals.css"),
   ];
   assert.match(teamRoute, /assigneeConditions = \["owner_uid = \?", "status = 'active'"\]/);
   assert.match(teamRoute, /json_each\(trade_team_members\.capabilities\)/);
@@ -318,7 +319,7 @@ test("the combined Schedule tab loads every capability-filtered assignee and kee
   assert.match(ui, /scheduleReady: boolean/);
   assert.match(ui, /if \(canOpenJobSchedule\) mainTabs\.push\(\["schedule",/);
   const scheduleSection = ui.match(/\{activeTab === "schedule"[\s\S]*?(?=\n\s*\{activeTab === ")/)?.[0] || "";
-  const assignmentForm = scheduleSection.match(/<form className=\{registerStyles\.assignmentForm\}[\s\S]*?<\/form>/)?.[0] || "";
+  const assignmentForm = scheduleSection.match(/<form className=\{`\$\{registerStyles\.assignmentForm\} crm-job-assignment-form`\}[\s\S]*?<\/form>/)?.[0] || "";
   assert.match(assignmentForm, /<select value=\{jobAssigneeId\}/);
   assert.match(assignmentForm, /Save assignment/);
   assert.doesNotMatch(assignmentForm, /Search team|Find an active teammate|type="search"|Load more/);
@@ -326,4 +327,5 @@ test("the combined Schedule tab loads every capability-filtered assignee and kee
   assert.match(scheduleSection, /variant="job"/);
   assert.ok(scheduleSection.indexOf("<TradeScheduleWorkspace") < scheduleSection.indexOf("registerStyles.assignmentForm"));
   assert.match(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
+  assert.match(globalStyles, /\.crm-job-assignment-form \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
 });

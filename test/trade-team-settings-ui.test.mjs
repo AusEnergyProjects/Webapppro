@@ -247,7 +247,7 @@ test("the combined Schedule tab respects own-schedule visibility and remains ava
   assert.doesNotMatch(crm, /mainTabs\.push\(\["assignment"/);
   assert.doesNotMatch(crm, /activeTab === "assignment"/);
   const scheduleSection = crm.match(/\{activeTab === "schedule"[\s\S]*?(?=\n\s*\{activeTab === ")/)?.[0] || "";
-  assert.match(scheduleSection, /\{canAssignJobs && <section[\s\S]*?<form className=\{registerStyles\.assignmentForm\}/);
+  assert.match(scheduleSection, /\{canAssignJobs && <section[\s\S]*?crm-job-assignment-form/);
   assert.match(scheduleSection, /<TradeScheduleWorkspace/);
   assert.match(scheduleSection, /variant="job"/);
   assert.match(scheduleSection, /permissions=\{permissions\}/);
