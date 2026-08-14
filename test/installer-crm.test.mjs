@@ -383,8 +383,10 @@ test("job summary renders every planned compliance activity without exposing raw
   assert.match(crm, /complianceIntents: ComplianceIntent\[\]/);
   assert.match(crm, /const complianceIntents = job\.complianceIntents\?\.length \? job\.complianceIntents : job\.complianceIntent \? \[job\.complianceIntent\] : \[\]/);
   assert.match(crm, /complianceIntents\.map\(\(intent\) => <section className="crm-job-compliance" key=\{intent\.id\}>/);
-  assert.match(crm, /\{!permissions && canManageFieldEvidence && unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
-  assert.doesNotMatch(crm, /!isProtected && customer && unlinkedComplianceIntents\.map/);
+  assert.match(crm, /const canOpenDirectCustomerCompliance = !permissions\s+&& canManageFieldEvidence\s+&& job\.sourceType === "internal"\s+&& job\.customerSource === "trade_owned"/);
+  assert.match(crm, /\{canOpenDirectCustomerCompliance && unlinkedComplianceIntents\.map\(\(intent\) => <TradeComplianceIntake key=\{intent\.id\}/);
+  assert.match(crm, /\{canOpenDirectCustomerCompliance && customer && complianceIntents\.length === 0 && complianceCases\.length === 0 && <TradeComplianceIntake/);
+  assert.doesNotMatch(crm, /!isProtected && customer && complianceIntents\.length === 0 && complianceCases\.length === 0 && <TradeComplianceIntake/);
   assert.match(crm, /initialIntent=\{intent\}/);
   assert.doesNotMatch(crm, /\{(?:job\.complianceIntent|intent)\.governanceMessage\}/);
   assert.match(crm, /Confirm the governed activity, product, scenario and evidence requirements before work starts/);
