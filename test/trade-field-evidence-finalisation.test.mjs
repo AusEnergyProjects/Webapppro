@@ -6,10 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as boundedJsonRequest from "../src/lib/bounded-json-request.ts";
 import { verifyJpegExif } from "../src/lib/jpeg-exif-verifier.ts";
+import { normaliseDeviceListQuery } from "../src/lib/trade-mobile-device-list-policy.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const mediaRouteSource = read("../src/app/api/trade-team/media/route.ts");
 const devicesRouteSource = read("../src/app/api/trade-team/devices/route.ts");
+const deviceRevocationSource = read("../src/lib/trade-mobile-device-revocation.ts");
 const governanceMigration = read(
   "../drizzle/0098_creditex_rule_governance.sql",
 );
@@ -256,8 +258,11 @@ function evidenceDatabase() {
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,
+      member_uid text NOT NULL,
       display_name text NOT NULL,
-      email text NOT NULL
+      email text NOT NULL,
+      status text NOT NULL,
+      can_manage_team integer NOT NULL
     );
 
     CREATE TABLE compliance_activity_versions (
@@ -476,6 +481,8 @@ function routeHarness(database, storage, options = {}) {
     actorUid: "installer-actor",
     memberId: "member-1",
     role: "technician",
+    canViewFieldEvidence: true,
+    canManageFieldEvidence: true,
   };
   const route = loadTypescriptModule(mediaRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
@@ -536,7 +543,12 @@ function deviceRouteHarness(database, storage, options = {}) {
     actorUid: "installer-actor",
     memberId: "member-1",
     role: "owner",
+    isOwner: true,
   };
+  const deviceRevocation = loadTypescriptModule(deviceRevocationSource, {
+    "cloudflare:workers": { env: { EVIDENCE: storage } },
+    "../../db": { getD1: () => d1 },
+  });
   const route = loadTypescriptModule(devicesRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
     "../../../../../db": { getD1: () => d1 },
@@ -567,6 +579,10 @@ function deviceRouteHarness(database, storage, options = {}) {
       MOBILE_CLIENT_ID_PATTERN: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/,
       MOBILE_PLATFORMS: new Set(["ios", "android"]),
       mobileErrorResponse: () => null,
+    },
+    "@/lib/trade-mobile-device-revocation": deviceRevocation,
+    "@/lib/trade-mobile-device-list-policy.mjs": {
+      normaliseDeviceListQuery,
     },
   });
   return { route, access };
@@ -627,6 +643,11 @@ const JPEG_WITHOUT_EXIF_BYTES = Uint8Array.from(Buffer.from(
   "/9j/wAALCAABAAEBAREA/9oACAEBAAA/AAD/2Q==",
   "base64",
 ));
+
+const TEST_RUN_CAPTURE_AT_MILLISECONDS = Date.now() - 60_000;
+const TEST_RUN_ACTIVITY_DATE = new Date(
+  TEST_RUN_CAPTURE_AT_MILLISECONDS + 600 * 60_000,
+).toISOString().slice(0, 10);
 
 function jpegWithEmbeddedCaptureDate(value) {
   const bytes = Uint8Array.from(FILE_BYTES["image/jpeg"]);
@@ -721,6 +742,30 @@ function validEnvelope(overrides = {}, bytes = FILE_BYTES["image/jpeg"]) {
   };
 }
 
+function recentEnvelope(overrides = {}, bytes = FILE_BYTES["image/jpeg"]) {
+  const observedAtUtc = new Date(
+    TEST_RUN_CAPTURE_AT_MILLISECONDS,
+  ).toISOString();
+  const computedAtUtc = new Date(
+    TEST_RUN_CAPTURE_AT_MILLISECONDS + 2_000,
+  ).toISOString();
+  return validEnvelope({
+    ...overrides,
+    integrity: {
+      computedAtUtc,
+      ...(overrides.integrity || {}),
+    },
+    capture: {
+      observedAtUtc,
+      ...(overrides.capture || {}),
+    },
+    location: {
+      observedAtUtc,
+      ...(overrides.location || {}),
+    },
+  }, bytes);
+}
+
 function seedJobsAndCompliance(database) {
   const now = "2026-08-01T03:00:00.000Z";
   database.prepare(`INSERT INTO trade_work_orders
@@ -761,9 +806,9 @@ function seedJobsAndCompliance(database) {
       'device-001', 'ios', 'Field phone', '1.0.0', 'apns', 'push-token', ?,
       'active', ?, ?, '', '', ?)`).run(now, now, now, now);
   database.prepare(`INSERT INTO trade_team_members
-    (id, owner_uid, display_name, email)
-    VALUES ('member-1', 'installer-owner', 'Field installer',
-      'field@example.test')`).run();
+    (id, owner_uid, member_uid, display_name, email, status, can_manage_team)
+    VALUES ('member-1', 'installer-owner', 'installer-actor',
+      'Field installer', 'field@example.test', 'active', 1)`).run();
 }
 
 function seedUpload(database, storage, {
@@ -866,7 +911,7 @@ test("field evidence source enforces guarded finalisation and pinned custody rul
     /SET status = 'aborted'[\s\S]*status IN \('initiated', 'uploading', 'completing'\)[\s\S]*const aborted = Number\(claim\.meta\.changes/,
   );
   assert.match(
-    devicesRouteSource,
+    deviceRevocationSource,
     /SET status = 'aborted'[\s\S]*status IN \('initiated', 'uploading', 'completing'\)[\s\S]*claim\.meta\.changes/,
   );
   assert.match(mediaRouteSource, /exactText\(original\.exifState, 40\) !== "available"/);
@@ -1064,6 +1109,8 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
   const database = evidenceDatabase();
   const storage = evidenceBucket();
   seedJobsAndCompliance(database);
+  database.prepare(`UPDATE compliance_cases SET activity_date = ?
+    WHERE id = 'case-1'`).run(TEST_RUN_ACTIVITY_DATE);
   const { route } = routeHarness(database, storage);
   let sequence = 0;
   const initiate = async (evidenceEnvelope, workOrderId = "job-compliance") => {
@@ -1096,40 +1143,40 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
     { observedAtUtc: "" },
   ];
   for (const location of invalidLocations) {
-    const { response, payload } = await initiate(validEnvelope({ location }));
+    const { response, payload } = await initiate(recentEnvelope({ location }));
     assert.equal(response.status, 400);
     assert.equal(payload.code, "EVIDENCE_LOCATION_INVALID");
   }
 
-  const mocked = await initiate(validEnvelope({ location: { mocked: true } }));
+  const mocked = await initiate(recentEnvelope({ location: { mocked: true } }));
   assert.equal(mocked.response.status, 400);
   assert.equal(mocked.payload.code, "EVIDENCE_GPS_MOCKED");
 
-  const exifNotReturned = await initiate(validEnvelope({
+  const exifNotReturned = await initiate(recentEnvelope({
     original: { exifState: "not_returned", exif: {} },
   }));
   assert.equal(exifNotReturned.response.status, 400);
   assert.equal(exifNotReturned.payload.code, "EVIDENCE_METADATA_REQUIRED");
 
-  const exifMissing = await initiate(validEnvelope({
+  const exifMissing = await initiate(recentEnvelope({
     original: { exifState: "available", exif: null },
   }));
   assert.equal(exifMissing.response.status, 400);
   assert.equal(exifMissing.payload.code, "EVIDENCE_METADATA_REQUIRED");
 
-  const wrongInstallation = await initiate(validEnvelope({
+  const wrongInstallation = await initiate(recentEnvelope({
     provenance: { installationId: "device-other" },
   }));
   assert.equal(wrongInstallation.response.status, 409);
   assert.equal(wrongInstallation.payload.code, "EVIDENCE_PROVENANCE_INVALID");
 
-  const simulator = await initiate(validEnvelope({
+  const simulator = await initiate(recentEnvelope({
     provenance: { isPhysicalDevice: false },
   }));
   assert.equal(simulator.response.status, 400);
   assert.equal(simulator.payload.code, "EVIDENCE_PHYSICAL_DEVICE_REQUIRED");
 
-  const invalidTimeZone = await initiate(validEnvelope({
+  const invalidTimeZone = await initiate(recentEnvelope({
     capture: { utcOffsetMinutes: "600" },
   }));
   assert.equal(invalidTimeZone.response.status, 400);
@@ -1138,25 +1185,25 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
     "EVIDENCE_CAPTURE_TIME_ZONE_INVALID",
   );
 
-  const oversizedEnvelope = validEnvelope();
+  const oversizedEnvelope = recentEnvelope();
   oversizedEnvelope.padding = "x".repeat(61 * 1024);
   const oversized = await initiate(oversizedEnvelope);
   assert.equal(oversized.response.status, 400);
   assert.equal(oversized.payload.code, "EVIDENCE_ENVELOPE_INVALID");
 
-  const integrityBeforeCapture = await initiate(validEnvelope({
+  const integrityBeforeCapture = await initiate(recentEnvelope({
     integrity: { computedAtUtc: "2026-08-01T02:34:55.000Z" },
   }));
   assert.equal(integrityBeforeCapture.response.status, 400);
   assert.equal(integrityBeforeCapture.payload.code, "EVIDENCE_TIME_ORDER_INVALID");
 
-  const staleLocation = await initiate(validEnvelope({
+  const staleLocation = await initiate(recentEnvelope({
     location: { observedAtUtc: "2026-08-01T02:00:00.000Z" },
   }));
   assert.equal(staleLocation.response.status, 400);
   assert.equal(staleLocation.payload.code, "EVIDENCE_TIME_ORDER_INVALID");
 
-  const laterPolicy = await initiate(validEnvelope({
+  const laterPolicy = await initiate(recentEnvelope({
     identifiers: {
       evidencePolicyVersionId: "policy-later",
       evidenceRequirementId: "requirement-later",
@@ -1168,7 +1215,7 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
 
   database.prepare(`UPDATE compliance_evidence_requirements
     SET capture_timing = 'pre_install' WHERE id = 'requirement-pinned'`).run();
-  const unsupportedTiming = await initiate(validEnvelope());
+  const unsupportedTiming = await initiate(recentEnvelope());
   assert.equal(unsupportedTiming.response.status, 409);
   assert.equal(
     unsupportedTiming.payload.code,
@@ -1179,7 +1226,7 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
 
   database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'withdrawn' WHERE id = 'policy-pinned'`).run();
-  const pinnedPolicy = await initiate(validEnvelope());
+  const pinnedPolicy = await initiate(recentEnvelope());
   assert.equal(pinnedPolicy.response.status, 201);
   assert.equal(pinnedPolicy.payload.upload.status, "initiated");
   const storedEnvelope = JSON.parse(database.prepare(`
@@ -1193,7 +1240,7 @@ test("initiation rejects invalid GPS and EXIF evidence while retaining legacy up
 
   database.prepare(`UPDATE compliance_evidence_policy_versions
     SET publish_state = 'draft' WHERE id = 'policy-pinned'`).run();
-  const draftPolicy = await initiate(validEnvelope());
+  const draftPolicy = await initiate(recentEnvelope());
   assert.equal(draftPolicy.response.status, 409);
   assert.equal(draftPolicy.payload.code, "EVIDENCE_LINK_INVALID");
 
@@ -1334,6 +1381,8 @@ test("governed initiation fails closed for unsupported requirement contracts and
   const database = evidenceDatabase();
   const storage = evidenceBucket();
   seedJobsAndCompliance(database);
+  database.prepare(`UPDATE compliance_cases SET activity_date = ?
+    WHERE id = 'case-1'`).run(TEST_RUN_ACTIVITY_DATE);
   const { route } = routeHarness(database, storage);
   let sequence = 0;
   const initiate = async () => {
@@ -1350,7 +1399,7 @@ test("governed initiation fails closed for unsupported requirement contracts and
       sizeBytes: FILE_BYTES["image/jpeg"].byteLength,
       category: "before",
       caption: "",
-      evidenceEnvelope: validEnvelope(),
+      evidenceEnvelope: recentEnvelope(),
     });
     return { response, payload: await response.json() };
   };
@@ -1413,6 +1462,9 @@ test("governed initiation fails closed for unsupported requirement contracts and
   result = await initiate();
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.code, "EVIDENCE_MAXIMUM_REACHED");
+
+  database.prepare(`UPDATE compliance_cases SET activity_date = '2026-08-01'
+    WHERE id = 'case-1'`).run();
 
   const completion = await post(route, {
     action: "complete",

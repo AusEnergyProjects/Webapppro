@@ -92,6 +92,9 @@ test("ordinary staff availability is self-only while delegated managers can edit
     }
   }
   const database = { prepare: (sql) => new ScheduleStatement(sql), batch: async () => [] };
+  const scheduleServer = transpileRoute("../src/lib/trade-schedule-server.ts", {
+    "../../db": { getD1: () => database },
+  });
   const route = transpileRoute("../src/app/api/trade-schedule/route.ts", {
     "../../../../db": { getD1: () => database },
     "@/lib/admin-server": adminServer,
@@ -107,6 +110,7 @@ test("ordinary staff availability is self-only while delegated managers can edit
       previousTradeScheduleMutationGuardStatement: () => ({ run: async () => ({ success: true, meta: { changes: 1 } }) }),
     },
     "@/lib/trade-team-permission-policy.mjs": { canRescheduleWithinScope: () => false },
+    "@/lib/trade-schedule-server": scheduleServer,
   });
 
   const weekUrl = "https://test/api/trade-schedule?rangeStart=2026-08-17";

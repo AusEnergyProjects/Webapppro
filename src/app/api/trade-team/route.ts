@@ -546,10 +546,12 @@ async function mutableAssignedJobState(
   workOrderId: string,
 ) {
   const assigned = await assignedJob(access, workOrderId);
-  const current = await db.prepare(`SELECT stage, revision, assignee_member_id, assignee_label, service_category
-    FROM trade_work_orders
-    WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer'
-      AND record_status = 'active'`)
+  const current = await db.prepare(`SELECT w.stage, w.revision, w.assignee_member_id, w.assignee_label,
+      w.service_category, w.source_type, d.customer_source
+    FROM trade_work_orders w
+    LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
+    WHERE w.id = ? AND w.firebase_uid = ? AND w.partner_type = 'installer'
+      AND w.record_status = 'active'`)
     .bind(workOrderId, access.ownerUid)
     .first<{
       stage: string;

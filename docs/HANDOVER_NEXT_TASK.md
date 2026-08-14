@@ -122,6 +122,183 @@ Sites provider identity: `info294029--aea-energy-comparison`
 
 Environment revision: 20
 
+## Active milestone: TLINK-JOB-SCHEDULE-WEEK-CALENDAR-65
+
+### User outcome
+
+When a trade user schedules a job, the relevant week calendar stays visible in
+the same job workspace so they can see other work before choosing a person and
+time. Assignment and appointment scheduling live under one `Schedule` tab.
+
+After a direct-owned quote is sent, the completion screen offers both `Done`
+and `Schedule and assign job`. Australian Energy Assessments leads can still be
+assigned in preparation, but no appointment can be added or moved until the
+customer has accepted the exact current quote version.
+
+### Owning workflow and expected files
+
+- Job workspace orchestration: `src/components/InstallerCrmWorkspace.tsx`.
+- Focused weekly calendar mode: `src/components/TradeScheduleWorkspace.tsx` and
+  `src/app/globals.css`.
+- Authoritative calendar data and conflict enforcement:
+  `src/app/api/trade-schedule/route.ts`,
+  `src/app/api/trade-crm/route.ts` and
+  `src/lib/trade-schedule-server.ts`.
+- Focused acceptance coverage: existing trade CRM, team-permission and
+  scheduling tests plus one focused job-schedule UI contract where useful.
+
+### In scope
+
+- Remove the separate job `Assign` tab and route all job assignment actions to
+  the job `Schedule` tab.
+- Keep the assignment selector and appointment booking controls together in
+  that tab. A new appointment uses the job's saved assignee so job access and
+  appointment ownership cannot silently diverge.
+- Show one Monday-to-Sunday calendar at a time beside the scheduling workflow,
+  with previous week, next week, today and direct week selection.
+- Default the focused calendar to the job's saved or draft-selected worker and
+  let authorised team viewers switch between one worker and all workers so a
+  large roster does not overcrowd the scheduling view.
+- Let navigation continue to any valid future week without an artificial
+  forward horizon.
+- Use the existing permission model and server response so team-schedule access
+  sees the team calendar and own-schedule access sees only the signed-in
+  member's appointments.
+- Preview the proposed person, start and duration against the visible week and
+  clearly identify overlaps before submission.
+- Apply the same authoritative overlap and unavailability guard when a job
+  appointment is created from the job workspace.
+- Preserve customer privacy redaction, service-capability assignment checks,
+  calendar-mirror behavior and existing schedule authority.
+- Keep direct-job quote delivery efficient by opening the same combined
+  `Schedule` tab from the terminal send result while retaining `Done` as a
+  close-only action.
+- Gate every appointment scheduling and rescheduling mutation for a released
+  Australian Energy Assessments lead on authoritative customer acceptance of
+  the exact current quote version, including a transaction-time race guard.
+- Keep ordinary assignment available before that acceptance so the business
+  can prepare ownership and access without prematurely booking the customer.
+
+### Out of scope
+
+- Team-role or permission-model changes, new database tables or migrations.
+- Replacing the full dispatch calendar, availability editor or external Google
+  Calendar and Outlook integration.
+- Changing customer appointment requests, field workflow, quotes, invoices or
+  compliance case behavior.
+- Final pre-launch deletion of customer, wholesaler, trade-account or job data.
+  The hosted environment remains a test environment until the user explicitly
+  declares it live; the final wipe is a separate deliberate operation.
+- Netlify deployment.
+
+### Acceptance criteria
+
+1. A focused job shows one `Schedule` tab and no separate `Assign` tab.
+2. The job context action for assignment opens that same `Schedule` tab.
+3. The tab shows current assignment, appointment controls and a visible seven-day
+   calendar before the user saves an appointment.
+4. Owners and staff with team schedule scope see authorised team appointments;
+   own-scope staff see only their own appointments and the UI states that scope.
+5. The job's selected worker is shown by default. Authorised team viewers can
+   choose all workers or one specific worker without changing server scope.
+6. Previous, next, today and direct week navigation work one week at a time and
+   can reach dates beyond the initial API buffer.
+7. A proposed overlap for the same worker is identified and cannot be submitted
+   until its visible week is loaded and clear. Different workers may overlap.
+   The server rejects same-worker overlap or unavailability even if the client
+   preview is bypassed or stale.
+8. Protected-customer labels remain redacted and no contact or exact protected
+   address is added to the calendar payload.
+9. Desktop and narrow-phone layouts keep the booking controls usable and the
+   weekly calendar internally scrollable without document-level overflow.
+10. Focused scheduling, permission and CRM tests pass, followed by the required
+   production build and full validation on the exact final source.
+11. A sent direct-owned quote offers `Done` and `Schedule and assign job`; the
+    latter closes the send preview and opens the combined `Schedule` tab.
+12. A released Australian Energy Assessments lead offers only `Done` after
+    sending and explains that scheduling waits for customer acceptance.
+13. Historical acceptance of an older quote version does not unlock scheduling
+    for a newer current draft, while direct-owned jobs remain schedulable.
+
+### Smallest validation set
+
+- Focused Node tests for trade scheduling, team permission UI and the job
+  register/schedule workspace.
+- Type checking, lint and `git diff --check` during implementation.
+- `npm run build`, followed by `npm run validate` on the final source.
+- Signed-in read-only desktop and phone interaction checks for week navigation,
+  permission copy, calendar visibility and layout. Do not create or change a
+  production appointment during QA.
+
+### Stop condition
+
+Stop and open a separate milestone if completion requires a new permission,
+schema migration, external calendar-provider change, final pre-launch data
+wipe, or a redesign of the full dispatch workspace beyond the job scheduling
+flow.
+
+### Implementation and validation state
+
+- Implemented on 14 August 2026 in isolated worktree
+  `C:\Webproject\aea-energy-schedule-week-calendar`, branch
+  `codex/job-schedule-week-calendar`, from baseline
+  `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`.
+- Full validation is green and the user has authorised the standard automatic
+  commit, push, Sites publication and live inspection workflow. Exact release
+  identifiers are recorded only after the published source reconciles.
+- The separate `Assign` tab/action is removed. Assignment, current
+  appointments, booking controls and the focused weekly calendar now share one
+  `Schedule` tab.
+- The focused calendar reuses the authoritative schedule API, labels own versus
+  team scope from the returned permissions, previews the proposed booking and
+  disables unrelated dispatch controls.
+- It opens on the saved or draft-selected worker to avoid crowding, and
+  authorised team viewers can switch the dropdown to all workers or one named
+  worker. Own-scope staff still receive only their server-authorised calendar.
+- Booking stays disabled until the selected week is loaded, visible and clear.
+  Conflict/loading changes are announced through a live status linked to the
+  booking controls, any failed latest calendar load blocks stale submission, a
+  failed far-week load has an explicit retry path and a suspended or removed
+  saved assignee must be replaced before booking.
+- Appointment creation keeps the saved job assignee authoritative and now uses
+  the same server overlap and unavailability guard as full dispatch scheduling.
+- Same-worker overlap and that worker's unavailability are blocked in both the
+  preview and atomic server mutation. Different workers can be booked at the
+  same time; focused client and real D1 tests cover that boundary.
+- Direct-owned quote completion now preserves `Done` and adds
+  `Schedule and assign job`, which closes the preview and opens this same
+  combined tab.
+- Released Australian Energy Assessments leads remain assignable but all actual
+  appointment mutations require the customer's acceptance row for the exact
+  current accepted quote version. A stale historical acceptance and a
+  concurrent change back to an unaccepted version both fail closed.
+- Confirmed checks on the exact implementation source: typecheck passed,
+  warning-free lint passed, integration 36/36 passed, affected scheduling and
+  CRM regression set 157/157 passed, the complete suite passed 2,214 tests with
+  10 intentional skips and 0 failures, `git diff --check` passed, all 140
+  migrations replayed, customer-plan PDF audit passed and the production build
+  and Sites server-bundle audit passed.
+- Responsive local markup and exact stylesheet inspection confirmed the
+  calendar-first desktop layout, calendar-first tablet stacking and a 390-class
+  phone layout with the 838-pixel week contained by internal horizontal
+  scrolling. Signed-in live owner, team-scope and own-scope desktop and phone
+  inspection remains the final post-publication check.
+
+### Next five product steps
+
+1. Make assignment plus first appointment one atomic server action so the user
+   can make one deliberate save while job access, appointment ownership and
+   conflict checks change together.
+2. Allow an existing appointment for the focused job to be edited inline in the
+   same Schedule tab while preserving revision and conflict guards.
+3. Suggest the next few clear slots for the selected worker while leaving the
+   user in control of the final date and time.
+4. Prepare and rehearse the bounded pre-launch data-reset runbook, with an
+   explicit launch gate that prevents accidental use after the product is live.
+5. Add focused schedule and quote-handoff telemetry for conflict rejections,
+   abandoned bookings, post-send scheduling uptake and time-to-book so the next
+   workflow improvement is evidence-led.
+
 ## Released milestone: TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64
 
 Status: exact executable application source

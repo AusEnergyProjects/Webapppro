@@ -38,7 +38,11 @@ class TestD1Statement {
 
 function testD1(database) {
   let beforeBatch = null;
+  let batchCalls = 0;
   return {
+    get batchCalls() {
+      return batchCalls;
+    },
     prepare(sql) {
       return new TestD1Statement(database, sql);
     },
@@ -46,6 +50,7 @@ function testD1(database) {
       beforeBatch = callback;
     },
     async batch(statements) {
+      batchCalls += 1;
       const callback = beforeBatch;
       beforeBatch = null;
       if (callback) callback();
@@ -128,6 +133,29 @@ function fixture() {
       , accepted_disclosure_sha256 text NOT NULL DEFAULT ''
       , accepted_disclosure_at text NOT NULL DEFAULT ''
     );
+    CREATE TABLE trade_crm_quotes (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      crm_customer_id text NOT NULL,
+      current_version_number integer NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE trade_crm_quote_versions (
+      id text PRIMARY KEY NOT NULL,
+      quote_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      version_number integer NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE trade_crm_quote_acceptances (
+      quote_id text NOT NULL,
+      quote_version_id text NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      crm_customer_id text NOT NULL,
+      decision text NOT NULL
+    );
     CREATE TABLE trade_crm_customers (
       id text PRIMARY KEY NOT NULL,
       firebase_uid text NOT NULL,
@@ -159,6 +187,22 @@ function fixture() {
       notes text NOT NULL,
       created_at text NOT NULL,
       updated_at text NOT NULL
+    );
+    CREATE TABLE trade_team_unavailability (
+      id text PRIMARY KEY NOT NULL,
+      owner_uid text NOT NULL,
+      team_member_id text NOT NULL,
+      starts_at text NOT NULL,
+      ends_at text NOT NULL
+    );
+    CREATE TABLE trade_crm_write_guards (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      operation_id text NOT NULL,
+      step_number integer NOT NULL,
+      verified integer NOT NULL,
+      created_at text NOT NULL,
+      CONSTRAINT trade_crm_write_guard_verified_check CHECK (verified = 1)
     );
     CREATE TABLE trade_work_order_tasks (
       id text PRIMARY KEY NOT NULL,
@@ -274,10 +318,13 @@ function fixture() {
     );
     INSERT INTO trade_crm_job_details VALUES (
       'job-1', 'owner-1', 'customer-1', '', 'public_lead_released', 'quoting', 'not_sure',
-      'Customer disclosed details', '', '', '[]', 0, 0, 0, 0, 'draft', 'not_started', '', '',
+      'Customer disclosed details', '', '', '[]', 0, 0, 0, 0, 'accepted', 'not_started', '', '',
       '{"contract":"tlink-public-lead-accepted-disclosure-v1"}',
       '${"a".repeat(64)}', '2026-01-01T00:00:00.000Z'
     );
+    INSERT INTO trade_crm_quotes VALUES ('quote-1', 'job-1', 'owner-1', 'customer-1', 1, 'accepted');
+    INSERT INTO trade_crm_quote_versions VALUES ('quote-version-1', 'quote-1', 'owner-1', 1, 'accepted');
+    INSERT INTO trade_crm_quote_acceptances VALUES ('quote-1', 'quote-version-1', 'job-1', 'owner-1', 'customer-1', 'accepted');
     INSERT INTO trade_team_members VALUES (
       'member-a', 'owner-1', 'actor-1', 'Assigned worker', '["hot-water"]', 'active'
     );
@@ -323,7 +370,7 @@ function access(overrides = {}) {
   };
 }
 
-function crmRoute(d1, actorAccess) {
+function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1, synced: 1, failed: 0 })) {
   class TradeAccessError extends Error {
     constructor(code) {
       super(code);
@@ -334,6 +381,9 @@ function crmRoute(d1, actorAccess) {
   const adminJson = (body, status = 200) => Response.json(body, { status });
   const syncHelpers = loadTypescriptModule("../src/lib/trade-team-sync-server.ts", {});
   const jobRegisterHelpers = loadTypescriptModule("../src/lib/trade-crm-job-register.ts", {});
+  const scheduleServerHelpers = loadTypescriptModule("../src/lib/trade-schedule-server.ts", {
+    "../../db": { getD1: () => d1 },
+  });
   return loadTypescriptModule("../src/app/api/trade-crm/route.ts", {
     "../../../../db": { getD1: () => d1 },
     "@/lib/admin-server": {
@@ -351,6 +401,9 @@ function crmRoute(d1, actorAccess) {
     },
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-crm-job-register": jobRegisterHelpers,
+    "@/lib/trade-calendar-sync-server": {
+      syncCreatedAppointmentToConnectedCalendars: syncAppointment,
+    },
     "@/lib/trade-schedule": {
       appointmentEndsAt: () => "2099-01-02T11:00:00.000Z",
       assertAppointmentSlot: () => {},
@@ -365,7 +418,7 @@ function crmRoute(d1, actorAccess) {
       TradeComplianceIntentError: DomainError,
     },
     "@/lib/trade-compliance-intent-replan-server": {
-      isTradeComplianceIntentScheduleConflict: () => false,
+      isTradeComplianceIntentScheduleConflict: (error) => String(error?.message || error).includes("trade_crm_write_guard_verified_check"),
       plannedComplianceIntentReplanStatements: async () => [],
       previousTradeScheduleMutationGuardStatement: () => { throw new Error("UNEXPECTED_INSTALLATION_PATH"); },
     },
@@ -382,6 +435,7 @@ function crmRoute(d1, actorAccess) {
     "@/lib/trade-team-permission-policy.mjs": {
       canRescheduleWithinScope: () => true,
     },
+    "@/lib/trade-schedule-server": scheduleServerHelpers,
   });
 }
 
@@ -400,27 +454,164 @@ function appointmentRequest(assigneeMemberId) {
   });
 }
 
-test("create_appointment POST denies a cross-assignee change without canAssignJobs", async () => {
+test("create_appointment POST rejects a requested assignee that differs from the saved job assignment", async () => {
   const { database, d1 } = fixture();
   const { POST } = crmRoute(d1, access());
 
   const response = await POST(appointmentRequest("member-b"));
-  assert.equal(response.status, 403);
-  assert.match((await response.json()).error, /assigning jobs/i);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /assignment changed/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+});
+
+test("create_appointment POST also rejects an owner's cross-assignee request", async () => {
+  const { database, d1 } = fixture();
+  const { POST } = crmRoute(d1, access({ isOwner: true, actorUid: "owner-1", canAssignJobs: true }));
+
+  const response = await POST(appointmentRequest("member-b"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /assignment changed/i);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
 });
 
 test("create_appointment POST allows the current exact assignee without canAssignJobs", async () => {
   const { database, d1 } = fixture();
+  const synced = [];
+  const { POST } = crmRoute(d1, access(), async (ownerUid, appointmentId) => {
+    synced.push({ ownerUid, appointmentId });
+    return { connected: 1, synced: 1, failed: 0 };
+  });
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { ok: true, calendarSync: { connected: 1, synced: 1, failed: 0 } });
+  const row = database.prepare("SELECT id, work_order_id, assignee_member_id, assignee_label FROM trade_crm_appointments").get();
+  assert.equal(row.work_order_id, "job-1");
+  assert.equal(row.assignee_member_id, "member-a");
+  assert.equal(row.assignee_label, "Assigned worker");
+  assert.deepEqual(synced, [{ ownerUid: "owner-1", appointmentId: row.id }]);
+});
+
+test("create_appointment waits for the current AEA quote version to be accepted", async () => {
+  const { database, d1 } = fixture();
+  database.exec("DELETE FROM trade_crm_quote_acceptances");
+  const response = await crmRoute(d1, access()).POST(appointmentRequest("member-a"));
+
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /customer.*accept.*current.*quote/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+  assert.equal(d1.batchCalls, 0);
+});
+
+test("create_appointment atomically rejects acceptance replaced after the pre-check", async () => {
+  const { database, d1 } = fixture();
+  d1.setBeforeBatch(() => database.exec("DELETE FROM trade_crm_quote_acceptances"));
+  const response = await crmRoute(d1, access()).POST(appointmentRequest("member-a"));
+
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /customer.*accept.*current.*quote/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+});
+
+test("create_appointment rejects a saved assignee whose team membership became inactive", async () => {
+  const { database, d1 } = fixture();
+  database.prepare("UPDATE trade_team_members SET status = 'inactive' WHERE id = 'member-a'").run();
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /available team member/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+  assert.equal(d1.batchCalls, 0);
+});
+
+test("create_appointment rejects an overlapping appointment before insert or batch", async () => {
+  const { database, d1 } = fixture();
+  database.prepare(`INSERT INTO trade_crm_appointments VALUES
+    ('appointment-existing', 'job-1', 'owner-1', 'site_visit', 'Existing visit',
+      '2099-01-02T10:30:00.000Z', '2099-01-02T11:30:00.000Z', 'member-a', 'Assigned worker',
+      'scheduled', '', '2026-01-01', '2026-01-01')`).run();
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /overlapping appointment/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
+  assert.equal(d1.batchCalls, 0);
+});
+
+test("create_appointment allows different workers to be booked at the same time", async () => {
+  const { database, d1 } = fixture();
+  database.prepare(`INSERT INTO trade_crm_appointments VALUES
+    ('appointment-other-worker', 'job-1', 'owner-1', 'site_visit', 'Other worker visit',
+      '2099-01-02T10:00:00.000Z', '2099-01-02T11:00:00.000Z', 'member-b', 'Other worker',
+      'scheduled', '', '2026-01-01', '2026-01-01')`).run();
   const { POST } = crmRoute(d1, access());
 
   const response = await POST(appointmentRequest("member-a"));
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { ok: true });
-  const row = database.prepare("SELECT work_order_id, assignee_member_id, assignee_label FROM trade_crm_appointments").get();
-  assert.equal(row.work_order_id, "job-1");
-  assert.equal(row.assignee_member_id, "member-a");
-  assert.equal(row.assignee_label, "Assigned worker");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE assignee_member_id = 'member-a'").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE assignee_member_id = 'member-b'").get().count, 1);
+});
+
+test("create_appointment rejects team unavailability before insert or batch", async () => {
+  const { database, d1 } = fixture();
+  database.prepare(`INSERT INTO trade_team_unavailability VALUES
+    ('unavailable-1', 'owner-1', 'member-a', '2099-01-02T09:30:00.000Z', '2099-01-02T10:30:00.000Z')`).run();
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /unavailable/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+  assert.equal(d1.batchCalls, 0);
+});
+
+test("create_appointment atomically rejects an overlap introduced after the availability pre-check", async () => {
+  const { database, d1 } = fixture();
+  d1.setBeforeBatch(() => {
+    database.prepare(`INSERT INTO trade_crm_appointments VALUES
+      ('appointment-racing', 'job-1', 'owner-1', 'site_visit', 'Racing visit',
+        '2099-01-02T10:30:00.000Z', '2099-01-02T11:30:00.000Z', 'member-a', 'Assigned worker',
+        'scheduled', '', '2026-01-01', '2026-01-01')`).run();
+  });
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /schedule|changed|refresh/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 1);
+  assert.equal(database.prepare("SELECT id FROM trade_crm_appointments").get().id, "appointment-racing");
+});
+
+test("create_appointment atomically rejects unavailability introduced after the pre-check", async () => {
+  const { database, d1 } = fixture();
+  d1.setBeforeBatch(() => {
+    database.prepare(`INSERT INTO trade_team_unavailability VALUES
+      ('unavailable-racing', 'owner-1', 'member-a', '2099-01-02T09:30:00.000Z', '2099-01-02T10:30:00.000Z')`).run();
+  });
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /schedule|changed|refresh/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+});
+
+test("create_appointment atomically rejects a job reassigned after it was opened", async () => {
+  const { database, d1 } = fixture();
+  d1.setBeforeBatch(() => {
+    database.prepare(`UPDATE trade_work_orders SET assignee_member_id = 'member-b', assignee_label = 'Other worker',
+      revision = 4, updated_at = 'concurrent' WHERE id = 'job-1'`).run();
+  });
+  const { POST } = crmRoute(d1, access());
+
+  const response = await POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /changed|refresh/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+  assert.equal(database.prepare("SELECT assignee_member_id FROM trade_work_orders WHERE id = 'job-1'").get().assignee_member_id, "member-b");
 });
 
 test("job detail GET applies scheduleScope before loading appointment rows", async () => {

@@ -55,6 +55,14 @@ import {
   ENERGY_SERVICE_LABELS,
 } from "@/lib/energy-service-catalogue.mjs";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
+import {
+  assertTradeJobReadyForScheduling,
+  assertTradeScheduleAvailable,
+  isTradeJobScheduleEligibilityConflict,
+  tradeJobScheduleEligibilityGuardStatement,
+  tradeJobScheduleEligibilitySql,
+  tradeScheduleAvailabilityGuardStatement,
+} from "@/lib/trade-schedule-server";
 
 export const runtime = "edge";
 
@@ -312,8 +320,11 @@ function errorResponse(error: unknown) {
     return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   }
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (code === "JOB_SCHEDULE_ACCEPTANCE_REQUIRED" || isTradeJobScheduleEligibilityConflict(error)) {
+    return adminJson({ ok: false, error: "Wait for the customer to accept the current Australian Energy Assessments quote before scheduling this job." }, 409);
+  }
   if (isTradeComplianceIntentScheduleConflict(error)) {
-    return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
+    return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job, its schedule or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
   }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
@@ -336,6 +347,8 @@ function errorResponse(error: unknown) {
   if (code === "QUOTE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow quote changes." }, 403);
   if (code === "INVOICE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow invoice changes." }, 403);
   if (code === "JOB_ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assigning jobs to other team members." }, 403);
+  if (code === "JOB_ASSIGNMENT_REQUIRED") return adminJson({ ok: false, error: "Assign this job before adding an appointment." }, 409);
+  if (code === "JOB_ASSIGNMENT_CHANGED") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job's assignment changed. Refresh it before booking." }, 409);
   if (code === "JOB_RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
   if (code === "CUSTOMER_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer records." }, 403);
@@ -358,6 +371,8 @@ function errorResponse(error: unknown) {
   if (code === "INVALID_DATE") return adminJson({ ok: false, error: "Choose a valid date and time." }, 400);
   if (["INVALID_STATE", "INVALID_JOB_STATUS", "INVALID_QUOTE_TOTAL"].includes(code)) return adminJson({ ok: false, error: "Check the job register filters and try again." }, 400);
   if (code === "PAST_APPOINTMENT") return adminJson({ ok: false, error: "Choose a future appointment time." }, 400);
+  if (code === "APPOINTMENT_CONFLICT") return adminJson({ ok: false, error: "That team member already has an overlapping appointment." }, 409);
+  if (code === "UNAVAILABLE_CONFLICT") return adminJson({ ok: false, error: "That team member is unavailable during the selected time." }, 409);
   if (code === "INVALID_APPOINTMENT_SLOT") return adminJson({ ok: false, error: "Choose an appointment time on a 15-minute interval." }, 400);
   if (code === "INVALID_QUICK_INVOICE") return adminJson({ ok: false, error: "Add at least one valid invoice line and check the GST choice." }, 400);
   if (code === "PRICE_BOOK_ITEM_UNAVAILABLE") return adminJson({ ok: false, error: "A saved invoice fee changed or was archived. Choose it again." }, 409);
@@ -533,6 +548,7 @@ function indexedJob(row: Record<string, unknown>, access: Pick<TeamAccess, "canV
     description: protectedCustomer ? "" : row.description || "", customerReference: protectedCustomer ? String(row.source_reference || row.work_number) : String(row.customer_reference || ""),
     nextAction: row.next_action || "", tags: storedList(row.job_tags), estimatedValueCents: Number(row.estimated_value_cents || 0),
     quotedValueCents: access.canViewQuotes ? Number(row.quoted_value_cents || 0) : 0,
+    scheduleReady: Boolean(row.schedule_ready),
     invoicedValueCents: access.canViewInvoices ? Number(row.invoiced_value_cents || 0) : 0,
     paidValueCents: access.canViewInvoices ? Number(row.paid_value_cents || 0) : 0,
     quoteStatus: access.canViewQuotes ? row.quote_status || "not_started" : "restricted",
@@ -1008,6 +1024,7 @@ async function crmDetail(identity: CrmIdentity, resource: string, id: string) {
   const row = await db.prepare(`SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type, d.description,
     d.customer_reference, d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents,
     d.invoiced_value_cents, d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
+    CASE WHEN ${tradeJobScheduleEligibilitySql("w", "d")} THEN 1 ELSE 0 END schedule_ready,
     CASE WHEN c.business_name <> '' THEN c.business_name ELSE TRIM(c.first_name || ' ' || c.last_name) END customer_name,
     (SELECT status FROM trade_handover_packs hp WHERE hp.work_order_id = w.id AND hp.firebase_uid = w.firebase_uid ORDER BY hp.updated_at DESC LIMIT 1) handover_status
     FROM trade_work_orders w LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
@@ -1294,7 +1311,7 @@ async function crmReports(identity: CrmIdentity) {
 
 async function ownedJob(db: D1Database, identity: CrmIdentity, workOrderId: string) {
   const job = await db.prepare(`SELECT w.id, w.source_type, w.service_category, w.assignee_member_id, w.revision, w.stage,
-      c.customer_number, c.business_name, c.first_name, c.last_name
+      d.customer_source, c.customer_number, c.business_name, c.first_name, c.last_name
     FROM trade_work_orders w
     LEFT JOIN trade_crm_job_details d ON d.work_order_id = w.id AND d.firebase_uid = w.firebase_uid
     LEFT JOIN trade_crm_customers c ON c.id = d.crm_customer_id AND c.firebase_uid = w.firebase_uid
@@ -2033,6 +2050,7 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, id: taskId });
     }
     if (action === "create_appointment") {
+      await assertTradeJobReadyForScheduling(identity.uid, workOrderId);
       if (!identity.access.isOwner && identity.access.scheduleScope === "own"
         && String(job.assignee_member_id || "") !== identity.memberId) throw new Error("JOB_NOT_ASSIGNED");
       const startsAt = dateValue(body.startsAt);
@@ -2043,27 +2061,38 @@ export async function POST(request: Request) {
       try { endsAt = appointmentEndsAt(startsAt.slice(0, 16), body.durationMinutes); }
       catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
-      const assigneeMemberId = cleanAdminText(body.assigneeMemberId, 180) || identity.memberId;
       const currentAssigneeMemberId = String(job.assignee_member_id || "");
-      if (!identity.access.isOwner && identity.access.scheduleScope === "own" && assigneeMemberId !== identity.memberId) {
-        throw new Error("JOB_NOT_ASSIGNED");
+      const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
+      if (!currentAssigneeMemberId) throw new Error("JOB_ASSIGNMENT_REQUIRED");
+      if (requestedAssigneeMemberId && requestedAssigneeMemberId !== currentAssigneeMemberId) {
+        throw new Error("JOB_ASSIGNMENT_CHANGED");
       }
-      if (assigneeMemberId !== currentAssigneeMemberId
-        && !canAssignJob(identity.access, currentAssigneeMemberId, assigneeMemberId)) {
-        throw new Error("JOB_ASSIGN_REQUIRED");
-      }
+      const assigneeMemberId = currentAssigneeMemberId;
       const member = await assertMemberCapability(db, identity, assigneeMemberId, String(job.service_category || ""));
       if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
       const assignee = String(member.display_name || "");
       const displayName = customerDisplayName(job);
       const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
       const appointmentId = crypto.randomUUID();
-      const statements = [db.prepare(`INSERT INTO trade_crm_appointments
+      await assertTradeScheduleAvailable({ ownerUid: identity.uid, memberId: assigneeMemberId, startsAt, endsAt });
+      const statements = [
+        db.prepare(`INSERT INTO trade_crm_write_guards
+          (id, firebase_uid, operation_id, step_number, verified, created_at)
+          VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
+            SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
+              AND record_status = 'active' AND revision = ? AND assignee_member_id = ?
+          ) THEN 1 ELSE 0 END, ?)`)
+          .bind(
+            crypto.randomUUID(), identity.uid, `appointment-job-assignee:${crypto.randomUUID()}`,
+            workOrderId, identity.uid, job.revision, assigneeMemberId, now,
+          ),
+        db.prepare(`INSERT INTO trade_crm_appointments
         (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
          status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`)
         .bind(appointmentId, workOrderId, identity.uid, appointmentType,
           appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
-          cleanAdminText(body.notes, 1000), now, now)];
+          cleanAdminText(body.notes, 1000), now, now),
+      ];
       if (appointmentType === "installation") {
         const revision = nextJobRevision(job.revision);
         const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
@@ -2110,8 +2139,26 @@ export async function POST(request: Request) {
           }),
         );
       }
+      statements.push(
+        tradeJobScheduleEligibilityGuardStatement(db, {
+          ownerUid: identity.uid,
+          workOrderId,
+          changedAt: now,
+        }),
+        tradeScheduleAvailabilityGuardStatement(db, {
+          ownerUid: identity.uid,
+          memberId: assigneeMemberId,
+          startsAt,
+          endsAt,
+          changedAt: now,
+          excludeAppointmentId: appointmentId,
+        }),
+      );
       await db.batch(statements);
-      return adminJson({ ok: true }, 201);
+      let calendarSync = { connected: 0, synced: 0, failed: 0 };
+      try { calendarSync = await syncCreatedAppointmentToConnectedCalendars(identity.uid, appointmentId); }
+      catch { calendarSync = { connected: 0, synced: 0, failed: 1 }; }
+      return adminJson({ ok: true, calendarSync }, 201);
     }
     if (action === "create_note") {
       const noteType = NOTE_TYPES.has(cleanAdminText(body.noteType, 20)) ? cleanAdminText(body.noteType, 20) : "internal";

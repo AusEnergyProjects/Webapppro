@@ -157,7 +157,7 @@ test("accepted public leads keep disclosed customer and site context inside scop
   assert.match(crm, /const customerContactSummary = customer \? \[customer\.phone, customer\.email\]/);
   assert.match(crm, /const siteAddressSummary = jobSite/);
   assert.match(crm, /isReleasedLead \? "Customer-authorised lead"/);
-  assert.match(crm, /This accepted job contains only the customer-disclosed contact and property details saved for your business/);
+  assert.match(crm, /This customer-authorised lead contains only the contact and property details disclosed to your business/);
   assert.match(crm, /customerName=\{jobCustomerName\}/);
   assert.match(quote, /jobSummary\?\.siteSummary/);
   assert.match(invoice, /invoice\.document\.customer\.name/);
@@ -171,7 +171,7 @@ test("staff schedule loads through its authorised API without opening owner cale
   const scheduleLoad = schedule.slice(scheduleLoadStart, scheduleLoadEnd);
   assert.match(scheduleLoad, /fetch\(`\/api\/trade-schedule\?rangeStart=/);
   assert.doesNotMatch(scheduleLoad, /if \(permissions\) return/);
-  assert.match(schedule, /if \(permissions\) return;[\s\S]*?fetch\("\/api\/trade-calendar-sync"/);
+  assert.match(schedule, /if \(permissions \|\| jobCalendar\) return;[\s\S]*?fetch\("\/api\/trade-calendar-sync"/);
   assert.match(schedule, /const canRescheduleJobs = !schedulePermissions \|\| schedulePermissions\.canRescheduleJobs/);
   assert.match(schedule, /const canManageAvailability = Boolean\(data\.access\?\.memberId\)/);
   assert.match(schedule, /canManageTeamAvailability\s*\? members\s*:\s*members\.filter\(\(member\) => member\.id === data\.access\?\.memberId\)/);
@@ -207,30 +207,56 @@ test("staff job creation and scoped job context do not leak directory search", (
   assert.match(newJob, /This scheduled job starts in your own work queue/);
 });
 
-test("job appointments use authoritative IDs and paged capability matched assignees", () => {
+test("job scheduling uses the authoritative assignee ID and loads every capability matched assignee page", () => {
   assert.match(crm, /assigneeMemberId: string; assigneeLabel: string/);
-  assert.match(crm, /const scheduleMemberId = job\.assigneeMemberId/);
   assert.doesNotMatch(crm, /teamMembers\.find\(\(member\) => member\.displayName === job\.assigneeLabel\)/);
   assert.doesNotMatch(crm, /teamMembers\[0\]\?\.id/);
+  assert.match(crm, /if \(!canRescheduleJobs \|\| !job\.assigneeMemberId \|\| assignmentBusy/);
+  assert.match(crm, /jobAssigneeId !== job\.assigneeMemberId/);
+  assert.match(crm, /const bookingControlsBlocked = assignmentBusy \|\| assignmentDirty \|\| appointmentBusy/);
+  assert.match(crm, /const bookingCalendarReady = appointmentScheduleValidation\.key === bookingProposalKey && appointmentScheduleValidation\.status === "clear"/);
+  assert.match(crm, /const bookingSubmitBlocked = bookingControlsBlocked \|\| !bookingCalendarReady/);
+  assert.match(crm, /appointmentScheduleValidation\.status !== "clear"/);
+  assert.match(crm, /onProposalValidation=\{handleProposalValidation\}/);
+  assert.match(crm, /focusedMemberId=\{jobAssigneeId\}/);
+  assert.match(crm, /proposal=\{canAddJobAppointment && !assignmentDirty \?/);
+  assert.match(crm, /aria-describedby=\{proposalStatusId\}/);
+  assert.match(crm, /assigneeMemberId: job\.assigneeMemberId/);
   assert.match(crm, /assigneeCapability: job\.serviceCategory/);
-  assert.match(crm, /assigneePageSize: "25"/);
-  assert.match(crm, /allowedAppointmentAssignees\.map/);
-  assert.match(crm, /appointmentAssigneeRoster\.page < appointmentAssigneeRoster\.totalPages/);
-  assert.match(crm, /canAssignJobs && \(!permissions \|\| permissions\.scheduleScope === "team"\)/);
+  assert.match(crm, /assigneePageSize: "50"/);
+  assert.match(crm, /for \(let page = 2; page <= \(roster\?\.totalPages \|\| 1\); page \+= 1\)/);
+  assert.match(crm, /allowedJobAssignees\.map/);
+  assert.doesNotMatch(crm, /appointmentAssigneeRoster|allowedAppointmentAssignees|Find an active teammate/);
 });
 
-test("own-schedule staff cannot view or mutate another worker's appointments", () => {
+test("the combined Schedule tab respects own-schedule visibility and remains available to assigners", () => {
   assert.match(crm, /type Appointment = \{[^}]*assigneeMemberId: string/);
   assert.match(crm, /const canViewTeamSchedule = !permissions \|\| permissions\.scheduleScope === "team"/);
   assert.match(crm, /job\.appointments\.filter\(\(appointment\) => appointment\.assigneeMemberId === selfMember\?\.id\)/);
   assert.match(crm, /const canViewJobSchedule = canViewTeamSchedule \|\| job\.assigneeMemberId === selfMember\?\.id \|\| visibleJobAppointments\.length > 0/);
-  assert.match(crm, /const canAddJobAppointment = canRescheduleJobs && \(canViewTeamSchedule \|\| job\.assigneeMemberId === selfMember\?\.id\)/);
+  assert.match(crm, /const canOpenJobSchedule = !isProtected && \(canAssignJobs \|\| canViewJobSchedule\)/);
+  assert.match(crm, /const canAddJobAppointment = jobReadyForScheduling && canRescheduleJobs && Boolean\(job\.assigneeMemberId\) && \(canViewTeamSchedule \|\| job\.assigneeMemberId === selfMember\?\.id\)/);
+  assert.match(crm, /const canStartJobScheduling = jobReadyForScheduling && \(canAssignJobs \|\| canAddJobAppointment\)/);
+  assert.match(crm, /const jobReadyForScheduling = job\.scheduleReady/);
+  assert.match(crm, /Wait for the customer to accept the current quote before adding an appointment/);
   assert.match(crm, /canViewTeamSchedule \|\| appointment\.assigneeMemberId === selfMember\?\.id/);
-  assert.match(crm, /if \(canViewJobSchedule\) mainTabs\.push\(\["schedule", `Schedule \(\$\{visibleJobAppointments\.length\}\)`\]\)/);
+  assert.match(crm, /if \(canOpenJobSchedule\) mainTabs\.push\(\["schedule", `Schedule \(\$\{visibleJobAppointments\.length\}\)`\]\)/);
   assert.match(crm, /visibleJobAppointments\.map\(\(item\)/);
   assert.match(crm, /\{canCompleteAppointment\(item\) && <button/);
-  assert.match(crm, /\{canAddJobAppointment && <form className="crm-inline-form" onSubmit=\{addAppointment\}>/);
+  assert.match(crm, /\{canAddJobAppointment && <form className="crm-job-booking-form" onSubmit=\{addAppointment\}>/);
+  assert.doesNotMatch(crm, /mainTabs\.push\(\["assignment"/);
+  assert.doesNotMatch(crm, /activeTab === "assignment"/);
+  const scheduleSection = crm.match(/\{activeTab === "schedule"[\s\S]*?(?=\n\s*\{activeTab === ")/)?.[0] || "";
+  assert.match(scheduleSection, /\{canAssignJobs && <section[\s\S]*?<form className=\{registerStyles\.assignmentForm\}/);
+  assert.match(scheduleSection, /<TradeScheduleWorkspace/);
+  assert.match(scheduleSection, /variant="job"/);
+  assert.match(scheduleSection, /permissions=\{permissions\}/);
+  assert.ok(scheduleSection.indexOf("<TradeScheduleWorkspace") < scheduleSection.indexOf("registerStyles.assignmentForm"));
   assert.doesNotMatch(crm, /if \(!permissions \|\| permissions\.scheduleScope\) mainTabs\.push/);
+  assert.match(crm, /const canOpenScheduleAction = !staffPermissions \|\| staffPermissions\.canAssignJobs/);
+  assert.match(crm, /job\.assigneeMemberId === selfMemberId/);
+  assert.match(crm, /setJobScheduleRefreshNonce\(\(value\) => value \+ 1\)/);
+  assert.match(crm, /onScheduleJob=\{canStartJobScheduling && !isReleasedLead \? \(\) => setTab\("schedule"\) : undefined\}/);
 });
 
 test("job edits use the exact loaded revision instead of overwriting concurrent changes", () => {

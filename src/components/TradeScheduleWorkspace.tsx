@@ -12,15 +12,21 @@ import {
   appointmentEndsAt,
   browserLocalDateTime,
   durationLabel,
+  invalidateScheduleProposal,
   mergeDraggedScheduleAppointment,
   moveAppointmentToDate,
   nextAppointmentSlot,
+  rangesOverlap,
+  scheduleProposalKey,
+  scheduleProposalValidation,
   scheduleDragEdgeDirection,
+  scheduleMemberLabel,
   scheduleAppointmentLanes,
   scheduleDisplayWindow,
   scheduleRangeContainsWeek,
   scheduleWeekDays,
   scheduleWeekSwipeDirection,
+  type ScheduleProposalValidation,
 } from "@/lib/trade-schedule";
 import {
   clearIntegrationReturnFromAddress,
@@ -46,6 +52,20 @@ type ScheduleResult = { ok?: boolean; error?: string; weekStart?: string; weekEn
 type Edit = { memberId: string; date: string; time: string; durationMinutes: number };
 type CalendarConnection = { provider: "google_calendar" | "microsoft_calendar"; label: string; configured: boolean; status: "connected" | "not_connected"; lastSyncAt: string; lastError: string };
 type CalendarResult = { ok?: boolean; error?: string; providers?: CalendarConnection[]; synced?: number; failed?: number };
+type ScheduleProposal = { startsAt: string; durationMinutes: number; assigneeMemberId: string; assigneeLabel: string; title: string };
+type TradeScheduleWorkspaceProps = {
+  user: User;
+  permissions?: TradeTeamPermissions;
+  onOpenJob?: (workOrderId: string) => void;
+  onOpenQuote?: (workOrderId: string) => void;
+  initialWeekStart?: string;
+  variant?: "full" | "job";
+  proposal?: ScheduleProposal;
+  refreshNonce?: number;
+  focusedMemberId?: string;
+  proposalStatusId?: string;
+  onProposalValidation?: (validation: ScheduleProposalValidation) => void;
+};
 
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const shortDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -72,7 +92,6 @@ function minuteValue(value: string) { const [hour, minute] = value.split(":").ma
 function defaultHours(weekday: number): WorkingHours { return { teamMemberId: "", weekday, startMinute: 540, endMinute: 1020, isAvailable: weekday >= 1 && weekday <= 5 }; }
 function readable(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function money(cents: number) { return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
-function memberLabel(member: Member) { return member.isOwner ? "Me" : member.displayName; }
 function editFromRange(memberId: string, startsAt: string, endsAt: string): Edit {
   return { memberId, date: startsAt.slice(0, 10), time: startsAt.slice(11, 16), durationMinutes: appointmentDurationMinutes(startsAt, endsAt) };
 }
@@ -111,7 +130,8 @@ function DurationControl({ id, value, onChange }: { id: string; value: number; o
   return <label className="schedule-duration" htmlFor={id}><span>Duration <strong>{durationLabel(value)}</strong></span><input id={id} type="range" min={APPOINTMENT_MIN_DURATION_MINUTES} max={APPOINTMENT_MAX_DURATION_MINUTES} step="15" value={value} onChange={(event) => onChange(Number(event.target.value))} /><small>15 min</small><small>8 hours</small></label>;
 }
 
-export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => undefined, onOpenQuote, initialWeekStart }: { user: User; permissions?: TradeTeamPermissions; onOpenJob?: (workOrderId: string) => void; onOpenQuote?: (workOrderId: string) => void; initialWeekStart?: string }) {
+export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => undefined, onOpenQuote, initialWeekStart, variant = "full", proposal, refreshNonce = 0, focusedMemberId, proposalStatusId = "trade-schedule-proposal-status", onProposalValidation }: TradeScheduleWorkspaceProps) {
+  const jobCalendar = variant === "job";
   const [initialTarget] = useState(() => initialScheduleWeekStart(initialWeekStart));
   const [initialFocusDate] = useState(() => initialScheduleFocusDate(initialWeekStart));
   const [rangeStart, setRangeStart] = useState(() => addDays(initialTarget, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
@@ -119,8 +139,8 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const [data, setData] = useState<ScheduleResult>({});
   const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const [calendars, setCalendars] = useState<CalendarConnection[]>([]);
-  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState("");
-  const [memberFilter, setMemberFilter] = useState(""); const [jobFilter, setJobFilter] = useState(""); const [serviceFilter, setServiceFilter] = useState(""); const [siteFilter, setSiteFilter] = useState(""); const [statusFilter, setStatusFilter] = useState(""); const [conflictOnly, setConflictOnly] = useState(false);
+  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(""); const [status, setStatus] = useState(""); const [loadError, setLoadError] = useState(""); const [failedWeekStart, setFailedWeekStart] = useState(""); const [loadAttemptNonce, setLoadAttemptNonce] = useState(0);
+  const [memberFilter, setMemberFilter] = useState(() => jobCalendar ? focusedMemberId || proposal?.assigneeMemberId || "" : ""); const [jobFilter, setJobFilter] = useState(""); const [serviceFilter, setServiceFilter] = useState(""); const [siteFilter, setSiteFilter] = useState(""); const [statusFilter, setStatusFilter] = useState(""); const [conflictOnly, setConflictOnly] = useState(false);
   const [hoursMember, setHoursMember] = useState(""); const [hourEdits, setHourEdits] = useState<Record<number, WorkingHours>>({});
   const [edits, setEdits] = useState<Record<string, Edit>>({}); const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
@@ -139,20 +159,21 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const draggedAppointmentRef = useRef<Appointment | null>(null);
   const dragDropCommittedRef = useRef(false);
   const pendingDragScrollPositionRef = useRef<{ minute: number; left: number } | null>(null);
-  const pendingWeekStartRef = useRef("");
-  const loadedRangeStartRef = useRef("");
+  const pendingWeekStartRef = useRef(initialTarget);
   const weekSwipeStartRef = useRef<{ x: number; y: number; startedOnAppointment: boolean; atStartBoundary: boolean; atEndBoundary: boolean } | null>(null);
   const suppressCardClickRef = useRef(false);
   const lastInitialWeekStartRef = useRef(initialWeekStart);
+  const lastFocusedMemberIdRef = useRef(focusedMemberId);
   const displayRangeStart = data.rangeStart || rangeStart;
   const schedulePermissions = data.access?.permissions || permissions;
   const canAssignJobs = !schedulePermissions || schedulePermissions.canAssignJobs;
   const canRescheduleJobs = !schedulePermissions || schedulePermissions.canRescheduleJobs;
   const canManageAvailability = Boolean(data.access?.memberId) || !permissions;
   const canManageTeamAvailability = Boolean(data.access?.isOwner || data.access?.permissions?.canManageTeam);
+  const memberLabel = (member: Member) => scheduleMemberLabel(member, data.access?.memberId || "");
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    setLoading(true); setLoadError(""); setFailedWeekStart("");
     try {
       const token = await user.getIdToken();
       const scheduleResponse = await fetch(`/api/trade-schedule?rangeStart=${rangeStart}&rangeWeeks=${SCHEDULE_BUFFER_WEEKS}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
@@ -160,8 +181,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       if (signal?.aborted) return;
       if (!scheduleResponse.ok || !result.ok) throw new Error(result.error || "The schedule could not be loaded.");
       const loadedRangeStart = result.rangeStart || rangeStart;
-      loadedRangeStartRef.current = loadedRangeStart;
-      setData(result); setHoursMember((current) => current || result.access?.memberId || result.members?.[0]?.id || ""); setEdits({}); setDecisionNotes({});
+      setData(result); setLoadError(""); setHoursMember((current) => current || result.access?.memberId || result.members?.[0]?.id || ""); setEdits({}); setDecisionNotes({});
       const pendingWeekStart = pendingWeekStartRef.current;
       if (pendingWeekStart && scheduleRangeContainsWeek(loadedRangeStart, result.rangeWeeks || SCHEDULE_BUFFER_WEEKS, pendingWeekStart)) {
         pendingWeekStartRef.current = "";
@@ -169,13 +189,8 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       }
     } catch (error) {
       if (!signal?.aborted) {
-        const failedPendingNavigation = Boolean(pendingWeekStartRef.current);
-        pendingWeekStartRef.current = "";
-        if (failedPendingNavigation) {
-          pendingFocusDateRef.current = "";
-          if (loadedRangeStartRef.current && loadedRangeStartRef.current !== rangeStart) setRangeStart(loadedRangeStartRef.current);
-        }
-        setStatus(error instanceof Error ? error.message : "The schedule could not be loaded.");
+        setFailedWeekStart(pendingWeekStartRef.current);
+        setLoadError(error instanceof Error ? error.message : "The schedule could not be loaded.");
       }
     }
     finally { if (!signal?.aborted) setLoading(false); }
@@ -185,16 +200,19 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     const controller = new AbortController();
     const frame = window.requestAnimationFrame(() => void load(controller.signal));
     return () => { controller.abort(); window.cancelAnimationFrame(frame); };
-  }, [load]);
-  useEffect(() => {
-    if (data.rangeStart) loadedRangeStartRef.current = data.rangeStart;
-  }, [data.rangeStart]);
+  }, [load, loadAttemptNonce, refreshNonce]);
   useEffect(() => {
     const timer = window.setInterval(() => setBrowserNow(browserLocalDateTime()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (permissions) return;
+    if (!jobCalendar || lastFocusedMemberIdRef.current === focusedMemberId) return;
+    lastFocusedMemberIdRef.current = focusedMemberId;
+    if (proposal) onProposalValidation?.(invalidateScheduleProposal(scheduleProposalKey(proposal.startsAt, proposal.durationMinutes, proposal.assigneeMemberId)));
+    setMemberFilter(focusedMemberId || "");
+  }, [focusedMemberId, jobCalendar, onProposalValidation, proposal]);
+  useEffect(() => {
+    if (permissions || jobCalendar) return;
     const controller = new AbortController();
     async function loadCalendars() {
       try {
@@ -239,7 +257,7 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     }
     const frame = window.requestAnimationFrame(() => void loadCalendars());
     return () => { controller.abort(); window.cancelAnimationFrame(frame); };
-  }, [initialTarget, permissions, user]);
+  }, [initialTarget, jobCalendar, permissions, user]);
   useEffect(() => {
     if (!hoursMember) return; const next: Record<number, WorkingHours> = {};
     for (let weekday = 0; weekday < 7; weekday += 1) next[weekday] = data.workingHours?.find((row) => row.teamMemberId === hoursMember && row.weekday === weekday) || { ...defaultHours(weekday), teamMemberId: hoursMember };
@@ -251,9 +269,12 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     const frame = window.requestAnimationFrame(() => {
       lastInitialWeekStartRef.current = initialWeekStart;
       pendingFocusDateRef.current = initialWeekStart; setFocusRequestVersion((current) => current + 1);
-      if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, target)) setActiveWeekStart(target);
-      else pendingWeekStartRef.current = target;
-      setRangeStart(addDays(target, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+      if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, target)) {
+        pendingWeekStartRef.current = ""; setActiveWeekStart(target);
+      } else {
+        pendingWeekStartRef.current = target;
+        setRangeStart(addDays(target, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [displayRangeStart, initialWeekStart]);
@@ -336,7 +357,36 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     return canManageTeamAvailability ? members : members.filter((member) => member.id === data.access?.memberId);
   }, [canManageTeamAvailability, data.access?.memberId, data.availabilityMembers]);
   const appointments = useMemo(() => data.appointments || [], [data.appointments]);
+  const visibleUnavailability = useMemo(() => (data.unavailability || [])
+    .filter((item) => !memberFilter || item.teamMemberId === memberFilter), [data.unavailability, memberFilter]);
   const appointmentsById = useMemo(() => new Map(appointments.map((item) => [item.id, item])), [appointments]);
+  const proposalEndsAt = useMemo(() => {
+    if (!proposal?.startsAt) return "";
+    try { return appointmentEndsAt(proposal.startsAt, proposal.durationMinutes); }
+    catch { return ""; }
+  }, [proposal]);
+  const proposalConflictIds = useMemo(() => new Set(appointments.filter((item) => Boolean(
+    proposal?.assigneeMemberId && proposal.startsAt && proposalEndsAt
+      && item.assigneeMemberId === proposal.assigneeMemberId
+      && rangesOverlap(item.startsAt, item.endsAt || item.startsAt, proposal.startsAt, proposalEndsAt),
+  )).map((item) => item.id)), [appointments, proposal, proposalEndsAt]);
+  const proposalValidation = useMemo(() => scheduleProposalValidation({
+    startsAt: proposal?.startsAt || "",
+    endsAt: proposalEndsAt,
+    assigneeMemberId: proposal?.assigneeMemberId || "",
+    visibleMemberId: memberFilter,
+    activeWeekStart,
+    loadedRangeStart: data.rangeStart,
+    loadedRangeWeeks: data.rangeWeeks || SCHEDULE_BUFFER_WEEKS,
+    loading,
+    loadFailed: Boolean(loadError),
+    failedWeekStart,
+    assigneeActive: !proposal?.assigneeMemberId || members.some((member) => member.id === proposal.assigneeMemberId),
+    appointments,
+    unavailability: data.unavailability || [],
+  }), [activeWeekStart, appointments, data.rangeStart, data.rangeWeeks, data.unavailability, failedWeekStart, loadError, loading, memberFilter, members, proposal, proposalEndsAt]);
+  const proposalHasConflict = proposalValidation.conflict;
+  useEffect(() => { onProposalValidation?.(proposalValidation); }, [onProposalValidation, proposalValidation]);
   const services = useMemo(() => [...new Set([...appointments.map((item) => item.serviceCategory), ...(data.unassignedJobs || []).map((item) => item.serviceCategory)])].filter(Boolean).sort(), [appointments, data.unassignedJobs]);
   const sites = useMemo(() => [...new Set([...appointments.map((item) => item.siteLabel), ...(data.unassignedJobs || []).map((item) => item.siteLabel)])].filter(Boolean).sort(), [appointments, data.unassignedJobs]);
   const jobQuery = jobFilter.trim().toLowerCase();
@@ -357,7 +407,20 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const todayAppointments = useMemo(() => appointments.filter((item) => item.startsAt.slice(0, 10) === todayDate)
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.customerDisplayName.localeCompare(b.customerDisplayName)), [appointments, todayDate]);
   const activeWeekAppointments = useMemo(() => visibleAppointments.filter((item) => item.startsAt.slice(0, 10) >= activeWeekStart && item.startsAt.slice(0, 10) < addDays(activeWeekStart, 7)), [activeWeekStart, visibleAppointments]);
-  const gridWindow = useMemo(() => scheduleDisplayWindow(activeWeekAppointments), [activeWeekAppointments]);
+  const activeWeekUnavailability = useMemo(() => scheduleWeekDays(activeWeekStart).flatMap((date) => {
+    const dayStart = `${date}T${minuteLabel(APPOINTMENT_PICKER_START_MINUTE)}`;
+    const dayEnd = `${date}T${minuteLabel(APPOINTMENT_PICKER_END_MINUTE)}`;
+    return visibleUnavailability.filter((item) => item.startsAt < dayEnd && item.endsAt > dayStart)
+      .map((item) => ({ ...item, id: `unavailable:${item.id}:${date}`,
+        startsAt: item.startsAt > dayStart ? item.startsAt : dayStart,
+        endsAt: item.endsAt < dayEnd ? item.endsAt : dayEnd }));
+  }), [activeWeekStart, visibleUnavailability]);
+  const activeWeekDisplayAppointments = useMemo(() => {
+    const displayItems = [...activeWeekAppointments, ...activeWeekUnavailability];
+    if (!proposal?.startsAt || !proposalEndsAt || (memberFilter && memberFilter !== proposal.assigneeMemberId) || proposal.startsAt.slice(0, 10) < activeWeekStart || proposal.startsAt.slice(0, 10) >= addDays(activeWeekStart, 7)) return displayItems;
+    return [...displayItems, { id: "job-schedule-proposal", startsAt: proposal.startsAt, endsAt: proposalEndsAt }];
+  }, [activeWeekAppointments, activeWeekStart, activeWeekUnavailability, memberFilter, proposal, proposalEndsAt]);
+  const gridWindow = useMemo(() => scheduleDisplayWindow(activeWeekDisplayAppointments), [activeWeekDisplayAppointments]);
   const gridStartMinute = gridWindow.startMinute;
   const gridEndMinute = gridWindow.endMinute;
   const gridHeight = ((gridEndMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT;
@@ -365,6 +428,22 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
   const activeWeekDays = useMemo(() => scheduleWeekDays(activeWeekStart), [activeWeekStart]);
   const ownerMemberId = members.find((member) => member.isOwner)?.id || members[0]?.id || "";
   const selectedAppointment = appointments.find((item) => item.id === selectedAppointmentId);
+  const calendarCanReschedule = canRescheduleJobs && !jobCalendar;
+  const proposalGuidance = proposalValidation.status === "loading"
+    ? "Loading the selected week before this booking can be saved."
+    : proposalValidation.status === "load_error"
+      ? "The selected week's calendar could not be loaded. Retry it before saving."
+      : proposalValidation.status === "not_visible"
+        ? "The selected booking's worker or week is not currently shown. Show the selected booking before saving."
+        : proposalValidation.status === "assignee_unavailable"
+          ? "This job's assigned worker is no longer active. Reassign the job before booking."
+        : proposalValidation.status === "unavailable"
+          ? "The selected person is unavailable during this time. Choose another time before saving."
+          : proposalValidation.status === "conflict"
+            ? "The selected time overlaps existing work. Choose another time before saving."
+            : proposalValidation.status === "clear"
+              ? "The selected time is clear in this loaded calendar. TLink checks again when you save."
+              : "Choose the person and time beside this calendar to preview the booking.";
 
   useEffect(() => {
     const position = pendingDragScrollPositionRef.current;
@@ -419,25 +498,52 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
       setActiveWeekStart(targetWeek);
       return true;
     }
+    if (jobCalendar && targetWeek !== activeWeekStart) onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key));
     pendingFocusDateRef.current = targetWeek;
     setFocusRequestVersion((current) => current + 1);
     if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, targetWeek)) {
       pendingWeekStartRef.current = "";
       setActiveWeekStart(targetWeek);
-    } else pendingWeekStartRef.current = targetWeek;
-    setRangeStart(addDays(targetWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+    } else {
+      pendingWeekStartRef.current = targetWeek;
+      const targetRangeStart = addDays(targetWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7);
+      if (targetRangeStart === rangeStart) setLoadAttemptNonce((value) => value + 1);
+      else setRangeStart(targetRangeStart);
+    }
     return true;
   }
 
   function goToToday() {
     const todayWeek = monday(new Date(`${todayDate}T12:00:00`));
+    if (jobCalendar && todayWeek !== activeWeekStart) onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key));
     pendingFocusDateRef.current = todayDate;
     setFocusRequestVersion((current) => current + 1);
     if (scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, todayWeek)) {
       pendingWeekStartRef.current = "";
       setActiveWeekStart(todayWeek);
-    } else pendingWeekStartRef.current = todayWeek;
-    setRangeStart(addDays(todayWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7));
+    } else {
+      pendingWeekStartRef.current = todayWeek;
+      const targetRangeStart = addDays(todayWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7);
+      if (targetRangeStart === rangeStart) setLoadAttemptNonce((value) => value + 1);
+      else setRangeStart(targetRangeStart);
+    }
+  }
+
+  function retryProposalWeek() {
+    if (!proposal?.startsAt) { setLoadAttemptNonce((value) => value + 1); return; }
+    const targetWeek = initialScheduleWeekStart(proposal.startsAt.slice(0, 10));
+    const targetRangeStart = addDays(targetWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7);
+    onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key, "loading"));
+    pendingWeekStartRef.current = targetWeek;
+    if (rangeStart === targetRangeStart) setLoadAttemptNonce((value) => value + 1);
+    else setRangeStart(targetRangeStart);
+  }
+
+  function showProposal() {
+    if (!proposal?.startsAt) return;
+    onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key, "loading"));
+    setMemberFilter(proposal.assigneeMemberId || "");
+    goToWeek(proposal.startsAt.slice(0, 10));
   }
 
   function startWeekSwipe(event: ReactTouchEvent<HTMLElement>) {
@@ -532,19 +638,20 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
     finally { clearDragEdge(true); draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); }
   }
 
-  if (loading && !data.ok) return <section className="dashboard-panel schedule-workspace"><div className="crm-empty"><strong>Building the team schedule</strong><span>Loading appointments, availability and capacity.</span></div></section>;
-  return <section className="dashboard-panel schedule-workspace" aria-busy={loading}>
-    <header className="schedule-heading"><div><span>Dispatch calendar</span><h2>One clear week at a time</h2><p>See the week, move work quickly and open any appointment for precise details.</p></div><div className="schedule-week-nav"><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, -1))}>Previous week</button><button className="schedule-today-button" type="button" disabled={loading} onClick={goToToday}>Today</button><label><span>Go to week</span><input type="date" value={activeWeekStart} disabled={loading} onChange={(event) => { if (event.target.value) goToWeek(event.target.value); }} /></label><strong className="schedule-week-range" onTouchStart={startWeekSwipe} onTouchEnd={finishWeekSwipe}>{formatDay(activeWeekStart)} to {formatDay(addDays(activeWeekStart, 6))}<small>Swipe to change week</small></strong><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, 1))}>Next week</button></div></header>
-    <section className="schedule-today-strip" aria-labelledby="schedule-today-title"><header><div><span>Today</span><strong id="schedule-today-title">{formatDay(todayDate)}</strong></div><b>{todayInRange ? `${todayAppointments.length} ${todayAppointments.length === 1 ? "appointment" : "appointments"}` : "Outside this week"}</b></header><div className="schedule-today-list">{todayInRange ? <>{todayAppointments.map((item) => <button type="button" key={item.id} onClick={(event) => { goToToday(); openAppointment(item.id, event.currentTarget); }}><strong>{formatTime(item.startsAt)} | {item.customerDisplayName}</strong><span>{item.assigneeLabel || "Unassigned"} | {item.suburbLabel}</span></button>)}{!todayAppointments.length && <p>No appointments today. Use the waiting jobs section below to add work.</p>}</> : <button type="button" onClick={goToToday}><strong>{"Load today's work"}</strong><span>Open the current week and jump straight to today.</span></button>}</div></section>
-    <details className="schedule-filter-panel"><summary><span>Schedule filters</span><strong>{memberFilter || jobFilter || serviceFilter || siteFilter || statusFilter || conflictOnly ? "Filters active" : "Everyone and all work"}</strong></summary><div className="schedule-filters"><label><span>Person</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">Everyone</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label><label><span>Job or customer</span><input value={jobFilter} placeholder="Customer, suburb or reference" onChange={(event) => setJobFilter(event.target.value)} /></label><label><span>Service</span><select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="">All services</option>{services.map((service) => <option key={service}>{readable(service)}</option>)}</select></label><label><span>Site</span><select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">All sites</option>{sites.map((site) => <option key={site}>{site}</option>)}</select></label><label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All schedule states</option><option value="scheduled">Scheduled</option><option value="conflict">Conflicts</option><option value="awaiting">Awaiting appointment</option><option value="unassigned">Unassigned</option></select></label><label className="schedule-check"><input type="checkbox" checked={conflictOnly} onChange={(event) => setConflictOnly(event.target.checked)} /><span>Conflicts only</span></label></div></details>
-    {(data.rescheduleRequests || []).length > 0 && <details className="schedule-reschedule-queue"><summary><span>Customer requests</span><strong>{canRescheduleJobs ? "Review before changing the schedule" : "View requests"} | {data.rescheduleRequests?.length}</strong></summary><div>{data.rescheduleRequests?.map((request) => {
+  if (loading && !data.ok) return <section className={`dashboard-panel schedule-workspace${jobCalendar ? " job-calendar" : ""}`}><div className="crm-empty"><strong>Building the schedule</strong><span>Loading the authorised appointments for this week.</span></div></section>;
+  return <section className={`dashboard-panel schedule-workspace${jobCalendar ? " job-calendar" : ""}`} aria-busy={loading}>
+    <header className="schedule-heading"><div><span>{jobCalendar ? schedulePermissions?.scheduleScope === "own" ? "Your calendar" : "Team calendar" : "Dispatch calendar"}</span><h2>{jobCalendar ? "Check the week before you book" : "One clear week at a time"}</h2><p>{jobCalendar ? schedulePermissions?.scheduleScope === "own" ? "Your access shows only appointments assigned to you." : "See authorised team work and conflicts while you choose this job's person and time." : "See the week, move work quickly and open any appointment for precise details."}</p></div><div className="schedule-week-nav"><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, -1))}>Previous week</button><button className="schedule-today-button" type="button" disabled={loading} onClick={goToToday}>Today</button><label><span>Go to week</span><input type="date" value={activeWeekStart} disabled={loading} onChange={(event) => { if (event.target.value) goToWeek(event.target.value); }} /></label><strong className="schedule-week-range" onTouchStart={startWeekSwipe} onTouchEnd={finishWeekSwipe}>{formatDay(activeWeekStart)} to {formatDay(addDays(activeWeekStart, 6))}<small>Swipe to change week</small></strong><button type="button" disabled={loading} onClick={() => goToWeek(adjacentScheduleWeek(activeWeekStart, 1))}>Next week</button></div></header>
+    {jobCalendar && (members.length > 1 || Boolean(memberFilter && !members.some((member) => member.id === memberFilter))) && <div className="job-calendar-person-filter"><label><span>Show calendar</span><select value={memberFilter} onChange={(event) => { onProposalValidation?.(invalidateScheduleProposal(proposalValidation.key)); setMemberFilter(event.target.value); }}><option value="">All workers</option>{memberFilter && !members.some((member) => member.id === memberFilter) && <option value={memberFilter}>{proposal?.assigneeLabel || "Assigned worker"} (unavailable)</option>}{members.map((member) => <option key={member.id} value={member.id}>{scheduleMemberLabel(member, data.access?.memberId || "")}</option>)}</select></label><small>{memberFilter ? "Showing one worker. Booking checks still use the job's assigned worker." : "Showing all workers allowed by your team access."}</small></div>}
+    {!jobCalendar && <section className="schedule-today-strip" aria-labelledby="schedule-today-title"><header><div><span>Today</span><strong id="schedule-today-title">{formatDay(todayDate)}</strong></div><b>{todayInRange ? `${todayAppointments.length} ${todayAppointments.length === 1 ? "appointment" : "appointments"}` : "Outside this week"}</b></header><div className="schedule-today-list">{todayInRange ? <>{todayAppointments.map((item) => <button type="button" key={item.id} onClick={(event) => { goToToday(); openAppointment(item.id, event.currentTarget); }}><strong>{formatTime(item.startsAt)} | {item.customerDisplayName}</strong><span>{item.assigneeLabel || "Unassigned"} | {item.suburbLabel}</span></button>)}{!todayAppointments.length && <p>No appointments today. Use the waiting jobs section below to add work.</p>}</> : <button type="button" onClick={goToToday}><strong>{"Load today's work"}</strong><span>Open the current week and jump straight to today.</span></button>}</div></section>}
+    {!jobCalendar && <details className="schedule-filter-panel"><summary><span>Schedule filters</span><strong>{memberFilter || jobFilter || serviceFilter || siteFilter || statusFilter || conflictOnly ? "Filters active" : "Everyone and all work"}</strong></summary><div className="schedule-filters"><label><span>Person</span><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)}><option value="">Everyone</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label><label><span>Job or customer</span><input value={jobFilter} placeholder="Customer, suburb or reference" onChange={(event) => setJobFilter(event.target.value)} /></label><label><span>Service</span><select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="">All services</option>{services.map((service) => <option key={service}>{readable(service)}</option>)}</select></label><label><span>Site</span><select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">All sites</option>{sites.map((site) => <option key={site}>{site}</option>)}</select></label><label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All schedule states</option><option value="scheduled">Scheduled</option><option value="conflict">Conflicts</option><option value="awaiting">Awaiting appointment</option><option value="unassigned">Unassigned</option></select></label><label className="schedule-check"><input type="checkbox" checked={conflictOnly} onChange={(event) => setConflictOnly(event.target.checked)} /><span>Conflicts only</span></label></div></details>}
+    {!jobCalendar && (data.rescheduleRequests || []).length > 0 && <details className="schedule-reschedule-queue"><summary><span>Customer requests</span><strong>{canRescheduleJobs ? "Review before changing the schedule" : "View requests"} | {data.rescheduleRequests?.length}</strong></summary><div>{data.rescheduleRequests?.map((request) => {
       const preferred = request.preferredWindows[0]; const baseStart = request.proposedStartsAt || preferred?.startsAt || request.currentStartsAt; const baseEnd = request.proposedEndsAt || preferred?.endsAt || request.currentEndsAt;
       const edit = edits[request.id] || editFromRange(request.proposedAssigneeMemberId || request.currentAssigneeMemberId, baseStart, baseEnd); const startsAt = editStart(edit); const invalidTime = startsAt <= minimumStart;
       return <article key={request.id}><header><div><span>{request.workNumber} | {readable(request.status)}</span><strong>{request.title}</strong><small>Current: {request.currentStartsAt} | {durationLabel(appointmentDurationMinutes(request.currentStartsAt, request.currentEndsAt))}</small></div></header><p><strong>Reason</strong>{request.reason}</p>{request.accessNotes && <p><strong>Access notes</strong>{request.accessNotes}</p>}{canRescheduleJobs && <><div className="schedule-request-decision">{canAssignJobs ? <select aria-label={`Assigned staff for request ${request.workNumber}`} value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select> : <span>{request.currentAssigneeLabel || "Assigned worker"}</span>}<input type="datetime-local" min={minimumStart} step="900" aria-label={`Reviewed start for ${request.workNumber}`} value={startsAt} onChange={(event) => setEdits((current) => ({ ...current, [request.id]: { ...edit, date: event.target.value.slice(0, 10), time: event.target.value.slice(11, 16) } }))} /><DurationControl id={`request-duration-${request.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [request.id]: { ...edit, durationMinutes } }))} /><input maxLength={500} value={decisionNotes[request.id] || ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Optional customer-facing response" /></div><div className="schedule-request-actions"><button type="button" disabled={busy === `reject:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "rejected", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "" }, `reject:${request.id}`, `${request.workNumber} request rejected without changing the schedule.`)}>Reject</button><button type="button" disabled={!edit.memberId || invalidTime || busy === `alternative:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "alternative_proposed", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `alternative:${request.id}`, `${request.workNumber} alternative proposed without changing the schedule.`)}>Propose alternative</button><button className="primary" type="button" disabled={!edit.memberId || invalidTime || busy === `accept:${request.id}`} onClick={() => void update({ action: "review_reschedule_request", requestId: request.id, decision: "accepted", expectedRequestRevision: request.revision, expectedAppointmentRevision: request.appointmentRevision, decisionNote: decisionNotes[request.id] || "", memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `accept:${request.id}`, `${request.workNumber} appointment change accepted.`)}>Accept and reschedule</button></div></>}</article>;
     })}</div></details>}
-    <p className="schedule-drag-note">{canRescheduleJobs ? "Drag within this week. Hold at the left or right edge to open the adjacent week." : "This schedule is read only for your access."} Tap or press Enter for exact details.</p>
+    <p className="schedule-drag-note" id={jobCalendar ? proposalStatusId : undefined} role={jobCalendar ? "status" : undefined} aria-live={jobCalendar ? "polite" : undefined}>{jobCalendar ? proposalGuidance : canRescheduleJobs ? "Drag within this week. Hold at the left or right edge to open the adjacent week." : "This schedule is read only for your access."} {!jobCalendar && "Tap or press Enter for exact details."} {jobCalendar && proposalValidation.status === "not_visible" && proposal?.startsAt && <button type="button" onClick={showProposal}>Show selected booking</button>} {jobCalendar && proposalValidation.status === "load_error" && <button type="button" onClick={retryProposalWeek}>Retry selected week</button>}</p>
     <div className="schedule-week-viewport" onTouchStart={startWeekSwipe} onTouchEnd={(event) => finishWeekSwipe(event, true)} onTouchCancel={() => { weekSwipeStartRef.current = null; }} onDragOver={(event) => { if (draggingId) autoScrollDuringDrag(event.clientX, event.clientY); }}>
-      {draggingId && <><span className={`schedule-drag-edge previous${dragEdgeDirection === -1 ? " active" : ""}`}>Hold for previous week</span><span className={`schedule-drag-edge next${dragEdgeDirection === 1 ? " active" : ""}`}>Hold for next week</span></>}
+      {!jobCalendar && draggingId && <><span className={`schedule-drag-edge previous${dragEdgeDirection === -1 ? " active" : ""}`}>Hold for previous week</span><span className={`schedule-drag-edge next${dragEdgeDirection === 1 ? " active" : ""}`}>Hold for next week</span></>}
       <div className="schedule-week-pages" style={{ transform: `translateX(-${activeWeekIndex * 100}%)` }}>
       {bufferedWeekStarts.map((bufferedWeekStart) => {
         const days = scheduleWeekDays(bufferedWeekStart);
@@ -557,7 +664,12 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
           const dayIsPast = date < minimumStart.slice(0, 10);
           const dayIsToday = date === todayDate;
           const dayAppointments = appointmentsByDate.get(date) || [];
-          const appointmentLanes = scheduleAppointmentLanes(dayAppointments);
+          const dayUnavailability = activeWeekUnavailability.filter((item) => item.startsAt.slice(0, 10) === date);
+          const proposalOnDay = proposal?.startsAt.slice(0, 10) === date && proposalEndsAt && proposal.assigneeMemberId && (!memberFilter || memberFilter === proposal.assigneeMemberId)
+            ? { id: "job-schedule-proposal", startsAt: proposal.startsAt, endsAt: proposalEndsAt }
+            : null;
+          const laneItems = [...dayAppointments, ...dayUnavailability, ...(proposalOnDay ? [proposalOnDay] : [])];
+          const appointmentLanes = scheduleAppointmentLanes(laneItems);
           return <section key={date} aria-label={`${dayIsToday ? "Today, " : ""}${formatDay(date)}`} className={`schedule-day-track${dropTarget === date ? " drop-target" : ""}${dayIsPast ? " past" : ""}${dayIsToday ? " today" : ""}`}>
             <header aria-current={dayIsToday ? "date" : undefined}><strong>{dayIsToday ? "Today" : shortDays[new Date(`${date}T00:00:00Z`).getUTCDay()]}</strong><span>{date.slice(5)}</span></header>
             <div className="schedule-day-grid" style={{ height: `${gridHeight}px` }}
@@ -572,20 +684,34 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
               onDrop={(event) => { event.preventDefault(); clearDragEdge(); const appointment = draggedAppointmentRef.current || appointmentsById.get(draggingId || event.dataTransfer.getData("text/plain")); if (appointment) { dragDropCommittedRef.current = true; void moveAppointment(appointment, date, minuteFromPointer(event.currentTarget, event.clientY, appointmentDurationMinutes(appointment.startsAt, appointment.endsAt))); } }}>
               {dayIsToday && nowMinute >= gridStartMinute && nowMinute <= gridEndMinute && <span className="schedule-now-line" style={{ top: `${((nowMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}><i>Now</i></span>}
               {dropTarget === date && <span className="schedule-drop-guide" style={{ top: `${((dropMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT}px` }}>{formatTime(`${date}T${minuteLabel(dropMinute)}`)}</span>}
+              {dayUnavailability.map((item) => {
+                const startMinute = minuteValue(item.startsAt.slice(11, 16));
+                const duration = Math.max(15, (Date.parse(`${item.endsAt}:00Z`) - Date.parse(`${item.startsAt}:00Z`)) / 60_000);
+                const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
+                const label = members.find((member) => member.id === item.teamMemberId)?.displayName || "Team member";
+                return <article key={item.id} aria-label={`${label} unavailable from ${formatTime(item.startsAt)}`} className="schedule-block unavailable" style={{ top: `${Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT)}px`, height: `${Math.max(44, (duration / 15) * GRID_QUARTER_HEIGHT)}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}><strong>Unavailable</strong><small>{label}</small><span>{formatTime(item.startsAt)} | busy time</span></article>;
+              })}
               {dayAppointments.map((item) => {
                 const startMinute = minuteValue(item.startsAt.slice(11, 16)); const duration = appointmentDurationMinutes(item.startsAt, item.endsAt); const top = Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT); const height = Math.max(62, (duration / 15) * GRID_QUARTER_HEIGHT);
                 const lane = appointmentLanes.get(item.id) || { lane: 0, laneCount: 1 };
                 const cardLabel = `${item.customerDisplayName}, ${item.assigneeLabel || "Unassigned"}, ${item.suburbLabel}, ${formatTime(item.startsAt)}`;
-                return <article key={item.id} data-schedule-appointment draggable={canRescheduleJobs && !busy && !loading} tabIndex={pageIsActive ? 0 : -1} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block ${colourFor(item.assigneeMemberId)}${item.conflicts ? " conflict" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}
+                const proposalConflict = proposalValidation.status === "conflict" && proposalConflictIds.has(item.id);
+                return <article key={item.id} data-schedule-appointment draggable={calendarCanReschedule && !busy && !loading} tabIndex={pageIsActive ? 0 : -1} role="button" aria-label={`View appointment for ${cardLabel}`} className={`schedule-block ${colourFor(item.assigneeMemberId)}${item.conflicts || proposalConflict ? " conflict" : ""}${selectedAppointmentId === item.id ? " selected" : ""}${draggingId === item.id ? " dragging" : ""}`} style={{ top: `${top}px`, height: `${height}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}
                   onClick={(event) => openAppointment(item.id, event.currentTarget)}
                   onDoubleClick={(event) => { event.stopPropagation(); closeAppointment(); onOpenJob(item.workOrderId); }}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAppointment(item.id, event.currentTarget); } }}
                   onDragStart={(event) => { suppressCardClickRef.current = true; draggedAppointmentRef.current = item; dragDropCommittedRef.current = false; dragEdgeLockRef.current = 0; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); setDraggingId(item.id); setDropMinute(startMinute); }}
                   onDragEnd={() => { const dragged = draggedAppointmentRef.current; clearDragEdge(true); if (dragged && !dragDropCommittedRef.current) { const sourceWeek = monday(new Date(`${dragged.startsAt.slice(0, 10)}T12:00:00`)); setActiveWeekStart(sourceWeek); if (!scheduleRangeContainsWeek(displayRangeStart, SCHEDULE_BUFFER_WEEKS, sourceWeek)) setRangeStart(addDays(sourceWeek, -SCHEDULE_BUFFER_LEADING_WEEKS * 7)); } draggedAppointmentRef.current = null; dragDropCommittedRef.current = false; setDraggingId(""); setDropTarget(""); setDropMinute(gridStartMinute); window.setTimeout(() => { suppressCardClickRef.current = false; }, 0); }}>
-                  <strong>{item.customerDisplayName}</strong><small>{item.assigneeLabel || "Unassigned"}</small><em>{item.suburbLabel}</em><span>{formatTime(item.startsAt)} | {durationLabel(duration)}</span>{item.outsideWorkingHours && <b>Outside hours</b>}{item.conflicts && <b>Conflict</b>}
+                  <strong>{item.customerDisplayName}</strong><small>{item.assigneeLabel || "Unassigned"}</small><em>{item.suburbLabel}</em><span>{formatTime(item.startsAt)} | {durationLabel(duration)}</span>{item.outsideWorkingHours && <b>Outside hours</b>}{item.conflicts && <b>Conflict</b>}{proposalConflict && <b>Overlaps selected time</b>}
                 </article>;
               })}
-              {dayIsToday && !dayAppointments.length && <span className="schedule-free-day">No jobs today</span>}
+              {proposalOnDay && (() => {
+                const startMinute = minuteValue(proposalOnDay.startsAt.slice(11, 16));
+                const duration = appointmentDurationMinutes(proposalOnDay.startsAt, proposalOnDay.endsAt);
+                const lane = appointmentLanes.get(proposalOnDay.id) || { lane: 0, laneCount: 1 };
+                return <article aria-label={`Proposed booking for ${proposal?.title || "this job"}`} className={`schedule-block proposal ${colourFor(proposal?.assigneeMemberId || "")}${proposalHasConflict ? " conflict" : ""}`} style={{ top: `${Math.max(0, ((startMinute - gridStartMinute) / 15) * GRID_QUARTER_HEIGHT)}px`, height: `${Math.max(62, (duration / 15) * GRID_QUARTER_HEIGHT)}px`, left: `calc(${lane.lane * 100 / lane.laneCount}% + 4px)`, right: "auto", width: `calc(${100 / lane.laneCount}% - 8px)` }}><strong>{proposal?.title || "This job"}</strong><small>{proposal?.assigneeLabel || "Selected person"}</small><em>Proposed booking</em><span>{formatTime(proposalOnDay.startsAt)} | {durationLabel(duration)}</span>{proposalHasConflict && <b>{proposalValidation.status === "unavailable" ? "Unavailable" : "Conflict"}</b>}</article>;
+              })()}
+              {dayIsToday && !dayAppointments.length && !dayUnavailability.length && !proposalOnDay && <span className="schedule-free-day">No jobs today</span>}
             </div>
           </section>;
         })}
@@ -603,19 +729,20 @@ export function TradeScheduleWorkspace({ user, permissions, onOpenJob = () => un
           <div className="schedule-selection" style={{ border: 0, borderRadius: 0, overflowY: "auto" }}>
             <p><strong>{selectedAppointment.title}</strong><br />{readable(selectedAppointment.serviceCategory)} | {selectedAppointment.siteSummary || selectedAppointment.siteLabel}<br />Job reference {selectedAppointment.workNumber}</p>
             <div className="schedule-quote-summary"><span><small>Quote</small><strong>{readable(selectedAppointment.quoteStatus || "not_started")}</strong></span><b>{money(selectedAppointment.quotedValueCents || 0)}</b></div>
-            {canRescheduleJobs && <div className="schedule-selection-fields">{canAssignJobs ? <label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label> : <span>{selectedAppointment.assigneeLabel || "Assigned worker"}</span>}<label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`appointment-duration-${selectedAppointment.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, durationMinutes } }))} /></div>}
+            {calendarCanReschedule && <div className="schedule-selection-fields">{canAssignJobs ? <label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label> : <span>{selectedAppointment.assigneeLabel || "Assigned worker"}</span>}<label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`appointment-duration-${selectedAppointment.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [selectedAppointment.id]: { ...edit, durationMinutes } }))} /></div>}
             {status && <p className="crm-status schedule-dialog-status" role="status">{status}</p>}
           </div>
-          <footer><button type="button" onClick={() => { closeAppointment(); onOpenJob(selectedAppointment.workOrderId); }}>Open full job</button>{onOpenQuote && !selectedAppointment.protectedJob && <button className="schedule-secondary" type="button" onClick={() => { closeAppointment(); onOpenQuote(selectedAppointment.workOrderId); }}>Open quote</button>}{canRescheduleJobs && <button className="primary" type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `appointment:${selectedAppointment.id}`} onClick={() => void update({ action: "schedule_appointment", appointmentId: selectedAppointment.id, expectedRevision: selectedAppointment.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `appointment:${selectedAppointment.id}`, `${selectedAppointment.customerDisplayName} schedule updated.`)}>{busy === `appointment:${selectedAppointment.id}` ? "Saving..." : "Save appointment"}</button>}</footer>
+          <footer><button type="button" onClick={() => { closeAppointment(); onOpenJob(selectedAppointment.workOrderId); }}>Open full job</button>{onOpenQuote && !selectedAppointment.protectedJob && <button className="schedule-secondary" type="button" onClick={() => { closeAppointment(); onOpenQuote(selectedAppointment.workOrderId); }}>Open quote</button>}{calendarCanReschedule && <button className="primary" type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `appointment:${selectedAppointment.id}`} onClick={() => void update({ action: "schedule_appointment", appointmentId: selectedAppointment.id, expectedRevision: selectedAppointment.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `appointment:${selectedAppointment.id}`, `${selectedAppointment.customerDisplayName} schedule updated.`)}>{busy === `appointment:${selectedAppointment.id}` ? "Saving..." : "Save appointment"}</button>}</footer>
         </section>
       </div>;
     })()}
-    <details className="schedule-capacity"><summary><span>Team capacity</span><strong>Week of {activeWeekStart} | {unassignedCount} jobs waiting</strong></summary><div>{capacity.map(({ member, available, booked, percent }) => <article key={member.id}><span><i className={`schedule-person-dot ${colourFor(member.id)}`} />{memberLabel(member)}<small>{member.isOwner ? "Owner" : "Team member"}</small></span><strong>{Math.round(booked / 60)}h booked of {Math.round(available / 60)}h</strong><div><i style={{ width: `${percent}%` }} /></div></article>)}</div></details>
-    {!permissions && <details className="schedule-calendar-links"><summary><span>Calendar apps</span><strong>Google Calendar and Outlook</strong></summary><div><p>TLink stays authoritative. Connected calendars receive this week&apos;s job blocks and never control the TLink schedule.</p>{calendars.map((provider) => <article key={provider.provider}><div><strong>{provider.label}</strong><span>{provider.status === "connected" ? provider.lastError ? "Connected, last sync needs attention" : "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</span></div><button type="button" disabled={!provider.configured || provider.status === "connected" || Boolean(busy)} onClick={() => void connectCalendar(provider)}>{provider.status === "connected" ? "Connected" : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button></article>)}<button className="primary" type="button" disabled={!calendars.some((item) => item.status === "connected") || Boolean(busy)} onClick={() => void syncCalendars()}>{busy === "calendar-sync" ? "Syncing..." : "Sync this week"}</button></div></details>}
-    {(canRescheduleJobs || canManageAvailability) && <div className="schedule-lower-grid">{canRescheduleJobs && <section className="schedule-unassigned"><header><div><span>Ready to schedule</span><h3>Choose a start and job length</h3></div><strong>{visibleJobs.length}</strong></header>{visibleJobs.map((job) => { const edit = edits[job.id] || initialEdit(activeWeekStart, minimumStart, job.assigneeMemberId || ownerMemberId); const startsAt = editStart(edit); return <article key={job.id}><div><span>{job.customerDisplayName} | {readable(job.priority)}</span><strong>{job.title}</strong><small>{job.suburbLabel} | {readable(job.serviceCategory)}</small></div>{canAssignJobs ? <label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label> : <span>{job.assigneeLabel || "Assigned worker"}</span>}<label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`job-duration-${job.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [job.id]: { ...edit, durationMinutes } }))} /><button type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `job:${job.id}`} onClick={() => void update({ action: "schedule_job", workOrderId: job.id, expectedRevision: job.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `job:${job.id}`, `${job.customerDisplayName} added to the schedule.`)}>Add to schedule</button></article>; })}{!visibleJobs.length && <div className="crm-empty"><strong>No work waiting</strong><span>Every visible active job already has a scheduled appointment.</span></div>}</section>}
+    {!jobCalendar && <details className="schedule-capacity"><summary><span>Team capacity</span><strong>Week of {activeWeekStart} | {unassignedCount} jobs waiting</strong></summary><div>{capacity.map(({ member, available, booked, percent }) => <article key={member.id}><span><i className={`schedule-person-dot ${colourFor(member.id)}`} />{memberLabel(member)}<small>{member.isOwner ? "Owner" : "Team member"}</small></span><strong>{Math.round(booked / 60)}h booked of {Math.round(available / 60)}h</strong><div><i style={{ width: `${percent}%` }} /></div></article>)}</div></details>}
+    {!jobCalendar && !permissions && <details className="schedule-calendar-links"><summary><span>Calendar apps</span><strong>Google Calendar and Outlook</strong></summary><div><p>TLink stays authoritative. Connected calendars receive this week&apos;s job blocks and never control the TLink schedule.</p>{calendars.map((provider) => <article key={provider.provider}><div><strong>{provider.label}</strong><span>{provider.status === "connected" ? provider.lastError ? "Connected, last sync needs attention" : "Connected" : provider.configured ? "Available to connect" : "TLink setup in progress"}</span></div><button type="button" disabled={!provider.configured || provider.status === "connected" || Boolean(busy)} onClick={() => void connectCalendar(provider)}>{provider.status === "connected" ? "Connected" : provider.configured ? `Connect ${provider.label}` : "TLink setup in progress"}</button></article>)}<button className="primary" type="button" disabled={!calendars.some((item) => item.status === "connected") || Boolean(busy)} onClick={() => void syncCalendars()}>{busy === "calendar-sync" ? "Syncing..." : "Sync this week"}</button></div></details>}
+    {!jobCalendar && (canRescheduleJobs || canManageAvailability) && <div className="schedule-lower-grid">{canRescheduleJobs && <section className="schedule-unassigned"><header><div><span>Ready to schedule</span><h3>Choose a start and job length</h3></div><strong>{visibleJobs.length}</strong></header>{visibleJobs.map((job) => { const edit = edits[job.id] || initialEdit(activeWeekStart, minimumStart, job.assigneeMemberId || ownerMemberId); const startsAt = editStart(edit); return <article key={job.id}><div><span>{job.customerDisplayName} | {readable(job.priority)}</span><strong>{job.title}</strong><small>{job.suburbLabel} | {readable(job.serviceCategory)}</small></div>{canAssignJobs ? <label><span>Person</span><select value={edit.memberId} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, memberId: event.target.value } }))}><option value="">Choose person</option>{members.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label> : <span>{job.assigneeLabel || "Assigned worker"}</span>}<label><span>Day</span><input type="date" min={minimumStart.slice(0, 10)} value={edit.date} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, date: event.target.value } }))} /></label><label><span>Start</span><select value={edit.time} onChange={(event) => setEdits((current) => ({ ...current, [job.id]: { ...edit, time: event.target.value } }))}>{timeChoices.map((time) => <option key={time}>{time}</option>)}</select></label><DurationControl id={`job-duration-${job.id}`} value={edit.durationMinutes} onChange={(durationMinutes) => setEdits((current) => ({ ...current, [job.id]: { ...edit, durationMinutes } }))} /><button type="button" disabled={!edit.memberId || startsAt <= minimumStart || busy === `job:${job.id}`} onClick={() => void update({ action: "schedule_job", workOrderId: job.id, expectedRevision: job.revision, memberId: edit.memberId, startsAt, durationMinutes: edit.durationMinutes }, `job:${job.id}`, `${job.customerDisplayName} added to the schedule.`)}>Add to schedule</button></article>; })}{!visibleJobs.length && <div className="crm-empty"><strong>No work waiting</strong><span>Every visible active job already has a scheduled appointment.</span></div>}</section>}
       {canManageAvailability && <details className="schedule-availability"><summary><span>Availability</span><strong>Set working hours and time off</strong></summary><div className="schedule-availability-content"><p>{canManageTeamAvailability ? "Manage availability for any team member." : "Manage your own availability."}</p><label><span>Person</span><select value={hoursMember} onChange={(event) => setHoursMember(event.target.value)}><option value="">Choose person</option>{availabilityMembers.map((member) => <option key={member.id} value={member.id}>{memberLabel(member)}</option>)}</select></label>{hoursMember && <div className="schedule-hours-grid">{dayNames.map((day, weekday) => { const row = hourEdits[weekday] || { ...defaultHours(weekday), teamMemberId: hoursMember }; return <article key={day}><label><input type="checkbox" checked={row.isAvailable} onChange={(event) => setHourEdits((current) => ({ ...current, [weekday]: { ...row, isAvailable: event.target.checked } }))} />{day}</label><input type="time" value={minuteLabel(row.startMinute)} disabled={!row.isAvailable} onChange={(event) => setHourEdits((current) => ({ ...current, [weekday]: { ...row, startMinute: minuteValue(event.target.value) } }))} /><input type="time" value={minuteLabel(row.endMinute)} disabled={!row.isAvailable} onChange={(event) => setHourEdits((current) => ({ ...current, [weekday]: { ...row, endMinute: minuteValue(event.target.value) } }))} /><button type="button" disabled={busy === `hours:${weekday}`} onClick={() => void update({ action: "save_working_hours", memberId: hoursMember, weekday, startMinute: row.startMinute, endMinute: row.endMinute, isAvailable: row.isAvailable }, `hours:${weekday}`, `${day} hours saved.`)}>Save</button></article>; })}</div>}
         {hoursMember && <form className="schedule-unavailable-form" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ action: "add_unavailability", memberId: hoursMember, startsAt: form.get("startsAt"), endsAt: form.get("endsAt"), reason: form.get("reason") }, "unavailable", "Unavailable time recorded."); event.currentTarget.reset(); }}><strong>Add unavailable time</strong><input name="startsAt" type="datetime-local" required /><input name="endsAt" type="datetime-local" required /><input name="reason" maxLength={200} placeholder="Leave, training or other reason" /><button disabled={busy === "unavailable"}>Add</button></form>}
         <div className="schedule-unavailable-list">{(data.unavailability || []).filter((item) => !hoursMember || item.teamMemberId === hoursMember).map((item) => <article key={item.id}><div><strong>{item.reason}</strong><span>{item.startsAt} to {item.endsAt}</span></div><button type="button" onClick={() => void update({ action: "remove_unavailability", id: item.id }, `remove:${item.id}`, "Unavailable time removed.")}>Remove</button></article>)}</div></div></details>}</div>}
+    {loadError && <p className="crm-status schedule-load-error" role="alert"><span>{loadError}</span>{!(jobCalendar && proposalValidation.status === "load_error") && <button type="button" disabled={loading} onClick={() => setLoadAttemptNonce((value) => value + 1)}>{loading ? "Retrying..." : "Retry calendar"}</button>}</p>}
     {status && <p className="crm-status" role="status">{status}</p>}
   </section>;
 }

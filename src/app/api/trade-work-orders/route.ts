@@ -23,6 +23,11 @@ import {
   requireInstallerTeamAccess,
   type TeamAccess,
 } from "@/lib/trade-team-server";
+import {
+  assertTradeJobReadyForScheduling,
+  isTradeJobScheduleEligibilityConflict,
+  tradeJobScheduleEligibilityGuardStatement,
+} from "@/lib/trade-schedule-server";
 
 export const runtime = "edge";
 
@@ -134,6 +139,9 @@ async function mutationIdentity(request: Request, action: string): Promise<{
 
 function errorResponse(error: unknown) {
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
+  if (code === "JOB_SCHEDULE_ACCEPTANCE_REQUIRED" || isTradeJobScheduleEligibilityConflict(error)) {
+    return adminJson({ ok: false, error: "Wait for the customer to accept the current Australian Energy Assessments quote before scheduling this job." }, 409);
+  }
   if (isTradeComplianceIntentScheduleConflict(error)) {
     return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
   }
@@ -634,6 +642,10 @@ export async function PATCH(request: Request) {
     if (scheduledStart && scheduledEnd && scheduledEnd < scheduledStart) {
       return adminJson({ ok: false, error: "The planned finish cannot be before the planned start." }, 400);
     }
+    const scheduleChanged = scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end;
+    if (scheduleChanged && identity.partnerType === "installer") {
+      await assertTradeJobReadyForScheduling(identity.uid, workOrderId);
+    }
     const assigneeLabel = body.assigneeLabel === undefined ? String(current.assignee_label) : cleanAdminText(body.assigneeLabel, 80);
     const assigneeMemberId = body.assigneeLabel === undefined ? String(current.assignee_member_id) : "";
     if (assigneeLabel && !identity.teamAccess) throw new Error("TEAM_ACCESS_REQUIRED");
@@ -641,7 +653,7 @@ export async function PATCH(request: Request) {
     const changes: string[] = [];
     if (requestedStage !== current.stage) changes.push(`Stage changed to ${requestedStage.replaceAll("_", " ")}.`);
     if (requestedPriority !== current.priority) changes.push(`Priority changed to ${requestedPriority}.`);
-    if (scheduledStart !== current.scheduled_start || scheduledEnd !== current.scheduled_end) changes.push("Schedule updated.");
+    if (scheduleChanged) changes.push("Schedule updated.");
     if (assigneeLabel !== current.assignee_label) changes.push(assigneeLabel ? `Assigned to ${assigneeLabel}.` : "Crew assignment cleared.");
     const revision = nextJobRevision(current.revision);
     const complianceIntentStatements = scheduledStart !== current.scheduled_start
@@ -663,6 +675,9 @@ export async function PATCH(request: Request) {
           assigneeLabel, revision, now, workOrderId, identity.uid,
           String(current.stage), Number(current.revision)),
       eventStatement(db, identity.uid, workOrderId, "work_updated", changes.join(" ") || "Work record reviewed.", now),
+      ...(scheduleChanged && identity.partnerType === "installer"
+        ? [tradeJobScheduleEligibilityGuardStatement(db, { ownerUid: identity.uid, workOrderId, changedAt: now })]
+        : []),
       ...offlineSyncStatements(db, identity, workOrderId, revision, now, assigneeMemberId,
         String(current.assignee_member_id || "")),
     ], {

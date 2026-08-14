@@ -451,7 +451,7 @@ test("quote SQL compiles against its production migration dependencies", () => {
 });
 
 test("installer and customer interfaces expose the version and consent contract", () => {
-  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
+  for (const copy of ["Issued versions are immutable", "Build Good, Better, Best", "Add optional extra", "Add choose-one pair", "Send quote to", "Save as next draft", "Preview and send", "Confirm and submit email", "Schedule and assign job", "Done", "Internal only", "Quote history", "Retry email"]) assert.match(installerUi, new RegExp(copy));
   const sendFlow = installerUi.slice(installerUi.indexOf("async function sendPreviewedQuote"), installerUi.indexOf("async function addQuoteRecipient"));
   assert.match(sendFlow, /action: "save_draft"/);
   assert.match(sendFlow, /if \(!saved\.draftVersionId\)/);
@@ -484,6 +484,11 @@ test("installer and customer interfaces expose the version and consent contract"
   for (const copy of ["Direct customer agreements", "Clear choices, one confirmed total", "Accept selected quote", "verified account evidence", "This version has been superseded", "selectedChoiceIds"]) assert.match(customerUi, new RegExp(copy));
   for (const hidden of ["unitCostCentsExGst", "marginBasisPoints", "markupBasisPoints"]) assert.doesNotMatch(customerUi, new RegExp(hidden));
   assert.match(crm, /<TradeQuotePanel/);
+  assert.match(installerUi, /onScheduleJob\?: \(\) => void/);
+  assert.match(installerUi, /onScheduleJob && !jobSummary\?\.publicLead/);
+  assert.match(installerUi, /setSendPreview\(null\); onScheduleJob\(\);/);
+  assert.match(installerUi, /This Australian Energy Assessments lead can be scheduled after the customer accepts the current quote/);
+  assert.match(crm, /onScheduleJob=\{canStartJobScheduling && !isReleasedLead \? \(\) => setTab\("schedule"\) : undefined\}/);
   assert.doesNotMatch(crm, /name="quotedValue"|name="quoteStatus"/);
   assert.match(dashboard, /href="\/account\/quotes"/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*?\.trade-quote-line \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);

@@ -271,12 +271,13 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   assert.match(ui, /staffPermissions\.canViewCustomers && staffPermissions\.canManageCustomers/);
   assert.match(ui, /job\.customerSource !== "platform_private" && job\.crmCustomerId/);
   assert.match(ui, /openJobCustomerEditor\(job\)/);
-  assert.match(ui, /Assign job/);
   assert.match(ui, /Schedule job/);
-  assert.match(ui, /openFocusedJob\(job\.id, "assignment"\)/);
+  assert.match(ui, /openFocusedJob\(job\.id, "schedule"\)/);
+  assert.doesNotMatch(ui, />Assign job<\/button>/);
+  assert.doesNotMatch(ui, /openFocusedJob\(job\.id, "assignment"\)/);
   assert.match(ui, /fetch\("\/api\/trade-team",/);
   assert.match(ui, /action: "assign_job", workOrderId: job\.id, memberId: jobAssigneeId/);
-  assert.match(ui, /activeTab === "assignment"/);
+  assert.doesNotMatch(ui, /activeTab === "assignment"/);
 });
 
 test("job workspace exposes authorised customer context, preserves the private boundary and uses the real customer editor", () => {
@@ -295,12 +296,13 @@ test("job workspace exposes authorised customer context, preserves the private b
     assert.match(ui, new RegExp(label));
   }
   assert.match(ui, /isProtected \? <div className="crm-customer-boundary protected"/);
-  assert.match(ui, /This accepted job contains only the customer-disclosed contact and property details saved for your business/);
+  assert.match(ui, /This customer-authorised lead contains only the contact and property details disclosed to your business/);
 });
 
-test("job assignment loads every capability-filtered roster page into one compact selector", () => {
-  const [teamRoute, ui, styles] = [
+test("the combined Schedule tab loads every capability-filtered assignee and keeps assignment beside the focused calendar", () => {
+  const [teamRoute, route, ui, styles] = [
     read("../src/app/api/trade-team/route.ts"),
+    read("../src/app/api/trade-crm/route.ts"),
     read("../src/components/InstallerCrmWorkspace.tsx"),
     read("../src/components/InstallerCrmJobRegister.module.css"),
   ];
@@ -309,9 +311,19 @@ test("job assignment loads every capability-filtered roster page into one compac
   assert.match(teamRoute, /assigneePageSize = Math\.min\(50/);
   assert.match(ui, /assigneePageSize: "50", assigneeCapability: job\.serviceCategory/);
   assert.match(ui, /for \(let page = 2; page <= \(roster\?\.totalPages \|\| 1\); page \+= 1\)/);
-  const assignmentSection = ui.match(/\{activeTab === "assignment"[\s\S]*?\{activeTab === "field"/)?.[0] || "";
-  assert.match(assignmentSection, /<select value=\{jobAssigneeId\}/);
-  assert.match(assignmentSection, /Save assignment/);
-  assert.doesNotMatch(assignmentSection, /Search team|Find an active teammate|type="search"|Load more/);
+  assert.doesNotMatch(ui, /type JobTab = [^;]*"assignment"/);
+  assert.match(ui, /const canOpenJobSchedule = !isProtected && \(canAssignJobs \|\| canViewJobSchedule\)/);
+  assert.match(ui, /const canStartJobScheduling = jobReadyForScheduling && \(canAssignJobs \|\| canAddJobAppointment\)/);
+  assert.match(route, /CASE WHEN \$\{tradeJobScheduleEligibilitySql\("w", "d"\)\} THEN 1 ELSE 0 END schedule_ready/);
+  assert.match(ui, /scheduleReady: boolean/);
+  assert.match(ui, /if \(canOpenJobSchedule\) mainTabs\.push\(\["schedule",/);
+  const scheduleSection = ui.match(/\{activeTab === "schedule"[\s\S]*?(?=\n\s*\{activeTab === ")/)?.[0] || "";
+  const assignmentForm = scheduleSection.match(/<form className=\{registerStyles\.assignmentForm\}[\s\S]*?<\/form>/)?.[0] || "";
+  assert.match(assignmentForm, /<select value=\{jobAssigneeId\}/);
+  assert.match(assignmentForm, /Save assignment/);
+  assert.doesNotMatch(assignmentForm, /Search team|Find an active teammate|type="search"|Load more/);
+  assert.match(scheduleSection, /<TradeScheduleWorkspace/);
+  assert.match(scheduleSection, /variant="job"/);
+  assert.ok(scheduleSection.indexOf("<TradeScheduleWorkspace") < scheduleSection.indexOf("registerStyles.assignmentForm"));
   assert.match(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
 });

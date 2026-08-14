@@ -10,6 +10,23 @@ export type ScheduleLaneItem = { id: string; startsAt: string; endsAt: string };
 export type ScheduleLane = { lane: number; laneCount: number };
 export type ScheduleConflictItem = ScheduleLaneItem & { assigneeMemberId?: unknown };
 export type ScheduleDisplayWindow = { startMinute: number; endMinute: number };
+export type ScheduleProposalStatus = "incomplete" | "loading" | "load_error" | "not_visible" | "assignee_unavailable" | "conflict" | "unavailable" | "clear";
+export type ScheduleProposalValidation = { key: string; status: ScheduleProposalStatus; conflict: boolean };
+export type ScheduleProposalValidationInput = {
+  startsAt: string;
+  endsAt: string;
+  assigneeMemberId: string;
+  visibleMemberId?: string;
+  activeWeekStart: string;
+  loadedRangeStart?: string;
+  loadedRangeWeeks?: number;
+  loading?: boolean;
+  loadFailed?: boolean;
+  failedWeekStart?: string;
+  assigneeActive?: boolean;
+  appointments?: Array<{ assigneeMemberId: string; startsAt: string; endsAt: string }>;
+  unavailability?: Array<{ teamMemberId: string; startsAt: string; endsAt: string }>;
+};
 export type ScheduleWeekSwipeInput = {
   deltaX: number;
   deltaY: number;
@@ -52,6 +69,15 @@ export function scheduleWeekDays(weekStart: string) {
 
 export function adjacentScheduleWeek(weekStart: string, direction: -1 | 1) {
   return addCalendarDays(normaliseWeekStart(weekStart), direction * 7);
+}
+
+export function scheduleWeekStartForDate(value: string) {
+  const date = String(value || "").slice(0, 10);
+  if (!DATE_PATTERN.test(date)) throw new Error("INVALID_DATE");
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) throw new Error("INVALID_DATE");
+  parsed.setUTCDate(parsed.getUTCDate() - ((parsed.getUTCDay() + 6) % 7));
+  return parsed.toISOString().slice(0, 10);
 }
 
 export function scheduleRangeContainsWeek(rangeStart: string, rangeWeeks: number, weekStart: string) {
@@ -255,6 +281,64 @@ export function localDayAndMinute(value: string) {
 
 export function rangesOverlap(startA: string, endA: string, startB: string, endB: string) {
   return startA < endB && startB < endA;
+}
+
+export function scheduleProposalKey(startsAt: string, durationMinutes: number, assigneeMemberId: string) {
+  return `${startsAt}|${durationMinutes}|${assigneeMemberId}`;
+}
+
+export function invalidateScheduleProposal(key: string, status: "loading" | "not_visible" = "not_visible"): ScheduleProposalValidation {
+  return { key, status, conflict: false };
+}
+
+export function scheduleMemberLabel(member: { id: string; displayName: string; isOwner?: boolean }, viewerMemberId: string) {
+  if (member.id === viewerMemberId) return "Me";
+  return member.isOwner ? `${member.displayName} (owner)` : member.displayName;
+}
+
+export function scheduleProposalValidation({
+  startsAt,
+  endsAt,
+  assigneeMemberId,
+  visibleMemberId = "",
+  activeWeekStart,
+  loadedRangeStart = "",
+  loadedRangeWeeks = 1,
+  loading = false,
+  loadFailed = false,
+  failedWeekStart = "",
+  assigneeActive = true,
+  appointments = [],
+  unavailability = [],
+}: ScheduleProposalValidationInput): ScheduleProposalValidation {
+  const durationMinutes = startsAt && endsAt
+    ? Math.round((Date.parse(`${endsAt}:00Z`) - Date.parse(`${startsAt}:00Z`)) / 60_000)
+    : 0;
+  const key = scheduleProposalKey(startsAt, durationMinutes, assigneeMemberId);
+  if (!startsAt || !endsAt || !assigneeMemberId || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return { key, status: "incomplete", conflict: false };
+
+  let proposalWeekStart = "";
+  try { proposalWeekStart = scheduleWeekStartForDate(startsAt); }
+  catch { return { key, status: "incomplete", conflict: false }; }
+  let targetLoaded = false;
+  try {
+    targetLoaded = Boolean(loadedRangeStart && scheduleRangeContainsWeek(loadedRangeStart, loadedRangeWeeks, proposalWeekStart));
+  } catch { targetLoaded = false; }
+  if (loadFailed || failedWeekStart === proposalWeekStart) return { key, status: "load_error", conflict: false };
+  if (loading) return { key, status: "loading", conflict: false };
+  if (!assigneeActive) return { key, status: "assignee_unavailable", conflict: false };
+  if (activeWeekStart !== proposalWeekStart || (visibleMemberId && visibleMemberId !== assigneeMemberId)) {
+    return { key, status: "not_visible", conflict: false };
+  }
+  if (!targetLoaded) return { key, status: "not_visible", conflict: false };
+
+  const overlapsAppointment = appointments.some((item) => item.assigneeMemberId === assigneeMemberId
+    && rangesOverlap(item.startsAt, item.endsAt || item.startsAt, startsAt, endsAt));
+  if (overlapsAppointment) return { key, status: "conflict", conflict: true };
+  const overlapsUnavailability = unavailability.some((item) => item.teamMemberId === assigneeMemberId
+    && rangesOverlap(item.startsAt, item.endsAt, startsAt, endsAt));
+  if (overlapsUnavailability) return { key, status: "unavailable", conflict: true };
+  return { key, status: "clear", conflict: false };
 }
 
 export function defaultWorkingWindow(weekday: number): WorkingWindow {

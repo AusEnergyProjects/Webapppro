@@ -34,11 +34,12 @@ test("rescheduling uses schedule scope independently from job scope", () => {
   assert.equal(canRescheduleWithinScope({ ...access, canRescheduleJobs: false }, "member-a"), false);
 });
 
-test("CRM appointment creation cannot assign a different member without assignment permission", async () => {
+test("CRM appointment creation always uses the job's saved assignment", async () => {
   const crm = await read("../src/app/api/trade-crm/route.ts");
   assert.match(crm, /const currentAssigneeMemberId = String\(job\.assignee_member_id \|\| ""\)/);
-  assert.match(crm, /assigneeMemberId !== currentAssigneeMemberId[\s\S]*?!canAssignJob\(identity\.access, currentAssigneeMemberId, assigneeMemberId\)/);
-  assert.match(crm, /throw new Error\("JOB_ASSIGN_REQUIRED"\)/);
+  assert.match(crm, /requestedAssigneeMemberId && requestedAssigneeMemberId !== currentAssigneeMemberId/);
+  assert.match(crm, /throw new Error\("JOB_ASSIGNMENT_CHANGED"\)/);
+  assert.match(crm, /const assigneeMemberId = currentAssigneeMemberId/);
   const actor = { isOwner: false, canAssignJobs: false, jobScope: "team", memberId: "member-a" };
   assert.equal(canAssignWithinScope(actor, "member-a", "member-b"), false);
   assert.equal(canAssignWithinScope({ ...actor, canAssignJobs: true }, "member-a", "member-b"), true);

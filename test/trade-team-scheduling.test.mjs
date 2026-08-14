@@ -8,6 +8,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const schema = read("../db/schema.ts");
 const migration = read("../drizzle/0051_team_scheduling_capacity.sql");
 const route = read("../src/app/api/trade-schedule/route.ts");
+const scheduleServer = read("../src/lib/trade-schedule-server.ts");
 const ui = read("../src/components/TradeScheduleWorkspace.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
@@ -100,8 +101,8 @@ test("the scheduling migration applies cleanly to its appointment dependency", (
 
 test("schedule SQL compiles against the production team and CRM migrations", () => {
   const db = new DatabaseSync(":memory:"); const directory = new URL("../drizzle/", import.meta.url);
-  for (const file of ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0070_frictionless_team_roster.sql", "0131_trade_team_permissions_and_member_files.sql", "0134_team_member_documents_and_colours.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
-  const queries = [...route.matchAll(/prepare\(\s*`([\s\S]*?)`,?\s*\)/g)].map((match) => match[1]).filter((sql) => !sql.includes("${"));
+  for (const file of ["0000_complex_absorbing_man.sql", "0011_even_reavers.sql", "0015_aromatic_black_knight.sql", "0019_melodic_unus.sql", "0025_dizzy_spot.sql", "0026_lovely_zodiak.sql", "0047_customer_service_site_foundation.sql", "0051_team_scheduling_capacity.sql", "0055_appointment_rescheduling.sql", "0057_customer_property_arrivals.sql", "0058_trade_contact_arrival_handoff.sql", "0070_frictionless_team_roster.sql", "0116_trade_crm_write_guard.sql", "0131_trade_team_permissions_and_member_files.sql", "0134_team_member_documents_and_colours.sql"]) apply(db, fs.readFileSync(new URL(file, directory), "utf8"));
+  const queries = [route, scheduleServer].flatMap((source) => [...source.matchAll(/prepare\(\s*`([\s\S]*?)`,?\s*\)/g)].map((match) => match[1])).filter((sql) => !sql.includes("${"));
   assert.ok(queries.length > 10);
   for (const sql of queries) assert.doesNotThrow(() => db.prepare(sql), `schedule SQL should compile: ${sql.slice(0, 80)}`);
 });
@@ -109,9 +110,10 @@ test("schedule SQL compiles against the production team and CRM migrations", () 
 test("authorised schedule scopes receive server-enforced conflict and revision checks", () => {
   for (const boundary of ["requireInstallerTeamAccess", "sameOrigin", "canViewSchedule", "canRescheduleWithinScope", "canAssignJob", "activeMember", "owner_uid = ?", "firebase_uid = ?"]) assert.match(route, new RegExp(boundary));
   assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
-  for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(route, new RegExp(conflict));
-  assert.doesNotMatch(route, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
-  assert.match(route, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) AND id <> \?/);
+  for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(`${route}\n${scheduleServer}`, new RegExp(conflict));
+  assert.doesNotMatch(`${route}\n${scheduleServer}`, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
+  assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) AND id <> \?/);
+  assert.match(route, /assertTradeScheduleAvailable\(\{ ownerUid: access\.ownerUid, memberId, startsAt, endsAt/);
   assert.match(route, /ON CONFLICT\(owner_uid, team_member_id, weekday\) DO UPDATE/);
   assert.match(route, /schedule_updated/); assert.match(route, /schedule_created/); assert.match(route, /jobSyncChangeStatements/);
 });
@@ -124,6 +126,12 @@ test("schedule payloads preserve customer privacy boundaries", () => {
   assert.match(route, /customer_business_name/);
   assert.match(route, /customer_first_name, row\.customer_last_name/);
   assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1/);
+  assert.match(route, /tradeJobScheduleEligibilitySql\("w", "d"\)/);
+  assert.match(route, /assertTradeJobReadyForScheduling\(access\.ownerUid, workOrderId\)/);
+  assert.match(scheduleServer, /schedule_version\.version_number = schedule_quote\.current_version_number/);
+  assert.match(scheduleServer, /schedule_acceptance\.quote_version_id = schedule_version\.id/);
+  assert.match(scheduleServer, /schedule_acceptance\.decision = 'accepted'/);
+  assert.match(scheduleServer, /tradeJobScheduleEligibilityGuardStatement/);
 });
 
 test("appointments expose compact quote state without bypassing the existing quote workspace", () => {
@@ -142,11 +150,13 @@ test("appointments expose compact quote state without bypassing the existing quo
 
 test("the installer dashboard exposes stable one-week scheduling with adjacent drag buffering", () => {
   for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
-  assert.match(ui, /draggable=\{canRescheduleJobs && !busy && !loading\}/);
+  assert.match(ui, /const calendarCanReschedule = canRescheduleJobs && !jobCalendar/);
+  assert.match(ui, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
   assert.match(ui, /const SCHEDULE_BUFFER_WEEKS = 3/);
   assert.match(ui, /const days = scheduleWeekDays\(bufferedWeekStart\)/);
   assert.match(ui, /appointmentsByDate = useMemo/);
-  assert.match(ui, /scheduleAppointmentLanes\(dayAppointments\)/);
+  assert.match(ui, /const laneItems = \[\.\.\.dayAppointments, \.\.\.dayUnavailability, \.\.\.\(proposalOnDay \? \[proposalOnDay\] : \[\]\)\]/);
+  assert.match(ui, /scheduleAppointmentLanes\(laneItems\)/);
   assert.match(ui, /new AbortController\(\)/);
   assert.match(ui, /schedule-dialog-status/);
   assert.match(ui, /className="schedule-week-pages" style=\{\{ transform: `translateX/);
@@ -158,9 +168,9 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /minute: gridStartMinute \+ \(\(container\?\.scrollTop \|\| 0\) \/ GRID_QUARTER_HEIGHT\) \* 15/);
   assert.match(ui, /container\.scrollTop = Math\.max\(0, \(\(position\.minute - gridStartMinute\)/);
   assert.match(ui, /pendingWeekStartRef\.current = targetWeek/);
-  assert.match(ui, /if \(failedPendingNavigation\) \{/);
-  assert.match(ui, /loadedRangeStartRef\.current && loadedRangeStartRef\.current !== rangeStart/);
-  assert.match(ui, /if \(data\.rangeStart\) loadedRangeStartRef\.current = data\.rangeStart/);
+  assert.match(ui, /setFailedWeekStart\(pendingWeekStartRef\.current\)/);
+  assert.match(ui, /setFailedWeekStart\(""\)/);
+  assert.match(ui, /targetRangeStart === rangeStart\) setLoadAttemptNonce/);
   assert.match(ui, /if \(!saved\)/);
   assert.match(ui, /setActiveWeekStart\(sourceWeek\)/);
   assert.match(ui, /mergeDraggedScheduleAppointment\(current\.appointments \|\| \[\], appointment\)/);
@@ -175,7 +185,7 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /Outside this week/);
   assert.match(ui, /aria-current=\{dayIsToday \? "date" : undefined\}/);
   assert.match(ui, /className="schedule-now-line"/);
-  assert.match(ui, /scheduleDisplayWindow\(activeWeekAppointments\)/);
+  assert.match(ui, /scheduleDisplayWindow\(activeWeekDisplayAppointments\)/);
   assert.match(ui, /expectedRevision: appointment\.revision/);
   assert.match(route, /scheduleConflictIds\(/);
   assert.match(ui, /min=\{minimumStart\}/);
@@ -187,6 +197,41 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(dashboard, /kind: "crm-view", id: "schedule"/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);
   assert.doesNotMatch(teamPortal, /TradeScheduleWorkspace|canDispatch/);
+});
+
+test("job-focused scheduling keeps the permission-aware week and hides unrelated dispatch panels", () => {
+  assert.match(ui, /variant\?: "full" \| "job"/);
+  assert.match(ui, /const jobCalendar = variant === "job"/);
+  assert.match(ui, /scheduleScope === "own" \? "Your calendar" : "Team calendar"/);
+  assert.match(ui, /Check the week before you book/);
+  assert.match(ui, /proposalConflictIds/);
+  assert.match(ui, /const proposalValidation = useMemo\(\(\) => scheduleProposalValidation/);
+  assert.match(ui, /const proposalHasConflict = proposalValidation\.conflict/);
+  assert.match(ui, /schedulePermissions\?\.scheduleScope === "own"/);
+  assert.match(ui, /role=\{jobCalendar \? "status" : undefined\}/);
+  assert.match(ui, /aria-live=\{jobCalendar \? "polite" : undefined\}/);
+  assert.match(ui, /proposalValidation\.status === "load_error"/);
+  assert.match(ui, /loadFailed: Boolean\(loadError\)/);
+  assert.match(ui, /setLoadError\(""\)/);
+  assert.match(ui, /Retry calendar/);
+  assert.match(ui, /setLoadAttemptNonce\(\(value\) => value \+ 1\)/);
+  assert.match(ui, /useState\(\(\) => jobCalendar \? focusedMemberId \|\| proposal\?\.assigneeMemberId \|\| "" : ""\)/);
+  assert.match(ui, /setMemberFilter\(focusedMemberId \|\| ""\)/);
+  assert.match(ui, /jobCalendar && \(members\.length > 1 \|\| Boolean\(memberFilter && !members\.some/);
+  assert.match(ui, /<option value="">All workers<\/option>/);
+  assert.match(ui, /invalidateScheduleProposal\(proposalValidation\.key\)/);
+  assert.match(ui, /scheduleMemberLabel\(member, data\.access\?\.memberId \|\| ""\)/);
+  assert.match(ui, /className="schedule-block unavailable"/);
+  assert.match(ui, />Unavailable<\/strong>/);
+  assert.doesNotMatch(ui, /schedule-block unavailable[\s\S]{0,500}item\.reason/);
+  assert.match(ui, /Proposed booking/);
+  assert.match(ui, /\{!jobCalendar && <section className="schedule-today-strip"/);
+  assert.match(ui, /\{!jobCalendar && <details className="schedule-filter-panel"/);
+  assert.match(ui, /\{!jobCalendar && \(data\.rescheduleRequests \|\| \[\]\)\.length > 0/);
+  assert.match(ui, /\{!jobCalendar && draggingId &&/);
+  assert.match(ui, /\{!jobCalendar && <details className="schedule-capacity"/);
+  assert.match(ui, /\{!jobCalendar && !permissions && <details className="schedule-calendar-links"/);
+  assert.match(ui, /\{!jobCalendar && \(canRescheduleJobs \|\| canManageAvailability\) && <div className="schedule-lower-grid"/);
 });
 
 test("appointment cards prioritise field-use context and open an accessible editor", () => {

@@ -110,6 +110,36 @@ function fixture(stage = "in_progress", revision = 5) {
       assignee_label text NOT NULL,
       updated_at text NOT NULL
     );
+    CREATE TABLE trade_crm_job_details (
+      work_order_id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      customer_source text NOT NULL DEFAULT 'internal',
+      crm_customer_id text NOT NULL DEFAULT '',
+      quote_status text NOT NULL DEFAULT 'not_started'
+    );
+    CREATE TABLE trade_crm_quotes (
+      id text PRIMARY KEY NOT NULL,
+      firebase_uid text NOT NULL,
+      work_order_id text NOT NULL,
+      crm_customer_id text NOT NULL,
+      current_version_number integer NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE trade_crm_quote_versions (
+      id text PRIMARY KEY NOT NULL,
+      quote_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      version_number integer NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE trade_crm_quote_acceptances (
+      quote_id text NOT NULL,
+      quote_version_id text NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      crm_customer_id text NOT NULL,
+      decision text NOT NULL
+    );
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,
@@ -275,6 +305,9 @@ function workOrdersRoute(db, staffAccess = null) {
       this.code = code;
     }
   }
+  const scheduleServer = loadTypescriptModule("../src/lib/trade-schedule-server.ts", {
+    "../../db": { getD1: () => db },
+  });
   return loadTypescriptModule("../src/app/api/trade-work-orders/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
@@ -296,6 +329,7 @@ function workOrdersRoute(db, staffAccess = null) {
       nextTradeWorkNumber: async () => "JOB-1",
     },
     "@/lib/trade-team-sync-server": syncHelpers,
+    "@/lib/trade-schedule-server": scheduleServer,
     "@/lib/appointment-notification-server": {
       queueAppointmentNotifications: async () => {},
     },
@@ -603,6 +637,55 @@ const directJobMutations = [
     })),
   },
 ];
+
+test("Business Hub schedule update rejects a job that fails the scheduling eligibility precheck", async () => {
+  const { database, db } = fixture();
+  database.prepare("UPDATE trade_work_orders SET source_type = 'opportunity' WHERE id = 'job-1'").run();
+
+  const response = await workOrdersRoute(db).PATCH(patchRequest({
+    action: "update_work_order",
+    workOrderId: "job-1",
+    scheduledStart: "2026-08-10",
+    scheduledEnd: "2026-08-11",
+  }));
+
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /accept the current Australian Energy Assessments quote/i);
+  assert.deepEqual({ ...database.prepare(`SELECT scheduled_start, scheduled_end, revision
+    FROM trade_work_orders WHERE id = 'job-1'`).get() }, {
+    scheduled_start: "",
+    scheduled_end: "",
+    revision: 5,
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
+});
+
+test("Business Hub schedule update rolls back when eligibility changes after its precheck", async () => {
+  const { database, db } = fixture();
+  db.setBeforeBatch(() => {
+    database.prepare("UPDATE trade_work_orders SET source_type = 'opportunity' WHERE id = 'job-1'").run();
+  });
+
+  const response = await workOrdersRoute(db).PATCH(patchRequest({
+    action: "update_work_order",
+    workOrderId: "job-1",
+    scheduledStart: "2026-08-10",
+    scheduledEnd: "2026-08-11",
+  }));
+
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /accept the current Australian Energy Assessments quote/i);
+  assert.deepEqual({ ...database.prepare(`SELECT source_type, scheduled_start, scheduled_end, revision
+    FROM trade_work_orders WHERE id = 'job-1'`).get() }, {
+    source_type: "opportunity",
+    scheduled_start: "",
+    scheduled_end: "",
+    revision: 5,
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
+});
 
 for (const stage of ["completed", "cancelled"]) {
   for (const mutation of directJobMutations) {
