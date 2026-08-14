@@ -115,8 +115,9 @@ test("private job files preview in place and retain an explicit download action"
 });
 
 test("job data refreshes preserve the active job tab", () => {
-  assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{selectedJobDetail\.assigneeMemberId\}`\}/);
+  assert.match(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}`\}/);
   assert.equal((crm.match(/<JobDetail key=/g) || []).length, 1);
+  assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{selectedJobDetail\.assigneeMemberId\}`\}/);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{focusedJobTab\}:\$\{refreshNonce\}`\}/);
   assert.doesNotMatch(crm, /key=\{`\$\{selectedJobDetail\.id\}:\$\{refreshNonce\}`\}/);
   assert.match(fieldPanel, /await refreshAfterReview\(\)/);
@@ -125,7 +126,7 @@ test("job data refreshes preserve the active job tab", () => {
   assert.match(crm, /window\.setInterval\(\(\) => refreshFocusedJob\(\), 30_000\)/);
   assert.match(crm, /if \(failClosed\) setFocusedJobRefreshing\(true\)/);
   assert.match(crm, /refreshing=\{focusedJobRefreshing\}/);
-  assert.match(crm, /const bookingControlsBlocked = refreshing \|\| assignmentBusy/);
+  assert.match(crm, /const bookingControlsBlocked = refreshing \|\| appointmentBusy \|\| jobAssigneesLoading/);
   assert.match(crm, /navigationTarget\.kind === "job"[\s\S]*setFocusedJobRefreshing\(true\)[\s\S]*setRefreshNonce\(\(value\) => value \+ 1\)/);
 });
 

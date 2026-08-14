@@ -239,7 +239,7 @@ function workflowFixture() {
       id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL,
       appointment_type text NOT NULL, title text NOT NULL, starts_at text NOT NULL,
       ends_at text NOT NULL, assignee_member_id text NOT NULL, assignee_label text NOT NULL,
-      status text NOT NULL, revision integer NOT NULL, created_at text NOT NULL
+      status text NOT NULL, notes text NOT NULL DEFAULT '', revision integer NOT NULL, created_at text NOT NULL
     );
     CREATE TABLE trade_crm_job_media (
       id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL,
@@ -441,7 +441,7 @@ test("Interested persists only disclosed customer context and survives later mar
   database.prepare(`INSERT INTO trade_crm_appointments VALUES
     ('appointment-1', ?, 'trade-a', 'site_visit', 'Customer site visit',
      '2026-08-13T09:00', '2026-08-13T10:00', 'member-1', 'Installer One',
-     'scheduled', 1, '2026-08-12T01:00:00.000Z')`).run(ids.workOrderId);
+     'scheduled', '', 1, '2026-08-12T01:00:00.000Z')`).run(ids.workOrderId);
   const appointmentSql = exactTemplate(
     scheduleRoute,
     /db\.prepare\(`(SELECT a\.id, a\.work_order_id[\s\S]*?ORDER BY a\.starts_at, a\.created_at)`\)/,

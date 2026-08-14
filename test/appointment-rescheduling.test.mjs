@@ -73,6 +73,20 @@ function assertEligibilityPrecheckAndAtomicGuard(section, label) {
   assert.ok(guard > batch && guard < batchEnd, `${label} must atomically recheck eligibility inside the mutation batch`);
 }
 
+function assertBatchEligibilityPrecheckAndAtomicGuard(section) {
+  const preparationLoop = section.indexOf("for (const change of changes)");
+  const precheck = section.indexOf("await assertTradeJobReadyForScheduling(");
+  const statements = section.indexOf("const statements: D1PreparedStatement[] = []");
+  const guard = section.indexOf("tradeJobScheduleEligibilityGuardStatement(db");
+  const guardLoop = section.lastIndexOf("for (const item of prepared)", guard);
+  const batch = section.indexOf("await db.batch(statements)");
+  assert.ok(preparationLoop >= 0 && precheck > preparationLoop,
+    "batch scheduling must precheck every prepared job's authoritative eligibility");
+  assert.ok(statements > precheck && guardLoop > statements && guard > guardLoop,
+    "batch scheduling must add an eligibility guard for every prepared job");
+  assert.ok(batch > guard, "batch scheduling must include every eligibility guard in its atomic mutation batch");
+}
+
 function conflictDispatchRoute(conflictCode) {
   let batchCalls = 0;
   let preparedWrites = 0;
@@ -340,7 +354,7 @@ test("dispatch decisions are owner scoped, revision protected and recheck confli
   assert.match(dispatchRoute, /action === "review_reschedule_request"/);
   for (const decision of ["accepted", "rejected", "alternative_proposed"]) assert.match(dispatchRoute, new RegExp(decision));
   for (const boundary of ["canRescheduleWithinScope", "canAssignJob", "r.firebase_uid = ?", "expectedRequestRevision", "expectedAppointmentRevision", "REVISION_CONFLICT", "assertTradeScheduleAvailable"]) assert.match(dispatchRoute, new RegExp(boundary));
-  assert.equal((dispatchRoute.match(/await assertTradeScheduleAvailable/g) || []).length, 3);
+  assert.equal((dispatchRoute.match(/await assertTradeScheduleAvailable/g) || []).length, 4);
   assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
   assert.match(scheduleServer, /trade_team_unavailability/);
   assert.match(scheduleServer, /throw new Error\("APPOINTMENT_CONFLICT"\)/);
@@ -357,6 +371,10 @@ test("dispatch decisions are owner scoped, revision protected and recheck confli
 test("every schedule mutation path prechecks and atomically guards authoritative AEA quote acceptance", () => {
   const acceptedReschedule = routeActionSection(
     "const appointmentRevision = Number(current.appointment_revision) + 1",
+    '} else if (action === "save_schedule_changes")',
+  );
+  const batchSchedule = routeActionSection(
+    'action === "save_schedule_changes"',
     '} else if (action === "schedule_appointment")',
   );
   const scheduleAppointment = routeActionSection(
@@ -369,10 +387,11 @@ test("every schedule mutation path prechecks and atomically guards authoritative
   );
 
   assertEligibilityPrecheckAndAtomicGuard(acceptedReschedule, "accepted customer reschedule");
+  assertBatchEligibilityPrecheckAndAtomicGuard(batchSchedule);
   assertEligibilityPrecheckAndAtomicGuard(scheduleAppointment, "appointment scheduling");
   assertEligibilityPrecheckAndAtomicGuard(scheduleJob, "job scheduling");
-  assert.equal((dispatchRoute.match(/await assertTradeJobReadyForScheduling\(/g) || []).length, 3);
-  assert.equal((dispatchRoute.match(/tradeJobScheduleEligibilityGuardStatement\(db/g) || []).length, 3);
+  assert.equal((dispatchRoute.match(/await assertTradeJobReadyForScheduling\(/g) || []).length, 4);
+  assert.equal((dispatchRoute.match(/tradeJobScheduleEligibilityGuardStatement\(db/g) || []).length, 4);
   assert.match(dispatchRoute, /JOB_SCHEDULE_ACCEPTANCE_REQUIRED[\s\S]*?Wait for the customer to accept the current Australian Energy Assessments quote/);
   assert.match(dispatchRoute, /AND \$\{tradeJobScheduleEligibilitySql\("w", "d"\)\}[\s\S]*?AND w\.stage NOT IN/);
 });

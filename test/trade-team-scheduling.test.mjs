@@ -112,10 +112,38 @@ test("authorised schedule scopes receive server-enforced conflict and revision c
   assert.doesNotMatch(route, /access\.role|canDispatch\(access\)/);
   for (const conflict of ["REVISION_CONFLICT", "APPOINTMENT_CONFLICT", "UNAVAILABLE_CONFLICT", "PAST_APPOINTMENT"]) assert.match(`${route}\n${scheduleServer}`, new RegExp(conflict));
   assert.doesNotMatch(`${route}\n${scheduleServer}`, /throw new Error\("WORKING_HOURS_CONFLICT"\)/);
-  assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) AND id <> \?/);
+  assert.match(scheduleServer, /status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\) \$\{exclusionSql\}/);
   assert.match(route, /assertTradeScheduleAvailable\(\{ ownerUid: access\.ownerUid, memberId, startsAt, endsAt/);
   assert.match(route, /ON CONFLICT\(owner_uid, team_member_id, weekday\) DO UPDATE/);
   assert.match(route, /schedule_updated/); assert.match(route, /schedule_created/); assert.match(route, /jobSyncChangeStatements/);
+});
+
+test("several staged moves are validated and committed as one guarded schedule batch", () => {
+  const batch = route.match(/else if \(action === "save_schedule_changes"\)[\s\S]*?(?=\n\s*} else if \(action === "schedule_appointment"\))/)?.[0] || "";
+  assert.match(batch, /body\.changes\.length < 1 \|\| body\.changes\.length > 5/);
+  assert.match(batch, /new Set\(appointmentIds\)\.size !== appointmentIds\.length/);
+  assert.match(batch, /currentRows\.results\.length !== changes\.length/);
+  assert.match(batch, /new Set\(workOrderIds\)\.size !== workOrderIds\.length/);
+  assert.match(batch, /change\.expectedRevision !== Number\(current\.revision\)/);
+  assert.match(batch, /assertCurrentScheduleAssignment\(access/);
+  assert.match(batch, /assertScheduleTarget\(access, change\.memberId\)/);
+  assert.match(batch, /assertAssignmentChange\(access/);
+  assert.match(batch, /assertMemberCapability\(member/);
+  assert.match(batch, /assertTradeJobReadyForScheduling\(access\.ownerUid/);
+  assert.match(batch, /left\.memberId === right\.memberId && left\.startsAt < right\.endsAt && left\.endsAt > right\.startsAt/);
+  assert.match(batch, /excludeAppointmentIds: appointmentIds/);
+  assert.match(batch, /status = 'scheduled' AND revision = \? AND assignee_member_id = \?/);
+  assert.match(batch, /previousTradeScheduleMutationGuardStatement/);
+  assert.match(batch, /tradeJobScheduleEligibilityGuardStatement/);
+  assert.match(batch, /tradeScheduleAvailabilityGuardStatement/);
+  assert.match(batch, /plannedComplianceIntentReplanStatements/);
+  assert.match(batch, /jobSyncChangeStatements/);
+  assert.match(batch, /await db\.batch\(statements\)/);
+  assert.equal((batch.match(/await db\.batch\(/g) || []).length, 1);
+  assert.match(batch, /notifications\.push\(\{/);
+  assert.match(batch, /syncAppointmentIds\.push\(item\.appointmentId\)/);
+  assert.match(scheduleServer, /excludeAppointmentIds\?\.length/);
+  assert.match(scheduleServer, /excludedIds\.map\(\(\) => "\?"\)\.join\(", "\)/);
 });
 
 test("schedule payloads preserve customer privacy boundaries", () => {
@@ -125,7 +153,16 @@ test("schedule payloads preserve customer privacy boundaries", () => {
   assert.match(route, /protectedJob\s*\?\s*row\.site_area \|\| "Protected service region"/);
   assert.match(route, /customer_business_name/);
   assert.match(route, /customer_first_name, row\.customer_last_name/);
-  assert.doesNotMatch(route, /c\.email|c\.phone|address_line_1/);
+  assert.match(route, /c\.email customer_email, c\.phone customer_phone/);
+  assert.match(route, /s\.address_line_1, s\.address_line_2, s\.suburb, s\.address_state, s\.postcode/);
+  assert.match(route, /const canSeeOperationalDetails = !protectedJob/);
+  assert.match(route, /const canSeeCustomerContact = !protectedJob/);
+  for (const field of ["addressLine1", "addressLine2", "addressSuburb", "addressState", "addressPostcode"]) {
+    assert.match(route, new RegExp(`${field}: canSeeOperationalDetails`));
+  }
+  assert.match(route, /notes: canSeeOperationalDetails/);
+  assert.match(route, /customerEmail: canSeeCustomerContact/);
+  assert.match(route, /customerPhone: canSeeCustomerContact/);
   assert.match(route, /tradeJobScheduleEligibilitySql\("w", "d"\)/);
   assert.match(route, /assertTradeJobReadyForScheduling\(access\.ownerUid, workOrderId\)/);
   assert.match(scheduleServer, /schedule_version\.version_number = schedule_quote\.current_version_number/);
@@ -149,8 +186,8 @@ test("appointments expose compact quote state without bypassing the existing quo
 });
 
 test("the installer dashboard exposes stable one-week scheduling with adjacent drag buffering", () => {
-  for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job"]) assert.match(ui, new RegExp(copy));
-  assert.match(ui, /const calendarCanReschedule = canRescheduleJobs && !jobCalendar/);
+  for (const copy of ["One clear week at a time", "Go to week", "Previous week", "Next week", "Today", "Swipe to change week", "Hold for previous week", "Hold for next week", "Add to schedule", "Conflicts only", "Set working hours and time off", "minuteFromPointer", "moveAppointmentToDate", "outsideWorkingHours", "memberLabel", "ownerMemberId", "schedule_appointment", "schedule_job", "save_schedule_changes", "Save schedule changes", "Discard"]) assert.match(ui, new RegExp(copy));
+  assert.match(ui, /const calendarCanReschedule = canRescheduleJobs/);
   assert.match(ui, /draggable=\{calendarCanReschedule && !busy && !loading\}/);
   assert.match(ui, /const SCHEDULE_BUFFER_WEEKS = 3/);
   assert.match(ui, /const days = scheduleWeekDays\(bufferedWeekStart\)/);
@@ -171,9 +208,12 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /setFailedWeekStart\(pendingWeekStartRef\.current\)/);
   assert.match(ui, /setFailedWeekStart\(""\)/);
   assert.match(ui, /targetRangeStart === rangeStart\) setLoadAttemptNonce/);
-  assert.match(ui, /if \(!saved\)/);
+  assert.match(ui, /const saved = await update\(\{ action: "save_schedule_changes", changes \}/);
+  assert.match(ui, /if \(!saved\) return/);
   assert.match(ui, /setActiveWeekStart\(sourceWeek\)/);
-  assert.match(ui, /mergeDraggedScheduleAppointment\(current\.appointments \|\| \[\], appointment\)/);
+  assert.match(ui, /applyScheduleChangeDrafts\(scheduleChangeSources, scheduleChangeDrafts\)/);
+  assert.match(ui, /stageScheduleChange\(appointment, date/);
+  assert.match(ui, /function discardScheduleChanges\(\)[\s\S]*?setPendingScheduleChanges\(\{\}\)/);
   assert.match(ui, /scheduleWeekSwipeDirection/);
   assert.match(ui, /className="schedule-week-viewport" onTouchStart=\{startWeekSwipe\} onTouchEnd=\{\(event\) => finishWeekSwipe\(event, true\)\} onTouchCancel=/);
   assert.doesNotMatch(ui, /handleScheduleScroll|rollScheduleWindow|eight weeks together|calendar rolls as you scroll/);
@@ -186,13 +226,14 @@ test("the installer dashboard exposes stable one-week scheduling with adjacent d
   assert.match(ui, /aria-current=\{dayIsToday \? "date" : undefined\}/);
   assert.match(ui, /className="schedule-now-line"/);
   assert.match(ui, /scheduleDisplayWindow\(activeWeekDisplayAppointments\)/);
-  assert.match(ui, /expectedRevision: appointment\.revision/);
+  assert.match(ui, /expectedRevision: change\.appointment\.revision/);
   assert.match(route, /scheduleConflictIds\(/);
   assert.match(ui, /min=\{minimumStart\}/);
   assert.match(route, /member_uid === ownerUid/);
   assert.match(route, /normaliseScheduleRangeWeeks\(search\.get\("rangeWeeks"\), 1\)/);
   assert.match(route, /schedulePayload\(access, rangeStart, rangeWeeks\)/);
-  assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, syncAppointmentId\)/);
+  assert.match(route, /for \(const appointmentId of Array\.from\(new Set\(syncAppointmentIds\)\)\)/);
+  assert.match(route, /syncCreatedAppointmentToConnectedCalendars\(access\.ownerUid, appointmentId\)/);
   assert.doesNotMatch(dashboard, /workspace === "schedule"/);
   assert.match(dashboard, /kind: "crm-view", id: "schedule"/);
   assert.match(dashboard, /hasBusinessOperations && hasTeamAccess/);
@@ -228,7 +269,7 @@ test("job-focused scheduling keeps the permission-aware week and hides unrelated
   assert.match(ui, /\{!jobCalendar && <section className="schedule-today-strip"/);
   assert.match(ui, /\{!jobCalendar && <details className="schedule-filter-panel"/);
   assert.match(ui, /\{!jobCalendar && \(data\.rescheduleRequests \|\| \[\]\)\.length > 0/);
-  assert.match(ui, /\{!jobCalendar && draggingId &&/);
+  assert.match(ui, /\{draggingId &&/);
   assert.match(ui, /\{!jobCalendar && <details className="schedule-capacity"/);
   assert.match(ui, /\{!jobCalendar && !permissions && <details className="schedule-calendar-links"/);
   assert.match(ui, /\{!jobCalendar && \(canRescheduleJobs \|\| canManageAvailability\) && <div className="schedule-lower-grid"/);
@@ -241,9 +282,27 @@ test("appointment cards prioritise field-use context and open an accessible edit
   assert.match(ui, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
   assert.match(ui, /document\.body\.style\.overflow = "hidden"/);
   assert.match(ui, /event\.key === "Escape"/);
+  assert.match(ui, /event\.key === "Escape"\)[\s\S]*setSelectedAppointmentId\(""\)[\s\S]*delete next\[selectedAppointmentId\]/);
+  assert.match(ui, /event\.key !== "Tab" \|\| !appointmentDialogRef\.current/);
+  assert.match(ui, /querySelectorAll<HTMLElement>\("button:not\(\[disabled\]\), input:not\(\[disabled\]\), select:not\(\[disabled\]\), textarea:not\(\[disabled\]\), a\[href\]"/);
+  assert.match(ui, /event\.shiftKey && document\.activeElement === first[\s\S]*?last\.focus\(\)/);
+  assert.match(ui, /!event\.shiftKey && document\.activeElement === last[\s\S]*?first\.focus\(\)/);
   assert.match(ui, /selectedTriggerRef\.current\?\.focus\(\)/);
+  assert.match(ui, /event\.currentTarget === event\.target\) closeAppointment\(\)/);
+  assert.match(ui, /aria-label="Close appointment details"/);
+  assert.match(ui, /function appointmentSiteAddress\(appointment: Appointment\)/);
+  assert.match(ui, /appointment\.siteAddress \|\| \[appointment\.addressLine1, appointment\.addressLine2, appointment\.addressSuburb, appointment\.addressState, appointment\.addressPostcode\]/);
+  assert.match(ui, /const siteAddress = appointmentSiteAddress\(selectedAppointment\)/);
+  assert.match(ui, /https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=/);
+  assert.match(ui, /target="_blank" rel="noreferrer">Open directions<\/a>/);
+  assert.match(ui, /selectedAppointment\.customerPhone/);
+  assert.match(ui, /selectedAppointment\.customerEmail/);
+  assert.match(ui, /selectedAppointment\.notes/);
   assert.match(ui, /type="date" min=\{minimumStart\.slice\(0, 10\)\}/);
-  assert.match(ui, /"Save appointment"/);
+  assert.match(ui, /<DurationControl id=\{`appointment-duration-/);
+  assert.match(ui, /stageScheduleChange\(selectedAppointment, edit\.date, minuteValue\(edit\.time\), edit\.memberId, edit\.durationMinutes\)/);
+  assert.match(ui, />Stage schedule change<\/button>/);
+  assert.doesNotMatch(ui, /onClick=\{\(\) => void update\(\{ action: "schedule_appointment", appointmentId: selectedAppointment\.id/);
 });
 
 test("new scheduling and authority copy avoids prohibited dash characters", () => {

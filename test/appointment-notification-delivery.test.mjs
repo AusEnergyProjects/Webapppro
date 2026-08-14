@@ -54,10 +54,23 @@ test("additive appointment notification storage applies with unique event and de
   db.close();
 });
 
-test("the four authoritative appointment milestones queue one revision-bound event", () => {
+test("authoritative appointment milestones and batch saves queue revision-bound events", () => {
   assert.match(workOrders, /eventType: "appointment_created"/);
   assert.match(schedule, /eventType: current\.assignee_member_id \? "appointment_changed" : "staff_assigned"/);
   assert.match(schedule, /eventType: "appointment_changed", appointmentRevision/);
+  const batchSchedule = schedule.slice(
+    schedule.indexOf('action === "save_schedule_changes"'),
+    schedule.indexOf('action === "schedule_appointment"'),
+  );
+  const commit = batchSchedule.indexOf("await db.batch(statements)");
+  const notification = batchSchedule.indexOf("notifications.push(", commit);
+  assert.ok(commit >= 0 && notification > commit,
+    "batch notifications must only be prepared after the atomic schedule commit succeeds");
+  assert.match(batchSchedule, /eventType: String\(item\.current\.assignee_member_id \|\| ""\) === item\.memberId \? "appointment_changed" : "staff_assigned"/);
+  assert.match(batchSchedule, /appointmentRevision: item\.appointmentRevision/);
+  assert.ok(schedule.indexOf("for (const notification of notifications) await queueAppointmentNotifications(notification)")
+    > schedule.indexOf('action === "schedule_job"'),
+  "all schedule mutation branches must reach the shared notification queue");
   assert.match(customerProjects, /eventType: "preparation_confirmed"/);
   assert.match(customerProjects, /appointment\.revision appointment_revision/);
   assert.match(server, /appointment:\$\{input\.appointmentId\}:\$\{input\.eventType\}:\$\{revision\}/);

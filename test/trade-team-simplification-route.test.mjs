@@ -27,6 +27,26 @@ const adminServer = {
   sameOrigin: () => true,
 };
 
+test("batch schedule changes enforce current, target and reassignment permission boundaries", () => {
+  const source = read("../src/app/api/trade-schedule/route.ts");
+  const batchSchedule = source.slice(
+    source.indexOf('action === "save_schedule_changes"'),
+    source.indexOf('action === "schedule_appointment"'),
+  );
+  assert.match(batchSchedule, /body\.changes\.length < 1 \|\| body\.changes\.length > 5/);
+  assert.match(batchSchedule, /new Set\(appointmentIds\)\.size !== appointmentIds\.length/);
+  const currentScope = batchSchedule.indexOf("assertCurrentScheduleAssignment(access");
+  const targetScope = batchSchedule.indexOf("assertScheduleTarget(access", currentScope);
+  const assignment = batchSchedule.indexOf("assertAssignmentChange(access", targetScope);
+  const member = batchSchedule.indexOf("activeMember(access.ownerUid", assignment);
+  const batch = batchSchedule.indexOf("await db.batch(statements)", member);
+  assert.ok(currentScope >= 0 && currentScope < targetScope && targetScope < assignment
+    && assignment < member && member < batch,
+  "every staged change must pass current, target and reassignment checks before the batch commits");
+  assert.match(batchSchedule, /WHERE a\.firebase_uid = \? AND a\.id IN/);
+  assert.match(batchSchedule, /change\.expectedRevision !== Number\(current\.revision\)/);
+});
+
 test("ordinary staff availability is self-only while delegated managers can edit the team", async () => {
   const members = [
     { id: "member-self", member_uid: "staff-uid", display_name: "Sam Field", email: "sam@example.test", status: "active", schedule_colour: "teal", capabilities: "[]" },

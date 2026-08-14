@@ -91,6 +91,25 @@ test("guided creation mirrors its saved appointment to every connected calendar"
   assert.match(workspace, /workspace=schedule/);
 });
 
+test("job workspace appointment creation commits assignment and booking before calendar sync", () => {
+  const createAppointment = crmRoute.slice(
+    crmRoute.indexOf('action === "create_appointment"'),
+    crmRoute.indexOf('action === "create_note"'),
+  );
+  assert.match(createAppointment, /expectedRevision !== Number\(job\.revision\)/);
+  assert.match(createAppointment, /const assigneeMemberId = requestedAssigneeMemberId/);
+  const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders");
+  const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", jobUpdate);
+  const batch = createAppointment.indexOf("await db.batch(statements)", appointmentInsert);
+  const calendarDelivery = createAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", batch);
+  const response = createAppointment.indexOf("revision: jobRevision", calendarDelivery);
+  assert.ok(jobUpdate >= 0 && jobUpdate < appointmentInsert && appointmentInsert < batch
+    && batch < calendarDelivery && calendarDelivery < response,
+  "assignment and appointment must commit atomically before calendar network delivery and the revision response");
+  assert.match(createAppointment, /previousAudienceMemberId: currentAssigneeMemberId/);
+  assert.match(createAppointment, /return adminJson\(\{ ok: true, id: appointmentId, revision: jobRevision, calendarSync \}, 201\)/);
+});
+
 test("optional summary notes have one editable owner in the Notes tab", () => {
   const overview = workspace.slice(workspace.indexOf('{activeTab === "summary"'), workspace.indexOf('{activeTab === "field"'));
   const notes = workspace.slice(workspace.indexOf('{activeTab === "notes"'), workspace.indexOf('{activeTab === "handover"'));

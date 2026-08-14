@@ -6680,13 +6680,15 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .schedule-drop-guide { background: #0b7658; border-radius: 999px; color: #fff; font-size: .52rem; font-weight: 900; left: 3px; line-height: 18px; padding: 0 7px; pointer-events: none; position: absolute; right: 3px; transform: translateY(-9px); z-index: 8; }
 .schedule-time-heading, .schedule-day-track > header { position: sticky; top: 0; z-index: 12; }
 .schedule-free-day { color: #8a9a94; font-size: .56rem; left: 0; position: absolute; right: 0; text-align: center; top: 42px; }
-.schedule-block { border: 1px solid rgba(6, 54, 46, .18); border-left: 5px solid #0e8f65; border-radius: 7px; box-shadow: 0 4px 11px rgba(9, 57, 48, .12); cursor: grab; display: grid; gap: 2px; left: 5px; overflow: hidden; padding: 6px 7px; position: absolute; right: 5px; z-index: 2; }
+.schedule-block { border: 1px solid rgba(6, 54, 46, .18); border-left: 5px solid #0e8f65; border-radius: 7px; box-shadow: 0 4px 11px rgba(9, 57, 48, .12); cursor: pointer; display: grid; gap: 2px; left: 5px; overflow: hidden; padding: 6px 7px; position: absolute; right: 5px; touch-action: manipulation; z-index: 2; }
+.schedule-block.moveable { cursor: grab; }
 .schedule-block.emerald { background: #daf3e8; border-left-color: #1b8a60; }.schedule-block.teal { background: #d7efed; border-left-color: #087f7a; }.schedule-block.blue { background: #e0eaf7; border-left-color: #3268a8; }.schedule-block.violet { background: #eee7f7; border-left-color: #7351a8; }.schedule-block.amber { background: #f8ecd8; border-left-color: #b66b08; }.schedule-block.rose { background: #f7e2e8; border-left-color: #b7445d; }
 .schedule-block:hover, .schedule-block.selected { box-shadow: 0 0 0 2px #073f31, 0 7px 17px rgba(9, 57, 48, .16); z-index: 3; }
 .schedule-block.dragging { cursor: grabbing; opacity: .45; }
 .schedule-block.conflict { border-color: #a3422f; box-shadow: inset 0 0 0 2px #a3422f, 0 4px 11px rgba(117, 45, 31, .18); }
+.schedule-block.draft { border-style: dashed; box-shadow: 0 0 0 2px rgba(11, 118, 88, .28), 0 6px 15px rgba(9, 57, 48, .15); }
 .schedule-day-grid.proposal-selectable { cursor: crosshair; }
-.schedule-block.proposal { background: repeating-linear-gradient(135deg, #fff9e6 0, #fff9e6 8px, #f5e8bb 8px, #f5e8bb 16px); border-color: #b97a12; border-left-color: #b97a12; box-shadow: 0 0 0 2px rgba(185, 122, 18, .18), 0 5px 13px rgba(87, 62, 19, .14); cursor: default; z-index: 4; }
+.schedule-block.proposal { background: repeating-linear-gradient(135deg, #fff9e6 0, #fff9e6 8px, #f5e8bb 8px, #f5e8bb 16px); border-color: #b97a12; border-left-color: #b97a12; box-shadow: 0 0 0 2px rgba(185, 122, 18, .18), 0 5px 13px rgba(87, 62, 19, .14); cursor: grab; z-index: 4; }
 .schedule-proposal-resize { align-items: center; cursor: ns-resize; display: flex; height: 32px; justify-content: center; position: absolute; touch-action: none; z-index: 5; }
 .schedule-proposal-resize::before { background: rgba(95, 61, 7, .7); border-radius: 999px; content: ""; height: 3px; width: 30px; }
 .schedule-proposal-resize:focus-visible { background: rgba(185, 122, 18, .16); outline: 2px solid #7b500d; outline-offset: -2px; }
@@ -6697,11 +6699,30 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .schedule-block > strong { color: #073f31; font-size: .64rem; }
 .schedule-block > small, .schedule-block > em { color: #315c50; font-size: .52rem; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-block > b { color: #9b3d28; font-size: .48rem; text-transform: uppercase; }
+.schedule-pending-actions { align-items: center; background: #eaf7f1; border: 1px solid #9bcdb9; border-radius: 11px; box-shadow: 0 10px 25px rgba(8, 67, 50, .12); display: grid; gap: 9px; grid-template-columns: minmax(0, 1fr) auto auto; padding: 11px 12px; position: sticky; top: 8px; z-index: 70; }
+.schedule-pending-actions.conflict { background: #fff2ed; border-color: #c97961; }
+.schedule-pending-actions > div { display: grid; gap: 3px; }
+.schedule-pending-actions strong { color: var(--color-aea-green-dark); font-size: .7rem; }
+.schedule-pending-actions span { color: var(--color-aea-muted); font-size: .58rem; line-height: 1.4; }
+.schedule-pending-actions button { background: #fff; border: 1px solid #9fc7b7; border-radius: 8px; color: var(--color-aea-green-dark); cursor: pointer; font-size: .62rem; font-weight: 850; min-height: 44px; padding: 9px 12px; }
+.schedule-pending-actions button.primary { background: var(--color-aea-green-dark); color: #fff; }
+.schedule-pending-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .schedule-selection { background: #f1f8f5; border: 1px solid #bad7ca; border-radius: 12px; display: grid; gap: 12px; padding: 14px; }
 .crm-invoice-preview-dialog .schedule-selection { background: #fff; padding: 16px; }
 .crm-invoice-preview-dialog .schedule-selection > p { background: #edf8f4; border-left: 3px solid #16a77a; border-radius: 8px; color: #526f66; font-size: .61rem; line-height: 1.55; margin: 0; padding: 11px 12px; }
 .crm-invoice-preview-dialog .schedule-selection > p strong { color: #173f36; }
 .crm-invoice-preview-dialog .schedule-selection > .schedule-dialog-status { background: #eef8f4; border: 1px solid #badccd; color: #315f53; margin: 0; }
+.schedule-appointment-dialog { width: min(720px, 100%); }
+.schedule-dialog-close { align-items: center; display: inline-flex; flex: 0 0 44px; font-size: 1.25rem !important; height: 44px; justify-content: center; line-height: 1; padding: 0 !important; width: 44px; }
+.schedule-appointment-details { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.schedule-appointment-details > div { background: #f5f9f7; border: 1px solid #e0eae6; border-radius: 8px; min-width: 0; padding: 9px; }
+.schedule-appointment-details dt { color: #688079; font-size: .52rem; font-weight: 850; text-transform: uppercase; }
+.schedule-appointment-details dd { color: #173f36; font-size: .64rem; font-weight: 750; margin: 4px 0 0; overflow-wrap: anywhere; }
+.crm-invoice-preview-dialog .schedule-selection > p.schedule-appointment-contact, .crm-invoice-preview-dialog .schedule-selection > p.schedule-appointment-notes { align-items: start; background: #f7fbfa; border: 1px solid #d4e6df; border-left: 4px solid #16a77a; display: grid; gap: 6px; }
+.schedule-appointment-contact > strong, .schedule-appointment-notes > strong { color: #173f36; font-size: .56rem; text-transform: uppercase; }
+.schedule-appointment-contact > span, .schedule-appointment-notes > span { color: #42665d; overflow-wrap: anywhere; }
+.schedule-appointment-contact > a { align-items: center; color: #087456; display: inline-flex; font-size: .64rem; font-weight: 850; justify-self: start; min-height: 44px; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.schedule-appointment-dialog > footer button { min-height: 44px; }
 .crm-invoice-preview-dialog .schedule-quote-summary { align-items: center; background: #f7fbfa; border: 1px solid #d4e6df; border-radius: 8px; display: flex; gap: 12px; justify-content: space-between; padding: 9px 12px; }
 .crm-invoice-preview-dialog .schedule-quote-summary span { display: grid; gap: 2px; }
 .crm-invoice-preview-dialog .schedule-quote-summary small { color: #688079; font-size: .52rem; font-weight: 850; text-transform: uppercase; }
@@ -6738,8 +6759,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .crm-job-schedule-panel { background: #f8fbfa; border: 1px solid #d4e4dd; border-radius: 13px; padding: 15px; }
 .crm-job-schedule-panel .crm-section-heading { margin-bottom: 12px; }
 .crm-job-schedule-panel .crm-section-heading p { color: var(--color-aea-muted); font-size: .6rem; line-height: 1.5; margin-top: 5px; }
-.crm-job-schedule-panel .crm-job-assignment-form { align-items: stretch; grid-template-columns: minmax(0, 1fr); }
-.crm-job-schedule-panel .crm-job-assignment-form button { max-width: 100%; width: 100%; }
 .crm-job-booking-form { display: grid; gap: 10px; margin-top: 13px; min-width: 0; }
 .crm-job-booking-form > fieldset { border: 0; display: grid; gap: 10px; margin: 0; min-width: 0; padding: 0; }
 .crm-job-booking-form > fieldset > label { display: grid; gap: 5px; min-width: 0; }
@@ -6749,6 +6768,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 .crm-job-booking-form .schedule-duration { min-width: 0; }
 .crm-job-booking-form .schedule-duration input[type="range"] { background: transparent; border: 0; min-height: 22px; padding: 0; }
 .crm-job-booking-form > fieldset > .btn { justify-self: start; }
+.crm-add-another-appointment { min-height: 44px; width: 100%; }
 .crm-job-schedule-workspace :is(button, input, select, textarea):focus-visible, .schedule-block:focus-visible { outline: 3px solid rgba(11, 118, 88, .38); outline-offset: 2px; }
 .schedule-block:focus-visible { z-index: 5; }
 .job-calendar { margin: 0 !important; max-width: 100%; min-width: 0; padding: 20px; width: 100%; }
@@ -6790,8 +6810,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 
 @media (max-width: 1180px) {
   .crm-job-schedule-layout { grid-template-columns: minmax(0, 1fr); }
-  .crm-job-schedule-layout > .job-calendar { order: 1; }
-  .crm-job-schedule-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); order: 2; }
+  .crm-job-schedule-layout > .job-calendar { order: 2; }
+  .crm-job-schedule-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); order: 1; }
   .crm-job-schedule-controls > :only-child { grid-column: 1 / -1; }
 }
 @media (max-width: 1100px) {
@@ -6824,6 +6844,10 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .invoice-toolbar > label { grid-column: 1 / -1; }
   .invoice-list > article { grid-template-columns: 1fr 1fr; }
   .invoice-list > article > div:first-child, .invoice-list > article > button { grid-column: 1 / -1; }
+  .schedule-pending-actions { grid-template-columns: 1fr 1fr; }
+  .schedule-pending-actions > div { grid-column: 1 / -1; }
+  .schedule-pending-actions button { width: 100%; }
+  .schedule-appointment-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .schedule-week-range small { display: block; }
 }
 @media (max-width: 480px) {
@@ -6845,6 +6869,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   .schedule-timetable { min-width: 838px; }
   .crm-invoice-preview-dialog .schedule-selection-fields { grid-template-columns: 1fr; }
   .crm-invoice-preview-dialog .schedule-selection-fields .schedule-duration { grid-column: 1; }
+  .schedule-appointment-details { grid-template-columns: 1fr; }
 }
 
 .follow-up-workspace { display: grid; gap: 18px; min-width: 0; }

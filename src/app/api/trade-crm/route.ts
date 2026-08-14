@@ -349,6 +349,8 @@ function errorResponse(error: unknown) {
   if (code === "JOB_ASSIGN_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow assigning jobs to other team members." }, 403);
   if (code === "JOB_ASSIGNMENT_REQUIRED") return adminJson({ ok: false, error: "Assign this job before adding an appointment." }, 409);
   if (code === "JOB_ASSIGNMENT_CHANGED") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job's assignment changed. Refresh it before booking." }, 409);
+  if (code === "ACTIVE_APPOINTMENT_REASSIGN") return adminJson({ ok: false, error: "This job already has an active appointment. Move or cancel that appointment before assigning the job to someone else." }, 409);
+  if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be scheduled." }, 409);
   if (code === "JOB_RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
   if (code === "CUSTOMER_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow customer records." }, 403);
@@ -2050,9 +2052,12 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, id: taskId });
     }
     if (action === "create_appointment") {
+      if (["completed", "cancelled"].includes(String(job.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+      const expectedRevision = Number(body.expectedRevision);
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision !== Number(job.revision)) {
+        throw new Error("REVISION_CONFLICT");
+      }
       await assertTradeJobReadyForScheduling(identity.uid, workOrderId);
-      if (!identity.access.isOwner && identity.access.scheduleScope === "own"
-        && String(job.assignee_member_id || "") !== identity.memberId) throw new Error("JOB_NOT_ASSIGNED");
       const startsAt = dateValue(body.startsAt);
       let endsAt = "";
       if (!startsAt) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
@@ -2063,64 +2068,95 @@ export async function POST(request: Request) {
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       const currentAssigneeMemberId = String(job.assignee_member_id || "");
       const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
-      if (!currentAssigneeMemberId) throw new Error("JOB_ASSIGNMENT_REQUIRED");
-      if (requestedAssigneeMemberId && requestedAssigneeMemberId !== currentAssigneeMemberId) {
-        throw new Error("JOB_ASSIGNMENT_CHANGED");
+      if (!requestedAssigneeMemberId) {
+        return adminJson({ ok: false, error: "Choose the team member who will attend." }, 400);
       }
-      const assigneeMemberId = currentAssigneeMemberId;
+      const assigneeMemberId = requestedAssigneeMemberId;
+      if (!identity.access.isOwner && identity.access.scheduleScope === "own"
+        && assigneeMemberId !== identity.memberId) throw new Error("JOB_RESCHEDULE_REQUIRED");
+      const assignmentChanged = currentAssigneeMemberId !== assigneeMemberId;
+      if (assignmentChanged && !canAssignJob(identity.access, currentAssigneeMemberId, assigneeMemberId)) {
+        throw new Error("JOB_ASSIGN_REQUIRED");
+      }
       const member = await assertMemberCapability(db, identity, assigneeMemberId, String(job.service_category || ""));
       if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
+      if (assignmentChanged) {
+        const activeAppointment = await db.prepare(`SELECT id FROM trade_crm_appointments
+          WHERE work_order_id = ? AND firebase_uid = ?
+            AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
+          .bind(workOrderId, identity.uid).first();
+        if (activeAppointment) throw new Error("ACTIVE_APPOINTMENT_REASSIGN");
+      }
       const assignee = String(member.display_name || "");
       const displayName = customerDisplayName(job);
       const appointmentTitle = `${displayName} ${SERVICE_LABELS[String(job.service_category)] || APPOINTMENT_LABELS[appointmentType]}`.trim();
       const appointmentId = crypto.randomUUID();
       await assertTradeScheduleAvailable({ ownerUid: identity.uid, memberId: assigneeMemberId, startsAt, endsAt });
+      const jobRevision = nextJobRevision(job.revision);
+      const installation = appointmentType === "installation";
+      const complianceIntentStatements = installation
+        ? await plannedComplianceIntentReplanStatements(db, {
+          actorUid: identity.access.actorUid,
+          changedAt: now,
+          ownerUid: identity.uid,
+          plannedStart: startsAt,
+          workOrderId,
+        })
+        : [];
       const statements = [
-        db.prepare(`INSERT INTO trade_crm_write_guards
-          (id, firebase_uid, operation_id, step_number, verified, created_at)
-          VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
-            SELECT 1 FROM trade_work_orders WHERE id = ? AND firebase_uid = ?
-              AND record_status = 'active' AND revision = ? AND assignee_member_id = ?
-          ) THEN 1 ELSE 0 END, ?)`)
-          .bind(
-            crypto.randomUUID(), identity.uid, `appointment-job-assignee:${crypto.randomUUID()}`,
-            workOrderId, identity.uid, job.revision, assigneeMemberId, now,
-          ),
+        ...complianceIntentStatements,
+        installation
+          ? db.prepare(`UPDATE trade_work_orders
+            SET assignee_member_id = ?, assignee_label = ?, scheduled_start = ?, scheduled_end = ?, stage = 'scheduled',
+              revision = ?, updated_at = ?
+            WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'
+              AND revision = ? AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND assignee_member_id = ?
+              AND (? = 0 OR NOT EXISTS (
+                SELECT 1 FROM trade_crm_appointments active_appointment
+                WHERE active_appointment.work_order_id = trade_work_orders.id
+                  AND active_appointment.firebase_uid = trade_work_orders.firebase_uid
+                  AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
+              ))`)
+            .bind(assigneeMemberId, assignee, startsAt, endsAt, jobRevision, now,
+              workOrderId, identity.uid, expectedRevision, job.stage, currentAssigneeMemberId,
+              assignmentChanged ? 1 : 0)
+          : db.prepare(`UPDATE trade_work_orders
+            SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
+            WHERE id = ? AND firebase_uid = ? AND partner_type = 'installer' AND record_status = 'active'
+              AND revision = ? AND stage = ? AND stage NOT IN ('completed', 'cancelled') AND assignee_member_id = ?
+              AND (? = 0 OR NOT EXISTS (
+                SELECT 1 FROM trade_crm_appointments active_appointment
+                WHERE active_appointment.work_order_id = trade_work_orders.id
+                  AND active_appointment.firebase_uid = trade_work_orders.firebase_uid
+                  AND active_appointment.status IN ('scheduled', 'en_route', 'arrived', 'in_progress')
+              ))`)
+            .bind(assigneeMemberId, assignee, jobRevision, now, workOrderId, identity.uid,
+              expectedRevision, job.stage, currentAssigneeMemberId, assignmentChanged ? 1 : 0),
+        previousTradeScheduleMutationGuardStatement(db, {
+          changedAt: now,
+          ownerUid: identity.uid,
+        }),
         db.prepare(`INSERT INTO trade_crm_appointments
         (id, work_order_id, firebase_uid, appointment_type, title, starts_at, ends_at, assignee_member_id, assignee_label,
          status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`)
         .bind(appointmentId, workOrderId, identity.uid, appointmentType,
           appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
           cleanAdminText(body.notes, 1000), now, now),
+        db.prepare(`INSERT INTO trade_crm_write_guards
+          (id, firebase_uid, operation_id, step_number, verified, created_at)
+          VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
+            SELECT 1 FROM trade_team_members selected_member
+            WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
+              AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
+                SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
+              ))
+          ) THEN 1 ELSE 0 END, ?)`)
+          .bind(crypto.randomUUID(), identity.uid, `appointment-member:${crypto.randomUUID()}`,
+            assigneeMemberId, identity.uid, identity.uid, String(job.service_category || ""),
+            String(job.service_category || ""), now),
       ];
-      if (appointmentType === "installation") {
-        const revision = nextJobRevision(job.revision);
-        const complianceIntentStatements = await plannedComplianceIntentReplanStatements(db, {
-          actorUid: identity.uid,
-          changedAt: now,
-          ownerUid: identity.uid,
-          plannedStart: startsAt,
-          workOrderId,
-        });
+      if (installation) {
         statements.push(
-          ...complianceIntentStatements,
-          db.prepare(`UPDATE trade_work_orders
-            SET scheduled_start = ?, scheduled_end = ?, stage = 'scheduled',
-              revision = ?, updated_at = ?
-            WHERE id = ? AND firebase_uid = ? AND revision = ?`)
-            .bind(
-              startsAt,
-              endsAt,
-              revision,
-              now,
-              workOrderId,
-              identity.uid,
-              job.revision,
-            ),
-          previousTradeScheduleMutationGuardStatement(db, {
-            changedAt: now,
-            ownerUid: identity.uid,
-          }),
           db.prepare(`INSERT INTO trade_work_order_events
             (id, work_order_id, firebase_uid, event_type, summary, created_at)
             VALUES (?, ?, ?, 'installation_scheduled',
@@ -2131,12 +2167,6 @@ export async function POST(request: Request) {
               identity.uid,
               now,
             ),
-          ...jobSyncChangeStatements(db, {
-            ownerUid: identity.uid,
-            workOrderId,
-            revision,
-            changedAt: now,
-          }),
         );
       }
       statements.push(
@@ -2153,12 +2183,25 @@ export async function POST(request: Request) {
           changedAt: now,
           excludeAppointmentId: appointmentId,
         }),
+        db.prepare(`INSERT INTO trade_work_order_events
+          (id, work_order_id, firebase_uid, event_type, summary, created_at)
+          VALUES (?, ?, ?, 'appointment_created', ?, ?)`)
+          .bind(crypto.randomUUID(), workOrderId, identity.uid,
+            `${APPOINTMENT_LABELS[appointmentType] || "Appointment"} scheduled with ${assignee} for ${startsAt}.`, now),
+        ...jobSyncChangeStatements(db, {
+          ownerUid: identity.uid,
+          workOrderId,
+          revision: jobRevision,
+          changedAt: now,
+          audienceMemberId: assigneeMemberId,
+          previousAudienceMemberId: currentAssigneeMemberId,
+        }),
       );
       await db.batch(statements);
       let calendarSync = { connected: 0, synced: 0, failed: 0 };
       try { calendarSync = await syncCreatedAppointmentToConnectedCalendars(identity.uid, appointmentId); }
       catch { calendarSync = { connected: 0, synced: 0, failed: 1 }; }
-      return adminJson({ ok: true, calendarSync }, 201);
+      return adminJson({ ok: true, id: appointmentId, revision: jobRevision, calendarSync }, 201);
     }
     if (action === "create_note") {
       const noteType = NOTE_TYPES.has(cleanAdminText(body.noteType, 20)) ? cleanAdminText(body.noteType, 20) : "internal";

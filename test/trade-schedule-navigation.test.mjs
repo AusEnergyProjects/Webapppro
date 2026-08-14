@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   adjacentScheduleWeek,
+  applyScheduleChangeDrafts,
   invalidateScheduleProposal,
-  mergeDraggedScheduleAppointment,
+  scheduleChangeConflictIds,
   scheduleDragEdgeDirection,
   scheduleMemberLabel,
   scheduleMinuteFromGridPosition,
@@ -86,14 +87,29 @@ test("schedule member labels identify the viewer rather than assuming the owner 
   assert.equal(scheduleMemberLabel(owner, "owner"), "Me");
 });
 
-test("an appointment remains addressable while an adjacent week is shown", () => {
-  const dragged = { id: "appointment-1", startsAt: "2026-07-20T09:00", revision: 4 };
-  assert.deepEqual(mergeDraggedScheduleAppointment([], dragged), [dragged]);
+test("several appointment moves project locally without mutating authoritative schedule data", () => {
+  const appointments = [
+    { id: "a", assigneeMemberId: "worker-1", startsAt: "2026-07-20T09:00", endsAt: "2026-07-20T10:00" },
+    { id: "b", assigneeMemberId: "worker-1", startsAt: "2026-07-20T10:00", endsAt: "2026-07-20T11:00" },
+    { id: "c", assigneeMemberId: "worker-2", startsAt: "2026-07-20T09:00", endsAt: "2026-07-20T10:00" },
+  ];
+  const changes = [
+    { appointmentId: "a", memberId: "worker-1", startsAt: "2026-07-21T11:15", durationMinutes: 45 },
+    { appointmentId: "b", memberId: "worker-1", startsAt: "2026-07-21T12:00", durationMinutes: 30 },
+  ];
+  const projected = applyScheduleChangeDrafts(appointments, changes);
+  assert.deepEqual(projected, [
+    { ...appointments[0], startsAt: "2026-07-21T11:15", endsAt: "2026-07-21T12:00", scheduleDraft: true },
+    { ...appointments[1], startsAt: "2026-07-21T12:00", endsAt: "2026-07-21T12:30", scheduleDraft: true },
+    { ...appointments[2], scheduleDraft: false },
+  ]);
+  assert.equal(appointments[0].startsAt, "2026-07-20T09:00");
+  assert.deepEqual([...scheduleChangeConflictIds(appointments, changes)], []);
 
-  const authoritative = { id: "appointment-1", startsAt: "2026-07-27T11:00", revision: 5 };
-  const merged = mergeDraggedScheduleAppointment([authoritative], dragged);
-  assert.equal(merged.length, 1);
-  assert.deepEqual(merged[0], authoritative);
+  const sameWorkerOverlap = [{ appointmentId: "b", memberId: "worker-1", startsAt: "2026-07-20T09:30", durationMinutes: 60 }];
+  assert.deepEqual([...scheduleChangeConflictIds(appointments, sameWorkerOverlap)].sort(), ["a", "b"]);
+  const differentWorkerOverlap = [{ appointmentId: "c", memberId: "worker-2", startsAt: "2026-07-20T10:00", durationMinutes: 60 }];
+  assert.deepEqual([...scheduleChangeConflictIds(appointments, differentWorkerOverlap)], []);
 });
 
 test("phone week swipes ignore taps, vertical movement and appointment gestures", () => {
@@ -141,4 +157,44 @@ test("the job calendar exposes guarded pointer and keyboard proposal gestures wi
   assert.match(scheduleStyles, /\.schedule-time-track span\.last \{ transform: translateY\(-100%\); \}/);
   assert.match(scheduleStyles, /\.schedule-proposal-resize[\s\S]*touch-action: none/);
   assert.match(scheduleStyles, /\.schedule-proposal-resize \{[^}]*height: 32px/);
+});
+
+test("whole-card moves remain local until one deliberate schedule save", () => {
+  const stage = scheduleUi.match(/function stageScheduleChange\([\s\S]*?(?=\n\s*async function saveScheduleChanges)/)?.[0] || "";
+  assert.match(stage, /setPendingScheduleChanges\(\(current\) =>/);
+  assert.doesNotMatch(stage, /fetch\(|\bupdate\(/);
+  assert.match(stage, /scheduleRangeContainsWeek\(displayRangeStart, SCHEDULE_BUFFER_WEEKS, targetWeek\)/);
+  assert.match(stage, /setData\(\(current\) => \(\{[\s\S]*rangeStart: targetRangeStart,[\s\S]*rangeWeeks: SCHEDULE_BUFFER_WEEKS/);
+  assert.match(stage, /setRangeStart\(targetRangeStart\)[\s\S]*setActiveWeekStart\(targetWeek\)/);
+  assert.match(scheduleUi, /const calendarCanReschedule = canRescheduleJobs/);
+  assert.match(scheduleUi, /stageScheduleChange\(appointment, date, minuteFromPointer/);
+  assert.match(scheduleUi, /data-schedule-proposal draggable=\{Boolean\(onProposalChange\) && !busy && !loading\}/);
+  assert.match(scheduleUi, /draggedProposalRef\.current = true/);
+  assert.match(scheduleUi, /onProposalChange\(\{ startsAt: `\$\{date\}T\$\{minuteLabel\(minute\)\}`, durationMinutes: proposal\.durationMinutes \}\)/);
+  assert.match(scheduleUi, /const \[pendingScheduleChanges, setPendingScheduleChanges\]/);
+  assert.match(scheduleUi, /applyScheduleChangeDrafts\(scheduleChangeSources, scheduleChangeDrafts\)/);
+  assert.match(scheduleUi, /action: "save_schedule_changes", changes/);
+  assert.match(scheduleUi, /expectedRevision: change\.appointment\.revision/);
+  assert.match(scheduleUi, /onClick=\{discardScheduleChanges\}[^>]*>Discard<\/button>/);
+  assert.match(scheduleUi, /busy === "schedule-batch" \? "Saving\.\.\." : "Save schedule changes"/);
+  assert.match(scheduleUi, /setPendingScheduleChanges\(\{\}\)[\s\S]*setEdits\(\{\}\)/);
+  assert.match(scheduleUi, /item\.scheduleDraft \? " draft"/);
+  assert.match(scheduleUi, /item\.scheduleDraft && <b>Unsaved<\/b>/);
+});
+
+test("the phone-safe detail editor stages the same date, time, worker and duration draft", () => {
+  assert.match(scheduleUi, /className="crm-invoice-preview-dialog schedule-appointment-dialog"/);
+  assert.match(scheduleUi, /type="date" min=\{minimumStart\.slice\(0, 10\)\} value=\{edit\.date\}/);
+  assert.match(scheduleUi, /<select value=\{edit\.time\}/);
+  assert.match(scheduleUi, /DurationControl id=\{`appointment-duration-\$\{selectedAppointment\.id\}`\} value=\{edit\.durationMinutes\}/);
+  assert.match(scheduleUi, /stageScheduleChange\(selectedAppointment, edit\.date, minuteValue\(edit\.time\), edit\.memberId, edit\.durationMinutes\)/);
+  assert.match(scheduleStyles, /\.schedule-block \{[^}]*touch-action: manipulation/);
+  assert.match(scheduleStyles, /\.schedule-block\.moveable \{[^}]*cursor: grab/);
+  assert.match(scheduleStyles, /\.schedule-pending-actions[\s\S]*min-height: 44px/);
+  assert.match(scheduleStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.schedule-pending-actions \{ grid-template-columns: 1fr 1fr; \}[\s\S]*?\.schedule-appointment-details \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  assert.match(scheduleStyles, /@media \(max-width: 480px\) \{[\s\S]*?\.crm-invoice-preview-dialog \.schedule-selection-fields \{ grid-template-columns: 1fr; \}/);
+  assert.match(scheduleStyles, /\.crm-job-schedule-layout > \.job-calendar \{ order: 2; \}/);
+  assert.match(scheduleStyles, /\.crm-job-schedule-controls \{[^}]*order: 1/);
+  assert.match(scheduleUi, /function closeAppointment\(\)[\s\S]*setEdits\(\(current\) =>/);
+  assert.match(scheduleUi, /function leaveSchedule\(action: \(\) => void\)[\s\S]*window\.confirm\("You have unsaved schedule changes\. Leave and discard them\?"\)/);
 });

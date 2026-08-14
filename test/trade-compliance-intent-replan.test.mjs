@@ -670,9 +670,17 @@ test("every existing work-order date mutation path shares the atomic replanning 
   const scheduleRoute = read("../src/app/api/trade-schedule/route.ts");
   const crmRoute = read("../src/app/api/trade-crm/route.ts");
   const workOrdersRoute = read("../src/app/api/trade-work-orders/route.ts");
+  const batchSchedule = scheduleRoute.slice(
+    scheduleRoute.indexOf('action === "save_schedule_changes"'),
+    scheduleRoute.indexOf('action === "schedule_appointment"'),
+  );
+  const crmAppointment = crmRoute.slice(
+    crmRoute.indexOf('action === "create_appointment"'),
+    crmRoute.indexOf('action === "create_note"'),
+  );
   assert.equal(
     scheduleRoute.match(/plannedComplianceIntentReplanStatements\(/g)?.length,
-    3,
+    4,
   );
   assert.equal(
     scheduleRoute.match(/\.\.\.complianceIntentStatements,/g)?.length,
@@ -682,7 +690,17 @@ test("every existing work-order date mutation path shares the atomic replanning 
     scheduleRoute.match(
       /previousTradeScheduleMutationGuardStatement\(/g,
     )?.length,
-    4,
+    6,
+  );
+  assert.match(
+    batchSchedule,
+    /for \(const item of prepared\) \{[\s\S]*?statements\.push\(\.\.\.await plannedComplianceIntentReplanStatements\(db/,
+  );
+  assert.match(batchSchedule, /UPDATE trade_crm_appointments[\s\S]*?UPDATE trade_work_orders/);
+  assert.ok(
+    batchSchedule.indexOf("plannedComplianceIntentReplanStatements")
+      < batchSchedule.indexOf("await db.batch(statements)"),
+    "batch compliance replans must be committed with the schedule changes",
   );
   assert.match(
     scheduleRoute,
@@ -703,8 +721,14 @@ test("every existing work-order date mutation path shares the atomic replanning 
     1,
   );
   assert.match(
-    crmRoute,
-    /if \(appointmentType === "installation"\)[\s\S]*?\.\.\.complianceIntentStatements,[\s\S]*?SET scheduled_start = \?[\s\S]*?AND revision = \?[\s\S]*?previousTradeScheduleMutationGuardStatement/,
+    crmAppointment,
+    /const installation = appointmentType === "installation"[\s\S]*?const complianceIntentStatements = installation[\s\S]*?plannedComplianceIntentReplanStatements\(db[\s\S]*?: \[\]/,
+  );
+  assert.match(crmAppointment, /\.\.\.complianceIntentStatements,[\s\S]*?SET assignee_member_id = \?, assignee_label = \?, scheduled_start = \?, scheduled_end = \?[\s\S]*?AND revision = \?[\s\S]*?previousTradeScheduleMutationGuardStatement/);
+  assert.ok(
+    crmAppointment.indexOf("...complianceIntentStatements")
+      < crmAppointment.indexOf("await db.batch(statements)"),
+    "installation compliance replans must be committed with appointment creation",
   );
   assert.equal(
     workOrdersRoute.match(

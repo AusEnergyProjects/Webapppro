@@ -252,6 +252,7 @@ test("protected opportunities cannot be found or ordered through raw customer co
 test("job register route and UI keep tenant scope, filters, sorting and accessible row actions authoritative", () => {
   const route = read("../src/app/api/trade-crm/route.ts");
   const ui = read("../src/components/InstallerCrmWorkspace.tsx");
+  const addAppointment = ui.match(/async function addAppointment\([\s\S]*?(?=\n\s*async function completeAppointment)/)?.[0] || "";
   assert.match(route, /w\.firebase_uid = \?/);
   assert.match(route, /identity\.access\.jobScope === "own"/);
   assert.match(route, /AND \(\? = 'team' OR w\.assignee_member_id = \?\)/);
@@ -275,9 +276,12 @@ test("job register route and UI keep tenant scope, filters, sorting and accessib
   assert.match(ui, /openFocusedJob\(job\.id, "schedule"\)/);
   assert.doesNotMatch(ui, />Assign job<\/button>/);
   assert.doesNotMatch(ui, /openFocusedJob\(job\.id, "assignment"\)/);
-  assert.match(ui, /fetch\("\/api\/trade-team",/);
-  assert.match(ui, /action: "assign_job", workOrderId: job\.id, memberId: jobAssigneeId/);
+  assert.match(addAppointment, /action: "create_appointment"/);
+  assert.match(addAppointment, /expectedRevision: job\.revision/);
+  assert.match(addAppointment, /assigneeMemberId: jobAssigneeId/);
+  assert.match(addAppointment, /setBookingDraftOpen\(false\)/);
   assert.doesNotMatch(ui, /activeTab === "assignment"/);
+  assert.doesNotMatch(ui, /key=\{`[^\n]*selectedJobDetail\.assigneeMemberId/);
 });
 
 test("job workspace exposes authorised customer context, preserves the private boundary and uses the real customer editor", () => {
@@ -299,7 +303,7 @@ test("job workspace exposes authorised customer context, preserves the private b
   assert.match(ui, /This customer-authorised lead contains only the contact and property details disclosed to your business/);
 });
 
-test("the combined Schedule tab loads every capability-filtered assignee and keeps assignment beside the focused calendar", () => {
+test("the combined Schedule tab assigns and books in one focused calendar action", () => {
   const [teamRoute, route, ui, styles, globalStyles] = [
     read("../src/app/api/trade-team/route.ts"),
     read("../src/app/api/trade-crm/route.ts"),
@@ -314,21 +318,37 @@ test("the combined Schedule tab loads every capability-filtered assignee and kee
   assert.match(ui, /for \(let page = 2; page <= \(roster\?\.totalPages \|\| 1\); page \+= 1\)/);
   assert.doesNotMatch(ui, /type JobTab = [^;]*"assignment"/);
   assert.match(ui, /const canOpenJobSchedule = !isProtected && \(canAssignJobs \|\| canViewJobSchedule\)/);
-  assert.match(ui, /const canStartJobScheduling = jobReadyForScheduling && \(canAssignJobs \|\| canAddJobAppointment\)/);
+  assert.match(ui, /const canPrepareJobAppointment = jobReadyForScheduling && canRescheduleJobs && \(canAssignJobs \|\| canAddJobAppointment\)/);
+  assert.match(ui, /const canStartJobScheduling = canPrepareJobAppointment/);
   assert.match(route, /CASE WHEN \$\{tradeJobScheduleEligibilitySql\("w", "d"\)\} THEN 1 ELSE 0 END schedule_ready/);
   assert.match(ui, /scheduleReady: boolean/);
   assert.match(ui, /if \(canOpenJobSchedule\) mainTabs\.push\(\["schedule",/);
   const scheduleSection = ui.match(/\{activeTab === "schedule"[\s\S]*?(?=\n\s*\{activeTab === ")/)?.[0] || "";
-  const assignmentForm = scheduleSection.match(/<form className=\{`\$\{registerStyles\.assignmentForm\} crm-job-assignment-form`\}[\s\S]*?<\/form>/)?.[0] || "";
-  assert.match(assignmentForm, /<select value=\{jobAssigneeId\}/);
-  assert.match(assignmentForm, /Save assignment/);
-  assert.doesNotMatch(assignmentForm, /Search team|Find an active teammate|type="search"|Load more/);
+  const createAppointment = route.match(/if \(action === "create_appointment"\)[\s\S]*?(?=\n\s*if \(action === "create_note"\))/)?.[0] || "";
+  assert.match(scheduleSection, /<select value=\{jobAssigneeId\}/);
+  assert.doesNotMatch(scheduleSection, /Search team|Find an active teammate|type="search"|Load more/);
+  assert.doesNotMatch(scheduleSection, /Save assignment|Save assignment first|Save the changed assignment before booking|Save the person first/);
   assert.match(scheduleSection, /<TradeScheduleWorkspace/);
   assert.match(scheduleSection, /variant="job"/);
-  assert.match(scheduleSection, /onProposalChange=\{canAddJobAppointment && !assignmentDirty && !refreshing \? handleScheduleProposalChange : undefined\}/);
+  assert.match(scheduleSection, /proposal=\{bookingDraftOpen && canAddJobAppointment \?/);
+  assert.match(scheduleSection, /assigneeMemberId: jobAssigneeId/);
+  assert.match(scheduleSection, /onProposalChange=\{bookingDraftOpen && canAddJobAppointment && !refreshing \? handleScheduleProposalChange : undefined\}/);
+  assert.match(ui, /const activeJobAppointmentKey = job\.appointments[\s\S]*?\["scheduled", "en_route", "arrived", "in_progress"\]\.includes\(item\.status\)[\s\S]*?\.join\("\|"\)/);
+  assert.match(ui, /useState\(\(\) => \(\{ appointmentKey: activeJobAppointmentKey, open: !hasActiveJobAppointment \}\)\)/);
+  assert.match(ui, /bookingDraftState\.appointmentKey === activeJobAppointmentKey \? bookingDraftState\.open : !hasActiveJobAppointment/);
   assert.match(ui, /setAppointmentStartsAt\(next\.startsAt\)/);
   assert.match(ui, /setAppointmentDuration\(next\.durationMinutes\)/);
-  assert.ok(scheduleSection.indexOf("<TradeScheduleWorkspace") < scheduleSection.indexOf("registerStyles.assignmentForm"));
-  assert.match(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
-  assert.match(globalStyles, /\.crm-job-schedule-panel \.crm-job-assignment-form \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(createAppointment, /expectedRevision !== Number\(job\.revision\)/);
+  assert.match(createAppointment, /const requestedAssigneeMemberId = cleanAdminText\(body\.assigneeMemberId/);
+  assert.match(createAppointment, /assignmentChanged && !canAssignJob\(identity\.access/);
+  assert.match(createAppointment, /assertMemberCapability\(db, identity, assigneeMemberId/);
+  assert.match(createAppointment, /revision = \? AND stage = \? AND stage NOT IN \('completed', 'cancelled'\) AND assignee_member_id = \?/);
+  assert.match(createAppointment, /tradeJobScheduleEligibilityGuardStatement/);
+  assert.match(createAppointment, /tradeScheduleAvailabilityGuardStatement/);
+  assert.match(createAppointment, /await db\.batch\(statements\)/);
+  assert.match(ui, /assignmentDirty \? "Assign and add appointment" : "Add appointment"/);
+  assert.match(scheduleSection, /setBookingDraftOpen\(true\); \}\}>Add another appointment<\/button>/);
+  assert.doesNotMatch(scheduleSection, /crm-job-assignment-form/);
+  assert.doesNotMatch(styles, /\.assignmentForm[\s\S]*grid-template-columns: minmax\(240px, 420px\) auto/);
+  assert.doesNotMatch(globalStyles, /\.crm-job-schedule-panel \.crm-job-assignment-form/);
 });

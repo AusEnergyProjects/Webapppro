@@ -199,7 +199,7 @@ test("jobs expose explicit and guarded double-click navigation while schedule ap
   assert.match(crm, /crm-job-workspace/);
   assert.match(crm, /Back to all jobs/);
   assert.match(crm, /initialTab=\{focusedJobTab\}/);
-  assert.match(schedule, /onDoubleClick=\{\(event\) => \{ event\.stopPropagation\(\); closeAppointment\(\); onOpenJob\(item\.workOrderId\); \}\}/);
+  assert.match(schedule, /onDoubleClick=\{\(event\) => \{ event\.stopPropagation\(\); leaveSchedule\(\(\) => onOpenJob\(item\.workOrderId\)\); \}\}/);
   assert.match(schedule, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(schedule, /role="dialog" aria-modal="true" aria-labelledby="schedule-appointment-title"/);
   assert.match(schedule, />Open full job</);

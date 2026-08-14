@@ -176,34 +176,6 @@
 .protectedCustomer { background: #f4f8fb; }
 .protectedCustomer > div:last-child { margin: 12px; }
 
-.assignmentForm {
-  align-items: end;
-  background: #f7faf9;
-  border: 1px solid #c9ddd8;
-  border-radius: 10px;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(240px, 420px) auto;
-  margin-top: 12px;
-  padding: 10px;
-}
-
-.assignmentForm label { display: grid; gap: 5px; }
-.assignmentForm label span { color: #45645c; font-size: 11px; font-weight: 800; }
-
-.assignmentForm select {
-  background: white;
-  border: 1px solid #b9d1c9;
-  border-radius: 8px;
-  color: #123f37;
-  font: inherit;
-  min-height: 40px;
-  padding: 8px 10px;
-  width: 100%;
-}
-
-.assignmentForm button { min-height: 40px; white-space: nowrap; }
-
 .customerEditor {
   overflow: hidden;
 }
@@ -562,7 +534,6 @@
 
 @media (max-width: 900px) {
   .toolbar { grid-template-columns: 1fr 1fr; }
-  .assignmentForm { grid-template-columns: minmax(0, 1fr) auto; }
   .customerFormGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spanTwo,
   .wideField { grid-column: 1 / -1; }
@@ -573,7 +544,6 @@
 @media (max-width: 560px) {
   .detailGrid { grid-template-columns: 1fr; }
   .detailGrid .wideDetail { grid-column: auto; }
-  .assignmentForm { align-items: stretch; grid-template-columns: 1fr; }
   .customerPanel > summary { align-items: flex-start; padding: 12px 14px; }
   .panelBody { padding: 14px; }
   .customerFormGrid { grid-template-columns: 1fr; }

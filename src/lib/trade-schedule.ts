@@ -12,6 +12,12 @@ export type ScheduleConflictItem = ScheduleLaneItem & { assigneeMemberId?: unkno
 export type ScheduleDisplayWindow = { startMinute: number; endMinute: number };
 export type ScheduleProposalStatus = "incomplete" | "loading" | "load_error" | "not_visible" | "assignee_unavailable" | "conflict" | "unavailable" | "clear";
 export type ScheduleProposalValidation = { key: string; status: ScheduleProposalStatus; conflict: boolean };
+export type ScheduleChangeDraft = {
+  appointmentId: string;
+  memberId: string;
+  startsAt: string;
+  durationMinutes: number;
+};
 export type ScheduleProposalValidationInput = {
   startsAt: string;
   endsAt: string;
@@ -141,9 +147,27 @@ export function scheduleProposalDurationFromEndMinute(
   return Math.max(APPOINTMENT_MIN_DURATION_MINUTES, Math.min(maximum, requested));
 }
 
-export function mergeDraggedScheduleAppointment<T extends { id: string }>(appointments: T[], dragged: T | null) {
-  if (!dragged || appointments.some((appointment) => appointment.id === dragged.id)) return appointments;
-  return [...appointments, dragged];
+export function applyScheduleChangeDrafts<
+  T extends { id: string; assigneeMemberId: string; startsAt: string; endsAt: string },
+>(appointments: T[], changes: ScheduleChangeDraft[]) {
+  const byAppointment = new Map(changes.map((change) => [change.appointmentId, change]));
+  return appointments.map((appointment) => {
+    const change = byAppointment.get(appointment.id);
+    if (!change) return { ...appointment, scheduleDraft: false };
+    return {
+      ...appointment,
+      assigneeMemberId: change.memberId,
+      startsAt: normaliseLocalDateTime(change.startsAt),
+      endsAt: appointmentEndsAt(change.startsAt, change.durationMinutes),
+      scheduleDraft: true,
+    };
+  });
+}
+
+export function scheduleChangeConflictIds<
+  T extends { id: string; assigneeMemberId: string; startsAt: string; endsAt: string },
+>(appointments: T[], changes: ScheduleChangeDraft[]) {
+  return scheduleConflictIds(applyScheduleChangeDrafts(appointments, changes));
 }
 
 export function normaliseLocalDateTime(value: unknown) {

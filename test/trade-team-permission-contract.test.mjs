@@ -34,12 +34,32 @@ test("rescheduling uses schedule scope independently from job scope", () => {
   assert.equal(canRescheduleWithinScope({ ...access, canRescheduleJobs: false }, "member-a"), false);
 });
 
-test("CRM appointment creation always uses the job's saved assignment", async () => {
+test("CRM appointment creation atomically authorises the requested assignment and first booking", async () => {
   const crm = await read("../src/app/api/trade-crm/route.ts");
-  assert.match(crm, /const currentAssigneeMemberId = String\(job\.assignee_member_id \|\| ""\)/);
-  assert.match(crm, /requestedAssigneeMemberId && requestedAssigneeMemberId !== currentAssigneeMemberId/);
-  assert.match(crm, /throw new Error\("JOB_ASSIGNMENT_CHANGED"\)/);
-  assert.match(crm, /const assigneeMemberId = currentAssigneeMemberId/);
+  const createAppointment = crm.slice(
+    crm.indexOf('action === "create_appointment"'),
+    crm.indexOf('action === "create_note"'),
+  );
+  for (const boundary of [
+    /expectedRevision !== Number\(job\.revision\)/,
+    /if \(!requestedAssigneeMemberId\)/,
+    /identity\.access\.scheduleScope === "own"[\s\S]*?assigneeMemberId !== identity\.memberId/,
+    /assignmentChanged && !canAssignJob\(identity\.access, currentAssigneeMemberId, assigneeMemberId\)/,
+    /assignmentChanged[\s\S]*?status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)[\s\S]*?ACTIVE_APPOINTMENT_REASSIGN/,
+  ]) assert.match(createAppointment, boundary);
+  const statements = createAppointment.indexOf("const statements = [");
+  const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders", statements);
+  const mutationGuard = createAppointment.indexOf("previousTradeScheduleMutationGuardStatement", jobUpdate);
+  const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", mutationGuard);
+  const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", appointmentInsert);
+  const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
+  const batch = createAppointment.indexOf("await db.batch(statements)", availabilityGuard);
+  assert.ok(statements >= 0 && statements < jobUpdate && jobUpdate < mutationGuard
+    && mutationGuard < appointmentInsert && appointmentInsert < eligibilityGuard
+    && eligibilityGuard < availabilityGuard && availabilityGuard < batch,
+  "assignment, booking and authoritative guards must share one ordered mutation batch");
+  assert.match(createAppointment, /WHERE id = \? AND firebase_uid = \?[\s\S]*?AND revision = \? AND stage = \?[\s\S]*?AND assignee_member_id = \?/);
+  assert.match(createAppointment, /return adminJson\(\{ ok: true, id: appointmentId, revision: jobRevision, calendarSync \}, 201\)/);
   const actor = { isOwner: false, canAssignJobs: false, jobScope: "team", memberId: "member-a" };
   assert.equal(canAssignWithinScope(actor, "member-a", "member-b"), false);
   assert.equal(canAssignWithinScope({ ...actor, canAssignJobs: true }, "member-a", "member-b"), true);
