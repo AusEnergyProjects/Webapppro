@@ -1,4 +1,5 @@
 import {
+  CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON,
   CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
   CreditexOfficialProductError,
   type CreditexOfficialProductRegistryStatus,
@@ -568,7 +569,9 @@ export async function maintainNextCreditexProductRegistry({
         const controller = new AbortController();
         const operationTimeout = returnScheduledFailures
           ? setTimeout(
-              () => controller.abort("official-product-background-timeout"),
+              () => controller.abort(
+                CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON,
+              ),
               positiveBoundedMilliseconds(
                 scheduledOperationTimeoutMs,
                 CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,

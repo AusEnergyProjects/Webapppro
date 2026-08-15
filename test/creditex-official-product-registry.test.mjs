@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
+import {
+  CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON,
+  CreditexOfficialProductError,
+} from "../src/lib/creditex-official-product-registry.ts";
 import {
   CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
   ensureAutomaticOfficialProductRegistryCurrent,
@@ -658,6 +661,28 @@ test("durable source acquisition hands off atomically before replay", async () =
     { now: new Date("2026-08-08T00:00:01.000Z") },
   )).status, "current");
 
+  const deleteArtifact = artifactStore.delete;
+  artifactStore.delete = async () => {
+    throw new Error("retained fragment cleanup is temporarily unavailable");
+  };
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, durableDefinition, {
+      artifactStore,
+      now: new Date("2026-08-08T00:00:01.500Z"),
+    }),
+    /retained fragment cleanup is temporarily unavailable/,
+  );
+  artifactStore.delete = deleteArtifact;
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(durableDefinition.registryCode).count, 0);
+  assert.equal((await loadOfficialProductRegistryStatus(
+    d1,
+    durableDefinition.registryCode,
+    { now: new Date("2026-08-08T00:00:01.500Z") },
+  )).lastAttempt.status, "success");
+
   const firstCleanup = await syncOfficialProductRegistry(d1, durableDefinition, {
     artifactStore,
     now: new Date("2026-08-08T00:00:02.000Z"),
@@ -683,6 +708,195 @@ test("durable source acquisition hands off atomically before replay", async () =
   assert.ok(fragmentObjectKeys.every(
     (objectKey) => !artifactStore.objects.has(objectKey),
   ));
+});
+
+async function persistMinimalSourceAcquisition(context, acquisitionId) {
+  await context.database.prepare(`INSERT INTO
+      compliance_official_product_source_acquisitions (
+        registry_code, acquisition_id, contract, definition_sha256,
+        source_key, source_refreshed_at, total_record_count,
+        status_control_json, category_control_json,
+        supplemental_control_json, phase, cleanup_disposition,
+        response_count, response_byte_length, assembly_record_count,
+        assembly_chunk_count, assembly_byte_length, revision,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 4, '{}', '{}', '{}', 'pages',
+        'restart', 0, 0, 0, 0, 0, 1, ?, ?)`)
+    .bind(
+      context.registryCode,
+      acquisitionId,
+      "creditex-official-product-source-acquisition/v1",
+      "d".repeat(64),
+      "fixture-pv",
+      context.checkedAt,
+      context.checkedAt,
+      context.checkedAt,
+    )
+    .run();
+}
+
+test("a bounded deadline during acquisition yields after its durable checkpoint", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const acquisitionId = "durable-acquisition-deadline-fixture";
+  const durableDefinition = {
+    ...definition,
+    registryCode: "fixture-acquisition-deadline",
+    async fetchSources(_fetchImpl, context) {
+      await persistMinimalSourceAcquisition(context, acquisitionId);
+      throw new Error("the active fetch observed its abort signal");
+    },
+  };
+  const controller = new AbortController();
+  controller.abort(CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON);
+  const result = await syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date("2026-08-08T00:02:00.000Z"),
+    signal: controller.signal,
+  });
+  assert.deepEqual({
+    changed: result.changed,
+    complete: result.complete,
+    phase: result.phase,
+    snapshotId: result.snapshotId,
+    recordCount: result.recordCount,
+  }, {
+    changed: false,
+    complete: false,
+    phase: "acquisition",
+    snapshotId: null,
+    recordCount: 4,
+  });
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(durableDefinition.registryCode).count, 0);
+  assert.deepEqual({ ...database.prepare(`SELECT acquisition_id, phase
+    FROM compliance_official_product_source_acquisitions
+    WHERE registry_code = ?`).get(durableDefinition.registryCode) }, {
+    acquisition_id: acquisitionId,
+    phase: "pages",
+  });
+});
+
+test("a deterministic acquisition error is not hidden by a simultaneous deadline", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const acquisitionId = "durable-acquisition-invalid-fixture";
+  const durableDefinition = {
+    ...definition,
+    registryCode: "fixture-acquisition-invalid",
+    async fetchSources(_fetchImpl, context) {
+      await persistMinimalSourceAcquisition(context, acquisitionId);
+      throw new CreditexOfficialProductError(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        "The official source returned a deterministic invalid contract.",
+      );
+    },
+  };
+  const controller = new AbortController();
+  controller.abort(CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON);
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, durableDefinition, {
+      artifactStore,
+      now: new Date("2026-08-08T00:03:00.000Z"),
+      signal: controller.signal,
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_INVALID"),
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(durableDefinition.registryCode).count, 1);
+});
+
+test("a forged deadline error without the scheduler reason remains a failure", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const acquisitionId = "durable-acquisition-forged-deadline";
+  const durableDefinition = {
+    ...definition,
+    registryCode: "fixture-forged-deadline",
+    async fetchSources(_fetchImpl, context) {
+      await persistMinimalSourceAcquisition(context, acquisitionId);
+      throw context.signal.reason;
+    },
+  };
+  const forgedDeadline = new CreditexOfficialProductError(
+    "OFFICIAL_PRODUCT_REFRESH_DEADLINE",
+    503,
+    "This did not originate from the bounded scheduler.",
+  );
+  const controller = new AbortController();
+  controller.abort(forgedDeadline);
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, durableDefinition, {
+      artifactStore,
+      now: new Date("2026-08-08T00:04:00.000Z"),
+      signal: controller.signal,
+    }),
+    (error) => error === forgedDeadline,
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(durableDefinition.registryCode).count, 1);
+});
+
+test("pre-activation acquisition cleanup cannot suppress a source failure", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const registryCode = definition.registryCode;
+  const acquisitionId = "durable-acquisition-preactivation-cleanup";
+  const baseDefinition = definition;
+  await syncOfficialProductRegistry(d1, baseDefinition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:05:00.000Z"),
+  });
+  const failingDefinition = {
+    ...baseDefinition,
+    async fetchSources(_fetchImpl, context) {
+      await persistMinimalSourceAcquisition(context, acquisitionId);
+      await context.database.prepare(`UPDATE
+          compliance_official_product_source_acquisitions
+        SET phase = 'assemble', revision = revision + 1, updated_at = ?
+        WHERE registry_code = ? AND acquisition_id = ? AND phase = 'pages'`)
+        .bind(context.checkedAt, context.registryCode, acquisitionId)
+        .run();
+      await context.database.prepare(`UPDATE
+          compliance_official_product_source_acquisitions
+        SET phase = 'ready', revision = revision + 1, updated_at = ?
+        WHERE registry_code = ? AND acquisition_id = ? AND phase = 'assemble'`)
+        .bind(context.checkedAt, context.registryCode, acquisitionId)
+        .run();
+      await context.database.prepare(`UPDATE
+          compliance_official_product_source_acquisitions
+        SET phase = 'cleanup', cleanup_disposition = 'finish',
+          revision = revision + 1, updated_at = ?
+        WHERE registry_code = ? AND acquisition_id = ? AND phase = 'ready'`)
+        .bind(context.checkedAt, context.registryCode, acquisitionId)
+        .run();
+      throw new Error("source handoff failed before activation");
+    },
+  };
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, failingDefinition, {
+      artifactStore,
+      now: new Date("2026-08-08T00:06:00.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE"),
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(registryCode).count, 1);
+  assert.equal((await loadOfficialProductRegistryStatus(
+    d1,
+    registryCode,
+    { now: new Date("2026-08-08T00:06:00.000Z") },
+  )).lastAttempt.status, "failed");
 });
 
 function expectedError(code) {
@@ -1965,6 +2179,213 @@ test("bounded streaming refresh resumes monotonically, activates, then finishes 
       FROM compliance_official_products WHERE snapshot_id = ?`)
     .get(seed.snapshotId).count, 0);
   assert.equal(harness.fetchCalls(), 2);
+});
+
+test("cleanup that lost its activated current snapshot remains an integrity failure", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount: 501,
+    sourceKey: "fixture-cleanup-current-integrity-veu",
+  });
+  await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-02T02:00:00.000Z"),
+  });
+  harness.nextRelease();
+  let activation = null;
+  for (let second = 0; second <= 10; second += 1) {
+    const result = await syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date(`2026-08-03T02:00:${String(second).padStart(2, "0")}.000Z`),
+    });
+    if (result.changed && result.phase === "cleanup") {
+      activation = result;
+      break;
+    }
+  }
+  assert.ok(activation);
+  database.exec("DROP TRIGGER compliance_official_product_snapshots_transition_guard");
+  database.prepare(`UPDATE compliance_official_product_snapshots
+    SET status = 'superseded', superseded_at = ?, superseded_on = ?
+    WHERE id = ? AND status = 'current'`)
+    .run("2026-08-03T02:01:00.000Z", "2026-08-03", activation.snapshotId);
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-03T02:01:01.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED"),
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 1);
+});
+
+test("a bounded deadline with retained replay progress yields without a failed source receipt", async (t) => {
+  const recordCount = 1_001;
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount,
+    sourceKey: "fixture-background-deadline-veu",
+  });
+  const seed = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-02T01:00:00.000Z"),
+  });
+  harness.nextRelease();
+  await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-03T01:00:00.000Z"),
+  });
+  const checkpoint = persistedRefreshProgress(database, harness.registryCode);
+  assert.ok(checkpoint);
+
+  const controller = new AbortController();
+  controller.abort(CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON);
+  const yielded = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-03T01:00:01.000Z"),
+    signal: controller.signal,
+  });
+  assert.deepEqual({
+    changed: yielded.changed,
+    complete: yielded.complete,
+    phase: yielded.phase,
+    snapshotId: yielded.snapshotId,
+    checkedAt: yielded.checkedAt,
+  }, {
+    changed: false,
+    complete: false,
+    phase: checkpoint.phase,
+    snapshotId: checkpoint.snapshot_id,
+    checkedAt: checkpoint.created_at,
+  });
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 0);
+  assert.equal(harness.fetchCalls(), 2);
+
+  let activation = null;
+  for (let second = 2; second <= 12; second += 1) {
+    const result = await syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date(`2026-08-03T01:00:${String(second).padStart(2, "0")}.000Z`),
+    });
+    if (result.changed && result.phase === "cleanup") {
+      activation = result;
+      break;
+    }
+  }
+  assert.ok(activation, "the retained replay must still activate");
+  assert.notEqual(activation.snapshotId, seed.snapshotId);
+  const cleanup = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-03T01:01:00.000Z"),
+  });
+  assert.equal(cleanup.complete, true);
+  assert.equal(cleanup.phase, "complete");
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 0);
+  assert.equal(harness.fetchCalls(), 2);
+});
+
+test("a genuine custody error with retained replay progress still records failure", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount: 1_001,
+    sourceKey: "fixture-genuine-retained-failure-veu",
+  });
+  await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-04T01:00:00.000Z"),
+  });
+  harness.nextRelease();
+  const custody = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-05T01:00:00.000Z"),
+  });
+  assert.ok(persistedRefreshProgress(database, harness.registryCode));
+  const retained = database.prepare(`SELECT object_key FROM
+      compliance_official_product_artifacts WHERE snapshot_id = ?`)
+    .get(custody.snapshotId);
+  artifactStore.objects.delete(retained.object_key);
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-05T01:00:01.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED"),
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 1);
+});
+
+test("a non-background cancellation with retained replay progress still records failure", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount: 1_001,
+    sourceKey: "fixture-explicit-cancel-veu",
+  });
+  await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-06T01:00:00.000Z"),
+  });
+  harness.nextRelease();
+  await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-07T01:00:00.000Z"),
+  });
+  const controller = new AbortController();
+  controller.abort("operator-request-cancelled");
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-07T01:00:01.000Z"),
+      signal: controller.signal,
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE"),
+  );
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 1);
 });
 
 test("a lost response after a committed replay quantum resumes without duplicate products", async (t) => {

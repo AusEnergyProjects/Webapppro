@@ -1,4 +1,5 @@
 import {
+  CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON,
   CREDITEX_OFFICIAL_PRODUCT_KINDS,
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT,
   CREDITEX_PRODUCT_KIND_REGISTRY,
@@ -305,6 +306,24 @@ type RefreshProgressRow = {
   updated_at: string;
 };
 
+type SourceAcquisitionProgressRow = {
+  acquisition_id: string;
+  phase: "pages" | "assemble" | "ready" | "cleanup";
+  cleanup_disposition: "restart" | "finish";
+  total_record_count: number;
+  created_at: string;
+};
+
+type PendingOfficialProductRefresh = Readonly<{
+  phase: "acquisition" | RefreshProgressPhase;
+  snapshotId: string | null;
+  sourceSha256: string | null;
+  recordCount: number;
+  stagedRecordCount: number;
+  checkedAt: string;
+  postActivationCleanup: boolean;
+}>;
+
 type SyncRunRow = {
   status: "success" | "unchanged" | "failed";
   snapshot_id: string | null;
@@ -406,8 +425,15 @@ function assertOfficialProductRefreshActive(
   registryCode: string,
 ) {
   if (signal?.aborted) {
+    if (signal.reason !== CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+        503,
+        `Official registry ${registryCode} refresh was cancelled.`,
+      );
+    }
     return fail(
-      "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+      "OFFICIAL_PRODUCT_REFRESH_DEADLINE",
       503,
       `Official registry ${registryCode} reached its bounded background deadline.`,
     );
@@ -1226,6 +1252,17 @@ async function acquireRegistrySourceArtifacts(
     result = await definition.fetchSources(fetchImpl, context);
   } catch (error) {
     if (error instanceof CreditexOfficialProductError) throw error;
+    if (
+      context.signal?.aborted
+      && context.signal.reason
+        === CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_DEADLINE",
+        503,
+        `Official registry ${definition.registryCode} reached its bounded background deadline.`,
+      );
+    }
     console.error("Official product registry acquisition failed.", {
       registryCode: definition.registryCode,
       errorName: error instanceof Error ? error.name : "UnknownError",
@@ -1761,15 +1798,88 @@ export async function hasPendingCreditexOfficialProductRefresh(
   registryCode: string,
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
-  const [progress, acquisition] = await Promise.all([
+  return Boolean(await loadPendingOfficialProductRefresh(db, registryCode));
+}
+
+async function loadPendingOfficialProductRefresh(
+  db: D1Database,
+  registryCode: string,
+): Promise<PendingOfficialProductRefresh | null> {
+  const [
+    progress,
+    acquisition,
+    acquisitionProducts,
+    current,
+    currentReceipt,
+  ] = await Promise.all([
     loadRefreshProgress(db, registryCode),
-    db.prepare(`SELECT acquisition_id
+    db.prepare(`SELECT acquisition_id, phase, cleanup_disposition,
+        total_record_count, created_at
       FROM compliance_official_product_source_acquisitions
       WHERE registry_code = ?`)
       .bind(registryCode)
-      .first<{ acquisition_id: string }>(),
+      .first<SourceAcquisitionProgressRow>(),
+    db.prepare(`SELECT stream.record_count
+      FROM compliance_official_product_source_acquisition_streams stream
+      INNER JOIN compliance_official_product_source_acquisitions acquisition
+        ON acquisition.acquisition_id = stream.acquisition_id
+      WHERE acquisition.registry_code = ? AND stream.stream_index = 0`)
+      .bind(registryCode)
+      .first<{ record_count: number }>(),
+    db.prepare(`SELECT id, source_manifest_json, source_sha256, record_count,
+        activated_at
+      FROM compliance_official_product_snapshots
+      WHERE registry_code = ? AND status = 'current' LIMIT 1`)
+      .bind(registryCode)
+      .first<SnapshotRow>(),
+    db.prepare(`SELECT run.checked_at
+      FROM compliance_official_product_sync_runs run
+      INNER JOIN compliance_official_product_snapshots snapshot
+        ON snapshot.id = run.snapshot_id
+      WHERE run.registry_code = ? AND run.status IN ('success', 'unchanged')
+        AND snapshot.status = 'current'
+      ORDER BY run.checked_at DESC, run.rowid DESC LIMIT 1`)
+      .bind(registryCode)
+      .first<{ checked_at: string }>(),
   ]);
-  return Boolean(progress || acquisition);
+  const currentReceiptCovers = (since: string) => Boolean(
+    currentReceipt
+    && Number.isFinite(Date.parse(currentReceipt.checked_at))
+    && Number.isFinite(Date.parse(since))
+    && Date.parse(currentReceipt.checked_at) >= Date.parse(since)
+  );
+  if (progress) {
+    const snapshot = progress.snapshot_id === current?.id
+      ? current
+      : await db.prepare(`SELECT id, source_manifest_json, source_sha256,
+          record_count, activated_at
+        FROM compliance_official_product_snapshots WHERE id = ?`)
+        .bind(progress.snapshot_id)
+        .first<SnapshotRow>();
+    return {
+      phase: progress.phase,
+      snapshotId: progress.snapshot_id,
+      sourceSha256: snapshot?.source_sha256 || null,
+      recordCount: Number(snapshot?.record_count || 0),
+      stagedRecordCount: progress.product_record_count,
+      checkedAt: progress.created_at,
+      postActivationCleanup: progress.phase === "cleanup"
+        && progress.snapshot_id === current?.id
+        && currentReceiptCovers(progress.created_at),
+    };
+  }
+  if (!acquisition) return null;
+  return {
+    phase: acquisition.phase === "cleanup" ? "cleanup" : "acquisition",
+    snapshotId: current?.id || null,
+    sourceSha256: current?.source_sha256 || null,
+    recordCount: Number(acquisition.total_record_count),
+    stagedRecordCount: Number(acquisitionProducts?.record_count || 0),
+    checkedAt: acquisition.created_at,
+    postActivationCleanup: acquisition.phase === "cleanup"
+      && acquisition.cleanup_disposition === "finish"
+      && currentReceiptCovers(acquisition.created_at),
+  };
 }
 
 function validatedStreamValues(
@@ -3750,7 +3860,20 @@ export async function syncOfficialProductRegistry(
     }
     const ownershipLost = error instanceof CreditexOfficialProductError
       && error.code === "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS";
-    if (leaseAcquired && !ownershipLost) {
+    const pendingRefresh = leaseAcquired
+      ? await loadPendingOfficialProductRefresh(
+          db,
+          definition.registryCode,
+        ).catch(() => null)
+      : null;
+    const boundedCheckpointYield = error instanceof CreditexOfficialProductError
+      && error.code === "OFFICIAL_PRODUCT_REFRESH_DEADLINE"
+      && options.signal?.aborted === true
+      && options.signal.reason
+        === CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON
+      && pendingRefresh !== null;
+    if (leaseAcquired && !ownershipLost && !boundedCheckpointYield
+      && !pendingRefresh?.postActivationCleanup) {
       const message = error instanceof Error && error.message.trim()
         ? error.message
         : "Unknown official product registry refresh error.";
@@ -3760,6 +3883,20 @@ export async function syncOfficialProductRegistry(
         checkedAt,
         message,
       ).catch(() => undefined);
+    }
+    if (boundedCheckpointYield && pendingRefresh) {
+      return {
+        changed: false,
+        complete: false as const,
+        phase: pendingRefresh.phase,
+        registryCode: definition.registryCode,
+        snapshotId: pendingRefresh.snapshotId,
+        sourceSha256: pendingRefresh.sourceSha256,
+        recordCount: pendingRefresh.recordCount,
+        stagedRecordCount: pendingRefresh.stagedRecordCount,
+        insertedThisRun: 0,
+        checkedAt: pendingRefresh.checkedAt,
+      };
     }
     throw error;
   } finally {

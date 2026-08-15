@@ -6,6 +6,7 @@ import type {
   CreditexOfficialProductSourceDefinition,
 } from "./creditex-official-product-registry-server.ts";
 import {
+  CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON,
   CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
   CreditexOfficialProductError,
 } from "./creditex-official-product-registry.ts";
@@ -1330,8 +1331,19 @@ function assertAcquisitionActive(
   context: CreditexOfficialProductSourceAcquisitionContext,
 ) {
   if (!context.signal?.aborted) return;
-  if (context.signal.reason instanceof Error) throw context.signal.reason;
-  throw new Error(String(context.signal.reason || "VEU source acquisition aborted"));
+  if (
+    context.signal.reason !== CREDITEX_OFFICIAL_PRODUCT_BACKGROUND_TIMEOUT_REASON
+  ) {
+    if (context.signal.reason instanceof Error) throw context.signal.reason;
+    throw new Error(String(
+      context.signal.reason || "VEU source acquisition aborted",
+    ));
+  }
+  throw new CreditexOfficialProductError(
+    "OFFICIAL_PRODUCT_REFRESH_DEADLINE",
+    503,
+    `Official registry ${context.registryCode} reached its bounded background deadline.`,
+  );
 }
 
 function assertAcquisitionFetchBudget(
