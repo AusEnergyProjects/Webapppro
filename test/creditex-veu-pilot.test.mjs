@@ -195,9 +195,9 @@ function testD1(database) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 148);
+  assert.equal(completeMigrationChain.length, 149);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0149_/);
+  assert.match(completeMigrationChain.at(-1), /^0150_/);
   let emulatedFtsTables = 0;
   for (const name of completeMigrationChain) {
     const migrationSource = fs.readFileSync(
@@ -2622,7 +2622,7 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(manualEvidenceWorkspace, /Installer preview/);
   assert.match(manualEvidenceWorkspace, /Submit for Creditex audit/);
   assert.match(calculationWorkspace, /National certificate calculation workspace/);
-  assert.match(calculationWorkspace, /Estimate STCs/);
+  assert.match(calculationWorkspace, /Calculate STCs/);
   assert.match(calculationWorkspace, /REBATE CALCULATOR/);
   assert.match(calculationWorkspace, /NSW-PDRS-2026/);
   assert.match(calculationWorkspace, /NSW-ESS-2026/);
@@ -2633,16 +2633,17 @@ test("Creditex UI surfaces all five priorities, compact quick filters and contro
   assert.match(calculationWorkspace, /\/api\/creditex\/program-estimates/);
   assert.match(
     calculationWorkspace,
-    /Final eligibility is checked before certificate creation/,
+    /Final eligibility[\s\S]{0,80}evidence must still be confirmed/,
   );
   assert.match(calculationWorkspace, /Activity calculation readiness/);
   assert.match(calculationWorkspace, /\/api\/creditex\/stc-estimates/);
-  assert.match(calculationWorkspace, /Estimate only/);
+  assert.match(calculationWorkspace, /Source-verified result/);
+  assert.doesNotMatch(sresCalculator, /Estimate only/);
   assert.match(portal, /options: \{ requestTimeoutMs\?: number \} = \{\}/);
   assert.match(portal, /options\.requestTimeoutMs \?\? 20_000/);
   assert.match(portal, /requestTimeoutMs \/ 1_000/);
-  assert.match(sresCalculator, /requestTimeoutMs: 90_000/);
-  assert.match(allProgramCalculator, /requestTimeoutMs: 300_000/);
+  assert.match(sresCalculator, /SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 25_000/);
+  assert.match(allProgramCalculator, /requestTimeoutMs: 25_000/);
   assert.match(calculationWorkspace, /Safety certification date/);
   assert.doesNotMatch(calculationWorkspace, /Site-assessed hours \| audit required/);
   assert.match(workspace, /Controlled submission boundary/);

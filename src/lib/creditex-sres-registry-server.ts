@@ -21,8 +21,9 @@ import {
   ensureCreditexProductRegistrySchemaGuards,
 } from "./creditex-product-registry-schema-guards.ts";
 import { australianRegulatorDate } from "./creditex-australian-regulator-date.ts";
-import type {
-  CreditexSresOfficialProductKind,
+import {
+  CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+  type CreditexSresOfficialProductKind,
 } from "./creditex-official-product-registry.ts";
 
 const REGISTRY_CODE = "cer_sres_swh" as const;
@@ -33,7 +34,7 @@ const XLSX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PRODUCT_INSERT_CHUNK = 1_000;
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
-const SYNC_LEASE_MS = 15 * 60 * 1000;
+const SYNC_LEASE_MS = 3 * 60 * 1000;
 const AUTOMATIC_REFRESH_WAIT_MS = 55_000;
 const AUTOMATIC_REFRESH_POLL_MS = 2_000;
 const AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
@@ -48,24 +49,35 @@ type FetchLike = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-function withSresSourceFetchDeadline(fetchImpl: FetchLike): FetchLike {
+function withSresSourceFetchDeadline(
+  fetchImpl: FetchLike,
+  timeoutMs = SRES_SOURCE_FETCH_TIMEOUT_MS,
+  operationSignal?: AbortSignal,
+): FetchLike {
   return async (input, init = {}) => {
     const controller = new AbortController();
-    const externalSignal = init.signal;
-    const abortFromExternal = () => controller.abort(externalSignal?.reason);
-    if (externalSignal?.aborted) abortFromExternal();
-    else externalSignal?.addEventListener("abort", abortFromExternal, {
-      once: true,
-    });
+    const externalSignals = [init.signal, operationSignal].filter(
+      (signal): signal is AbortSignal => Boolean(signal),
+    );
+    const abortFromExternal = (event: Event) => {
+      const signal = event.currentTarget as AbortSignal;
+      controller.abort(signal.reason);
+    };
+    for (const signal of externalSignals) {
+      if (signal.aborted) controller.abort(signal.reason);
+      else signal.addEventListener("abort", abortFromExternal, { once: true });
+    }
     const timeout = setTimeout(
       () => controller.abort("sres-official-source-timeout"),
-      SRES_SOURCE_FETCH_TIMEOUT_MS,
+      timeoutMs,
     );
     try {
       return await fetchImpl(input, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
-      externalSignal?.removeEventListener("abort", abortFromExternal);
+      for (const signal of externalSignals) {
+        signal.removeEventListener("abort", abortFromExternal);
+      }
     }
   };
 }
@@ -281,6 +293,16 @@ export type CreditexSresOfficialProductSearchInput = Readonly<{
 
 function fail(code: string, status: number, message: string): never {
   throw new CreditexSresRegistryError(code, status, message);
+}
+
+function assertSresRefreshActive(signal: AbortSignal | undefined) {
+  if (signal?.aborted) {
+    return fail(
+      "SRES_SOURCE_UNAVAILABLE",
+      503,
+      "The SRES official registry reached its bounded background deadline.",
+    );
+  }
 }
 
 function canonicalJson(value: unknown): string {
@@ -929,6 +951,7 @@ async function acquireSyncLease(
   db: D1Database,
   leaseId: string,
   startedAt: string,
+  fleetLeaseId?: string,
 ) {
   const expiresAt = new Date(
     new Date(startedAt).getTime() + SYNC_LEASE_MS,
@@ -940,8 +963,25 @@ async function acquireSyncLease(
       lease_id = excluded.lease_id,
       started_at = excluded.started_at,
       expires_at = excluded.expires_at
-    WHERE compliance_product_registry_sync_leases.expires_at <= excluded.started_at`)
-    .bind(REGISTRY_CODE, leaseId, startedAt, expiresAt)
+    WHERE compliance_product_registry_sync_leases.expires_at <= excluded.started_at
+      OR (
+        compliance_product_registry_sync_leases.lease_id <> excluded.lease_id
+        AND ? <> '' AND EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+        WHERE fleet.registry_code = ?
+          AND fleet.lease_id = ?
+          AND fleet.expires_at > excluded.started_at
+        )
+      )`)
+    .bind(
+      REGISTRY_CODE,
+      leaseId,
+      startedAt,
+      expiresAt,
+      fleetLeaseId || "",
+      CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+      fleetLeaseId || "",
+    )
     .run();
   if (Number(result.meta?.changes || 0) !== 1) {
     return fail(
@@ -1096,21 +1136,42 @@ export async function syncCerSresProductRegistry(
     references?: readonly CerSresReferenceSource[];
     sources?: readonly CerSresProductSource[];
     reviewedCountDecrease?: CreditexSresReviewedProductCountDecrease;
+    fleetLeaseId?: string;
+    sourceFetchTimeoutMs?: number;
+    signal?: AbortSignal;
   } = {},
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
-  const fetchImpl = withSresSourceFetchDeadline(options.fetchImpl || fetch);
+  const sourceFetchTimeoutMs = options.sourceFetchTimeoutMs === undefined
+    ? SRES_SOURCE_FETCH_TIMEOUT_MS
+    : Number(options.sourceFetchTimeoutMs);
+  if (
+    !Number.isSafeInteger(sourceFetchTimeoutMs)
+    || sourceFetchTimeoutMs < 1_000
+    || sourceFetchTimeoutMs > SRES_SOURCE_FETCH_TIMEOUT_MS
+  ) {
+    throw new CreditexSresRegistryError(
+      "SRES_REQUEST_INVALID",
+      400,
+      "The SRES source fetch timeout is invalid.",
+    );
+  }
+  const fetchImpl = withSresSourceFetchDeadline(
+    options.fetchImpl || fetch,
+    sourceFetchTimeoutMs,
+    options.signal,
+  );
   const now = options.now || new Date();
   const checkedAt = now.toISOString();
   const checkedOn = australianRegulatorDate(now);
   const sources = options.sources || CER_SRES_PRODUCT_SOURCES;
   const references = options.references || CER_SRES_REFERENCE_SOURCES;
   const artifactStore = options.artifactStore;
-  const leaseId = crypto.randomUUID();
+  const leaseId = options.fleetLeaseId || crypto.randomUUID();
   let stagingSnapshotId = "";
   let leaseAcquired = false;
   try {
-    await acquireSyncLease(db, leaseId, checkedAt);
+    await acquireSyncLease(db, leaseId, checkedAt, options.fleetLeaseId);
     leaseAcquired = true;
     await cleanAbandonedRegistryRows(db);
     if (!artifactStore) {
@@ -1122,12 +1183,16 @@ export async function syncCerSresProductRegistry(
     }
     const productArtifacts: SourceArtifact[] = [];
     for (const source of sources) {
+      assertSresRefreshActive(options.signal);
       productArtifacts.push(await fetchSource(source, fetchImpl));
+      assertSresRefreshActive(options.signal);
       await renewSyncLease(db, leaseId, checkedAt);
     }
     const referenceArtifacts: ReferenceArtifact[] = [];
     for (const source of references) {
+      assertSresRefreshActive(options.signal);
       referenceArtifacts.push(await fetchReference(source, fetchImpl));
+      assertSresRefreshActive(options.signal);
       await renewSyncLease(db, leaseId, checkedAt);
     }
     const registerMetadataArtifacts = productArtifacts.map(
@@ -1266,10 +1331,25 @@ export async function syncCerSresProductRegistry(
     const sourceManifestJson = canonicalJson(manifest);
     const sourceSha256 = await sha256Hex(sourceManifestJson);
     if (current?.source_sha256 === sourceSha256) {
-      await db.prepare(`INSERT INTO compliance_product_registry_sync_runs (
+      await renewSyncLease(db, leaseId, checkedAt);
+      const leaseFenceAt = options.now
+        ? checkedAt
+        : new Date().toISOString();
+      const receipt = await db.prepare(`INSERT INTO compliance_product_registry_sync_runs (
         id, registry_code, status, snapshot_id, source_manifest_json,
         source_sha256, record_count, checked_at, message
-      ) VALUES (?, ?, 'unchanged', ?, ?, ?, ?, ?, '')`)
+      ) SELECT ?, ?, 'unchanged', ?, ?, ?, ?, ?, ''
+      WHERE EXISTS (
+        SELECT 1 FROM compliance_product_registry_sync_leases AS inner_lease
+        WHERE inner_lease.registry_code = ?
+          AND inner_lease.lease_id = ?
+          AND inner_lease.expires_at > ?
+      ) AND (? = '' OR EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+        WHERE fleet.registry_code = ?
+          AND fleet.lease_id = ?
+          AND fleet.expires_at > ?
+      ))`)
         .bind(
           crypto.randomUUID(),
           REGISTRY_CODE,
@@ -1278,8 +1358,22 @@ export async function syncCerSresProductRegistry(
           sourceSha256,
           recordCount,
           checkedAt,
+          REGISTRY_CODE,
+          leaseId,
+          leaseFenceAt,
+          options.fleetLeaseId || "",
+          CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+          options.fleetLeaseId || "",
+          leaseFenceAt,
         )
         .run();
+      if (Number(receipt.meta?.changes || 0) !== 1) {
+        return fail(
+          "SRES_REFRESH_IN_PROGRESS",
+          409,
+          "Official registry refresh ownership was lost.",
+        );
+      }
       return {
         changed: false,
         snapshotId: current.id,
@@ -1341,6 +1435,7 @@ export async function syncCerSresProductRegistry(
         "The staged registry record count did not reconcile.",
       );
     }
+    const leaseFenceAt = options.now ? checkedAt : new Date().toISOString();
     const activationStatements = [
       db.prepare(`UPDATE compliance_product_registry_snapshots
         SET status = 'superseded', superseded_at = ?, superseded_on = ?
@@ -1349,8 +1444,31 @@ export async function syncCerSresProductRegistry(
       db.prepare(`UPDATE compliance_product_registry_snapshots
         SET status = 'current', activated_at = ?, activated_on = ?,
           superseded_at = NULL, superseded_on = NULL
-        WHERE id = ? AND registry_code = ? AND status = 'staging'`)
-        .bind(checkedAt, checkedOn, stagingSnapshotId, REGISTRY_CODE),
+        WHERE id = ? AND registry_code = ? AND status = 'staging'
+          AND EXISTS (
+            SELECT 1 FROM compliance_product_registry_sync_leases AS inner_lease
+            WHERE inner_lease.registry_code = ?
+              AND inner_lease.lease_id = ?
+              AND inner_lease.expires_at > ?
+          ) AND (? = '' OR EXISTS (
+            SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+            WHERE fleet.registry_code = ?
+              AND fleet.lease_id = ?
+              AND fleet.expires_at > ?
+          ))`)
+        .bind(
+          checkedAt,
+          checkedOn,
+          stagingSnapshotId,
+          REGISTRY_CODE,
+          REGISTRY_CODE,
+          leaseId,
+          leaseFenceAt,
+          options.fleetLeaseId || "",
+          CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+          options.fleetLeaseId || "",
+          leaseFenceAt,
+        ),
     ];
     if (current) {
       activationStatements.push(pruneUnchangedHistoricalProducts(
@@ -1376,6 +1494,7 @@ export async function syncCerSresProductRegistry(
         ),
     );
     await renewSyncLease(db, leaseId, checkedAt);
+    assertSresRefreshActive(options.signal);
     await db.batch(activationStatements);
     await cleanAbandonedRegistryRows(db);
     return {
@@ -1491,6 +1610,7 @@ export async function ensureCerSresProductRegistryCurrent(
     now?: Date;
     waitForRefreshMs?: number;
     pollIntervalMs?: number;
+    fleetLeaseId?: string;
   } = {},
 ) {
   const now = options.now || new Date();
@@ -1510,6 +1630,7 @@ export async function ensureCerSresProductRegistryCurrent(
       artifactStore: options.artifactStore,
       fetchImpl: options.fetchImpl,
       now: options.now,
+      fleetLeaseId: options.fleetLeaseId,
     });
   } catch (error) {
     if (

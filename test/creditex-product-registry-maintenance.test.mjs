@@ -4,15 +4,27 @@ import test from "node:test";
 
 import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
 import {
+  creditexAutomaticProductRegistries,
+} from "../src/lib/creditex-official-product-registry-definitions.ts";
+import {
+  CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
+  CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
   CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS,
+  CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS,
   CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS,
-  creditexProductRegistryMaintenanceTargetIndex,
+  creditexAutomaticProductRegistryStreamingBudget,
   creditexProductRegistryRefreshDue,
+  drainCreditexProductRegistryMaintenance,
   enqueueCreditexProductRegistryRefresh,
+  hasDueCreditexProductRegistryRefreshRequest,
+  hasQueuedCreditexProductRegistryRefreshRequest,
   maintainCreditexAutomaticProductRegistry,
   maintainNextCreditexProductRegistry,
   withCreditexProductRegistryFleetLease,
 } from "../src/lib/creditex-product-registry-maintenance.ts";
+import {
+  CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+} from "../src/lib/creditex-official-product-registry-server.ts";
 
 const NOW = new Date("2027-01-16T00:00:00.000Z");
 const definition = {
@@ -50,6 +62,28 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("only the VEU streaming registry receives a bounded replay budget", () => {
+  const budgets = Object.fromEntries(
+    creditexAutomaticProductRegistries({}).map((registry) => [
+      registry.registryCode,
+      creditexAutomaticProductRegistryStreamingBudget(registry),
+    ]),
+  );
+  assert.deepEqual(budgets, {
+    "gems-products": undefined,
+    "nsw-tessa-products": undefined,
+    "veu-approved-products":
+      CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+  });
+  assert.ok(CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS < 20_000);
+  assert.ok(
+    1 + 2 * Math.ceil(
+      75_492 / CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+    ) < 16,
+    "a current-scale VEU activation must fit below the Worker subrequest chain limit",
+  );
+});
 
 function fleetDatabase() {
   const state = {
@@ -146,6 +180,15 @@ function fleetDatabase() {
     },
     async first() {
       if (sql.includes("FROM compliance_official_product_refresh_requests")) {
+        if (!sql.includes("not_before <= ?")) {
+          const queued = [...state.refreshRequests.values()]
+            .filter((request) => values.includes(request.registryCode))
+            .sort((left, right) => (
+              left.requestedAt.localeCompare(right.requestedAt)
+              || left.registryCode.localeCompare(right.registryCode)
+            ))[0];
+          return queued ? { registry_code: queued.registryCode } : null;
+        }
         const [now, ...registryCodes] = values;
         const due = [...state.refreshRequests.values()]
           .filter((request) => (
@@ -157,7 +200,10 @@ function fleetDatabase() {
             left.requestedAt.localeCompare(right.requestedAt)
             || left.registryCode.localeCompare(right.registryCode)
           ))[0];
-        return due ? { registry_code: due.registryCode } : null;
+        return due ? {
+          registry_code: due.registryCode,
+          attempt_count: due.attemptCount,
+        } : null;
       }
       throw new Error(`Unexpected first SQL: ${sql}`);
     },
@@ -188,6 +234,31 @@ test("official product maintenance becomes due at 24 hours but not before", () =
     creditexProductRegistryRefreshDue(registryStatus(), NOW),
     true,
   );
+});
+
+test("queued status remains true while a deferred retry is not due", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  database.state.refreshRequests.get(registryCode).notBefore = new Date(
+    NOW.getTime() + 3_000,
+  ).toISOString();
+  assert.equal(await hasQueuedCreditexProductRegistryRefreshRequest(
+    database,
+    [registryCode],
+    { ensureSchema: withoutSchemaInstall },
+  ), true);
+  assert.equal(await hasDueCreditexProductRegistryRefreshRequest(
+    database,
+    [registryCode],
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  ), false);
 });
 
 test("recent failed maintenance observes bounded retry backoff then retries", async () => {
@@ -252,7 +323,7 @@ test("lease contention is treated as an active refresh", async () => {
   });
 });
 
-test("scheduled maintenance selects exactly one registry for each minute", async () => {
+test("unscoped maintenance selects exactly one oldest due registry", async () => {
   const refreshed = [];
   const targets = ["gems-products", "nsw-tessa-products", "veu-approved-products"]
     .map((registryCode) => ({
@@ -261,25 +332,69 @@ test("scheduled maintenance selects exactly one registry for each minute", async
         registryCode,
         status: "stale",
       }),
-      refresh: async () => {
-        refreshed.push(registryCode);
+      refresh: async (_database, _now, fleetLeaseId) => {
+        refreshed.push({ registryCode, fleetLeaseId });
         return { changed: true };
       },
     }));
-  const index = creditexProductRegistryMaintenanceTargetIndex(NOW, targets.length);
   const result = await maintainNextCreditexProductRegistry({
     database: {},
     now: NOW,
     targets,
     loadQueuedRefresh: async () => null,
-    withFleetLease: async (_database, operation) => operation(),
+    withFleetLease: async (_database, operation) => operation({
+      leaseId: "callback-issued-fleet-lease",
+    }),
   });
-  assert.deepEqual(refreshed, [targets[index].registryCode]);
+  assert.deepEqual(refreshed, [{
+    registryCode: "gems-products",
+    fleetLeaseId: "callback-issued-fleet-lease",
+  }]);
   assert.deepEqual(result, {
-    registryCode: targets[index].registryCode,
+    registryCode: "gems-products",
     outcome: "refreshed",
     changed: true,
   });
+});
+
+test("calculator dispatch prioritises its exact queued registry", async () => {
+  const database = fleetDatabase();
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    "gems-products",
+    new Date(NOW.getTime() - 1_000),
+    { ensureSchema: withoutSchemaInstall },
+  );
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    "veu-approved-products",
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  const refreshed = [];
+  const targets = ["gems-products", "veu-approved-products"].map(
+    (registryCode) => ({
+      registryCode,
+      loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+      refresh: async (_database, _now, fleetLeaseId) => {
+        refreshed.push({ registryCode, fleetLeaseId });
+        return { changed: true };
+      },
+    }),
+  );
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    preferredRegistryCode: "veu-approved-products",
+    targets,
+    withFleetLease: realFleetLease,
+  });
+  assert.equal(refreshed.length, 1);
+  assert.equal(refreshed[0].registryCode, "veu-approved-products");
+  assert.ok(refreshed[0].fleetLeaseId);
+  assert.equal(result.registryCode, "veu-approved-products");
+  assert.equal(database.state.refreshRequests.has("veu-approved-products"), false);
+  assert.equal(database.state.refreshRequests.has("gems-products"), true);
 });
 
 test("fleet lease rejects overlapping minute work and recovers stale ownership", async () => {
@@ -325,15 +440,20 @@ test("fleet lease rejects overlapping minute work and recovers stale ownership",
     startedAt: "2027-01-15T23:00:00.000Z",
     expiresAt: "2027-01-15T23:03:00.000Z",
   };
+  let callbackLeaseId = "";
   assert.equal(await withCreditexProductRegistryFleetLease(
     database,
-    async () => "recovered",
+    async (fleetLease) => {
+      callbackLeaseId = fleetLease.leaseId;
+      return "recovered";
+    },
     {
       ensureSchema: withoutSchemaInstall,
       now: () => NOW,
       leaseId: "successor-owner",
     },
   ), "recovered");
+  assert.equal(callbackLeaseId, "successor-owner");
   assert.equal(database.state.lease, null);
 });
 
@@ -363,19 +483,26 @@ test("durable refresh requests coalesce and failure is deferred with backoff", a
     database.state.refreshRequests.get("gems-products").updatedAt,
     NOW.toISOString(),
   );
+  assert.equal(await hasDueCreditexProductRegistryRefreshRequest(
+    database,
+    ["gems-products"],
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  ), true);
   const failure = new Error("official source failed");
+  const target = {
+    registryCode: "gems-products",
+    loadStatus: async () => registryStatus({
+      registryCode: "gems-products",
+      status: "stale",
+    }),
+    refresh: async () => { throw failure; },
+  };
   await assert.rejects(
     maintainNextCreditexProductRegistry({
       database,
       now: NOW,
-      targets: [{
-        registryCode: "gems-products",
-        loadStatus: async () => registryStatus({
-          registryCode: "gems-products",
-          status: "stale",
-        }),
-        refresh: async () => { throw failure; },
-      }],
+      targets: [target],
       withFleetLease: realFleetLease,
     }),
     failure,
@@ -385,10 +512,330 @@ test("durable refresh requests coalesce and failure is deferred with backoff", a
   assert.equal(request.lastError, failure.message);
   assert.equal(
     request.notBefore,
-    new Date(NOW.getTime() + CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS)
+    new Date(NOW.getTime() + 3_000)
       .toISOString(),
   );
+  let attemptedAt = new Date(request.notBefore);
+  for (const delay of [6_000, 12_000, CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS]) {
+    await assert.rejects(
+      maintainNextCreditexProductRegistry({
+        database,
+        now: attemptedAt,
+        targets: [target],
+        withFleetLease: realFleetLease,
+      }),
+      failure,
+    );
+    const retried = database.state.refreshRequests.get("gems-products");
+    assert.equal(
+      retried.notBefore,
+      new Date(attemptedAt.getTime() + delay).toISOString(),
+    );
+    attemptedAt = new Date(retried.notBefore);
+  }
+  assert.equal(
+    database.state.refreshRequests.get("gems-products").attemptCount,
+    4,
+  );
   assert.equal(database.state.lease, null);
+});
+
+test("a due durable retry overrides the failed-attempt status backoff", async () => {
+  const database = fleetDatabase();
+  const registryCode = "gems-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let failed = false;
+  let refreshCalls = 0;
+  const target = {
+    registryCode,
+    loadStatus: async (_database, now) => registryStatus({
+      registryCode,
+      status: failed ? "current" : "stale",
+      lastAttempt: failed
+        ? {
+            status: "failed",
+            checkedAt: NOW.toISOString(),
+            message: "transient source failure",
+          }
+        : registryStatus().lastAttempt,
+      lastCheckedAt: now.toISOString(),
+    }),
+    refresh: async () => {
+      refreshCalls += 1;
+      if (!failed) {
+        failed = true;
+        throw new Error("transient source failure");
+      }
+      return { changed: true, complete: true };
+    },
+  };
+  await assert.rejects(
+    maintainNextCreditexProductRegistry({
+      database,
+      now: NOW,
+      targets: [target],
+      withFleetLease: realFleetLease,
+    }),
+    /transient source failure/,
+  );
+  const retryAt = new Date(
+    database.state.refreshRequests.get(registryCode).notBefore,
+  );
+  const retried = await maintainNextCreditexProductRegistry({
+    database,
+    now: retryAt,
+    targets: [target],
+    withFleetLease: realFleetLease,
+  });
+  assert.equal(refreshCalls, 2);
+  assert.equal(retried.outcome, "refreshed");
+  assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("an explicit due queue refreshes a current registry", async () => {
+  const database = fleetDatabase();
+  const registryCode = "nsw-tessa-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let refreshCalls = 0;
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({ registryCode, status: "current" }),
+      refresh: async () => {
+        refreshCalls += 1;
+        return { changed: false, complete: true };
+      },
+    }],
+    withFleetLease: realFleetLease,
+  });
+  assert.equal(refreshCalls, 1);
+  assert.equal(result.outcome, "refreshed");
+  assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("an incomplete replay keeps its queue due without recording failure backoff", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let complete = false;
+  const target = {
+    registryCode,
+    loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+    refresh: async () => complete
+      ? { changed: true, complete: true }
+      : {
+          changed: false,
+          complete: false,
+          stagedRecordCount: 500,
+          recordCount: 2_501,
+        },
+  };
+  const progressed = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    targets: [target],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(progressed, {
+    registryCode,
+    outcome: "progressed",
+    stagedRecordCount: 500,
+    recordCount: 2_501,
+  });
+  const queued = database.state.refreshRequests.get(registryCode);
+  assert.equal(queued.attemptCount, 0);
+  assert.equal(queued.notBefore, NOW.toISOString());
+  assert.equal(queued.lastAttemptAt, null);
+  assert.equal(queued.lastError, null);
+  assert.equal(database.state.lease, null);
+
+  complete = true;
+  const finished = await maintainNextCreditexProductRegistry({
+    database,
+    now: new Date(NOW.getTime() + 1),
+    targets: [target],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(finished, {
+    registryCode,
+    outcome: "refreshed",
+    changed: true,
+  });
+  assert.equal(database.state.refreshRequests.size, 0);
+  assert.equal(database.state.lease, null);
+});
+
+test("retained replay bypasses a failed-source backoff and finishes immediately", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let refreshCalls = 0;
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({
+        registryCode,
+        status: "stale",
+        lastAttempt: {
+          status: "failed",
+          checkedAt: new Date(NOW.getTime() - 1_000).toISOString(),
+          message: "transient worker cancellation",
+        },
+      }),
+      hasPendingWork: async () => true,
+      refresh: async () => {
+        refreshCalls += 1;
+        return { changed: true, complete: true };
+      },
+    }],
+    withFleetLease: realFleetLease,
+  });
+  assert.equal(refreshCalls, 1);
+  assert.equal(result.outcome, "refreshed");
+  assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("background drain advances consecutive replay quanta in one invocation", async () => {
+  let calls = 0;
+  const result = await drainCreditexProductRegistryMaintenance({
+    database: {},
+    maximumElapsedMs: 25_000,
+    maximumSteps: CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
+    now: () => NOW,
+    preferredRegistryCode: "veu-approved-products",
+    targets: [{
+      registryCode: "veu-approved-products",
+      loadStatus: async () => registryStatus(),
+      refresh: async () => ({ changed: false }),
+    }],
+    maintain: async () => {
+      calls += 1;
+      return calls < 5
+        ? { registryCode: "veu-approved-products", outcome: "progressed" }
+        : {
+            registryCode: "veu-approved-products",
+            outcome: "refreshed",
+            changed: true,
+          };
+    },
+  });
+  assert.equal(calls, 5);
+  assert.equal(result.steps, 5);
+  assert.equal(result.outcome, "refreshed");
+  assert.equal(result.continuationRequired, false);
+});
+
+test("background drain requests a new invocation when bounded time expires", async () => {
+  let calls = 0;
+  let elapsed = 0;
+  const result = await drainCreditexProductRegistryMaintenance({
+    database: {},
+    maximumElapsedMs: 1_000,
+    maximumSteps: CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
+    now: () => new Date(NOW.getTime() + elapsed),
+    preferredRegistryCode: "veu-approved-products",
+    targets: [],
+    maintain: async () => {
+      calls += 1;
+      elapsed += 600;
+      return { registryCode: "veu-approved-products", outcome: "progressed" };
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.steps, 2);
+  assert.equal(result.outcome, "progressed");
+  assert.equal(result.continuationRequired, true);
+});
+
+test("background drain never starts a second slow step beyond its one invocation deadline", async () => {
+  let calls = 0;
+  let elapsed = 0;
+  const result = await drainCreditexProductRegistryMaintenance({
+    database: {},
+    maximumElapsedMs: 1_000,
+    operationTimeoutMs: 800,
+    now: () => new Date(NOW.getTime() + elapsed),
+    preferredRegistryCode: "veu-approved-products",
+    targets: [],
+    maintain: async ({ scheduledOperationTimeoutMs }) => {
+      calls += 1;
+      assert.equal(scheduledOperationTimeoutMs, 800);
+      elapsed += 950;
+      return { registryCode: "veu-approved-products", outcome: "progressed" };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.steps, 1);
+  assert.equal(result.continuationRequired, true);
+});
+
+test("background drain turns a bounded source failure into a short durable continuation", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  const result = await drainCreditexProductRegistryMaintenance({
+    database,
+    now: () => NOW,
+    operationTimeoutMs: 100,
+    preferredRegistryCode: registryCode,
+    maintain: (input) => maintainNextCreditexProductRegistry({
+      ...input,
+      withFleetLease: realFleetLease,
+    }),
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+      refresh: async (_database, _now, _fleetLeaseId, signal) => (
+        new Promise((_resolve, reject) => {
+          assert.ok(signal);
+          signal.addEventListener("abort", () => {
+            reject(new Error("bounded official source timeout"));
+          }, { once: true });
+        })
+      ),
+    }],
+  });
+  assert.deepEqual(result, {
+    registryCode,
+    outcome: "retry_scheduled",
+    retryAfterMs: 3_000,
+    continuationRequired: true,
+    continuationDelayMs: 3_000,
+    steps: 1,
+  });
+  const queued = database.state.refreshRequests.get(registryCode);
+  assert.equal(queued.notBefore, new Date(NOW.getTime() + 3_000).toISOString());
+  assert.equal(queued.attemptCount, 1);
+  assert.match(queued.lastError, /bounded official source timeout/);
 });
 
 test("fleet ownership renews during long work and old owners cannot release successors", async () => {
@@ -428,18 +875,92 @@ test("fleet ownership renews during long work and old owners cannot release succ
   assert.equal(replaced.state.lease.leaseId, "successor-owner");
 });
 
-test("HTTP health traffic never bootstraps product registries and cron does one bounded target", () => {
+test("dispatch responses and health traffic each schedule one bounded registry maintenance drain", () => {
   const worker = fs.readFileSync(
     new URL("../worker/index.ts", import.meta.url),
     "utf8",
+  );
+  const dispatchBlock = worker.slice(
+    worker.indexOf("function queueCreditexProductRegistryDispatch"),
+    worker.indexOf("function queueBackgroundDispatches"),
+  );
+  assert.match(
+    dispatchBlock,
+    /response\.headers\.get\(CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER\)/,
+  );
+  assert.match(
+    dispatchBlock,
+    /headers\.delete\(CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER\)/,
+  );
+  assert.match(
+    dispatchBlock,
+    /ctx\.waitUntil\(\s*drainCreditexProductRegistryMaintenance\(\{/,
+  );
+  assert.match(dispatchBlock, /preferredRegistryCode: registryCode/);
+  assert.match(dispatchBlock, /result\.continuationRequired/);
+  assert.match(
+    dispatchBlock,
+    /requestCreditexProductRegistryContinuation\(\s*request,\s*registryCode/,
+  );
+  assert.equal(
+    dispatchBlock.match(/drainCreditexProductRegistryMaintenance\(/g)?.length,
+    1,
+    "one stale response must schedule only one bounded maintenance drain",
+  );
+  assert.match(
+    dispatchBlock,
+    /return new Response\(response\.body,[\s\S]*headers,/,
   );
   const healthBlock = worker.slice(
     worker.indexOf('if (request.method === "GET" && url.pathname === "/api/health" && response.ok)'),
     worker.indexOf("return queueTradeQuoteDeliveryDispatch"),
   );
-  assert.doesNotMatch(healthBlock, /ProductRegistr/);
+  assert.match(
+    healthBlock,
+    /ctx\.waitUntil\(\s*drainCreditexProductRegistryMaintenance\(\{/,
+  );
+  assert.match(
+    healthBlock,
+    /creditexAutomaticProductRegistryMaintenanceTargets\(\{/,
+  );
+  assert.match(healthBlock, /result\.continuationRequired/);
+  assert.match(
+    healthBlock,
+    /CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE/,
+  );
+  assert.equal(
+    healthBlock.match(/drainCreditexProductRegistryMaintenance\(/g)?.length,
+    1,
+    "one successful health request must schedule only one bounded maintenance drain",
+  );
+  assert.doesNotMatch(healthBlock, /for \(const definition of .*ProductRegistr/);
+  const continuationBlock = worker.slice(
+    worker.indexOf("async function requestCreditexProductRegistryContinuation"),
+    worker.indexOf("function queueBackgroundDispatches"),
+  );
+  assert.match(continuationBlock, /continueRegistry/);
+  assert.match(continuationBlock, /cache: "no-store"/);
+  assert.match(continuationBlock, /redirect: "error"/);
   const scheduledBlock = worker.slice(worker.indexOf("async scheduled"));
-  assert.match(scheduledBlock, /maintainNextCreditexProductRegistry/);
+  assert.match(scheduledBlock, /drainCreditexProductRegistryMaintenance/);
   assert.match(scheduledBlock, /creditexAutomaticProductRegistryMaintenanceTargets/);
   assert.doesNotMatch(scheduledBlock, /for \(const definition of .*ProductRegistr/);
+});
+
+test("Sites deployment enables and audits public self-continuation fetches", () => {
+  const vite = fs.readFileSync(
+    new URL("../vite.config.ts", import.meta.url),
+    "utf8",
+  );
+  const bundleAudit = fs.readFileSync(
+    new URL("../scripts/audit-sites-server-bundle.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    vite,
+    /compatibility_flags:\s*\[[\s\S]*"nodejs_compat"[\s\S]*"global_fetch_strictly_public"[\s\S]*\]/,
+  );
+  assert.match(bundleAudit, /dist[\s\S]*server[\s\S]*wrangler\.json/);
+  assert.match(bundleAudit, /global_fetch_strictly_public/);
+  assert.match(bundleAudit, /compatibilityFlags\.includes\(requiredFlag\)/);
 });

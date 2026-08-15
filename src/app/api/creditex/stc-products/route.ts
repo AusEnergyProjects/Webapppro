@@ -19,7 +19,6 @@ import {
 } from "@/lib/creditex-calculator-route-response";
 import { CreditexSresRegistryError } from "@/lib/creditex-sres-registry";
 import {
-  ensureCerSresProductRegistryCurrent,
   loadCerSresRegistryStatus,
   searchCerSresProducts,
   syncCerSresProductRegistry,
@@ -27,6 +26,9 @@ import {
   type CreditexSresReviewedProductCountDecrease,
 } from "@/lib/creditex-sres-registry-server";
 import {
+  CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER,
+  creditexProductRegistryRefreshDue,
+  enqueueCreditexProductRegistryRefresh,
   withCreditexProductRegistryFleetLease,
 } from
   "@/lib/creditex-product-registry-maintenance";
@@ -138,10 +140,17 @@ export async function GET(request: Request) {
     const installationDate = parameters.get("installationDate");
     if (!technology && !installationDate) {
       const registry = await loadCerSresRegistryStatus(database);
-      return json(projectCreditexCalculatorReadResponse(access.accessType, {
+      const responseBody = projectCreditexCalculatorReadResponse(access.accessType, {
         ok: true,
         registry,
-      }));
+      });
+      if (creditexProductRegistryRefreshDue(registry)) {
+        await enqueueCreditexProductRegistryRefresh(database, "cer_sres_swh");
+        return json(responseBody, 200, {
+          [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: "cer_sres_swh",
+        });
+      }
+      return json(responseBody);
     }
     const searchInput = {
       technology: String(technology || "") as
@@ -165,22 +174,30 @@ export async function GET(request: Request) {
           || error.code === "SRES_PRODUCT_REGISTRY_UNAVAILABLE"
         );
       if (!recoveryRequired) throw error;
-      const artifactStore = (env as unknown as {
-        EVIDENCE?: CreditexSresArtifactStore;
-      }).EVIDENCE;
-      await withCreditexProductRegistryFleetLease(
+      await enqueueCreditexProductRegistryRefresh(
         database,
-        () => ensureCerSresProductRegistryCurrent(
-          database,
-          { artifactStore },
-        ),
+        "cer_sres_swh",
       );
-      result = await searchCerSresProducts(database, searchInput);
+      return json({
+        ok: false,
+        code: "OFFICIAL_PRODUCT_FLEET_BUSY",
+        error: "The exact CER product registry is updating. The calculator will retry automatically.",
+      }, 503, {
+        "Retry-After": "3",
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: "cer_sres_swh",
+      });
     }
-    return json(projectCreditexCalculatorReadResponse(access.accessType, {
+    const responseBody = projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,
       ...result,
-    }));
+    });
+    if (creditexProductRegistryRefreshDue(result.registry)) {
+      await enqueueCreditexProductRegistryRefresh(database, "cer_sres_swh");
+      return json(responseBody, 200, {
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: "cer_sres_swh",
+      });
+    }
+    return json(responseBody);
   } catch (error) {
     return errorResponse(error);
   }
@@ -233,6 +250,22 @@ export async function POST(request: Request) {
         "A reviewed source decrease requires a governance-verified administrator.",
       );
     }
+    if (standardRefresh) {
+      await enqueueCreditexProductRegistryRefresh(
+        database,
+        "cer_sres_swh",
+      );
+      const registry = await loadCerSresRegistryStatus(database);
+      return json({
+        ok: true,
+        queued: true,
+        registryCodes: ["cer_sres_swh"],
+        registry,
+      }, 202, {
+        "Retry-After": "3",
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: "cer_sres_swh",
+      });
+    }
     const reviewedCountDecrease: CreditexSresReviewedProductCountDecrease
       | undefined = reviewedDecreaseRefresh
         ? {
@@ -247,9 +280,10 @@ export async function POST(request: Request) {
     }).EVIDENCE;
     const result = await withCreditexProductRegistryFleetLease(
       database,
-      () => syncCerSresProductRegistry(database, {
+      (fleetLease) => syncCerSresProductRegistry(database, {
         artifactStore,
         reviewedCountDecrease,
+        fleetLeaseId: fleetLease.leaseId,
       }),
     );
     const registry = await loadCerSresRegistryStatus(database);

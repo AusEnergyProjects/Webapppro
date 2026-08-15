@@ -55,11 +55,50 @@ type CreditexLatestEstimateAction =
   | { type: "accept"; estimate: TradeRebateEstimateSummary }
   | { type: "invalidate" };
 
+const CREDITEX_REGISTRY_STATUS_POLL_INITIAL_DELAY_MS = 5_000;
+const CREDITEX_REGISTRY_STATUS_POLL_INTERVAL_MS = 15_000;
+const CREDITEX_REGISTRY_STATUS_POLL_TIMEOUT_MS = 30 * 60_000;
+
+type CreditexRegistryStatusPoll = Readonly<{
+  generation: number;
+  programCode: string;
+  registryCodes: readonly string[];
+  sourceLabel: string;
+  currentLabel: string;
+  requestTimeoutMs: number;
+  deadlineAt: number;
+}>;
+
 export function creditexLatestEstimateReducer(
   _current: TradeRebateEstimateSummary | null,
   action: CreditexLatestEstimateAction,
 ) {
   return action.type === "accept" ? action.estimate : null;
+}
+
+function registryStatusRecord(value: unknown) {
+  const status = objectValue(value);
+  return typeof status?.registryCode === "string" ? status : null;
+}
+
+export function creditexAutomaticRegistryPollState(
+  registryCodes: readonly string[],
+  registries: readonly unknown[],
+  refreshQueuedRegistryCodes: readonly string[],
+) {
+  const statuses = registries.map(registryStatusRecord).filter(Boolean);
+  const requested = registryCodes.map((registryCode) => statuses.find(
+    (status) => status?.registryCode === registryCode,
+  ) || null);
+  if (requested.some((status) => (
+    objectValue(status?.lastAttempt)?.status === "failed"
+  ))) return "failed" as const;
+  if (
+    refreshQueuedRegistryCodes.length > 0
+    || requested.length !== registryCodes.length
+    || requested.some((status) => status?.status !== "current")
+  ) return "pending" as const;
+  return "complete" as const;
 }
 
 type CreditexCertificateGrossValue = {
@@ -449,7 +488,7 @@ export function creditexAutomaticRegistryRefreshContract(programCode: string) {
       sourceDescription: "Automatic VEU-approved product source",
       buttonLabel: "Refresh VEU-approved products",
       currentLabel: "VEU Public Registry rows are current.",
-      requestTimeoutMs: 300_000,
+      requestTimeoutMs: 25_000,
     } as const;
   }
   if (
@@ -462,7 +501,7 @@ export function creditexAutomaticRegistryRefreshContract(programCode: string) {
       sourceDescription: "Automatic NSW official product data",
       buttonLabel: "Refresh NSW official products",
       currentLabel: "NSW official product rows are current.",
-      requestTimeoutMs: 300_000,
+      requestTimeoutMs: 25_000,
     } as const;
   }
   return null;
@@ -476,6 +515,7 @@ export async function creditexRefreshAutomaticProductRegistries(
   },
 ) {
   let recordCount = 0;
+  let queuedRegistryCount = 0;
   for (const registryCode of contract.registryCodes) {
     const result = await api("/api/creditex/official-products", {
       method: "POST",
@@ -484,15 +524,23 @@ export async function creditexRefreshAutomaticProductRegistries(
         registryCode,
       }),
     }, { requestTimeoutMs: contract.requestTimeoutMs });
+    if (result.queued !== true) {
+      throw new Error(
+        `The ${registryCode} update was not accepted by the background refresh queue.`,
+      );
+    }
+    queuedRegistryCount += 1;
     const registries = Array.isArray(result.registries)
       ? result.registries as Array<Record<string, unknown>>
       : [];
     recordCount += registries.reduce(
-      (total, registry) => total + Number(registry.recordCount || 0),
+      (total, registry) => total + (
+        registry.status === "current" ? Number(registry.recordCount || 0) : 0
+      ),
       0,
     );
   }
-  return recordCount;
+  return { queuedRegistryCount, recordCount };
 }
 
 function CreditexLocalProgramCalculator({
@@ -763,6 +811,9 @@ export function CreditexAllProgramCalculator({
   const [registryRefreshBusy, setRegistryRefreshBusy] = useState(false);
   const [registryRefreshNotice, setRegistryRefreshNotice] = useState("");
   const [registryRefreshError, setRegistryRefreshError] = useState("");
+  const [registryStatusPoll, setRegistryStatusPoll] =
+    useState<CreditexRegistryStatusPoll | null>(null);
+  const registryStatusPollGenerationRef = useRef(0);
   const [latestEstimate, dispatchLatestEstimate] = useReducer(
     creditexLatestEstimateReducer,
     null,
@@ -780,6 +831,135 @@ export function CreditexAllProgramCalculator({
   const registryRefreshContract = creditexAutomaticRegistryRefreshContract(
     programCode,
   );
+
+  const cancelRegistryStatusPoll = useCallback(() => {
+    registryStatusPollGenerationRef.current += 1;
+    setRegistryStatusPoll(null);
+  }, []);
+
+  useEffect(() => {
+    if (!registryStatusPoll) return;
+    const activeContract = creditexAutomaticRegistryRefreshContract(programCode);
+    const contractChanged = role !== "admin"
+      || registryStatusPoll.programCode !== programCode
+      || !activeContract
+      || JSON.stringify(activeContract.registryCodes)
+        !== JSON.stringify(registryStatusPoll.registryCodes);
+    if (contractChanged) {
+      registryStatusPollGenerationRef.current += 1;
+      return;
+    }
+
+    let active = true;
+    let timer: number | null = null;
+    let controller: AbortController | null = null;
+    const generation = registryStatusPoll.generation;
+    const stillActive = () => active
+      && registryStatusPollGenerationRef.current === generation;
+
+    const finishTimedOut = () => {
+      if (!stillActive()) return;
+      setRegistryRefreshNotice("");
+      setRegistryRefreshError(
+        `The accepted ${registryStatusPoll.sourceLabel} update was not confirmed current within 30 minutes. Product choices were not reloaded. Refresh again to request another controlled update.`,
+      );
+      setRegistryStatusPoll(null);
+    };
+
+    const schedule = (delay: number) => {
+      if (!stillActive()) return;
+      const remaining = registryStatusPoll.deadlineAt - Date.now();
+      if (remaining <= 0) {
+        finishTimedOut();
+        return;
+      }
+      timer = window.setTimeout(
+        () => void pollRegistryStatus(),
+        Math.min(delay, remaining),
+      );
+    };
+
+    const pollRegistryStatus = async () => {
+      if (!stillActive()) return;
+      controller = new AbortController();
+      try {
+        const [statusResult, continuationResults] = await Promise.all([
+          api(
+            "/api/creditex/official-products",
+            { signal: controller.signal },
+            { requestTimeoutMs: registryStatusPoll.requestTimeoutMs },
+          ),
+          Promise.all(registryStatusPoll.registryCodes.map(
+            async (registryCode) => ({
+              registryCode,
+              result: await api(
+                `/api/creditex/official-products?continueRegistry=${encodeURIComponent(registryCode)}`,
+                { signal: controller?.signal },
+                { requestTimeoutMs: registryStatusPoll.requestTimeoutMs },
+              ),
+            }),
+          )),
+        ]);
+        if (!stillActive()) return;
+
+        const registries = Array.isArray(statusResult.registries)
+          ? statusResult.registries.map(registryStatusRecord).filter(Boolean)
+          : [];
+        const queuedRegistryCodes = continuationResults
+          .filter(({ result }) => result.refreshQueued === true)
+          .map(({ registryCode }) => registryCode);
+        const failedRegistryCodes = registries.flatMap((status) => {
+          const lastAttempt = objectValue(status?.lastAttempt);
+          return registryStatusPoll.registryCodes.includes(
+            String(status?.registryCode || ""),
+          ) && lastAttempt?.status === "failed"
+            ? [String(status?.registryCode || "")]
+            : [];
+        }).filter(Boolean);
+        const pollState = creditexAutomaticRegistryPollState(
+          registryStatusPoll.registryCodes,
+          registries,
+          queuedRegistryCodes,
+        );
+
+        if (pollState === "complete") {
+          setRegistryRefreshError("");
+          setRegistryRefreshNotice(
+            `${registryStatusPoll.currentLabel} Product choices reloaded automatically.`,
+          );
+          setRegistryRefreshVersion((current) => current + 1);
+          setRegistryStatusPoll(null);
+          return;
+        }
+
+        if (pollState === "failed") {
+          setRegistryRefreshError(
+            `The accepted official data update is not current. The last controlled refresh for ${failedRegistryCodes.join(", ")} did not complete. Status checks will continue automatically.`,
+          );
+          setRegistryRefreshNotice("");
+        } else {
+          setRegistryRefreshError("");
+          setRegistryRefreshNotice(
+            `The accepted ${registryStatusPoll.sourceLabel} update is not current yet. Status checks will continue automatically, and product choices will reload after every requested registry is current.`,
+          );
+        }
+      } catch {
+        if (!stillActive()) return;
+        setRegistryRefreshNotice("");
+        setRegistryRefreshError(
+          "The accepted official data update has not been confirmed current because the latest status check failed. Checking again automatically.",
+        );
+      }
+      schedule(CREDITEX_REGISTRY_STATUS_POLL_INTERVAL_MS);
+    };
+
+    schedule(CREDITEX_REGISTRY_STATUS_POLL_INITIAL_DELAY_MS);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [api, programCode, registryStatusPoll, role]);
 
   function acceptSresEstimate(estimate: CreditexSresEstimateResult) {
     dispatchLatestEstimate({
@@ -827,21 +1007,37 @@ export function CreditexAllProgramCalculator({
 
   async function refreshAutomaticProductRegistry() {
     if (!registryRefreshContract) return;
+    cancelRegistryStatusPoll();
     invalidateLatestEstimate();
     setRegistryRefreshBusy(true);
     setRegistryRefreshNotice("");
     setRegistryRefreshError("");
     try {
-      const recordCount = await creditexRefreshAutomaticProductRegistries(
+      const { queuedRegistryCount, recordCount } =
+        await creditexRefreshAutomaticProductRegistries(
         api,
         registryRefreshContract,
       );
       setRegistryRefreshNotice(
         recordCount > 0
-          ? `${recordCount.toLocaleString("en-AU")} ${registryRefreshContract.currentLabel}`
-          : registryRefreshContract.currentLabel,
+          ? `${queuedRegistryCount} official data update${
+              queuedRegistryCount === 1 ? "" : "s"
+            } accepted. ${recordCount.toLocaleString("en-AU")} current approved rows remain available while status checks continue automatically.`
+          : `${queuedRegistryCount} official data update${
+              queuedRegistryCount === 1 ? "" : "s"
+            } accepted. Status checks will continue automatically, and product choices will load when every requested registry is current.`,
       );
-      setRegistryRefreshVersion((current) => current + 1);
+      const generation = registryStatusPollGenerationRef.current + 1;
+      registryStatusPollGenerationRef.current = generation;
+      setRegistryStatusPoll({
+        generation,
+        programCode,
+        registryCodes: [...registryRefreshContract.registryCodes],
+        sourceLabel: registryRefreshContract.sourceLabel,
+        currentLabel: registryRefreshContract.currentLabel,
+        requestTimeoutMs: registryRefreshContract.requestTimeoutMs,
+        deadlineAt: Date.now() + CREDITEX_REGISTRY_STATUS_POLL_TIMEOUT_MS,
+      });
     } catch (caught) {
       setRegistryRefreshError(
         caught instanceof Error
@@ -870,6 +1066,7 @@ export function CreditexAllProgramCalculator({
             value={programCode}
             disabled={registryRefreshBusy}
             onChange={(event) => {
+              cancelRegistryStatusPoll();
               setProgramCode(event.target.value);
               invalidateLatestEstimate();
               setRegistryRefreshNotice("");

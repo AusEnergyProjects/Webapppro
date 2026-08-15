@@ -413,7 +413,7 @@ export function CreditexCompliancePortal() {
                 ? Math.min(Math.max(retryAfterSeconds * 1_000, 1_000), 5_000)
                 : 1_000;
               setLoadingMessage(
-                `Preparing governed compliance controls (${attempt + 1} of 20)...`,
+                "Updating the exact official product register. Product choices will load automatically.",
               );
               await new Promise((resolve) =>
                 window.setTimeout(resolve, retryAfterMilliseconds)

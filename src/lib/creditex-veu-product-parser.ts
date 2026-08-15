@@ -2733,6 +2733,7 @@ function parseCreditexVeuStreamProductArtifact(bytes: Uint8Array) {
 
 const CREDITEX_VEU_STREAM_BATCH_SIZE = 500;
 const CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE = 5_000;
+const CREDITEX_VEU_STREAM_MAXIMUM_RESUME_BATCHES = 2_000;
 
 function creditexVeuStreamHeader(bytes: Uint8Array) {
   let header: JsonObject | null = null;
@@ -3085,9 +3086,43 @@ async function* creditexVeuRecordBatches(
   loadValues: (
     sourceRecordKeys: readonly string[],
   ) => Promise<ReadonlyMap<string, Readonly<Record<string, unknown>>>>,
+  resume?: Readonly<{
+    afterRecordCount: number;
+    afterSourceRecordKey: string;
+    maximumBatches: number;
+  }>,
 ): AsyncGenerator<readonly CreditexOfficialProductRecord[]> {
   const expectedTotal = inspectCreditexVeuStreamProductArtifact(bytes, contentType);
+  const afterRecordCount = resume?.afterRecordCount ?? 0;
+  const afterSourceRecordKey = resume?.afterSourceRecordKey ?? "";
+  const maximumBatches = resume?.maximumBatches;
+  if (
+    !Number.isSafeInteger(afterRecordCount)
+    || afterRecordCount < 0
+    || afterRecordCount > expectedTotal
+    || (
+      afterRecordCount === 0
+        ? afterSourceRecordKey !== ""
+        : (
+          typeof afterSourceRecordKey !== "string"
+          || afterSourceRecordKey.length < 1
+          || afterSourceRecordKey.length > 500
+        )
+    )
+    || (
+      resume !== undefined
+      && (
+        !Number.isSafeInteger(maximumBatches)
+        || Number(maximumBatches) < 1
+        || Number(maximumBatches) > CREDITEX_VEU_STREAM_MAXIMUM_RESUME_BATCHES
+      )
+    )
+  ) {
+    return sourceError("stream artifact resume cursor is invalid");
+  }
   let recordIndex = 0;
+  let checkpointVerified = afterRecordCount === 0;
+  let yieldedBatchCount = 0;
   for (const { value } of veuStreamLines(bytes)) {
     if (value.recordType !== "page") continue;
     const decoded = decodeCreditexVeuPowerBiProductPage(
@@ -3097,22 +3132,55 @@ async function* creditexVeuRecordBatches(
       CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (let offset = 0; offset < decoded.rows.length; offset += CREDITEX_VEU_STREAM_BATCH_SIZE) {
-      const rows = decoded.rows.slice(offset, offset + CREDITEX_VEU_STREAM_BATCH_SIZE);
+      const pageRows = decoded.rows.slice(
+        offset,
+        offset + CREDITEX_VEU_STREAM_BATCH_SIZE,
+      );
+      const batchStart = recordIndex;
+      recordIndex += pageRows.length;
+      if (!checkpointVerified && afterRecordCount <= recordIndex) {
+        const checkpointOffset = afterRecordCount - batchStart - 1;
+        const checkpointRow = pageRows[checkpointOffset];
+        if (
+          !checkpointRow
+          || requiredRowText(
+            checkpointRow[1],
+            "stream artifact resume product ID",
+          ) !== afterSourceRecordKey
+        ) {
+          return sourceError("stream artifact resume cursor changed");
+        }
+        checkpointVerified = true;
+      }
+      if (recordIndex <= afterRecordCount) continue;
+      const rows = batchStart < afterRecordCount
+        ? pageRows.slice(afterRecordCount - batchStart)
+        : pageRows;
       const ids = rows.map((row) => requiredRowText(row[0], "page Salesforce Id"));
       const values = await loadValues(ids);
-      const records = rows.map((row) => {
+      const records = rows.map((row, rowOffset) => {
         const id = requiredRowText(row[0], "page Salesforce Id");
         const rawSupplement = values.get(id);
         const supplement = rawSupplement
           ? rawSupplement as unknown as VeuSupplementalRecord
           : undefined;
-        recordIndex += 1;
-        return productRecord(row, recordIndex, supplement);
+        return productRecord(
+          row,
+          batchStart + (pageRows.length - rows.length) + rowOffset + 1,
+          supplement,
+        );
       });
       yield records;
+      yieldedBatchCount += 1;
+      if (
+        maximumBatches !== undefined
+        && yieldedBatchCount >= maximumBatches
+      ) {
+        return;
+      }
     }
   }
-  if (recordIndex !== expectedTotal) {
+  if (!checkpointVerified || recordIndex !== expectedTotal) {
     return sourceError("stream artifact replay count changed");
   }
 }

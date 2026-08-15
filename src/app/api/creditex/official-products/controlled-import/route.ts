@@ -283,7 +283,7 @@ export async function POST(request: Request) {
     const controlledDefinition = { ...definition, fetchSources: async () => artifacts };
     const result = await withCreditexProductRegistryFleetLease(
       database,
-      () => syncOfficialProductRegistry(
+      (fleetLease) => syncOfficialProductRegistry(
         database,
         controlledDefinition,
         {
@@ -304,6 +304,7 @@ export async function POST(request: Request) {
             permissionReviewDecisionId: permission.review_decision_id,
             permissionReviewedByUid: permission.reviewed_by_uid,
           } satisfies CreditexControlledProductImportReview,
+          fleetLeaseId: fleetLease.leaseId,
         },
       ),
     );

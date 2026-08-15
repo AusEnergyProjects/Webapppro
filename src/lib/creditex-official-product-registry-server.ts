@@ -2,6 +2,7 @@ import {
   CREDITEX_OFFICIAL_PRODUCT_KINDS,
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT,
   CREDITEX_PRODUCT_KIND_REGISTRY,
+  CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
   CreditexOfficialProductError,
   officialProductKindsForVeuActivity,
   officialVeuProductCategoryNumbersForActivity,
@@ -14,7 +15,7 @@ import { australianRegulatorDate } from "./creditex-australian-regulator-date.ts
 import { ensureCreditexProductRegistrySchemaGuards } from "./creditex-product-registry-schema-guards.ts";
 
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
-const SYNC_LEASE_MS = 20 * 60 * 1000;
+const SYNC_LEASE_MS = 3 * 60 * 1000;
 const AUTOMATIC_REFRESH_WAIT_MS = 55_000;
 const AUTOMATIC_REFRESH_POLL_MS = 2_000;
 const AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
@@ -24,6 +25,11 @@ const PRODUCT_INSERT_MAX_ROWS = 500;
 const PRODUCT_INSERT_MAX_BIND_BYTES = 1_500_000;
 const PRODUCT_INSERT_BATCH_MAX_STATEMENTS = 4;
 const PRODUCT_INSERT_BATCH_MAX_BIND_BYTES = 6_000_000;
+export const CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET = 15_000;
+const OFFICIAL_PRODUCT_REFRESH_REPLAY_CONTRACT =
+  "creditex-official-product-refresh-replay/v1";
+const STREAMING_QUANTUM_MAX_BATCHES = 4;
+const HISTORICAL_CLEANUP_RECORD_BUDGET = 2_000;
 const PRODUCT_SELECTION_ID_PREFIX = "official-product-v1:";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9:_-]*$/;
@@ -68,6 +74,11 @@ export type CreditexOfficialProductStreamingParser = Readonly<{
     loadValues: (
       sourceRecordKeys: readonly string[],
     ) => Promise<ReadonlyMap<string, Readonly<Record<string, unknown>>>>,
+    resume?: Readonly<{
+      afterRecordCount: number;
+      afterSourceRecordKey: string;
+      maximumBatches: number;
+    }>,
   ): AsyncIterable<readonly CreditexOfficialProductRecord[]>;
 }>;
 
@@ -172,24 +183,33 @@ export async function verifyCreditexControlledProductPermissionArtifact(
 
 function withOfficialSourceFetchDeadline(
   fetchImpl: CreditexOfficialProductFetch,
+  timeoutMs = OFFICIAL_SOURCE_FETCH_TIMEOUT_MS,
+  operationSignal?: AbortSignal,
 ): CreditexOfficialProductFetch {
   return async (input, init = {}) => {
     const controller = new AbortController();
-    const externalSignal = init.signal;
-    const abortFromExternal = () => controller.abort(externalSignal?.reason);
-    if (externalSignal?.aborted) abortFromExternal();
-    else externalSignal?.addEventListener("abort", abortFromExternal, {
-      once: true,
-    });
+    const externalSignals = [init.signal, operationSignal].filter(
+      (signal): signal is AbortSignal => Boolean(signal),
+    );
+    const abortFromExternal = (event: Event) => {
+      const signal = event.currentTarget as AbortSignal;
+      controller.abort(signal.reason);
+    };
+    for (const signal of externalSignals) {
+      if (signal.aborted) controller.abort(signal.reason);
+      else signal.addEventListener("abort", abortFromExternal, { once: true });
+    }
     const timeout = setTimeout(
       () => controller.abort("official-product-source-timeout"),
-      OFFICIAL_SOURCE_FETCH_TIMEOUT_MS,
+      timeoutMs,
     );
     try {
       return await fetchImpl(input, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timeout);
-      externalSignal?.removeEventListener("abort", abortFromExternal);
+      for (const signal of externalSignals) {
+        signal.removeEventListener("abort", abortFromExternal);
+      }
     }
   };
 }
@@ -200,6 +220,45 @@ type SnapshotRow = {
   source_sha256: string;
   record_count: number;
   activated_at: string | null;
+};
+
+type StagingSnapshotRow = SnapshotRow & {
+  contract: string;
+  source_count: number;
+  created_at: string;
+};
+
+type ArtifactRow = {
+  source_key: string;
+  source_url: string;
+  source_sha256: string;
+  content_type: string;
+  byte_length: number;
+  record_count: number;
+  object_key: string;
+};
+
+type RefreshProgressPhase =
+  | "supplements"
+  | "products"
+  | "activate"
+  | "cleanup";
+
+type RefreshProgressRow = {
+  registry_code: string;
+  snapshot_id: string;
+  replay_contract: string;
+  source_index: number;
+  source_key: string;
+  phase: RefreshProgressPhase;
+  supplement_batch_count: number;
+  supplement_value_count: number;
+  product_batch_count: number;
+  product_record_count: number;
+  last_product_record_key: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type SyncRunRow = {
@@ -296,6 +355,19 @@ function fail(
   message: string,
 ): never {
   throw new CreditexOfficialProductError(code, status, message);
+}
+
+function assertOfficialProductRefreshActive(
+  signal: AbortSignal | undefined,
+  registryCode: string,
+) {
+  if (signal?.aborted) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE",
+      503,
+      `Official registry ${registryCode} reached its bounded background deadline.`,
+    );
+  }
 }
 
 function canonicalJson(value: unknown): string {
@@ -1147,6 +1219,7 @@ async function acquireLease(
   registryCode: string,
   leaseId: string,
   startedAt: string,
+  fleetLeaseId?: string,
 ) {
   const expiresAt = new Date(
     new Date(startedAt).getTime() + SYNC_LEASE_MS,
@@ -1158,8 +1231,25 @@ async function acquireLease(
       lease_id = excluded.lease_id,
       started_at = excluded.started_at,
       expires_at = excluded.expires_at
-    WHERE compliance_official_product_sync_leases.expires_at <= excluded.started_at`)
-    .bind(registryCode, leaseId, startedAt, expiresAt)
+    WHERE compliance_official_product_sync_leases.expires_at <= excluded.started_at
+      OR (
+        compliance_official_product_sync_leases.lease_id <> excluded.lease_id
+        AND ? <> '' AND EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+        WHERE fleet.registry_code = ?
+          AND fleet.lease_id = ?
+          AND fleet.expires_at > excluded.started_at
+        )
+      )`)
+    .bind(
+      registryCode,
+      leaseId,
+      startedAt,
+      expiresAt,
+      fleetLeaseId || "",
+      CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+      fleetLeaseId || "",
+    )
     .run();
   if (Number(result.meta?.changes || 0) !== 1) {
     return fail(
@@ -1210,6 +1300,148 @@ async function cleanStagingRows(db: D1Database, registryCode: string) {
     .run();
 }
 
+type ResumableStagingSnapshot = Readonly<{
+  snapshot: StagingSnapshotRow;
+  artifacts: readonly RetainedSourceArtifact[];
+}>;
+
+async function loadResumableStagingSnapshot(
+  db: D1Database,
+  definition: CreditexOfficialProductRegistryDefinition,
+  current: SnapshotRow | null,
+): Promise<ResumableStagingSnapshot | null> {
+  const staging = await db.prepare(`SELECT id, contract, source_manifest_json,
+      source_sha256, source_count, record_count, created_at, activated_at
+    FROM compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'staging'
+    ORDER BY created_at DESC, id DESC LIMIT 2`)
+    .bind(definition.registryCode)
+    .all<StagingSnapshotRow>();
+  const rows = staging.results || [];
+  if (rows.length === 0) return null;
+  const snapshot = rows[0];
+  const createdAt = Date.parse(snapshot.created_at);
+  let manifest: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(snapshot.source_manifest_json) as unknown;
+    manifest = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    manifest = null;
+  }
+  const sourceManifestSha = manifest
+    ? await sha256Hex(canonicalJson(manifest))
+    : "";
+  const manifestSources = Array.isArray(manifest?.sources)
+    ? manifest.sources as readonly unknown[]
+    : [];
+  const artifacts = await db.prepare(`SELECT source_key, source_url,
+      source_sha256, content_type, byte_length, record_count, object_key
+    FROM compliance_official_product_artifacts
+    WHERE snapshot_id = ? ORDER BY source_key`)
+    .bind(snapshot.id)
+    .all<ArtifactRow>();
+  const artifactRows = artifacts.results || [];
+  const artifactBySource = new Map(
+    artifactRows.map((artifact) => [artifact.source_key, artifact]),
+  );
+  const manifestBySource = new Map<string, Record<string, unknown>>();
+  for (const value of manifestSources) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const source = value as Record<string, unknown>;
+    if (typeof source.sourceKey === "string") {
+      manifestBySource.set(source.sourceKey, source);
+    }
+  }
+  const retained: RetainedSourceArtifact[] = [];
+  let valid = rows.length === 1
+    && Number.isFinite(createdAt)
+    && snapshot.contract === CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT
+    && snapshot.activated_at === null
+    && snapshot.source_count === definition.sources.length
+    && snapshot.record_count > 0
+    && sourceManifestSha === snapshot.source_sha256
+    && manifest?.contract === CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT
+    && manifest?.registryCode === definition.registryCode
+    && manifest?.title === definition.title
+    && manifestSources.length === definition.sources.length
+    && artifactRows.length === definition.sources.length;
+  for (const source of definition.sources) {
+    const artifact = artifactBySource.get(source.sourceKey);
+    const manifestSource = manifestBySource.get(source.sourceKey);
+    const expectedProductIdentity = source.productKind
+      ? { productKind: source.productKind }
+      : { productKinds: source.productKinds };
+    if (
+      !artifact
+      || !manifestSource
+      || manifestSource.url !== source.url
+      || manifestSource.licence !== source.licence
+      || canonicalJson(
+          source.productKind
+            ? { productKind: manifestSource.productKind }
+            : { productKinds: manifestSource.productKinds },
+        ) !== canonicalJson(expectedProductIdentity)
+      || manifestSource.contentType !== artifact.content_type
+      || manifestSource.byteLength !== artifact.byte_length
+      || manifestSource.recordCount !== artifact.record_count
+      || manifestSource.sha256 !== artifact.source_sha256
+      || manifestSource.objectKey !== artifact.object_key
+      || artifact.source_url !== source.url
+      || !source.expectedContentTypes.includes(artifact.content_type)
+      || artifact.byte_length < 1
+      || artifact.byte_length > source.maximumBytes
+      || artifact.record_count < source.minimumRecords
+    ) {
+      valid = false;
+      continue;
+    }
+    retained.push({
+      source,
+      contentType: artifact.content_type,
+      byteLength: artifact.byte_length,
+      sha256: artifact.source_sha256,
+      recordCount: artifact.record_count,
+      objectKey: artifact.object_key,
+    });
+  }
+  if (valid && current) {
+    const previous = await db.prepare(`SELECT source_key, record_count
+      FROM compliance_official_product_artifacts WHERE snapshot_id = ?`)
+      .bind(current.id)
+      .all<SourceCountRow>();
+    const previousCounts = new Map(
+      (previous.results || []).map((row) => [
+        row.source_key,
+        Number(row.record_count),
+      ]),
+    );
+    valid = retained.every((artifact) => {
+      const previousCount = previousCounts.get(artifact.source.sourceKey);
+      return previousCount === undefined
+        || artifact.recordCount >= previousCount;
+    });
+  }
+  if (!valid || retained.length !== definition.sources.length) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official registry ${definition.registryCode} retained refresh progress could not be verified.`,
+    );
+  }
+  return { snapshot, artifacts: retained };
+}
+
+type ProductInsertFence = Readonly<{
+  registryCode: string;
+  sourceKey: string;
+  revision: number;
+  leaseId: string;
+  fleetLeaseId?: string;
+  leaseFenceAt: string;
+}>;
+
 function pruneUnchangedHistoricalProducts(
   db: D1Database,
   supersededSnapshotId: string,
@@ -1240,39 +1472,24 @@ function pruneUnchangedHistoricalProducts(
     .bind(supersededSnapshotId, currentSnapshotId);
 }
 
-async function insertProductChunks(
+function buildProductInsertStatements(
   db: D1Database,
   snapshotId: string,
   currentSnapshotId: string | null,
   records: readonly StagedOfficialProductRecord[],
+  fence?: ProductInsertFence,
 ) {
-  let pendingStatements: D1PreparedStatement[] = [];
-  let pendingBindBytes = 0;
-  const flushPendingStatements = async () => {
-    if (pendingStatements.length === 0) {
-      return;
-    }
-    const statements = pendingStatements;
-    pendingStatements = [];
-    pendingBindBytes = 0;
-    await db.batch(statements);
-  };
-  const queueRows = async (
+  const pending: Array<Readonly<{
+    statement: D1PreparedStatement;
+    rowCount: number;
+    bindBytes: number;
+  }>> = [];
+  const queueRows = (
     serializedRows: readonly string[],
     payloadBytes: number,
   ) => {
     const payload = `[${serializedRows.join(",")}]`;
-    if (
-      pendingStatements.length > 0
-      && (
-        pendingStatements.length >= PRODUCT_INSERT_BATCH_MAX_STATEMENTS
-        || pendingBindBytes + payloadBytes
-          > PRODUCT_INSERT_BATCH_MAX_BIND_BYTES
-      )
-    ) {
-      await flushPendingStatements();
-    }
-    pendingStatements.push(db.prepare(`INSERT INTO compliance_official_products (
+    const statement = db.prepare(`INSERT INTO compliance_official_products (
       id, snapshot_id, source_key, source_record_key, product_kind,
       manufacturer, brand, model, series, registration_number,
       certificate_number, approval_status, eligible_from, eligible_to,
@@ -1317,9 +1534,50 @@ async function insertProductChunks(
     LEFT JOIN compliance_official_products previous_product
       ON previous_product.snapshot_id = ?
       AND previous_product.source_key = json_extract(value, '$.sourceKey')
-      AND previous_product.source_record_key = json_extract(value, '$.sourceRecordKey')`)
-      .bind(payload, currentSnapshotId || ""));
-    pendingBindBytes += payloadBytes;
+      AND previous_product.source_record_key = json_extract(value, '$.sourceRecordKey')
+    WHERE (? = '' OR (
+      EXISTS (
+        SELECT 1 FROM compliance_official_product_refresh_progress progress
+        WHERE progress.registry_code = ?
+          AND progress.snapshot_id = ?
+          AND progress.source_key = ?
+          AND progress.phase = 'products'
+          AND progress.revision = ?
+      )
+      AND EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases inner_lease
+        WHERE inner_lease.registry_code = ?
+          AND inner_lease.lease_id = ?
+          AND inner_lease.expires_at > ?
+      )
+      AND (? = '' OR EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases fleet
+        WHERE fleet.registry_code = ?
+          AND fleet.lease_id = ?
+          AND fleet.expires_at > ?
+      ))
+    ))`)
+      .bind(
+        payload,
+        currentSnapshotId || "",
+        fence?.registryCode || "",
+        fence?.registryCode || "",
+        snapshotId,
+        fence?.sourceKey || "",
+        fence?.revision || 0,
+        fence?.registryCode || "",
+        fence?.leaseId || "",
+        fence?.leaseFenceAt || "",
+        fence?.fleetLeaseId || "",
+        CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+        fence?.fleetLeaseId || "",
+        fence?.leaseFenceAt || "",
+      );
+    pending.push({
+      statement,
+      rowCount: serializedRows.length,
+      bindBytes: payloadBytes,
+    });
   };
   const encoder = new TextEncoder();
   let serializedRows: string[] = [];
@@ -1364,7 +1622,7 @@ async function insertProductChunks(
           > PRODUCT_INSERT_MAX_BIND_BYTES
       )
     ) {
-      await queueRows(serializedRows, payloadBytes);
+      queueRows(serializedRows, payloadBytes);
       serializedRows = [];
       payloadBytes = 2;
     }
@@ -1379,17 +1637,62 @@ async function insertProductChunks(
     payloadBytes += (serializedRows.length === 1 ? 0 : 1) + serializedRowBytes;
   }
   if (serializedRows.length > 0) {
-    await queueRows(serializedRows, payloadBytes);
+    queueRows(serializedRows, payloadBytes);
   }
-  await flushPendingStatements();
+  return pending;
 }
 
-async function insertStreamingValues(
+async function insertProductChunks(
   db: D1Database,
   snapshotId: string,
+  currentSnapshotId: string | null,
+  records: readonly StagedOfficialProductRecord[],
+) {
+  const pending = buildProductInsertStatements(
+    db,
+    snapshotId,
+    currentSnapshotId,
+    records,
+  );
+  for (let offset = 0; offset < pending.length; offset += PRODUCT_INSERT_BATCH_MAX_STATEMENTS) {
+    const batch = pending.slice(offset, offset + PRODUCT_INSERT_BATCH_MAX_STATEMENTS);
+    const bindBytes = batch.reduce((total, item) => total + item.bindBytes, 0);
+    if (bindBytes > PRODUCT_INSERT_BATCH_MAX_BIND_BYTES) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        "Official product staging exceeded its bounded transaction size.",
+      );
+    }
+    await db.batch(batch.map((item) => item.statement));
+  }
+}
+
+async function loadRefreshProgress(
+  db: D1Database,
+  registryCode: string,
+) {
+  return db.prepare(`SELECT registry_code, snapshot_id, replay_contract,
+      source_index, source_key, phase, supplement_batch_count,
+      supplement_value_count, product_batch_count, product_record_count,
+      last_product_record_key, revision, created_at, updated_at
+    FROM compliance_official_product_refresh_progress
+    WHERE registry_code = ?`)
+    .bind(registryCode)
+    .first<RefreshProgressRow>();
+}
+
+export async function hasPendingCreditexOfficialProductRefresh(
+  db: D1Database,
+  registryCode: string,
+) {
+  await ensureCreditexProductRegistrySchemaGuards(db);
+  return Boolean(await loadRefreshProgress(db, registryCode));
+}
+
+function validatedStreamValues(
   sourceKey: string,
   batch: readonly CreditexOfficialProductStreamValue[],
-  createdAt: string,
 ) {
   if (batch.length < 1 || batch.length > PRODUCT_INSERT_MAX_ROWS) {
     return fail(
@@ -1399,7 +1702,7 @@ async function insertStreamingValues(
     );
   }
   const seen = new Set<string>();
-  const values = batch.map((item) => {
+  return batch.map((item) => {
     const sourceRecordKey = cleanText(
       item.sourceRecordKey,
       "stream value sourceRecordKey",
@@ -1407,10 +1710,7 @@ async function insertStreamingValues(
       true,
     );
     const valueJson = canonicalJson(item.value);
-    if (
-      seen.has(sourceRecordKey)
-      || valueJson.length > 65_536
-    ) {
+    if (seen.has(sourceRecordKey) || valueJson.length > 65_536) {
       return fail(
         "OFFICIAL_PRODUCT_SOURCE_INVALID",
         502,
@@ -1420,14 +1720,37 @@ async function insertStreamingValues(
     seen.add(sourceRecordKey);
     return { sourceRecordKey, value: item.value };
   });
-  await db.prepare(`INSERT INTO compliance_official_product_stream_values (
-      snapshot_id, source_key, source_record_key, value_json, created_at
-    ) SELECT ?, ?,
-      json_extract(value, '$.sourceRecordKey'),
-      json_extract(value, '$.value'), ?
-    FROM json_each(?)`)
-    .bind(snapshotId, sourceKey, createdAt, canonicalJson(values))
-    .run();
+}
+
+function refreshOwnershipPredicate() {
+  return `EXISTS (
+      SELECT 1 FROM compliance_official_product_sync_leases inner_lease
+      WHERE inner_lease.registry_code = ?
+        AND inner_lease.lease_id = ?
+        AND inner_lease.expires_at > ?
+    ) AND (? = '' OR EXISTS (
+      SELECT 1 FROM compliance_official_product_sync_leases fleet
+      WHERE fleet.registry_code = ?
+        AND fleet.lease_id = ?
+        AND fleet.expires_at > ?
+    ))`;
+}
+
+function refreshOwnershipBindings(input: Readonly<{
+  registryCode: string;
+  leaseId: string;
+  fleetLeaseId?: string;
+  leaseFenceAt: string;
+}>) {
+  return [
+    input.registryCode,
+    input.leaseId,
+    input.leaseFenceAt,
+    input.fleetLeaseId || "",
+    CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+    input.fleetLeaseId || "",
+    input.leaseFenceAt,
+  ] as const;
 }
 
 async function loadStreamingValues(
@@ -1464,14 +1787,14 @@ async function loadStreamingValues(
   return values;
 }
 
-async function stageStreamingSource(
+async function bootstrapLegacyRefreshProgress(
   db: D1Database,
-  artifactStore: CreditexOfficialProductArtifactStore,
   artifact: RetainedSourceArtifact,
   snapshotId: string,
-  currentSnapshotId: string | null,
-  activatedOn: string,
-  checkedAt: string,
+  sourceIndex: number,
+  bytes: Uint8Array,
+  sourceCheckedAt: string,
+  operationAt: string,
 ) {
   const parser = artifact.source.streamingParser;
   if (!parser) {
@@ -1481,33 +1804,439 @@ async function stageStreamingSource(
       `Official source ${artifact.source.sourceKey} has no stream parser.`,
     );
   }
-  let bytes: Uint8Array | null = await readRetainedArtifactBytes(
-    artifactStore,
-    artifact,
-  );
-  for (const batch of parser.supplementalBatches(
-    bytes,
-    artifact.contentType,
-  )) {
-    await insertStreamingValues(
-      db,
-      snapshotId,
-      artifact.source.sourceKey,
-      batch,
-      checkedAt,
+  const [streamCountRow, productCountRow, lastProduct] = await Promise.all([
+    db.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_stream_values
+      WHERE snapshot_id = ? AND source_key = ?`)
+      .bind(snapshotId, artifact.source.sourceKey)
+      .first<{ count: number }>(),
+    db.prepare(`SELECT count(*) AS count FROM compliance_official_products
+      WHERE snapshot_id = ? AND source_key = ?`)
+      .bind(snapshotId, artifact.source.sourceKey)
+      .first<{ count: number }>(),
+    db.prepare(`SELECT source_record_key FROM compliance_official_products
+      WHERE snapshot_id = ? AND source_key = ?
+      ORDER BY rowid DESC LIMIT 1`)
+      .bind(snapshotId, artifact.source.sourceKey)
+      .first<{ source_record_key: string }>(),
+  ]);
+  const streamCount = Number(streamCountRow?.count || 0);
+  const productCount = Number(productCountRow?.count || 0);
+  if (
+    !Number.isSafeInteger(streamCount)
+    || streamCount < 0
+    || !Number.isSafeInteger(productCount)
+    || productCount < 0
+    || productCount > artifact.recordCount
+    || (
+      productCount !== artifact.recordCount
+      && productCount % PRODUCT_INSERT_MAX_ROWS !== 0
+    )
+    || Boolean(lastProduct?.source_record_key) !== (productCount > 0)
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official source ${artifact.source.sourceKey} legacy replay boundary is invalid.`,
     );
   }
-  let recordCount = 0;
+  let supplementValueCount = 0;
+  let streamBoundaryMatched = streamCount === 0;
+  for (const batch of parser.supplementalBatches(bytes, artifact.contentType)) {
+    const values = validatedStreamValues(artifact.source.sourceKey, batch);
+    supplementValueCount += values.length;
+    if (supplementValueCount === streamCount) streamBoundaryMatched = true;
+    if (supplementValueCount > streamCount && !streamBoundaryMatched) break;
+  }
+  const completeSupplementValueCount = supplementValueCount;
+  if (
+    !streamBoundaryMatched
+    || streamCount > completeSupplementValueCount
+    || (productCount > 0 && streamCount !== completeSupplementValueCount)
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official source ${artifact.source.sourceKey} legacy supplement boundary is invalid.`,
+    );
+  }
+  let retainedSupplementBatches = 0;
+  let retainedSupplementValues = 0;
+  if (streamCount > 0) {
+    for (const batch of parser.supplementalBatches(bytes, artifact.contentType)) {
+      retainedSupplementBatches += 1;
+      retainedSupplementValues += batch.length;
+      if (retainedSupplementValues >= streamCount) break;
+    }
+  }
+  const phase: RefreshProgressPhase = streamCount < completeSupplementValueCount
+    ? "supplements"
+    : productCount === artifact.recordCount
+      ? "activate"
+      : "products";
+  const lastProductRecordKey = lastProduct?.source_record_key || "";
+  if (productCount > 0) {
+    await parser.recordBatches(
+      bytes,
+      artifact.contentType,
+      (sourceRecordKeys) => loadStreamingValues(
+        db,
+        snapshotId,
+        artifact.source.sourceKey,
+        sourceRecordKeys,
+      ),
+      {
+        afterRecordCount: productCount,
+        afterSourceRecordKey: lastProductRecordKey,
+        maximumBatches: 1,
+      },
+    )[Symbol.asyncIterator]().next();
+  }
+  await db.prepare(`INSERT INTO compliance_official_product_refresh_progress (
+      registry_code, snapshot_id, replay_contract, source_index, source_key,
+      phase, supplement_batch_count, supplement_value_count,
+      product_batch_count, product_record_count, last_product_record_key,
+      revision, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`)
+    .bind(
+      artifact.source.registryCode,
+      snapshotId,
+      OFFICIAL_PRODUCT_REFRESH_REPLAY_CONTRACT,
+      sourceIndex,
+      artifact.source.sourceKey,
+      phase,
+      retainedSupplementBatches,
+      retainedSupplementValues,
+      Math.ceil(productCount / PRODUCT_INSERT_MAX_ROWS),
+      productCount,
+      lastProductRecordKey,
+      sourceCheckedAt,
+      operationAt,
+    )
+    .run();
+  return loadRefreshProgress(db, artifact.source.registryCode);
+}
+
+async function stageSupplementQuantum(
+  db: D1Database,
+  parser: CreditexOfficialProductStreamingParser,
+  bytes: Uint8Array,
+  artifact: RetainedSourceArtifact,
+  progress: RefreshProgressRow,
+  input: Readonly<{
+    checkedAt: string;
+    leaseId: string;
+    fleetLeaseId?: string;
+    leaseFenceAt: string;
+    maximumRecords: number;
+    signal?: AbortSignal;
+  }>,
+) {
+  const selected: Array<readonly ReturnType<typeof validatedStreamValues>[number][]> = [];
+  let batchIndex = 0;
+  let priorValueCount = 0;
+  let hasMore = false;
+  const maximumBatches = Math.max(
+    1,
+    Math.ceil(input.maximumRecords / PRODUCT_INSERT_MAX_ROWS),
+  );
+  for (const batch of parser.supplementalBatches(bytes, artifact.contentType)) {
+    assertOfficialProductRefreshActive(
+      input.signal,
+      artifact.source.registryCode,
+    );
+    const values = validatedStreamValues(artifact.source.sourceKey, batch);
+    if (batchIndex < progress.supplement_batch_count) {
+      priorValueCount += values.length;
+      batchIndex += 1;
+      continue;
+    }
+    if (selected.length >= maximumBatches) {
+      hasMore = true;
+      break;
+    }
+    selected.push(values);
+    batchIndex += 1;
+  }
+  if (priorValueCount !== progress.supplement_value_count) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official source ${artifact.source.sourceKey} supplement cursor changed.`,
+    );
+  }
+  if (selected.length === 0) {
+    if (hasMore) {
+      return fail(
+        "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+        500,
+        `Official source ${artifact.source.sourceKey} supplement replay stalled.`,
+      );
+    }
+    const result = await db.prepare(`UPDATE compliance_official_product_refresh_progress
+      SET phase = 'products', revision = revision + 1, updated_at = ?
+      WHERE registry_code = ? AND snapshot_id = ? AND source_key = ?
+        AND phase = 'supplements' AND revision = ?
+        AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        input.checkedAt,
+        progress.registry_code,
+        progress.snapshot_id,
+        progress.source_key,
+        progress.revision,
+        ...refreshOwnershipBindings({
+          registryCode: progress.registry_code,
+          leaseId: input.leaseId,
+          fleetLeaseId: input.fleetLeaseId,
+          leaseFenceAt: input.leaseFenceAt,
+        }),
+      )
+      .run();
+    if (Number(result.meta?.changes || 0) !== 1) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+        409,
+        `Official registry ${progress.registry_code} refresh ownership was lost.`,
+      );
+    }
+    return loadRefreshProgress(db, progress.registry_code);
+  }
+  let next = progress;
+  for (let offset = 0; offset < selected.length; offset += STREAMING_QUANTUM_MAX_BATCHES) {
+    assertOfficialProductRefreshActive(
+      input.signal,
+      artifact.source.registryCode,
+    );
+    const quantum = selected.slice(offset, offset + STREAMING_QUANTUM_MAX_BATCHES);
+    const statements = quantum.map((values) => db.prepare(`INSERT INTO
+        compliance_official_product_stream_values (
+          snapshot_id, source_key, source_record_key, value_json, created_at
+        ) SELECT ?, ?, json_extract(value, '$.sourceRecordKey'),
+          json_extract(value, '$.value'), ?
+        FROM json_each(?)
+        WHERE EXISTS (
+          SELECT 1 FROM compliance_official_product_refresh_progress progress
+          WHERE progress.registry_code = ? AND progress.snapshot_id = ?
+            AND progress.source_key = ? AND progress.phase = 'supplements'
+            AND progress.revision = ?
+        ) AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        next.snapshot_id,
+        next.source_key,
+        input.checkedAt,
+        canonicalJson(values),
+        next.registry_code,
+        next.snapshot_id,
+        next.source_key,
+        next.revision,
+        ...refreshOwnershipBindings({
+          registryCode: next.registry_code,
+          leaseId: input.leaseId,
+          fleetLeaseId: input.fleetLeaseId,
+          leaseFenceAt: input.leaseFenceAt,
+        }),
+      ));
+    const addedValues = quantum.reduce((total, values) => total + values.length, 0);
+    const finalQuantum = offset + quantum.length === selected.length;
+    const nextPhase = finalQuantum && !hasMore ? "products" : "supplements";
+    statements.push(db.prepare(`UPDATE compliance_official_product_refresh_progress
+      SET phase = ?, supplement_batch_count = ?, supplement_value_count = ?,
+        revision = revision + 1, updated_at = ?
+      WHERE registry_code = ? AND snapshot_id = ? AND source_key = ?
+        AND phase = 'supplements' AND revision = ?
+        AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        nextPhase,
+        next.supplement_batch_count + quantum.length,
+        next.supplement_value_count + addedValues,
+        input.checkedAt,
+        next.registry_code,
+        next.snapshot_id,
+        next.source_key,
+        next.revision,
+        ...refreshOwnershipBindings({
+          registryCode: next.registry_code,
+          leaseId: input.leaseId,
+          fleetLeaseId: input.fleetLeaseId,
+          leaseFenceAt: input.leaseFenceAt,
+        }),
+      ));
+    const results = await db.batch(statements);
+    for (let index = 0; index < quantum.length; index += 1) {
+      if (Number(results[index]?.meta?.changes || 0) !== quantum[index].length) {
+        return fail(
+          "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+          409,
+          `Official registry ${next.registry_code} refresh ownership was lost.`,
+        );
+      }
+    }
+    if (Number(results[results.length - 1]?.meta?.changes || 0) !== 1) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+        409,
+        `Official registry ${next.registry_code} refresh ownership was lost.`,
+      );
+    }
+    const loaded = await loadRefreshProgress(db, next.registry_code);
+    if (!loaded) {
+      return fail(
+        "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+        500,
+        `Official registry ${next.registry_code} lost its replay progress.`,
+      );
+    }
+    next = loaded;
+  }
+  return next;
+}
+
+async function stageProductQuantum(
+  db: D1Database,
+  parser: CreditexOfficialProductStreamingParser,
+  bytes: Uint8Array,
+  artifact: RetainedSourceArtifact,
+  currentSnapshotId: string | null,
+  activatedOn: string,
+  progress: RefreshProgressRow,
+  input: Readonly<{
+    checkedAt: string;
+    leaseId: string;
+    fleetLeaseId?: string;
+    leaseFenceAt: string;
+    maximumRecords: number;
+    signal?: AbortSignal;
+  }>,
+) {
+  let next = progress;
+  let insertedThisRun = 0;
+  let pendingRecords: StagedOfficialProductRecord[] = [];
+  let pendingParserBatches = 0;
+  const commit = async () => {
+    if (pendingRecords.length === 0) return;
+    assertOfficialProductRefreshActive(
+      input.signal,
+      artifact.source.registryCode,
+    );
+    const records = pendingRecords;
+    const parserBatchCount = pendingParserBatches;
+    pendingRecords = [];
+    pendingParserBatches = 0;
+    const fence: ProductInsertFence = {
+      registryCode: next.registry_code,
+      sourceKey: next.source_key,
+      revision: next.revision,
+      leaseId: input.leaseId,
+      fleetLeaseId: input.fleetLeaseId,
+      leaseFenceAt: input.leaseFenceAt,
+    };
+    const productStatements = buildProductInsertStatements(
+      db,
+      next.snapshot_id,
+      currentSnapshotId,
+      records,
+      fence,
+    );
+    const bindBytes = productStatements.reduce(
+      (total, item) => total + item.bindBytes,
+      0,
+    );
+    if (
+      productStatements.length > PRODUCT_INSERT_BATCH_MAX_STATEMENTS
+      || bindBytes > PRODUCT_INSERT_BATCH_MAX_BIND_BYTES
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${artifact.source.sourceKey} exceeded its replay quantum.`,
+      );
+    }
+    const nextRecordCount = next.product_record_count + records.length;
+    const nextPhase = nextRecordCount === artifact.recordCount
+      ? "activate"
+      : "products";
+    const lastProductRecordKey = records[records.length - 1].sourceRecordKey;
+    const progressStatement = db.prepare(`UPDATE
+        compliance_official_product_refresh_progress
+      SET phase = ?, product_batch_count = ?, product_record_count = ?,
+        last_product_record_key = ?, revision = revision + 1, updated_at = ?
+      WHERE registry_code = ? AND snapshot_id = ? AND source_key = ?
+        AND phase = 'products' AND revision = ?
+        AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        nextPhase,
+        next.product_batch_count + parserBatchCount,
+        nextRecordCount,
+        lastProductRecordKey,
+        input.checkedAt,
+        next.registry_code,
+        next.snapshot_id,
+        next.source_key,
+        next.revision,
+        ...refreshOwnershipBindings({
+          registryCode: next.registry_code,
+          leaseId: input.leaseId,
+          fleetLeaseId: input.fleetLeaseId,
+          leaseFenceAt: input.leaseFenceAt,
+        }),
+      );
+    const results = await db.batch([
+      ...productStatements.map((item) => item.statement),
+      progressStatement,
+    ]);
+    for (let index = 0; index < productStatements.length; index += 1) {
+      if (
+        Number(results[index]?.meta?.changes || 0)
+          !== productStatements[index].rowCount
+      ) {
+        return fail(
+          "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+          409,
+          `Official registry ${next.registry_code} refresh ownership was lost.`,
+        );
+      }
+    }
+    if (Number(results[results.length - 1]?.meta?.changes || 0) !== 1) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+        409,
+        `Official registry ${next.registry_code} refresh ownership was lost.`,
+      );
+    }
+    insertedThisRun += records.length;
+    const loaded = await loadRefreshProgress(db, next.registry_code);
+    if (!loaded) {
+      return fail(
+        "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+        500,
+        `Official registry ${next.registry_code} lost its replay progress.`,
+      );
+    }
+    next = loaded;
+  };
+  const maximumBatches = Math.max(
+    1,
+    Math.ceil(input.maximumRecords / PRODUCT_INSERT_MAX_ROWS),
+  );
   for await (const rawBatch of parser.recordBatches(
     bytes,
     artifact.contentType,
     (sourceRecordKeys) => loadStreamingValues(
       db,
-      snapshotId,
+      next.snapshot_id,
       artifact.source.sourceKey,
       sourceRecordKeys,
     ),
+    {
+      afterRecordCount: next.product_record_count,
+      afterSourceRecordKey: next.last_product_record_key,
+      maximumBatches,
+    },
   )) {
+    assertOfficialProductRefreshActive(
+      input.signal,
+      artifact.source.registryCode,
+    );
     if (rawBatch.length < 1 || rawBatch.length > PRODUCT_INSERT_MAX_ROWS) {
       return fail(
         "OFFICIAL_PRODUCT_SOURCE_INVALID",
@@ -1531,30 +2260,516 @@ async function stageStreamingSource(
       activatedOn,
       Boolean(currentSnapshotId),
     );
-    await insertProductChunks(
+    const trial = buildProductInsertStatements(
       db,
-      snapshotId,
+      next.snapshot_id,
       currentSnapshotId,
-      staged,
+      [...pendingRecords, ...staged],
+      {
+        registryCode: next.registry_code,
+        sourceKey: next.source_key,
+        revision: next.revision,
+        leaseId: input.leaseId,
+        fleetLeaseId: input.fleetLeaseId,
+        leaseFenceAt: input.leaseFenceAt,
+      },
     );
-    recordCount += staged.length;
+    const trialBytes = trial.reduce((total, item) => total + item.bindBytes, 0);
+    if (
+      pendingRecords.length > 0
+      && (
+        trial.length > PRODUCT_INSERT_BATCH_MAX_STATEMENTS
+        || trialBytes > PRODUCT_INSERT_BATCH_MAX_BIND_BYTES
+      )
+    ) {
+      await commit();
+    }
+    pendingRecords.push(...staged);
+    pendingParserBatches += 1;
+    if (
+      pendingParserBatches >= STREAMING_QUANTUM_MAX_BATCHES
+      || next.product_record_count + pendingRecords.length
+        === artifact.recordCount
+    ) {
+      await commit();
+    }
+    if (insertedThisRun >= input.maximumRecords || next.phase === "activate") {
+      break;
+    }
   }
-  bytes = null;
+  await commit();
   if (
-    recordCount !== artifact.recordCount
-    || recordCount < artifact.source.minimumRecords
+    next.product_record_count > artifact.recordCount
+    || (
+      next.product_record_count === artifact.recordCount
+      && next.product_record_count < artifact.source.minimumRecords
+    )
+    || (next.product_record_count < artifact.recordCount && insertedThisRun === 0)
   ) {
     return fail(
-      "OFFICIAL_PRODUCT_SOURCE_INVALID",
-      502,
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
       `Official source ${artifact.source.sourceKey} stream count did not reconcile.`,
     );
   }
-  await db.prepare(`DELETE FROM compliance_official_product_stream_values
-    WHERE snapshot_id = ? AND source_key = ?`)
-    .bind(snapshotId, artifact.source.sourceKey)
+  return { progress: next, insertedThisRun };
+}
+
+async function stageStreamingSource(
+  db: D1Database,
+  artifactStore: CreditexOfficialProductArtifactStore,
+  artifact: RetainedSourceArtifact,
+  snapshotId: string,
+  sourceIndex: number,
+  currentSnapshotId: string | null,
+  activatedOn: string,
+  sourceCheckedAt: string,
+  checkedAt: string,
+  maximumRecords: number,
+  leaseId: string,
+  fleetLeaseId?: string,
+  leaseFenceAt = new Date().toISOString(),
+  signal?: AbortSignal,
+) {
+  const parser = artifact.source.streamingParser;
+  if (!parser) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      500,
+      `Official source ${artifact.source.sourceKey} has no stream parser.`,
+    );
+  }
+  assertOfficialProductRefreshActive(signal, artifact.source.registryCode);
+  let bytes: Uint8Array | null = await readRetainedArtifactBytes(
+    artifactStore,
+    artifact,
+  );
+  let progress = await loadRefreshProgress(db, artifact.source.registryCode);
+  if (!progress) {
+    progress = await bootstrapLegacyRefreshProgress(
+      db,
+      artifact,
+      snapshotId,
+      sourceIndex,
+      bytes,
+      sourceCheckedAt,
+      checkedAt,
+    );
+  }
+  if (
+    !progress
+    || progress.snapshot_id !== snapshotId
+    || progress.source_index !== sourceIndex
+    || progress.source_key !== artifact.source.sourceKey
+    || progress.replay_contract !== OFFICIAL_PRODUCT_REFRESH_REPLAY_CONTRACT
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official source ${artifact.source.sourceKey} replay progress changed.`,
+    );
+  }
+  const ownership = {
+    checkedAt,
+    leaseId,
+    fleetLeaseId,
+    leaseFenceAt,
+    maximumRecords,
+    signal,
+  };
+  if (progress.phase === "supplements") {
+    const next = await stageSupplementQuantum(
+      db,
+      parser,
+      bytes,
+      artifact,
+      progress,
+      ownership,
+    );
+    if (!next) {
+      return fail(
+        "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+        500,
+        `Official source ${artifact.source.sourceKey} lost supplement progress.`,
+      );
+    }
+    progress = next;
+  }
+  let insertedThisRun = 0;
+  if (progress.phase === "products") {
+    const result = await stageProductQuantum(
+      db,
+      parser,
+      bytes,
+      artifact,
+      currentSnapshotId,
+      activatedOn,
+      progress,
+      ownership,
+    );
+    progress = result.progress;
+    insertedThisRun = result.insertedThisRun;
+  }
+  bytes = null;
+  return {
+    complete: progress.phase === "activate",
+    phase: progress.phase,
+    insertedThisRun,
+    recordCount: progress.product_record_count,
+  };
+}
+
+async function activateOfficialProductStagingSnapshot(
+  db: D1Database,
+  input: Readonly<{
+    registryCode: string;
+    stagingSnapshotId: string;
+    currentSnapshotId: string | null;
+    checkedAt: string;
+    checkedOn: string;
+    sourceManifestJson: string;
+    sourceSha256: string;
+    recordCount: number;
+    reviewAuditMessage: string;
+    leaseId: string;
+    fleetLeaseId?: string;
+    leaseFenceAt?: string;
+    progressRevision?: number;
+    operationAt?: string;
+  }>,
+) {
+  const leaseFenceAt = input.leaseFenceAt || new Date().toISOString();
+  const activationStatements: D1PreparedStatement[] = [];
+  if (input.progressRevision !== undefined) {
+    activationStatements.push(db.prepare(`UPDATE
+        compliance_official_product_refresh_progress
+      SET phase = 'cleanup', revision = revision + 1, updated_at = ?
+      WHERE registry_code = ? AND snapshot_id = ? AND phase = 'activate'
+        AND revision = ? AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        input.operationAt || leaseFenceAt,
+        input.registryCode,
+        input.stagingSnapshotId,
+        input.progressRevision,
+        ...refreshOwnershipBindings({
+          registryCode: input.registryCode,
+          leaseId: input.leaseId,
+          fleetLeaseId: input.fleetLeaseId,
+          leaseFenceAt,
+        }),
+      ));
+  }
+  activationStatements.push(
+    db.prepare(`UPDATE compliance_official_product_snapshots
+      SET status = 'superseded', superseded_at = ?, superseded_on = ?
+      WHERE registry_code = ? AND status = 'current'`)
+      .bind(input.checkedAt, input.checkedOn, input.registryCode),
+    db.prepare(`UPDATE compliance_official_product_snapshots
+      SET status = 'current', activated_at = ?, activated_on = ?,
+        superseded_at = NULL, superseded_on = NULL
+      WHERE id = ? AND registry_code = ? AND status = 'staging'
+        AND EXISTS (
+          SELECT 1 FROM compliance_official_product_sync_leases AS inner_lease
+          WHERE inner_lease.registry_code = ?
+            AND inner_lease.lease_id = ?
+            AND inner_lease.expires_at > ?
+        ) AND (? = '' OR EXISTS (
+          SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+          WHERE fleet.registry_code = ?
+            AND fleet.lease_id = ?
+            AND fleet.expires_at > ?
+        ))`)
+      .bind(
+        input.checkedAt,
+        input.checkedOn,
+        input.stagingSnapshotId,
+        input.registryCode,
+        input.registryCode,
+        input.leaseId,
+        leaseFenceAt,
+        input.fleetLeaseId || "",
+        CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+        input.fleetLeaseId || "",
+        leaseFenceAt,
+      ),
+  );
+  if (
+    input.progressRevision === undefined
+    && input.currentSnapshotId
+  ) {
+    activationStatements.push(pruneUnchangedHistoricalProducts(
+      db,
+      input.currentSnapshotId,
+      input.stagingSnapshotId,
+    ));
+  }
+  activationStatements.push(
+    db.prepare(`INSERT INTO compliance_official_product_sync_runs (
+      id, registry_code, status, snapshot_id, source_manifest_json,
+      source_sha256, record_count, checked_at, message
+    ) VALUES (?, ?, 'success', ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        crypto.randomUUID(),
+        input.registryCode,
+        input.stagingSnapshotId,
+        input.sourceManifestJson,
+        input.sourceSha256,
+        input.recordCount,
+        input.checkedAt,
+        input.reviewAuditMessage,
+      ),
+  );
+  const results = await db.batch(activationStatements);
+  if (
+    input.progressRevision !== undefined
+    && Number(results[0]?.meta?.changes || 0) !== 1
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+      409,
+      `Official registry ${input.registryCode} refresh ownership was lost.`,
+    );
+  }
+}
+
+async function cleanupActivatedRefreshProgress(
+  db: D1Database,
+  progress: RefreshProgressRow,
+  input: Readonly<{
+    leaseId: string;
+    fleetLeaseId?: string;
+    leaseFenceAt: string;
+  }>,
+) {
+  if (progress.phase !== "cleanup") {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official registry ${progress.registry_code} cleanup progress is invalid.`,
+    );
+  }
+  const ownership = refreshOwnershipBindings({
+    registryCode: progress.registry_code,
+    leaseId: input.leaseId,
+    fleetLeaseId: input.fleetLeaseId,
+    leaseFenceAt: input.leaseFenceAt,
+  });
+  const removed = await db.prepare(`DELETE FROM compliance_official_products
+    WHERE id IN (
+      SELECT historical.id
+      FROM compliance_official_products historical
+      JOIN compliance_official_product_snapshots historical_snapshot
+        ON historical_snapshot.id = historical.snapshot_id
+        AND historical_snapshot.registry_code = ?
+        AND historical_snapshot.status = 'superseded'
+      WHERE EXISTS (
+        SELECT 1 FROM compliance_official_products current_product
+        WHERE current_product.snapshot_id = ?
+          AND current_product.source_key = historical.source_key
+          AND current_product.source_record_key = historical.source_record_key
+          AND current_product.product_kind = historical.product_kind
+          AND current_product.manufacturer = historical.manufacturer
+          AND current_product.brand = historical.brand
+          AND current_product.model = historical.model
+          AND current_product.series = historical.series
+          AND current_product.registration_number = historical.registration_number
+          AND current_product.certificate_number = historical.certificate_number
+          AND current_product.approval_status = historical.approval_status
+          AND current_product.eligible_from = historical.eligible_from
+          AND current_product.eligible_to = historical.eligible_to
+          AND current_product.available_in_australia = historical.available_in_australia
+          AND current_product.registry_effective_from = historical.registry_effective_from
+          AND current_product.search_text = historical.search_text
+          AND current_product.attributes_json = historical.attributes_json
+      )
+      LIMIT ?
+    ) AND ${refreshOwnershipPredicate()}`)
+    .bind(
+      progress.registry_code,
+      progress.snapshot_id,
+      HISTORICAL_CLEANUP_RECORD_BUDGET,
+      ...ownership,
+    )
     .run();
-  return recordCount;
+  const removedCount = Number(removed.meta?.changes || 0);
+  if (removedCount >= HISTORICAL_CLEANUP_RECORD_BUDGET) {
+    return { complete: false as const, removedCount };
+  }
+  const remaining = await db.prepare(`SELECT count(*) AS count
+    FROM compliance_official_products historical
+    JOIN compliance_official_product_snapshots historical_snapshot
+      ON historical_snapshot.id = historical.snapshot_id
+      AND historical_snapshot.registry_code = ?
+      AND historical_snapshot.status = 'superseded'
+    WHERE EXISTS (
+      SELECT 1 FROM compliance_official_products current_product
+      WHERE current_product.snapshot_id = ?
+        AND current_product.source_key = historical.source_key
+        AND current_product.source_record_key = historical.source_record_key
+        AND current_product.product_kind = historical.product_kind
+        AND current_product.manufacturer = historical.manufacturer
+        AND current_product.brand = historical.brand
+        AND current_product.model = historical.model
+        AND current_product.series = historical.series
+        AND current_product.registration_number = historical.registration_number
+        AND current_product.certificate_number = historical.certificate_number
+        AND current_product.approval_status = historical.approval_status
+        AND current_product.eligible_from = historical.eligible_from
+        AND current_product.eligible_to = historical.eligible_to
+        AND current_product.available_in_australia = historical.available_in_australia
+        AND current_product.registry_effective_from = historical.registry_effective_from
+        AND current_product.search_text = historical.search_text
+        AND current_product.attributes_json = historical.attributes_json
+    )`)
+    .bind(progress.registry_code, progress.snapshot_id)
+    .first<{ count: number }>();
+  if (Number(remaining?.count || 0) > 0) {
+    return { complete: false as const, removedCount };
+  }
+  const results = await db.batch([
+    db.prepare(`DELETE FROM compliance_official_product_stream_values
+      WHERE snapshot_id = ? AND ${refreshOwnershipPredicate()}`)
+      .bind(progress.snapshot_id, ...ownership),
+    db.prepare(`DELETE FROM compliance_official_product_refresh_progress
+      WHERE registry_code = ? AND snapshot_id = ? AND phase = 'cleanup'
+        AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        progress.registry_code,
+        progress.snapshot_id,
+        ...ownership,
+      ),
+  ]);
+  if (Number(results[1]?.meta?.changes || 0) !== 1) {
+    return fail(
+      "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+      409,
+      `Official registry ${progress.registry_code} refresh ownership was lost.`,
+    );
+  }
+  return { complete: true as const, removedCount };
+}
+
+async function continueResumableStagingSnapshot(
+  db: D1Database,
+  artifactStore: CreditexOfficialProductArtifactStore,
+  definition: CreditexOfficialProductRegistryDefinition,
+  staging: ResumableStagingSnapshot,
+  current: SnapshotRow | null,
+  input: Readonly<{
+    checkedAt: string;
+    checkedOn: string;
+    leaseId: string;
+    fleetLeaseId?: string;
+    maximumStreamingRecords: number;
+    leaseFenceAt?: string;
+    signal?: AbortSignal;
+  }>,
+) {
+  const streamingArtifacts = staging.artifacts
+    .map((artifact, sourceIndex) => ({ artifact, sourceIndex }))
+    .filter(({ artifact }) => artifact.source.streamingParser);
+  if (streamingArtifacts.length !== 1 || staging.artifacts.length !== 1) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official registry ${definition.registryCode} resumable source composition is unsupported.`,
+    );
+  }
+  const [{ artifact, sourceIndex }] = streamingArtifacts;
+  await renewLease(
+    db,
+    definition.registryCode,
+    input.leaseId,
+    input.checkedAt,
+  );
+  const sourceCheckedAt = staging.snapshot.created_at;
+  const sourceCheckedOn = australianRegulatorDate(sourceCheckedAt);
+  const replay = await stageStreamingSource(
+    db,
+    artifactStore,
+    artifact,
+    staging.snapshot.id,
+    sourceIndex,
+    current?.id || null,
+    sourceCheckedOn,
+    sourceCheckedAt,
+    input.checkedAt,
+    input.maximumStreamingRecords,
+    input.leaseId,
+    input.fleetLeaseId,
+    input.leaseFenceAt || new Date().toISOString(),
+    input.signal,
+  );
+  assertOfficialProductRefreshActive(input.signal, definition.registryCode);
+  const inserted = await db.prepare(`SELECT count(*) AS count
+    FROM compliance_official_products WHERE snapshot_id = ?`)
+    .bind(staging.snapshot.id)
+    .first<{ count: number }>();
+  const stagedRecordCount = Number(inserted?.count || 0);
+  if (!replay.complete || stagedRecordCount !== staging.snapshot.record_count) {
+    return {
+      changed: false,
+      complete: false as const,
+      phase: replay.phase,
+      registryCode: definition.registryCode,
+      snapshotId: staging.snapshot.id,
+      sourceSha256: staging.snapshot.source_sha256,
+      recordCount: staging.snapshot.record_count,
+      stagedRecordCount,
+      insertedThisRun: replay.insertedThisRun,
+      checkedAt: input.checkedAt,
+    };
+  }
+  await renewLease(
+    db,
+    definition.registryCode,
+    input.leaseId,
+    input.checkedAt,
+  );
+  const activationProgress = await loadRefreshProgress(
+    db,
+    definition.registryCode,
+  );
+  if (
+    !activationProgress
+    || activationProgress.snapshot_id !== staging.snapshot.id
+    || activationProgress.phase !== "activate"
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+      500,
+      `Official registry ${definition.registryCode} activation progress is invalid.`,
+    );
+  }
+  await activateOfficialProductStagingSnapshot(db, {
+    registryCode: definition.registryCode,
+    stagingSnapshotId: staging.snapshot.id,
+    currentSnapshotId: current?.id || null,
+    checkedAt: sourceCheckedAt,
+    checkedOn: sourceCheckedOn,
+    sourceManifestJson: staging.snapshot.source_manifest_json,
+    sourceSha256: staging.snapshot.source_sha256,
+    recordCount: staging.snapshot.record_count,
+    reviewAuditMessage: "",
+    leaseId: input.leaseId,
+    fleetLeaseId: input.fleetLeaseId,
+    leaseFenceAt: input.leaseFenceAt,
+    progressRevision: activationProgress.revision,
+    operationAt: input.checkedAt,
+  });
+  return {
+    changed: true,
+    complete: false as const,
+    phase: "cleanup" as const,
+    registryCode: definition.registryCode,
+    snapshotId: staging.snapshot.id,
+    sourceSha256: staging.snapshot.source_sha256,
+    recordCount: staging.snapshot.record_count,
+    stagedRecordCount,
+    insertedThisRun: replay.insertedThisRun,
+    checkedAt: sourceCheckedAt,
+    reviewedCountDecrease: false,
+  };
 }
 
 async function recordFailure(
@@ -1582,6 +2797,10 @@ export async function syncOfficialProductRegistry(
     controlledImportReview?: CreditexControlledProductImportReview;
     controlledImportPermissionArtifact?:
       CreditexControlledProductPermissionArtifact;
+    fleetLeaseId?: string;
+    maximumStreamingRecordsPerRun?: number;
+    sourceFetchTimeoutMs?: number;
+    signal?: AbortSignal;
   } = {},
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
@@ -1598,6 +2817,38 @@ export async function syncOfficialProductRegistry(
   }
   const checkedAt = (options.now || new Date()).toISOString();
   const checkedOn = australianRegulatorDate(checkedAt);
+  const maximumStreamingRecords = options.maximumStreamingRecordsPerRun
+    === undefined
+    ? Number.MAX_SAFE_INTEGER
+    : Number(options.maximumStreamingRecordsPerRun);
+  if (
+    options.maximumStreamingRecordsPerRun !== undefined
+    && (
+      !Number.isSafeInteger(maximumStreamingRecords)
+      || maximumStreamingRecords < PRODUCT_INSERT_MAX_ROWS
+      || maximumStreamingRecords > 50_000
+    )
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      "The official product streaming refresh budget is invalid.",
+    );
+  }
+  const sourceFetchTimeoutMs = options.sourceFetchTimeoutMs === undefined
+    ? OFFICIAL_SOURCE_FETCH_TIMEOUT_MS
+    : Number(options.sourceFetchTimeoutMs);
+  if (
+    !Number.isSafeInteger(sourceFetchTimeoutMs)
+    || sourceFetchTimeoutMs < 1_000
+    || sourceFetchTimeoutMs > OFFICIAL_SOURCE_FETCH_TIMEOUT_MS
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      400,
+      "The official product source fetch timeout is invalid.",
+    );
+  }
   const controlledImportReview = options.controlledImportReview
     ? {
         importedByUid: cleanText(
@@ -1642,6 +2893,9 @@ export async function syncOfficialProductRegistry(
     : undefined;
   const controlledImportPermissionArtifact =
     options.controlledImportPermissionArtifact;
+  const resumableStagingAllowed = !options.reviewedCountDecrease
+    && !options.controlledImportReview
+    && !controlledImportPermissionArtifact;
   if (
     Boolean(controlledImportReview)
       !== Boolean(controlledImportPermissionArtifact)
@@ -1672,14 +2926,21 @@ export async function syncOfficialProductRegistry(
   }
   const fetchImpl = withOfficialSourceFetchDeadline(
     options.fetchImpl || fetch,
+    sourceFetchTimeoutMs,
+    options.signal,
   );
-  const leaseId = crypto.randomUUID();
+  const leaseId = options.fleetLeaseId || crypto.randomUUID();
   let leaseAcquired = false;
   let stagingSnapshotId = "";
   try {
-    await acquireLease(db, definition.registryCode, leaseId, checkedAt);
+    await acquireLease(
+      db,
+      definition.registryCode,
+      leaseId,
+      checkedAt,
+      options.fleetLeaseId,
+    );
     leaseAcquired = true;
-    await cleanStagingRows(db, definition.registryCode);
     if (!options.artifactStore) {
       return fail(
         "OFFICIAL_PRODUCT_SOURCE_CUSTODY_UNAVAILABLE",
@@ -1687,6 +2948,72 @@ export async function syncOfficialProductRegistry(
         "Immutable official source storage is unavailable.",
       );
     }
+    const current = await db.prepare(`SELECT
+      id, source_manifest_json, source_sha256, record_count, activated_at
+      FROM compliance_official_product_snapshots
+      WHERE registry_code = ? AND status = 'current' LIMIT 1`)
+      .bind(definition.registryCode)
+      .first<SnapshotRow>();
+    const retainedProgress = resumableStagingAllowed
+      ? await loadRefreshProgress(db, definition.registryCode)
+      : null;
+    if (retainedProgress?.phase === "cleanup") {
+      if (!current || retainedProgress.snapshot_id !== current.id) {
+        return fail(
+          "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+          500,
+          `Official registry ${definition.registryCode} cleanup lost its current snapshot.`,
+        );
+      }
+      const cleanup = await cleanupActivatedRefreshProgress(
+        db,
+        retainedProgress,
+        {
+          leaseId,
+          fleetLeaseId: options.fleetLeaseId,
+          leaseFenceAt: options.now ? checkedAt : new Date().toISOString(),
+        },
+      );
+      return {
+        changed: false,
+        complete: cleanup.complete,
+        phase: cleanup.complete ? "complete" as const : "cleanup" as const,
+        registryCode: definition.registryCode,
+        snapshotId: current.id,
+        sourceSha256: current.source_sha256,
+        recordCount: current.record_count,
+        stagedRecordCount: current.record_count,
+        insertedThisRun: 0,
+        checkedAt: retainedProgress.created_at,
+      };
+    }
+    const resumable = resumableStagingAllowed
+      ? await loadResumableStagingSnapshot(
+          db,
+          definition,
+          current,
+        )
+      : null;
+    if (resumable) {
+      stagingSnapshotId = resumable.snapshot.id;
+      return await continueResumableStagingSnapshot(
+        db,
+        options.artifactStore,
+        definition,
+        resumable,
+        current,
+        {
+          checkedAt,
+          checkedOn,
+          leaseId,
+          fleetLeaseId: options.fleetLeaseId,
+          maximumStreamingRecords,
+          leaseFenceAt: options.now ? checkedAt : undefined,
+          signal: options.signal,
+        },
+      );
+    }
+    await cleanStagingRows(db, definition.registryCode);
     // Phase one keeps only compact, custody-verified receipts. Parsed records and
     // source bytes leave scope before the next official source is requested.
     const artifacts: RetainedSourceArtifact[] = [];
@@ -1694,7 +3021,9 @@ export async function syncOfficialProductRegistry(
       definition,
       fetchImpl,
     );
+    assertOfficialProductRefreshActive(options.signal, definition.registryCode);
     for (const source of definition.sources) {
+      assertOfficialProductRefreshActive(options.signal, definition.registryCode);
       const acquiredSource = acquiredSources?.get(source.sourceKey);
       artifacts.push(await fetchInspectAndRetainSource(
         definition,
@@ -1705,18 +3034,13 @@ export async function syncOfficialProductRegistry(
         controlledImportReview,
       ));
       acquiredSources?.delete(source.sourceKey);
+      assertOfficialProductRefreshActive(options.signal, definition.registryCode);
       await renewLease(db, definition.registryCode, leaseId, checkedAt);
     }
     const recordCount = artifacts.reduce(
       (total, artifact) => total + artifact.recordCount,
       0,
     );
-    const current = await db.prepare(`SELECT
-      id, source_manifest_json, source_sha256, record_count, activated_at
-      FROM compliance_official_product_snapshots
-      WHERE registry_code = ? AND status = 'current' LIMIT 1`)
-      .bind(definition.registryCode)
-      .first<SnapshotRow>();
     const decreases: SourceCountDecrease[] = [];
     if (current) {
       const previousCounts = await db.prepare(`SELECT source_key, record_count
@@ -1798,10 +3122,25 @@ export async function syncOfficialProductRegistry(
     const sourceManifestJson = canonicalJson(manifest);
     const sourceSha256 = await sha256Hex(sourceManifestJson);
     if (current?.source_sha256 === sourceSha256) {
-      await db.prepare(`INSERT INTO compliance_official_product_sync_runs (
+      await renewLease(db, definition.registryCode, leaseId, checkedAt);
+      const leaseFenceAt = options.now
+        ? checkedAt
+        : new Date().toISOString();
+      const receipt = await db.prepare(`INSERT INTO compliance_official_product_sync_runs (
         id, registry_code, status, snapshot_id, source_manifest_json,
         source_sha256, record_count, checked_at, message
-      ) VALUES (?, ?, 'unchanged', ?, ?, ?, ?, ?, '')`)
+      ) SELECT ?, ?, 'unchanged', ?, ?, ?, ?, ?, ''
+      WHERE EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases AS inner_lease
+        WHERE inner_lease.registry_code = ?
+          AND inner_lease.lease_id = ?
+          AND inner_lease.expires_at > ?
+      ) AND (? = '' OR EXISTS (
+        SELECT 1 FROM compliance_official_product_sync_leases AS fleet
+        WHERE fleet.registry_code = ?
+          AND fleet.lease_id = ?
+          AND fleet.expires_at > ?
+      ))`)
         .bind(
           crypto.randomUUID(),
           definition.registryCode,
@@ -1810,8 +3149,22 @@ export async function syncOfficialProductRegistry(
           sourceSha256,
           recordCount,
           checkedAt,
+          definition.registryCode,
+          leaseId,
+          leaseFenceAt,
+          options.fleetLeaseId || "",
+          CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+          options.fleetLeaseId || "",
+          leaseFenceAt,
         )
         .run();
+      if (Number(receipt.meta?.changes || 0) !== 1) {
+        return fail(
+          "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+          409,
+          `Official registry ${definition.registryCode} refresh ownership was lost.`,
+        );
+      }
       return {
         changed: false,
         registryCode: definition.registryCode,
@@ -1822,7 +3175,24 @@ export async function syncOfficialProductRegistry(
       };
     }
     stagingSnapshotId = crypto.randomUUID();
-    await db.prepare(`INSERT INTO compliance_official_product_snapshots (
+    const boundedStreamingSources = artifacts
+      .map((artifact, sourceIndex) => ({ artifact, sourceIndex }))
+      .filter(({ artifact }) => artifact.source.streamingParser);
+    if (
+      options.maximumStreamingRecordsPerRun !== undefined
+      && (
+        boundedStreamingSources.length !== 1
+        || artifacts.length !== 1
+      )
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        500,
+        `Official registry ${definition.registryCode} has an unsupported resumable source composition.`,
+      );
+    }
+    const stagingStatements = [db.prepare(`INSERT INTO
+      compliance_official_product_snapshots (
       id, registry_code, contract, source_manifest_json, source_sha256,
       source_count, record_count, status, created_at, activated_at, activated_on,
       superseded_at, superseded_on
@@ -1836,13 +3206,10 @@ export async function syncOfficialProductRegistry(
         artifacts.length,
         recordCount,
         checkedAt,
-      )
-      .run();
-    // Phase two replays each exact R2 artifact independently into the staging
-    // snapshot. The current snapshot is not changed until every replay reconciles.
+      )];
     for (const artifact of artifacts) {
-      await renewLease(db, definition.registryCode, leaseId, checkedAt);
-      await db.prepare(`INSERT INTO compliance_official_product_artifacts (
+      stagingStatements.push(db.prepare(`INSERT INTO
+        compliance_official_product_artifacts (
         id, snapshot_id, source_key, source_url, source_sha256, content_type,
         byte_length, record_count, object_key, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -1857,18 +3224,76 @@ export async function syncOfficialProductRegistry(
           artifact.recordCount,
           artifact.objectKey,
           checkedAt,
-        )
-        .run();
-      if (artifact.source.streamingParser) {
-        await stageStreamingSource(
-          db,
-          options.artifactStore,
-          artifact,
+        ));
+    }
+    if (options.maximumStreamingRecordsPerRun !== undefined) {
+      const [{ artifact, sourceIndex }] = boundedStreamingSources;
+      stagingStatements.push(db.prepare(`INSERT INTO
+        compliance_official_product_refresh_progress (
+          registry_code, snapshot_id, replay_contract, source_index,
+          source_key, phase, supplement_batch_count, supplement_value_count,
+          product_batch_count, product_record_count, last_product_record_key,
+          revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'supplements', 0, 0, 0, 0, '', 1, ?, ?)`)
+        .bind(
+          definition.registryCode,
           stagingSnapshotId,
-          current?.id || null,
-          checkedOn,
+          OFFICIAL_PRODUCT_REFRESH_REPLAY_CONTRACT,
+          sourceIndex,
+          artifact.source.sourceKey,
           checkedAt,
-        );
+          checkedAt,
+        ));
+    }
+    assertOfficialProductRefreshActive(options.signal, definition.registryCode);
+    await db.batch(stagingStatements);
+    assertOfficialProductRefreshActive(options.signal, definition.registryCode);
+    if (
+      options.maximumStreamingRecordsPerRun !== undefined
+      && boundedStreamingSources.length === 1
+    ) {
+      return {
+        changed: false,
+        complete: false as const,
+        registryCode: definition.registryCode,
+        snapshotId: stagingSnapshotId,
+        sourceSha256,
+        recordCount,
+        stagedRecordCount: 0,
+        insertedThisRun: 0,
+        phase: "supplements" as const,
+        checkedAt,
+      };
+    }
+    // Phase two replays each exact R2 artifact independently into the staging
+    // snapshot. The current snapshot is not changed until every replay reconciles.
+    for (let sourceIndex = 0; sourceIndex < artifacts.length; sourceIndex += 1) {
+      const artifact = artifacts[sourceIndex];
+      await renewLease(db, definition.registryCode, leaseId, checkedAt);
+      if (artifact.source.streamingParser) {
+        let replayComplete = false;
+        while (!replayComplete) {
+          const replay = await stageStreamingSource(
+            db,
+            options.artifactStore,
+            artifact,
+            stagingSnapshotId,
+            sourceIndex,
+            current?.id || null,
+            checkedOn,
+            checkedAt,
+            checkedAt,
+            CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+            leaseId,
+            options.fleetLeaseId,
+            options.now ? checkedAt : new Date().toISOString(),
+            options.signal,
+          );
+          replayComplete = replay.complete;
+          if (!replayComplete) {
+            await renewLease(db, definition.registryCode, leaseId, checkedAt);
+          }
+        }
       } else {
         let records: readonly CreditexOfficialProductRecord[] | null =
           await loadRetainedSourceRecords(
@@ -1917,45 +3342,6 @@ export async function syncOfficialProductRegistry(
         "The staged official product count did not reconcile.",
       );
     }
-    const activationStatements = [
-      db.prepare(`UPDATE compliance_official_product_snapshots
-        SET status = 'superseded', superseded_at = ?, superseded_on = ?
-        WHERE registry_code = ? AND status = 'current'`)
-        .bind(checkedAt, checkedOn, definition.registryCode),
-      db.prepare(`UPDATE compliance_official_product_snapshots
-        SET status = 'current', activated_at = ?, activated_on = ?,
-          superseded_at = NULL, superseded_on = NULL
-        WHERE id = ? AND registry_code = ? AND status = 'staging'`)
-        .bind(
-          checkedAt,
-          checkedOn,
-          stagingSnapshotId,
-          definition.registryCode,
-        ),
-    ];
-    if (current) {
-      activationStatements.push(pruneUnchangedHistoricalProducts(
-        db,
-        current.id,
-        stagingSnapshotId,
-      ));
-    }
-    activationStatements.push(
-      db.prepare(`INSERT INTO compliance_official_product_sync_runs (
-        id, registry_code, status, snapshot_id, source_manifest_json,
-        source_sha256, record_count, checked_at, message
-      ) VALUES (?, ?, 'success', ?, ?, ?, ?, ?, ?)`)
-        .bind(
-          crypto.randomUUID(),
-          definition.registryCode,
-          stagingSnapshotId,
-          sourceManifestJson,
-          sourceSha256,
-          recordCount,
-          checkedAt,
-          reviewAuditMessage,
-        ),
-    );
     await renewLease(db, definition.registryCode, leaseId, checkedAt);
     if (controlledImportPermissionArtifact) {
       // Permission is mutable independently of the staged product artifacts.
@@ -1966,7 +3352,51 @@ export async function syncOfficialProductRegistry(
         controlledImportPermissionArtifact,
       );
     }
-    await db.batch(activationStatements);
+    const activationProgress = await loadRefreshProgress(
+      db,
+      definition.registryCode,
+    );
+    if (activationProgress && activationProgress.phase !== "activate") {
+      return fail(
+        "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+        500,
+        `Official registry ${definition.registryCode} activation progress is invalid.`,
+      );
+    }
+    await activateOfficialProductStagingSnapshot(db, {
+      registryCode: definition.registryCode,
+      stagingSnapshotId,
+      currentSnapshotId: current?.id || null,
+      checkedAt,
+      checkedOn,
+      sourceManifestJson,
+      sourceSha256,
+      recordCount,
+      reviewAuditMessage,
+      leaseId,
+      fleetLeaseId: options.fleetLeaseId,
+      leaseFenceAt: options.now ? checkedAt : undefined,
+      progressRevision: activationProgress?.revision,
+      operationAt: checkedAt,
+    });
+    if (activationProgress) {
+      const cleanupProgress = await loadRefreshProgress(
+        db,
+        definition.registryCode,
+      );
+      if (!cleanupProgress || cleanupProgress.phase !== "cleanup") {
+        return fail(
+          "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+          500,
+          `Official registry ${definition.registryCode} cleanup progress is invalid.`,
+        );
+      }
+      await cleanupActivatedRefreshProgress(db, cleanupProgress, {
+        leaseId,
+        fleetLeaseId: options.fleetLeaseId,
+        leaseFenceAt: options.now ? checkedAt : new Date().toISOString(),
+      });
+    }
     await cleanStagingRows(db, definition.registryCode);
     return {
       changed: true,
@@ -1978,14 +3408,24 @@ export async function syncOfficialProductRegistry(
       reviewedCountDecrease: acceptedDecreaseReview !== null,
     };
   } catch (error) {
-    if (stagingSnapshotId) {
+    const deterministicStagingFailure = error instanceof CreditexOfficialProductError
+      && (
+        error.code === "OFFICIAL_PRODUCT_SOURCE_INVALID"
+        || error.code === "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED"
+      );
+    if (
+      stagingSnapshotId
+      && (!resumableStagingAllowed || deterministicStagingFailure)
+    ) {
       await db.prepare(`DELETE FROM compliance_official_product_snapshots
         WHERE id = ? AND status = 'staging'`)
         .bind(stagingSnapshotId)
         .run()
         .catch(() => undefined);
     }
-    if (leaseAcquired) {
+    const ownershipLost = error instanceof CreditexOfficialProductError
+      && error.code === "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS";
+    if (leaseAcquired && !ownershipLost) {
       const message = error instanceof Error && error.message.trim()
         ? error.message
         : "Unknown official product registry refresh error.";
@@ -2109,6 +3549,7 @@ export async function ensureAutomaticOfficialProductRegistryCurrent(
     now?: Date;
     waitForRefreshMs?: number;
     pollIntervalMs?: number;
+    fleetLeaseId?: string;
   } = {},
 ): Promise<CreditexOfficialProductRegistryStatus> {
   const statusOptions = options.now ? { now: options.now } : {};
@@ -2127,6 +3568,7 @@ export async function ensureAutomaticOfficialProductRegistryCurrent(
       artifactStore: options.artifactStore,
       fetchImpl: options.fetchImpl,
       now: options.now,
+      fleetLeaseId: options.fleetLeaseId,
     });
   } catch (error) {
     if (

@@ -105,6 +105,9 @@ export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   wa_horizon_supported_solution: "wa-horizon-supported-solutions",
 } as const satisfies Record<CreditexOfficialProductKind, string>;
 
+export const CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE =
+  "automatic-registry-fleet";
+
 export type CreditexProductRegistryRefreshDesign = Readonly<{
   registryCode: string;
   producer:

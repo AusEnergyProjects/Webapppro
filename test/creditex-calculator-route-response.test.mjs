@@ -21,6 +21,9 @@ const officialProductsRoute = read(
 const stcProductsRoute = read(
   "../src/app/api/creditex/stc-products/route.ts",
 );
+const controlledOfficialProductsRoute = read(
+  "../src/app/api/creditex/official-products/controlled-import/route.ts",
+);
 
 test("calculator route descriptors preserve authentication and bounded schema readiness", () => {
   for (const error of [
@@ -218,7 +221,7 @@ test("public quote registry responses use the same redacted projection as instal
   );
 });
 
-test("all calculator routes share safe descriptors and registry refresh remains admin-only", () => {
+test("all calculator routes share safe descriptors and stale reads dispatch bounded background refresh", () => {
   for (const route of [
     programEstimateRoute,
     stcEstimateRoute,
@@ -242,7 +245,28 @@ test("all calculator routes share safe descriptors and registry refresh remains 
     assert.match(postSource, /requireComplianceAccess\(request/);
     assert.match(postSource, /allowedRoles: \["admin"\]/);
     assert.doesNotMatch(postSource, /requireCreditexCalculatorAccess\(request/);
+    assert.match(
+      postSource,
+      /if \(standardRefresh\) \{[\s\S]*?enqueueCreditexProductRegistryRefresh\(/,
+    );
+    assert.match(
+      postSource,
+      /queued: true[\s\S]*?\}, 202, \{[\s\S]*?CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER/,
+    );
   }
+  assert.match(officialProductsRoute, /parameters\.get\("continueRegistry"\)/);
+  assert.match(
+    officialProductsRoute,
+    /hasDueCreditexProductRegistryRefreshRequest\(/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /hasQueuedCreditexProductRegistryRefreshRequest\(/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /refreshQueued,[\s\S]*continuationDue/,
+  );
   assert.match(officialProductsRoute, /brand: parameters\.get\("brand"\)/);
   assert.match(officialProductsRoute, /model: parameters\.get\("model"\)/);
   assert.match(
@@ -257,13 +281,71 @@ test("all calculator routes share safe descriptors and registry refresh remains 
     officialProductsRoute,
     /veuScenario: parameters\.get\("veuScenario"\)/,
   );
+  for (const [name, route, staleCodes, dispatchValue] of [
+    [
+      "official products",
+      officialProductsRoute,
+      [
+        "OFFICIAL_PRODUCT_REGISTRY_STALE",
+        "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
+      ],
+      "definition.registryCode",
+    ],
+    [
+      "SRES products",
+      stcProductsRoute,
+      [
+        "SRES_PRODUCT_REGISTRY_STALE",
+        "SRES_PRODUCT_REGISTRY_UNAVAILABLE",
+      ],
+      '"cer_sres_swh"',
+    ],
+  ]) {
+    const getSource = route.slice(
+      route.indexOf("export async function GET"),
+      route.indexOf("export async function POST"),
+    );
+    assert.match(
+      getSource,
+      /await enqueueCreditexProductRegistryRefresh\(/,
+      `${name} must durably enqueue stale recovery`,
+    );
+    assert.match(
+      getSource,
+      /creditexProductRegistryRefreshDue\(/,
+      `${name} must start proactive refresh while the current snapshot remains usable`,
+    );
+    assert.match(
+      getSource,
+      /return json\(responseBody, 200, \{[\s\S]*?CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER/,
+      `${name} must return current results while privately dispatching proactive refresh`,
+    );
+    assert.match(getSource, /code: "OFFICIAL_PRODUCT_FLEET_BUSY"/);
+    assert.match(getSource, /\}, 503, \{/);
+    assert.match(getSource, /"Retry-After": "3"/);
+    assert.match(
+      getSource,
+      new RegExp(
+        `\\[CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER\\]: ${dispatchValue.replaceAll(".", "\\.")}`,
+      ),
+      `${name} must privately signal one background maintenance dispatch`,
+    );
+    assert.doesNotMatch(getSource, /ensureAutomaticOfficialProductRegistryCurrent\(/);
+    assert.doesNotMatch(getSource, /ensureCerSresProductRegistryCurrent\(/);
+    assert.doesNotMatch(getSource, /syncOfficialProductRegistry\(/);
+    assert.doesNotMatch(getSource, /syncCerSresProductRegistry\(/);
+    assert.doesNotMatch(getSource, /withCreditexProductRegistryFleetLease\(/);
+    for (const staleCode of staleCodes) {
+      assert.match(getSource, new RegExp(`error\\.code === "${staleCode}"`));
+    }
+  }
   assert.match(
     officialProductsRoute,
-    /ensureAutomaticOfficialProductRegistryCurrent\(/,
+    /"Cache-Control": "private, no-store"/,
   );
   assert.match(
     stcProductsRoute,
-    /ensureCerSresProductRegistryCurrent\(/,
+    /"Cache-Control": "private, no-store"/,
   );
   assert.match(
     officialProductsRoute,
@@ -273,6 +355,38 @@ test("all calculator routes share safe descriptors and registry refresh remains 
     stcProductsRoute,
     /withCreditexProductRegistryFleetLease\(/,
   );
+  assert.match(
+    officialProductsRoute,
+    /fleetLeaseId: fleetLease\.leaseId/,
+  );
+  assert.match(
+    stcProductsRoute,
+    /fleetLeaseId: fleetLease\.leaseId/,
+  );
+  for (const [name, route] of [
+    ["official products", officialProductsRoute],
+    ["SRES products", stcProductsRoute],
+    ["controlled official products", controlledOfficialProductsRoute],
+  ]) {
+    const wrapperCount = route.match(
+      /withCreditexProductRegistryFleetLease\(/g,
+    )?.length || 0;
+    const exactForwardCount = route.match(
+      /fleetLeaseId: fleetLease\.leaseId/g,
+    )?.length || 0;
+    const callbackCount = route.match(/\(fleetLease\) =>/g)?.length || 0;
+    assert.ok(wrapperCount > 0, `${name} must use the fleet wrapper`);
+    assert.equal(
+      callbackCount,
+      wrapperCount,
+      `${name} must receive every callback-issued fleet lease`,
+    );
+    assert.equal(
+      exactForwardCount,
+      wrapperCount,
+      `${name} must pass the exact callback-issued fleet lease to every registry producer`,
+    );
+  }
   assert.match(
     officialProductsRoute,
     /error\.code === "OFFICIAL_PRODUCT_REGISTRY_STALE"/,

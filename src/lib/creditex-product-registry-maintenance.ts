@@ -1,4 +1,5 @@
 import {
+  CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
   CreditexOfficialProductError,
   type CreditexOfficialProductRegistryStatus,
 } from "./creditex-official-product-registry.ts";
@@ -6,6 +7,8 @@ import {
   creditexAutomaticProductRegistries,
 } from "./creditex-official-product-registry-definitions.ts";
 import {
+  CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+  hasPendingCreditexOfficialProductRefresh,
   loadOfficialProductRegistryStatus,
   syncOfficialProductRegistry,
   type CreditexOfficialProductArtifactStore,
@@ -24,10 +27,14 @@ export const CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS =
   24 * 60 * 60 * 1000;
 export const CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS =
   15 * 60 * 1000;
-export const CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE =
-  "automatic-registry-fleet";
 export const CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_MS = 3 * 60 * 1000;
 export const CREDITEX_PRODUCT_REGISTRY_FLEET_HEARTBEAT_MS = 30 * 1000;
+export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MS = 22_000;
+export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS = 64;
+export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS = 18_000;
+export const CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS = 30_000;
+export const CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER =
+  "X-AEA-Creditex-Product-Registry-Dispatch";
 
 type FleetLeaseOptions = Readonly<{
   leaseMs?: number;
@@ -35,6 +42,10 @@ type FleetLeaseOptions = Readonly<{
   now?: () => Date;
   leaseId?: string;
   ensureSchema?: typeof ensureCreditexProductRegistrySchemaGuards;
+}>;
+
+export type CreditexProductRegistryFleetLeaseContext = Readonly<{
+  leaseId: string;
 }>;
 
 function positiveBoundedMilliseconds(
@@ -125,7 +136,9 @@ async function releaseFleetLease(
  */
 export async function withCreditexProductRegistryFleetLease<TResult>(
   database: D1Database,
-  operation: () => Promise<TResult>,
+  operation: (
+    context: CreditexProductRegistryFleetLeaseContext,
+  ) => Promise<TResult>,
   options: FleetLeaseOptions = {},
 ) {
   await (options.ensureSchema || ensureCreditexProductRegistrySchemaGuards)(
@@ -160,7 +173,7 @@ export async function withCreditexProductRegistryFleetLease<TResult>(
   }, heartbeatMs);
 
   try {
-    const result = await operation();
+    const result = await operation({ leaseId });
     await heartbeat;
     if (heartbeatFailure) throw heartbeatFailure;
     await renewFleetLease(database, leaseId, clock(), leaseMs);
@@ -186,7 +199,18 @@ export type CreditexProductRegistryMaintenanceTarget = Readonly<{
     database: D1Database,
     now: Date,
   ): Promise<RegistryMaintenanceStatus>;
-  refresh(database: D1Database, now: Date): Promise<{ changed: boolean }>;
+  hasPendingWork?(database: D1Database): Promise<boolean>;
+  refresh(
+    database: D1Database,
+    now: Date,
+    fleetLeaseId: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    changed: boolean;
+    complete?: boolean;
+    stagedRecordCount?: number;
+    recordCount?: number;
+  }>;
 }>;
 
 export function creditexProductRegistryRefreshDue(
@@ -217,6 +241,15 @@ export function creditexProductRegistryRetryBackoffActive(
   return elapsed >= 0 && elapsed < CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS;
 }
 
+export function creditexAutomaticProductRegistryStreamingBudget(
+  definition: CreditexOfficialProductRegistryDefinition,
+) {
+  return definition.sources.length === 1
+    && definition.sources[0]?.streamingParser
+    ? CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET
+    : undefined;
+}
+
 export function creditexAutomaticProductRegistryMaintenanceTargets({
   artifactStore,
   environment = {},
@@ -233,10 +266,27 @@ export function creditexAutomaticProductRegistryMaintenanceTargets({
           now,
         })
       ),
-      refresh: (database: D1Database, now: Date) => (
+      hasPendingWork: (database: D1Database) => (
+        hasPendingCreditexOfficialProductRefresh(
+          database,
+          definition.registryCode,
+        )
+      ),
+      refresh: (
+        database: D1Database,
+        now: Date,
+        fleetLeaseId: string,
+        signal?: AbortSignal,
+      ) => (
         syncOfficialProductRegistry(database, definition, {
           artifactStore,
           now,
+          fleetLeaseId,
+          maximumStreamingRecordsPerRun:
+            creditexAutomaticProductRegistryStreamingBudget(definition),
+          sourceFetchTimeoutMs:
+            CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+          signal,
         })
       ),
     }),
@@ -248,25 +298,28 @@ export function creditexAutomaticProductRegistryMaintenanceTargets({
       loadStatus: (database: D1Database, now: Date) => (
         loadCerSresRegistryStatus(database, { now })
       ),
-      refresh: (database: D1Database, now: Date) => (
-        syncCerSresProductRegistry(database, { artifactStore, now })
+      refresh: (
+        database: D1Database,
+        now: Date,
+        fleetLeaseId: string,
+        signal?: AbortSignal,
+      ) => (
+        syncCerSresProductRegistry(database, {
+          artifactStore,
+          now,
+          fleetLeaseId,
+          sourceFetchTimeoutMs:
+            CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+          signal,
+        })
       ),
     },
   ];
 }
 
-export function creditexProductRegistryMaintenanceTargetIndex(
-  now: Date,
-  targetCount: number,
-) {
-  if (!Number.isSafeInteger(targetCount) || targetCount < 1) return -1;
-  const timestamp = now.getTime();
-  if (!Number.isFinite(timestamp)) return 0;
-  return Math.floor(timestamp / 60_000) % targetCount;
-}
-
 type RefreshRequestRow = Readonly<{
   registry_code: string;
+  attempt_count: number;
 }>;
 
 export async function enqueueCreditexProductRegistryRefresh(
@@ -304,12 +357,46 @@ async function loadQueuedRefreshRequest(
 ) {
   if (registryCodes.length < 1) return null;
   const placeholders = registryCodes.map(() => "?").join(", ");
-  return database.prepare(`SELECT registry_code
+  return database.prepare(`SELECT registry_code, attempt_count
       FROM compliance_official_product_refresh_requests
       WHERE not_before <= ? AND registry_code IN (${placeholders})
       ORDER BY requested_at, registry_code LIMIT 1`)
     .bind(now.toISOString(), ...registryCodes)
     .first<RefreshRequestRow>();
+}
+
+export async function hasDueCreditexProductRegistryRefreshRequest(
+  database: D1Database,
+  registryCodes: readonly string[],
+  now = new Date(),
+  options: Readonly<{
+    ensureSchema?: typeof ensureCreditexProductRegistrySchemaGuards;
+  }> = {},
+) {
+  await (options.ensureSchema || ensureCreditexProductRegistrySchemaGuards)(
+    database,
+  );
+  return Boolean(await loadQueuedRefreshRequest(database, registryCodes, now));
+}
+
+export async function hasQueuedCreditexProductRegistryRefreshRequest(
+  database: D1Database,
+  registryCodes: readonly string[],
+  options: Readonly<{
+    ensureSchema?: typeof ensureCreditexProductRegistrySchemaGuards;
+  }> = {},
+) {
+  await (options.ensureSchema || ensureCreditexProductRegistrySchemaGuards)(
+    database,
+  );
+  if (registryCodes.length < 1) return false;
+  const placeholders = registryCodes.map(() => "?").join(", ");
+  return Boolean(await database.prepare(`SELECT registry_code
+      FROM compliance_official_product_refresh_requests
+      WHERE registry_code IN (${placeholders})
+      ORDER BY requested_at, registry_code LIMIT 1`)
+    .bind(...registryCodes)
+    .first<{ registry_code: string }>());
 }
 
 async function completeQueuedRefreshRequest(
@@ -327,9 +414,15 @@ async function deferQueuedRefreshRequest(
   registryCode: string,
   now: Date,
   error?: unknown,
+  attemptCount = 0,
 ) {
+  const rapidRetryDelays = [3_000, 6_000, 12_000] as const;
+  const retryDelay = error === undefined
+    ? CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS
+    : rapidRetryDelays[attemptCount]
+      ?? CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS;
   const notBefore = new Date(
-    now.getTime() + CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS,
+    now.getTime() + retryDelay,
   ).toISOString();
   const message = error instanceof Error
     ? error.message.slice(0, 500)
@@ -343,7 +436,7 @@ async function deferQueuedRefreshRequest(
       WHERE registry_code = ?`)
       .bind(notBefore, now.toISOString(), registryCode)
       .run();
-    return;
+    return retryDelay;
   }
   await database.prepare(`UPDATE
       compliance_official_product_refresh_requests
@@ -361,59 +454,96 @@ async function deferQueuedRefreshRequest(
       registryCode,
     )
     .run();
+  return retryDelay;
 }
 
 /**
- * Scheduled invocations service exactly one registry. This keeps large source
- * acquisitions off request waitUntil, prevents concurrent fleet bootstrap and
- * gives every configured automatic producer a deterministic turn every few
- * minutes.
+ * Each invocation services exactly one registry. A calculator-triggered call
+ * prioritises that exact registry; health and cron calls choose the oldest due
+ * producer. The fleet lease prevents concurrent source acquisition and replay.
  */
 export async function maintainNextCreditexProductRegistry({
   database,
   loadQueuedRefresh = loadQueuedRefreshRequest,
   now = new Date(),
+  preferredRegistryCode,
+  returnScheduledFailures = false,
+  scheduledOperationTimeoutMs =
+    CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
   targets,
   withFleetLease = withCreditexProductRegistryFleetLease,
 }: {
   database: D1Database;
   loadQueuedRefresh?: typeof loadQueuedRefreshRequest;
   now?: Date;
+  preferredRegistryCode?: string;
+  returnScheduledFailures?: boolean;
+  scheduledOperationTimeoutMs?: number;
   targets: readonly CreditexProductRegistryMaintenanceTarget[];
   withFleetLease?: typeof withCreditexProductRegistryFleetLease;
 }) {
   try {
-    return await withFleetLease(database, async () => {
+    return await withFleetLease(database, async (fleetLease) => {
+      const preferredTarget = preferredRegistryCode
+        ? targets.find((target) => target.registryCode === preferredRegistryCode)
+        : undefined;
       const queued = await loadQueuedRefresh(
         database,
-        targets.map((target) => target.registryCode),
+        preferredTarget
+          ? [preferredTarget.registryCode]
+          : targets.map((target) => target.registryCode),
         now,
       );
-      const index = creditexProductRegistryMaintenanceTargetIndex(
-        now,
-        targets.length,
-      );
-      if (!queued && index < 0) return { outcome: "no_targets" as const };
-      const target = queued
-        ? targets.find((candidate) => (
-            candidate.registryCode === queued.registry_code
-          ))!
-        : targets[index];
-      const status = await target.loadStatus(database, now);
-      if (creditexProductRegistryRetryBackoffActive(status, now)) {
-        if (queued) {
-          await deferQueuedRefreshRequest(
-            database,
-            target.registryCode,
-            now,
-          );
-        }
+      if (!queued && targets.length === 0) {
+        return { outcome: "no_targets" as const };
+      }
+      let target: CreditexProductRegistryMaintenanceTarget;
+      let status: RegistryMaintenanceStatus;
+      if (queued || preferredTarget) {
+        target = targets.find((candidate) => (
+          candidate.registryCode === (
+            queued?.registry_code || preferredTarget?.registryCode
+          )
+        ))!;
+        status = await target.loadStatus(database, now);
+      } else {
+        const candidates = await Promise.all(targets.map(async (candidate) => ({
+          target: candidate,
+          status: await candidate.loadStatus(database, now),
+        })));
+        const due = candidates.filter((candidate) => (
+          creditexProductRegistryRefreshDue(candidate.status, now)
+        )).sort((left, right) => {
+          const leftCheckedAt = left.status.lastCheckedAt
+            ? Date.parse(left.status.lastCheckedAt)
+            : Number.NEGATIVE_INFINITY;
+          const rightCheckedAt = right.status.lastCheckedAt
+            ? Date.parse(right.status.lastCheckedAt)
+            : Number.NEGATIVE_INFINITY;
+          return leftCheckedAt - rightCheckedAt
+            || left.target.registryCode.localeCompare(right.target.registryCode);
+        });
+        if (due.length === 0) return { outcome: "all_current" as const };
+        ({ target, status } = due[0]);
+      }
+      const pendingWork = target.hasPendingWork
+        ? await target.hasPendingWork(database)
+        : false;
+      if (
+        creditexProductRegistryRetryBackoffActive(status, now)
+        && !pendingWork
+        && !queued
+      ) {
         return {
           registryCode: target.registryCode,
           outcome: "retry_backoff" as const,
         };
       }
-      if (!creditexProductRegistryRefreshDue(status, now)) {
+      if (
+        !creditexProductRegistryRefreshDue(status, now)
+        && !pendingWork
+        && !queued
+      ) {
         if (queued) {
           await completeQueuedRefreshRequest(database, target.registryCode);
         }
@@ -422,19 +552,78 @@ export async function maintainNextCreditexProductRegistry({
           outcome: "current" as const,
         };
       }
-      let result: { changed: boolean };
+      let result: {
+        changed: boolean;
+        complete?: boolean;
+        stagedRecordCount?: number;
+        recordCount?: number;
+      };
       try {
-        result = await target.refresh(database, now);
+        const controller = new AbortController();
+        const operationTimeout = returnScheduledFailures
+          ? setTimeout(
+              () => controller.abort("official-product-background-timeout"),
+              positiveBoundedMilliseconds(
+                scheduledOperationTimeoutMs,
+                CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+                CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+              ),
+            )
+          : undefined;
+        try {
+          result = await target.refresh(
+            database,
+            now,
+            fleetLease.leaseId,
+            returnScheduledFailures ? controller.signal : undefined,
+          );
+        } finally {
+          if (operationTimeout !== undefined) clearTimeout(operationTimeout);
+        }
       } catch (error) {
-        if (queued) {
-          await deferQueuedRefreshRequest(
+        const retainedPendingWork = target.hasPendingWork
+          ? await target.hasPendingWork(database).catch(() => false)
+          : false;
+        let retryAfterMs = 0;
+        if (returnScheduledFailures && !queued) {
+          await enqueueCreditexProductRegistryRefresh(
+            database,
+            target.registryCode,
+            now,
+          );
+        }
+        if ((queued || returnScheduledFailures) && !retainedPendingWork) {
+          retryAfterMs = await deferQueuedRefreshRequest(
             database,
             target.registryCode,
             now,
             error,
+            returnScheduledFailures ? 0 : queued?.attempt_count || 0,
           );
         }
+        if (returnScheduledFailures) {
+          return {
+            registryCode: target.registryCode,
+            outcome: "retry_scheduled" as const,
+            retryAfterMs,
+          };
+        }
         throw error;
+      }
+      if (result.complete === false) {
+        if (!queued) {
+          await enqueueCreditexProductRegistryRefresh(
+            database,
+            target.registryCode,
+            now,
+          );
+        }
+        return {
+          registryCode: target.registryCode,
+          outcome: "progressed" as const,
+          stagedRecordCount: result.stagedRecordCount || 0,
+          recordCount: result.recordCount || 0,
+        };
       }
       if (queued) {
         await completeQueuedRefreshRequest(database, target.registryCode);
@@ -464,6 +653,82 @@ export async function maintainNextCreditexProductRegistry({
     }
     throw error;
   }
+}
+
+export async function drainCreditexProductRegistryMaintenance({
+  database,
+  maximumElapsedMs = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MS,
+  maximumSteps = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
+  now = () => new Date(),
+  operationTimeoutMs = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+  preferredRegistryCode,
+  targets,
+  maintain = maintainNextCreditexProductRegistry,
+}: {
+  database: D1Database;
+  maximumElapsedMs?: number;
+  maximumSteps?: number;
+  now?: () => Date;
+  operationTimeoutMs?: number;
+  preferredRegistryCode?: string;
+  targets: readonly CreditexProductRegistryMaintenanceTarget[];
+  maintain?: typeof maintainNextCreditexProductRegistry;
+}) {
+  const startedAt = now().getTime();
+  const elapsedLimit = Math.min(Math.max(maximumElapsedMs, 1_000), 25_000);
+  const stepLimit = Math.min(Math.max(maximumSteps, 1), 64);
+  let lastResult: Awaited<ReturnType<typeof maintainNextCreditexProductRegistry>>
+    | null = null;
+  let steps = 0;
+  let continuationRequired = false;
+  const exactPreferred = Boolean(
+    preferredRegistryCode
+    && targets.some((target) => target.registryCode === preferredRegistryCode),
+  );
+  let nextPreferredRegistryCode = preferredRegistryCode;
+  while (steps < stepLimit) {
+    const elapsedMs = now().getTime() - startedAt;
+    const remainingMs = elapsedLimit - elapsedMs;
+    if (remainingMs < 100) {
+      continuationRequired = true;
+      break;
+    }
+    lastResult = await maintain({
+      database,
+      now: now(),
+      preferredRegistryCode: nextPreferredRegistryCode,
+      returnScheduledFailures: true,
+      scheduledOperationTimeoutMs: Math.min(operationTimeoutMs, remainingMs),
+      targets,
+    });
+    steps += 1;
+    if (lastResult.outcome === "retry_scheduled") {
+      continuationRequired = true;
+      break;
+    }
+    const progressed = lastResult.outcome === "progressed";
+    const completedOne = lastResult.outcome === "refreshed"
+      || lastResult.outcome === "current";
+    if (!progressed && (!completedOne || exactPreferred)) break;
+    nextPreferredRegistryCode = lastResult.outcome === "progressed"
+      ? lastResult.registryCode
+      : undefined;
+    if (
+      steps >= stepLimit
+      || now().getTime() - startedAt >= elapsedLimit
+    ) {
+      continuationRequired = true;
+      break;
+    }
+  }
+  return {
+    ...(lastResult || { outcome: "no_targets" as const }),
+    continuationRequired,
+    continuationDelayMs: lastResult?.outcome === "retry_scheduled"
+      ? lastResult.retryAfterMs
+      : 0,
+    steps,
+  };
 }
 
 export async function maintainCreditexAutomaticProductRegistry({

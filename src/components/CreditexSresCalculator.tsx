@@ -12,7 +12,10 @@ import { todayIso } from "@/lib/date-picker";
 import { creditexSresCalculationBlocker } from "@/lib/creditex-official-product-registry";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
-const SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 180_000;
+const SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 25_000;
+const SRES_REGISTRY_STATUS_POLL_INITIAL_DELAY_MS = 5_000;
+const SRES_REGISTRY_STATUS_POLL_INTERVAL_MS = 15_000;
+const SRES_REGISTRY_STATUS_POLL_TIMEOUT_MS = 30 * 60_000;
 
 type Api = (
   path: string,
@@ -69,6 +72,22 @@ type RegistryStatus = {
     message: string;
   } | null;
 };
+
+type SresRegistryStatusPoll = Readonly<{
+  generation: number;
+  deadlineAt: number;
+}>;
+
+export function creditexSresRegistryPollState(
+  registry: RegistryStatus | null,
+  refreshQueued: unknown,
+) {
+  if (registry?.lastAttempt?.status === "failed") return "failed" as const;
+  if (refreshQueued !== false || registry?.status !== "current") {
+    return "pending" as const;
+  }
+  return "complete" as const;
+}
 
 export type CreditexSresEstimateResult = {
   technology: Technology;
@@ -321,6 +340,10 @@ export function CreditexSresCalculator({
   const [lookupError, setLookupError] = useState("");
   const [lookupVersion, setLookupVersion] = useState(0);
   const [refreshBusy, setRefreshBusy] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [registryStatusPoll, setRegistryStatusPoll] =
+    useState<SresRegistryStatusPoll | null>(null);
   const [estimate, setEstimate] = useState<CreditexSresEstimateResult | null>(null);
   const [estimateBusy, setEstimateBusy] = useState(false);
   const [estimateError, setEstimateError] = useState("");
@@ -330,6 +353,7 @@ export function CreditexSresCalculator({
   const waterHeaterItemIdRef = useRef(0);
   const estimateRequestRef = useRef(0);
   const registrySnapshotRef = useRef("");
+  const registryStatusPollGenerationRef = useRef(0);
 
   const productBlocker = creditexSresCalculationBlocker(form.technology);
   const waterHeaterUnitTotal = creditexSresWaterHeaterQuoteUnitTotal(
@@ -344,6 +368,11 @@ export function CreditexSresCalculator({
     setEstimateBusy(false);
     onEstimateInvalidated?.();
   }, [onEstimateInvalidated]);
+
+  const cancelRegistryStatusPoll = useCallback(() => {
+    registryStatusPollGenerationRef.current += 1;
+    setRegistryStatusPoll(null);
+  }, []);
 
   function updateForm(updater: (current: FormState) => FormState) {
     invalidateEstimate();
@@ -542,15 +571,122 @@ export function CreditexSresCalculator({
     productCascade.model,
   ]);
 
+  useEffect(() => {
+    if (!registryStatusPoll) return;
+    if (role !== "admin" || productBlocker) {
+      registryStatusPollGenerationRef.current += 1;
+      return;
+    }
+
+    let active = true;
+    let timer: number | null = null;
+    let controller: AbortController | null = null;
+    const generation = registryStatusPoll.generation;
+    const stillActive = () => active
+      && registryStatusPollGenerationRef.current === generation;
+
+    const finishTimedOut = () => {
+      if (!stillActive()) return;
+      setRefreshNotice("");
+      setRefreshError(
+        "The accepted CER product update was not confirmed current within 30 minutes. Product choices were not reloaded. Refresh again to request another controlled update.",
+      );
+      setRegistryStatusPoll(null);
+    };
+
+    const schedule = (delay: number) => {
+      if (!stillActive()) return;
+      const remaining = registryStatusPoll.deadlineAt - Date.now();
+      if (remaining <= 0) {
+        finishTimedOut();
+        return;
+      }
+      timer = window.setTimeout(
+        () => void pollRegistryStatus(),
+        Math.min(delay, remaining),
+      );
+    };
+
+    const pollRegistryStatus = async () => {
+      if (!stillActive()) return;
+      controller = new AbortController();
+      try {
+        const [statusResult, continuationResult] = await Promise.all([
+          api(
+            "/api/creditex/stc-products",
+            { signal: controller.signal },
+            { requestTimeoutMs: SRES_PRODUCT_RECOVERY_TIMEOUT_MS },
+          ),
+          api(
+            "/api/creditex/official-products?continueRegistry=cer_sres_swh",
+            { signal: controller.signal },
+            { requestTimeoutMs: SRES_PRODUCT_RECOVERY_TIMEOUT_MS },
+          ),
+        ]);
+        if (!stillActive()) return;
+
+        const nextRegistry = (statusResult.registry || null) as
+          RegistryStatus | null;
+        setRegistry(nextRegistry);
+        const pollState = creditexSresRegistryPollState(
+          nextRegistry,
+          continuationResult.refreshQueued,
+        );
+        if (pollState === "complete") {
+          setRefreshError("");
+          setRefreshNotice(
+            "Official CER product rows are current. Product choices reloaded automatically.",
+          );
+          setLookupVersion((current) => current + 1);
+          setRegistryStatusPoll(null);
+          return;
+        }
+        if (pollState === "failed") {
+          setRefreshNotice("");
+          setRefreshError(
+            "The accepted CER product update is not current because the last controlled refresh did not complete. Status checks will continue automatically.",
+          );
+        } else {
+          setRefreshError("");
+          setRefreshNotice(
+            "The accepted CER product update is not current yet. Status checks will continue automatically, and product choices will reload automatically when the registry is current.",
+          );
+        }
+      } catch {
+        if (!stillActive()) return;
+        setRefreshNotice("");
+        setRefreshError(
+          "The accepted CER product update has not been confirmed current because the latest status check failed. Checking again automatically.",
+        );
+      }
+      schedule(SRES_REGISTRY_STATUS_POLL_INTERVAL_MS);
+    };
+
+    schedule(SRES_REGISTRY_STATUS_POLL_INITIAL_DELAY_MS);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [api, productBlocker, registryStatusPoll, role]);
+
   async function refreshRegistry() {
+    cancelRegistryStatusPoll();
     invalidateEstimate();
     setRefreshBusy(true);
+    setRefreshNotice("");
+    setRefreshError("");
     setLookupError("");
     try {
       const result = await api("/api/creditex/stc-products", {
         method: "POST",
         body: JSON.stringify({ action: "refresh" }),
-      }, { requestTimeoutMs: 90_000 });
+      }, { requestTimeoutMs: SRES_PRODUCT_RECOVERY_TIMEOUT_MS });
+      if (result.queued !== true) {
+        throw new Error(
+          "The CER product update was not accepted by the background refresh queue.",
+        );
+      }
       const nextRegistry = (result.registry || null) as RegistryStatus | null;
       const nextSnapshotId = nextRegistry?.snapshot?.id || "";
       if (
@@ -568,11 +704,19 @@ export function CreditexSresCalculator({
         setProducts([]);
       }
       setRegistry(nextRegistry);
-      setLookupVersion((current) => current + 1);
+      setRefreshNotice(
+        nextRegistry?.status === "current"
+          ? "The official CER product update was accepted. Current approved rows remain available while status checks continue automatically."
+          : "The official CER product update was accepted. Product choices will load automatically when the registry is current, and status checks will continue until then.",
+      );
+      const generation = registryStatusPollGenerationRef.current + 1;
+      registryStatusPollGenerationRef.current = generation;
+      setRegistryStatusPoll({
+        generation,
+        deadlineAt: Date.now() + SRES_REGISTRY_STATUS_POLL_TIMEOUT_MS,
+      });
     } catch (error) {
-      setProducts([]);
-      markRegistryUnverified();
-      setLookupError(
+      setRefreshError(
         error instanceof Error
           ? error.message
           : "The official registry refresh failed safely.",
@@ -648,7 +792,7 @@ export function CreditexSresCalculator({
         setEstimateError(
           error instanceof Error
             ? error.message
-            : "The STC estimate could not be completed safely.",
+            : "The STC calculation could not be completed safely.",
         );
       }
     } finally {
@@ -659,6 +803,9 @@ export function CreditexSresCalculator({
   }
 
   function updateTechnology(technology: Technology) {
+    cancelRegistryStatusPoll();
+    setRefreshNotice("");
+    setRefreshError("");
     waterHeaterItemIdRef.current = 0;
     setWaterHeaterItems([]);
     dispatchProductCascade({ type: "reset", reason: "technology" });
@@ -732,9 +879,13 @@ export function CreditexSresCalculator({
     >
       <header>
         <div>
-          <span>FEDERAL REBATE ESTIMATE</span>
-          <h4 id="stc-estimator-title">Estimate STCs</h4>
-          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
+          <span>FEDERAL CERTIFICATE CALCULATOR</span>
+          <h4 id="stc-estimator-title">Calculate STCs</h4>
+          <small>
+            Exact, source-verified arithmetic for the selected inputs. Final
+            eligibility, certificate creation, provider submission and provider
+            acceptance are separate governed workflows.
+          </small>
         </div>
       </header>
 
@@ -1014,7 +1165,7 @@ export function CreditexSresCalculator({
             )
           }
         >
-          {estimateBusy ? "Calculating..." : "Calculate rebate estimate"}
+          {estimateBusy ? "Calculating..." : "Calculate STCs"}
         </button>
       </form>
 
@@ -1034,6 +1185,10 @@ export function CreditexSresCalculator({
           >
             {refreshBusy ? "Refreshing..." : "Refresh official products"}
           </button>
+          {refreshNotice && <p role="status">{refreshNotice}</p>}
+          {refreshError && (
+            <p className={styles.error} role="alert">{refreshError}</p>
+          )}
         </details>
       )}
 
@@ -1043,32 +1198,50 @@ export function CreditexSresCalculator({
         <section className={styles.estimateResult} aria-live="polite">
           <header>
             <div>
-              <span>Estimated quantity</span>
+              <span>Calculated quantity</span>
               <strong>{estimate.output.quantity} {estimate.output.unit}</strong>
             </div>
-            <b>Estimate only</b>
+            <b>Source-verified result</b>
           </header>
-          {estimate.resolution && (
-            <div className={styles.estimateResolution}>
-              <strong>
-                {estimate.resolution.brand && estimate.resolution.model
-                  ? `${estimate.resolution.brand} ${estimate.resolution.model}`
-                  : `Postcode ${estimate.resolution.postcode}`}
-              </strong>
-              {Number(estimate.unitQuantity || "1") > 1
-                && estimate.perUnitOutput
-                && !estimate.waterHeaterItems && (
-                <span>
-                  {estimate.perUnitOutput.quantity} STC per system x {estimate.unitQuantity} systems
-                </span>
-              )}
-              {estimate.waterHeaterItems?.map((item) => (
-                <span key={item.itemNumber}>
-                  {item.resolution.brand} {item.resolution.model}: {item.perUnitOutput.quantity} STC per system x {item.unitQuantity} = {item.output.quantity} STC
-                </span>
-              ))}
-            </div>
-          )}
+          <div className={styles.estimateResolution}>
+            <span>
+              Exact, source-verified calculation for the selected inputs and
+              {" "}{estimate.technology === "solar_battery"
+                ? "safety certification date"
+                : "installation date"} {estimate.effectiveDate}.
+            </span>
+            <span>
+              Formula/source version: {estimate.formulaKey} | {estimate.formulaVersion}.
+            </span>
+            <span>Official source: {estimate.officialSourceTitle}.</span>
+            {estimate.resolution && (
+              <>
+                <strong>
+                  {estimate.resolution.brand && estimate.resolution.model
+                    ? `${estimate.resolution.brand} ${estimate.resolution.model}`
+                    : `Postcode ${estimate.resolution.postcode}`}
+                </strong>
+                {Number(estimate.unitQuantity || "1") > 1
+                  && estimate.perUnitOutput
+                  && !estimate.waterHeaterItems && (
+                  <span>
+                    {estimate.perUnitOutput.quantity} STC per system x {estimate.unitQuantity} systems
+                  </span>
+                )}
+                {estimate.waterHeaterItems?.map((item) => (
+                  <span key={item.itemNumber}>
+                    {item.resolution.brand} {item.resolution.model}: {item.perUnitOutput.quantity} STC per system x {item.unitQuantity} = {item.output.quantity} STC
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+          <p>
+            This confirms the calculated STC quantity only. Final eligibility
+            and evidence must still be confirmed. Certificate creation,
+            provider submission and provider acceptance remain separate
+            governed workflows.
+          </p>
           <details>
             <summary>Calculation details</summary>
             {estimate.resolution && (
@@ -1093,7 +1266,9 @@ export function CreditexSresCalculator({
                 </li>
               ))}
             </ol>
-            <p>{estimate.operatorMessage}</p>
+            <p>
+              <strong>Eligibility boundary:</strong> {estimate.operatorMessage}
+            </p>
             <footer>
               <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
                 Open official source

@@ -19,12 +19,12 @@ import {
 } from "@/lib/creditex-calculator-route-response";
 import {
   CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES,
+  CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
   CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS,
   CREDITEX_PRODUCT_KIND_REGISTRY,
   CreditexOfficialProductError,
 } from "@/lib/creditex-official-product-registry";
 import {
-  ensureAutomaticOfficialProductRegistryCurrent,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
@@ -34,6 +34,7 @@ import {
 import {
   CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
   creditexAutomaticProductRegistry,
+  creditexAutomaticProductRegistries,
   creditexCecBatteryConnectorConfigurationIssue,
 } from "@/lib/creditex-official-product-registry-definitions";
 import {
@@ -42,6 +43,11 @@ import {
   type CreditexSresArtifactStore,
 } from "@/lib/creditex-sres-registry-server";
 import {
+  CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER,
+  creditexProductRegistryRefreshDue,
+  enqueueCreditexProductRegistryRefresh,
+  hasDueCreditexProductRegistryRefreshRequest,
+  hasQueuedCreditexProductRegistryRefreshRequest,
   withCreditexProductRegistryFleetLease,
 } from
   "@/lib/creditex-product-registry-maintenance";
@@ -149,6 +155,58 @@ export async function GET(request: Request) {
       allowPublicQuote: true,
     });
     const parameters = new URL(request.url).searchParams;
+    const continuationRegistryCode = parameters.get("continueRegistry");
+    if (continuationRegistryCode) {
+      if ([...parameters.keys()].some((key) => key !== "continueRegistry")) {
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REQUEST_INVALID",
+          400,
+          "The official registry continuation request is invalid.",
+        );
+      }
+      const runtimeEnvironment = env as unknown as Record<string, unknown>;
+      const automaticRegistryCodes = [
+        ...creditexAutomaticProductRegistries(runtimeEnvironment).map(
+          (definition) => definition.registryCode,
+        ),
+        "cer_sres_swh",
+      ];
+      const requestedRegistryCodes = continuationRegistryCode
+        === CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE
+        ? automaticRegistryCodes
+        : automaticRegistryCodes.includes(continuationRegistryCode)
+          ? [continuationRegistryCode]
+          : [];
+      if (requestedRegistryCodes.length === 0) {
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REQUEST_INVALID",
+          400,
+          "The selected official registry does not support automatic continuation.",
+        );
+      }
+      const [refreshQueued, continuationDue] = await Promise.all([
+        hasQueuedCreditexProductRegistryRefreshRequest(
+          database,
+          requestedRegistryCodes,
+        ),
+        hasDueCreditexProductRegistryRefreshRequest(
+          database,
+          requestedRegistryCodes,
+        ),
+      ]);
+      return json({
+        ok: true,
+        refreshQueued,
+        continuationDue,
+      }, continuationDue ? 202 : 200,
+        continuationDue
+          ? {
+              "Retry-After": "3",
+              [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]:
+                continuationRegistryCode,
+            }
+          : {});
+    }
     const productKind = parameters.get("productKind");
     const installationDate = parameters.get("installationDate");
     if (!productKind && !installationDate) {
@@ -226,23 +284,34 @@ export async function GET(request: Request) {
         ? creditexAutomaticProductRegistry(registryCode, runtimeEnvironment)
         : undefined;
       if (!definition) throw error;
-      const artifactStore = (env as unknown as {
-        EVIDENCE?: CreditexOfficialProductArtifactStore;
-      }).EVIDENCE;
-      await withCreditexProductRegistryFleetLease(
+      await enqueueCreditexProductRegistryRefresh(
         database,
-        () => ensureAutomaticOfficialProductRegistryCurrent(
-          database,
-          definition,
-          { artifactStore },
-        ),
+        definition.registryCode,
       );
-      result = await searchOfficialProducts(database, searchInput);
+      return json({
+        ok: false,
+        code: "OFFICIAL_PRODUCT_FLEET_BUSY",
+        error: "The exact official product registry is updating. The calculator will retry automatically.",
+      }, 503, {
+        "Retry-After": "3",
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: definition.registryCode,
+      });
     }
-    return json(projectCreditexCalculatorReadResponse(access.accessType, {
+    const responseBody = projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,
       ...result,
-    }));
+    });
+    if (creditexProductRegistryRefreshDue(result.registry)) {
+      await enqueueCreditexProductRegistryRefresh(
+        database,
+        result.registry.registryCode,
+      );
+      return json(responseBody, 200, {
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]:
+          result.registry.registryCode,
+      });
+    }
+    return json(responseBody);
   } catch (error) {
     return errorResponse(error);
   }
@@ -311,6 +380,60 @@ export async function POST(request: Request) {
           }
         : undefined;
     const runtimeEnvironment = env as unknown as Record<string, unknown>;
+    if (standardRefresh) {
+      const automaticDefinitions = creditexAutomaticProductRegistries(
+        runtimeEnvironment,
+      );
+      let registryCodes: string[];
+      if (body.registryCode === "all") {
+        const cecConfigurationIssue =
+          creditexCecBatteryConnectorConfigurationIssue(runtimeEnvironment);
+        if (cecConfigurationIssue) {
+          throw new CreditexOfficialProductError(
+            "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
+            503,
+            cecConfigurationIssue,
+          );
+        }
+        registryCodes = [
+          ...automaticDefinitions.map((definition) => definition.registryCode),
+          "cer_sres_swh",
+        ];
+      } else if (
+        body.registryCode === "cer_sres_swh"
+        || automaticDefinitions.some(
+          (definition) => definition.registryCode === body.registryCode,
+        )
+      ) {
+        registryCodes = [body.registryCode];
+      } else {
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REQUEST_INVALID",
+          400,
+          "The selected official registry does not support automatic refresh.",
+        );
+      }
+      await Promise.all(registryCodes.map((registryCode) => (
+        enqueueCreditexProductRegistryRefresh(database, registryCode)
+      )));
+      const registries = await Promise.all(registryCodes.map(
+        (registryCode) => registryCode === "cer_sres_swh"
+          ? loadCerSresRegistryStatus(database)
+          : loadOfficialProductRegistryStatus(database, registryCode),
+      ));
+      const dispatchRegistryCode = registryCodes.length === 1
+        ? registryCodes[0]
+        : CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE;
+      return json({
+        ok: true,
+        queued: true,
+        registryCodes,
+        registries,
+      }, 202, {
+        "Retry-After": "3",
+        [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]: dispatchRegistryCode,
+      });
+    }
     const definitions = body.registryCode === "all"
       ? [...CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES]
       : [creditexAutomaticProductRegistry(
@@ -326,7 +449,10 @@ export async function POST(request: Request) {
         }).EVIDENCE;
         const result = await withCreditexProductRegistryFleetLease(
           database,
-          () => syncCerSresProductRegistry(database, { artifactStore }),
+          (fleetLease) => syncCerSresProductRegistry(database, {
+            artifactStore,
+            fleetLeaseId: fleetLease.leaseId,
+          }),
         );
         const registry = await loadCerSresRegistryStatus(database);
         return json({ ok: true, results: [result], registries: [registry] });
@@ -344,9 +470,10 @@ export async function POST(request: Request) {
     for (const definition of definitions) {
       results.push(await withCreditexProductRegistryFleetLease(
         database,
-        () => syncOfficialProductRegistry(database, definition, {
+        (fleetLease) => syncOfficialProductRegistry(database, definition, {
           artifactStore,
           reviewedCountDecrease,
+          fleetLeaseId: fleetLease.leaseId,
         }),
       ));
     }
@@ -359,10 +486,14 @@ export async function POST(request: Request) {
         definitions.push(licensedCecBattery);
         results.push(await withCreditexProductRegistryFleetLease(
           database,
-          () => syncOfficialProductRegistry(
+          (fleetLease) => syncOfficialProductRegistry(
             database,
             licensedCecBattery,
-            { artifactStore, reviewedCountDecrease },
+            {
+              artifactStore,
+              reviewedCountDecrease,
+              fleetLeaseId: fleetLease.leaseId,
+            },
           ),
         ));
       }
@@ -371,8 +502,9 @@ export async function POST(request: Request) {
       }).EVIDENCE;
       results.push(await withCreditexProductRegistryFleetLease(
         database,
-        () => syncCerSresProductRegistry(database, {
+        (fleetLease) => syncCerSresProductRegistry(database, {
           artifactStore: sresArtifactStore,
+          fleetLeaseId: fleetLease.leaseId,
         }),
       ));
       if (!licensedCecBattery) {

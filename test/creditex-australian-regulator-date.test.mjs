@@ -63,7 +63,7 @@ test("the Worker runs one durable registry maintenance target on the minute sche
   );
   assert.match(worker, /NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);
   assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
-  assert.match(worker, /maintainNextCreditexProductRegistry\(/);
+  assert.match(worker, /drainCreditexProductRegistryMaintenance\(/);
   assert.match(worker, /creditexAutomaticProductRegistryMaintenanceTargets\(/);
   assert.doesNotMatch(worker, /SRES_REGISTRY_CRON/);
   assert.doesNotMatch(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON/);

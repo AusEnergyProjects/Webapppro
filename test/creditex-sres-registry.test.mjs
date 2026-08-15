@@ -61,6 +61,13 @@ const streamStagingMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const refreshProgressMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0150_creditex_official_product_refresh_progress.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const productRouteSource = fs.readFileSync(
   new URL(
@@ -89,14 +96,16 @@ const calculatorSource = fs.readFileSync(
 );
 
 class TestD1Statement {
-  constructor(database, sql, values = []) {
+  constructor(database, sql, values = [], onBind = () => undefined) {
     this.database = database;
     this.sql = sql;
     this.values = values;
+    this.onBind = onBind;
   }
 
   bind(...values) {
-    return new TestD1Statement(this.database, this.sql, values);
+    this.onBind(this.sql, values);
+    return new TestD1Statement(this.database, this.sql, values, this.onBind);
   }
 
   async first() {
@@ -117,12 +126,16 @@ class TestD1Statement {
   }
 }
 
-function testD1(database) {
+function testD1(
+  database,
+  { onBind = () => undefined, onBatch = () => undefined } = {},
+) {
   return {
     prepare(sql) {
-      return new TestD1Statement(database, sql);
+      return new TestD1Statement(database, sql, [], onBind);
     },
     async batch(statements) {
+      onBatch(statements);
       database.exec("BEGIN");
       try {
         const results = statements.map((statement) => statement.runSync());
@@ -323,19 +336,20 @@ function memoryArtifactStore() {
   };
 }
 
-function fixture() {
+function fixture(options = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(migration);
   database.exec(officialProductMigration);
   database.exec(refreshQueueMigration);
   database.exec(streamStagingMigration);
+  database.exec(refreshProgressMigration);
   for (const guard of CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }
   return {
     database,
-    d1: testD1(database),
+    d1: testD1(database, options),
     artifactStore: memoryArtifactStore(),
   };
 }
@@ -1653,7 +1667,16 @@ test("changed postcode source bytes immediately quarantine zone calculations", a
 });
 
 test("a database lease rejects overlapping registry refreshes", async () => {
-  const { d1, artifactStore } = fixture();
+  const { database, d1, artifactStore } = fixture();
+  const checkedAt = new Date("2026-08-08T00:00:00.000Z");
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    "automatic-registry-fleet",
+    "current-fleet-owner",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+  );
   let announceStarted;
   let releaseFetches;
   const started = new Promise((resolve) => {
@@ -1671,9 +1694,10 @@ test("a database lease rejects overlapping registry refreshes", async () => {
   const first = syncCerSresProductRegistry(d1, {
     fetchImpl: blockedFetch,
     artifactStore,
-    now: new Date("2026-08-08T00:00:00.000Z"),
+    now: checkedAt,
     references: REFERENCES,
     sources: SOURCES,
+    fleetLeaseId: "current-fleet-owner",
   });
   await started;
   await assert.rejects(
@@ -1683,11 +1707,264 @@ test("a database lease rejects overlapping registry refreshes", async () => {
       now: new Date("2026-08-08T00:00:01.000Z"),
       references: REFERENCES,
       sources: SOURCES,
+      fleetLeaseId: "current-fleet-owner",
     }),
     expectedRegistryError("SRES_REFRESH_IN_PROGRESS"),
   );
   releaseFetches();
   await first;
+});
+
+test("a verified fleet owner reclaims a cancelled SRES registry lease", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const checkedAt = new Date("2026-08-08T00:00:00.000Z");
+  database.prepare(`INSERT INTO compliance_product_registry_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    "cer_sres_swh",
+    "cancelled-sres-worker",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 15 * 60_000).toISOString(),
+  );
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    "automatic-registry-fleet",
+    "current-fleet-owner",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+  );
+
+  for (const fleetLeaseId of [undefined, "wrong-fleet-owner"]) {
+    await assert.rejects(
+      syncCerSresProductRegistry(d1, {
+        fetchImpl: fetchFixture(),
+        artifactStore,
+        now: checkedAt,
+        references: REFERENCES,
+        sources: SOURCES,
+        ...(fleetLeaseId ? { fleetLeaseId } : {}),
+      }),
+      expectedRegistryError("SRES_REFRESH_IN_PROGRESS"),
+    );
+  }
+  database.prepare(`UPDATE compliance_official_product_sync_leases
+    SET started_at = ?, expires_at = ?
+    WHERE registry_code = 'automatic-registry-fleet'`)
+    .run(
+      new Date(checkedAt.getTime() - 60_000).toISOString(),
+      checkedAt.toISOString(),
+    );
+  await assert.rejects(
+    syncCerSresProductRegistry(d1, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: checkedAt,
+      references: REFERENCES,
+      sources: SOURCES,
+      fleetLeaseId: "current-fleet-owner",
+    }),
+    expectedRegistryError("SRES_REFRESH_IN_PROGRESS"),
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_product_registry_sync_leases`).get()
+      .lease_id,
+    "cancelled-sres-worker",
+  );
+  database.prepare(`UPDATE compliance_official_product_sync_leases
+    SET expires_at = ? WHERE registry_code = 'automatic-registry-fleet'`)
+    .run(new Date(checkedAt.getTime() + 3 * 60_000).toISOString());
+
+  const result = await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: checkedAt,
+    references: REFERENCES,
+    sources: SOURCES,
+    fleetLeaseId: "current-fleet-owner",
+  });
+  assert.equal(result.changed, true);
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_product_registry_sync_leases`).get().count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_official_product_sync_leases
+      WHERE registry_code = 'automatic-registry-fleet'`).get().lease_id,
+    "current-fleet-owner",
+  );
+});
+
+test("a successor takeover fences the old SRES owner's unchanged receipt and release", async () => {
+  let armed = false;
+  let takeoverCount = 0;
+  const checkedAt = new Date("2026-08-10T00:00:01.000Z");
+  const { database, d1, artifactStore } = fixture({
+    onBind(sql) {
+      if (
+        armed
+        && takeoverCount === 0
+        && sql.includes("INSERT INTO compliance_product_registry_sync_runs")
+        && sql.includes("SELECT ?, ?, 'unchanged'")
+      ) {
+        takeoverCount += 1;
+        const expiresAt = new Date(
+          checkedAt.getTime() + 3 * 60_000,
+        ).toISOString();
+        database.prepare(`UPDATE compliance_product_registry_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code = 'cer_sres_swh' AND lease_id = 'old-owner'`)
+          .run(checkedAt.toISOString(), expiresAt);
+        database.prepare(`UPDATE compliance_official_product_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code = 'automatic-registry-fleet'
+            AND lease_id = 'old-owner'`)
+          .run(checkedAt.toISOString(), expiresAt);
+      }
+    },
+  });
+  const initial = await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES ('automatic-registry-fleet', 'old-owner', ?, ?)`)
+    .run(
+      checkedAt.toISOString(),
+      new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+    );
+  armed = true;
+
+  await assert.rejects(
+    syncCerSresProductRegistry(d1, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: checkedAt,
+      references: REFERENCES,
+      sources: SOURCES,
+      fleetLeaseId: "old-owner",
+    }),
+    expectedRegistryError("SRES_REFRESH_IN_PROGRESS"),
+  );
+
+  assert.equal(takeoverCount, 1);
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_product_registry_sync_runs
+      WHERE registry_code = 'cer_sres_swh' AND status = 'unchanged'`).get().count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT id FROM compliance_product_registry_snapshots
+      WHERE registry_code = 'cer_sres_swh' AND status = 'current'`).get().id,
+    initial.snapshotId,
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_product_registry_sync_leases
+      WHERE registry_code = 'cer_sres_swh'`).get().lease_id,
+    "successor-owner",
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_official_product_sync_leases
+      WHERE registry_code = 'automatic-registry-fleet'`).get().lease_id,
+    "successor-owner",
+  );
+});
+
+test("a successor takeover atomically prevents the old SRES owner from activating", async () => {
+  let armed = false;
+  let takeoverCount = 0;
+  const checkedAt = new Date("2026-08-10T00:00:01.000Z");
+  const { database, d1, artifactStore } = fixture({
+    onBatch(statements) {
+      if (
+        armed
+        && takeoverCount === 0
+        && statements.some((statement) => (
+          statement.sql.includes("UPDATE compliance_product_registry_snapshots")
+          && statement.sql.includes("status = 'current'")
+          && statement.sql.includes("inner_lease.lease_id = ?")
+        ))
+      ) {
+        takeoverCount += 1;
+        const expiresAt = new Date(
+          checkedAt.getTime() + 3 * 60_000,
+        ).toISOString();
+        database.prepare(`UPDATE compliance_product_registry_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code = 'cer_sres_swh' AND lease_id = 'old-owner'`)
+          .run(checkedAt.toISOString(), expiresAt);
+        database.prepare(`UPDATE compliance_official_product_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code = 'automatic-registry-fleet'
+            AND lease_id = 'old-owner'`)
+          .run(checkedAt.toISOString(), expiresAt);
+      }
+    },
+  });
+  const initial = await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES ('automatic-registry-fleet', 'old-owner', ?, ?)`)
+    .run(
+      checkedAt.toISOString(),
+      new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+    );
+  armed = true;
+
+  await assert.rejects(
+    syncCerSresProductRegistry(d1, {
+      fetchImpl: fetchFixture(new Map([
+        ["cer-ashp", csvFixture(SOURCES[0], { 2: "AS51-210HPA-TAKEOVER" })],
+      ])),
+      artifactStore,
+      now: checkedAt,
+      references: REFERENCES,
+      sources: SOURCES,
+      fleetLeaseId: "old-owner",
+    }),
+    /Successful registry sync must identify the current snapshot/,
+  );
+
+  assert.equal(takeoverCount, 1);
+  assert.equal(
+    database.prepare(`SELECT id FROM compliance_product_registry_snapshots
+      WHERE registry_code = 'cer_sres_swh' AND status = 'current'`).get().id,
+    initial.snapshotId,
+  );
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_product_registry_snapshots
+      WHERE registry_code = 'cer_sres_swh' AND status = 'staging'`).get().count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_product_registry_sync_runs
+      WHERE registry_code = 'cer_sres_swh' AND status = 'success'`).get().count,
+    1,
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_product_registry_sync_leases
+      WHERE registry_code = 'cer_sres_swh'`).get().lease_id,
+    "successor-owner",
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_official_product_sync_leases
+      WHERE registry_code = 'automatic-registry-fleet'`).get().lease_id,
+    "successor-owner",
+  );
 });
 
 test("an expired older refresh cannot replace a newer activated snapshot", async () => {
@@ -1811,7 +2088,7 @@ test("protected APIs, bounded scheduled Worker and UI enforce server-derived reg
     estimateRouteSource,
     /allowPublicQuote: estimatePurpose === "quote"/,
   );
-  assert.match(workerSource, /maintainNextCreditexProductRegistry/);
+  assert.match(workerSource, /drainCreditexProductRegistryMaintenance/);
   assert.match(workerSource, /creditexAutomaticProductRegistryMaintenanceTargets/);
   assert.doesNotMatch(workerSource, /SRES_REGISTRY_CRON/);
   assert.match(calculatorSource, /Product type/);

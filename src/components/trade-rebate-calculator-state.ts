@@ -11,5 +11,5 @@ export function resetTradeDashboardStateOnUidChange(
 export function tradeRebatePreparingMessage(attempt: number | null) {
   return attempt === null
     ? ""
-    : `Preparing governed calculator controls (${attempt} of 20)...`;
+    : "Updating the exact official product register. Product choices will load automatically.";
 }

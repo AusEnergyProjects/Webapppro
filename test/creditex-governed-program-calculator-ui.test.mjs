@@ -706,7 +706,7 @@ test("VEU water-heater quote combines exact reductions once and hides scheme his
 test("admin refresh selects only the program-specific governed registry", () => {
   const veu = allProgramModule.creditexAutomaticRegistryRefreshContract("VEU");
   assert.deepEqual(veu.registryCodes, ["veu-approved-products"]);
-  assert.equal(veu.requestTimeoutMs, 300_000);
+  assert.equal(veu.requestTimeoutMs, 25_000);
   assert.match(veu.sourceLabel, /VEU Public Registry/);
   assert.equal(veu.buttonLabel, "Refresh VEU-approved products");
 
@@ -718,7 +718,7 @@ test("admin refresh selects only the program-specific governed registry", () => 
       other.registryCodes,
       ["nsw-tessa-products", "gems-products"],
     );
-    assert.equal(other.requestTimeoutMs, 300_000);
+    assert.equal(other.requestTimeoutMs, 25_000);
     assert.equal(other.buttonLabel, "Refresh NSW official products");
     assert.match(other.currentLabel, /NSW official product rows are current/);
   }
@@ -728,7 +728,7 @@ test("admin refresh selects only the program-specific governed registry", () => 
   );
 });
 
-test("NSW admin refresh updates TESSA before GEMS and combines their current row counts", async () => {
+test("NSW admin refresh queues TESSA before GEMS and retains current row counts", async () => {
   const contract = allProgramModule.creditexAutomaticRegistryRefreshContract(
     "NSW-PDRS-2026",
   );
@@ -739,8 +739,10 @@ test("NSW admin refresh updates TESSA before GEMS and combines their current row
       calls.push({ path, body, options });
       return {
         ok: true,
+        queued: true,
         registries: [{
           registryCode: body.registryCode,
+          status: "current",
           recordCount: body.registryCode === "gems-products" ? 31_418 : 746,
         }],
       };
@@ -748,7 +750,10 @@ test("NSW admin refresh updates TESSA before GEMS and combines their current row
     contract,
   );
 
-  assert.equal(recordCount, 32_164);
+  assert.deepEqual(recordCount, {
+    queuedRegistryCount: 2,
+    recordCount: 32_164,
+  });
   assert.deepEqual(
     calls.map((call) => call.body.registryCode),
     ["nsw-tessa-products", "gems-products"],
@@ -756,7 +761,7 @@ test("NSW admin refresh updates TESSA before GEMS and combines their current row
   for (const call of calls) {
     assert.equal(call.path, "/api/creditex/official-products");
     assert.equal(call.body.action, "refresh");
-    assert.equal(call.options.requestTimeoutMs, 300_000);
+    assert.equal(call.options.requestTimeoutMs, 25_000);
   }
 });
 
@@ -774,13 +779,64 @@ test("NSW admin refresh fails closed when either governed source cannot refresh"
         if (registryCode === "gems-products") {
           throw new Error("GEMS refresh unavailable");
         }
-        return { registries: [{ recordCount: 746 }] };
+        return {
+          queued: true,
+          registries: [{ status: "current", recordCount: 746 }],
+        };
       },
       contract,
     ),
     /GEMS refresh unavailable/,
   );
   assert.deepEqual(registryCodes, ["nsw-tessa-products", "gems-products"]);
+});
+
+test("queued admin refresh never presents stale rows as currently available", async () => {
+  const contract = allProgramModule.creditexAutomaticRegistryRefreshContract(
+    "VEU",
+  );
+  const result = await allProgramModule.creditexRefreshAutomaticProductRegistries(
+    async () => ({
+      queued: true,
+      registries: [{ status: "stale", recordCount: 75_492 }],
+    }),
+    contract,
+  );
+  assert.deepEqual(result, {
+    queuedRegistryCount: 1,
+    recordCount: 0,
+  });
+});
+
+test("a deferred registry queue prevents completion even with prior current success", () => {
+  const registryCodes = ["nsw-tessa-products", "gems-products"];
+  const current = registryCodes.map((registryCode) => ({
+    registryCode,
+    status: "current",
+    lastAttempt: {
+      status: "success",
+      checkedAt: "2026-08-16T00:00:00.000Z",
+      message: "",
+    },
+  }));
+  assert.equal(allProgramModule.creditexAutomaticRegistryPollState(
+    registryCodes,
+    current,
+    ["gems-products"],
+  ), "pending");
+  assert.equal(allProgramModule.creditexAutomaticRegistryPollState(
+    registryCodes,
+    current,
+    [],
+  ), "complete");
+  assert.equal(allProgramModule.creditexAutomaticRegistryPollState(
+    registryCodes,
+    [{
+      ...current[0],
+      lastAttempt: { ...current[0].lastAttempt, status: "failed" },
+    }, current[1]],
+    [],
+  ), "failed");
 });
 
 test("NSW official-product refresh remains admin-only", () => {
@@ -853,7 +909,7 @@ test("the shared approved-product picker shows only choices that remain necessar
   assert.match(pickerSource, /Retry official registry/);
   assert.match(
     pickerSource,
-    /OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 180_000/,
+    /OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 25_000/,
   );
   assert.match(
     pickerSource,

@@ -217,17 +217,24 @@ test("workspace failures are not labelled as invalid credentials", () => {
   assert.doesNotMatch(workspaceLoaderSource, /setNotice\(authMessage\(error\)\)/);
 });
 
-test("first access installs schema guards in quota-safe batches and retries visibly", () => {
+test("first access and registry recovery retry visibly without a fake attempt total", () => {
   assert.match(schemaGuards, /const SCHEMA_INSTALL_BATCH_SIZE = 40/);
   assert.match(schemaGuards, /missing\.slice\(0, SCHEMA_INSTALL_BATCH_SIZE\)/);
   assert.match(schemaGuards, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
   assert.match(sessionRoute, /code: "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
   assert.match(sessionRoute, /"Retry-After": "1"/);
   assert.match(portal, /for \(let attempt = 0; attempt < 20; attempt \+= 1\)/);
-  assert.match(portal, /Preparing governed compliance controls \(\$\{attempt \+ 1\} of 20\)/);
   assert.match(portal, /result\.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
+  assert.match(portal, /result\.code === "OFFICIAL_PRODUCT_FLEET_BUSY"/);
   assert.match(portal, /response\.headers\.get\("Retry-After"\)/);
-  assert.match(portal, /Preparing governed compliance controls/);
+  assert.match(
+    portal,
+    /Updating the exact official product register\. Product choices will load automatically\./,
+  );
+  assert.doesNotMatch(
+    portal,
+    /Preparing governed compliance controls \([^)]*of[^)]*\)/,
+  );
   assert.match(portal, /Retry workspace/);
   assert.match(sessionRoute, /CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED/);
   assert.match(sessionRoute, /CREDITEX_SCHEMA_MIGRATIONS_REQUIRED/);

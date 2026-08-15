@@ -38,8 +38,12 @@ import {
   type CreditexOfficialProductArtifactStore,
 } from "../src/lib/creditex-official-product-registry-server";
 import {
+  CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+} from "../src/lib/creditex-official-product-registry";
+import {
+  CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER,
   creditexAutomaticProductRegistryMaintenanceTargets,
-  maintainNextCreditexProductRegistry,
+  drainCreditexProductRegistryMaintenance,
 } from "../src/lib/creditex-product-registry-maintenance";
 import { ensureTlinkSchemaGuards } from "../src/lib/tlink-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
@@ -207,6 +211,83 @@ function queuePublicPlanDeliveryDispatch(
   return dispatch.response;
 }
 
+function queueCreditexProductRegistryDispatch(
+  response: Response,
+  ctx: ExecutionContext,
+  request: Request,
+  workerEnv: unknown,
+) {
+  const registryCode =
+    response.headers.get(CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER) || "";
+  if (!registryCode) return response;
+  const headers = new Headers(response.headers);
+  headers.delete(CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER);
+  const artifactStore = (workerEnv as {
+    EVIDENCE?: CreditexOfficialProductArtifactStore & CreditexSresArtifactStore;
+  }).EVIDENCE;
+  ctx.waitUntil(
+    drainCreditexProductRegistryMaintenance({
+      database: getD1(),
+      preferredRegistryCode: registryCode,
+      targets: creditexAutomaticProductRegistryMaintenanceTargets({
+        artifactStore,
+        environment: workerEnv as Readonly<Record<string, unknown>>,
+      }),
+    }).then(async (result) => {
+      if (result.continuationRequired) {
+        await requestCreditexProductRegistryContinuation(
+          request,
+          registryCode,
+          result.continuationDelayMs,
+        );
+      }
+    }).catch((error) => {
+      console.error(
+        `Official product registry ${registryCode} recovery failed.`,
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    }),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function requestCreditexProductRegistryContinuation(
+  request: Request,
+  registryCode: string,
+  delayMs = 0,
+) {
+  if (delayMs > 0) {
+    await new Promise((resolve) => setTimeout(
+      resolve,
+      Math.min(Math.max(delayMs, 0), 3_000),
+    ));
+  }
+  const continuationUrl = new URL(
+    "/api/creditex/official-products",
+    request.url,
+  );
+  continuationUrl.searchParams.set("continueRegistry", registryCode);
+  const response = await fetch(continuationUrl, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      Origin: continuationUrl.origin,
+    },
+    method: "GET",
+    redirect: "error",
+  });
+  await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Official product registry continuation returned ${response.status}.`,
+    );
+  }
+}
+
 function queueBackgroundDispatches(
   response: Response,
   ctx: ExecutionContext,
@@ -296,6 +377,31 @@ function queueBackgroundDispatches(
       }),
     );
     const bucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
+    const registryArtifactStore = (workerEnv as {
+      EVIDENCE?: CreditexOfficialProductArtifactStore & CreditexSresArtifactStore;
+    }).EVIDENCE;
+    ctx.waitUntil(
+      drainCreditexProductRegistryMaintenance({
+        database,
+        targets: creditexAutomaticProductRegistryMaintenanceTargets({
+          artifactStore: registryArtifactStore,
+          environment: workerEnv as Readonly<Record<string, unknown>>,
+        }),
+      }).then(async (result) => {
+        if (result.continuationRequired) {
+          await requestCreditexProductRegistryContinuation(
+            request,
+            CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+            result.continuationDelayMs,
+          );
+        }
+      }).catch((error) => {
+        console.error(
+          "Official product registry health recovery failed.",
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      }),
+    );
     if (bucket) {
       ctx.waitUntil(
         drainTradeTeamMemberFileCleanup({ db: database, bucket })
@@ -313,13 +419,13 @@ function queueBackgroundDispatches(
       );
     }
   }
-  return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCustomerProjectActivityDispatch(
+  return queueTradeQuoteDeliveryDispatch(queuePublicPlanDeliveryDispatch(queueCreditexProductRegistryDispatch(queueCustomerProjectActivityDispatch(
     queueOpportunityNotificationDispatch(
       queueCustomerOpportunityDispatch(response, ctx),
       ctx,
     ),
     ctx,
-  ), ctx), {
+  ), ctx, request, workerEnv), ctx), {
     waitUntil: (promise) => ctx.waitUntil(promise),
     drain: (deliveryId) => drainTradeQuoteDeliveries({ db: getD1(), deliveryId }),
     onError: (error) => {
@@ -395,9 +501,8 @@ const worker = {
       }).EVIDENCE;
       const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
-        maintainNextCreditexProductRegistry({
+        drainCreditexProductRegistryMaintenance({
           database: getD1(),
-          now: new Date(controller.scheduledTime),
           targets: creditexAutomaticProductRegistryMaintenanceTargets({
             artifactStore: registryArtifactStore,
             environment: registryEnvironment,

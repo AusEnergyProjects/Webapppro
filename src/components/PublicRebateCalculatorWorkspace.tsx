@@ -11,7 +11,7 @@ type ApiResult = Record<string, unknown> & {
   error?: string;
 };
 
-const PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 180_000;
+const PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 60_000;
 const PUBLIC_CALCULATOR_MAXIMUM_ATTEMPTS = 20;
 
 export function PublicRebateCalculatorWorkspace() {
@@ -86,7 +86,7 @@ export function PublicRebateCalculatorWorkspace() {
         }
         if (!response.ok || result.ok === false) {
           throw new Error(
-            result.error || "The rebate estimate could not be completed.",
+            result.error || "The rebate calculation could not be completed.",
           );
         }
         return result;
@@ -103,9 +103,9 @@ export function PublicRebateCalculatorWorkspace() {
       aria-labelledby="public-rebate-calculator-title"
     >
       <header className="dashboard-panel-heading">
-        <span>REBATE ESTIMATOR</span>
+        <span>REBATE CALCULATOR</span>
         <h1 id="public-rebate-calculator-title">
-          See the rebate value before you request a quote
+          See the calculated rebate value before you request a quote
         </h1>
         <p>
           Choose the work and approved product. The result is an exact,

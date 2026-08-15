@@ -52,6 +52,13 @@ const streamStagingMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const refreshProgressMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0150_creditex_official_product_refresh_progress.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 class TestD1Statement {
   constructor(database, sql, values = [], onBind = () => undefined) {
@@ -219,6 +226,7 @@ function fixture(options = {}) {
   database.exec(officialMigration);
   database.exec(refreshQueueMigration);
   database.exec(streamStagingMigration);
+  database.exec(refreshProgressMigration);
   for (const guard of CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }
@@ -1449,6 +1457,564 @@ test("streaming registry staging never materializes the complete product graph",
     .get(result.snapshotId).count, recordCount);
 });
 
+function resumableStreamingHarness({
+  recordCount,
+  registryCode = "veu-approved-products",
+  sourceKey = "fixture-resumable-veu",
+}) {
+  let release = 1;
+  let fetchCalls = 0;
+  const sourceRecordKey = (index) => (
+    `VEU-RESUME-${String(index).padStart(6, "0")}`
+  );
+  const decodeRelease = (bytes) => {
+    const payload = JSON.parse(new TextDecoder().decode(bytes));
+    assert.equal(payload.recordCount, recordCount);
+    assert.ok(Number.isSafeInteger(payload.release));
+    return payload.release;
+  };
+  const streamSource = {
+    registryCode,
+    sourceKey,
+    productKinds: ["veu_shower_rose"],
+    url: `https://example.test/${sourceKey}`,
+    minimumRecords: recordCount,
+    maximumBytes: 1_000,
+    expectedContentTypes: ["application/json"],
+    accept: "application/json",
+    licence: "fixture official licence",
+    productionMode: "automatic",
+    requiresOfficialEligibleFrom: true,
+    parse() {
+      throw new Error("the aggregate parser must not run");
+    },
+    streamingParser: {
+      inspect(bytes) {
+        decodeRelease(bytes);
+        return recordCount;
+      },
+      *supplementalBatches(bytes) {
+        decodeRelease(bytes);
+        for (let offset = 0; offset < recordCount; offset += 500) {
+          const length = Math.min(500, recordCount - offset);
+          yield Array.from({ length }, (_, index) => ({
+            sourceRecordKey: sourceRecordKey(offset + index),
+            value: { watts: 400 + ((offset + index) % 2) },
+          }));
+        }
+      },
+      async *recordBatches(
+        bytes,
+        _contentType,
+        loadValues,
+        cursor = {},
+      ) {
+        decodeRelease(bytes);
+        const afterRecordCount = Number(cursor.afterRecordCount || 0);
+        const afterSourceRecordKey = String(cursor.afterSourceRecordKey || "");
+        const maximumBatches = Number(
+          cursor.maximumBatches ?? Number.MAX_SAFE_INTEGER,
+        );
+        if (
+          !Number.isSafeInteger(afterRecordCount)
+          || afterRecordCount < 0
+          || afterRecordCount > recordCount
+          || !Number.isSafeInteger(maximumBatches)
+          || maximumBatches < 1
+          || (
+            afterRecordCount !== 0
+            && afterSourceRecordKey !== sourceRecordKey(afterRecordCount - 1)
+          )
+          || (afterRecordCount === 0 && afterSourceRecordKey !== "")
+        ) {
+          throw new CreditexOfficialProductError(
+            "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+            500,
+            "The fixture replay cursor did not match the exact retained boundary.",
+          );
+        }
+        let yielded = 0;
+        for (
+          let offset = afterRecordCount;
+          offset < recordCount && yielded < maximumBatches;
+          offset += 500
+        ) {
+          const length = Math.min(500, recordCount - offset);
+          const ids = Array.from({ length }, (_, index) => (
+            sourceRecordKey(offset + index)
+          ));
+          const values = await loadValues(ids);
+          assert.equal(values.size, ids.length);
+          yield ids.map((id) => ({
+            sourceKey,
+            sourceRecordKey: id,
+            productKind: "veu_shower_rose",
+            manufacturer: "",
+            brand: "Resumable",
+            model: `Resumable ${id}`,
+            series: "",
+            registrationNumber: id,
+            certificateNumber: "",
+            approvalStatus: "approved",
+            eligibleFrom: "2026-01-01",
+            eligibleTo: "",
+            availableInAustralia: true,
+            attributes: {
+              veuProductCategoryNumber: "17A",
+              watts: values.get(id).watts,
+            },
+          }));
+          yielded += 1;
+        }
+      },
+    },
+  };
+  return {
+    definition: {
+      registryCode,
+      title: "Resumable VEU fixture",
+      sources: [streamSource],
+      async fetchSources() {
+        fetchCalls += 1;
+        return [{
+          sourceKey,
+          contentType: "application/json",
+          bytes: new TextEncoder().encode(JSON.stringify({
+            release,
+            recordCount,
+          })),
+        }];
+      },
+    },
+    fetchCalls: () => fetchCalls,
+    nextRelease() {
+      release += 1;
+    },
+    registryCode,
+    sourceKey,
+    sourceRecordKey,
+  };
+}
+
+function persistedRefreshProgress(database, registryCode) {
+  return database.prepare(`SELECT registry_code, snapshot_id, source_index,
+      source_key, phase, supplement_batch_count, supplement_value_count,
+      product_batch_count, product_record_count, last_product_record_key,
+      revision, created_at, updated_at
+    FROM compliance_official_product_refresh_progress
+    WHERE registry_code = ?`).get(registryCode) || null;
+}
+
+test("bounded streaming refresh resumes monotonically, activates, then finishes cleanup", async (t) => {
+  const recordCount = 2_501;
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({ recordCount });
+  const seed = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-01T00:00:00.000Z"),
+  });
+  assert.equal(seed.changed, true);
+  assert.equal(harness.fetchCalls(), 1);
+  harness.nextRelease();
+
+  const first = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date("2026-08-02T00:00:00.000Z"),
+  });
+  assert.deepEqual({
+    changed: first.changed,
+    complete: first.complete,
+    phase: first.phase,
+    stagedRecordCount: first.stagedRecordCount,
+    insertedThisRun: first.insertedThisRun,
+  }, {
+    changed: false,
+    complete: false,
+    phase: "supplements",
+    stagedRecordCount: 0,
+    insertedThisRun: 0,
+  });
+  assert.equal(harness.fetchCalls(), 2);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_artifacts WHERE snapshot_id = ?`)
+    .get(first.snapshotId).count, 1);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_stream_values WHERE snapshot_id = ?`)
+    .get(first.snapshotId).count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(first.snapshotId).count, 0);
+
+  const progressHistory = [persistedRefreshProgress(
+    database,
+    harness.registryCode,
+  )];
+  assert.deepEqual({
+    phase: progressHistory[0].phase,
+    revision: progressHistory[0].revision,
+    supplementValueCount: progressHistory[0].supplement_value_count,
+    productRecordCount: progressHistory[0].product_record_count,
+    lastProductRecordKey: progressHistory[0].last_product_record_key,
+  }, {
+    phase: "supplements",
+    revision: 1,
+    supplementValueCount: 0,
+    productRecordCount: 0,
+    lastProductRecordKey: "",
+  });
+
+  let activation = null;
+  for (let invocation = 1; invocation <= 20; invocation += 1) {
+    const result = await syncOfficialProductRegistry(d1, harness.definition, {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date(`2026-08-02T00:00:${String(invocation).padStart(2, "0")}.000Z`),
+    });
+    assert.equal(harness.fetchCalls(), 2, "resumption must use retained custody");
+    assert.equal(database.prepare(`SELECT count(*) count
+      FROM compliance_official_product_sync_runs
+      WHERE registry_code = ? AND status = 'failed'`)
+      .get(harness.registryCode).count, 0);
+    assert.equal(database.prepare(`SELECT count(*) count
+      FROM compliance_official_product_refresh_requests`).get().count, 0);
+    const progress = persistedRefreshProgress(database, harness.registryCode);
+    assert.ok(progress);
+    progressHistory.push(progress);
+    if (result.changed && result.phase === "cleanup") {
+      activation = result;
+      break;
+    }
+    assert.equal(result.changed, false);
+    assert.equal(result.complete, false);
+  }
+  assert.ok(activation, "the bounded replay must reach activation");
+  assert.notEqual(activation.snapshotId, seed.snapshotId);
+
+  const phaseOrder = new Map([
+    ["supplements", 0],
+    ["products", 1],
+    ["activate", 2],
+    ["cleanup", 3],
+  ]);
+  for (let index = 1; index < progressHistory.length; index += 1) {
+    const previous = progressHistory[index - 1];
+    const current = progressHistory[index];
+    assert.ok(current.revision > previous.revision);
+    assert.ok(current.supplement_value_count >= previous.supplement_value_count);
+    assert.ok(current.product_record_count >= previous.product_record_count);
+    assert.ok(phaseOrder.get(current.phase) >= phaseOrder.get(previous.phase));
+    if (current.product_record_count === 0) {
+      assert.equal(current.last_product_record_key, "");
+    } else {
+      assert.equal(
+        current.last_product_record_key,
+        harness.sourceRecordKey(current.product_record_count - 1),
+      );
+    }
+  }
+  assert.equal(progressHistory.at(-1).phase, "cleanup");
+  assert.equal(database.prepare(`SELECT id FROM
+      compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'current'`)
+    .get(harness.registryCode).id, activation.snapshotId);
+  assert.equal(database.prepare(`SELECT status FROM
+      compliance_official_product_snapshots WHERE id = ?`)
+    .get(seed.snapshotId).status, "superseded");
+  assert.equal(database.prepare(`SELECT count(*) count
+      FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(seed.snapshotId).count, recordCount);
+
+  const firstCleanup = await syncOfficialProductRegistry(
+    d1,
+    harness.definition,
+    {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-02T00:01:00.000Z"),
+    },
+  );
+  assert.deepEqual({
+    changed: firstCleanup.changed,
+    complete: firstCleanup.complete,
+    phase: firstCleanup.phase,
+  }, { changed: false, complete: false, phase: "cleanup" });
+  assert.equal(database.prepare(`SELECT count(*) count
+      FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(seed.snapshotId).count, recordCount - 2_000);
+  assert.equal(harness.fetchCalls(), 2);
+
+  const finalCleanup = await syncOfficialProductRegistry(
+    d1,
+    harness.definition,
+    {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date("2026-08-02T00:01:01.000Z"),
+    },
+  );
+  assert.deepEqual({
+    changed: finalCleanup.changed,
+    complete: finalCleanup.complete,
+    phase: finalCleanup.phase,
+  }, { changed: false, complete: true, phase: "complete" });
+  assert.equal(persistedRefreshProgress(database, harness.registryCode), null);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_stream_values WHERE snapshot_id = ?`)
+    .get(activation.snapshotId).count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count
+      FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(seed.snapshotId).count, 0);
+  assert.equal(harness.fetchCalls(), 2);
+});
+
+test("a lost response after a committed replay quantum resumes without duplicate products", async (t) => {
+  const recordCount = 1_201;
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount,
+    sourceKey: "fixture-lost-response-veu",
+  });
+  const run = (databaseBinding, second) => syncOfficialProductRegistry(
+    databaseBinding,
+    harness.definition,
+    {
+      fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+      artifactStore,
+      maximumStreamingRecordsPerRun: 500,
+      now: new Date(`2026-08-03T00:00:${String(second).padStart(2, "0")}.000Z`),
+    },
+  );
+
+  const custody = await run(d1, 0);
+  assert.equal(custody.phase, "supplements");
+  await run(d1, 1);
+  await run(d1, 2);
+  assert.deepEqual({
+    phase: persistedRefreshProgress(database, harness.registryCode).phase,
+    supplementValueCount: persistedRefreshProgress(
+      database,
+      harness.registryCode,
+    ).supplement_value_count,
+    productRecordCount: persistedRefreshProgress(
+      database,
+      harness.registryCode,
+    ).product_record_count,
+  }, {
+    phase: "supplements",
+    supplementValueCount: 1_000,
+    productRecordCount: 0,
+  });
+
+  let responseLost = false;
+  const lossyD1 = {
+    prepare(sql) {
+      return d1.prepare(sql);
+    },
+    async batch(statements) {
+      const result = await d1.batch(statements);
+      const committedProductQuantum = statements.some((statement) => (
+        statement.sql.includes("INSERT INTO compliance_official_products")
+      )) && statements.some((statement) => (
+        statement.sql.includes("product_record_count = ?")
+      ));
+      if (!responseLost && committedProductQuantum) {
+        responseLost = true;
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+          409,
+          "The committed Worker response was lost.",
+        );
+      }
+      return result;
+    },
+  };
+  await assert.rejects(
+    run(lossyD1, 3),
+    expectedError("OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"),
+  );
+  assert.equal(responseLost, true);
+  const committed = persistedRefreshProgress(database, harness.registryCode);
+  assert.deepEqual({
+    phase: committed.phase,
+    productRecordCount: committed.product_record_count,
+    lastProductRecordKey: committed.last_product_record_key,
+  }, {
+    phase: "products",
+    productRecordCount: 500,
+    lastProductRecordKey: harness.sourceRecordKey(499),
+  });
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_products WHERE snapshot_id = ?`)
+    .get(custody.snapshotId).count, 500);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 0);
+
+  let activation = null;
+  for (let second = 4; second <= 10; second += 1) {
+    const result = await run(d1, second);
+    if (result.changed && result.phase === "cleanup") {
+      activation = result;
+      break;
+    }
+  }
+  assert.ok(activation);
+  const cleanup = await run(d1, 11);
+  assert.equal(cleanup.complete, true);
+  assert.equal(cleanup.phase, "complete");
+  assert.equal(harness.fetchCalls(), 1);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 0);
+  const finalCounts = database.prepare(`SELECT count(*) count,
+      count(DISTINCT source_record_key) distinct_count
+    FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(activation.snapshotId);
+  assert.equal(finalCounts.count, recordCount);
+  assert.equal(finalCounts.distinct_count, recordCount);
+});
+
+test("a persisted cursor with the wrong exact last key fails closed", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount: 1_201,
+    sourceKey: "fixture-wrong-cursor-veu",
+  });
+  const seed = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-04T00:00:00.000Z"),
+  });
+  harness.nextRelease();
+  const run = (second) => syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date(`2026-08-05T00:00:${String(second).padStart(2, "0")}.000Z`),
+  });
+  const custody = await run(0);
+  for (let second = 1; second <= 6; second += 1) {
+    await run(second);
+    if (
+      persistedRefreshProgress(database, harness.registryCode)
+        ?.product_record_count >= 500
+    ) break;
+  }
+  const beforeCorruption = persistedRefreshProgress(
+    database,
+    harness.registryCode,
+  );
+  assert.equal(beforeCorruption.product_record_count, 500);
+  assert.equal(
+    beforeCorruption.last_product_record_key,
+    harness.sourceRecordKey(499),
+  );
+  database.exec(
+    "DROP TRIGGER compliance_official_product_refresh_progress_transition_guard",
+  );
+  database.prepare(`UPDATE compliance_official_product_refresh_progress
+    SET last_product_record_key = ? WHERE registry_code = ?`)
+    .run(harness.sourceRecordKey(0), harness.registryCode);
+
+  await assert.rejects(
+    run(7),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED"),
+  );
+  assert.equal(database.prepare(`SELECT id FROM
+      compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'current'`)
+    .get(harness.registryCode).id, seed.snapshotId);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'staging'`)
+    .get(harness.registryCode).count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'success'`)
+    .get(harness.registryCode).count, 1);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 1);
+  assert.equal(custody.snapshotId === seed.snapshotId, false);
+});
+
+test("a non-boundary legacy replay cannot bootstrap over the prior current snapshot", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({
+    recordCount: 1_201,
+    sourceKey: "fixture-legacy-boundary-veu",
+  });
+  const seed = await syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-06T00:00:00.000Z"),
+  });
+  harness.nextRelease();
+  const run = (second) => syncOfficialProductRegistry(d1, harness.definition, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    maximumStreamingRecordsPerRun: 500,
+    now: new Date(`2026-08-07T00:00:${String(second).padStart(2, "0")}.000Z`),
+  });
+  const custody = await run(0);
+  for (let second = 1; second <= 6; second += 1) {
+    await run(second);
+    if (
+      persistedRefreshProgress(database, harness.registryCode)
+        ?.product_record_count >= 500
+    ) break;
+  }
+  assert.equal(
+    persistedRefreshProgress(database, harness.registryCode)
+      .product_record_count,
+    500,
+  );
+  database.prepare(`DELETE FROM compliance_official_product_refresh_progress
+    WHERE registry_code = ?`).run(harness.registryCode);
+  database.prepare(`DELETE FROM compliance_official_products
+    WHERE id = (
+      SELECT id FROM compliance_official_products
+      WHERE snapshot_id = ? ORDER BY rowid DESC LIMIT 1
+    )`).run(custody.snapshotId);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_products WHERE snapshot_id = ?`)
+    .get(custody.snapshotId).count, 499);
+
+  await assert.rejects(
+    run(7),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED"),
+  );
+  assert.equal(database.prepare(`SELECT id FROM
+      compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'current'`)
+    .get(harness.registryCode).id, seed.snapshotId);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'staging'`)
+    .get(harness.registryCode).count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'success'`)
+    .get(harness.registryCode).count, 1);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+      compliance_official_product_sync_runs
+    WHERE registry_code = ? AND status = 'failed'`)
+    .get(harness.registryCode).count, 1);
+});
+
 test("product staging keeps every D1 JSON binding below the governed byte budget", async () => {
   const encoder = new TextEncoder();
   const insertPayloads = [];
@@ -2256,6 +2822,297 @@ test("automatic recovery waits for one concurrent exact refresh and never serves
       waitForRefreshMs: 0,
     }),
     expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
+  );
+});
+
+test("a verified fleet owner reclaims a per-registry lease left by a cancelled Worker", async () => {
+  const { database, d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const checkedAt = new Date("2026-08-10T00:00:01.000Z");
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?), (?, ?, ?, ?)`).run(
+    definition.registryCode,
+    "cancelled-worker",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 20 * 60_000).toISOString(),
+    "automatic-registry-fleet",
+    "current-fleet-owner",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+  );
+
+  for (const fleetLeaseId of [undefined, "wrong-fleet-owner"]) {
+    await assert.rejects(
+      syncOfficialProductRegistry(d1, definition, {
+        fetchImpl: fetchFixture(),
+        artifactStore,
+        now: checkedAt,
+        ...(fleetLeaseId ? { fleetLeaseId } : {}),
+      }),
+      expectedError("OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"),
+    );
+  }
+  database.prepare(`UPDATE compliance_official_product_sync_leases
+    SET started_at = ?, expires_at = ?
+    WHERE registry_code = 'automatic-registry-fleet'`)
+    .run(
+      new Date(checkedAt.getTime() - 60_000).toISOString(),
+      checkedAt.toISOString(),
+    );
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, definition, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: checkedAt,
+      fleetLeaseId: "current-fleet-owner",
+    }),
+    expectedError("OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"),
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_official_product_sync_leases
+      WHERE registry_code = ?`).get(definition.registryCode).lease_id,
+    "cancelled-worker",
+  );
+  database.prepare(`UPDATE compliance_official_product_sync_leases
+    SET expires_at = ? WHERE registry_code = 'automatic-registry-fleet'`)
+    .run(new Date(checkedAt.getTime() + 3 * 60_000).toISOString());
+
+  const recovered = await syncOfficialProductRegistry(
+    d1,
+    definition,
+    {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: checkedAt,
+      fleetLeaseId: "current-fleet-owner",
+    },
+  );
+  assert.equal(recovered.changed, false);
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_sync_leases
+      WHERE registry_code = ?`).get(definition.registryCode).count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT lease_id FROM compliance_official_product_sync_leases
+      WHERE registry_code = 'automatic-registry-fleet'`).get().lease_id,
+    "current-fleet-owner",
+  );
+});
+
+test("one fleet owner cannot start the same inner registry twice", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const checkedAt = new Date("2026-08-08T00:00:00.000Z");
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    "automatic-registry-fleet",
+    "current-fleet-owner",
+    checkedAt.toISOString(),
+    new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+  );
+  let announceStarted;
+  let releaseFetch;
+  const started = new Promise((resolve) => {
+    announceStarted = resolve;
+  });
+  const released = new Promise((resolve) => {
+    releaseFetch = resolve;
+  });
+  const fixtureSource = fetchFixture();
+  const first = syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: async (input, init) => {
+      announceStarted();
+      await released;
+      return fixtureSource(input, init);
+    },
+    artifactStore,
+    now: checkedAt,
+    fleetLeaseId: "current-fleet-owner",
+  });
+  await started;
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, definition, {
+      fetchImpl: fixtureSource,
+      artifactStore,
+      now: checkedAt,
+      fleetLeaseId: "current-fleet-owner",
+    }),
+    expectedError("OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"),
+  );
+  releaseFetch();
+  await first;
+});
+
+test("a successor takeover fences the old owner's unchanged receipt and release", async () => {
+  let armed = false;
+  let takeoverCount = 0;
+  const checkedAt = new Date("2026-08-10T00:00:01.000Z");
+  const { database, d1, artifactStore } = fixture({
+    onBind(sql) {
+      if (
+        armed
+        && takeoverCount === 0
+        && sql.includes("INSERT INTO compliance_official_product_sync_runs")
+        && sql.includes("SELECT ?, ?, 'unchanged'")
+      ) {
+        takeoverCount += 1;
+        database.prepare(`UPDATE compliance_official_product_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code IN (?, 'automatic-registry-fleet')
+            AND lease_id = 'old-owner'`).run(
+          checkedAt.toISOString(),
+          new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+          definition.registryCode,
+        );
+      }
+    },
+  });
+  const initial = await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES ('automatic-registry-fleet', 'old-owner', ?, ?)`)
+    .run(
+      checkedAt.toISOString(),
+      new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+    );
+  armed = true;
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, definition, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: checkedAt,
+      fleetLeaseId: "old-owner",
+    }),
+    expectedError("OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"),
+  );
+
+  assert.equal(takeoverCount, 1);
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_sync_runs
+      WHERE registry_code = ? AND status = 'unchanged'`)
+      .get(definition.registryCode).count,
+    0,
+  );
+  assert.equal(
+    database.prepare(`SELECT id FROM compliance_official_product_snapshots
+      WHERE registry_code = ? AND status = 'current'`)
+      .get(definition.registryCode).id,
+    initial.snapshotId,
+  );
+  assert.deepEqual(
+    database.prepare(`SELECT registry_code FROM compliance_official_product_sync_leases
+      WHERE lease_id = 'successor-owner' ORDER BY registry_code`).all()
+      .map(({ registry_code }) => registry_code),
+    ["automatic-registry-fleet", definition.registryCode].sort(),
+    "the old owner's finally block must not delete either successor lease",
+  );
+});
+
+test("a successor takeover atomically prevents the old owner from activating", async () => {
+  let armed = false;
+  let takeoverCount = 0;
+  const checkedAt = new Date("2026-08-10T00:00:01.000Z");
+  const { database, d1, artifactStore } = fixture({
+    onBatch(statements) {
+      if (
+        armed
+        && takeoverCount === 0
+        && statements.some((statement) => (
+          statement.sql.includes("UPDATE compliance_official_product_snapshots")
+          && statement.sql.includes("status = 'current'")
+          && statement.sql.includes("inner_lease.lease_id = ?")
+        ))
+      ) {
+        takeoverCount += 1;
+        database.prepare(`UPDATE compliance_official_product_sync_leases
+          SET lease_id = 'successor-owner', started_at = ?, expires_at = ?
+          WHERE registry_code IN (?, 'automatic-registry-fleet')
+            AND lease_id = 'old-owner'`).run(
+          checkedAt.toISOString(),
+          new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+          definition.registryCode,
+        );
+      }
+    },
+  });
+  const initial = await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES ('automatic-registry-fleet', 'old-owner', ?, ?)`)
+    .run(
+      checkedAt.toISOString(),
+      new Date(checkedAt.getTime() + 3 * 60_000).toISOString(),
+    );
+  armed = true;
+
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, definition, {
+      fetchImpl: fetchFixture({
+        "fixture-pv": rows["fixture-pv"].map((row, index) => (
+          index === 0 ? { ...row, model: "Panel takeover blocked" } : row
+        )),
+      }),
+      artifactStore,
+      now: checkedAt,
+      fleetLeaseId: "old-owner",
+    }),
+    /Successful official product sync must identify current snapshot/,
+  );
+
+  assert.equal(takeoverCount, 1);
+  assert.equal(
+    database.prepare(`SELECT id FROM compliance_official_product_snapshots
+      WHERE registry_code = ? AND status = 'current'`)
+      .get(definition.registryCode).id,
+    initial.snapshotId,
+  );
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_snapshots
+      WHERE registry_code = ? AND status = 'staging'`)
+      .get(definition.registryCode).count,
+    1,
+    "lease loss must retain exactly one complete staging snapshot for the successor",
+  );
+  const resumable = database.prepare(`SELECT snapshot.id,
+      snapshot.record_count,
+      count(product.id) AS product_count
+    FROM compliance_official_product_snapshots snapshot
+    LEFT JOIN compliance_official_products product
+      ON product.snapshot_id = snapshot.id
+    WHERE snapshot.registry_code = ? AND snapshot.status = 'staging'
+    GROUP BY snapshot.id, snapshot.record_count`).get(definition.registryCode);
+  assert.equal(resumable.product_count, resumable.record_count);
+  assert.notEqual(resumable.id, initial.snapshotId);
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_sync_runs
+      WHERE registry_code = ? AND status = 'success'`)
+      .get(definition.registryCode).count,
+    1,
+  );
+  assert.deepEqual(
+    database.prepare(`SELECT registry_code FROM compliance_official_product_sync_leases
+      WHERE lease_id = 'successor-owner' ORDER BY registry_code`).all()
+      .map(({ registry_code }) => registry_code),
+    ["automatic-registry-fleet", definition.registryCode].sort(),
   );
 });
 

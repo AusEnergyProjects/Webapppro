@@ -66,26 +66,33 @@ test("Firebase UID transitions synchronously reset protected dashboard state", (
   }
 });
 
-test("calculator preparation state has deterministic retry and terminal values", () => {
+test("calculator preparation retries fleet work without presenting a fake attempt total", () => {
+  const preparing =
+    "Updating the exact official product register. Product choices will load automatically.";
   assert.equal(
     tradeRebatePreparingMessage(1),
-    "Preparing governed calculator controls (1 of 20)...",
+    preparing,
   );
   assert.equal(
     tradeRebatePreparingMessage(9),
-    "Preparing governed calculator controls (9 of 20)...",
+    preparing,
   );
   assert.equal(
     tradeRebatePreparingMessage(20),
-    "Preparing governed calculator controls (20 of 20)...",
+    preparing,
   );
   assert.equal(tradeRebatePreparingMessage(null), "");
+  assert.doesNotMatch(preparing, /\d+\s+of\s+\d+/i);
   assert.match(
     workspace,
     /try \{[\s\S]*requestWithCreditexTokenRecovery[\s\S]*\} finally \{\s*setPreparingMessage\(tradeRebatePreparingMessage\(null\)\);\s*\}/,
   );
   assert.match(workspace, /catch \(error\) \{[\s\S]*AbortError[\s\S]*throw new Error/);
+  assert.match(workspace, /result\.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
+  assert.match(workspace, /result\.code === "OFFICIAL_PRODUCT_FLEET_BUSY"/);
+  assert.match(workspace, /response\.headers\.get\("Retry-After"\)/);
   assert.match(workspace, /assertActiveIdentity\(\);[\s\S]*continue;/);
+  assert.doesNotMatch(workspace, /Preparing governed calculator controls \([^)]*of[^)]*\)/);
 });
 
 test("calculator APIs keep trade access verified while public reads are quote-only", () => {
@@ -112,7 +119,7 @@ test("trade calculator separates exact governed results from certificate and pro
     /registryCodes: \["nsw-tessa-products", "gems-products"\]/,
   );
   assert.match(calculator, /for \(const registryCode of contract\.registryCodes\)/);
-  assert.match(calculator, /requestTimeoutMs: 300_000/);
+  assert.match(calculator, /requestTimeoutMs: 25_000/);
   assert.doesNotMatch(calculator, /registryCode: "all"/);
   assert.match(sresCalculator, /role === "admin" && !productBlocker/);
   assert.match(
@@ -127,4 +134,52 @@ test("trade calculator separates exact governed results from certificate and pro
   assert.match(officialProductsRoute, /allowedRoles: \["admin"\]/);
   assert.match(stcProductsRoute, /allowedRoles: \["admin"\]/);
   assert.doesNotMatch(workspace, /refreshRegistry|Refresh now/);
+});
+
+test("accepted official registry updates keep polling until every queued registry is current", () => {
+  assert.match(
+    calculator,
+    /CREDITEX_REGISTRY_STATUS_POLL_INITIAL_DELAY_MS = 5_000/,
+  );
+  assert.match(
+    calculator,
+    /CREDITEX_REGISTRY_STATUS_POLL_INTERVAL_MS = 15_000/,
+  );
+  assert.match(
+    calculator,
+    /CREDITEX_REGISTRY_STATUS_POLL_TIMEOUT_MS = 30 \* 60_000/,
+  );
+  assert.match(
+    calculator,
+    /continueRegistry=\$\{encodeURIComponent\(registryCode\)\}/,
+  );
+  assert.match(
+    calculator,
+    /result\.refreshQueued === true[\s\S]*creditexAutomaticRegistryPollState\([\s\S]*if \(pollState === "complete"\)[\s\S]*setRegistryRefreshVersion\(\(current\) => current \+ 1\)/,
+  );
+  assert.match(
+    calculator,
+    /catch \{[\s\S]*latest status check failed[\s\S]*schedule\(CREDITEX_REGISTRY_STATUS_POLL_INTERVAL_MS\)/,
+  );
+  assert.match(
+    calculator,
+    /const contractChanged = role !== "admin"[\s\S]*registryStatusPoll\.programCode !== programCode[\s\S]*registryStatusPollGenerationRef\.current \+= 1/,
+  );
+  assert.match(
+    calculator,
+    /return \(\) => \{[\s\S]*active = false;[\s\S]*window\.clearTimeout\(timer\);[\s\S]*controller\?\.abort\(\)/,
+  );
+
+  const acceptedRefresh = calculator.slice(
+    calculator.indexOf("async function refreshAutomaticProductRegistry"),
+    calculator.indexOf("return (", calculator.indexOf(
+      "async function refreshAutomaticProductRegistry",
+    )),
+  );
+  assert.match(acceptedRefresh, /setRegistryStatusPoll\(\{/);
+  assert.doesNotMatch(acceptedRefresh, /setRegistryRefreshVersion/);
+  assert.doesNotMatch(
+    acceptedRefresh,
+    /certificate creation|provider acceptance/i,
+  );
 });

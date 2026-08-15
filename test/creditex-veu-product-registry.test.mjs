@@ -634,6 +634,147 @@ test("VEU production-scale stream keeps every parse and D1 lookup batch bounded"
   assert.ok(maximumRecords <= 500);
 });
 
+test("VEU stream resumes after an exact retained source-record cursor", async () => {
+  const bytes = boundedProductionStreamArtifact(2_600);
+  const lookupSizes = [];
+  const records = [];
+  for await (const batch of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+    bytes,
+    "application/json",
+    async (sourceRecordKeys) => {
+      lookupSizes.push(sourceRecordKeys.length);
+      assert.notEqual(sourceRecordKeys[0], "a0O000000000749");
+      return new Map();
+    },
+    {
+      afterRecordCount: 750,
+      afterSourceRecordKey: "000000749",
+      maximumBatches: 3,
+    },
+  )) {
+    records.push(...batch);
+  }
+  assert.deepEqual(lookupSizes, [250, 500, 500]);
+  assert.equal(records.length, 1_250);
+  assert.equal(records[0].sourceRecordKey, "000000750");
+  assert.equal(records.at(-1).sourceRecordKey, "000001999");
+});
+
+test("VEU stream rejects a resume cursor whose exact source record changed", async () => {
+  let loaded = false;
+  await assert.rejects(async () => {
+    for await (const batch of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+      boundedProductionStreamArtifact(1_200),
+      "application/json",
+      async () => {
+        loaded = true;
+        return new Map();
+      },
+      {
+        afterRecordCount: 500,
+        afterSourceRecordKey: "000000498",
+        maximumBatches: 1,
+      },
+    )) {
+      assert.fail(`unexpected replay batch of ${batch.length} records`);
+    }
+  }, /stream artifact resume cursor changed/);
+  assert.equal(loaded, false);
+});
+
+test("VEU stream enforces a bounded number of replay batches", async () => {
+  const records = [];
+  let lookups = 0;
+  for await (const batch of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+    boundedProductionStreamArtifact(2_100),
+    "application/json",
+    async () => {
+      lookups += 1;
+      return new Map();
+    },
+    {
+      afterRecordCount: 0,
+      afterSourceRecordKey: "",
+      maximumBatches: 2,
+    },
+  )) {
+    records.push(...batch);
+  }
+  assert.equal(lookups, 2);
+  assert.equal(records.length, 1_000);
+  assert.equal(records.at(-1).sourceRecordKey, "000000999");
+});
+
+test("VEU stream accepts an exact end cursor without replaying a lookup", async () => {
+  const records = [];
+  let lookups = 0;
+  for await (const batch of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+    boundedProductionStreamArtifact(1_234),
+    "application/json",
+    async () => {
+      lookups += 1;
+      return new Map();
+    },
+    {
+      afterRecordCount: 1_234,
+      afterSourceRecordKey: "000001233",
+      maximumBatches: 4,
+    },
+  )) {
+    records.push(...batch);
+  }
+  assert.equal(lookups, 0);
+  assert.deepEqual(records, []);
+});
+
+test("VEU stream rejects malformed resume count, key and batch bounds", async () => {
+  const bytes = boundedProductionStreamArtifact(2);
+  const invalidCursors = [
+    {
+      afterRecordCount: -1,
+      afterSourceRecordKey: "000000000",
+      maximumBatches: 1,
+    },
+    {
+      afterRecordCount: 3,
+      afterSourceRecordKey: "000000002",
+      maximumBatches: 1,
+    },
+    {
+      afterRecordCount: 0,
+      afterSourceRecordKey: "000000000",
+      maximumBatches: 1,
+    },
+    {
+      afterRecordCount: 1,
+      afterSourceRecordKey: "",
+      maximumBatches: 1,
+    },
+    {
+      afterRecordCount: 0,
+      afterSourceRecordKey: "",
+      maximumBatches: 0,
+    },
+    {
+      afterRecordCount: 0,
+      afterSourceRecordKey: "",
+      maximumBatches: 2_001,
+    },
+  ];
+  for (const cursor of invalidCursors) {
+    await assert.rejects(async () => {
+      for await (const batch of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+        bytes,
+        "application/json",
+        async () => new Map(),
+        cursor,
+      )) {
+        assert.fail(`unexpected replay batch of ${batch.length} records`);
+      }
+    }, /stream artifact resume cursor is invalid/);
+  }
+});
+
 test("the public VEU parser recognizes the bounded v4 custody contract", () => {
   const records = parseCreditexVeuProductArtifact(
     boundedProductionStreamArtifact(5_123),

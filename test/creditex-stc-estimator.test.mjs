@@ -402,7 +402,15 @@ test("quote estimates calculate PV, wind and hydro from date, postcode and capac
   assert.equal(pv.estimatePurpose, "quote");
   assert.equal(pv.eligibilityConfirmed, false);
   assert.equal(pv.certificateActionEnabled, false);
-  assert.match(pv.eligibilityWarning, /Quote estimate only/);
+  assert.match(
+    pv.eligibilityWarning,
+    /exact, source-verified calculation for the supplied inputs/,
+  );
+  assert.match(
+    pv.eligibilityWarning,
+    /Certificate creation, provider submission and provider acceptance remain separate governed workflows/,
+  );
+  assert.doesNotMatch(pv.eligibilityWarning, /estimate only|guess/i);
 
   const wind = await estimateCreditexSresQuote(
     databaseIsNotUsedForArithmeticOnlyQuotes,

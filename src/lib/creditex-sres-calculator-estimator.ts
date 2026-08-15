@@ -37,7 +37,7 @@ export type CreditexSresWaterHeaterQuoteItem = {
 };
 
 const QUOTE_WARNING =
-  "Quote estimate only. Equipment and installation eligibility have not been confirmed. Confirm approved products and complete installation evidence before any certificate action.";
+  "The STC quantity is an exact, source-verified calculation for the supplied inputs. Equipment and installation eligibility and evidence are not confirmed by this calculation. Certificate creation, provider submission and provider acceptance remain separate governed workflows.";
 
 function requestError(message: string): never {
   throw new CreditexStcEstimateError("STC_REQUEST_INVALID", 400, message);

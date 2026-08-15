@@ -34,6 +34,13 @@ const streamStagingMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const refreshProgressMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0150_creditex_official_product_refresh_progress.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const worker = fs.readFileSync(
   new URL("../worker/index.ts", import.meta.url),
   "utf8",
@@ -51,9 +58,18 @@ test("Sites-safe product registry migrations contain no trigger bodies", () => {
   assert.doesNotMatch(officialMigration, /CREATE\s+TRIGGER/i);
   assert.doesNotMatch(refreshQueueMigration, /CREATE\s+TRIGGER/i);
   assert.doesNotMatch(streamStagingMigration, /CREATE\s+TRIGGER/i);
+  assert.doesNotMatch(refreshProgressMigration, /CREATE\s+TRIGGER/i);
   assert.match(
     streamStagingMigration,
     /CREATE TABLE `compliance_official_product_stream_values`/,
+  );
+  assert.match(
+    refreshProgressMigration,
+    /CREATE TABLE `compliance_official_product_refresh_progress`/,
+  );
+  assert.match(
+    refreshProgressMigration,
+    /CREATE UNIQUE INDEX `compliance_official_product_snapshots_staging_idx`/,
   );
   assert.match(
     `${sresMigration}\n${officialMigration}`,
@@ -63,7 +79,7 @@ test("Sites-safe product registry migrations contain no trigger bodies", () => {
 
 test("all product registry trigger guards have one unique prepared statement", () => {
   assert.equal(CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 14);
-  assert.equal(CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 14);
+  assert.equal(CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 17);
   const guards = [
     ...CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS,
     ...CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS,
@@ -74,7 +90,7 @@ test("all product registry trigger guards have one unique prepared statement", (
 });
 
 test("scheduled registry refresh installs guards before either sync", () => {
-  assert.match(worker, /maintainNextCreditexProductRegistry\(/);
+  assert.match(worker, /drainCreditexProductRegistryMaintenance\(/);
   assert.match(worker, /creditexAutomaticProductRegistryMaintenanceTargets\(/);
   assert.match(maintenance, /ensureCreditexProductRegistrySchemaGuards/);
   assert.match(maintenance, /syncCerSresProductRegistry/);
