@@ -219,6 +219,7 @@ export function creditexProductRegistryRefreshDue(
   now = new Date(),
 ) {
   if (creditexProductRegistryRetryBackoffActive(status, now)) return false;
+  if (status.lastAttempt?.status === "failed") return true;
   if (status.status !== "current") return true;
   if (!status.lastCheckedAt) return true;
   const checkedAt = Date.parse(status.lastCheckedAt);

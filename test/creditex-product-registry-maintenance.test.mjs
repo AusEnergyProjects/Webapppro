@@ -262,6 +262,28 @@ test("queued status remains true while a deferred retry is not due", async () =>
   ), false);
 });
 
+test("a current registry retries as soon as its failed-attempt backoff ends", () => {
+  const failedAt = new Date(
+    NOW.getTime() - CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS,
+  );
+  const status = registryStatus({
+    lastCheckedAt: new Date(NOW.getTime() - 60_000).toISOString(),
+    lastAttempt: {
+      status: "failed",
+      checkedAt: failedAt.toISOString(),
+      message: "transient refresh failure",
+    },
+  });
+  assert.equal(
+    creditexProductRegistryRefreshDue(
+      status,
+      new Date(NOW.getTime() - 1),
+    ),
+    false,
+  );
+  assert.equal(creditexProductRegistryRefreshDue(status, NOW), true);
+});
+
 test("recent failed maintenance observes bounded retry backoff then retries", async () => {
   let syncCalls = 0;
   const failedAt = new Date(NOW.getTime() - CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS + 1);
