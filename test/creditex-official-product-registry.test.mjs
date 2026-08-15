@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
 import {
+  CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
   ensureAutomaticOfficialProductRegistryCurrent,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
@@ -3922,4 +3923,44 @@ test("live VEU feed retains its exact artifact and activates every row", {
     statuses.reduce((sum, { count }) => sum + Number(count), 0),
     result.recordCount,
   );
+});
+
+test("live VEU background acquisition finishes inside its bounded source quantum", {
+  skip: process.env.CREDITEX_LIVE_VEU_REGISTRY_SYNC !== "1",
+}, async (t) => {
+  const { database, d1 } = fixture();
+  const artifactStore = fileArtifactStore();
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort("official-product-background-timeout"),
+    18_000,
+  );
+  t.after(() => {
+    clearTimeout(timeout);
+    database.close();
+    fs.rmSync(artifactStore.directory, { recursive: true });
+  });
+  const startedAt = performance.now();
+  const result = await syncOfficialProductRegistry(
+    d1,
+    CREDITEX_VEU_PRODUCT_REGISTRY,
+    {
+      artifactStore,
+      fetchImpl: fetch,
+      maximumStreamingRecordsPerRun:
+        CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+      now: new Date(),
+      signal: controller.signal,
+      sourceFetchTimeoutMs: 18_000,
+    },
+  );
+  const elapsedMs = performance.now() - startedAt;
+  assert.equal(result.complete, false);
+  assert.equal(result.phase, "supplements");
+  assert.equal(result.stagedRecordCount, 0);
+  assert.ok(result.recordCount >= 70_000);
+  assert.ok(elapsedMs < 18_000);
+  assert.equal(artifactStore.objects.size, 1);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_refresh_progress`).get().count, 1);
 });

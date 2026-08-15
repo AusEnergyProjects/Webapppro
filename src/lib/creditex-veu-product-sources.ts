@@ -42,6 +42,8 @@ const VEU_PAGE_URI = "/vpr/s/public-registry";
 export const CREDITEX_VEU_PAGE_SIZE = 5_000;
 export const CREDITEX_VEU_MAX_PAGES = 200;
 export const CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES = 32_000_000;
+export const CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY = 4;
+export const CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES = 8_000_000;
 const VEU_SOURCE_FRESHNESS_MS = 48 * 60 * 60 * 1_000;
 const VEU_FUTURE_TOLERANCE_MS = 10 * 60 * 1_000;
 
@@ -717,20 +719,21 @@ async function acquireSupplementalEvidence(
   embedToken: string,
   definition: VeuSupplementalQuery,
   categoryCounts: Readonly<Record<string, number>>,
-  writer: BoundedVeuArtifactWriter,
-) {
+  reserveResponseBytes: (response: string) => void,
+): Promise<readonly JsonObject[]> {
+  const records: JsonObject[] = [];
   const expectedCount = definition.categories.reduce(
     (sum, category) => sum + (categoryCounts[category] || 0),
     0,
   );
   if (expectedCount === 0) {
-    writer.append({
+    records.push({
       recordType: "supplement",
       key: definition.key,
       queryFields: definition.fields,
       expectedCount,
     });
-    return;
+    return records;
   }
   const filter = "productIds" in definition
     ? { property: "Product_ID__c", values: definition.productIds }
@@ -741,7 +744,7 @@ async function acquireSupplementalEvidence(
   let rowCount = 0;
   let pageCount = 0;
   let terminalSeen = false;
-  writer.append({
+  records.push({
     recordType: "supplement",
     key: definition.key,
     queryFields: definition.fields,
@@ -764,7 +767,8 @@ async function acquireSupplementalEvidence(
       fieldTypes,
       CREDITEX_VEU_PAGE_SIZE,
     );
-    writer.append({
+    reserveResponseBytes(response);
+    records.push({
       recordType: "supplement-page",
       key: definition.key,
       afterId,
@@ -806,6 +810,53 @@ async function acquireSupplementalEvidence(
   ) {
     return sourceError(`supplement ${definition.key} did not reconcile`);
   }
+  return records;
+}
+
+async function acquireAllSupplementalEvidence(
+  fetchImpl: CreditexOfficialProductFetch,
+  clusterUrl: string,
+  embedToken: string,
+  categoryCounts: Readonly<Record<string, number>>,
+) {
+  // Supplemental families have independent category filters and cursors. Fetch
+  // a bounded group in parallel, then append in the canonical definition order
+  // so source bytes stay deterministic while avoiding ten serial network waits.
+  const orderedRecords: JsonObject[][] = [];
+  const encoder = new TextEncoder();
+  let retainedResponseBytes = 0;
+  const reserveResponseBytes = (response: string) => {
+    const byteLength = encoder.encode(response).byteLength;
+    if (
+      retainedResponseBytes + byteLength
+      > CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES
+    ) {
+      return sourceError("supplement evidence exceeded its concurrent byte limit");
+    }
+    retainedResponseBytes += byteLength;
+  };
+  for (
+    let start = 0;
+    start < CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length;
+    start += CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY
+  ) {
+    const definitions = CREDITEX_VEU_SUPPLEMENTAL_QUERIES.slice(
+      start,
+      start + CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY,
+    );
+    const batches = await Promise.all(definitions.map((definition) => (
+      acquireSupplementalEvidence(
+        fetchImpl,
+        clusterUrl,
+        embedToken,
+        definition,
+        categoryCounts,
+        reserveResponseBytes,
+      )
+    )));
+    orderedRecords.push(...batches.map((records) => [...records]));
+  }
+  return orderedRecords;
 }
 
 async function acquirePowerBiEvidence(
@@ -912,6 +963,18 @@ async function acquirePowerBiEvidence(
       refreshResponse,
     },
   });
+  // Supplemental evidence is independent of the main Id cursor. Acquire it in
+  // the same bounded concurrency groups while the model and product pages are
+  // being read, then append only after the main stream in canonical order.
+  const supplementalEvidence = acquireAllSupplementalEvidence(
+    fetchImpl,
+    clusterUrl,
+    embedToken,
+    categoryControl,
+  ).then(
+    (records) => ({ records } as const),
+    (error: unknown) => ({ error } as const),
+  );
   // Model and conceptual-schema responses are the two largest controls. Fetch,
   // validate and append them in separate lexical scopes so the Worker never
   // retains both decoded response graphs at once.
@@ -991,15 +1054,10 @@ async function acquirePowerBiEvidence(
   if (rowCount !== total || pageCount > CREDITEX_VEU_MAX_PAGES) {
     return sourceError("Power BI product pagination did not reconcile");
   }
-  for (const definition of CREDITEX_VEU_SUPPLEMENTAL_QUERIES) {
-    await acquireSupplementalEvidence(
-      fetchImpl,
-      clusterUrl,
-      embedToken,
-      definition,
-      categoryControl,
-      writer,
-    );
+  const supplementalResult = await supplementalEvidence;
+  if ("error" in supplementalResult) throw supplementalResult.error;
+  for (const records of supplementalResult.records) {
+    for (const record of records) writer.append(record);
   }
   return writer.finish();
 }

@@ -22,6 +22,8 @@ import {
   CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES,
   CREDITEX_VEU_MAX_PAGES,
   CREDITEX_VEU_PAGE_SIZE,
+  CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES,
+  CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY,
 } from "../src/lib/creditex-veu-product-sources.ts";
 
 const textEncoder = new TextEncoder();
@@ -590,6 +592,8 @@ test("VEU acquisition has a fixed Worker heap envelope and exact page capacity",
   assert.equal(CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES, 32_000_000);
   assert.equal(CREDITEX_VEU_PAGE_SIZE, 5_000);
   assert.equal(CREDITEX_VEU_MAX_PAGES, 200);
+  assert.equal(CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES, 8_000_000);
+  assert.equal(CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY, 4);
   assert.ok(CREDITEX_VEU_PAGE_SIZE * CREDITEX_VEU_MAX_PAGES >= 70_000);
   assert.deepEqual(
     parseCreditexVeuProductArtifact(streamArtifact(), "application/json"),
@@ -1132,7 +1136,18 @@ test("VEU public source live acquisition is opt-in", {
   const { fetchCreditexVeuProductSources } = await import(
     "../src/lib/creditex-veu-product-sources.ts"
   );
-  const [source] = await fetchCreditexVeuProductSources(fetch);
+  let inFlight = 0;
+  let maximumInFlight = 0;
+  const trackedFetch = async (...args) => {
+    inFlight += 1;
+    maximumInFlight = Math.max(maximumInFlight, inFlight);
+    try {
+      return await fetch(...args);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const [source] = await fetchCreditexVeuProductSources(trackedFetch);
   const records = parseCreditexVeuProductArtifact(
     source.bytes,
     source.contentType,
@@ -1147,6 +1162,10 @@ test("VEU public source live acquisition is opt-in", {
   assert.ok(approved > 0);
   assert.ok(legacy > 0);
   assert.equal(approved + legacy, records.length);
+  assert.ok(maximumInFlight >= 2);
+  assert.ok(
+    maximumInFlight <= CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY + 1,
+  );
   for (const [productId, category] of [
     ["000035970", "1D"],
     ["000035971", "3C"],
