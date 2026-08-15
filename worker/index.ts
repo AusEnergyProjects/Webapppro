@@ -278,7 +278,7 @@ async function requestCreditexProductRegistryContinuation(
       Origin: continuationUrl.origin,
     },
     method: "GET",
-    redirect: "error",
+    redirect: "manual",
   });
   await response.text();
   if (!response.ok) {

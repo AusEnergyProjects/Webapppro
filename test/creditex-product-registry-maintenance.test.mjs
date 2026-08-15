@@ -940,7 +940,8 @@ test("dispatch responses and health traffic each schedule one bounded registry m
   );
   assert.match(continuationBlock, /continueRegistry/);
   assert.match(continuationBlock, /cache: "no-store"/);
-  assert.match(continuationBlock, /redirect: "error"/);
+  assert.match(continuationBlock, /redirect: "manual"/);
+  assert.match(continuationBlock, /if \(!response\.ok\)/);
   const scheduledBlock = worker.slice(worker.indexOf("async scheduled"));
   assert.match(scheduledBlock, /drainCreditexProductRegistryMaintenance/);
   assert.match(scheduledBlock, /creditexAutomaticProductRegistryMaintenanceTargets/);
