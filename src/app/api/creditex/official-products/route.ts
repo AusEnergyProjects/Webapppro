@@ -24,6 +24,7 @@ import {
   CreditexOfficialProductError,
 } from "@/lib/creditex-official-product-registry";
 import {
+  ensureAutomaticOfficialProductRegistryCurrent,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
@@ -41,7 +42,6 @@ import {
   type CreditexSresArtifactStore,
 } from "@/lib/creditex-sres-registry-server";
 import {
-  enqueueCreditexProductRegistryRefresh,
   withCreditexProductRegistryFleetLease,
 } from
   "@/lib/creditex-product-registry-maintenance";
@@ -226,15 +226,18 @@ export async function GET(request: Request) {
         ? creditexAutomaticProductRegistry(registryCode, runtimeEnvironment)
         : undefined;
       if (!definition) throw error;
-      await enqueueCreditexProductRegistryRefresh(
+      const artifactStore = (env as unknown as {
+        EVIDENCE?: CreditexOfficialProductArtifactStore;
+      }).EVIDENCE;
+      await withCreditexProductRegistryFleetLease(
         database,
-        definition.registryCode,
+        () => ensureAutomaticOfficialProductRegistryCurrent(
+          database,
+          definition,
+          { artifactStore },
+        ),
       );
-      throw new CreditexOfficialProductError(
-        "OFFICIAL_PRODUCT_FLEET_BUSY",
-        503,
-        "The exact official product registry refresh is queued. Retry shortly.",
-      );
+      result = await searchOfficialProducts(database, searchInput);
     }
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,

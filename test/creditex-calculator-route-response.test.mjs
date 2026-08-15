@@ -259,16 +259,19 @@ test("all calculator routes share safe descriptors and registry refresh remains 
   );
   assert.match(
     officialProductsRoute,
-    /enqueueCreditexProductRegistryRefresh\(/,
-  );
-  assert.match(stcProductsRoute, /enqueueCreditexProductRegistryRefresh\(/);
-  assert.doesNotMatch(
-    officialProductsRoute,
     /ensureAutomaticOfficialProductRegistryCurrent\(/,
   );
-  assert.doesNotMatch(
+  assert.match(
     stcProductsRoute,
     /ensureCerSresProductRegistryCurrent\(/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /withCreditexProductRegistryFleetLease\(/,
+  );
+  assert.match(
+    stcProductsRoute,
+    /withCreditexProductRegistryFleetLease\(/,
   );
   assert.match(
     officialProductsRoute,

@@ -17,10 +17,9 @@ import {
   describeCreditexCalculatorRouteError,
   projectCreditexCalculatorReadResponse,
 } from "@/lib/creditex-calculator-route-response";
-import { CreditexOfficialProductError } from
-  "@/lib/creditex-official-product-registry";
 import { CreditexSresRegistryError } from "@/lib/creditex-sres-registry";
 import {
+  ensureCerSresProductRegistryCurrent,
   loadCerSresRegistryStatus,
   searchCerSresProducts,
   syncCerSresProductRegistry,
@@ -28,7 +27,6 @@ import {
   type CreditexSresReviewedProductCountDecrease,
 } from "@/lib/creditex-sres-registry-server";
 import {
-  enqueueCreditexProductRegistryRefresh,
   withCreditexProductRegistryFleetLease,
 } from
   "@/lib/creditex-product-registry-maintenance";
@@ -167,15 +165,17 @@ export async function GET(request: Request) {
           || error.code === "SRES_PRODUCT_REGISTRY_UNAVAILABLE"
         );
       if (!recoveryRequired) throw error;
-      await enqueueCreditexProductRegistryRefresh(
+      const artifactStore = (env as unknown as {
+        EVIDENCE?: CreditexSresArtifactStore;
+      }).EVIDENCE;
+      await withCreditexProductRegistryFleetLease(
         database,
-        "cer_sres_swh",
+        () => ensureCerSresProductRegistryCurrent(
+          database,
+          { artifactStore },
+        ),
       );
-      throw new CreditexOfficialProductError(
-        "OFFICIAL_PRODUCT_FLEET_BUSY",
-        503,
-        "The exact CER product registry refresh is queued. Retry shortly.",
-      );
+      result = await searchCerSresProducts(database, searchInput);
     }
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,
