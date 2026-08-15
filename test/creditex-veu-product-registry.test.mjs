@@ -240,6 +240,7 @@ function formulaSupplementalValues() {
       Zone_5_Be_GJyear_step_down_load_size__c: 0.9,
       Zone_4_Annual_Energy_Savings_system_l__c: 70,
       Zone_5_Annual_Energy_Savings_system_l__c: 65,
+      Refrigerant_Type_GWP__c: "R-290",
     },
     "000100007": {
       Product_Configuration__c: "Single split system",
@@ -859,6 +860,7 @@ test("VEU artifact normalizes formula-critical product fields without guessed va
       beZone5: byCategory("1D").attributes.be2021Zone5StepDownLoadGjPerYear,
       zone4Available: byCategory("1D").attributes.veuZone4ModelDataAvailable,
       zone5Available: byCategory("1D").attributes.veuZone5ModelDataAvailable,
+      refrigerantType: byCategory("1D").attributes.refrigerantType,
     },
     {
       systemSize: "Medium",
@@ -866,6 +868,7 @@ test("VEU artifact normalizes formula-critical product fields without guessed va
       beZone5: 0.9,
       zone4Available: true,
       zone5Available: true,
+      refrigerantType: "R-290",
     },
   );
   assert.deepEqual(
@@ -1179,4 +1182,9 @@ test("VEU public source live acquisition is opt-in", {
     assert.equal(water.attributes.veuZone5ModelDataAvailable, false);
     assert.equal(water.attributes.zone5AnnualEnergySavings, undefined);
   }
+  const reportedIncidentProduct = records.find(
+    ({ registrationNumber }) => registrationNumber === "000021826",
+  );
+  assert.equal(reportedIncidentProduct.model, "PASHW015-270LD-FL02-R290");
+  assert.equal(reportedIncidentProduct.attributes.refrigerantType, "R-290");
 });

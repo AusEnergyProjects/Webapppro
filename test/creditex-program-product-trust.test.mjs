@@ -477,6 +477,7 @@ test("VEU water-heater model values are installation-zone controlled and ambiguo
     bs2021Zone5StepDownLoadGjPerYear: 6.3,
     be2021Zone5StepDownLoadGjPerYear: 2.9,
     zone5AnnualEnergySavings: 64,
+    refrigerantType: "R-290",
   });
   const derived = deriveCreditexVeuOfficialProductInputs(
     "1D",
@@ -485,12 +486,36 @@ test("VEU water-heater model values are installation-zone controlled and ambiguo
       system_size: "small",
       bs2021_gj_per_year: "999",
       be2021_gj_per_year: "999",
+      refrigerant_gwp: "9999",
     },
     [mediumHeatPump],
   );
   assert.equal(derived.system_size, "medium");
   assert.equal(derived.bs2021_gj_per_year, "6.3");
   assert.equal(derived.be2021_gj_per_year, "2.9");
+  assert.equal(derived.refrigerant_gwp, "3");
+
+  const gasReplacement = deriveCreditexVeuOfficialProductInputs(
+    "3C",
+    { climate_zone: "5", refrigerant_gwp: "9999" },
+    [product("veu_water_heater", {
+      ...mediumHeatPump.attributes,
+      veuProductCategoryNumber: "3C",
+    })],
+  );
+  assert.equal(gasReplacement.refrigerant_gwp, "3");
+
+  assert.throws(
+    () => deriveCreditexVeuOfficialProductInputs(
+      "1D",
+      { climate_zone: "5" },
+      [product("veu_water_heater", {
+        ...mediumHeatPump.attributes,
+        refrigerantType: undefined,
+      })],
+    ),
+    officialError,
+  );
 
   assert.throws(
     () => deriveCreditexVeuOfficialProductInputs(

@@ -272,6 +272,7 @@ export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = [
       "Zone_5_Be_GJyear_step_down_load_size__c",
       "Zone_4_Annual_Energy_Savings_system_l__c",
       "Zone_5_Annual_Energy_Savings_system_l__c",
+      "Refrigerant_Type_GWP__c",
     ],
   },
   {

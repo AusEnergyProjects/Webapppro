@@ -197,6 +197,7 @@ function waterHeaterSelection(id, bs2021 = 1) {
       zone4AnnualEnergySavings: 70,
       bs2021Zone4StepDownLoadGjPerYear: bs2021,
       be2021Zone4StepDownLoadGjPerYear: 1,
+      refrigerantType: "R-290",
     },
   });
 }
@@ -216,7 +217,6 @@ function waterHeaterQuoteInputs() {
     no_additional_inline_storage_or_system_confirmed: "no",
     decommissioning_and_disposal_confirmed: "no",
     co_payment_per_installed_product_aud: "0",
-    refrigerant_gwp: "675",
     warranty_years: "0",
     warranty_requirements_confirmed: "no",
   };
@@ -659,6 +659,10 @@ test("VEU route validates and seals every mixed water-heater model before totali
   assert.equal(body.estimate.output.unitQuantity, "2");
   assert.equal(body.estimate.propertyItems.length, 2);
   assert.equal(body.estimate.propertyItems[0].unitQuantity, "1");
+  assert.equal(
+    body.estimate.propertyItems[0].inputSnapshot.refrigerantGwp,
+    "3/1",
+  );
   assert.equal(body.estimate.propertyItems[0].approvedProducts[0].attributes.veuProductId, "VEU-WH-A");
   assert.equal(body.estimate.propertyItems[1].approvedProducts[0].attributes.veuProductId, "VEU-WH-B");
   assert.equal(body.estimate.propertyItems[0].registryReceipt.installationDate, "2026-08-08");

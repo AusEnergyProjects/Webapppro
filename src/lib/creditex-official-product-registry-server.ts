@@ -3,6 +3,7 @@ import {
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT,
   CREDITEX_PRODUCT_KIND_REGISTRY,
   CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
+  CREDITEX_VEU_ELIGIBLE_HEAT_PUMP_REFRIGERANTS,
   CreditexOfficialProductError,
   officialProductKindsForVeuActivity,
   officialVeuProductCategoryNumbersForActivity,
@@ -3709,6 +3710,7 @@ function eligibleOfficialProductRelation(input: {
   installationDate: string;
   query: string;
   veuProductCategoryNumbers?: readonly string[];
+  veuRefrigerantTypes?: readonly string[];
   brand?: string;
   model?: string;
   productType?: string;
@@ -3761,6 +3763,17 @@ function eligibleOfficialProductRelation(input: {
       '$.veuProductCategoryNumber'
     ) AS TEXT)) IN (${input.veuProductCategoryNumbers.map(() => "?").join(", ")})`);
     bindings.push(...input.veuProductCategoryNumbers);
+  }
+  if (input.veuRefrigerantTypes) {
+    conditions.push(`json_type(
+      product.attributes_json,
+      '$.refrigerantType'
+    ) = 'text'`);
+    conditions.push(`trim(CAST(json_extract(
+      product.attributes_json,
+      '$.refrigerantType'
+    ) AS TEXT)) IN (${input.veuRefrigerantTypes.map(() => "?").join(", ")})`);
+    bindings.push(...input.veuRefrigerantTypes);
   }
   if (input.query) {
     conditions.push("instr(product.search_text, ?) > 0");
@@ -3911,6 +3924,7 @@ export async function searchOfficialProducts(
     );
   }
   let veuProductCategoryNumbers: readonly string[] | undefined;
+  let veuRefrigerantTypes: readonly string[] | undefined;
   if (registryCode === "veu-approved-products") {
     if (!veuActivityCode) {
       return fail(
@@ -3928,6 +3942,9 @@ export async function searchOfficialProducts(
       veuActivityCode,
       veuScenario || undefined,
     );
+    if (veuActivityCode === "1D" || veuActivityCode === "3C") {
+      veuRefrigerantTypes = CREDITEX_VEU_ELIGIBLE_HEAT_PUMP_REFRIGERANTS;
+    }
     if (
       !governedKinds.includes(kind)
       || veuProductCategoryNumbers.length < 1
@@ -3945,6 +3962,7 @@ export async function searchOfficialProducts(
     installationDate,
     query: "",
     veuProductCategoryNumbers,
+    veuRefrigerantTypes,
   } as const;
   const brandRelation = eligibleOfficialProductRelation(baseRelation);
   const modelRelation = brand

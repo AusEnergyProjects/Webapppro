@@ -994,12 +994,25 @@ test("VEU facets are restricted to governed activity and scenario categories", a
     eligibleFrom: "2026-01-01",
     eligibleTo: "",
     availableInAustralia: true,
-    attributes: { veuProductCategoryNumber: category },
+    attributes: {
+      veuProductCategoryNumber: category,
+      ...(
+        (category === "1D" || category === "3C")
+        && sourceRecordKey !== "VEU-1D-ONLY"
+          ? {
+              refrigerantType: sourceRecordKey === "VEU-1D-HIGH"
+                ? "R-410A"
+                : "R-290",
+            }
+          : {}
+      ),
+    },
   });
   const categoryRows = [
     veuCategoryRecord("VEU-1C", "veu_water_heater", "Heater Co", "1C Model", "1C"),
     veuCategoryRecord("VEU-1D", "veu_water_heater", "Heater Co", "1D Model", "1D"),
     veuCategoryRecord("VEU-1D-ONLY", "veu_water_heater", "1D Only", "1D Other", "1D"),
+    veuCategoryRecord("VEU-1D-HIGH", "veu_water_heater", "High GWP", "1D R410A", "1D"),
     veuCategoryRecord("VEU-3C", "veu_water_heater", "Other Heater", "3C Model", "3C"),
     veuCategoryRecord("VEU-3D", "veu_water_heater", "Other Heater", "3D Model", "3D"),
     veuCategoryRecord(
@@ -1095,6 +1108,17 @@ test("VEU facets are restricted to governed activity and scenario categories", a
   assert.deepEqual(
     activity1C.products.map(({ registrationNumber }) => registrationNumber),
     ["VEU-1C"],
+  );
+
+  const activity1D = await searchOfficialProducts(d1, {
+    productKind: "veu_water_heater",
+    installationDate: "2026-08-08",
+    veuActivityCode: "1D",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.equal(activity1D.matchCount, 1);
+  assert.deepEqual(
+    activity1D.products.map(({ registrationNumber }) => registrationNumber),
+    ["VEU-1D"],
   );
 
   const scenario27A = await searchOfficialProducts(d1, {

@@ -681,6 +681,20 @@ function setOfficialNumber(
   inputs[key] = String(value);
 }
 
+export const CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE = {
+  "R-744": 1,
+  "R-1234yf": 5,
+  "R-290": 3,
+  "R-513A": 629,
+  "R-32": 675,
+  "R-134A": 1430,
+  "R-410A": 2088,
+} as const;
+
+export const CREDITEX_VEU_ELIGIBLE_HEAT_PUMP_REFRIGERANTS = Object.entries(
+  CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE,
+).filter(([, gwp]) => gwp < 700).map(([refrigerant]) => refrigerant);
+
 const ESS_COLD_CLIMATE_POSTCODE_RANGES: readonly [number, number][] = [
   [2328, 2329], [2333, 2333], [2336, 2347], [2350, 2361], [2365, 2365],
   [2369, 2372], [2379, 2382], [2395, 2396], [2403, 2404], [2453, 2453],
@@ -1122,6 +1136,22 @@ export function deriveCreditexVeuOfficialProductInputs(
     if (activityCode === "1C" || activityCode === "1D") {
       inputs.system_size = systemSize;
     }
+    if (activityCode === "1D" || activityCode === "3C") {
+      const refrigerant = officialText(
+        selection,
+        "refrigerantType",
+        "the exact VEU Public Registry refrigerant type",
+      );
+      const refrigerantGwp = CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE[
+        refrigerant as keyof typeof CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE
+      ];
+      if (refrigerantGwp === undefined) {
+        return officialProductFailure(
+          `The selected VEU-approved water heater uses unsupported refrigerant ${JSON.stringify(refrigerant)}.`,
+        );
+      }
+      setOfficialNumber(inputs, "refrigerant_gwp", refrigerantGwp);
+    }
     return inputs;
   }
   if (activityCode === "6") {
@@ -1209,13 +1239,11 @@ export function deriveCreditexVeuOfficialProductInputs(
       "refrigerantType",
       "an exact refrigerant type",
     );
-    const refrigerantGwp = refrigerant === "R-32"
-      ? 675
-      : refrigerant === "R-410A"
-        ? 2088
-        : officialProductFailure(
-          `The selected VEU-approved air conditioner uses unsupported refrigerant ${JSON.stringify(refrigerant)}.`,
-        );
+    const refrigerantGwp = refrigerant === "R-32" || refrigerant === "R-410A"
+      ? CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE[refrigerant]
+      : officialProductFailure(
+        `The selected VEU-approved air conditioner uses unsupported refrigerant ${JSON.stringify(refrigerant)}.`,
+      );
     const approvedHeatingCapacity = officialNumber(
       selection,
       "ratedHeatingCapacityKw",
@@ -1597,12 +1625,14 @@ export function deriveCreditexVeuOfficialProductInputs(
       "refrigerantType",
       "an exact refrigerant type",
     );
-    const refrigerantGwp = ({
-      "R-744": 1,
-      "R-513A": 629,
-      "R-1234yf": 5,
-      "R-290": 3,
-    } as const)[refrigerant as "R-744" | "R-513A" | "R-1234yf" | "R-290"];
+    const refrigerantGwp = (
+      refrigerant === "R-744"
+      || refrigerant === "R-513A"
+      || refrigerant === "R-1234yf"
+      || refrigerant === "R-290"
+    )
+      ? CREDITEX_VEU_REFRIGERANT_GWP_BY_TYPE[refrigerant]
+      : undefined;
     if (!refrigerantGwp) {
       return officialProductFailure(
         `The selected VEU Part 44 product uses refrigerant ${JSON.stringify(refrigerant)}, which is not in the reviewed ESC Application Guide v2.2 GWP table.`,
