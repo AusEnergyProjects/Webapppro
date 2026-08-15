@@ -121,6 +121,9 @@ const tradeComplianceIntent = await vite.ssrLoadModule(
 const schemaGuards = await vite.ssrLoadModule(
   "/src/lib/creditex-schema-guards.ts",
 );
+const workPackSchemaGuards = await vite.ssrLoadModule(
+  "/src/lib/creditex-work-pack-schema-guards.ts",
+);
 const outputActions = await vite.ssrLoadModule(
   "/src/lib/creditex-output-action-server.ts",
 );
@@ -235,6 +238,13 @@ function idempotency(clientActionId) {
     deviceId: "browser-runtime-device",
     payloadHash: sha256(Buffer.from(clientActionId)),
   };
+}
+
+function installedWorkPackGuardCount(sqlite) {
+  return workPackSchemaGuards.CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS
+    .filter(({ name }) => sqlite.prepare(
+      "SELECT 1 present FROM sqlite_schema WHERE type = 'trigger' AND name = ?",
+    ).get(name)?.present === 1).length;
 }
 
 function scope({ workerUid = WORKER_UID, memberId = MEMBER_ID } = {}) {
@@ -1185,6 +1195,43 @@ async function signaturePacket(database, projection, {
   };
 }
 
+test("empty assigned work-pack listing installs all guards before returning", async () => {
+  const { sqlite, database } = runtimeDatabase();
+  const result = await server.listAssignedCreditexActivityWorkPacks(
+    database,
+    scope(),
+  );
+  assert.deepEqual(result, []);
+  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  sqlite.close();
+});
+
+test("empty guided auto-open installs all work-pack guards before its first read", async () => {
+  const { sqlite, database } = runtimeDatabase();
+  let result;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      result = await complianceServer.autoOpenReadyPlannedComplianceWorkPacks(
+        database,
+        {
+          workOrderId: "missing-runtime-work-order",
+          installerUid: "missing-runtime-installer",
+          actorUid: "missing-runtime-installer",
+          createdAt: NOW,
+        },
+      );
+      break;
+    } catch (error) {
+      if (!String(error?.message || error).startsWith(
+        "CREDITEX_SCHEMA_GUARDS_INSTALLING:",
+      )) throw error;
+    }
+  }
+  assert.deepEqual(result, []);
+  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  sqlite.close();
+});
+
 test("guided work-pack reconciliation retries atomically and remains idempotent without certificates", async () => {
   const { sqlite, database } = await seededRuntime();
   database.interceptNextBatch(
@@ -1953,170 +2000,212 @@ test("guided work-pack reconciliation reports hard governance blockers without a
 });
 
 function sresActivationRuntime() {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`
-    CREATE TABLE compliance_organisations (
-      id TEXT PRIMARY KEY, organisation_code TEXT NOT NULL, status TEXT NOT NULL
-    );
-    CREATE TABLE compliance_users (
-      organisation_id TEXT NOT NULL, firebase_uid TEXT NOT NULL,
-      status TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL,
-      governance_identity_verified INTEGER NOT NULL,
-      governance_identity_verified_by_uid TEXT NOT NULL,
-      PRIMARY KEY (organisation_id, firebase_uid)
-    );
-    CREATE TABLE admin_users (
-      firebase_uid TEXT PRIMARY KEY, status TEXT NOT NULL, role TEXT NOT NULL,
-      display_name TEXT NOT NULL
-    );
-    CREATE TABLE compliance_programs (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL, program_code TEXT NOT NULL
-    );
-    CREATE TABLE compliance_activity_versions (
-      id TEXT PRIMARY KEY, program_id TEXT NOT NULL
-    );
-    CREATE TABLE compliance_activity_work_pack_versions (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      activity_version_id TEXT NOT NULL, activity_template_id TEXT NOT NULL,
-      version INTEGER NOT NULL
-    );
-    CREATE TABLE compliance_cases (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      activity_version_id TEXT NOT NULL
-    );
-    CREATE TABLE compliance_activity_work_pack_instances (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      compliance_case_id TEXT NOT NULL, work_pack_version_id TEXT NOT NULL,
-      activity_date TEXT NOT NULL, instance_key TEXT NOT NULL,
-      revision INTEGER NOT NULL
-    );
-    CREATE TABLE compliance_official_source_artifacts (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL, sha256 TEXT NOT NULL,
-      object_key TEXT NOT NULL, source_title TEXT NOT NULL,
-      source_url TEXT NOT NULL, source_version TEXT NOT NULL,
-      captured_at TEXT NOT NULL
-    );
-    CREATE TABLE compliance_official_source_review_decisions (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      subject_type TEXT NOT NULL, subject_id TEXT NOT NULL,
-      artifact_id TEXT NOT NULL, artifact_sha256 TEXT NOT NULL,
-      artifact_object_key TEXT NOT NULL, decision TEXT NOT NULL,
-      reviewed_at TEXT NOT NULL, supersedes_decision_id TEXT DEFAULT '' NOT NULL
-    );
-    CREATE TABLE compliance_equipment_records (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL, case_id TEXT NOT NULL,
-      record_type TEXT NOT NULL, status TEXT NOT NULL,
-      product_registry TEXT NOT NULL, product_reference TEXT NOT NULL,
-      quantity INTEGER NOT NULL, evidence_snapshot TEXT NOT NULL,
-      recorded_at TEXT NOT NULL
-    );
-    CREATE TABLE compliance_participants (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      participant_type TEXT NOT NULL, legal_name TEXT NOT NULL,
-      external_reference TEXT NOT NULL, status TEXT NOT NULL
-    );
-    CREATE TABLE compliance_participant_abilities (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      participant_id TEXT NOT NULL, activity_version_id TEXT NOT NULL,
-      ability_code TEXT NOT NULL, ability_role TEXT NOT NULL,
-      status TEXT NOT NULL, effective_from TEXT NOT NULL,
-      effective_to TEXT NOT NULL, evidence_snapshot TEXT NOT NULL,
-      approved_by_uid TEXT NOT NULL, approved_at TEXT NOT NULL
-    );
-    CREATE TABLE compliance_calculator_versions (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      activity_version_id TEXT NOT NULL, calculator_key TEXT NOT NULL,
-      version INTEGER NOT NULL, title TEXT NOT NULL,
-      approval_state TEXT NOT NULL, primary_approver_uid TEXT NOT NULL,
-      secondary_approver_uid TEXT NOT NULL,
-      official_source_sha256 TEXT NOT NULL
-    );
-    CREATE TABLE compliance_calculator_engine_receipts (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      calculator_version_id TEXT NOT NULL, engine_contract_hash TEXT NOT NULL,
-      golden_vector_suite_sha256 TEXT NOT NULL,
-      engine_suite_hash TEXT NOT NULL, suite_receipt_hash TEXT NOT NULL,
-      vector_count INTEGER NOT NULL, executed_by_uid TEXT NOT NULL,
-      executed_at TEXT NOT NULL, result TEXT NOT NULL
-    );
-    CREATE TABLE compliance_audit_events (
-      id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL,
-      actor_type TEXT NOT NULL, actor_uid TEXT NOT NULL,
-      event_type TEXT NOT NULL, target_type TEXT NOT NULL,
-      target_id TEXT NOT NULL, summary TEXT NOT NULL,
-      metadata TEXT NOT NULL, created_at TEXT NOT NULL
-    );
-    CREATE TABLE compliance_output_action_packets (
-      id TEXT PRIMARY KEY, action_kind TEXT NOT NULL, program_code TEXT NOT NULL,
-      organisation_id TEXT NOT NULL, activity_template_id TEXT NOT NULL,
-      compliance_case_id TEXT NOT NULL, packet_snapshot TEXT NOT NULL,
-      prepared_at TEXT NOT NULL
-    );
-  `);
-  sqlite.exec(fs.readFileSync(
-    path.join(ROOT, "drizzle", "0146_creditex_sres_certificate_activation_evidence.sql"),
-    "utf8",
-  ));
-  return { sqlite, database: new TestD1Database(sqlite) };
+  const runtime = runtimeDatabase();
+  seedOperationalRecords(runtime.sqlite);
+  return runtime;
 }
-
 function seedSresActivationRuntime(sqlite) {
-  const organisationId = "org-sres-runtime";
+  const organisationId = sqlite.prepare(`SELECT id
+      FROM compliance_organisations WHERE organisation_code = 'CREDITEX-AU'`)
+    .get().id;
   const sourceSha256 = "a".repeat(64);
   const otherSourceSha256 = "b".repeat(64);
   const sourceObjectKey = "creditex/sres/current-source.pdf";
   const recordedAt = "2026-08-15T00:00:00.000Z";
-  sqlite.prepare(`INSERT INTO compliance_organisations
-    (id, organisation_code, status) VALUES (?, 'CREDITEX-AU', 'active')`)
-    .run(organisationId);
+  const definitionSha256 = `sha256:${"1".repeat(64)}`;
+  const responseSha256 = `sha256:${"2".repeat(64)}`;
+  const schemaSnapshot = JSON.stringify({
+    contract: "creditex-activity-work-pack/v1",
+    activityTemplateId: "sres-pv-small-generation-unit",
+    version: 1,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: "",
+    stages: [{}],
+    signerRoles: [],
+    dependencies: [],
+    sections: [{}],
+  });
+  const responseSnapshot = JSON.stringify({
+    contract: "creditex-activity-work-pack-instance/v1",
+    prefill: {
+      contract: "creditex-activity-work-pack-prefill/v1",
+      customerContext: {
+        contract: "creditex-activity-work-pack-customer-context/v1",
+        editable: false,
+        contextSha256: `sha256:${"3".repeat(64)}`,
+        customerId: "",
+        siteId: "",
+        contactId: "",
+        customerRevision: "",
+        siteRevision: "",
+        contactRevision: "",
+      },
+    },
+    response: {
+      contract: "creditex-activity-work-pack-response/v1",
+      answers: {},
+      repeatableSections: {},
+      dependencyResolutions: {},
+      schemaSha256: definitionSha256,
+    },
+    declarations: {},
+    finalisation: null,
+    compositionLockId: "",
+    compositionSha256: "",
+    definitionSha256,
+    prefillSha256: `sha256:${"4".repeat(64)}`,
+    responseSha256,
+    declarationsSha256: `sha256:${"5".repeat(64)}`,
+  });
   for (const user of [
     ["sres-author", "admin", "SRES Author", "sres-reviewer"],
     ["sres-reviewer", "reviewer", "SRES Reviewer", "sres-author"],
   ]) {
     sqlite.prepare(`INSERT INTO compliance_users (
-        organisation_id, firebase_uid, status, role, display_name,
-        governance_identity_verified, governance_identity_verified_by_uid
-      ) VALUES (?, ?, 'active', ?, ?, 1, ?)`)
-      .run(organisationId, ...user);
+        id, organisation_id, firebase_uid, email, status, role, display_name,
+        created_by_uid, created_at, updated_at, governance_identity_verified,
+        governance_identity_verified_by_uid, governance_identity_verified_at,
+        governance_identity_verification_basis
+      ) VALUES (?, ?, ?, ?, 'active', ?, ?, 'runtime-bootstrap', ?, ?, 1, ?, ?,
+        'Bounded SRES activation runtime fixture')`)
+      .run(
+        `member:${user[0]}`,
+        organisationId,
+        user[0],
+        `${user[0]}@example.test`,
+        user[1],
+        user[2],
+        recordedAt,
+        recordedAt,
+        user[3],
+        recordedAt,
+      );
   }
   sqlite.prepare(`INSERT INTO compliance_programs
-      (id, organisation_id, program_code) VALUES ('sres-program', ?, 'SRES')`)
-    .run(organisationId);
-  sqlite.exec(`
-    INSERT INTO compliance_activity_versions (id, program_id)
-      VALUES ('sres-activity-version', 'sres-program');
-  `);
+      (id, organisation_id, program_code, name, scheme_kind, jurisdiction,
+      administering_body, official_source_url, official_source_title,
+      official_source_checked_at, created_by_uid, created_at, updated_at)
+    VALUES ('sres-program', ?, 'SRES', 'Small-scale Renewable Energy Scheme',
+      'tradable_certificate', 'AU', 'Clean Energy Regulator',
+      'https://cer.gov.au/sres', 'Current official SRES source', ?,
+      'sres-author', ?, ?)`)
+    .run(organisationId, recordedAt, recordedAt, recordedAt);
+  sqlite.prepare(`INSERT INTO compliance_activity_versions (
+      id, program_id, activity_key, version, title, service_category,
+      registry_activity_code, product_category, scenario, jurisdiction,
+      effective_from, official_source_url, official_source_title,
+      official_source_checked_at, created_by_uid, created_at, updated_at
+    ) VALUES ('sres-activity-version', 'sres-program', 'pv', 1,
+      'Small generation unit', 'solar', 'PV', 'Solar PV',
+      'Small generation unit installation', 'AU', '2026-01-01',
+      'https://cer.gov.au/sres', 'Current official SRES source', ?,
+      'sres-author', ?, ?)`)
+    .run(recordedAt, recordedAt, recordedAt);
   sqlite.prepare(`INSERT INTO compliance_activity_work_pack_versions (
-      id, organisation_id, activity_version_id, activity_template_id, version
+      id, organisation_id, activity_version_id, activity_template_id,
+      manual_policy_binding_id, manual_policy_binding_version,
+      manual_policy_binding_sha256, evidence_policy_version_id,
+      evidence_policy_version, evidence_policy_source_sha256, version,
+      contract, title, schema_snapshot, schema_sha256, effective_from,
+      authored_by_uid, authored_at, updated_by_uid, updated_at, created_at
     ) VALUES ('sres-work-pack-version', ?, 'sres-activity-version',
-      'sres-pv-small-generation-unit', 1)`)
-    .run(organisationId);
+      'sres-pv-small-generation-unit', 'sres-manual-policy', 1, ?,
+      'sres-evidence-policy', 1, ?, 1, 'creditex-activity-work-pack/v1',
+      'SRES PV work pack', ?, ?, '2026-01-01', 'sres-author', ?,
+      'sres-author', ?, ?)`)
+    .run(
+      organisationId,
+      "6".repeat(64),
+      "7".repeat(64),
+      schemaSnapshot,
+      definitionSha256,
+      recordedAt,
+      recordedAt,
+      recordedAt,
+    );
+  const sresIntent = tradeComplianceIntent.resolveTradeComplianceIntent({
+    mode: "planned",
+    programTemplateId: "au-sres",
+    activityTemplateId: "sres-pv",
+    siteJurisdiction: "QLD",
+    plannedStart: "2026-08-15T09:00:00.000Z",
+  }).snapshot;
+  const sresIntentJson =
+    tradeComplianceIntent.stableTradeComplianceIntentJson(sresIntent);
+  sqlite.prepare(`INSERT INTO trade_work_order_compliance_intents (
+      id, work_order_id, installer_uid, compliance_organisation_id,
+      program_template_id, activity_template_id, program_code,
+      registry_activity_code, service_category, site_jurisdiction,
+      planned_start, catalogue_reviewed_on, intent_snapshot,
+      intent_snapshot_sha256, status, compliance_case_id, revision,
+      created_by_uid, created_at, updated_at, intent_key
+    ) VALUES ('sres-intent-runtime', ?, ?, ?, 'au-sres', 'sres-pv', 'SRES',
+      'PV', 'solar', 'QLD', '2026-08-15T09:00:00.000Z', ?, ?, ?, 'planned',
+      '', 1, ?, ?, ?, 'program:au-sres:activity:sres-pv')`)
+    .run(
+      WORK_ORDER_ID,
+      OWNER_UID,
+      organisationId,
+      governmentCatalogue.GOVERNMENT_CATALOGUE_REVIEWED_ON,
+      sresIntentJson,
+      sha256(Buffer.from(sresIntentJson)),
+      OWNER_UID,
+      recordedAt,
+      recordedAt,
+    );
   sqlite.prepare(`INSERT INTO compliance_cases
-      (id, organisation_id, activity_version_id)
-      VALUES ('sres-case', ?, 'sres-activity-version')`)
-    .run(organisationId);
+      (id, case_number, organisation_id, program_id, work_order_id,
+      installer_uid, activity_version_id, activity_date, site_jurisdiction,
+      activity_snapshot, created_by_type, created_by_uid, created_at,
+      updated_at, compliance_intent_id)
+    VALUES ('sres-case', 'SRES-RUNTIME-1', ?, 'sres-program',
+      ?, ?, 'sres-activity-version',
+      '2026-08-15', 'QLD', '{}', 'compliance', 'sres-author', ?, ?,
+      'sres-intent-runtime')`)
+    .run(organisationId, WORK_ORDER_ID, OWNER_UID, recordedAt, recordedAt);
   sqlite.prepare(`INSERT INTO compliance_activity_work_pack_instances (
       id, organisation_id, compliance_case_id, work_pack_version_id,
-      activity_date, instance_key, revision
+      work_order_id, activity_date, instance_key, revision, response_snapshot,
+      response_sha256, created_by_uid, created_at
     ) VALUES ('sres-instance', ?, 'sres-case', 'sres-work-pack-version',
-      '2026-08-15', 'sres-instance-key', 1)`)
-    .run(organisationId);
+      ?, '2026-08-15', 'sres-instance-key', 1, ?, ?,
+      'sres-author', ?)`)
+    .run(
+      organisationId,
+      WORK_ORDER_ID,
+      responseSnapshot,
+      responseSha256,
+      recordedAt,
+    );
   for (const source of [
     ["sres-source", sourceSha256, sourceObjectKey, "sres-source-review"],
     ["sres-other-source", otherSourceSha256,
       "creditex/sres/other-source.pdf", "sres-other-source-review"],
   ]) {
     sqlite.prepare(`INSERT INTO compliance_official_source_artifacts (
-        id, organisation_id, sha256, object_key, source_title, source_url,
-        source_version, captured_at
-      ) VALUES (?, ?, ?, ?, 'Current official SRES source',
-        'https://cer.gov.au/sres', '2026-08-15', ?)`)
-      .run(source[0], organisationId, source[1], source[2], recordedAt);
+        id, organisation_id, client_request_id, source_url, source_host,
+        source_title, source_version, original_file_name, content_type,
+        size_bytes, sha256, object_key, asserted_retrieved_at, captured_by_uid,
+        captured_at
+      ) VALUES (?, ?, ?, 'https://cer.gov.au/sres', 'cer.gov.au',
+        'Current official SRES source', '2026-08-15', 'sres-source.pdf',
+        'application/pdf', 1, ?, ?, ?, 'sres-author', ?)`)
+      .run(
+        source[0],
+        organisationId,
+        `capture:${source[0]}`,
+        source[1],
+        source[2],
+        recordedAt,
+        recordedAt,
+      );
     sqlite.prepare(`INSERT INTO compliance_official_source_review_decisions (
         id, organisation_id, subject_type, subject_id, artifact_id,
-        artifact_sha256, artifact_object_key, decision, reviewed_at,
-        supersedes_decision_id
-      ) VALUES (?, ?, 'artifact', ?, ?, ?, ?, 'approved', ?, '')`)
+        artifact_sha256, artifact_object_key, decision, review_note,
+        reviewed_by_uid, reviewed_at, supersedes_decision_id
+      ) VALUES (?, ?, 'artifact', ?, ?, ?, ?, 'approved',
+        'Exact official SRES source independently reviewed.',
+        'sres-reviewer', ?, '')`)
       .run(
         source[3],
         organisationId,
@@ -2129,9 +2218,10 @@ function seedSresActivationRuntime(sqlite) {
   }
   sqlite.prepare(`INSERT INTO compliance_equipment_records (
       id, organisation_id, case_id, record_type, status, product_registry,
-      product_reference, quantity, evidence_snapshot, recorded_at
+      product_reference, quantity, evidence_snapshot, recorded_by_uid,
+      recorded_at, created_at, updated_at
     ) VALUES ('sres-equipment', ?, 'sres-case', 'installed', 'installed',
-      'cer_sres_pv', 'CER-PV-123', 1, ?, ?)`)
+      'cer_sres_pv', 'CER-PV-123', 1, ?, 'sres-author', ?, ?, ?)`)
     .run(
       organisationId,
       JSON.stringify({
@@ -2139,17 +2229,25 @@ function seedSresActivationRuntime(sqlite) {
         sourceSha256: `sha256:${sourceSha256}`,
       }),
       recordedAt,
+      recordedAt,
+      recordedAt,
     );
   for (const participant of [
     ["sres-agent", "agent", "Creditex Pty Ltd", "REC-AGENT-1"],
     ["sres-installer", "installer", "SRES Installer", "ACC-INSTALLER-1"],
-    ["sres-wrong-agent", "customer", "Wrong Participant", "WRONG-1"],
+    ["sres-wrong-agent", "retailer", "Wrong Participant", "WRONG-1"],
   ]) {
     sqlite.prepare(`INSERT INTO compliance_participants (
         id, organisation_id, participant_type, legal_name,
-        external_reference, status
-      ) VALUES (?, ?, ?, ?, ?, 'active')`)
-      .run(participant[0], organisationId, ...participant.slice(1));
+        external_reference, status, created_by_uid, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'active', 'sres-author', ?, ?)`)
+      .run(
+        participant[0],
+        organisationId,
+        ...participant.slice(1),
+        recordedAt,
+        recordedAt,
+      );
   }
   for (const ability of [
     ["sres-agent-ability", "sres-agent", "sres_registered_agent", "agent"],
@@ -2163,9 +2261,10 @@ function seedSresActivationRuntime(sqlite) {
     sqlite.prepare(`INSERT INTO compliance_participant_abilities (
         id, organisation_id, participant_id, activity_version_id,
         ability_code, ability_role, status, effective_from, effective_to,
-        evidence_snapshot, approved_by_uid, approved_at
+        evidence_snapshot, approved_by_uid, approved_at, created_by_uid,
+        created_at, updated_at
       ) VALUES (?, ?, ?, 'sres-activity-version', ?, ?, 'active',
-        '2026-01-01', '2026-12-31', ?, 'sres-reviewer', ?)`)
+        '2026-01-01', '2026-12-31', ?, 'sres-reviewer', ?, 'sres-author', ?, ?)`)
       .run(
         ability[0],
         organisationId,
@@ -2174,28 +2273,38 @@ function seedSresActivationRuntime(sqlite) {
         ability[3],
         JSON.stringify({ sourceSha256: `sha256:${sourceSha256}` }),
         recordedAt,
+        recordedAt,
+        recordedAt,
       );
   }
   sqlite.prepare(`INSERT INTO compliance_calculator_versions (
       id, organisation_id, activity_version_id, calculator_key, version,
-      title, approval_state, primary_approver_uid, secondary_approver_uid,
-      official_source_sha256
+      title, output_type, specification, rounding_policy, official_source_url,
+      official_source_version, approval_state, primary_approver_uid,
+      secondary_approver_uid, approved_at, official_source_sha256, created_by_uid,
+      created_at, updated_at
     ) VALUES ('sres-calculator', ?, 'sres-activity-version', 'sres_stc', 1,
-      'Exact SRES STC calculator', 'approved', 'calculator-author',
-      'calculator-reviewer', ?)`)
-    .run(organisationId, sourceSha256);
+      'Exact SRES STC calculator', 'STC', '{}', '{}',
+      'https://cer.gov.au/sres', '2026-08-15', 'approved',
+      'calculator-author', 'calculator-reviewer', ?, ?, 'calculator-author', ?, ?)`)
+    .run(organisationId, recordedAt, sourceSha256, recordedAt, recordedAt);
   sqlite.prepare(`INSERT INTO compliance_calculator_engine_receipts (
-      id, organisation_id, calculator_version_id, engine_contract_hash,
+      id, organisation_id, calculator_version_id, calculator_version_number,
+      engine_contract_id, engine_contract_hash,
       golden_vector_suite_sha256, engine_suite_hash, suite_receipt_hash,
-      vector_count, executed_by_uid, executed_at, result
-    ) VALUES ('sres-engine-receipt', ?, 'sres-calculator', ?, ?, ?, ?, 3,
-      'calculator-runner', ?, 'passed')`)
+      suite_receipt_schema, vector_count, executed_by_uid, executed_at, result,
+      created_at
+    ) VALUES ('sres-engine-receipt', ?, 'sres-calculator', 1,
+      'creditex-fixed-decimal-engine-contract/base10-strings-v2', ?, ?, ?, ?,
+      'creditex-calculator-suite-receipt/v2', 3,
+      'calculator-runner', ?, 'passed', ?)`)
     .run(
       organisationId,
       `sha256:${"c".repeat(64)}`,
       "d".repeat(64),
       `sha256:${"e".repeat(64)}`,
       `sha256:${"f".repeat(64)}`,
+      recordedAt,
       recordedAt,
     );
   return { organisationId, sourceSha256, sourceObjectKey };
@@ -2205,7 +2314,7 @@ function sresActivationActor(organisationId, actorUid) {
   return { organisationId, actorUid, actorKind: "compliance" };
 }
 
-test("SRES activation binds eight current reviewed gates and invalidates stale packets", async () => {
+test("SRES activation binds eight current reviewed gates and invalidates stale source state", async () => {
   const { sqlite, database } = sresActivationRuntime();
   const { organisationId, sourceSha256, sourceObjectKey } =
     seedSresActivationRuntime(sqlite);
@@ -2399,24 +2508,20 @@ test("SRES activation binds eight current reviewed gates and invalidates stale p
   assert.equal(ready.ready, true);
   assert.equal(ready.gates.filter((gate) => gate.status === "approved").length, 8);
   assert.equal(ready.snapshotSha256, frozen.snapshotSha256);
-
-  const packetSnapshot = JSON.stringify({
-    programActivationEvidence: frozen.snapshot,
-    programActivationEvidenceSha256: frozen.snapshotSha256,
-  });
-  assert.doesNotThrow(() => sqlite.prepare(`INSERT INTO compliance_output_action_packets (
-      id, action_kind, program_code, organisation_id, activity_template_id,
-      compliance_case_id, packet_snapshot, prepared_at
-    ) VALUES ('sres-packet-current', 'certificate_submission', 'SRES', ?,
-      'sres-pv-small-generation-unit', 'sres-case', ?, ?)`)
-    .run(organisationId, packetSnapshot, "2026-08-15T01:04:00.000Z"));
+  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  assert.throws(() => sqlite.prepare(`UPDATE compliance_activity_work_pack_versions
+      SET activity_version_id = 'forged-activity-version'
+      WHERE id = 'sres-work-pack-version'`).run(),
+  /COMPLIANCE_WORK_PACK_ACTIVITY_VERSION_REQUIRED/);
 
   sqlite.prepare(`INSERT INTO compliance_official_source_review_decisions (
       id, organisation_id, subject_type, subject_id, artifact_id,
-      artifact_sha256, artifact_object_key, decision, reviewed_at,
-      supersedes_decision_id
+      artifact_sha256, artifact_object_key, decision, review_note,
+      reviewed_by_uid, reviewed_at, supersedes_decision_id
     ) VALUES ('sres-source-withdrawal', ?, 'artifact', 'sres-source',
-      'sres-source', ?, ?, 'rejected', ?, 'sres-source-review')`)
+      'sres-source', ?, ?, 'withdrawn',
+      'The previously approved source is no longer current.',
+      'sres-reviewer', ?, 'sres-source-review')`)
     .run(
       organisationId,
       sourceSha256,
@@ -2430,13 +2535,6 @@ test("SRES activation binds eight current reviewed gates and invalidates stale p
     options("2026-08-15T01:05:00.000Z"),
   );
   assert.equal(stale.ready, false);
-  assert.throws(() => sqlite.prepare(`INSERT INTO compliance_output_action_packets (
-      id, action_kind, program_code, organisation_id, activity_template_id,
-      compliance_case_id, packet_snapshot, prepared_at
-    ) VALUES ('sres-packet-stale', 'certificate_submission', 'SRES', ?,
-      'sres-pv-small-generation-unit', 'sres-case', ?, ?)`)
-    .run(organisationId, packetSnapshot, "2026-08-15T01:05:00.000Z"),
-  /COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID/);
   assert.throws(() => sqlite.prepare(`UPDATE compliance_sres_activation_snapshots
       SET created_at = created_at WHERE id = ?`).run(frozen.snapshot.snapshotId),
   /COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_IMMUTABLE/);

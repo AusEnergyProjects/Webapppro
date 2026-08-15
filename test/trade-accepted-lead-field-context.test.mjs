@@ -117,6 +117,9 @@ function syncRoute(accessRecord, jobs) {
     "@/lib/creditex-activity-work-pack-server": {
       listAssignedCreditexActivityWorkPacks: async () => [],
     },
+    "@/lib/creditex-work-pack-schema-guards": {
+      ensureCreditexWorkPackSchemaGuards: async () => {},
+    },
     "@/lib/creditex-compliance-server": {
       reconcileReadyPlannedComplianceWorkPacks: async () => [],
     },

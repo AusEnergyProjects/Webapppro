@@ -38,6 +38,7 @@ import type {
 import {
   reconcileReadyPlannedComplianceWorkPacks,
 } from "@/lib/creditex-compliance-server";
+import { ensureCreditexWorkPackSchemaGuards } from "@/lib/creditex-work-pack-schema-guards";
 
 export const runtime = "edge";
 
@@ -1606,6 +1607,7 @@ const INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL = `SELECT 1
 
 async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
+  await ensureCreditexWorkPackSchemaGuards(db);
   const [tasks, forms, issues, plan, unlinkedWorkPack, incompleteWorkPack, compliance, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),

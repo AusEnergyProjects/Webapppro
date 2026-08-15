@@ -58,6 +58,9 @@ const server = loadTypescriptModule(
     "./creditex-official-product-registry.ts": officialProductRegistry,
     "../data/creditex-current-work-pack-content.ts": currentWorkPackContent,
     "./creditex-work-pack-content-draft.ts": workPackContentDraft,
+    "./creditex-work-pack-schema-guards.ts": {
+      async ensureCreditexWorkPackSchemaGuards() {},
+    },
     "./creditex-sres-certificate-activation-server.ts": {
       loadCreditexSresActivationState() {
         throw new Error("SRES activation is outside this VEU governance-list test.");

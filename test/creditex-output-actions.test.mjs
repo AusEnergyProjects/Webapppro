@@ -3,6 +3,13 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import {
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS,
+} from "../src/lib/creditex-work-pack-schema-guards.ts";
+
+const workPackGuardSql = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS
+  .map((definition) => definition.sql)
+  .join("\n");
 
 const files = {
   component: new URL(
@@ -227,10 +234,9 @@ test("adapter submission remains an internal non-null service boundary and is no
 });
 
 test("SRES certificates require eight current independently reviewed activation gates", async () => {
-  const [component, shared, migration, service] = await Promise.all([
+  const [component, shared, service] = await Promise.all([
     source("component"),
     source("sharedRoute"),
-    source("sresMigration"),
     source("sresService"),
   ]);
   for (const evidenceKind of [
@@ -250,9 +256,9 @@ test("SRES certificates require eight current independently reviewed activation 
   assert.match(shared, /supersedesRecordId: body\.supersedesRecordId/);
   assert.match(service, /SRES_ACTIVATION_CALCULATOR_SOURCE_MISMATCH/);
   assert.match(service, /sres_activation_snapshot_stale_or_invalid/);
-  assert.match(migration, /compliance_sres_output_action_activation_guard/);
-  assert.match(migration, /json_each\(activation\.`snapshot_json`, '\$\.records'\)/);
-  assert.match(migration, /COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID/);
+  assert.match(workPackGuardSql, /compliance_sres_output_action_activation_guard/);
+  assert.match(workPackGuardSql, /json_each\(activation\.`snapshot_json`, '\$\.records'\)/);
+  assert.match(workPackGuardSql, /COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID/);
 });
 
 test("exact packets and provider responses are authenticated no-store downloads", async () => {
@@ -281,15 +287,15 @@ test("the database enforces dual work-pack hashes and one action per final recor
 
   assert.match(migration, /`work_pack_instance_sha256` text NOT NULL/);
   assert.match(migration, /`work_pack_response_sha256` text NOT NULL/);
-  assert.match(migration, /final_record\.`instance_sha256` = NEW\.`work_pack_instance_sha256`/);
-  assert.match(migration, /final_record\.`response_sha256` = NEW\.`work_pack_response_sha256`/);
+  assert.match(workPackGuardSql, /final_record\.`instance_sha256` = NEW\.`work_pack_instance_sha256`/);
+  assert.match(workPackGuardSql, /final_record\.`response_sha256` = NEW\.`work_pack_response_sha256`/);
   assert.match(migration, /`compliance_output_action_final_record_idx`/);
   assert.match(
     migration,
     /\(`organisation_id`, `work_pack_final_record_id`\)/,
   );
   assert.match(
-    migration,
+    workPackGuardSql,
     /CASE NEW\.`actor_kind`\s+WHEN 'adapter' THEN 'platform'\s+ELSE 'compliance'/,
   );
   assert.doesNotMatch(migration, /operational_output_evidence/);

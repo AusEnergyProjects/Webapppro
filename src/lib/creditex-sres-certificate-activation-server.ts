@@ -2,6 +2,9 @@ import type {
   CreditexWorkPackGovernanceActor,
 } from "./creditex-activity-work-pack-server";
 import { creditexCanonicalSha256 } from "./creditex-interchange-preflight";
+import {
+  ensureCreditexWorkPackSchemaGuards,
+} from "./creditex-work-pack-schema-guards";
 
 export const CREDITEX_SRES_ACTIVATION_EVIDENCE_CONTRACT =
   "creditex-sres-certificate-activation-evidence/v1" as const;
@@ -200,6 +203,7 @@ async function activationIdentity(
   database: D1Database,
   actor: CreditexWorkPackGovernanceActor,
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const actorUid = requiredText(actor.actorUid, 240, "Governance actor");
   const organisationId = requiredText(
     actor.organisationId,

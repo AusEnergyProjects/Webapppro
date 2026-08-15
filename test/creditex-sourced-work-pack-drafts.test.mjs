@@ -58,6 +58,9 @@ const server = loadTypescriptModule(
     "./creditex-official-product-registry.ts": officialProductRegistry,
     "../data/creditex-current-work-pack-content.ts": currentContent,
     "./creditex-work-pack-content-draft.ts": sourcedDraft,
+    "./creditex-work-pack-schema-guards.ts": {
+      async ensureCreditexWorkPackSchemaGuards() {},
+    },
     "./creditex-sres-certificate-activation-server.ts": {
       loadCreditexSresActivationState() {
         throw new Error("SRES activation is outside sourced-draft authoring.");

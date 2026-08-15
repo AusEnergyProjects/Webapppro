@@ -536,9 +536,22 @@ export const CREDITEX_CALCULATOR_AUTHORING_SCHEMA_GUARD_DEFINITIONS =
 export const CREDITEX_FOUNDATION_SCHEMA_GUARD_DEFINITIONS =
   CREDITEX_SCHEMA_GUARD_DEFINITIONS.slice(0, 27);
 
+const CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_NAMES = new Set([
+  "compliance_official_source_artifacts_actor_guard",
+  "compliance_official_source_artifacts_no_update",
+  "compliance_official_source_artifacts_no_delete",
+]);
+
+export const CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS =
+  CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter((definition) =>
+    CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_NAMES.has(definition.name)
+  );
+
 const SCHEMA_INSTALL_BATCH_SIZE = 40;
 const readinessByDatabase = new WeakMap<object, Promise<void>>();
 const pilotReadinessByDatabase = new WeakMap<object, Promise<void>>();
+const officialSourceCustodyReadinessByDatabase =
+  new WeakMap<object, Promise<void>>();
 const CREDITEX_REQUIRED_SCHEMA_TABLES = [
   "compliance_legacy_import_batches",
   "compliance_legacy_import_rows",
@@ -683,11 +696,36 @@ async function requireCreditexSchemaMigrations(database: D1Database) {
   }
 }
 
+async function requireCreditexOfficialSourceCustodySchema(
+  database: D1Database,
+) {
+  const required = [
+    "compliance_official_source_artifacts",
+    "compliance_users",
+    "admin_users",
+    "compliance_organisations",
+  ] as const;
+  const names = required.map((name) => `'${name}'`).join(", ");
+  const tables = await database.prepare(
+    `SELECT name FROM sqlite_schema
+      WHERE type = 'table' AND name IN (${names})`,
+  ).all<{ name: string }>();
+  const installed = new Set(tables.results.map((row) => String(row.name)));
+  const missing = required.filter((name) => !installed.has(name));
+  if (missing.length) {
+    throw new Error(
+      `CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_MIGRATIONS_REQUIRED:${missing.join(",")}`,
+    );
+  }
+}
+
 async function installCreditexSchemaGuards(
   database: D1Database,
   definitions: readonly SchemaGuardDefinition[],
+  requireMigrations: (database: D1Database) => Promise<void> =
+    requireCreditexSchemaMigrations,
 ) {
-  await requireCreditexSchemaMigrations(database);
+  await requireMigrations(database);
   const installed = await installedGuards(database);
   const mismatched = definitions.filter(
     (definition) =>
@@ -787,6 +825,27 @@ export async function ensureCreditexPilotSchemaGuards(
     await readiness;
   } catch (error) {
     pilotReadinessByDatabase.delete(databaseKey);
+    throw error;
+  }
+}
+
+export async function ensureCreditexOfficialSourceCustodySchemaGuards(
+  database: D1Database,
+) {
+  const databaseKey = database as object;
+  let readiness = officialSourceCustodyReadinessByDatabase.get(databaseKey);
+  if (!readiness) {
+    readiness = installCreditexSchemaGuards(
+      database,
+      CREDITEX_OFFICIAL_SOURCE_CUSTODY_SCHEMA_GUARD_DEFINITIONS,
+      requireCreditexOfficialSourceCustodySchema,
+    );
+    officialSourceCustodyReadinessByDatabase.set(databaseKey, readiness);
+  }
+  try {
+    await readiness;
+  } catch (error) {
+    officialSourceCustodyReadinessByDatabase.delete(databaseKey);
     throw error;
   }
 }

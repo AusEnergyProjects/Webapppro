@@ -1,8 +1,7 @@
-DROP TRIGGER IF EXISTS `compliance_official_source_artifacts_actor_guard`;
-DROP TRIGGER IF EXISTS `compliance_official_source_artifacts_no_update`;
-DROP TRIGGER IF EXISTS `compliance_official_source_artifacts_no_delete`;
-
+-- Sites-safe migration: complex trigger guards are installed through
+-- src/lib/creditex-schema-guards.ts using one prepared statement per guard.
 PRAGMA legacy_alter_table = ON;
+
 ALTER TABLE `compliance_official_source_artifacts`
   RENAME TO `compliance_official_source_artifacts_previous`;
 
@@ -80,54 +79,21 @@ SELECT
 FROM `compliance_official_source_artifacts_previous`;
 
 DROP TABLE `compliance_official_source_artifacts_previous`;
+
 PRAGMA legacy_alter_table = OFF;
 
 CREATE UNIQUE INDEX `compliance_official_source_artifacts_org_request_idx`
   ON `compliance_official_source_artifacts`
   (`organisation_id`, `client_request_id`);
+
 CREATE UNIQUE INDEX `compliance_official_source_artifacts_org_object_idx`
   ON `compliance_official_source_artifacts`
   (`organisation_id`, `object_key`);
+
 CREATE INDEX `compliance_official_source_artifacts_org_state_idx`
   ON `compliance_official_source_artifacts`
   (`organisation_id`, `custody_state`, `captured_at`, `id`);
+
 CREATE INDEX `compliance_official_source_artifacts_org_hash_idx`
   ON `compliance_official_source_artifacts`
   (`organisation_id`, `sha256`, `captured_at`);
-
-CREATE TRIGGER `compliance_official_source_artifacts_actor_guard`
-BEFORE INSERT ON `compliance_official_source_artifacts`
-WHEN NOT EXISTS (
-  SELECT 1
-  FROM `compliance_users` member
-  WHERE member.`organisation_id` = NEW.`organisation_id`
-    AND member.`firebase_uid` = NEW.`captured_by_uid`
-    AND member.`role` IN ('admin', 'case_manager')
-    AND member.`status` = 'active'
-)
-AND NOT EXISTS (
-  SELECT 1
-  FROM `admin_users` administrator
-  JOIN `compliance_organisations` organisation
-    ON organisation.`id` = NEW.`organisation_id`
-    AND organisation.`organisation_code` = 'CREDITEX-AU'
-    AND organisation.`status` = 'active'
-  WHERE administrator.`firebase_uid` = NEW.`captured_by_uid`
-    AND administrator.`role` IN ('owner', 'admin')
-    AND administrator.`status` = 'active'
-)
-BEGIN
-  SELECT RAISE(ABORT, 'COMPLIANCE_SOURCE_CUSTODY_ACTOR_INVALID');
-END;
-
-CREATE TRIGGER `compliance_official_source_artifacts_no_update`
-BEFORE UPDATE ON `compliance_official_source_artifacts`
-BEGIN
-  SELECT RAISE(ABORT, 'COMPLIANCE_SOURCE_CUSTODY_IMMUTABLE');
-END;
-
-CREATE TRIGGER `compliance_official_source_artifacts_no_delete`
-BEFORE DELETE ON `compliance_official_source_artifacts`
-BEGIN
-  SELECT RAISE(ABORT, 'COMPLIANCE_SOURCE_CUSTODY_DELETE_FORBIDDEN');
-END;

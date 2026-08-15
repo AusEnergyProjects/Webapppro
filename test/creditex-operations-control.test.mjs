@@ -15,6 +15,9 @@ const approvedSourceReviewMock = {
   CreditexSourceLookupReviewError: MockCreditexSourceLookupReviewError,
   requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
 };
+const workPackSchemaGuardsMock = {
+  ensureCreditexWorkPackSchemaGuards: async () => {},
+};
 class MockCreditexActivityWorkPackServerError extends Error {}
 const activityWorkPackMock = {
   CreditexActivityWorkPackServerError: MockCreditexActivityWorkPackServerError,
@@ -1295,6 +1298,7 @@ test("installer case creation is quote-free while optional handoff linkage remai
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
@@ -1704,6 +1708,7 @@ test("audited local operations execute against the schema and financial guards r
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
@@ -3068,6 +3073,7 @@ test("publication requires two different named administrators and a sealed appro
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
@@ -3245,6 +3251,7 @@ test("evidence policy governance blocks unverified originals and publishes one i
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },

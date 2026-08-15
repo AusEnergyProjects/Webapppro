@@ -1,4 +1,5 @@
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
+import { ensureCreditexWorkPackSchemaGuards } from "./creditex-work-pack-schema-guards";
 import {
   CreditexSourceLookupReviewError,
   requireCurrentApprovedOfficialSourceBinding,
@@ -4460,6 +4461,7 @@ export async function autoOpenReadyPlannedComplianceWorkPacks(
   input: AutoOpenPlannedComplianceWorkPacksInput,
 ): Promise<readonly PlannedComplianceWorkPackReadiness[]> {
   await ensureCreditexSchemaGuards(database);
+  await ensureCreditexWorkPackSchemaGuards(database);
   const workOrderId = requiredText(
     input.workOrderId,
     180,

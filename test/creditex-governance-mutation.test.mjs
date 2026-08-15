@@ -21,6 +21,9 @@ const require = (specifier) => {
   if (specifier === "./creditex-schema-guards") {
     return { ensureCreditexSchemaGuards: async () => {} };
   }
+  if (specifier === "./creditex-work-pack-schema-guards") {
+    return { ensureCreditexWorkPackSchemaGuards: async () => {} };
+  }
   if (specifier === "./creditex-source-lookup-review-server") {
     return {
       CreditexSourceLookupReviewError: class extends Error {},

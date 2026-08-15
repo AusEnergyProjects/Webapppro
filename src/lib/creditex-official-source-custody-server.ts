@@ -1,4 +1,7 @@
 import type { CreditexCustodyBucket } from "./creditex-custody-bucket";
+import {
+  ensureCreditexOfficialSourceCustodySchemaGuards,
+} from "./creditex-schema-guards.ts";
 
 export const CREDITEX_OFFICIAL_SOURCE_LIMITS = {
   maximumBytes: 15 * 1024 * 1024,
@@ -764,6 +767,7 @@ async function captureOfficialSourceArtifact(
   },
 ) {
   requireSourceCaptureRole(member);
+  await ensureCreditexOfficialSourceCustodySchemaGuards(database);
   const clientRequestId = cleanClientRequestId(input.clientRequestId);
   const source = normaliseOfficialSourceUrl(input.sourceUrl);
   const finalSource = normaliseOfficialSourceUrl(retrieval.finalSourceUrl);

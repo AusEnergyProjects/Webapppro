@@ -14,6 +14,9 @@ import {
 import type {
   CreditexWorkPackGovernanceCoverageRow,
 } from "./creditex-work-pack-coverage";
+import {
+  ensureCreditexWorkPackSchemaGuards,
+} from "./creditex-work-pack-schema-guards";
 
 export const CREDITEX_OUTPUT_ACTION_PACKET_CONTRACT =
   "creditex-output-action-packet/v1" as const;
@@ -126,6 +129,7 @@ async function outputActorCapabilities(
   database: D1Database,
   actor: CreditexWorkPackGovernanceActor,
 ): Promise<CreditexOutputActionActorCapabilities> {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const identity = await loadCreditexWorkPackGovernanceIdentity(database, actor);
   const canTransition = actor.actorKind === "admin"
     ? ["owner", "admin", "reviewer"].includes(identity.role)
@@ -835,6 +839,7 @@ export async function loadCreditexOutputAction(
   organisationId: string,
   packetId: string,
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const row = await database.prepare(`${PACKET_PROJECTION_SQL}
     LEFT JOIN compliance_output_action_reviews review
       ON review.organisation_id = packet.organisation_id
@@ -903,6 +908,7 @@ export async function listCreditexOutputActionReceipts(
   database: D1Database,
   organisationId: string,
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const rows = await database.prepare(`SELECT id, packet_id, provider_name,
       request_sha256, response_sha256, provider_reference,
       provider_status, http_status, response_received_at, created_at
@@ -919,6 +925,7 @@ export async function loadCreditexOutputActionReceipt(
   organisationId: string,
   receiptId: string,
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const id = requiredText(
     receiptId,
     240,

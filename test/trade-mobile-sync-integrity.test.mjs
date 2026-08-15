@@ -615,6 +615,9 @@ function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
         };
       },
     },
+    "@/lib/creditex-work-pack-schema-guards": {
+      ensureCreditexWorkPackSchemaGuards: async () => {},
+    },
     "@/lib/creditex-compliance-server": {
       reconcileReadyPlannedComplianceWorkPacks: async () => [],
     },

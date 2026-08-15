@@ -102,6 +102,9 @@ import {
   createCreditexSourcedWorkPackDraft as buildCreditexSourcedWorkPackDraft,
   creditexSourcedWorkPackSourceBindings,
 } from "./creditex-work-pack-content-draft.ts";
+import {
+  ensureCreditexWorkPackSchemaGuards,
+} from "./creditex-work-pack-schema-guards.ts";
 
 export const CREDITEX_ACTIVITY_WORK_PACK_INSTANCE_CONTRACT =
   "creditex-activity-work-pack-instance/v1";
@@ -1082,6 +1085,7 @@ export async function resolvePublishedCreditexActivityWorkPack(
     activityDate: string;
   },
 ): Promise<ResolvedCreditexActivityWorkPack> {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const organisationId = text(
     input.organisationId,
     180,
@@ -2620,6 +2624,7 @@ async function assignedInstanceRow(
   scope: CreditexWorkPackTradeScope,
   instanceId: string,
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const row = await database.prepare(`SELECT instance.*,
       compliance_case.activity_version_id,
       compliance_case.revision case_revision,
@@ -3185,6 +3190,7 @@ async function projectAssignedInstance(
   row: WorkPackInstanceRecord,
   actorUid: string,
 ): Promise<CreditexAssignedActivityWorkPackProjection> {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const resolved = await resolvePinnedCreditexActivityWorkPack(database, {
     organisationId: row.organisation_id,
     workPackVersionId: row.work_pack_version_id,
@@ -3378,6 +3384,7 @@ export async function listAssignedCreditexActivityWorkPacks(
   database: D1Database,
   input: CreditexWorkPackTradeScope & { workOrderIds?: readonly string[] },
 ) {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const workOrderIds = [...new Set((input.workOrderIds || [])
     .map((item) => optionalText(item, 180))
     .filter(Boolean))];
@@ -9098,6 +9105,7 @@ async function governanceIdentity(
   database: D1Database,
   actor: CreditexWorkPackGovernanceActor,
 ): Promise<GovernanceIdentity> {
+  await ensureCreditexWorkPackSchemaGuards(database);
   const actorUid = text(
     actor.actorUid,
     240,

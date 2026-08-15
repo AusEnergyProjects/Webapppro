@@ -1215,9 +1215,14 @@ test("official source APIs expose governed list and verified download contracts"
 
   assert.match(
     adminCaptureMigration,
-    /DROP TRIGGER IF EXISTS `compliance_official_source_artifacts_actor_guard`/,
+    /creditex-schema-guards\.ts/,
   );
-  assert.match(adminCaptureMigration, /organisation_code` = 'CREDITEX-AU'/);
-  assert.match(adminCaptureMigration, /administrator\.`role` IN \('owner', 'admin'\)/);
+  const actorGuard = CREDITEX_SCHEMA_GUARD_DEFINITIONS.find(
+    (definition) =>
+      definition.name === "compliance_official_source_artifacts_actor_guard",
+  );
+  assert.ok(actorGuard);
+  assert.match(actorGuard.sql, /organisation_code` = 'CREDITEX-AU'/);
+  assert.match(actorGuard.sql, /administrator\.`role` IN \('owner', 'admin'\)/);
   assert.doesNotMatch(adminCaptureMigration, /review_decisions|approved/);
 });

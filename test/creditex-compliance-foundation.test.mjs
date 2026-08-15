@@ -18,6 +18,10 @@ const approvedSourceReviewMock = {
   requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
 };
 
+const workPackSchemaGuardsMock = {
+  ensureCreditexWorkPackSchemaGuards: async () => {},
+};
+
 class MockCreditexActivityWorkPackServerError extends Error {}
 
 const activityWorkPackMock = {
@@ -329,6 +333,7 @@ test("published programs and activity versions are source-backed, immutable, and
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": sourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
@@ -735,6 +740,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
       "./creditex-schema-guards": {
         ensureCreditexSchemaGuards: async () => {},
       },
+      "./creditex-work-pack-schema-guards": workPackSchemaGuardsMock,
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
       "./creditex-activity-work-pack-server": activityWorkPackMock,
     },

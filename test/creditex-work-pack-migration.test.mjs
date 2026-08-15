@@ -13,6 +13,9 @@ import {
   CREDITEX_WORK_PACK_COVERAGE_CATALOGUE_STATES,
   CREDITEX_WORK_PACK_COVERAGE_SUMMARY,
 } from "../src/lib/creditex-work-pack-coverage.ts";
+import {
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS,
+} from "../src/lib/creditex-work-pack-schema-guards.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const migrationPath = path.join(
@@ -21,6 +24,11 @@ const migrationPath = path.join(
   "0142_creditex_activity_work_packs.sql",
 );
 const migrationSql = fs.readFileSync(migrationPath, "utf8");
+const workPackMigrationGuards = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS
+  .filter((definition) => definition.name.startsWith("compliance_work_pack_"));
+const workPackGuardSql = workPackMigrationGuards
+  .map((definition) => definition.sql)
+  .join("\n");
 const HASH = "a".repeat(64);
 const POLICY_HASH = "b".repeat(64);
 const BINDING_HASH = "c".repeat(64);
@@ -33,11 +41,11 @@ test("signature custody enforces a finite prepared-revision and receipt-time win
     /unixepoch\(`signed_at`\) >= unixepoch\(`created_at`\) - 604800/,
   );
   assert.match(
-    migrationSql,
+    workPackGuardSql,
     /unixepoch\(NEW\.`signed_at`\) >=\s*unixepoch\(prepared_instance\.`created_at`\) - 300/,
   );
   assert.match(
-    migrationSql,
+    workPackGuardSql,
     /COMPLIANCE_WORK_PACK_SIGNATURE_TIME_OUT_OF_BOUNDS/,
   );
 });
@@ -207,6 +215,9 @@ function governanceDatabase(organisationCode = "CREDITEX-AU") {
     );
   `);
   database.exec(migrationSql);
+  for (const definition of workPackMigrationGuards) {
+    database.exec(definition.sql);
+  }
   database.prepare(`
     INSERT INTO compliance_organisations (id, organisation_code, status)
     VALUES ('org', ?, 'active')
@@ -530,11 +541,11 @@ test("0142 parses and freezes every governed work-pack row shape", () => {
     /'customer_context', 'assigned_worker', 'authenticated_actor'/,
   );
   assert.match(
-    migrationSql,
+    workPackGuardSql,
     /assigned_member\.`member_uid` = NEW\.`signer_uid`/,
   );
   assert.match(
-    migrationSql,
+    workPackGuardSql,
     /signature\.`response_sha256` = NEW\.`response_sha256`/,
   );
 });
