@@ -26,6 +26,9 @@ import {
 import {
   CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
 } from "../src/lib/creditex-official-product-registry-server.ts";
+import {
+  CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
+} from "../src/lib/creditex-veu-product-sources.ts";
 
 const NOW = new Date("2027-01-16T00:00:00.000Z");
 const definition = {
@@ -79,9 +82,11 @@ test("only the VEU streaming registry receives a bounded replay budget", () => {
   });
   assert.ok(CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS < 20_000);
   assert.ok(
-    1 + 2 * Math.ceil(
-      75_492 / CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
-    ) < 16,
+    CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA
+      + 1
+      + 2 * Math.ceil(
+        75_492 / CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+      ) < 16,
     "a current-scale VEU activation must fit below the Worker subrequest chain limit",
   );
 });
@@ -734,7 +739,7 @@ test("retained replay bypasses a failed-source backoff and finishes immediately"
               message: "transient worker cancellation",
             },
       }),
-      hasPendingWork: async () => true,
+      hasPendingWork: async () => !recovered,
       refresh: async () => {
         refreshCalls += 1;
         recovered = true;
@@ -885,6 +890,30 @@ test("background drain advances consecutive replay quanta in one invocation", as
   assert.equal(result.continuationRequired, false);
 });
 
+test("background drain leaves activated predecessor cleanup to a fresh root invocation", async () => {
+  let calls = 0;
+  const result = await drainCreditexProductRegistryMaintenance({
+    database: {},
+    maximumElapsedMs: 25_000,
+    maximumSteps: CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
+    now: () => NOW,
+    preferredRegistryCode: "veu-approved-products",
+    targets: [],
+    maintain: async () => {
+      calls += 1;
+      return {
+        registryCode: "veu-approved-products",
+        outcome: "progressed",
+        deferContinuation: true,
+      };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.steps, 1);
+  assert.equal(result.outcome, "progressed");
+  assert.equal(result.continuationRequired, false);
+});
+
 test("background drain requests a new invocation when bounded time expires", async () => {
   let calls = 0;
   let elapsed = 0;
@@ -953,7 +982,7 @@ test("background drain reserves enough time to dispatch after one live-scale rep
   assert.equal(result.continuationRequired, true);
 });
 
-test("background drain turns a bounded source failure into a short durable continuation", async () => {
+test("background drain defers a bounded source failure to a fresh root continuation", async () => {
   const database = fleetDatabase();
   const registryCode = "veu-approved-products";
   await enqueueCreditexProductRegistryRefresh(
@@ -988,7 +1017,7 @@ test("background drain turns a bounded source failure into a short durable conti
     registryCode,
     outcome: "retry_scheduled",
     retryAfterMs: 3_000,
-    continuationRequired: true,
+    continuationRequired: false,
     continuationDelayMs: 3_000,
     steps: 1,
   });
@@ -996,6 +1025,52 @@ test("background drain turns a bounded source failure into a short durable conti
   assert.equal(queued.notBefore, new Date(NOW.getTime() + 3_000).toISOString());
   assert.equal(queued.attemptCount, 1);
   assert.match(queued.lastError, /bounded official source timeout/);
+});
+
+test("a timed-out durable acquisition stays queued for a fresh root continuation", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  const result = await drainCreditexProductRegistryMaintenance({
+    database,
+    now: () => NOW,
+    operationTimeoutMs: 100,
+    preferredRegistryCode: registryCode,
+    maintain: (input) => maintainNextCreditexProductRegistry({
+      ...input,
+      withFleetLease: realFleetLease,
+    }),
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+      hasPendingWork: async () => true,
+      refresh: async (_database, _now, _fleetLeaseId, signal) => (
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            reject(new Error("durable acquisition page timed out"));
+          }, { once: true });
+        })
+      ),
+    }],
+  });
+  assert.deepEqual(result, {
+    registryCode,
+    outcome: "retry_scheduled",
+    retryAfterMs: 3_000,
+    deferContinuation: true,
+    continuationRequired: false,
+    continuationDelayMs: 3_000,
+    steps: 1,
+  });
+  const queued = database.state.refreshRequests.get(registryCode);
+  assert.equal(queued.attemptCount, 1);
+  assert.equal(queued.notBefore, new Date(NOW.getTime() + 3_000).toISOString());
+  assert.match(queued.lastError, /durable acquisition page timed out/);
 });
 
 test("fleet ownership renews during long work and old owners cannot release successors", async () => {

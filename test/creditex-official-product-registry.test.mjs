@@ -23,6 +23,9 @@ import {
 import {
   CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS,
 } from "../src/lib/creditex-product-registry-schema-guards.ts";
+import {
+  CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
+} from "../src/lib/creditex-veu-product-sources.ts";
 
 const sresMigration = fs.readFileSync(
   new URL(
@@ -56,6 +59,13 @@ const streamStagingMigration = fs.readFileSync(
 const refreshProgressMigration = fs.readFileSync(
   new URL(
     "../drizzle/0150_creditex_official_product_refresh_progress.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const sourceAcquisitionMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0151_creditex_official_product_source_acquisition.sql",
     import.meta.url,
   ),
   "utf8",
@@ -141,6 +151,9 @@ function memoryArtifactStore() {
         customMetadata: { ...options.customMetadata },
       });
     },
+    async delete(key) {
+      objects.delete(key);
+    },
   };
 }
 
@@ -183,6 +196,7 @@ async function retainControlledPermissionArtifact(
 function fileArtifactStore() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "creditex-veu-r2-"));
   const objects = new Map();
+  let nextObject = 0;
   return {
     directory,
     objects,
@@ -210,12 +224,18 @@ function fileArtifactStore() {
         : null;
     },
     async put(key, value, options) {
-      const objectPath = path.join(directory, String(objects.size));
+      const objectPath = path.join(directory, String(nextObject));
+      nextObject += 1;
       fs.writeFileSync(objectPath, value);
       objects.set(key, {
         path: objectPath,
         customMetadata: { ...options.customMetadata },
       });
+    },
+    async delete(key) {
+      const value = objects.get(key);
+      if (value && fs.existsSync(value.path)) fs.unlinkSync(value.path);
+      objects.delete(key);
     },
   };
 }
@@ -228,6 +248,7 @@ function fixture(options = {}) {
   database.exec(refreshQueueMigration);
   database.exec(streamStagingMigration);
   database.exec(refreshProgressMigration);
+  database.exec(sourceAcquisitionMigration);
   for (const guard of CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }
@@ -516,6 +537,153 @@ function fetchFixture(overrides = {}) {
     });
   };
 }
+
+test("durable source acquisition hands off atomically before replay", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const acquisitionId = "durable-acquisition-fixture-1";
+  const fragmentObjectKeys = Array.from({ length: 33 }, (_, index) => (
+    `creditex/official-products/acquisitions/fixture/${acquisitionId}/control-${index}.json`
+  ));
+  let invocation = 0;
+  const durableDefinition = {
+    ...definition,
+    fetchSources: async (_fetchImpl, context) => {
+      invocation += 1;
+      if (invocation === 1) {
+        await context.database.prepare(`INSERT INTO
+            compliance_official_product_source_acquisitions (
+              registry_code, acquisition_id, contract, definition_sha256, source_key,
+              source_refreshed_at, total_record_count, status_control_json,
+              category_control_json, supplemental_control_json, phase, response_count,
+              response_byte_length, revision, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 4, '{}', '{}', '{}', 'pages', ?, ?, 1, ?, ?)`)
+          .bind(
+            context.registryCode,
+            acquisitionId,
+            "creditex-official-product-source-acquisition/v1",
+            "a".repeat(64),
+            "fixture-pv",
+            context.checkedAt,
+            fragmentObjectKeys.length,
+            fragmentObjectKeys.length * 2,
+            context.checkedAt,
+            context.checkedAt,
+          )
+          .run();
+        for (const [fragmentIndex, objectKey] of fragmentObjectKeys.entries()) {
+          await context.artifactStore.put(objectKey, new TextEncoder().encode("{}"), {
+            httpMetadata: { contentType: "application/json" },
+            customMetadata: { acquisitionId, fragmentIndex: String(fragmentIndex) },
+          });
+          await context.database.prepare(`INSERT INTO
+              compliance_official_product_source_acquisition_fragments (
+                acquisition_id, kind, stream_index, fragment_index,
+                request_sha256, cursor_before, cursor_after, row_count,
+                terminal, object_key, response_sha256, content_type,
+                byte_length, created_at
+              ) VALUES (?, 'control', -1, ?, ?, '', '', 0, 0, ?, ?,
+                'application/json', 2, ?)`)
+            .bind(
+              acquisitionId,
+              fragmentIndex,
+              "b".repeat(64),
+              objectKey,
+              "c".repeat(64),
+              context.checkedAt,
+            )
+            .run();
+        }
+        return {
+          complete: false,
+          acquisitionId,
+          recordCount: 4,
+          stagedRecordCount: 2,
+        };
+      }
+      await context.database.prepare(`UPDATE
+          compliance_official_product_source_acquisitions
+        SET phase = 'assemble', revision = revision + 1, updated_at = ?
+        WHERE registry_code = ? AND acquisition_id = ? AND phase = 'pages'`)
+        .bind(context.checkedAt, context.registryCode, acquisitionId)
+        .run();
+      await context.database.prepare(`UPDATE
+          compliance_official_product_source_acquisitions
+        SET phase = 'ready', revision = revision + 1, updated_at = ?
+        WHERE registry_code = ? AND acquisition_id = ? AND phase = 'assemble'`)
+        .bind(context.checkedAt, context.registryCode, acquisitionId)
+        .run();
+      return {
+        complete: true,
+        acquisitionId,
+        cleanupRetainedFragments: true,
+        sources: definition.sources.map((sourceDefinition) => ({
+          sourceKey: sourceDefinition.sourceKey,
+          contentType: "application/json",
+          bytes: new TextEncoder().encode(JSON.stringify(
+            rows[sourceDefinition.sourceKey],
+          )),
+        })),
+      };
+    },
+  };
+  const first = await syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  assert.equal(first.complete, false);
+  assert.equal(first.phase, "acquisition");
+  assert.equal(first.snapshotId, null);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_snapshots`).get().count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_source_acquisitions`).get().count, 1);
+
+  const second = await syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date("2026-08-08T00:00:01.000Z"),
+  });
+  assert.equal(second.changed, true);
+  assert.equal(second.recordCount, 4);
+  assert.deepEqual({ ...database.prepare(`SELECT phase, cleanup_disposition
+    FROM compliance_official_product_source_acquisitions`).get() }, {
+    phase: "cleanup",
+    cleanup_disposition: "finish",
+  });
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_snapshots
+    WHERE status = 'current'`).get().count, 1);
+  assert.equal((await loadOfficialProductRegistryStatus(
+    d1,
+    durableDefinition.registryCode,
+    { now: new Date("2026-08-08T00:00:01.000Z") },
+  )).status, "current");
+
+  const firstCleanup = await syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date("2026-08-08T00:00:02.000Z"),
+  });
+  assert.equal(firstCleanup.complete, false);
+  assert.equal(firstCleanup.phase, "cleanup");
+  assert.equal(invocation, 2, "cleanup must not reacquire the official source");
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+    compliance_official_product_source_acquisition_fragments`).get().count, 1);
+  assert.equal(fragmentObjectKeys.filter(
+    (objectKey) => artifactStore.objects.has(objectKey),
+  ).length, 1);
+
+  const finalCleanup = await syncOfficialProductRegistry(d1, durableDefinition, {
+    artifactStore,
+    now: new Date("2026-08-08T00:00:03.000Z"),
+  });
+  assert.equal(finalCleanup.complete, true);
+  assert.equal(finalCleanup.phase, "complete");
+  assert.equal(invocation, 2);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_source_acquisitions`).get().count, 0);
+  assert.ok(fragmentObjectKeys.every(
+    (objectKey) => !artifactStore.objects.has(objectKey),
+  ));
+});
 
 function expectedError(code) {
   return (error) => {
@@ -3918,28 +4086,138 @@ test("live automatic feeds activate official products into searchable snapshots"
   assert.equal(refrigerator.products.length, 1);
 });
 
+const VEU_WORKER_SELF_CALL_LIMIT = 16;
+
+function liveVeuAcquisitionProgress(database) {
+  const acquisition = database.prepare(`SELECT acquisition_id, phase,
+      response_count, assembly_record_count, assembly_chunk_count
+    FROM compliance_official_product_source_acquisitions
+    WHERE registry_code = 'veu-approved-products'`).get();
+  if (!acquisition) return null;
+  const streams = database.prepare(`SELECT stream_index, page_count,
+      record_count, last_record_id, terminal
+    FROM compliance_official_product_source_acquisition_streams
+    WHERE acquisition_id = ? ORDER BY stream_index`)
+    .all(acquisition.acquisition_id);
+  return {
+    ...acquisition,
+    streams: streams.map((stream) => ({ ...stream })),
+  };
+}
+
+function assertLiveVeuProgressMonotonic(previous, current) {
+  if (!previous || !current) return;
+  assert.equal(current.acquisition_id, previous.acquisition_id);
+  assert.ok(current.response_count >= previous.response_count);
+  assert.ok(current.assembly_record_count >= previous.assembly_record_count);
+  assert.ok(current.assembly_chunk_count >= previous.assembly_chunk_count);
+  assert.equal(current.streams.length, previous.streams.length);
+  current.streams.forEach((stream, index) => {
+    const prior = previous.streams[index];
+    assert.equal(stream.stream_index, prior.stream_index);
+    assert.ok(stream.page_count >= prior.page_count);
+    assert.ok(stream.record_count >= prior.record_count);
+    if (stream.record_count === prior.record_count) {
+      assert.equal(stream.last_record_id, prior.last_record_id);
+    }
+    assert.ok(stream.terminal >= prior.terminal);
+  });
+}
+
+function trackedLiveVeuFetch(pageRequestCounts) {
+  return async (input, init = {}) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/querydata") && typeof init.body === "string") {
+      try {
+        const payload = JSON.parse(init.body);
+        const selections = payload.queries?.[0]?.Query?.Commands?.[0]
+          ?.SemanticQueryDataShapeCommand?.Query?.Select || [];
+        if (selections.length > 2) {
+          pageRequestCounts.set(
+            init.body,
+            (pageRequestCounts.get(init.body) || 0) + 1,
+          );
+        }
+      } catch {
+        // The live source parser owns request validation; tracking is best effort.
+      }
+    }
+    return fetch(input, init);
+  };
+}
+
+async function runLiveVeuQuantum(d1, artifactStore, fetchImpl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort("official-product-background-timeout"),
+    17_500,
+  );
+  const startedAt = performance.now();
+  try {
+    const result = await syncOfficialProductRegistry(
+      d1,
+      CREDITEX_VEU_PRODUCT_REGISTRY,
+      {
+        artifactStore,
+        fetchImpl,
+        maximumStreamingRecordsPerRun:
+          CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
+        now: new Date(),
+        signal: controller.signal,
+        sourceFetchTimeoutMs: 18_000,
+      },
+    );
+    const elapsedMs = performance.now() - startedAt;
+    assert.ok(elapsedMs < 18_000, `VEU quantum took ${elapsedMs}ms`);
+    return { result, elapsedMs };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 test("live VEU feed retains its exact artifact and activates every row", {
   skip: process.env.CREDITEX_LIVE_VEU_REGISTRY_SYNC !== "1",
 }, async (t) => {
   const { database, d1 } = fixture();
   const artifactStore = fileArtifactStore();
+  const pageRequestCounts = new Map();
+  const fetchImpl = trackedLiveVeuFetch(pageRequestCounts);
   t.after(() => database.close());
-  t.after(() => fs.rmSync(artifactStore.directory, { recursive: true }));
-  const result = await syncOfficialProductRegistry(
-    d1,
-    CREDITEX_VEU_PRODUCT_REGISTRY,
-    {
-      fetchImpl: fetch,
-      artifactStore,
-      now: new Date(),
-    },
-  );
+  t.after(() => fs.rmSync(artifactStore.directory, {
+    recursive: true,
+    force: true,
+  }));
+  let result = null;
+  let previousProgress = null;
+  let status = null;
+  let invocations = 0;
+  for (; invocations < VEU_WORKER_SELF_CALL_LIMIT; invocations += 1) {
+    ({ result } = await runLiveVeuQuantum(d1, artifactStore, fetchImpl));
+    const progress = liveVeuAcquisitionProgress(database);
+    assertLiveVeuProgressMonotonic(previousProgress, progress);
+    previousProgress = progress || previousProgress;
+    status = await loadOfficialProductRegistryStatus(
+      d1,
+      CREDITEX_VEU_PRODUCT_REGISTRY.registryCode,
+    );
+    if (status.status === "current") {
+      invocations += 1;
+      break;
+    }
+  }
+  assert.ok(invocations < VEU_WORKER_SELF_CALL_LIMIT);
+  assert.equal(status?.status, "current");
+  assert.ok(result);
   assert.ok(result.recordCount >= 70_000);
   assert.equal(database.prepare(`SELECT count(*) count
     FROM compliance_official_products`).get().count, result.recordCount);
   assert.equal(database.prepare(`SELECT count(*) count
     FROM compliance_official_product_artifacts`).get().count, 1);
-  assert.equal(artifactStore.objects.size, 1);
+  const artifact = database.prepare(`SELECT object_key
+    FROM compliance_official_product_artifacts`).get();
+  assert.ok(artifactStore.objects.has(artifact.object_key));
+  assert.ok(pageRequestCounts.size >= Math.ceil(result.recordCount / 5_000));
+  assert.ok([...pageRequestCounts.values()].every((count) => count === 1));
   const statuses = database.prepare(`SELECT approval_status status, count(*) count
     FROM compliance_official_products GROUP BY approval_status ORDER BY status`).all();
   assert.deepEqual(statuses.map(({ status }) => status), ["approved", "legacy"]);
@@ -3954,37 +4232,40 @@ test("live VEU background acquisition finishes inside its bounded source quantum
 }, async (t) => {
   const { database, d1 } = fixture();
   const artifactStore = fileArtifactStore();
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort("official-product-background-timeout"),
-    18_000,
-  );
+  const pageRequestCounts = new Map();
+  const fetchImpl = trackedLiveVeuFetch(pageRequestCounts);
   t.after(() => {
-    clearTimeout(timeout);
     database.close();
-    fs.rmSync(artifactStore.directory, { recursive: true });
+    fs.rmSync(artifactStore.directory, { recursive: true, force: true });
   });
-  const startedAt = performance.now();
-  const result = await syncOfficialProductRegistry(
-    d1,
-    CREDITEX_VEU_PRODUCT_REGISTRY,
-    {
-      artifactStore,
-      fetchImpl: fetch,
-      maximumStreamingRecordsPerRun:
-        CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
-      now: new Date(),
-      signal: controller.signal,
-      sourceFetchTimeoutMs: 18_000,
-    },
+  let result = null;
+  let previousProgress = null;
+  let invocations = 0;
+  for (
+    ;
+    invocations < CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA;
+    invocations += 1
+  ) {
+    ({ result } = await runLiveVeuQuantum(d1, artifactStore, fetchImpl));
+    const progress = liveVeuAcquisitionProgress(database);
+    assertLiveVeuProgressMonotonic(previousProgress, progress);
+    previousProgress = progress || previousProgress;
+    if (result.phase !== "acquisition") {
+      invocations += 1;
+      break;
+    }
+  }
+  assert.ok(
+    invocations <= CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
   );
-  const elapsedMs = performance.now() - startedAt;
+  assert.ok(result);
   assert.equal(result.complete, false);
   assert.equal(result.phase, "supplements");
   assert.equal(result.stagedRecordCount, 0);
   assert.ok(result.recordCount >= 70_000);
-  assert.ok(elapsedMs < 18_000);
-  assert.equal(artifactStore.objects.size, 1);
+  assert.ok(pageRequestCounts.size >= Math.ceil(result.recordCount / 5_000));
+  assert.ok([...pageRequestCounts.values()].every((count) => count === 1));
+  assert.ok(artifactStore.objects.size > 1);
   assert.equal(database.prepare(`SELECT count(*) count
     FROM compliance_official_product_refresh_progress`).get().count, 1);
 });

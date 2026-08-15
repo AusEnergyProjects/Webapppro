@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
 import {
   CREDITEX_VEU_CATEGORY_PRODUCT_KIND,
   CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
@@ -19,14 +22,98 @@ import {
   parseCreditexVeuProductArtifact,
 } from "../src/lib/creditex-veu-product-parser.ts";
 import {
+  acquireCreditexVeuPowerBiEvidenceDurably,
   CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES,
+  CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
+  CREDITEX_VEU_DURABLE_ASSEMBLY_MAX_RECORDS_PER_QUANTUM,
+  CREDITEX_VEU_DURABLE_ACQUISITION_MAX_NEW_RESPONSES,
   CREDITEX_VEU_MAX_PAGES,
   CREDITEX_VEU_PAGE_SIZE,
   CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES,
   CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY,
+  fetchCreditexVeuProductSources,
 } from "../src/lib/creditex-veu-product-sources.ts";
+import {
+  CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS,
+} from "../src/lib/creditex-product-registry-schema-guards.ts";
 
 const textEncoder = new TextEncoder();
+
+class DurableTestD1Statement {
+  constructor(database, sql, values = []) {
+    this.database = database;
+    this.sql = sql;
+    this.values = values;
+  }
+
+  bind(...values) {
+    return new DurableTestD1Statement(this.database, this.sql, values);
+  }
+
+  async first() {
+    return this.database.prepare(this.sql).get(...this.values) || null;
+  }
+
+  async all() {
+    return { results: this.database.prepare(this.sql).all(...this.values) };
+  }
+
+  async run() {
+    const result = this.database.prepare(this.sql).run(...this.values);
+    return { success: true, meta: { changes: Number(result.changes) } };
+  }
+}
+
+function durableTestD1(database) {
+  return {
+    prepare(sql) {
+      return new DurableTestD1Statement(database, sql);
+    },
+    async batch(statements) {
+      database.exec("BEGIN");
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        database.exec("COMMIT");
+        return results;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  };
+}
+
+function durableArtifactStore() {
+  const objects = new Map();
+  const puts = new Map();
+  return {
+    objects,
+    puts,
+    async head(key) {
+      const object = objects.get(key);
+      return object
+        ? { size: object.bytes.byteLength, customMetadata: object.customMetadata }
+        : null;
+    },
+    async get(key) {
+      const object = objects.get(key);
+      return object
+        ? { async arrayBuffer() { return object.bytes.slice().buffer; } }
+        : null;
+    },
+    async put(key, value, options) {
+      puts.set(key, (puts.get(key) || 0) + 1);
+      objects.set(key, {
+        bytes: Uint8Array.from(value),
+        customMetadata: { ...options.customMetadata },
+      });
+    },
+    async delete(key) {
+      objects.delete(key);
+    },
+  };
+}
 
 function response(names, dataset) {
   return JSON.stringify({
@@ -499,11 +586,76 @@ function powerBiRestartLiteral(value, type) {
   throw new Error(`Unsupported restart type ${type}`);
 }
 
-function boundedProductionStreamArtifact(recordCount) {
+function productionProductRow(index, category = "22A") {
+  return [
+    `a0O${String(index).padStart(12, "0")}`,
+    String(index).padStart(9, "0"),
+    null,
+    category,
+    `activity-${category}`,
+    "Scale Brand",
+    `Scale model ${index}`,
+    "Approved",
+    epoch("2026-01-01"),
+    null,
+    400,
+    6,
+    300,
+    null,
+    null,
+    "GEMS 2019",
+    null,
+  ];
+}
+
+function productionProductPageResponse(
+  recordCount,
+  offset,
+  { includeInductionSupplement = false } = {},
+) {
+  const length = Math.min(CREDITEX_VEU_PAGE_SIZE, recordCount - offset);
+  const rows = Array.from({ length }, (_, pageIndex) => {
+    const index = offset + pageIndex;
+    return productionProductRow(
+      index,
+      includeInductionSupplement && index === 0 ? "46A" : "22A",
+    );
+  });
+  const raw = JSON.parse(compressedProductResponse(rows));
+  const dataset = raw.results[0].result.data.dsr.DS[0];
+  const continuation = offset + length < recordCount;
+  if (continuation) {
+    dataset.IC = false;
+    dataset.RT = [rows.at(-1).map((value, index) => (
+      powerBiRestartLiteral(value, CREDITEX_VEU_QUERY_FIELD_TYPES[index])
+    ))];
+  }
+  return {
+    response: JSON.stringify(raw),
+    lastId: rows.at(-1)[0],
+  };
+}
+
+function boundedProductionStreamArtifact(
+  recordCount,
+  {
+    includeInductionSupplement = false,
+    extraBlankCategoryControl = 0,
+  } = {},
+) {
   const categories = Object.fromEntries([
     "",
     ...Object.keys(CREDITEX_VEU_CATEGORY_PRODUCT_KIND),
-  ].map((category) => [category, category === "22A" ? recordCount : 0]));
+  ].map((category) => [
+    category,
+    category === "22A"
+      ? recordCount - (includeInductionSupplement ? 1 : 0)
+        - extraBlankCategoryControl
+      : category === "" ? extraBlankCategoryControl
+      : category === "46A" && includeInductionSupplement
+        ? 1
+        : 0,
+  ]));
   const lines = [JSON.stringify({
     recordType: "header",
     contract: CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
@@ -522,7 +674,21 @@ function boundedProductionStreamArtifact(recordCount) {
         ["Approved", recordCount],
         ["Legacy", 0],
       ]),
-      categoryResponse: groupedResponse("Product_Category_Number__c", [["22A", recordCount]]),
+      categoryResponse: groupedResponse(
+        "Product_Category_Number__c",
+        includeInductionSupplement
+          ? [
+              ...(extraBlankCategoryControl
+                ? [["", extraBlankCategoryControl]]
+                : []),
+              [
+                "22A",
+                recordCount - 1 - extraBlankCategoryControl,
+              ],
+              ["46A", 1],
+            ]
+          : [["22A", recordCount]],
+      ),
       refreshResponse: refreshResponse(),
     },
   })];
@@ -538,52 +704,40 @@ function boundedProductionStreamArtifact(recordCount) {
   }));
   let afterId = null;
   for (let offset = 0; offset < recordCount; offset += CREDITEX_VEU_PAGE_SIZE) {
-    const length = Math.min(CREDITEX_VEU_PAGE_SIZE, recordCount - offset);
-    const rows = Array.from({ length }, (_, pageIndex) => {
-      const index = offset + pageIndex;
-      return [
-        `a0O${String(index).padStart(12, "0")}`,
-        String(index).padStart(9, "0"),
-        null,
-        "22A",
-        "activity-22",
-        "Scale Brand",
-        `Scale model ${index}`,
-        "Approved",
-        epoch("2026-01-01"),
-        null,
-        400,
-        6,
-        300,
-        null,
-        null,
-        "GEMS 2019",
-        null,
-      ];
+    const page = productionProductPageResponse(recordCount, offset, {
+      includeInductionSupplement,
     });
-    const raw = JSON.parse(compressedProductResponse(rows));
-    const dataset = raw.results[0].result.data.dsr.DS[0];
-    const continuation = offset + length < recordCount;
-    if (continuation) {
-      dataset.IC = false;
-      dataset.RT = [rows.at(-1).map((value, index) => (
-        powerBiRestartLiteral(value, CREDITEX_VEU_QUERY_FIELD_TYPES[index])
-      ))];
-    }
     lines.push(JSON.stringify({
       recordType: "page",
       afterId,
-      response: JSON.stringify(raw),
+      response: page.response,
     }));
-    afterId = rows.at(-1)[0];
+    afterId = page.lastId;
   }
+  const supplementalArtifacts = supplementsForRows(
+    includeInductionSupplement ? [productionProductRow(0, "46A")] : [],
+  );
   for (const definition of CREDITEX_VEU_SUPPLEMENTAL_QUERIES) {
+    const supplement = supplementalArtifacts.find(
+      ({ key }) => key === definition.key,
+    );
     lines.push(JSON.stringify({
       recordType: "supplement",
       key: definition.key,
       queryFields: definition.fields,
-      expectedCount: 0,
+      expectedCount: supplement.expectedCount,
+      ...(definition.key === "project-based-lighting"
+        ? { controlResponse: aggregateResponse(supplement.expectedCount) }
+        : {}),
     }));
+    for (const page of supplement.pages) {
+      lines.push(JSON.stringify({
+        recordType: "supplement-page",
+        key: definition.key,
+        afterId: page.afterId,
+        response: page.response,
+      }));
+    }
   }
   lines.push("");
   return textEncoder.encode(lines.join("\n"));
@@ -596,6 +750,33 @@ test("VEU acquisition has a fixed Worker heap envelope and exact page capacity",
   assert.equal(CREDITEX_VEU_SUPPLEMENTAL_BUFFER_MAXIMUM_BYTES, 8_000_000);
   assert.equal(CREDITEX_VEU_SUPPLEMENTAL_FETCH_CONCURRENCY, 4);
   assert.ok(CREDITEX_VEU_PAGE_SIZE * CREDITEX_VEU_MAX_PAGES >= 70_000);
+  const currentScaleRecords = 75_492;
+  const productPages = Math.ceil(currentScaleRecords / CREDITEX_VEU_PAGE_SIZE);
+  const supplementalCategories = CREDITEX_VEU_SUPPLEMENTAL_QUERIES.flatMap(
+    ({ categories }) => categories,
+  );
+  assert.equal(
+    new Set(supplementalCategories).size,
+    supplementalCategories.length,
+    "supplemental streams must remain category-disjoint for the call bound",
+  );
+  const maximumSupplementPages = productPages
+    + CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length - 1;
+  const pageQuanta = Math.ceil(
+    (2 + productPages + maximumSupplementPages)
+      / CREDITEX_VEU_DURABLE_ACQUISITION_MAX_NEW_RESPONSES,
+  );
+  const maximumAssemblyRecords = 3 + productPages
+    + CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length
+    + maximumSupplementPages;
+  const assemblyQuanta = Math.ceil(
+    maximumAssemblyRecords
+      / (2 * CREDITEX_VEU_DURABLE_ASSEMBLY_MAX_RECORDS_PER_QUANTUM),
+  );
+  assert.equal(
+    pageQuanta + assemblyQuanta,
+    CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
+  );
   assert.deepEqual(
     parseCreditexVeuProductArtifact(streamArtifact(), "application/json"),
     parseCreditexVeuProductArtifact(artifact(), "application/json"),
@@ -637,6 +818,340 @@ test("VEU production-scale stream keeps every parse and D1 lookup batch bounded"
   assert.equal(batches, Math.ceil(recordCount / 500));
   assert.ok(maximumLookup <= 500);
   assert.ok(maximumRecords <= 500);
+});
+
+test("VEU durable acquisition resumes exact pages and assembles canonical bytes", async (t) => {
+  const recordCount = 70_001;
+  const includeInductionSupplement = true;
+  const database = new DatabaseSync(":memory:");
+  database.exec("PRAGMA foreign_keys = ON");
+  database.exec(fs.readFileSync(new URL(
+    "../drizzle/0125_creditex_official_product_registry.sql",
+    import.meta.url,
+  ), "utf8"));
+  database.exec(fs.readFileSync(new URL(
+    "../drizzle/0151_creditex_official_product_source_acquisition.sql",
+    import.meta.url,
+  ), "utf8"));
+  for (const guard of CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
+    if (guard.name.includes("source_acquisition")) database.exec(guard.sql);
+  }
+  const checkedAt = "2026-08-09T00:30:00.000Z";
+  const expiresAt = "2026-08-10T00:30:00.000Z";
+  const leaseId = "durable-veu-test-lease";
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases
+      (registry_code, lease_id, started_at, expires_at)
+    VALUES (?, ?, ?, ?), (?, ?, ?, ?)`)
+    .run(
+      "veu-approved-products",
+      leaseId,
+      checkedAt,
+      expiresAt,
+      "automatic-registry-fleet",
+      leaseId,
+      checkedAt,
+      expiresAt,
+    );
+  const artifactStore = durableArtifactStore();
+  const context = {
+    database: durableTestD1(database),
+    artifactStore,
+    registryCode: "veu-approved-products",
+    checkedAt,
+    leaseId,
+    fleetLeaseId: leaseId,
+    leaseFenceAt: checkedAt,
+    yieldAt: Number.MAX_SAFE_INTEGER,
+  };
+  const productFetches = new Map();
+  let supplementalFetches = 0;
+  const fetchImpl = async (input, init = {}) => {
+    const url = new URL(input);
+    let body;
+    if (url.pathname.includes("modelsAndExploration")) {
+      body = modelResponse();
+    } else if (url.pathname.endsWith("/conceptualschema")) {
+      body = conceptualSchemaResponse();
+    } else if (url.pathname.endsWith("/querydata")) {
+      const payload = JSON.parse(String(init.body));
+      const command = payload.queries[0].Query.Commands[0]
+        .SemanticQueryDataShapeCommand;
+      const names = command.Query.Select.map((selection) => selection.Name);
+      if (names.length === 1 && names[0] === "Count_Product_ID") {
+        body = aggregateResponse(command.Query.Where.length > 1 ? 0 : recordCount);
+      } else if (
+        names.length === 2
+        && names[0] === "Dim_Product.Product_Status__c"
+      ) {
+        body = groupedResponse("Product_Status__c", [
+          ["Approved", recordCount],
+          ["Legacy", 0],
+        ]);
+      } else if (
+        names.length === 2
+        && names[0] === "Dim_Product.Product_Category_Number__c"
+      ) {
+        body = groupedResponse(
+          "Product_Category_Number__c",
+          [["", 1], ["22A", recordCount - 2], ["46A", 1]],
+        );
+      } else if (names[0]?.includes("Last Refreshed DateTime")) {
+        body = refreshResponse();
+      } else if (names.length === CREDITEX_VEU_QUERY_FIELDS.length) {
+        const matches = String(init.body).match(/a0O\d{12}/g) || [];
+        const cursor = matches.at(-1) || "";
+        const offset = cursor ? Number(cursor.slice(3)) + 1 : 0;
+        productFetches.set(cursor, (productFetches.get(cursor) || 0) + 1);
+        body = productionProductPageResponse(recordCount, offset, {
+          includeInductionSupplement,
+        }).response;
+      } else {
+        supplementalFetches += 1;
+        const supplement = supplementsForRows([
+          productionProductRow(0, "46A"),
+        ]).find(({ key }) => key === "induction-cooktop");
+        assert.equal(supplement.pages.length, 1);
+        body = supplement.pages[0].response;
+      }
+    } else {
+      throw new Error(`Unexpected durable VEU URL ${url}`);
+    }
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  const originalDateNow = Date.now;
+  Date.now = () => Date.parse(checkedAt);
+  try {
+    const first = await acquireCreditexVeuPowerBiEvidenceDurably(
+      fetchImpl,
+      context,
+      "https://cluster.example.test",
+      "embed-token",
+    );
+    assert.equal(first.complete, false);
+    assert.equal(first.stagedRecordCount, 50_000);
+    const acquisitionId = first.acquisitionId;
+    const firstReceipts = database.prepare(`SELECT count(*) AS count
+      FROM compliance_official_product_source_acquisition_fragments
+      WHERE acquisition_id = ?`).get(acquisitionId);
+    assert.equal(firstReceipts.count, 17);
+
+    const baseNow = Date.parse(checkedAt);
+    const boundedAssemblyContext = { ...context, yieldAt: baseNow + 1_000 };
+    Date.now = () => {
+      const phase = database.prepare(`SELECT phase
+        FROM compliance_official_product_source_acquisitions
+        WHERE acquisition_id = ?`).get(acquisitionId)?.phase;
+      return phase === "assemble" ? baseNow + 999 : baseNow;
+    };
+    const second = await acquireCreditexVeuPowerBiEvidenceDurably(
+      fetchImpl,
+      boundedAssemblyContext,
+      "https://cluster.example.test",
+      "embed-token",
+    );
+    assert.equal(second.complete, false);
+    assert.deepEqual({ ...database.prepare(`SELECT phase,
+        assembly_record_count, assembly_chunk_count
+      FROM compliance_official_product_source_acquisitions
+      WHERE acquisition_id = ?`).get(acquisitionId) }, {
+      phase: "assemble",
+      assembly_record_count: 0,
+      assembly_chunk_count: 0,
+    });
+
+    Date.now = () => {
+      const progress = database.prepare(`SELECT assembly_chunk_count
+        FROM compliance_official_product_source_acquisitions
+        WHERE acquisition_id = ?`).get(acquisitionId);
+      return Number(progress?.assembly_chunk_count || 0) > 0
+        ? baseNow + 999
+        : baseNow;
+    };
+    const third = await fetchCreditexVeuProductSources(
+      async () => { throw new Error("assembly must not refetch upstream"); },
+      boundedAssemblyContext,
+    );
+    assert.equal(third.complete, false);
+    const retainedAssembly = database.prepare(`SELECT object_key
+      FROM compliance_official_product_source_acquisition_fragments
+      WHERE acquisition_id = ? AND kind = 'assembly'
+      ORDER BY fragment_index`).all(acquisitionId);
+    assert.equal(retainedAssembly.length, 1);
+    assert.equal(artifactStore.puts.get(retainedAssembly[0].object_key), 1);
+    assert.deepEqual({ ...database.prepare(`SELECT phase,
+        assembly_record_count, assembly_chunk_count
+      FROM compliance_official_product_source_acquisitions
+      WHERE acquisition_id = ?`).get(acquisitionId) }, {
+      phase: "assemble",
+      assembly_record_count:
+        CREDITEX_VEU_DURABLE_ASSEMBLY_MAX_RECORDS_PER_QUANTUM,
+      assembly_chunk_count: 1,
+    });
+
+    Date.now = () => {
+      const phase = database.prepare(`SELECT phase
+        FROM compliance_official_product_source_acquisitions
+        WHERE acquisition_id = ?`).get(acquisitionId)?.phase;
+      return phase === "ready" ? baseNow + 999 : baseNow;
+    };
+    const fourth = await fetchCreditexVeuProductSources(
+      async () => { throw new Error("assembly resume must remain source-free"); },
+      boundedAssemblyContext,
+    );
+    assert.equal(fourth.complete, false);
+    assert.equal(database.prepare(`SELECT phase FROM
+      compliance_official_product_source_acquisitions
+      WHERE acquisition_id = ?`).get(acquisitionId).phase, "ready");
+
+    Date.now = () => baseNow;
+    const fifth = await fetchCreditexVeuProductSources(
+      async () => { throw new Error("ready finalization must remain source-free"); },
+      context,
+    );
+    assert.equal(fifth.complete, true);
+    assert.equal(fifth.acquisitionId, acquisitionId);
+    assert.deepEqual(
+      fifth.sources[0].bytes,
+      boundedProductionStreamArtifact(recordCount, {
+        includeInductionSupplement,
+        extraBlankCategoryControl: 1,
+      }),
+    );
+    assert.equal(artifactStore.puts.get(retainedAssembly[0].object_key), 1);
+    assert.equal(productFetches.size, Math.ceil(recordCount / CREDITEX_VEU_PAGE_SIZE));
+    assert.ok([...productFetches.values()].every((count) => count === 1));
+    assert.equal(supplementalFetches, 1);
+    const projectLightingStream = database.prepare(`SELECT expected_record_count
+      FROM compliance_official_product_source_acquisition_streams
+      WHERE acquisition_id = ? AND stream_key = 'project-based-lighting'`)
+      .get(acquisitionId);
+    assert.equal(projectLightingStream.expected_record_count, 0);
+    const finalStream = database.prepare(`SELECT page_count, record_count,
+        last_record_id, terminal
+      FROM compliance_official_product_source_acquisition_streams
+      WHERE acquisition_id = ? AND stream_index = 0`).get(acquisitionId);
+    assert.deepEqual({ ...finalStream }, {
+      page_count: 15,
+      record_count: recordCount,
+      last_record_id: "a0O000000070000",
+      terminal: 1,
+    });
+    await t.test("a delayed retained assembly is invalidated once its source becomes stale", async () => {
+      Date.now = () => Date.parse("2026-08-12T00:30:00.000Z");
+      const stale = await fetchCreditexVeuProductSources(
+        async () => { throw new Error("stale assembly cleanup must be source-free"); },
+        context,
+      );
+      assert.equal(stale.complete, false);
+      assert.equal(database.prepare(`SELECT phase FROM
+        compliance_official_product_source_acquisitions
+        WHERE acquisition_id = ?`).get(acquisitionId).phase, "cleanup");
+    });
+  } finally {
+    Date.now = originalDateNow;
+    database.close();
+  }
+});
+
+test("VEU durable acquisition resets definition drift and fences a successor takeover", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec("PRAGMA foreign_keys = ON");
+  database.exec(fs.readFileSync(new URL(
+    "../drizzle/0125_creditex_official_product_registry.sql",
+    import.meta.url,
+  ), "utf8"));
+  database.exec(fs.readFileSync(new URL(
+    "../drizzle/0151_creditex_official_product_source_acquisition.sql",
+    import.meta.url,
+  ), "utf8"));
+  for (const guard of CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
+    if (guard.name.includes("source_acquisition")) database.exec(guard.sql);
+  }
+  const checkedAt = "2026-08-09T00:30:00.000Z";
+  const leaseId = "definition-drift-owner";
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases
+      (registry_code, lease_id, started_at, expires_at)
+    VALUES (?, ?, ?, ?)`)
+    .run(
+      "veu-approved-products",
+      leaseId,
+      checkedAt,
+      "2026-08-10T00:30:00.000Z",
+    );
+  const insertDriftedAcquisition = (
+    acquisitionId,
+    phase = "pages",
+  ) => database.prepare(`INSERT INTO
+      compliance_official_product_source_acquisitions (
+        registry_code, acquisition_id, contract, definition_sha256, source_key,
+        source_refreshed_at, total_record_count, status_control_json,
+        category_control_json, supplemental_control_json, phase, revision,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 75492, '{}', '{}', '{}', ?, 1, ?, ?)`)
+    .run(
+      "veu-approved-products",
+      acquisitionId,
+      "creditex-official-product-source-acquisition/v1",
+      "d".repeat(64),
+      CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY,
+      checkedAt,
+      phase,
+      checkedAt,
+      checkedAt,
+    );
+  const context = {
+    database: durableTestD1(database),
+    artifactStore: durableArtifactStore(),
+    registryCode: "veu-approved-products",
+    checkedAt,
+    leaseId,
+    leaseFenceAt: checkedAt,
+    yieldAt: Number.MAX_SAFE_INTEGER,
+  };
+  let upstreamCalls = 0;
+  const unavailableUpstream = async () => {
+    upstreamCalls += 1;
+    throw new Error("definition reset must not reacquire upstream");
+  };
+  try {
+    insertDriftedAcquisition("definition-drift-acquisition-1");
+    const reset = await fetchCreditexVeuProductSources(
+      unavailableUpstream,
+      context,
+    );
+    assert.equal(reset.complete, false);
+    assert.equal(upstreamCalls, 0);
+    assert.equal(database.prepare(`SELECT phase FROM
+      compliance_official_product_source_acquisitions
+      WHERE registry_code = ?`).get(context.registryCode).phase, "cleanup");
+
+    database.prepare(`DELETE FROM compliance_official_product_source_acquisitions
+      WHERE registry_code = ?`).run(context.registryCode);
+    insertDriftedAcquisition("definition-drift-acquisition-2", "assemble");
+    database.prepare(`UPDATE compliance_official_product_sync_leases
+      SET lease_id = ?, started_at = ?, expires_at = ?
+      WHERE registry_code = ?`).run(
+      "definition-drift-successor",
+      "2026-08-09T00:31:00.000Z",
+      "2026-08-10T00:31:00.000Z",
+      context.registryCode,
+    );
+    await assert.rejects(
+      fetchCreditexVeuProductSources(unavailableUpstream, context),
+      (error) => error instanceof CreditexOfficialProductError
+        && error.code === "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"
+        && error.status === 409,
+    );
+    assert.equal(upstreamCalls, 0);
+    assert.equal(database.prepare(`SELECT phase FROM
+      compliance_official_product_source_acquisitions
+      WHERE registry_code = ?`).get(context.registryCode).phase, "assemble");
+  } finally {
+    database.close();
+  }
 });
 
 test("VEU stream resumes after an exact retained source-record cursor", async () => {

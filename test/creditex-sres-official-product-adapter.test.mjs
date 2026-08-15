@@ -33,6 +33,10 @@ const refreshProgressMigration = fs.readFileSync(new URL(
   "../drizzle/0150_creditex_official_product_refresh_progress.sql",
   import.meta.url,
 ), "utf8");
+const sourceAcquisitionMigration = fs.readFileSync(new URL(
+  "../drizzle/0151_creditex_official_product_source_acquisition.sql",
+  import.meta.url,
+), "utf8");
 
 class TestD1Statement {
   constructor(database, sql, values = []) {
@@ -135,6 +139,7 @@ function fixtureDatabase({ mismatchAshpArtifact = false } = {}) {
   sqlite.exec(refreshQueueMigration);
   sqlite.exec(streamStagingMigration);
   sqlite.exec(refreshProgressMigration);
+  sqlite.exec(sourceAcquisitionMigration);
   const snapshotId = "snapshot-adapter-20260815";
   const createdAt = "2026-08-15T00:00:00.000Z";
   const activatedAt = "2026-08-15T00:01:00.000Z";

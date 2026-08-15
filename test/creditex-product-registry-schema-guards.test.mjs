@@ -41,6 +41,13 @@ const refreshProgressMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const sourceAcquisitionMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0151_creditex_official_product_source_acquisition.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const worker = fs.readFileSync(
   new URL("../worker/index.ts", import.meta.url),
   "utf8",
@@ -59,6 +66,7 @@ test("Sites-safe product registry migrations contain no trigger bodies", () => {
   assert.doesNotMatch(refreshQueueMigration, /CREATE\s+TRIGGER/i);
   assert.doesNotMatch(streamStagingMigration, /CREATE\s+TRIGGER/i);
   assert.doesNotMatch(refreshProgressMigration, /CREATE\s+TRIGGER/i);
+  assert.doesNotMatch(sourceAcquisitionMigration, /CREATE\s+TRIGGER/i);
   assert.match(
     streamStagingMigration,
     /CREATE TABLE `compliance_official_product_stream_values`/,
@@ -66,6 +74,18 @@ test("Sites-safe product registry migrations contain no trigger bodies", () => {
   assert.match(
     refreshProgressMigration,
     /CREATE TABLE `compliance_official_product_refresh_progress`/,
+  );
+  assert.match(
+    sourceAcquisitionMigration,
+    /CREATE TABLE `compliance_official_product_source_acquisitions`/,
+  );
+  assert.match(
+    sourceAcquisitionMigration,
+    /CREATE TABLE `compliance_official_product_source_acquisition_streams`/,
+  );
+  assert.match(
+    sourceAcquisitionMigration,
+    /CREATE TABLE `compliance_official_product_source_acquisition_fragments`/,
   );
   assert.match(
     refreshProgressMigration,
@@ -79,7 +99,7 @@ test("Sites-safe product registry migrations contain no trigger bodies", () => {
 
 test("all product registry trigger guards have one unique prepared statement", () => {
   assert.equal(CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 14);
-  assert.equal(CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 17);
+  assert.equal(CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS.length, 20);
   const guards = [
     ...CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS,
     ...CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS,

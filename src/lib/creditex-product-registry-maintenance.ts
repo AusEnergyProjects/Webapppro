@@ -209,6 +209,7 @@ export type CreditexProductRegistryMaintenanceTarget = Readonly<{
   ): Promise<{
     changed: boolean;
     complete?: boolean;
+    phase?: "acquisition" | "supplements" | "products" | "activate" | "cleanup" | "complete";
     stagedRecordCount?: number;
     recordCount?: number;
   }>;
@@ -559,6 +560,7 @@ export async function maintainNextCreditexProductRegistry({
       let result: {
         changed: boolean;
         complete?: boolean;
+        phase?: "acquisition" | "supplements" | "products" | "activate" | "cleanup" | "complete";
         stagedRecordCount?: number;
         recordCount?: number;
       };
@@ -596,13 +598,13 @@ export async function maintainNextCreditexProductRegistry({
             now,
           );
         }
-        if ((queued || returnScheduledFailures) && !retainedPendingWork) {
+        if (queued || returnScheduledFailures) {
           retryAfterMs = await deferQueuedRefreshRequest(
             database,
             target.registryCode,
             now,
             error,
-            returnScheduledFailures ? 0 : queued?.attempt_count || 0,
+            queued?.attempt_count || 0,
           );
         }
         if (returnScheduledFailures) {
@@ -610,6 +612,7 @@ export async function maintainNextCreditexProductRegistry({
             registryCode: target.registryCode,
             outcome: "retry_scheduled" as const,
             retryAfterMs,
+            ...(retainedPendingWork ? { deferContinuation: true as const } : {}),
           };
         }
         throw error;
@@ -627,6 +630,9 @@ export async function maintainNextCreditexProductRegistry({
           outcome: "progressed" as const,
           stagedRecordCount: result.stagedRecordCount || 0,
           recordCount: result.recordCount || 0,
+          ...(result.phase === "cleanup"
+            ? { deferContinuation: true as const }
+            : {}),
         };
       }
       if (queued || pendingWork) {
@@ -647,6 +653,25 @@ export async function maintainNextCreditexProductRegistry({
             outcome: "progressed" as const,
             stagedRecordCount: result.stagedRecordCount || 0,
             recordCount: result.recordCount || 0,
+          };
+        }
+        const remainingPendingWork = target.hasPendingWork
+          ? await target.hasPendingWork(database)
+          : false;
+        if (remainingPendingWork) {
+          if (!queued) {
+            await enqueueRefresh(
+              database,
+              target.registryCode,
+              now,
+            );
+          }
+          return {
+            registryCode: target.registryCode,
+            outcome: "progressed" as const,
+            stagedRecordCount: result.stagedRecordCount || 0,
+            recordCount: result.recordCount || 0,
+            deferContinuation: true as const,
           };
         }
       }
@@ -740,10 +765,18 @@ export async function drainCreditexProductRegistryMaintenance({
     });
     steps += 1;
     if (lastResult.outcome === "retry_scheduled") {
-      continuationRequired = true;
+      // The durable queue's not-before time is authoritative. A chained
+      // preferred-registry request would bypass it, so failures resume only
+      // from the next independent health or cron root.
+      continuationRequired = false;
       break;
     }
     const progressed = lastResult.outcome === "progressed";
+    if (
+      progressed
+      && "deferContinuation" in lastResult
+      && lastResult.deferContinuation
+    ) break;
     const completedOne = lastResult.outcome === "refreshed"
       || lastResult.outcome === "current";
     if (!progressed && (!completedOne || exactPreferred)) break;

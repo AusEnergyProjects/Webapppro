@@ -68,6 +68,13 @@ const refreshProgressMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const sourceAcquisitionMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0151_creditex_official_product_source_acquisition.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const productRouteSource = fs.readFileSync(
   new URL(
@@ -344,6 +351,7 @@ function fixture(options = {}) {
   database.exec(refreshQueueMigration);
   database.exec(streamStagingMigration);
   database.exec(refreshProgressMigration);
+  database.exec(sourceAcquisitionMigration);
   for (const guard of CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }

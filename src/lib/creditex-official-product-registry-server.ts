@@ -26,11 +26,12 @@ const PRODUCT_INSERT_MAX_ROWS = 500;
 const PRODUCT_INSERT_MAX_BIND_BYTES = 1_500_000;
 const PRODUCT_INSERT_BATCH_MAX_STATEMENTS = 4;
 const PRODUCT_INSERT_BATCH_MAX_BIND_BYTES = 6_000_000;
-export const CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET = 15_000;
+export const CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET = 25_000;
 const OFFICIAL_PRODUCT_REFRESH_REPLAY_CONTRACT =
   "creditex-official-product-refresh-replay/v1";
 const STREAMING_QUANTUM_MAX_BATCHES = 4;
 const HISTORICAL_CLEANUP_RECORD_BUDGET = 2_000;
+const SOURCE_ACQUISITION_FRAGMENT_CLEANUP_BUDGET = 32;
 const PRODUCT_SELECTION_ID_PREFIX = "official-product-v1:";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN_PATTERN = /^[a-z0-9][a-z0-9:_-]*$/;
@@ -109,7 +110,11 @@ export type CreditexOfficialProductRegistryDefinition = {
   sources: readonly CreditexOfficialProductSourceDefinition[];
   fetchSources?: (
     fetchImpl: CreditexOfficialProductFetch,
-  ) => Promise<readonly CreditexFetchedOfficialProductSource[]>;
+    context?: CreditexOfficialProductSourceAcquisitionContext,
+  ) => Promise<
+    | readonly CreditexFetchedOfficialProductSource[]
+    | CreditexOfficialProductSourceAcquisitionResult
+  >;
 };
 
 export type CreditexOfficialProductArtifactStore = {
@@ -128,7 +133,45 @@ export type CreditexOfficialProductArtifactStore = {
       customMetadata: Record<string, string>;
     },
   ): Promise<unknown>;
+  delete?(key: string): Promise<unknown>;
 };
+
+export type CreditexOfficialProductSourceAcquisitionContext = Readonly<{
+  database: D1Database;
+  artifactStore: CreditexOfficialProductArtifactStore;
+  registryCode: string;
+  checkedAt: string;
+  leaseId: string;
+  fleetLeaseId?: string;
+  leaseFenceAt: string;
+  yieldAt: number;
+  signal?: AbortSignal;
+}>;
+
+export type CreditexOfficialProductSourceAcquisitionResult =
+  | Readonly<{
+      complete: false;
+      acquisitionId: string;
+      recordCount: number;
+      stagedRecordCount: number;
+    }>
+  | Readonly<{
+      complete: true;
+      acquisitionId?: string;
+      cleanupRetainedFragments?: boolean;
+      sources: readonly CreditexFetchedOfficialProductSource[];
+    }>;
+
+function isOfficialProductSourceAcquisitionResult(
+  value:
+    | readonly CreditexFetchedOfficialProductSource[]
+    | CreditexOfficialProductSourceAcquisitionResult,
+): value is CreditexOfficialProductSourceAcquisitionResult {
+  return !Array.isArray(value)
+    && typeof value === "object"
+    && value !== null
+    && "complete" in value;
+}
 
 export type CreditexControlledProductPermissionArtifact = Readonly<{
   organisationId: string;
@@ -1161,14 +1204,26 @@ async function fetchInspectAndRetainSource(
   };
 }
 
+type AcquiredRegistrySourceArtifacts =
+  | Extract<CreditexOfficialProductSourceAcquisitionResult, { complete: false }>
+  | Readonly<{
+      complete: true;
+      acquisitionId?: string;
+      cleanupRetainedFragments?: boolean;
+      sources: Map<string, CreditexFetchedOfficialProductSource>;
+    }>;
+
 async function acquireRegistrySourceArtifacts(
   definition: CreditexOfficialProductRegistryDefinition,
   fetchImpl: CreditexOfficialProductFetch,
-) {
+  context: CreditexOfficialProductSourceAcquisitionContext,
+): Promise<AcquiredRegistrySourceArtifacts | null> {
   if (!definition.fetchSources) return null;
-  let acquired: readonly CreditexFetchedOfficialProductSource[];
+  let result:
+    | readonly CreditexFetchedOfficialProductSource[]
+    | CreditexOfficialProductSourceAcquisitionResult;
   try {
-    acquired = await definition.fetchSources(fetchImpl);
+    result = await definition.fetchSources(fetchImpl, context);
   } catch (error) {
     if (error instanceof CreditexOfficialProductError) throw error;
     console.error("Official product registry acquisition failed.", {
@@ -1182,6 +1237,19 @@ async function acquireRegistrySourceArtifacts(
       `Official registry ${definition.registryCode} could not be acquired.`,
     );
   }
+  if (
+    isOfficialProductSourceAcquisitionResult(result)
+    && result.complete === false
+  ) return result;
+  const acquired = isOfficialProductSourceAcquisitionResult(result)
+    ? result.sources
+    : result;
+  const acquisitionId = isOfficialProductSourceAcquisitionResult(result)
+    ? result.acquisitionId
+    : undefined;
+  const cleanupRetainedFragments = isOfficialProductSourceAcquisitionResult(result)
+    ? result.cleanupRetainedFragments
+    : undefined;
   if (
     acquired.length !== definition.sources.length
     || new Set(acquired.map(({ sourceKey }) => sourceKey)).size
@@ -1204,7 +1272,12 @@ async function acquireRegistrySourceArtifacts(
       `Official registry ${definition.registryCode} returned an unexpected artifact set.`,
     );
   }
-  return bySource;
+  return {
+    complete: true as const,
+    acquisitionId,
+    cleanupRetainedFragments,
+    sources: bySource,
+  };
 }
 
 async function loadRetainedSourceRecords(
@@ -1688,7 +1761,15 @@ export async function hasPendingCreditexOfficialProductRefresh(
   registryCode: string,
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
-  return Boolean(await loadRefreshProgress(db, registryCode));
+  const [progress, acquisition] = await Promise.all([
+    loadRefreshProgress(db, registryCode),
+    db.prepare(`SELECT acquisition_id
+      FROM compliance_official_product_source_acquisitions
+      WHERE registry_code = ?`)
+      .bind(registryCode)
+      .first<{ acquisition_id: string }>(),
+  ]);
+  return Boolean(progress || acquisition);
 }
 
 function validatedStreamValues(
@@ -1752,6 +1833,101 @@ function refreshOwnershipBindings(input: Readonly<{
     input.fleetLeaseId || "",
     input.leaseFenceAt,
   ] as const;
+}
+
+type SourceAcquisitionCleanupRow = Readonly<{
+  acquisition_id: string;
+  cleanup_disposition: "restart" | "finish";
+  revision: number;
+}>;
+
+async function loadSourceAcquisitionCleanup(
+  db: D1Database,
+  registryCode: string,
+) {
+  return db.prepare(`SELECT acquisition_id, cleanup_disposition, revision
+    FROM compliance_official_product_source_acquisitions
+    WHERE registry_code = ? AND phase = 'cleanup'`)
+    .bind(registryCode)
+    .first<SourceAcquisitionCleanupRow>();
+}
+
+async function cleanupRetainedSourceAcquisition(
+  db: D1Database,
+  artifactStore: CreditexOfficialProductArtifactStore,
+  registryCode: string,
+  acquisition: SourceAcquisitionCleanupRow,
+  input: Readonly<{
+    leaseId: string;
+    fleetLeaseId?: string;
+    leaseFenceAt: string;
+  }>,
+) {
+  if (!artifactStore.delete) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_CUSTODY_UNAVAILABLE",
+      503,
+      `Official registry ${registryCode} cannot clean retained acquisition fragments.`,
+    );
+  }
+  const selected = await db.prepare(`SELECT object_key
+    FROM compliance_official_product_source_acquisition_fragments
+    WHERE acquisition_id = ? ORDER BY kind, stream_index, fragment_index
+    LIMIT ?`)
+    .bind(
+      acquisition.acquisition_id,
+      SOURCE_ACQUISITION_FRAGMENT_CLEANUP_BUDGET,
+    )
+    .all<{ object_key: string }>();
+  const objectKeys = (selected.results || []).map((row) => row.object_key);
+  await Promise.all(objectKeys.map((objectKey) => artifactStore.delete!(objectKey)));
+  if (objectKeys.length > 0) {
+    const result = await db.prepare(`DELETE FROM
+        compliance_official_product_source_acquisition_fragments
+      WHERE acquisition_id = ?
+        AND object_key IN (SELECT value FROM json_each(?))
+        AND ${refreshOwnershipPredicate()}`)
+      .bind(
+        acquisition.acquisition_id,
+        canonicalJson(objectKeys),
+        ...refreshOwnershipBindings({ registryCode, ...input }),
+      )
+      .run();
+    if (Number(result.meta?.changes || 0) !== objectKeys.length) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+        409,
+        `Official registry ${registryCode} fragment cleanup ownership was lost.`,
+      );
+    }
+  }
+  const remaining = await db.prepare(`SELECT count(*) remaining_count
+    FROM compliance_official_product_source_acquisition_fragments
+    WHERE acquisition_id = ?`)
+    .bind(acquisition.acquisition_id)
+    .first<{ remaining_count: number }>();
+  if (Number(remaining?.remaining_count || 0) > 0) {
+    return { complete: false as const, disposition: acquisition.cleanup_disposition };
+  }
+  const deleted = await db.prepare(`DELETE FROM
+      compliance_official_product_source_acquisitions
+    WHERE registry_code = ? AND acquisition_id = ? AND phase = 'cleanup'
+      AND revision = ? AND ${refreshOwnershipPredicate()}`)
+    .bind(
+      registryCode,
+      acquisition.acquisition_id,
+      acquisition.revision,
+      ...refreshOwnershipBindings({ registryCode, ...input }),
+    )
+    .run();
+  if (Number(deleted.meta?.changes || 0) !== 1) {
+    return fail(
+      "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+      409,
+      `Official registry ${registryCode} fragment cleanup ownership was lost.`,
+    );
+  }
+  return { complete: true as const, disposition: acquisition.cleanup_disposition };
 }
 
 async function loadStreamingValues(
@@ -3014,13 +3190,73 @@ export async function syncOfficialProductRegistry(
         },
       );
     }
+    const sourceAcquisitionCleanup = await loadSourceAcquisitionCleanup(
+      db,
+      definition.registryCode,
+    );
+    if (sourceAcquisitionCleanup) {
+      const cleanup = await cleanupRetainedSourceAcquisition(
+        db,
+        options.artifactStore,
+        definition.registryCode,
+        sourceAcquisitionCleanup,
+        {
+          leaseId,
+          fleetLeaseId: options.fleetLeaseId,
+          leaseFenceAt: options.now ? checkedAt : new Date().toISOString(),
+        },
+      );
+      const finished = cleanup.complete && cleanup.disposition === "finish";
+      return {
+        changed: false,
+        complete: finished,
+        phase: finished ? "complete" as const : "cleanup" as const,
+        registryCode: definition.registryCode,
+        snapshotId: current?.id || null,
+        sourceSha256: current?.source_sha256 || null,
+        recordCount: current?.record_count || 0,
+        stagedRecordCount: current?.record_count || 0,
+        insertedThisRun: 0,
+        checkedAt,
+      };
+    }
     await cleanStagingRows(db, definition.registryCode);
     // Phase one keeps only compact, custody-verified receipts. Parsed records and
     // source bytes leave scope before the next official source is requested.
     const artifacts: RetainedSourceArtifact[] = [];
-    const acquiredSources = await acquireRegistrySourceArtifacts(
+    const acquisition = await acquireRegistrySourceArtifacts(
       definition,
       fetchImpl,
+      {
+        database: db,
+        artifactStore: options.artifactStore,
+        registryCode: definition.registryCode,
+        checkedAt,
+        leaseId,
+        fleetLeaseId: options.fleetLeaseId,
+        leaseFenceAt: options.now ? checkedAt : new Date().toISOString(),
+        yieldAt: Date.now() + Math.max(sourceFetchTimeoutMs - 3_500, 1_000),
+        signal: options.signal,
+      },
+    );
+    if (acquisition?.complete === false) {
+      return {
+        changed: false,
+        complete: false as const,
+        phase: "acquisition" as const,
+        registryCode: definition.registryCode,
+        snapshotId: current?.id || null,
+        sourceSha256: current?.source_sha256 || null,
+        recordCount: acquisition.recordCount,
+        stagedRecordCount: acquisition.stagedRecordCount,
+        insertedThisRun: 0,
+        checkedAt,
+      };
+    }
+    const acquiredSources = acquisition?.sources || null;
+    const completedAcquisitionId = acquisition?.acquisitionId;
+    const cleanupCompletedAcquisition = Boolean(
+      acquisition?.complete && acquisition.cleanupRetainedFragments,
     );
     assertOfficialProductRefreshActive(options.signal, definition.registryCode);
     for (const source of definition.sources) {
@@ -3127,7 +3363,7 @@ export async function syncOfficialProductRegistry(
       const leaseFenceAt = options.now
         ? checkedAt
         : new Date().toISOString();
-      const receipt = await db.prepare(`INSERT INTO compliance_official_product_sync_runs (
+      const receiptStatement = db.prepare(`INSERT INTO compliance_official_product_sync_runs (
         id, registry_code, status, snapshot_id, source_manifest_json,
         source_sha256, record_count, checked_at, message
       ) SELECT ?, ?, 'unchanged', ?, ?, ?, ?, ?, ''
@@ -3157,9 +3393,53 @@ export async function syncOfficialProductRegistry(
           CREDITEX_PRODUCT_REGISTRY_FLEET_LEASE_CODE,
           options.fleetLeaseId || "",
           leaseFenceAt,
+        );
+      const completedAcquisitionStatement = completedAcquisitionId
+        ? cleanupCompletedAcquisition
+          ? db.prepare(`UPDATE compliance_official_product_source_acquisitions
+              SET phase = 'cleanup', cleanup_disposition = 'finish',
+                revision = revision + 1, updated_at = ?
+              WHERE registry_code = ? AND acquisition_id = ? AND phase = 'ready'
+                AND ${refreshOwnershipPredicate()}`)
+            .bind(
+              checkedAt,
+              definition.registryCode,
+              completedAcquisitionId,
+              ...refreshOwnershipBindings({
+                registryCode: definition.registryCode,
+                leaseId,
+                fleetLeaseId: options.fleetLeaseId,
+                leaseFenceAt,
+              }),
+            )
+          : db.prepare(`DELETE FROM
+              compliance_official_product_source_acquisitions
+            WHERE registry_code = ? AND acquisition_id = ?
+              AND ${refreshOwnershipPredicate()}`)
+            .bind(
+              definition.registryCode,
+              completedAcquisitionId,
+              ...refreshOwnershipBindings({
+                registryCode: definition.registryCode,
+                leaseId,
+                fleetLeaseId: options.fleetLeaseId,
+                leaseFenceAt,
+              }),
+            )
+        : null;
+      const receiptResults = completedAcquisitionStatement
+        ? await db.batch([
+            receiptStatement,
+            completedAcquisitionStatement,
+          ])
+        : [await receiptStatement.run()];
+      if (
+        Number(receiptResults[0]?.meta?.changes || 0) !== 1
+        || (
+          completedAcquisitionId
+          && Number(receiptResults[1]?.meta?.changes || 0) !== 1
         )
-        .run();
-      if (Number(receipt.meta?.changes || 0) !== 1) {
+      ) {
         return fail(
           "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
           409,
@@ -3246,8 +3526,52 @@ export async function syncOfficialProductRegistry(
           checkedAt,
         ));
     }
+    if (completedAcquisitionId) {
+      const leaseFenceAt = options.now ? checkedAt : new Date().toISOString();
+      stagingStatements.push(cleanupCompletedAcquisition
+        ? db.prepare(`UPDATE compliance_official_product_source_acquisitions
+            SET phase = 'cleanup', cleanup_disposition = 'finish',
+              revision = revision + 1, updated_at = ?
+            WHERE registry_code = ? AND acquisition_id = ? AND phase = 'ready'
+              AND ${refreshOwnershipPredicate()}`)
+          .bind(
+            checkedAt,
+            definition.registryCode,
+            completedAcquisitionId,
+            ...refreshOwnershipBindings({
+              registryCode: definition.registryCode,
+              leaseId,
+              fleetLeaseId: options.fleetLeaseId,
+              leaseFenceAt,
+            }),
+          )
+        : db.prepare(`DELETE FROM
+            compliance_official_product_source_acquisitions
+          WHERE registry_code = ? AND acquisition_id = ?
+            AND ${refreshOwnershipPredicate()}`)
+          .bind(
+            definition.registryCode,
+            completedAcquisitionId,
+            ...refreshOwnershipBindings({
+              registryCode: definition.registryCode,
+              leaseId,
+              fleetLeaseId: options.fleetLeaseId,
+              leaseFenceAt,
+            }),
+          ));
+    }
     assertOfficialProductRefreshActive(options.signal, definition.registryCode);
-    await db.batch(stagingStatements);
+    const stagingResults = await db.batch(stagingStatements);
+    if (
+      completedAcquisitionId
+      && Number(stagingResults.at(-1)?.meta?.changes || 0) !== 1
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+        409,
+        `Official registry ${definition.registryCode} refresh ownership was lost.`,
+      );
+    }
     assertOfficialProductRefreshActive(options.signal, definition.registryCode);
     if (
       options.maximumStreamingRecordsPerRun !== undefined
