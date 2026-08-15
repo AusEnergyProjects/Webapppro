@@ -15,6 +15,16 @@ const OPS_SITE_URL = "https://compare.ausenergyassessments.com";
 const OPS_ALERT_EMAIL = REPLY_TO;
 const OPS_STATE_KEY = "AEA_OPS_HEALTH_STATE_V1";
 const OPS_REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
+const OPS_REQUIRED_OFFICIAL_PRODUCT_REGISTRIES = [
+  "cec-products",
+  "cer-cec-products",
+  "cer_sres_swh",
+  "gems-products",
+  "nsw-tessa-products",
+  "veu-approved-products",
+  "wa-horizon-supported-solutions",
+  "wa-synergy-supported-solutions",
+];
 const OPS_ADMIN_ALERT_PROPERTY_PREFIX = "AEA_ADMIN_ALERT_V1_";
 const OPS_ADMIN_ALERT_MAX_AGE_MS = 10 * 60 * 1000;
 const OPS_ADMIN_ALERT_DEDUPE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -61,6 +71,7 @@ function runOperationalHealthCheck() {
     opsJsonCheck_("site_runtime", OPS_SITE_URL + "/api/health", function(body) {
       return body && body.ok === true && body.service === "aea-energy";
     }),
+    opsJsonCheck_("official_product_registries", OPS_SITE_URL + "/api/creditex/official-products", opsOfficialProductRegistriesOk_),
     opsJsonCheck_("electricity_plans", OPS_SITE_URL + "/api/electricity-plans?postcode=3000&customerType=RESIDENTIAL&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
     opsJsonCheck_("gas_plans", OPS_SITE_URL + "/api/gas-plans?postcode=3000&annualMj=58000&usageProfile=heating&includeConditional=false&monitor=" + encodeURIComponent(monitorId), opsPlanResponseOk_),
     opsLeadProbe_(probeToken),
@@ -103,6 +114,23 @@ function opsPlanResponseOk_(body) {
     && Number(body.source.detailPlansSucceeded) > 0
     && Number(body.source.plansWithLastUpdated) > 0
     && String(body.source.detailApiVersion) === "3";
+}
+
+function opsOfficialProductRegistriesOk_(body) {
+  if (!body || body.ok !== true || !Array.isArray(body.registries)) return false;
+  return OPS_REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.every(function(registryCode) {
+    const matches = body.registries.filter(function(registry) {
+      return registry && registry.registryCode === registryCode;
+    });
+    if (matches.length !== 1) return false;
+    const registry = matches[0];
+    const lastAttemptStatus = registry.lastAttempt && registry.lastAttempt.status;
+    return registry.status === "current"
+      && registry.readiness
+      && registry.readiness.calculatorReady === true
+      && registry.readiness.refreshReady === true
+      && (lastAttemptStatus === "success" || lastAttemptStatus === "unchanged");
+  });
 }
 
 function opsLeadProbe_(probeToken) {

@@ -44,10 +44,25 @@ test("public product reads are redacted and registry refresh stays admin-only", 
 });
 
 test("public requests have bounded retries and no refresh control", () => {
-  assert.match(workspace, /attempt < 10/);
+  assert.match(workspace, /PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 60_000/);
+  assert.match(workspace, /PUBLIC_CALCULATOR_MAXIMUM_ATTEMPTS = 20/);
   assert.match(workspace, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
+  assert.match(workspace, /OFFICIAL_PRODUCT_FLEET_BUSY/);
+  assert.match(workspace, /recoveryDeadline - Date\.now\(\)/);
+  assert.match(workspace, /response\.headers\.get\("Retry-After"\)/);
   assert.match(workspace, /options\.requestTimeoutMs \|\| 25_000/);
   assert.doesNotMatch(workspace, /action: "refresh"/);
+});
+
+test("public calculator states the exact calculation boundary", () => {
+  assert.match(
+    workspace,
+    /exact,\s+source-verified calculation for your selected inputs, installation\s+date and source version/,
+  );
+  assert.match(
+    workspace,
+    /Certificate creation, eligibility and\s+provider acceptance are separate/,
+  );
 });
 
 test("anonymous estimate access is enabled only for explicit quote requests", () => {

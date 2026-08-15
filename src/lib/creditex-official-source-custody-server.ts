@@ -29,9 +29,10 @@ type CustodyMember = {
   uid: string;
   organisationId: string;
   role: string;
+  actorKind?: "compliance" | "admin";
 };
 
-export type CaptureCreditexOfficialSourceInput = {
+export type CaptureCreditexOfficialSourceArtifactInput = {
   clientRequestId: unknown;
   sourceUrl: unknown;
   sourceTitle: unknown;
@@ -41,17 +42,27 @@ export type CaptureCreditexOfficialSourceInput = {
   assertedRetrievedAt: unknown;
   sourceEtag?: unknown;
   sourceLastModified?: unknown;
-  targetType: unknown;
-  targetId: unknown;
-  citationLocation: unknown;
   bytes: Uint8Array;
 };
+
+export type CaptureCreditexServerFetchedOfficialSourceArtifactInput =
+  CaptureCreditexOfficialSourceArtifactInput & {
+    finalSourceUrl: unknown;
+  };
+
+export type CaptureCreditexOfficialSourceInput =
+  CaptureCreditexOfficialSourceArtifactInput & {
+    targetType?: unknown;
+    targetId?: unknown;
+    citationLocation?: unknown;
+  };
 
 type OfficialSourceArtifactRecord = {
   id: string;
   organisation_id: string;
   client_request_id: string;
   source_url: string;
+  source_final_url: string;
   source_host: string;
   source_title: string;
   source_version: string;
@@ -60,6 +71,7 @@ type OfficialSourceArtifactRecord = {
   size_bytes: number;
   sha256: string;
   object_key: string;
+  retrieval_method: "manual_upload" | "server_fetch";
   asserted_retrieved_at: string;
   source_etag: string;
   source_last_modified: string;
@@ -100,14 +112,14 @@ type OfficialSourceDownloadRecord = {
 };
 
 type OfficialSourceListingRecord = OfficialSourceArtifactRecord & {
-  binding_id: string;
-  artifact_id: string;
-  target_type: string;
-  target_id: string;
-  citation_location: string;
-  binding_state: string;
-  binding_created_by_uid: string;
-  binding_created_at: string;
+  binding_id: string | null;
+  artifact_id: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  citation_location: string | null;
+  binding_state: string | null;
+  binding_created_by_uid: string | null;
+  binding_created_at: string | null;
   artifact_review_id: string | null;
   artifact_review_decision: OfficialSourceReviewRecord["decision"] | null;
   artifact_review_supersedes_decision_id: string | null;
@@ -142,6 +154,24 @@ export class CreditexOfficialSourceCustodyError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+export async function resolveActiveCreditexOfficialSourceOrganisation(
+  database: D1Database,
+) {
+  const rows = await database.prepare(`SELECT id
+    FROM compliance_organisations
+    WHERE organisation_code = 'CREDITEX-AU' AND status = 'active'
+    ORDER BY id
+    LIMIT 2`).all<{ id: string }>();
+  if (rows.results.length !== 1) {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CREDITEX_ORGANISATION_UNAVAILABLE",
+      503,
+      "The active Creditex governance organisation is not available.",
+    );
+  }
+  return rows.results[0].id;
 }
 
 function cleanText(
@@ -217,6 +247,20 @@ export function isAllowedOfficialGovernmentHost(value: unknown) {
   return host === "gov.au" || host.endsWith(".gov.au");
 }
 
+const CREDITEX_APPROVED_OFFICIAL_REGULATOR_HOSTS = new Set([
+  "www.qca.org.au",
+  "cleanenergycouncil.org.au",
+  "www.cleanenergycouncil.org.au",
+  "synergy.net.au",
+  "www.synergy.net.au",
+]);
+
+export function isAllowedOfficialAuthorityHost(value: unknown) {
+  const host = String(value || "").trim().toLowerCase().replace(/\.$/, "");
+  return isAllowedOfficialGovernmentHost(host)
+    || CREDITEX_APPROVED_OFFICIAL_REGULATOR_HOSTS.has(host);
+}
+
 export function normaliseOfficialSourceUrl(value: unknown) {
   let parsed: URL;
   try {
@@ -234,12 +278,12 @@ export function normaliseOfficialSourceUrl(value: unknown) {
     || parsed.username
     || parsed.password
     || parsed.port
-    || !isAllowedOfficialGovernmentHost(host)
+    || !isAllowedOfficialAuthorityHost(host)
   ) {
     throw new CreditexOfficialSourceCustodyError(
       "SOURCE_DOMAIN_NOT_ALLOWED",
       400,
-      "Use an official Australian government HTTPS source.",
+      "Use an official Australian government or approved regulator HTTPS source.",
     );
   }
   parsed.hostname = host;
@@ -422,6 +466,7 @@ function publicArtifact(record: OfficialSourceArtifactRecord) {
     id: record.id,
     clientRequestId: record.client_request_id,
     sourceUrl: record.source_url,
+    finalSourceUrl: record.source_final_url || record.source_url,
     sourceHost: record.source_host,
     sourceTitle: record.source_title,
     sourceVersion: record.source_version,
@@ -429,7 +474,7 @@ function publicArtifact(record: OfficialSourceArtifactRecord) {
     contentType: record.content_type,
     sizeBytes: Number(record.size_bytes),
     sha256: record.sha256,
-    retrievalMethod: "manual_upload",
+    retrievalMethod: record.retrieval_method || "manual_upload",
     assertedRetrievedAt: record.asserted_retrieved_at,
     sourceEtag: record.source_etag,
     sourceLastModified: record.source_last_modified,
@@ -530,7 +575,8 @@ function decodeOfficialSourceCursor(value: unknown) {
     if (!Array.isArray(parsed) || parsed.length !== 3) throw new Error();
     const capturedAt = cursorText(parsed[0], 64);
     const artifactId = cursorText(parsed[1], 180);
-    const bindingId = cursorText(parsed[2], 180);
+    const bindingId = String(parsed[2] ?? "").trim();
+    if (bindingId.length > 180) throw new Error();
     if (!Number.isFinite(Date.parse(capturedAt))) throw new Error();
     return { capturedAt, artifactId, bindingId };
   } catch (error) {
@@ -607,7 +653,7 @@ async function existingCapture(
       binding.created_by_uid binding_created_by_uid,
       binding.created_at binding_created_at
     FROM compliance_official_source_artifacts artifact
-    JOIN compliance_official_source_bindings binding
+    LEFT JOIN compliance_official_source_bindings binding
       ON binding.artifact_id = artifact.id
       AND binding.organisation_id = artifact.organisation_id
     WHERE artifact.organisation_id = ?
@@ -616,13 +662,13 @@ async function existingCapture(
     LIMIT 1`)
     .bind(organisationId, clientRequestId)
     .first<OfficialSourceArtifactRecord & {
-      binding_id: string;
-      target_type: string;
-      target_id: string;
-      citation_location: string;
-      binding_state: string;
-      binding_created_by_uid: string;
-      binding_created_at: string;
+      binding_id: string | null;
+      target_type: string | null;
+      target_id: string | null;
+      citation_location: string | null;
+      binding_state: string | null;
+      binding_created_by_uid: string | null;
+      binding_created_at: string | null;
     }>();
 }
 
@@ -630,6 +676,7 @@ function assertIdempotentCapture(
   existing: NonNullable<Awaited<ReturnType<typeof existingCapture>>>,
   expected: {
     sourceUrl: string;
+    finalSourceUrl: string;
     sourceTitle: string;
     sourceVersion: string;
     fileName: string;
@@ -639,25 +686,39 @@ function assertIdempotentCapture(
     assertedRetrievedAt: string;
     sourceEtag: string;
     sourceLastModified: string;
-    targetType: string;
-    targetId: string;
-    citationLocation: string;
+    retrievalMethod: "manual_upload" | "server_fetch";
+    binding: {
+      targetType: string;
+      targetId: string;
+      citationLocation: string;
+    } | null;
   },
 ) {
   if (
     existing.source_url !== expected.sourceUrl
+    || (existing.source_final_url || existing.source_url)
+      !== expected.finalSourceUrl
     || existing.source_title !== expected.sourceTitle
     || existing.source_version !== expected.sourceVersion
     || existing.original_file_name !== expected.fileName
     || existing.content_type !== expected.contentType
     || Number(existing.size_bytes) !== expected.sizeBytes
     || existing.sha256 !== expected.sha256
-    || existing.asserted_retrieved_at !== expected.assertedRetrievedAt
-    || existing.source_etag !== expected.sourceEtag
-    || existing.source_last_modified !== expected.sourceLastModified
-    || existing.target_type !== expected.targetType
-    || existing.target_id !== expected.targetId
-    || existing.citation_location !== expected.citationLocation
+    || (existing.retrieval_method || "manual_upload")
+      !== expected.retrievalMethod
+    || (expected.retrievalMethod === "manual_upload"
+      && (
+        existing.asserted_retrieved_at !== expected.assertedRetrievedAt
+        || existing.source_etag !== expected.sourceEtag
+        || existing.source_last_modified !== expected.sourceLastModified
+      ))
+    || Boolean(existing.binding_id) !== Boolean(expected.binding)
+    || (expected.binding !== null
+      && (
+        existing.target_type !== expected.binding.targetType
+        || existing.target_id !== expected.binding.targetId
+        || existing.citation_location !== expected.binding.citationLocation
+      ))
   ) {
     throw new CreditexOfficialSourceCustodyError(
       "SOURCE_REQUEST_ID_CONFLICT",
@@ -667,21 +728,45 @@ function assertIdempotentCapture(
   }
 }
 
-export async function captureCreditexOfficialSource(
-  database: D1Database,
-  bucket: CreditexCustodyBucket,
-  member: CustodyMember,
-  input: CaptureCreditexOfficialSourceInput,
-) {
-  if (!["admin", "case_manager"].includes(member.role)) {
+function custodyActorKind(member: CustodyMember) {
+  return member.actorKind === "admin" ? "admin" : "compliance";
+}
+
+function requireSourceCaptureRole(member: CustodyMember) {
+  const actorKind = custodyActorKind(member);
+  const roles = actorKind === "admin"
+    ? ["owner", "admin"]
+    : ["admin", "case_manager"];
+  if (!roles.includes(member.role)) {
     throw new CreditexOfficialSourceCustodyError(
       "SOURCE_CUSTODY_ROLE_REQUIRED",
       403,
-      "This compliance role cannot capture official source material.",
+      actorKind === "admin"
+        ? "This operations role cannot capture official source material."
+        : "This compliance role cannot capture official source material.",
     );
   }
+}
+
+async function captureOfficialSourceArtifact(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: CustodyMember,
+  input: CaptureCreditexOfficialSourceArtifactInput,
+  binding: {
+    type: CreditexOfficialSourceTargetType;
+    targetId: string;
+    citationLocation: string;
+  } | null,
+  retrieval: {
+    method: "manual_upload" | "server_fetch";
+    finalSourceUrl: string;
+  },
+) {
+  requireSourceCaptureRole(member);
   const clientRequestId = cleanClientRequestId(input.clientRequestId);
   const source = normaliseOfficialSourceUrl(input.sourceUrl);
+  const finalSource = normaliseOfficialSourceUrl(retrieval.finalSourceUrl);
   const sourceTitle = cleanText(
     input.sourceTitle,
     500,
@@ -712,19 +797,6 @@ export async function captureCreditexOfficialSource(
     "The source last-modified value is too long.",
     false,
   );
-  const type = targetType(input.targetType);
-  const targetId = cleanText(
-    input.targetId,
-    180,
-    "SOURCE_TARGET_INVALID",
-    "Choose a draft compliance target.",
-  );
-  const citationLocation = cleanText(
-    input.citationLocation,
-    500,
-    "SOURCE_CITATION_INVALID",
-    "Add the page, section, clause, schedule or table used by the draft target.",
-  );
   const bytes = input.bytes;
   if (
     !(bytes instanceof Uint8Array)
@@ -745,15 +817,10 @@ export async function captureCreditexOfficialSource(
     );
   }
 
-  await requireDraftTarget(
-    database,
-    member.organisationId,
-    type,
-    targetId,
-  );
   const sha256 = await sha256Hex(bytes);
   const idempotentValues = {
     sourceUrl: source.url,
+    finalSourceUrl: finalSource.url,
     sourceTitle,
     sourceVersion,
     fileName,
@@ -763,9 +830,14 @@ export async function captureCreditexOfficialSource(
     assertedRetrievedAt,
     sourceEtag,
     sourceLastModified,
-    targetType: type,
-    targetId,
-    citationLocation,
+    retrievalMethod: retrieval.method,
+    binding: binding
+      ? {
+          targetType: binding.type,
+          targetId: binding.targetId,
+          citationLocation: binding.citationLocation,
+        }
+      : null,
   };
   const existing = await existingCapture(
     database,
@@ -778,21 +850,23 @@ export async function captureCreditexOfficialSource(
     return {
       reused: true,
       artifact: publicArtifact(existing),
-      binding: publicBinding({
-        id: existing.binding_id,
-        artifact_id: existing.id,
-        target_type: existing.target_type,
-        target_id: existing.target_id,
-        citation_location: existing.citation_location,
-        binding_state: existing.binding_state,
-        created_by_uid: existing.binding_created_by_uid,
-        created_at: existing.binding_created_at,
-      }),
+      binding: existing.binding_id
+        ? publicBinding({
+            id: existing.binding_id,
+            artifact_id: existing.id,
+            target_type: existing.target_type || "",
+            target_id: existing.target_id || "",
+            citation_location: existing.citation_location || "",
+            binding_state: existing.binding_state || "",
+            created_by_uid: existing.binding_created_by_uid || "",
+            created_at: existing.binding_created_at || "",
+          })
+        : null,
     };
   }
 
   const artifactId = crypto.randomUUID();
-  const bindingId = crypto.randomUUID();
+  const bindingId = binding ? crypto.randomUUID() : "";
   const auditId = crypto.randomUUID();
   const capturedAt = new Date().toISOString();
   const objectKey = [
@@ -809,20 +883,23 @@ export async function captureCreditexOfficialSource(
       artifactId,
       sha256,
       sourceHost: source.host,
+      finalSourceHost: finalSource.host,
+      retrievalMethod: retrieval.method,
       custodyState: "pending_review",
     },
   });
 
   try {
-    await database.batch([
+    const statements = [
       database.prepare(`INSERT INTO compliance_official_source_artifacts (
-          id, organisation_id, client_request_id, source_url, source_host,
+          id, organisation_id, client_request_id, source_url, source_final_url,
+          source_host,
           source_title, source_version, original_file_name, content_type,
           size_bytes, sha256, object_key, retrieval_method,
           asserted_retrieved_at, source_etag, source_last_modified,
           custody_state, rule_activation_enabled, captured_by_uid, captured_at
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual_upload',
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, 'pending_review', 0, ?, ?
         )`)
         .bind(
@@ -830,6 +907,7 @@ export async function captureCreditexOfficialSource(
           member.organisationId,
           clientRequestId,
           source.url,
+          finalSource.url,
           source.host,
           sourceTitle,
           sourceVersion,
@@ -838,27 +916,34 @@ export async function captureCreditexOfficialSource(
           bytes.byteLength,
           sha256,
           objectKey,
+          retrieval.method,
           assertedRetrievedAt,
           sourceEtag,
           sourceLastModified,
           member.uid,
           capturedAt,
         ),
-      database.prepare(`INSERT INTO compliance_official_source_bindings (
-          id, organisation_id, artifact_id, target_type, target_id,
-          citation_location, binding_state, rule_activation_enabled,
-          created_by_uid, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending_review', 0, ?, ?)`)
-        .bind(
-          bindingId,
-          member.organisationId,
-          artifactId,
-          type,
-          targetId,
-          citationLocation,
-          member.uid,
-          capturedAt,
-        ),
+    ];
+    if (binding) {
+      statements.push(
+        database.prepare(`INSERT INTO compliance_official_source_bindings (
+            id, organisation_id, artifact_id, target_type, target_id,
+            citation_location, binding_state, rule_activation_enabled,
+            created_by_uid, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 'pending_review', 0, ?, ?)`)
+          .bind(
+            bindingId,
+            member.organisationId,
+            artifactId,
+            binding.type,
+            binding.targetId,
+            binding.citationLocation,
+            member.uid,
+            capturedAt,
+          ),
+      );
+    }
+    statements.push(
       database.prepare(`INSERT INTO compliance_audit_events (
           id, organisation_id, actor_type, actor_uid, event_type,
           target_type, target_id, summary, metadata, created_at
@@ -874,19 +959,25 @@ export async function captureCreditexOfficialSource(
           member.uid,
           artifactId,
           JSON.stringify({
-            bindingId,
+            bindingId: bindingId || null,
+            identityRealm: custodyActorKind(member),
+            actorRole: member.role,
             sourceHost: source.host,
+            finalSourceUrl: finalSource.url,
+            finalSourceHost: finalSource.host,
+            retrievalMethod: retrieval.method,
             sha256,
             sizeBytes: bytes.byteLength,
-            targetType: type,
-            targetId,
-            citationLocation,
+            targetType: binding?.type || null,
+            targetId: binding?.targetId || null,
+            citationLocation: binding?.citationLocation || null,
             custodyState: "pending_review",
             ruleActivationEnabled: false,
           }),
           capturedAt,
         ),
-    ]);
+    );
+    await database.batch(statements);
   } catch (error) {
     await bucket.delete(objectKey).catch(() => undefined);
     throw error;
@@ -898,6 +989,7 @@ export async function captureCreditexOfficialSource(
       id: artifactId,
       clientRequestId,
       sourceUrl: source.url,
+      finalSourceUrl: finalSource.url,
       sourceHost: source.host,
       sourceTitle,
       sourceVersion,
@@ -905,7 +997,7 @@ export async function captureCreditexOfficialSource(
       contentType,
       sizeBytes: bytes.byteLength,
       sha256,
-      retrievalMethod: "manual_upload",
+      retrievalMethod: retrieval.method,
       assertedRetrievedAt,
       sourceEtag,
       sourceLastModified,
@@ -914,18 +1006,96 @@ export async function captureCreditexOfficialSource(
       capturedByUid: member.uid,
       capturedAt,
     },
-    binding: {
-      id: bindingId,
-      artifactId,
-      targetType: type,
+    binding: binding
+      ? {
+          id: bindingId,
+          artifactId,
+          targetType: binding.type,
+          targetId: binding.targetId,
+          citationLocation: binding.citationLocation,
+          bindingState: "pending_review",
+          ruleActivationEnabled: false,
+          createdByUid: member.uid,
+          createdAt: capturedAt,
+        }
+      : null,
+  };
+}
+
+export async function captureCreditexOfficialSourceArtifact(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: CustodyMember,
+  input: CaptureCreditexOfficialSourceArtifactInput,
+) {
+  const source = normaliseOfficialSourceUrl(input.sourceUrl);
+  return captureOfficialSourceArtifact(database, bucket, member, input, null, {
+    method: "manual_upload",
+    finalSourceUrl: source.url,
+  });
+}
+
+export async function captureCreditexServerFetchedOfficialSourceArtifact(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: CustodyMember,
+  input: CaptureCreditexServerFetchedOfficialSourceArtifactInput,
+) {
+  return captureOfficialSourceArtifact(database, bucket, member, input, null, {
+    method: "server_fetch",
+    finalSourceUrl: normaliseOfficialSourceUrl(input.finalSourceUrl).url,
+  });
+}
+
+export async function captureCreditexOfficialSource(
+  database: D1Database,
+  bucket: CreditexCustodyBucket,
+  member: CustodyMember,
+  input: CaptureCreditexOfficialSourceInput,
+) {
+  requireSourceCaptureRole(member);
+  if (custodyActorKind(member) !== "compliance") {
+    throw new CreditexOfficialSourceCustodyError(
+      "SOURCE_CUSTODY_ROLE_REQUIRED",
+      403,
+      "Operations users capture source documents through the governed Forms library.",
+    );
+  }
+  const hasTarget = [input.targetType, input.targetId, input.citationLocation]
+    .some((value) => String(value ?? "").trim());
+  if (!hasTarget) {
+    return captureCreditexOfficialSourceArtifact(database, bucket, member, input);
+  }
+  const type = targetType(input.targetType);
+  const targetId = cleanText(
+    input.targetId,
+    180,
+    "SOURCE_TARGET_INVALID",
+    "Choose a draft compliance target.",
+  );
+  const citationLocation = cleanText(
+    input.citationLocation,
+    500,
+    "SOURCE_CITATION_INVALID",
+    "Add the page, section, clause, schedule or table used by the draft target.",
+  );
+  await requireDraftTarget(database, member.organisationId, type, targetId);
+  const source = normaliseOfficialSourceUrl(input.sourceUrl);
+  return captureOfficialSourceArtifact(
+    database,
+    bucket,
+    member,
+    input,
+    {
+      type,
       targetId,
       citationLocation,
-      bindingState: "pending_review",
-      ruleActivationEnabled: false,
-      createdByUid: member.uid,
-      createdAt: capturedAt,
     },
-  };
+    {
+      method: "manual_upload",
+      finalSourceUrl: source.url,
+    },
+  );
 }
 
 function reviewFromListing(
@@ -939,7 +1109,7 @@ function reviewFromListing(
   return publicReview({
     id,
     subject_type: subjectType,
-    subject_id: subjectType === "artifact" ? record.id : record.binding_id,
+    subject_id: subjectType === "artifact" ? record.id : record.binding_id || "",
     decision,
     supersedes_decision_id:
       record[`${prefix}_review_supersedes_decision_id`] || "",
@@ -966,7 +1136,7 @@ export async function listCreditexOfficialSources(
         OR (
           artifact.captured_at = ?
           AND artifact.id = ?
-          AND binding.id < ?
+          AND COALESCE(binding.id, '') < ?
         )
       )`
     : "";
@@ -1023,7 +1193,7 @@ export async function listCreditexOfficialSources(
       binding_review.reviewed_by_uid binding_reviewed_by_uid,
       binding_review.reviewed_at binding_reviewed_at
     FROM compliance_official_source_artifacts artifact
-    JOIN compliance_official_source_bindings binding
+    LEFT JOIN compliance_official_source_bindings binding
       ON binding.artifact_id = artifact.id
       AND binding.organisation_id = artifact.organisation_id
     LEFT JOIN compliance_official_source_review_decisions artifact_review
@@ -1067,13 +1237,13 @@ export async function listCreditexOfficialSources(
     ORDER BY
       artifact.captured_at DESC,
       artifact.id DESC,
-      binding.id DESC
+      COALESCE(binding.id, '') DESC
     LIMIT ?`)
       .bind(...listBindings)
       .all<OfficialSourceListingRecord>(),
     database.prepare(`SELECT COUNT(*) total
       FROM compliance_official_source_artifacts artifact
-      JOIN compliance_official_source_bindings binding
+      LEFT JOIN compliance_official_source_bindings binding
         ON binding.artifact_id = artifact.id
         AND binding.organisation_id = artifact.organisation_id
       WHERE artifact.organisation_id = ?`)
@@ -1082,21 +1252,26 @@ export async function listCreditexOfficialSources(
   ]);
   const hasNext = rows.results.length > pageSize;
   const pageRows = rows.results.slice(0, pageSize);
-  const items = pageRows.map((record) => ({
-    artifact: publicArtifact(record),
-    binding: publicBinding({
-      id: record.binding_id,
-      artifact_id: record.artifact_id,
-      target_type: record.target_type,
-      target_id: record.target_id,
-      citation_location: record.citation_location,
-      binding_state: record.binding_state,
-      created_by_uid: record.binding_created_by_uid,
-      created_at: record.binding_created_at,
-    }),
-    artifactReview: reviewFromListing(record, "artifact"),
-    bindingReview: reviewFromListing(record, "binding"),
-  }));
+  const items = pageRows.map((record) => {
+    const binding = record.binding_id
+      ? publicBinding({
+          id: record.binding_id,
+          artifact_id: record.artifact_id || record.id,
+          target_type: record.target_type || "",
+          target_id: record.target_id || "",
+          citation_location: record.citation_location || "",
+          binding_state: record.binding_state || "",
+          created_by_uid: record.binding_created_by_uid || "",
+          created_at: record.binding_created_at || "",
+        })
+      : null;
+    return {
+      artifact: publicArtifact(record),
+      binding,
+      artifactReview: reviewFromListing(record, "artifact"),
+      bindingReview: binding ? reviewFromListing(record, "binding") : null,
+    };
+  });
   const last = hasNext ? pageRows.at(-1) : null;
   return {
     items,
@@ -1107,7 +1282,7 @@ export async function listCreditexOfficialSources(
       ? encodeOfficialSourceCursor({
           capturedAt: last.captured_at,
           artifactId: last.id,
-          bindingId: last.binding_id,
+          bindingId: last.binding_id || "",
         })
       : null,
   };
@@ -1310,13 +1485,17 @@ export async function downloadCreditexOfficialSource(
   member: CustodyMember,
   artifactIdValue: unknown,
 ) {
-  if (
-    !["admin", "case_manager", "reviewer", "auditor"].includes(member.role)
-  ) {
+  const actorKind = custodyActorKind(member);
+  const allowedRoles = actorKind === "admin"
+    ? ["owner", "admin", "reviewer", "support"]
+    : ["admin", "case_manager", "reviewer", "auditor"];
+  if (!allowedRoles.includes(member.role)) {
     throw new CreditexOfficialSourceCustodyError(
       "SOURCE_CUSTODY_ROLE_REQUIRED",
       403,
-      "This compliance role cannot open official source material.",
+      actorKind === "admin"
+        ? "This operations role cannot open official source material."
+        : "This compliance role cannot open official source material.",
     );
   }
   const artifactId = cleanText(
@@ -1358,7 +1537,7 @@ export async function downloadCreditexOfficialSource(
     ) VALUES (
       ?, ?, 'compliance', ?, 'official_source.retained_bytes_accessed',
       'compliance_official_source_artifact', ?,
-      'Authorised Creditex member accessed verified retained official source bytes.',
+      'Authorised governance user accessed verified retained official source bytes.',
       ?, ?
     )`)
     .bind(
@@ -1368,6 +1547,7 @@ export async function downloadCreditexOfficialSource(
       record.id,
       JSON.stringify({
         accessRole: member.role,
+        identityRealm: actorKind,
         contentType: record.content_type,
         fileName: record.original_file_name,
         sha256: record.sha256,

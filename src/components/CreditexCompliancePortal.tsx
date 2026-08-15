@@ -30,6 +30,8 @@ import {
 import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
+import { CreditexActivityWorkPackGovernance } from "./CreditexActivityWorkPackGovernance";
+import { CreditexOutputActions } from "./CreditexOutputActions";
 import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
 import { CreditexOperationsWorkspace } from "./CreditexOperationsWorkspace";
 import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
@@ -314,7 +316,7 @@ export function CreditexCompliancePortal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tab, setTab] =
-    useState<"cases" | "pilot" | "sources" | "governance">("cases");
+    useState<"cases" | "pilot" | "sources" | "forms" | "governance">("cases");
   const [cases, setCases] = useState<CaseQueueItem[]>([]);
   const [caseQuery, setCaseQuery] = useState("");
   const [caseStatus, setCaseStatus] =
@@ -363,7 +365,7 @@ export function CreditexCompliancePortal() {
         isUnauthorized: (attempt) => attempt.response.status === 401,
         request: async (idToken) => {
           headers.set("Authorization", `Bearer ${idToken}`);
-          for (let attempt = 0; attempt < 10; attempt += 1) {
+          for (let attempt = 0; attempt < 20; attempt += 1) {
             const controller = new AbortController();
             const requestTimeout = window.setTimeout(
               () => controller.abort(),
@@ -398,8 +400,11 @@ export function CreditexCompliancePortal() {
             }
             if (
               response.status === 503
-              && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
-              && attempt < 9
+              && (
+                result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
+                || result.code === "OFFICIAL_PRODUCT_FLEET_BUSY"
+              )
+              && attempt < 19
             ) {
               const retryAfterSeconds = Number(
                 response.headers.get("Retry-After"),
@@ -408,7 +413,7 @@ export function CreditexCompliancePortal() {
                 ? Math.min(Math.max(retryAfterSeconds * 1_000, 1_000), 5_000)
                 : 1_000;
               setLoadingMessage(
-                `Preparing governed compliance controls (${attempt + 1} of 10)...`,
+                `Preparing governed compliance controls (${attempt + 1} of 20)...`,
               );
               await new Promise((resolve) =>
                 window.setTimeout(resolve, retryAfterMilliseconds)
@@ -994,11 +999,11 @@ export function CreditexCompliancePortal() {
     }
     event.preventDefault();
     const visibleTabs: Array<
-      "cases" | "pilot" | "sources" | "governance"
+      "cases" | "pilot" | "sources" | "forms" | "governance"
     > =
       session?.role === "admin"
-        ? ["cases", "pilot", "sources", "governance"]
-        : ["cases", "pilot", "sources"];
+        ? ["cases", "pilot", "sources", "forms", "governance"]
+        : ["cases", "pilot", "sources", "forms"];
     const currentIndex = visibleTabs.indexOf(tab);
     const nextIndex = event.key === "Home"
       ? 0
@@ -1238,6 +1243,19 @@ export function CreditexCompliancePortal() {
           >
             Official sources
           </button>
+          <button
+            className={styles.tab}
+            type="button"
+            role="tab"
+            id="creditex-tab-forms"
+            aria-controls="creditex-panel-forms"
+            aria-selected={tab === "forms"}
+            tabIndex={tab === "forms" ? 0 : -1}
+            onClick={() => setTab("forms")}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            Activity forms
+          </button>
           {session.role === "admin" && (
             <button
               className={styles.tab}
@@ -1262,6 +1280,8 @@ export function CreditexCompliancePortal() {
               <h1>
                 {tab === "sources"
                   ? "Official source custody"
+                  : tab === "forms"
+                    ? "Activity form control"
                   : tab === "governance"
                     ? "Government rule control"
                     : "Compliance case control"}
@@ -1269,6 +1289,8 @@ export function CreditexCompliancePortal() {
               <p>
                 {tab === "sources"
                   ? "Authorised Creditex staff can compare current government links with exact retained bytes and immutable source-review records."
+                  : tab === "forms"
+                    ? "Build, review and publish the exact technician workflow for each effective activity. Trade accounts can complete a pinned published version but cannot alter its definition."
                   : tab === "governance"
                     ? "Named administrators create and govern effective-dated program, activity and evidence records without turning Creditex instructions into government rules."
                     : "Queue lists minimise private data. Authorised Creditex staff can open the audited case workspace for the customer, installer, site, appointments, evidence originals and captured metadata needed to review, correct and submit that exact job."}
@@ -1350,6 +1372,30 @@ export function CreditexCompliancePortal() {
                 && session.governanceIdentityVerified
               }
               onDownload={downloadOfficialSource}
+            />
+          </section>
+        )}
+
+        {tab === "forms" && (
+          <section
+            className={`${styles.panel} ${styles.governancePanel}`}
+            id="creditex-panel-forms"
+            role="tabpanel"
+            aria-labelledby="creditex-tab-forms"
+          >
+            <CreditexActivityWorkPackGovernance
+              api={api}
+              endpoint="/api/creditex/work-packs"
+              sourceEndpoint="/api/creditex/official-sources"
+              sourceBatchEndpoint="/api/creditex/official-sources/batch-import"
+              canCaptureSource={["admin", "case_manager"].includes(session.role)}
+              onDownloadSource={downloadOfficialSource}
+              contextLabel="Creditex"
+            />
+            <CreditexOutputActions
+              api={api}
+              endpoint="/api/creditex/output-actions"
+              contextLabel="Creditex compliance"
             />
           </section>
         )}

@@ -3,6 +3,11 @@ import {
   CreditexSourceLookupReviewError,
   requireCurrentApprovedOfficialSourceBinding,
 } from "./creditex-source-lookup-review-server";
+import {
+  CreditexActivityWorkPackServerError,
+  prepareCreditexActivityWorkPackAttachment,
+  resolvePublishedCreditexActivityWorkPack,
+} from "./creditex-activity-work-pack-server";
 
 export const COMPLIANCE_SERVICE_CATEGORIES = [
   "assessment",
@@ -3649,8 +3654,37 @@ export type PreparedLiveComplianceCase = {
   siteJurisdiction: AustralianSiteJurisdiction;
   activitySnapshot: Record<string, unknown>;
   caseStatementIndex: number;
+  workPackInstanceId: string;
+  workPackVersionId: string;
+  workPackDefinitionSha256: string;
+  workPackCompositionLockId: string;
+  workPackCompositionSha256: string;
+  workPackStatementIndex: number;
   eventStatementIndex: number;
 };
+
+export type PlannedComplianceWorkPackBlocker = Readonly<{
+  code: string;
+  message: string;
+}>;
+
+export type PlannedComplianceWorkPackReadiness = Readonly<{
+  complianceIntentId: string;
+  activityTemplateId: string;
+  activityVersionId: string;
+  complianceCaseId: string;
+  workPackInstanceId: string;
+  workPackVersionId: string;
+  workPackReady: boolean;
+  blockers: readonly PlannedComplianceWorkPackBlocker[];
+}>;
+
+export type AutoOpenPlannedComplianceWorkPacksInput = Readonly<{
+  workOrderId: string;
+  installerUid: string;
+  actorUid: string;
+  createdAt?: string;
+}>;
 
 function caseNumber(caseId: string, createdAt: string) {
   const caseHex = caseId.replace(/[^0-9a-f]/gi, "").slice(0, 20);
@@ -4013,6 +4047,25 @@ export async function appendLiveComplianceCaseStatements(
         createdAt,
       ),
   ) - 1;
+  const workPackAttachment = await prepareCreditexActivityWorkPackAttachment(
+    database,
+    {
+      caseId,
+      organisationId: activity.organisationId,
+      workOrderId,
+      complianceIntentId,
+      activityVersionId: activity.id,
+      activityDate,
+      evidencePolicyVersionId: evidencePolicy.id,
+      activitySnapshot: snapshot,
+      ownerUid: installerUid,
+      actorUid,
+      createdAt,
+    },
+  );
+  const workPackStatementIndex = batch.length
+    + workPackAttachment.statements.length - 1;
+  batch.push(...workPackAttachment.statements);
   const eventStatementIndex = batch.push(
     database.prepare(`INSERT INTO compliance_case_events
       (id, case_id, organisation_id, event_type, actor_type, actor_uid,
@@ -4031,8 +4084,12 @@ export async function appendLiveComplianceCaseStatements(
           evidencePolicyVersionId: evidencePolicy.id,
           programCode: activity.programCode,
           activityKey: activity.activityKey,
-          version: activity.version,
-          commercialHandoffId,
+           version: activity.version,
+           workPackVersionId: workPackAttachment.workPackVersionId,
+           workPackDefinitionSha256: workPackAttachment.definitionSha256,
+           workPackCompositionLockId: workPackAttachment.compositionLockId,
+           workPackCompositionSha256: workPackAttachment.compositionSha256,
+           commercialHandoffId,
           acceptedQuoteVersionId,
           acceptedScopeSha256,
         }),
@@ -4053,6 +4110,12 @@ export async function appendLiveComplianceCaseStatements(
     siteJurisdiction,
     activitySnapshot: snapshot,
     caseStatementIndex,
+    workPackInstanceId: workPackAttachment.instanceId,
+    workPackVersionId: workPackAttachment.workPackVersionId,
+    workPackDefinitionSha256: workPackAttachment.definitionSha256,
+    workPackCompositionLockId: workPackAttachment.compositionLockId,
+    workPackCompositionSha256: workPackAttachment.compositionSha256,
+    workPackStatementIndex,
     eventStatementIndex,
   };
 }
@@ -4068,4 +4131,400 @@ export async function prepareLiveComplianceCaseStatements(
     input,
   );
   return { ...prepared, statements };
+}
+
+type PlannedComplianceIntentRow = Record<string, unknown> & {
+  id: string;
+  activity_template_id: string;
+  compliance_organisation_id: string;
+  organisation_code: string;
+  installer_uid: string;
+  program_code: string;
+  registry_activity_code: string;
+  service_category: string;
+  site_jurisdiction: string;
+  planned_start: string;
+  intent_snapshot: string;
+  compliance_case_id: string;
+  status: string;
+};
+
+function plannedWorkPackBlocked(
+  intent: PlannedComplianceIntentRow,
+  code: string,
+  message: string,
+  activityVersionId = "",
+): PlannedComplianceWorkPackReadiness {
+  return {
+    complianceIntentId: String(intent.id),
+    activityTemplateId: String(intent.activity_template_id),
+    activityVersionId,
+    complianceCaseId: String(intent.compliance_case_id || ""),
+    workPackInstanceId: "",
+    workPackVersionId: "",
+    workPackReady: false,
+    blockers: [{ code, message }],
+  };
+}
+
+async function linkedPlannedWorkPackReadiness(
+  database: D1Database,
+  intent: PlannedComplianceIntentRow,
+): Promise<PlannedComplianceWorkPackReadiness> {
+  const row = await database.prepare(`SELECT
+      compliance_case.id AS compliance_case_id,
+      compliance_case.activity_version_id,
+      compliance_case.activity_date,
+      instance.id AS work_pack_instance_id,
+      instance.work_pack_version_id,
+      instance.status AS work_pack_status
+    FROM compliance_cases compliance_case
+    LEFT JOIN compliance_activity_work_pack_instances instance
+      ON instance.compliance_case_id = compliance_case.id
+      AND instance.organisation_id = compliance_case.organisation_id
+      AND instance.revision = (
+        SELECT MAX(latest.revision)
+        FROM compliance_activity_work_pack_instances latest
+        WHERE latest.organisation_id = instance.organisation_id
+          AND latest.instance_key = instance.instance_key
+      )
+    WHERE compliance_case.id = ?
+      AND compliance_case.compliance_intent_id = ?
+      AND compliance_case.work_order_id = ?
+      AND compliance_case.installer_uid = ?
+    LIMIT 1`)
+    .bind(
+      String(intent.compliance_case_id || ""),
+      String(intent.id),
+      String(intent.work_order_id),
+      String(intent.installer_uid),
+    )
+    .first<Record<string, unknown>>();
+  if (!row?.work_pack_instance_id || String(row.work_pack_status) === "void") {
+    return plannedWorkPackBlocked(
+      intent,
+      "pinned_work_pack_missing",
+      "The linked draft compliance case does not have a current pinned activity form. Creditex setup is required before field collection.",
+      String(row?.activity_version_id || ""),
+    );
+  }
+  let resolvedWorkPack;
+  try {
+    resolvedWorkPack = await resolvePublishedCreditexActivityWorkPack(database, {
+      organisationId: String(intent.compliance_organisation_id),
+      activityVersionId: String(row.activity_version_id || ""),
+      activityDate: String(row.activity_date || ""),
+    });
+  } catch (error) {
+    if (error instanceof CreditexActivityWorkPackServerError) {
+      return plannedWorkPackBlocked(
+        intent,
+        error.code.toLowerCase(),
+        error.message,
+        String(row.activity_version_id || ""),
+      );
+    }
+    throw error;
+  }
+  if (
+    resolvedWorkPack.id !== String(row.work_pack_version_id || "")
+    || resolvedWorkPack.activityTemplateId !== String(intent.activity_template_id)
+  ) {
+    return plannedWorkPackBlocked(
+      intent,
+      "pinned_work_pack_governance_changed",
+      "The linked activity form no longer matches the exact independently approved effective version. Creditex must repair the pinned form before field collection.",
+      String(row.activity_version_id || ""),
+    );
+  }
+  return {
+    complianceIntentId: String(intent.id),
+    activityTemplateId: String(intent.activity_template_id),
+    activityVersionId: String(row.activity_version_id || ""),
+    complianceCaseId: String(row.compliance_case_id || ""),
+    workPackInstanceId: String(row.work_pack_instance_id),
+    workPackVersionId: String(row.work_pack_version_id || ""),
+    workPackReady: true,
+    blockers: [],
+  };
+}
+
+async function exactPlannedIntentActivityVersion(
+  database: D1Database,
+  intent: PlannedComplianceIntentRow,
+) {
+  const activityDate = String(intent.planned_start || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(activityDate)) return [];
+  const rows = await database.prepare(`SELECT DISTINCT
+      activity.id AS activity_version_id
+    FROM compliance_activity_work_pack_versions work_pack
+    JOIN compliance_activity_versions activity
+      ON activity.id = work_pack.activity_version_id
+    JOIN compliance_programs program
+      ON program.id = activity.program_id
+      AND program.organisation_id = work_pack.organisation_id
+    WHERE work_pack.organisation_id = ?
+      AND work_pack.activity_template_id = ?
+      AND work_pack.publish_state = 'published'
+      AND work_pack.effective_from <= ?
+      AND (work_pack.effective_to = '' OR work_pack.effective_to >= ?)
+      AND activity.publish_state = 'published'
+      AND activity.effective_from <= ?
+      AND (activity.effective_to = '' OR activity.effective_to >= ?)
+      AND program.publish_state = 'published'
+      AND program.program_code = ?
+      AND activity.service_category = ?
+      AND (activity.jurisdiction = ? OR activity.jurisdiction = 'AU')
+      AND (
+        (? <> '' AND activity.registry_activity_code = ?)
+        OR (
+          ? = ''
+          AND COALESCE(
+            json_extract(?, '$.activity.activityKey'),
+            ''
+          ) <> ''
+          AND activity.activity_key = json_extract(
+            ?, '$.activity.activityKey'
+          )
+        )
+      )
+    ORDER BY activity.id
+    LIMIT 3`)
+    .bind(
+      String(intent.compliance_organisation_id),
+      String(intent.activity_template_id),
+      activityDate,
+      activityDate,
+      activityDate,
+      activityDate,
+      String(intent.program_code),
+      String(intent.service_category),
+      String(intent.site_jurisdiction),
+      String(intent.registry_activity_code || ""),
+      String(intent.registry_activity_code || ""),
+      String(intent.registry_activity_code || ""),
+      String(intent.intent_snapshot || "{}"),
+      String(intent.intent_snapshot || "{}"),
+    )
+    .all<Record<string, unknown>>();
+  return rows.results.map((row) => String(row.activity_version_id || ""))
+    .filter(Boolean);
+}
+
+async function autoOpenPlannedComplianceWorkPack(
+  database: D1Database,
+  intent: PlannedComplianceIntentRow,
+  input: AutoOpenPlannedComplianceWorkPacksInput,
+  createdAt: string,
+): Promise<PlannedComplianceWorkPackReadiness> {
+  if (String(intent.status) === "case_linked") {
+    return linkedPlannedWorkPackReadiness(database, intent);
+  }
+  const activityVersions = await exactPlannedIntentActivityVersion(
+    database,
+    intent,
+  );
+  if (activityVersions.length < 1) {
+    return plannedWorkPackBlocked(
+      intent,
+      "published_effective_activity_version_required",
+      "Creditex must publish and independently approve the exact effective activity form and its official sources before this planned activity can open for field work.",
+    );
+  }
+  if (activityVersions.length !== 1) {
+    return plannedWorkPackBlocked(
+      intent,
+      "published_effective_activity_version_ambiguous",
+      "More than one governed activity version matches this planned work. Creditex must resolve the effective-version overlap before field collection.",
+    );
+  }
+  const activityVersionId = activityVersions[0];
+  const statements: D1PreparedStatement[] = [];
+  let prepared: PreparedLiveComplianceCase;
+  try {
+    prepared = await appendLiveComplianceCaseStatements(database, statements, {
+      activityVersionId,
+      activityDate: String(intent.planned_start).slice(0, 10),
+      serviceCategory: String(intent.service_category),
+      jurisdiction: String(intent.site_jurisdiction),
+      workOrderId: String(intent.work_order_id),
+      complianceIntentId: String(intent.id),
+      installerUid: String(intent.installer_uid),
+      actorType: "installer",
+      actorUid: input.actorUid,
+      expectedOrganisation: {
+        id: String(intent.compliance_organisation_id),
+        code: String(intent.organisation_code),
+      },
+      createdAt,
+    });
+  } catch (error) {
+    if (
+      (error instanceof ComplianceDomainError
+        || error instanceof CreditexActivityWorkPackServerError)
+      && error.status < 500
+    ) {
+      return plannedWorkPackBlocked(
+        intent,
+        error.code.toLowerCase(),
+        error.message,
+        activityVersionId,
+      );
+    }
+    throw error;
+  }
+  const operationId = crypto.randomUUID();
+  statements.push(
+    database.prepare(`UPDATE trade_work_order_compliance_intents
+      SET status = 'case_linked', compliance_case_id = ?, updated_at = ?
+      WHERE id = ?
+        AND work_order_id = ?
+        AND installer_uid = ?
+        AND compliance_organisation_id = ?
+        AND activity_template_id = ?
+        AND status = 'planned'
+        AND compliance_case_id = ''`)
+      .bind(
+        prepared.caseId,
+        createdAt,
+        String(intent.id),
+        String(intent.work_order_id),
+        String(intent.installer_uid),
+        String(intent.compliance_organisation_id),
+        String(intent.activity_template_id),
+      ),
+    database.prepare(`INSERT INTO trade_crm_write_guards (
+        id, firebase_uid, operation_id, step_number, verified, created_at
+      ) VALUES (?, ?, ?, 1,
+        CASE WHEN changes() = 1 THEN 1 ELSE 0 END, ?)`)
+      .bind(
+        crypto.randomUUID(),
+        String(intent.installer_uid),
+        operationId,
+        createdAt,
+      ),
+    database.prepare(`INSERT INTO trade_work_order_events (
+        id, work_order_id, firebase_uid, event_type, summary, created_at
+      ) VALUES (?, ?, ?, 'compliance_case_linked', ?, ?)`)
+      .bind(
+        crypto.randomUUID(),
+        String(intent.work_order_id),
+        String(intent.installer_uid),
+        "A draft compliance case and exact published activity form were attached. No certificate was created.",
+        createdAt,
+      ),
+  );
+  try {
+    await database.batch(statements);
+  } catch (error) {
+    const current = await database.prepare(`SELECT
+        intent.*, organisation.organisation_code
+      FROM trade_work_order_compliance_intents intent
+      JOIN compliance_organisations organisation
+        ON organisation.id = intent.compliance_organisation_id
+      WHERE intent.id = ? AND intent.work_order_id = ?
+        AND intent.installer_uid = ?
+      LIMIT 1`)
+      .bind(
+        String(intent.id),
+        String(intent.work_order_id),
+        String(intent.installer_uid),
+      )
+      .first<PlannedComplianceIntentRow>();
+    if (current?.status === "case_linked" && current.compliance_case_id) {
+      const replay = await linkedPlannedWorkPackReadiness(database, current);
+      if (replay.workPackReady) return replay;
+    }
+    throw error;
+  }
+  return {
+    complianceIntentId: String(intent.id),
+    activityTemplateId: String(intent.activity_template_id),
+    activityVersionId,
+    complianceCaseId: prepared.caseId,
+    workPackInstanceId: prepared.workPackInstanceId,
+    workPackVersionId: prepared.workPackVersionId,
+    workPackReady: true,
+    blockers: [],
+  };
+}
+
+/**
+ * Runs only after the guided job/customer/site/appointment/intent batch commits.
+ * Each planned activity is independently resolved and linked in one guarded D1
+ * batch. A draft case is operational preparation only: this path never creates
+ * a certificate, submission, eligibility decision or certificate calculation.
+ */
+export async function autoOpenReadyPlannedComplianceWorkPacks(
+  database: D1Database,
+  input: AutoOpenPlannedComplianceWorkPacksInput,
+): Promise<readonly PlannedComplianceWorkPackReadiness[]> {
+  await ensureCreditexSchemaGuards(database);
+  const workOrderId = requiredText(
+    input.workOrderId,
+    180,
+    "WORK_ORDER_REQUIRED",
+    "Work order",
+  );
+  const installerUid = requiredText(
+    input.installerUid,
+    180,
+    "INSTALLER_REQUIRED",
+    "Installer",
+  );
+  const actorUid = requiredText(
+    input.actorUid,
+    180,
+    "ACTOR_REQUIRED",
+    "Actor",
+  );
+  if (actorUid !== installerUid) {
+    throw new ComplianceDomainError(
+      "COMPLIANCE_INSTALLER_ACTOR_MISMATCH",
+      403,
+      "Guided compliance preparation must be attributed to the installer account that owns the job.",
+    );
+  }
+  const createdAt = input.createdAt
+    ? checkedInstant(input.createdAt, "INVALID_CREATED_AT", "Created time")
+    : new Date().toISOString();
+  const intents = await database.prepare(`SELECT
+      intent.*, organisation.organisation_code
+    FROM trade_work_order_compliance_intents intent
+    JOIN trade_work_orders work_order
+      ON work_order.id = intent.work_order_id
+      AND work_order.firebase_uid = intent.installer_uid
+      AND work_order.record_status = 'active'
+    JOIN compliance_organisations organisation
+      ON organisation.id = intent.compliance_organisation_id
+      AND organisation.status = 'active'
+    WHERE intent.work_order_id = ?
+      AND intent.installer_uid = ?
+      AND intent.status IN ('planned', 'case_linked')
+    ORDER BY intent.intent_key, intent.id`)
+    .bind(workOrderId, installerUid)
+    .all<PlannedComplianceIntentRow>();
+  const readiness: PlannedComplianceWorkPackReadiness[] = [];
+  for (const intent of intents.results) {
+    readiness.push(await autoOpenPlannedComplianceWorkPack(
+      database,
+      intent,
+      input,
+      createdAt,
+    ));
+  }
+  return readiness;
+}
+
+/**
+ * Idempotent repair entrypoint for a guided job whose initial post-commit
+ * preparation was interrupted. It deliberately delegates to the same exact
+ * published/effective resolver and guarded case+instance batch as first open;
+ * it never creates a certificate or treats a governance blocker as success.
+ */
+export async function reconcileReadyPlannedComplianceWorkPacks(
+  database: D1Database,
+  input: AutoOpenPlannedComplianceWorkPacksInput,
+) {
+  return autoOpenReadyPlannedComplianceWorkPacks(database, input);
 }

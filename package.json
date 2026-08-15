@@ -9,6 +9,7 @@
     "audit:customer-plan-pdf": "node scripts/audit-customer-plan-pdf.mjs",
     "audit:sites-server-bundle": "node scripts/audit-sites-server-bundle.mjs",
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
+    "validate:creditex-certificate-activation": "node --experimental-strip-types scripts/validate-creditex-certificate-activation.mjs",
     "start": "vinext start",
     "lint": "eslint --concurrency 4",
     "typecheck": "tsc --noEmit --pretty false",

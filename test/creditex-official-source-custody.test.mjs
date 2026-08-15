@@ -5,10 +5,13 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   captureCreditexOfficialSource,
+  captureCreditexOfficialSourceArtifact,
   downloadCreditexOfficialSource,
+  isAllowedOfficialAuthorityHost,
   isAllowedOfficialGovernmentHost,
   listCreditexOfficialSourceTargets,
   listCreditexOfficialSources,
+  resolveActiveCreditexOfficialSourceOrganisation,
 } from "../src/lib/creditex-official-source-custody-server.ts";
 import {
   CREDITEX_SCHEMA_GUARD_DEFINITIONS,
@@ -24,6 +27,27 @@ const migration = fs.readFileSync(
 const reviewMigration = fs.readFileSync(
   new URL(
     "../drizzle/0107_creditex_source_lookup_approval_bridge.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const adminCaptureMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0143_creditex_admin_official_source_capture.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const serverFetchMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0145_creditex_server_fetched_official_source_custody.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const controlledPermissionMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0147_creditex_controlled_product_permission_sources.sql",
     import.meta.url,
   ),
   "utf8",
@@ -113,6 +137,16 @@ class FakeR2 {
 function fixture() {
   const database = new DatabaseSync(":memory:");
   database.exec(`
+    CREATE TABLE admin_users (
+      firebase_uid text PRIMARY KEY NOT NULL,
+      role text NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE compliance_organisations (
+      id text PRIMARY KEY NOT NULL,
+      organisation_code text NOT NULL,
+      status text NOT NULL
+    );
     CREATE TABLE compliance_users (
       organisation_id text NOT NULL,
       firebase_uid text NOT NULL,
@@ -177,12 +211,25 @@ function fixture() {
   `);
   database.exec(migration);
   database.exec(reviewMigration);
+  database.exec(serverFetchMigration);
+  database.exec(controlledPermissionMigration);
   for (const guard of CREDITEX_SCHEMA_GUARD_DEFINITIONS.filter(
     ({ name }) => name.startsWith("compliance_official_source_"),
   )) {
     database.exec(guard.sql);
   }
   database.exec(`
+    INSERT INTO compliance_organisations
+      (id, organisation_code, status)
+      VALUES
+        ('org-1', 'CREDITEX-AU', 'active'),
+        ('org-2', 'NOT-CREDITEX', 'active');
+    INSERT INTO admin_users (firebase_uid, role, status)
+      VALUES
+        ('ops-owner', 'owner', 'active'),
+        ('ops-admin', 'admin', 'active'),
+        ('ops-reviewer', 'reviewer', 'active'),
+        ('ops-support', 'support', 'active');
     INSERT INTO compliance_users
       (
         organisation_id,
@@ -241,6 +288,12 @@ function fixture() {
       organisationId: "org-1",
       role: "admin",
     },
+    adminMember: {
+      uid: "ops-owner",
+      organisationId: "org-1",
+      role: "owner",
+      actorKind: "admin",
+    },
   };
 }
 
@@ -264,12 +317,118 @@ function captureInput(overrides = {}) {
   };
 }
 
+function artifactCaptureInput(overrides = {}) {
+  const input = captureInput(overrides);
+  delete input.targetType;
+  delete input.targetId;
+  delete input.citationLocation;
+  return input;
+}
+
 test("official government host allowlist rejects lookalike and commercial domains", () => {
   assert.equal(isAllowedOfficialGovernmentHost("energy.vic.gov.au"), true);
   assert.equal(isAllowedOfficialGovernmentHost("registry.energy.gov.au"), true);
   assert.equal(isAllowedOfficialGovernmentHost("energy.gov.au.example.com"), false);
   assert.equal(isAllowedOfficialGovernmentHost("creditex.com.au"), false);
   assert.equal(isAllowedOfficialGovernmentHost("evilgov.au"), false);
+  assert.equal(
+    isAllowedOfficialAuthorityHost("www.cleanenergycouncil.org.au"),
+    true,
+  );
+  assert.equal(isAllowedOfficialAuthorityHost("synergy.net.au"), true);
+  assert.equal(
+    isAllowedOfficialAuthorityHost("cleanenergycouncil.org.au.example.com"),
+    false,
+  );
+});
+
+test("AEA admin Forms capture retains one unbound artifact pending independent Creditex review", async () => {
+  const { database, d1, bucket, adminMember } = fixture();
+  assert.equal(
+    await resolveActiveCreditexOfficialSourceOrganisation(d1),
+    "org-1",
+  );
+  const input = artifactCaptureInput({
+    clientRequestId: "forms-source-request-0001",
+    sourceTitle: "Official assignment form template",
+  });
+  const captured = await captureCreditexOfficialSourceArtifact(
+    d1,
+    bucket,
+    adminMember,
+    input,
+  );
+  assert.equal(captured.reused, false);
+  assert.equal(captured.binding, null);
+  assert.equal(captured.artifact.custodyState, "pending_review");
+  assert.equal(captured.artifact.ruleActivationEnabled, false);
+  assert.equal(bucket.puts, 1);
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) count FROM compliance_official_source_artifacts",
+    ).get().count,
+    1,
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) count FROM compliance_official_source_bindings",
+    ).get().count,
+    0,
+  );
+
+  const [listed] = (await listCreditexOfficialSources(d1, adminMember)).items;
+  assert.equal(listed.artifact.id, captured.artifact.id);
+  assert.equal(listed.binding, null);
+  assert.equal(listed.artifactReview, null);
+  assert.equal(listed.bindingReview, null);
+  assert.equal(JSON.stringify(listed).includes("object_key"), false);
+  assert.equal(JSON.stringify(listed).includes("official-sources/"), false);
+
+  const replayed = await captureCreditexOfficialSourceArtifact(
+    d1,
+    bucket,
+    adminMember,
+    input,
+  );
+  assert.equal(replayed.reused, true);
+  assert.equal(replayed.artifact.id, captured.artifact.id);
+  assert.equal(replayed.binding, null);
+  assert.equal(bucket.puts, 1);
+
+  const download = await downloadCreditexOfficialSource(
+    d1,
+    bucket,
+    {
+      ...adminMember,
+      uid: "ops-reviewer",
+      role: "reviewer",
+    },
+    captured.artifact.id,
+  );
+  assert.deepEqual(new Uint8Array(download.bytes), input.bytes);
+  const receipt = database.prepare(
+    "SELECT metadata FROM compliance_audit_events WHERE id = ?",
+  ).get(download.receiptId);
+  assert.equal(JSON.parse(receipt.metadata).identityRealm, "admin");
+
+  await assert.rejects(
+    captureCreditexOfficialSourceArtifact(
+      d1,
+      bucket,
+      { ...adminMember, uid: "ops-reviewer", role: "reviewer" },
+      artifactCaptureInput({ clientRequestId: "forms-source-reviewer" }),
+    ),
+    (error) => error.code === "SOURCE_CUSTODY_ROLE_REQUIRED",
+  );
+  await assert.rejects(
+    captureCreditexOfficialSourceArtifact(
+      d1,
+      bucket,
+      { ...adminMember, organisationId: "org-2" },
+      artifactCaptureInput({ clientRequestId: "forms-source-wrong-org" }),
+    ),
+    /COMPLIANCE_SOURCE_CUSTODY_ACTOR_INVALID/,
+  );
 });
 
 test("exact official source bytes are hash-bound in R2 and remain pending review", async () => {
@@ -1000,6 +1159,20 @@ test("official source APIs expose governed list and verified download contracts"
     ),
     "utf8",
   );
+  const adminCollectionRoute = fs.readFileSync(
+    new URL(
+      "../src/app/api/admin/compliance-official-sources/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const adminDownloadRoute = fs.readFileSync(
+    new URL(
+      "../src/app/api/admin/compliance-official-sources/[id]/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
 
   assert.match(collectionRoute, /sources:\s*sourcePage\.items/);
   assert.match(collectionRoute, /sourcePagination:/);
@@ -1015,4 +1188,36 @@ test("official source APIs expose governed list and verified download contracts"
   assert.match(downloadRoute, /private, no-store/);
   assert.match(downloadRoute, /X-Content-Type-Options/);
   assert.doesNotMatch(downloadRoute, /object_key|objectKey/);
+
+  assert.match(adminCollectionRoute, /requireAdminIdentity\(request, \[/);
+  assert.match(adminCollectionRoute, /"owner",\s*"admin"/);
+  assert.match(
+    adminCollectionRoute,
+    /resolveActiveCreditexOfficialSourceOrganisation/,
+  );
+  assert.match(adminCollectionRoute, /captureCreditexOfficialSourceArtifact/);
+  assert.match(adminCollectionRoute, /pendingIndependentCreditexReview: true/);
+  assert.match(adminCollectionRoute, /SOURCE_UPLOAD_LENGTH_REQUIRED/);
+  assert.match(adminCollectionRoute, /Number\.isSafeInteger\(contentLength\)/);
+  assert.match(adminCollectionRoute, /contentLength < 1/);
+  assert.match(adminCollectionRoute, /maximumRequestBytes/);
+  assert.ok(
+    adminCollectionRoute.indexOf("await request.formData()")
+      > adminCollectionRoute.indexOf("maximumRequestBytes"),
+  );
+  assert.doesNotMatch(adminCollectionRoute, /recordCreditexOfficialSourceReview/);
+  assert.doesNotMatch(adminCollectionRoute, /targetType|targetId|citationLocation/);
+  assert.doesNotMatch(adminCollectionRoute, /object_key|objectKey/);
+  assert.match(adminDownloadRoute, /downloadCreditexOfficialSource/);
+  assert.match(adminDownloadRoute, /X-Creditex-Official-Source-Receipt/);
+  assert.match(adminDownloadRoute, /private, no-store/);
+  assert.doesNotMatch(adminDownloadRoute, /object_key|objectKey/);
+
+  assert.match(
+    adminCaptureMigration,
+    /DROP TRIGGER IF EXISTS `compliance_official_source_artifacts_actor_guard`/,
+  );
+  assert.match(adminCaptureMigration, /organisation_code` = 'CREDITEX-AU'/);
+  assert.match(adminCaptureMigration, /administrator\.`role` IN \('owner', 'admin'\)/);
+  assert.doesNotMatch(adminCaptureMigration, /review_decisions|approved/);
 });

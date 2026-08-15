@@ -98,7 +98,12 @@ type Job = {
 };
 type CrmResult = { ok?: boolean; customers?: Customer[]; jobs?: Job[]; templates?: JobTemplate[]; teamMembers?: TeamMember[]; teamAccess?: boolean; error?: string };
 type DuplicateCandidate = { customerId: string; customerNumber: string; displayName: string; serviceSiteId: string; siteLabel: string; reasons: string[] };
-type CreateJobResult = { ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string; complianceIntentPlanned?: boolean; complianceIntentCount?: number; calendarSynced?: number; calendarFailed?: number; duplicateCandidates?: DuplicateCandidate[]; error?: string };
+type CreateJobResult = {
+  ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string;
+  complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
+  workPackBlockers?: Array<{ code: string; message: string }>;
+  calendarSynced?: number; calendarFailed?: number; duplicateCandidates?: DuplicateCandidate[]; error?: string;
+};
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
 type CrmIndexResult = { ok?: boolean; items?: Job[] | Customer[]; pagination?: IndexPagination; error?: string };
 type CrmDetailResult = { ok?: boolean; job?: Job; customer?: Customer | null; contacts?: CustomerContact[]; sites?: ServiceSite[]; jobs?: Job[]; error?: string };
@@ -1033,9 +1038,16 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       await load(); setRefreshNonce((value) => value + 1);
       const calendarFailed = Number(result.calendarFailed || 0);
       const calendarSynced = Number(result.calendarSynced || 0);
+      const workPackBlockerMessages = Array.from(new Set(
+        (result.workPackBlockers || []).map((item) => item.message).filter(Boolean),
+      ));
       const creationResults = [
         `${result.workNumber || "Job"} created and scheduled in TLink.`,
-        result.complianceIntentPlanned ? "The planned government activity is available to the assigned compliance team for setup review; no regulated case or certificate was created." : "",
+        result.complianceIntentPlanned && result.workPackReady
+          ? "The governed activity form was attached to its draft compliance case and is ready for the assigned technician. No certificate was created."
+          : result.complianceIntentPlanned
+            ? `The job is saved, but field work is blocked until Creditex completes the governed activity form${workPackBlockerMessages.length ? `: ${workPackBlockerMessages.join(" ")}` : "."}`
+            : "",
         calendarSynced ? `${calendarSynced} connected calendar ${calendarSynced === 1 ? "item" : "items"} updated.` : "",
         calendarFailed ? `Calendar sync needs another try. ${calendarFailed} ${calendarFailed === 1 ? "update was" : "updates were"} not completed.` : "",
       ].filter(Boolean).join(" ");

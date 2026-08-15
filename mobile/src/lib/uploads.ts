@@ -1,5 +1,3 @@
-import * as Crypto from 'expo-crypto';
-
 import { ApiError, apiRequest } from '@/lib/api';
 import { APP_VERSION, MOBILE_PLATFORM, UPLOAD_PART_BYTES } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
@@ -120,9 +118,7 @@ function unavailableSessionError(session: UploadSession) {
 }
 
 async function restartUpload(row: UploadRow) {
-  const clientUploadId = `upload-${Crypto.randomUUID()}`;
   await updateUpload(row.id, {
-    client_upload_id: clientUploadId,
     session_id: '',
     uploaded_parts: '[]',
     status: 'queued',
@@ -130,7 +126,6 @@ async function restartUpload(row: UploadRow) {
   });
   return {
     ...row,
-    client_upload_id: clientUploadId,
     session_id: '',
     uploaded_parts: '[]',
     status: 'queued' as const,

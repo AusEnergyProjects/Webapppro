@@ -96,6 +96,65 @@ const PRECISE_MULTIPLICATION_SPECIFICATION = {
   },
 };
 
+const SRES_PV_2026_SPECIFICATION = {
+  schemaVersion: CREDITEX_CALCULATOR_SPEC_SCHEMA,
+  key: "cer_sres_pv_2026",
+  version: 1,
+  title: "CER SRES solar PV entitlement for 2026 installations",
+  inputs: [
+    {
+      key: "rated_capacity_kw",
+      unit: "kW",
+      precision: 3,
+      minimum: "0.001",
+      maximum: "100",
+    },
+    {
+      key: "zone_rating",
+      unit: "STC/kW/year",
+      precision: 3,
+      minimum: "1.185",
+      maximum: "1.622",
+    },
+    {
+      key: "deeming_years",
+      unit: "year",
+      precision: 0,
+      minimum: "5",
+      maximum: "5",
+    },
+  ],
+  steps: [
+    {
+      kind: "multiply",
+      key: "annual_stcs",
+      leftSource: "rated_capacity_kw",
+      rightSource: "zone_rating",
+      leftUnit: "kW",
+      rightUnit: "STC/kW/year",
+      outputUnit: "STC/year",
+    },
+    {
+      kind: "multiply",
+      key: "deemed_stcs",
+      leftSource: "annual_stcs",
+      rightSource: "deeming_years",
+      leftUnit: "STC/year",
+      rightUnit: "year",
+      outputUnit: "STC",
+    },
+    {
+      kind: "rounding",
+      key: "whole_stcs",
+      source: "deemed_stcs",
+      unit: "STC",
+      mode: "floor",
+      decimalPlaces: 0,
+    },
+  ],
+  output: { source: "whole_stcs", unit: "STC" },
+};
+
 function assertCalculatorError(expectedCode) {
   return (error) => {
     assert.ok(error instanceof CreditexCalculatorError);
@@ -172,6 +231,32 @@ test("a validated generic specification evaluates deterministically and emits ca
   assert.equal(suiteOne.receiptHash, suiteTwo.receiptHash);
   assert.equal(suiteOne.engineContractHash, first.engineContractHash);
   assert.equal("implementationHash" in suiteOne, false);
+});
+
+test("binary fixed-decimal multiplication reproduces the governed 2026 CER PV vector", () => {
+  const receipt = evaluateCreditexCalculator(SRES_PV_2026_SPECIFICATION, {
+    rated_capacity_kw: { value: "6.6", unit: "kW" },
+    zone_rating: { value: "1.382", unit: "STC/kW/year" },
+    deeming_years: { value: "5", unit: "year" },
+  });
+  assert.deepEqual(receipt.output, { decimal: "45", unit: "STC" });
+  assert.equal(receipt.trace[0].input.decimal, "6.6");
+  assert.equal(receipt.trace[0].secondaryInput.decimal, "1.382");
+  assert.equal(receipt.trace[0].output.decimal, "9.1212");
+  assert.equal(receipt.trace[1].secondaryInput.decimal, "5");
+  assert.equal(receipt.trace[1].output.decimal, "45.606");
+  assert.match(receipt.receiptHash, /^sha256:[a-f0-9]{64}$/);
+
+  const suite = runCreditexCalculatorTestSuite(SRES_PV_2026_SPECIFICATION, [{
+    key: "cer_2026_6_6kw_zone_1_382",
+    inputs: {
+      rated_capacity_kw: { value: "6.6", unit: "kW" },
+      zone_rating: { value: "1.382", unit: "STC/kW/year" },
+      deeming_years: { value: "5", unit: "year" },
+    },
+    expected: { value: "45", unit: "STC" },
+  }]);
+  assert.equal(suite.passed, true);
 });
 
 test("unit mismatches fail at both specification and runtime boundaries", () => {

@@ -6,10 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
 import {
+  ensureAutomaticOfficialProductRegistryCurrent,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
   validateOfficialProductSelections,
+  verifyCreditexControlledProductPermissionArtifact,
 } from "../src/lib/creditex-official-product-registry-server.ts";
 import {
   CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
@@ -32,6 +34,20 @@ const sresMigration = fs.readFileSync(
 const officialMigration = fs.readFileSync(
   new URL(
     "../drizzle/0125_creditex_official_product_registry.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const refreshQueueMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0148_creditex_official_product_refresh_requests.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const streamStagingMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0149_creditex_official_product_stream_staging.sql",
     import.meta.url,
   ),
   "utf8",
@@ -120,6 +136,42 @@ function memoryArtifactStore() {
   };
 }
 
+async function retainControlledPermissionArtifact(
+  store,
+  {
+    organisationId = "creditex-org",
+    artifactId = "permission-artifact-42",
+    objectKey = `creditex/official-sources/${artifactId}.json`,
+  } = {},
+) {
+  const bytes = new TextEncoder().encode(JSON.stringify({
+    organisationId,
+    permission: "approved source reuse",
+  }));
+  const sha256 = await crypto.subtle.digest("SHA-256", bytes).then((digest) => (
+    [...new Uint8Array(digest)]
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("")
+  ));
+  const permission = {
+    organisationId,
+    artifactId,
+    sha256,
+    objectKey,
+    sizeBytes: bytes.byteLength,
+  };
+  await store.put(objectKey, bytes, {
+    httpMetadata: { contentType: "application/json" },
+    customMetadata: {
+      organisationId,
+      artifactId,
+      sha256,
+      custodyState: "pending_review",
+    },
+  });
+  return permission;
+}
+
 function fileArtifactStore() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "creditex-veu-r2-"));
   const objects = new Map();
@@ -165,6 +217,8 @@ function fixture(options = {}) {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(sresMigration);
   database.exec(officialMigration);
+  database.exec(refreshQueueMigration);
+  database.exec(streamStagingMigration);
   for (const guard of CREDITEX_OFFICIAL_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }
@@ -1290,6 +1344,111 @@ test("source receipts and staged R2 replays materialize only one source at a tim
   }, "an unchanged receipt is not parsed for a second staging pass");
 });
 
+test("streaming registry staging never materializes the complete product graph", async (t) => {
+  const recordCount = 1_201;
+  const sourceKey = "fixture-veu-streaming";
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  let directParseCalls = 0;
+  let maximumSupplementalBatch = 0;
+  let maximumLookup = 0;
+  let maximumRecordBatch = 0;
+  const streamSource = {
+    registryCode: "veu-approved-products",
+    sourceKey,
+    productKinds: ["veu_shower_rose"],
+    url: `https://example.test/${sourceKey}`,
+    minimumRecords: recordCount,
+    maximumBytes: 1_000,
+    expectedContentTypes: ["application/json"],
+    accept: "application/json",
+    licence: "fixture official licence",
+    productionMode: "automatic",
+    requiresOfficialEligibleFrom: true,
+    parse() {
+      directParseCalls += 1;
+      throw new Error("the aggregate parser must not run");
+    },
+    streamingParser: {
+      inspect() {
+        return recordCount;
+      },
+      *supplementalBatches() {
+        for (let offset = 0; offset < recordCount; offset += 500) {
+          const length = Math.min(500, recordCount - offset);
+          const batch = Array.from({ length }, (_, index) => ({
+            sourceRecordKey: `VEU-${String(offset + index).padStart(5, "0")}`,
+            value: { watts: 400 + ((offset + index) % 2) },
+          }));
+          maximumSupplementalBatch = Math.max(
+            maximumSupplementalBatch,
+            batch.length,
+          );
+          yield batch;
+        }
+      },
+      async *recordBatches(_bytes, _contentType, loadValues) {
+        for (let offset = 0; offset < recordCount; offset += 500) {
+          const length = Math.min(500, recordCount - offset);
+          const ids = Array.from({ length }, (_, index) => (
+            `VEU-${String(offset + index).padStart(5, "0")}`
+          ));
+          maximumLookup = Math.max(maximumLookup, ids.length);
+          const values = await loadValues(ids);
+          assert.equal(values.size, ids.length);
+          const records = ids.map((id) => ({
+            sourceKey,
+            sourceRecordKey: id,
+            productKind: "veu_shower_rose",
+            manufacturer: "",
+            brand: "Scale",
+            model: `Scale ${id}`,
+            series: "",
+            registrationNumber: id,
+            certificateNumber: "",
+            approvalStatus: "approved",
+            eligibleFrom: "2026-01-01",
+            eligibleTo: "",
+            availableInAustralia: true,
+            attributes: {
+              veuProductCategoryNumber: "17A",
+              watts: values.get(id).watts,
+            },
+          }));
+          maximumRecordBatch = Math.max(maximumRecordBatch, records.length);
+          yield records;
+        }
+      },
+    },
+  };
+  const result = await syncOfficialProductRegistry(d1, {
+    registryCode: "veu-approved-products",
+    title: "Streaming VEU fixture",
+    sources: [streamSource],
+    async fetchSources() {
+      return [{
+        sourceKey,
+        contentType: "application/json",
+        bytes: new TextEncoder().encode('{"stream":"fixture"}'),
+      }];
+    },
+  }, {
+    fetchImpl: async () => { throw new Error("direct fetch must not run"); },
+    artifactStore,
+    now: new Date("2026-08-09T00:00:00.000Z"),
+  });
+  assert.equal(result.recordCount, recordCount);
+  assert.equal(directParseCalls, 0);
+  assert.equal(maximumSupplementalBatch, 500);
+  assert.equal(maximumLookup, 500);
+  assert.equal(maximumRecordBatch, 500);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_product_stream_values`).get().count, 0);
+  assert.equal(database.prepare(`SELECT count(*) count
+    FROM compliance_official_products WHERE snapshot_id = ?`)
+    .get(result.snapshotId).count, recordCount);
+});
+
 test("product staging keeps every D1 JSON binding below the governed byte budget", async () => {
   const encoder = new TextEncoder();
   const insertPayloads = [];
@@ -1891,7 +2050,7 @@ test("UTC activation timestamps keep Australian regulator-date boundaries", asyn
   assert.equal(australianTenth.products[0].attributes.watts, 415);
 });
 
-test("record-count regressions and failed attempts quarantine the last snapshot", async () => {
+test("failed refreshes stay auditable while the last exact snapshot expires on its original TTL", async () => {
   const { d1, artifactStore } = fixture();
   await syncOfficialProductRegistry(d1, definition, {
     fetchImpl: fetchFixture(), artifactStore,
@@ -1915,14 +2074,187 @@ test("record-count regressions and failed attempts quarantine the last snapshot"
   const status = await loadOfficialProductRegistryStatus(d1, "cer-cec-products", {
     now: new Date("2026-08-09T00:00:01.000Z"),
   });
+  assert.equal(status.status, "current");
+  assert.equal(status.lastAttempt.status, "failed");
+  const withinTtl = await searchOfficialProducts(d1, {
+    productKind: "pv_module",
+    installationDate: "2026-08-09",
+    brand: "Bright Panel",
+  }, { now: new Date("2026-08-09T00:00:01.000Z") });
+  assert.equal(withinTtl.registry.status, "current");
+  assert.equal(withinTtl.matchCount, 1);
+
+  const expiredAt = new Date("2026-08-10T00:00:01.000Z");
+  const expired = await loadOfficialProductRegistryStatus(
+    d1,
+    "cer-cec-products",
+    { now: expiredAt },
+  );
+  assert.equal(expired.status, "stale");
+  assert.equal(expired.lastAttempt.status, "failed");
+  await assert.rejects(
+    searchOfficialProducts(d1, {
+      productKind: "pv_module",
+      installationDate: "2026-08-10",
+      brand: "Bright Panel",
+    }, { now: expiredAt }),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
+  );
+});
+
+test("a future-dated registry check is never treated as current", async () => {
+  const { d1, artifactStore } = fixture();
+  const checkedAt = new Date("2026-08-08T00:00:00.000Z");
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: checkedAt,
+  });
+  const beforeCheck = new Date(checkedAt.getTime() - 1);
+  const status = await loadOfficialProductRegistryStatus(
+    d1,
+    definition.registryCode,
+    { now: beforeCheck },
+  );
+  assert.equal(status.lastCheckedAt, checkedAt.toISOString());
+  assert.equal(status.status, "stale");
+  await assert.rejects(
+    searchOfficialProducts(d1, {
+      productKind: "pv_module",
+      installationDate: "2026-08-08",
+      brand: "Bright Panel",
+    }, { now: beforeCheck }),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
+  );
+});
+
+test("automatic recovery refreshes an expired registry from the exact official source", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const expiredAt = new Date("2026-08-10T00:00:01.000Z");
+  assert.equal(
+    (await loadOfficialProductRegistryStatus(d1, definition.registryCode, {
+      now: expiredAt,
+    })).status,
+    "stale",
+  );
+
+  const recovered = await ensureAutomaticOfficialProductRegistryCurrent(
+    d1,
+    definition,
+    {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: expiredAt,
+    },
+  );
+  assert.equal(recovered.status, "current");
+  assert.equal(recovered.lastCheckedAt, expiredAt.toISOString());
+  assert.equal(recovered.lastAttempt.status, "unchanged");
+  const search = await searchOfficialProducts(d1, {
+    productKind: "pv_module",
+    installationDate: "2026-08-10",
+    brand: "Bright Panel",
+  }, { now: expiredAt });
+  assert.equal(search.registry.status, "current");
+  assert.equal(search.matchCount, 1);
+});
+
+test("automatic recovery remains fail closed when the exact official source fails", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const expiredAt = new Date("2026-08-10T00:00:01.000Z");
+  await assert.rejects(
+    ensureAutomaticOfficialProductRegistryCurrent(d1, definition, {
+      fetchImpl: async () => {
+        throw new Error("fixture official source unavailable");
+      },
+      artifactStore,
+      now: expiredAt,
+    }),
+    expectedError("OFFICIAL_PRODUCT_SOURCE_UNAVAILABLE"),
+  );
+  const status = await loadOfficialProductRegistryStatus(
+    d1,
+    definition.registryCode,
+    { now: expiredAt },
+  );
   assert.equal(status.status, "stale");
   assert.equal(status.lastAttempt.status, "failed");
   await assert.rejects(
     searchOfficialProducts(d1, {
       productKind: "pv_module",
-      installationDate: "2026-08-09",
+      installationDate: "2026-08-10",
       brand: "Bright Panel",
-    }, { now: new Date("2026-08-09T00:00:01.000Z") }),
+    }, { now: expiredAt }),
+    expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
+  );
+});
+
+test("automatic recovery waits for one concurrent exact refresh and never serves stale rows", async () => {
+  const { database, d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const expiredAt = new Date("2026-08-10T00:00:01.000Z");
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    definition.registryCode,
+    "competing-refresh",
+    expiredAt.toISOString(),
+    new Date(expiredAt.getTime() + 60_000).toISOString(),
+  );
+  const competingRefresh = new Promise((resolve, reject) => {
+    setTimeout(() => {
+      database.prepare(`DELETE FROM compliance_official_product_sync_leases
+        WHERE registry_code = ?`).run(definition.registryCode);
+      syncOfficialProductRegistry(d1, definition, {
+        fetchImpl: fetchFixture(),
+        artifactStore,
+        now: expiredAt,
+      }).then(resolve, reject);
+    }, 5);
+  });
+  const [recovered] = await Promise.all([
+    ensureAutomaticOfficialProductRegistryCurrent(d1, definition, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: expiredAt,
+      waitForRefreshMs: 500,
+      pollIntervalMs: 10,
+    }),
+    competingRefresh,
+  ]);
+  assert.equal(recovered.status, "current");
+  assert.equal(recovered.lastAttempt.status, "unchanged");
+
+  database.prepare(`INSERT INTO compliance_official_product_sync_leases (
+    registry_code, lease_id, started_at, expires_at
+  ) VALUES (?, ?, ?, ?)`).run(
+    definition.registryCode,
+    "another-refresh",
+    new Date(expiredAt.getTime() + 48 * 60 * 60 * 1000 + 1).toISOString(),
+    new Date(expiredAt.getTime() + 48 * 60 * 60 * 1000 + 60_001).toISOString(),
+  );
+  const staleAgainAt = new Date(expiredAt.getTime() + 48 * 60 * 60 * 1000 + 1);
+  await assert.rejects(
+    ensureAutomaticOfficialProductRegistryCurrent(d1, definition, {
+      fetchImpl: fetchFixture(),
+      artifactStore,
+      now: staleAgainAt,
+      waitForRefreshMs: 0,
+    }),
     expectedError("OFFICIAL_PRODUCT_REGISTRY_STALE"),
   );
 });
@@ -2034,6 +2366,35 @@ test("exact retained bytes are re-read and corrupted custody fails closed", asyn
   );
 });
 
+test("reused R2 bytes reconcile exact source URL and licence metadata", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  const [key, retained] = artifactStore.objects.entries().next().value;
+  const expectedMetadata = { ...retained.customMetadata };
+  artifactStore.objects.set(key, {
+    ...retained,
+    customMetadata: {
+      ...retained.customMetadata,
+      sourceUrl: "https://untrusted.invalid/reused-object",
+      licence: "unreviewed licence",
+    },
+  });
+  const result = await syncOfficialProductRegistry(d1, definition, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T01:00:00.000Z"),
+  });
+  assert.equal(result.changed, false);
+  assert.deepEqual(
+    artifactStore.objects.get(key).customMetadata,
+    expectedMetadata,
+  );
+});
+
 test("licensed connectors cannot be silently promoted to automatic scraping", async () => {
   const { d1, artifactStore } = fixture();
   const licensed = {
@@ -2061,7 +2422,7 @@ test("CER-hosted CEC artifacts remain controlled manual until reuse permission i
     CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES.map(
       ({ registryCode }) => registryCode,
     ),
-    ["cer-cec-products"],
+    ["cer-cec-products", "wa-synergy-supported-solutions"],
   );
   assert.ok(CREDITEX_CER_CEC_PRODUCT_REGISTRY.sources.every((item) => (
     item.productionMode === "controlled_manual"
@@ -2083,6 +2444,190 @@ test("CER-hosted CEC artifacts remain controlled manual until reuse permission i
     ),
     expectedError("OFFICIAL_PRODUCT_SOURCE_INVALID"),
   );
+});
+
+test("controlled imports verify the exact retained permission bytes and identity", async () => {
+  const store = memoryArtifactStore();
+  const objectKey = "creditex/official-sources/private-permission-evidence.json";
+  const bytes = new TextEncoder().encode(JSON.stringify({
+    organisationId: "creditex-org",
+    permission: "approved source reuse",
+  }));
+  const sha256 = await crypto.subtle.digest("SHA-256", bytes).then((digest) => (
+    [...new Uint8Array(digest)]
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("")
+  ));
+  const permission = {
+    organisationId: "creditex-org",
+    artifactId: "permission-artifact-42",
+    sha256,
+    objectKey,
+    sizeBytes: bytes.byteLength,
+  };
+  await store.put(objectKey, bytes, {
+    httpMetadata: { contentType: "application/json" },
+    customMetadata: {
+      organisationId: permission.organisationId,
+      artifactId: permission.artifactId,
+      sha256,
+      custodyState: "pending_review",
+    },
+  });
+  await verifyCreditexControlledProductPermissionArtifact(store, permission);
+
+  for (const mutation of [
+    { sizeBytes: bytes.byteLength + 1 },
+    { sha256: "0".repeat(64) },
+    { organisationId: "another-org" },
+    { artifactId: "another-artifact" },
+  ]) {
+    await assert.rejects(
+      verifyCreditexControlledProductPermissionArtifact(store, {
+        ...permission,
+        ...mutation,
+      }),
+      (error) => (
+        error.code === "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED"
+        && !error.message.includes(objectKey)
+      ),
+    );
+  }
+
+  store.objects.get(objectKey).bytes[0] ^= 1;
+  await assert.rejects(
+    verifyCreditexControlledProductPermissionArtifact(store, permission),
+    (error) => (
+      error.code === "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED"
+      && !error.message.includes(objectKey)
+    ),
+  );
+});
+
+test("governed controlled import accepts only a complete reviewed artifact set", async () => {
+  const { database, d1, artifactStore } = fixture();
+  const permission = await retainControlledPermissionArtifact(artifactStore);
+  const controlledDefinition = {
+    ...definition,
+    sources: definition.sources.map((item) => ({
+      ...item,
+      productionMode: "controlled_manual",
+    })),
+    fetchSources: async () => definition.sources.map((item) => {
+      const bytes = new TextEncoder().encode(JSON.stringify(rows[item.sourceKey]));
+      return {
+        sourceKey: item.sourceKey,
+        contentType: "application/json",
+        bytes,
+      };
+    }),
+  };
+  await assert.rejects(
+    syncOfficialProductRegistry(d1, controlledDefinition, {
+      artifactStore,
+      controlledImportReview: {
+        importedByUid: "same-admin",
+        governanceIdentityVerified: true,
+        permissionArtifactId: "permission-artifact-42",
+        permissionArtifactSha256: "e".repeat(64),
+        permissionArtifactObjectKey:
+          "creditex/official-sources/permission-artifact-42.json",
+        permissionReviewDecisionId: "permission-review-42",
+        permissionReviewedByUid: "same-admin",
+      },
+      now: new Date("2026-08-08T00:00:00.000Z"),
+    }),
+    expectedError("OFFICIAL_PRODUCT_REQUEST_INVALID"),
+  );
+  const result = await syncOfficialProductRegistry(d1, controlledDefinition, {
+    artifactStore,
+    fetchImpl: async () => {
+      throw new Error("controlled import must never fetch a network source");
+    },
+    controlledImportReview: {
+      importedByUid: "import-admin",
+      governanceIdentityVerified: true,
+      permissionArtifactId: permission.artifactId,
+      permissionArtifactSha256: permission.sha256,
+      permissionArtifactObjectKey: permission.objectKey,
+      permissionReviewDecisionId: "permission-review-42",
+      permissionReviewedByUid: "governance-admin",
+    },
+    controlledImportPermissionArtifact: permission,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  assert.equal(result.changed, true);
+  const snapshot = database.prepare(`SELECT source_manifest_json
+    FROM compliance_official_product_snapshots
+    WHERE registry_code = ? AND status = 'current'`).get(definition.registryCode);
+  const manifest = JSON.parse(snapshot.source_manifest_json);
+  assert.deepEqual(manifest.controlledImportReview, {
+    contract: "creditex-controlled-product-import-review/v1",
+    importedByUid: "import-admin",
+    reviewedAt: "2026-08-08T00:00:00.000Z",
+    permissionArtifactId: permission.artifactId,
+    permissionArtifactSha256: permission.sha256,
+    permissionArtifactObjectKey: permission.objectKey,
+    permissionReviewDecisionId: "permission-review-42",
+    permissionReviewedByUid: "governance-admin",
+  });
+});
+
+test("controlled imports re-verify permission custody at the activation boundary", async () => {
+  for (const mode of ["mutate", "delete"]) {
+    const { database, d1, artifactStore } = fixture();
+    const permission = await retainControlledPermissionArtifact(artifactStore, {
+      artifactId: `permission-${mode}`,
+    });
+    await verifyCreditexControlledProductPermissionArtifact(
+      artifactStore,
+      permission,
+    );
+    const controlledDefinition = {
+      ...definition,
+      sources: definition.sources.map((item) => ({
+        ...item,
+        productionMode: "controlled_manual",
+      })),
+      fetchSources: async () => {
+        if (mode === "delete") {
+          artifactStore.objects.delete(permission.objectKey);
+        } else {
+          artifactStore.objects.get(permission.objectKey).bytes[0] ^= 1;
+        }
+        return definition.sources.map((item) => ({
+          sourceKey: item.sourceKey,
+          contentType: "application/json",
+          bytes: new TextEncoder().encode(JSON.stringify(rows[item.sourceKey])),
+        }));
+      },
+    };
+    await assert.rejects(
+      syncOfficialProductRegistry(d1, controlledDefinition, {
+        artifactStore,
+        controlledImportPermissionArtifact: permission,
+        controlledImportReview: {
+          importedByUid: "import-admin",
+          governanceIdentityVerified: true,
+          permissionArtifactId: permission.artifactId,
+          permissionArtifactSha256: permission.sha256,
+          permissionArtifactObjectKey: permission.objectKey,
+          permissionReviewDecisionId: "permission-review-42",
+          permissionReviewedByUid: "governance-admin",
+        },
+        now: new Date("2026-08-08T00:00:00.000Z"),
+      }),
+      expectedError("OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED"),
+      `${mode}d permission evidence must block activation`,
+    );
+    assert.equal(
+      database.prepare(`SELECT count(*) count
+        FROM compliance_official_product_snapshots
+        WHERE status IN ('current', 'staging')`).get().count,
+      0,
+      `${mode}d permission evidence must leave no active or staging snapshot`,
+    );
+  }
 });
 
 test("missing, stale and out-of-window selections fail closed", async () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CREDITEX_VEU_CATEGORY_PRODUCT_KIND,
+  CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
   CREDITEX_VEU_DATASET_ID,
   CREDITEX_VEU_DIM_PRODUCT_SCHEMA,
   CREDITEX_VEU_MODEL_ID,
@@ -12,9 +13,16 @@ import {
   CREDITEX_VEU_QUERY_FIELD_TYPES,
   CREDITEX_VEU_REFRESH_SCHEMA,
   CREDITEX_VEU_REPORT_ID,
+  CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT,
+  CREDITEX_VEU_STREAMING_PARSER,
   CREDITEX_VEU_SUPPLEMENTAL_QUERIES,
   parseCreditexVeuProductArtifact,
 } from "../src/lib/creditex-veu-product-parser.ts";
+import {
+  CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES,
+  CREDITEX_VEU_MAX_PAGES,
+  CREDITEX_VEU_PAGE_SIZE,
+} from "../src/lib/creditex-veu-product-sources.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -458,6 +466,184 @@ function mutateArtifact(bytes, mutation) {
   mutation(value);
   return textEncoder.encode(JSON.stringify(value));
 }
+
+function streamArtifact(overrides = {}) {
+  const legacy = JSON.parse(new TextDecoder().decode(artifact(overrides)));
+  const { pages, supplements, ...header } = legacy;
+  return textEncoder.encode([
+    JSON.stringify({
+      recordType: "header",
+      ...header,
+      contract: CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT,
+    }),
+    ...pages.map((page) => JSON.stringify({ recordType: "page", ...page })),
+    ...supplements.map((supplement) => JSON.stringify({
+      recordType: "supplement",
+      ...supplement,
+    })),
+    "",
+  ].join("\n"));
+}
+
+function powerBiRestartLiteral(value, type) {
+  if (value === null) return "null";
+  if (type === 1) return `'${String(value).replaceAll("'", "''")}'`;
+  if (type === 3) return `${value}D`;
+  if (type === 5) return value ? "true" : "false";
+  if (type === 7) {
+    return `datetime'${new Date(value).toISOString().slice(0, -1)}'`;
+  }
+  throw new Error(`Unsupported restart type ${type}`);
+}
+
+function boundedProductionStreamArtifact(recordCount) {
+  const categories = Object.fromEntries([
+    "",
+    ...Object.keys(CREDITEX_VEU_CATEGORY_PRODUCT_KIND),
+  ].map((category) => [category, category === "22A" ? recordCount : 0]));
+  const lines = [JSON.stringify({
+    recordType: "header",
+    contract: CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
+    sourceKey: CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY,
+    reportId: CREDITEX_VEU_REPORT_ID,
+    datasetId: CREDITEX_VEU_DATASET_ID,
+    modelId: CREDITEX_VEU_MODEL_ID,
+    sourceRefreshedAt: "2026-08-08T20:17:49.000Z",
+    queryFields: CREDITEX_VEU_QUERY_FIELDS,
+    controls: {
+      total: recordCount,
+      statuses: { Approved: recordCount, Legacy: 0 },
+      categories,
+      totalResponse: aggregateResponse(recordCount),
+      statusResponse: groupedResponse("Product_Status__c", [
+        ["Approved", recordCount],
+        ["Legacy", 0],
+      ]),
+      categoryResponse: groupedResponse("Product_Category_Number__c", [["22A", recordCount]]),
+      refreshResponse: refreshResponse(),
+    },
+  })];
+  lines.push(JSON.stringify({
+    recordType: "control",
+    key: "modelResponse",
+    response: modelResponse(),
+  }));
+  lines.push(JSON.stringify({
+    recordType: "control",
+    key: "conceptualSchemaResponse",
+    response: conceptualSchemaResponse(),
+  }));
+  let afterId = null;
+  for (let offset = 0; offset < recordCount; offset += CREDITEX_VEU_PAGE_SIZE) {
+    const length = Math.min(CREDITEX_VEU_PAGE_SIZE, recordCount - offset);
+    const rows = Array.from({ length }, (_, pageIndex) => {
+      const index = offset + pageIndex;
+      return [
+        `a0O${String(index).padStart(12, "0")}`,
+        String(index).padStart(9, "0"),
+        null,
+        "22A",
+        "activity-22",
+        "Scale Brand",
+        `Scale model ${index}`,
+        "Approved",
+        epoch("2026-01-01"),
+        null,
+        400,
+        6,
+        300,
+        null,
+        null,
+        "GEMS 2019",
+        null,
+      ];
+    });
+    const raw = JSON.parse(compressedProductResponse(rows));
+    const dataset = raw.results[0].result.data.dsr.DS[0];
+    const continuation = offset + length < recordCount;
+    if (continuation) {
+      dataset.IC = false;
+      dataset.RT = [rows.at(-1).map((value, index) => (
+        powerBiRestartLiteral(value, CREDITEX_VEU_QUERY_FIELD_TYPES[index])
+      ))];
+    }
+    lines.push(JSON.stringify({
+      recordType: "page",
+      afterId,
+      response: JSON.stringify(raw),
+    }));
+    afterId = rows.at(-1)[0];
+  }
+  for (const definition of CREDITEX_VEU_SUPPLEMENTAL_QUERIES) {
+    lines.push(JSON.stringify({
+      recordType: "supplement",
+      key: definition.key,
+      queryFields: definition.fields,
+      expectedCount: 0,
+    }));
+  }
+  lines.push("");
+  return textEncoder.encode(lines.join("\n"));
+}
+
+test("VEU acquisition has a fixed Worker heap envelope and exact page capacity", () => {
+  assert.equal(CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES, 32_000_000);
+  assert.equal(CREDITEX_VEU_PAGE_SIZE, 500);
+  assert.equal(CREDITEX_VEU_MAX_PAGES, 200);
+  assert.ok(CREDITEX_VEU_PAGE_SIZE * CREDITEX_VEU_MAX_PAGES >= 70_000);
+  assert.deepEqual(
+    parseCreditexVeuProductArtifact(streamArtifact(), "application/json"),
+    parseCreditexVeuProductArtifact(artifact(), "application/json"),
+  );
+});
+
+test("VEU production-scale stream keeps every parse and D1 lookup batch bounded", async () => {
+  const recordCount = 75_123;
+  const bytes = boundedProductionStreamArtifact(recordCount);
+  assert.ok(bytes.byteLength < CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES);
+  assert.equal(
+    CREDITEX_VEU_STREAMING_PARSER.inspect(bytes, "application/json"),
+    recordCount,
+  );
+  assert.deepEqual(
+    [...CREDITEX_VEU_STREAMING_PARSER.supplementalBatches(
+      bytes,
+      "application/json",
+    )],
+    [],
+  );
+  let loaded = 0;
+  let batches = 0;
+  let maximumLookup = 0;
+  let maximumRecords = 0;
+  for await (const records of CREDITEX_VEU_STREAMING_PARSER.recordBatches(
+    bytes,
+    "application/json",
+    async (sourceRecordKeys) => {
+      batches += 1;
+      maximumLookup = Math.max(maximumLookup, sourceRecordKeys.length);
+      return new Map();
+    },
+  )) {
+    maximumRecords = Math.max(maximumRecords, records.length);
+    loaded += records.length;
+  }
+  assert.equal(loaded, recordCount);
+  assert.equal(batches, Math.ceil(recordCount / CREDITEX_VEU_PAGE_SIZE));
+  assert.ok(maximumLookup <= 500);
+  assert.ok(maximumRecords <= 500);
+});
+
+test("VEU v3 acquisition rejects incomplete streamed custody", () => {
+  const complete = streamArtifact();
+  assert.throws(
+    () => parseCreditexVeuProductArtifact(
+      complete.subarray(0, complete.byteLength - 1),
+      "application/json",
+    ),
+    /stream artifact is incomplete/,
+  );
+});
 
 test("VEU artifact maps exact identities, categories, dates, statuses and formula fields", () => {
   const records = parseCreditexVeuProductArtifact(

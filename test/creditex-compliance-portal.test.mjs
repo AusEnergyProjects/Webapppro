@@ -223,7 +223,8 @@ test("first access installs schema guards in quota-safe batches and retries visi
   assert.match(schemaGuards, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
   assert.match(sessionRoute, /code: "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
   assert.match(sessionRoute, /"Retry-After": "1"/);
-  assert.match(portal, /for \(let attempt = 0; attempt < 10; attempt \+= 1\)/);
+  assert.match(portal, /for \(let attempt = 0; attempt < 20; attempt \+= 1\)/);
+  assert.match(portal, /Preparing governed compliance controls \(\$\{attempt \+ 1\} of 20\)/);
   assert.match(portal, /result\.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"/);
   assert.match(portal, /response\.headers\.get\("Retry-After"\)/);
   assert.match(portal, /Preparing governed compliance controls/);

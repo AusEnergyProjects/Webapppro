@@ -28,6 +28,12 @@ test("verified installers can open the governed rebate calculator from the trade
   assert.match(workspace, /Calculate before you quote/);
   assert.match(workspace, /<CreditexAllProgramCalculator[\s\S]*api=\{api\}[\s\S]*role="trade"[\s\S]*documentDraftOwnerUid=\{user\.uid\}/);
   assert.match(workspace, /requestWithCreditexTokenRecovery/);
+  assert.match(
+    workspace,
+    /options: \{ requestTimeoutMs\?: number \} = \{\}/,
+  );
+  assert.match(workspace, /options\.requestTimeoutMs \?\? 20_000/);
+  assert.match(workspace, /requestTimeoutMs \/ 1_000/);
 });
 
 test("Firebase UID transitions synchronously reset protected dashboard state", () => {
@@ -63,11 +69,15 @@ test("Firebase UID transitions synchronously reset protected dashboard state", (
 test("calculator preparation state has deterministic retry and terminal values", () => {
   assert.equal(
     tradeRebatePreparingMessage(1),
-    "Preparing governed calculator controls (1 of 10)...",
+    "Preparing governed calculator controls (1 of 20)...",
   );
   assert.equal(
     tradeRebatePreparingMessage(9),
-    "Preparing governed calculator controls (9 of 10)...",
+    "Preparing governed calculator controls (9 of 20)...",
+  );
+  assert.equal(
+    tradeRebatePreparingMessage(20),
+    "Preparing governed calculator controls (20 of 20)...",
   );
   assert.equal(tradeRebatePreparingMessage(null), "");
   assert.match(
@@ -92,7 +102,7 @@ test("calculator APIs keep trade access verified while public reads are quote-on
   }
 });
 
-test("trade access remains estimate-only and cannot refresh an official registry", () => {
+test("trade calculator separates exact governed results from certificate and provider outcomes", () => {
   assert.match(calculator, /role: "admin" \| "case_manager" \| "reviewer" \| "auditor" \| "trade"/);
   assert.match(calculator, /role === "admin" && registryRefreshContract/);
   assert.match(calculator, /Refresh NSW official products/);
@@ -105,7 +115,15 @@ test("trade access remains estimate-only and cannot refresh an official registry
   assert.match(calculator, /requestTimeoutMs: 300_000/);
   assert.doesNotMatch(calculator, /registryCode: "all"/);
   assert.match(sresCalculator, /role === "admin" && !productBlocker/);
-  assert.match(workspace, /do not create,[\s\S]*register or trade certificates/);
+  assert.match(
+    workspace,
+    /Successful governed results are exact for[\s\S]*approved product snapshot[\s\S]*formula\/source\s*version/,
+  );
+  assert.match(
+    workspace,
+    /do not create or trade certificates[\s\S]*do not record[\s\S]*provider acceptance/,
+  );
+  assert.doesNotMatch(workspace, /Results remain estimates|CERTIFICATE ESTIMATES/);
   assert.match(officialProductsRoute, /allowedRoles: \["admin"\]/);
   assert.match(stcProductsRoute, /allowedRoles: \["admin"\]/);
   assert.doesNotMatch(workspace, /refreshRegistry|Refresh now/);

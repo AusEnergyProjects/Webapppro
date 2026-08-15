@@ -32,6 +32,7 @@ import {
 import {
   CreditexGovernedProgramCalculator,
   type CreditexGovernedEstimate,
+  creditexCalculationBoundaryMessage,
   creditexQuoteEvidenceInput,
 } from "./CreditexGovernedProgramCalculator";
 import {
@@ -192,7 +193,7 @@ function CreditexCertificateGrossValueResult({
     <section
       className={styles.estimateResult}
       aria-live="polite"
-      aria-label="Estimated gross certificate value"
+      aria-label="Reference gross certificate value"
     >
       <header>
         <div>
@@ -203,7 +204,7 @@ function CreditexCertificateGrossValueResult({
             {" "}= {certificateMoney(value.grossValueCents)} gross*
           </strong>
         </div>
-        <b>Estimate only</b>
+        <b>Market reference only</b>
       </header>
       <div className={styles.estimateResolution}>
         <span>
@@ -249,9 +250,14 @@ type LocalEstimate = {
   };
   certificateActionEnabled: false;
   operatorMessage: string;
+  eligibilityWarnings?: Array<{
+    inputKey?: string;
+    message: string;
+  }>;
   receiptHash: string;
   approvedProducts?: Array<{
     id: string;
+    snapshotId: string;
     productKind: CreditexOfficialProductKind;
     brand: string;
     manufacturer: string;
@@ -265,6 +271,131 @@ type LocalEstimate = {
   }>;
   registryReceiptHash?: string;
 };
+
+function CreditexLocalProgramResult({ estimate }: { estimate: LocalEstimate }) {
+  const approvedProducts = estimate.approvedProducts || [];
+  const approvedProductSnapshotIds = Array.from(new Set(
+    approvedProducts
+      .map((product) => (
+        typeof product.snapshotId === "string" ? product.snapshotId.trim() : ""
+      ))
+      .filter(Boolean),
+  ));
+  const provenanceComplete = Boolean(
+    estimate.effectiveDate
+    && estimate.formulaKey
+    && estimate.sourceVersion
+    && approvedProducts.every((product) => (
+      typeof product.snapshotId === "string" && Boolean(product.snapshotId.trim())
+    )),
+  );
+
+  return (
+    <section className={styles.estimateResult} aria-live="polite">
+      <header>
+        <div>
+          <span>Calculated quote-planning amount</span>
+          <strong>${estimate.output.quantity}</strong>
+        </div>
+        <b>{provenanceComplete
+          ? "Source-verified result"
+          : "Calculation provenance incomplete"}</b>
+      </header>
+      <div className={styles.estimateResolution}>
+        {provenanceComplete ? (
+          <span>
+            Exact, source-verified calculation for the selected inputs and
+            installation date {estimate.effectiveDate}.
+          </span>
+        ) : (
+          <span>
+            The calculation returned a result, but its complete date, product
+            snapshot or source-version provenance is unavailable.
+          </span>
+        )}
+        <span>
+          Approved product snapshot:{" "}
+          {approvedProductSnapshotIds.length > 0
+            ? approvedProductSnapshotIds.join(", ")
+            : "Not used by this calculation"}.
+        </span>
+        <span>
+          Formula/source version: {estimate.formulaKey || "not recorded"}
+          {" | "}{estimate.sourceVersion || "not recorded"}.
+        </span>
+      </div>
+      {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
+        <div className={styles.estimateResolution}>
+          {estimate.approvedProducts.map((product) => (
+            <strong key={product.id}>
+              {[product.brand || product.manufacturer, product.model]
+                .filter(Boolean)
+                .join(" ")}
+            </strong>
+          ))}
+        </div>
+      )}
+      <p>
+        This confirms the calculation only. Final eligibility and evidence must
+        still be confirmed. Any claim, certificate creation and provider
+        acceptance remain separate workflows.
+      </p>
+      <details>
+        <summary>Calculation details</summary>
+        <ol>
+          {estimate.trace.map((step) => (
+            <li key={step.key}>
+              <div>
+                <strong>{step.label}</strong>
+                <span>{step.operation}</span>
+              </div>
+              <b>{step.output} {step.unit}</b>
+            </li>
+          ))}
+        </ol>
+        {estimate.productRegistryRequirements.length > 0 && (
+          <p>
+            Product eligibility required: {estimate.productRegistryRequirements.join("; ")}.
+          </p>
+        )}
+        {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
+          <p>
+            {estimate.approvedProducts.map((product) => (
+              `${officialProductKindLabel(product.productKind)}: ${creditexProductOptionLabel(product)}`
+            )).join("; ")}
+          </p>
+        )}
+        {creditexCalculationBoundaryMessage(estimate.operatorMessage) && (
+          <p>
+            <strong>Eligibility boundary:</strong>{" "}
+            {creditexCalculationBoundaryMessage(estimate.operatorMessage)}
+          </p>
+        )}
+        {estimate.eligibilityWarnings && estimate.eligibilityWarnings.length > 0 && (
+          <ul>
+            {estimate.eligibilityWarnings.map((warning, index) => (
+              <li key={`${warning.inputKey || "eligibility"}:${index}`}>
+                {warning.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        <footer>
+          <a
+            href={estimate.officialSourceUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open official source
+          </a>
+          <code title={estimate.registryReceiptHash || estimate.receiptHash}>
+            Receipt {(estimate.registryReceiptHash || estimate.receiptHash).slice(0, 22)}...
+          </code>
+        </footer>
+      </details>
+    </section>
+  );
+}
 
 function effectiveDate(program: CreditexLocalProgramDefinition) {
   const today = todayIso();
@@ -454,7 +585,7 @@ function CreditexLocalProgramCalculator({
         setError(
           caught instanceof Error
             ? caught.message
-            : "The program estimate could not be completed safely.",
+            : "The program calculation could not be completed safely.",
         );
       }
     } finally {
@@ -527,9 +658,12 @@ function CreditexLocalProgramCalculator({
     >
       <header>
         <div>
-          <span>{program.jurisdiction} REBATE ESTIMATE</span>
+          <span>{program.jurisdiction} QUOTE CALCULATION</span>
           <h4 id="local-program-estimator-title">{program.name}</h4>
-          <small>Estimate only. Final eligibility is checked before any claim.</small>
+          <small>
+            Source-pinned calculation for quote planning. Final eligibility and
+            any claim or provider acceptance are checked separately.
+          </small>
         </div>
       </header>
 
@@ -603,72 +737,12 @@ function CreditexLocalProgramCalculator({
         )}
 
         <button type="submit" disabled={busy}>
-          {busy ? "Calculating..." : "Calculate rebate estimate"}
+          {busy ? "Calculating..." : "Calculate source-verified result"}
         </button>
       </form>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
-      {estimate && (
-        <section className={styles.estimateResult} aria-live="polite">
-          <header>
-            <div>
-              <span>{estimate.output.label}</span>
-              <strong>${estimate.output.quantity}</strong>
-            </div>
-            <b>Estimate only</b>
-          </header>
-          {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
-            <div className={styles.estimateResolution}>
-              {estimate.approvedProducts.map((product) => (
-                <strong key={product.id}>
-                  {[product.brand || product.manufacturer, product.model]
-                    .filter(Boolean)
-                    .join(" ")}
-                </strong>
-              ))}
-            </div>
-          )}
-          <details>
-            <summary>Calculation details</summary>
-            <ol>
-              {estimate.trace.map((step) => (
-                <li key={step.key}>
-                  <div>
-                    <strong>{step.label}</strong>
-                    <span>{step.operation}</span>
-                  </div>
-                  <b>{step.output} {step.unit}</b>
-                </li>
-              ))}
-            </ol>
-            {estimate.productRegistryRequirements.length > 0 && (
-              <p>
-                Product eligibility required: {estimate.productRegistryRequirements.join("; ")}.
-              </p>
-            )}
-            {estimate.approvedProducts && estimate.approvedProducts.length > 0 && (
-              <p>
-                {estimate.approvedProducts.map((product) => (
-                  `${officialProductKindLabel(product.productKind)}: ${creditexProductOptionLabel(product)}`
-                )).join("; ")}
-              </p>
-            )}
-            <p>{estimate.operatorMessage}</p>
-            <footer>
-              <a
-                href={estimate.officialSourceUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open official source
-              </a>
-              <code title={estimate.registryReceiptHash || estimate.receiptHash}>
-                Receipt {(estimate.registryReceiptHash || estimate.receiptHash).slice(0, 22)}...
-              </code>
-            </footer>
-          </details>
-        </section>
-      )}
+      {estimate && <CreditexLocalProgramResult estimate={estimate} />}
     </section>
   );
 }
@@ -785,7 +859,10 @@ export function CreditexAllProgramCalculator({
         <div>
           <span>REBATE CALCULATOR</span>
           <h4>Choose a program</h4>
-          <small>Fast quote estimate using official scheme data.</small>
+          <small>
+            Quote planning with official scheme data. Successful governed results
+            show their exact calculation and product provenance.
+          </small>
         </div>
         <label>
           Program

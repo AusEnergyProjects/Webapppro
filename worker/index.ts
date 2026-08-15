@@ -32,20 +32,15 @@ import {
 } from "../src/lib/public-plan-delivery-retry";
 import { createOpportunityFromLead } from "../src/lib/opportunity-server";
 import {
-  syncCerSresProductRegistry,
   type CreditexSresArtifactStore,
 } from "../src/lib/creditex-sres-registry-server";
 import {
-  CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
-  creditexCecBatteryConnectorConfigurationIssue,
-  creditexAutomaticProductRegistry,
-} from "../src/lib/creditex-official-product-registry-definitions";
-import {
-  syncOfficialProductRegistry,
   type CreditexOfficialProductArtifactStore,
 } from "../src/lib/creditex-official-product-registry-server";
-import { matchesAustralianRegulatorClock } from "../src/lib/creditex-australian-regulator-date";
-import { ensureCreditexProductRegistrySchemaGuards } from "../src/lib/creditex-product-registry-schema-guards";
+import {
+  creditexAutomaticProductRegistryMaintenanceTargets,
+  maintainNextCreditexProductRegistry,
+} from "../src/lib/creditex-product-registry-maintenance";
 import { ensureTlinkSchemaGuards } from "../src/lib/tlink-schema-guards";
 import { generateDueServiceJobs } from "../src/lib/trade-recurring-jobs-server";
 import { cleanupUnreferencedTradeIssuedDocuments } from "../src/lib/trade-issued-document-cleanup";
@@ -71,9 +66,6 @@ const LEGACY_SITE_HOST = "aea-energy-comparison.info294029.chatgpt.site";
 const CANONICAL_SITE_HOST = "compare.ausenergyassessments.com";
 const NOTIFICATION_DELIVERY_CRON = "* * * * *";
 const DAILY_MAINTENANCE_CRON = "15 20 * * *";
-const SRES_REGISTRY_CRON = "5 13,14 * * *";
-const OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 * * *";
-const VEU_PRODUCT_REGISTRY_CODE = "veu-approved-products";
 
 type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 
@@ -287,8 +279,9 @@ function queueBackgroundDispatches(
     );
   }
   if (request.method === "GET" && url.pathname === "/api/health" && response.ok) {
+    const database = getD1();
     ctx.waitUntil(
-      drainTradeQuoteDeliveries({ db: getD1(), limit: 10 })
+      drainTradeQuoteDeliveries({ db: database, limit: 10 })
         .then(() => undefined)
         .catch((error) => {
           console.error(
@@ -305,14 +298,14 @@ function queueBackgroundDispatches(
     const bucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
     if (bucket) {
       ctx.waitUntil(
-        drainTradeTeamMemberFileCleanup({ db: getD1(), bucket })
+        drainTradeTeamMemberFileCleanup({ db: database, bucket })
           .then(() => undefined)
           .catch((error) => {
             console.error("Team member file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
           }),
       );
       ctx.waitUntil(
-        drainTradeCrmJobMediaCleanup({ db: getD1(), bucket })
+        drainTradeCrmJobMediaCleanup({ db: database, bucket })
           .then(() => undefined)
           .catch((error) => {
             console.error("Accepted job file cleanup failed.", error instanceof Error ? error.message : "Unknown error");
@@ -396,7 +389,25 @@ const worker = {
     if (controller.cron === NOTIFICATION_DELIVERY_CRON) {
       const teamMemberBucket = (workerEnv as { EVIDENCE?: TradeTeamMemberCleanupBucket }).EVIDENCE;
       const documentExpiryEmail = serviceReminderProviderConfiguration().email;
+      const registryArtifactStore = (workerEnv as {
+        EVIDENCE?: CreditexOfficialProductArtifactStore
+          & CreditexSresArtifactStore;
+      }).EVIDENCE;
+      const registryEnvironment = workerEnv as Readonly<Record<string, unknown>>;
       tasks.push(
+        maintainNextCreditexProductRegistry({
+          database: getD1(),
+          now: new Date(controller.scheduledTime),
+          targets: creditexAutomaticProductRegistryMaintenanceTargets({
+            artifactStore: registryArtifactStore,
+            environment: registryEnvironment,
+          }),
+        }).catch((error) => {
+          console.error(
+            "Official product registry scheduled refresh failed.",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+        }),
         ensureTlinkSchemaGuards(getD1()).catch((error) => {
           console.error("TLink schema guard installation failed.", error instanceof Error ? error.message : "Unknown error");
           throw error;
@@ -459,96 +470,6 @@ const worker = {
         }),
         syncCertificatePriceHistory(db).catch((error) => {
           console.error("Certificate price refresh failed.", error instanceof Error ? error.message : "Unknown error");
-        }),
-      );
-    }
-    if (
-      controller.cron === SRES_REGISTRY_CRON
-      && matchesAustralianRegulatorClock(controller.scheduledTime, 0, 5)
-    ) {
-      const db = getD1();
-      const artifactStore = (workerEnv as {
-        EVIDENCE?: CreditexSresArtifactStore;
-      }).EVIDENCE;
-      tasks.push(
-        (async () => {
-          await ensureCreditexProductRegistrySchemaGuards(db);
-          await syncCerSresProductRegistry(db, { artifactStore });
-        })().catch((error) => {
-          console.error("CER SRES product registry refresh failed.", error instanceof Error ? error.message : "Unknown error");
-          throw error;
-        }),
-      );
-    }
-    if (
-      controller.cron === OFFICIAL_PRODUCT_REGISTRY_CRON
-      && matchesAustralianRegulatorClock(controller.scheduledTime, 0, 25)
-    ) {
-      const db = getD1();
-      const artifactStore = (workerEnv as {
-        EVIDENCE?: CreditexOfficialProductArtifactStore;
-      }).EVIDENCE;
-      tasks.push(
-        (async () => {
-          await ensureCreditexProductRegistrySchemaGuards(db);
-          for (const definition of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
-            if (definition.registryCode === VEU_PRODUCT_REGISTRY_CODE) continue;
-            await syncOfficialProductRegistry(db, definition, {
-              artifactStore,
-            });
-          }
-          const environment = workerEnv as Readonly<Record<string, unknown>>;
-          const cecConfigurationIssue =
-            creditexCecBatteryConnectorConfigurationIssue(environment);
-          if (cecConfigurationIssue) {
-            console.error(cecConfigurationIssue);
-          }
-          const licensedCecBattery = creditexAutomaticProductRegistry(
-            "cec-products",
-            workerEnv as Readonly<Record<string, unknown>>,
-          );
-          if (licensedCecBattery) {
-            await syncOfficialProductRegistry(db, licensedCecBattery, {
-              artifactStore,
-            });
-          }
-        })().catch((error) => {
-          console.error(
-            "Official product registry refresh failed.",
-            error instanceof Error ? error.message : "Unknown error",
-          );
-          throw error;
-        }),
-      );
-    }
-    // Keep the VEU refresh on the recurring scheduler so it does not depend on
-    // a separate cron event being provisioned by the hosting platform.
-    if (
-      controller.cron === NOTIFICATION_DELIVERY_CRON
-      && matchesAustralianRegulatorClock(controller.scheduledTime, 7, 25)
-    ) {
-      const db = getD1();
-      const artifactStore = (workerEnv as {
-        EVIDENCE?: CreditexOfficialProductArtifactStore;
-      }).EVIDENCE;
-      tasks.push(
-        (async () => {
-          await ensureCreditexProductRegistrySchemaGuards(db);
-          const definition = CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES.find(
-            (candidate) => candidate.registryCode === VEU_PRODUCT_REGISTRY_CODE,
-          );
-          if (!definition) {
-            throw new Error("VEU product registry definition is unavailable.");
-          }
-          await syncOfficialProductRegistry(db, definition, {
-            artifactStore,
-          });
-        })().catch((error) => {
-          console.error(
-            "VEU product registry refresh failed.",
-            error instanceof Error ? error.message : "Unknown error",
-          );
-          throw error;
         }),
       );
     }

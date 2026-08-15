@@ -3,7 +3,12 @@
 import type { User } from "firebase/auth";
 import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { SearchableLookup, type SearchableLookupOption } from "./SearchableLookup";
-import { nextAppointmentSlot } from "@/lib/trade-schedule";
+import { TradeScheduleWorkspace } from "./TradeScheduleWorkspace";
+import {
+  nextAppointmentSlot,
+  scheduleProposalKey,
+  type ScheduleProposalValidation,
+} from "@/lib/trade-schedule";
 import {
   GOVERNMENT_ACTIVITY_TEMPLATES,
   GOVERNMENT_PROGRAM_TEMPLATES,
@@ -206,6 +211,7 @@ export function TradeNewJobForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const appointmentScheduleStatusId = useId();
   const [step, setStep] = useState(1);
   const [highestStep, setHighestStep] = useState(1);
   const [message, setMessage] = useState("");
@@ -251,6 +257,11 @@ export function TradeNewJobForm({
   const [appointmentNotes, setAppointmentNotes] = useState("");
   const [minimumStart, setMinimumStart] = useState(() => nextAppointmentSlot());
   const [scheduledStart, setScheduledStart] = useState("");
+  const [appointmentScheduleValidation, setAppointmentScheduleValidation] = useState<ScheduleProposalValidation>({
+    key: "",
+    status: "incomplete",
+    conflict: false,
+  });
   const [plannedActivities, setPlannedActivities] = useState<PlannedComplianceActivity[]>([]);
   const [activityDraftOpen, setActivityDraftOpen] = useState(false);
   const [draftClaimOutputCode, setDraftClaimOutputCode] = useState<ComplianceClaimOutputCode | "">("");
@@ -262,6 +273,45 @@ export function TradeNewJobForm({
   const visibleBootstrapMembers = canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : [];
   const allAssignableMembers = [...visibleBootstrapMembers, ...assignableMembers].filter((member, index, values) => values.findIndex((candidate) => candidate.id === member.id) === index);
   const selectedTeamMember = allAssignableMembers.find((member) => member.id === effectiveAssigneeMemberId);
+  const appointmentProposalKey = scheduleProposalKey(scheduledStart, duration, effectiveAssigneeMemberId);
+  const appointmentCalendarReady = appointmentScheduleValidation.key === appointmentProposalKey
+    && appointmentScheduleValidation.status === "clear";
+
+  const handleAppointmentProposalValidation = useCallback((validation: ScheduleProposalValidation) => {
+    setAppointmentScheduleValidation((current) => current.key === validation.key
+      && current.status === validation.status
+      && current.conflict === validation.conflict ? current : validation);
+  }, []);
+
+  const handleAppointmentProposalChange = useCallback((proposal: { startsAt: string; durationMinutes: number }) => {
+    setScheduledStart(proposal.startsAt);
+    setDuration(proposal.durationMinutes);
+  }, [setDuration, setScheduledStart]);
+
+  function appointmentCalendarMessage() {
+    if (!effectiveAssigneeMemberId) return "Choose an active team member before setting the appointment.";
+    if (!scheduledStart) return "Choose the appointment time in the controls, or double-click an open time in the calendar.";
+    if (appointmentScheduleValidation.key !== appointmentProposalKey || appointmentScheduleValidation.status === "loading") {
+      return "Wait while TLink loads and checks the selected week.";
+    }
+    if (appointmentScheduleValidation.status === "load_error") return "The selected week could not be loaded. Retry the calendar before continuing.";
+    if (appointmentScheduleValidation.status === "not_visible") return "Show the selected worker and week in the calendar before continuing.";
+    if (appointmentScheduleValidation.status === "assignee_unavailable") return "Choose an active team member before continuing.";
+    if (appointmentScheduleValidation.status === "unavailable") return "That team member is unavailable at the selected time. Choose another time.";
+    if (appointmentScheduleValidation.status === "conflict") return "That team member already has work at the selected time. Choose another time.";
+    return "The selected week must be loaded and conflict-free before continuing.";
+  }
+
+  function appointmentActionLabel() {
+    if (!effectiveAssigneeMemberId) return "Choose a team member";
+    if (!scheduledStart) return "Choose a time";
+    if (appointmentScheduleValidation.key !== appointmentProposalKey || appointmentScheduleValidation.status === "loading") return "Checking calendar...";
+    if (appointmentScheduleValidation.status === "load_error") return "Calendar unavailable";
+    if (appointmentScheduleValidation.status === "not_visible") return "Show selected booking";
+    if (appointmentScheduleValidation.status === "assignee_unavailable") return "Choose an active worker";
+    if (appointmentScheduleValidation.conflict) return "Choose another time";
+    return "Review job";
+  }
 
   function showStep(nextStep: number) {
     setStep(nextStep);
@@ -611,6 +661,10 @@ export function TradeNewJobForm({
         }
         setMinimumStart(nextAppointmentSlot());
       }
+      if (nextStep === 5 && !appointmentCalendarReady) {
+        setMessage(appointmentCalendarMessage());
+        return;
+      }
       showStep(nextStep);
     }
   }
@@ -629,8 +683,14 @@ export function TradeNewJobForm({
     else if (step === 4) next(5);
   }
 
-  return <form ref={formRef} noValidate className="crm-form crm-new-job crm-job-wizard" onSubmit={(event) => {
+  return <form ref={formRef} noValidate className={`crm-form crm-new-job crm-job-wizard${step === 4 ? " crm-job-wizard-scheduling" : ""}`} onSubmit={(event) => {
     if (!validateVisibleStep()) { event.preventDefault(); return; }
+    if (!appointmentCalendarReady) {
+      event.preventDefault();
+      setMessage(appointmentCalendarMessage());
+      setStep(4);
+      return;
+    }
     if (activityDraftOpen || plannedActivityDetails.length !== plannedActivities.length) {
       event.preventDefault();
       setMessage(activityDraftOpen
@@ -715,9 +775,9 @@ export function TradeNewJobForm({
           <p>{activity.title}</p>
           <dl>
             <div><dt>Output</dt><dd>{program.claimOutputCode} | {program.claimOutputLabel}</dd></div>
-            <div><dt>Product</dt><dd>{activity.productCategory || "No product category listed"}</dd></div>
+            <div><dt>Product</dt><dd>{activity.productCategory || "Creditex product rule mapping required"}</dd></div>
             <div><dt>Evidence</dt><dd>Published governed policy required</dd></div>
-            <div><dt>Calculation</dt><dd>{calculation ? `${calculation.unit} | ${calculation.state.replaceAll("_", " ")}` : "Governed calculation not published"}</dd></div>
+            <div><dt>Calculation</dt><dd>{calculation ? `${calculation.unit} | Exact result is generated after the required product, scenario and installation data are verified` : "Creditex calculation rule not released"}</dd></div>
           </dl>
         </article>)}
       </div>}
@@ -740,9 +800,9 @@ export function TradeNewJobForm({
           <p>The assigned compliance team can review the customer, site, activity and schedule. A regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready.</p>
           <dl>
             <div><dt>Specification</dt><dd>{draftActivity.specificationPart || "No separate specification part"}</dd></div>
-            <div><dt>Scenario</dt><dd>{draftActivity.scenarioCode ? `${draftActivity.scenarioCode} | ${draftActivity.scenario}` : draftActivity.scenario || "No separate scenario code"}</dd></div>
-            <div><dt>Product category</dt><dd>{draftActivity.productCategory || "No product category listed"}</dd></div>
-            <div><dt>Calculation</dt><dd>{draftCalculation ? `${draftCalculation.unit} | ${draftCalculation.state.replaceAll("_", " ")}` : "Governed calculation not published"}</dd></div>
+            <div><dt>Scenario</dt><dd>{draftActivity.scenarioCode ? `${draftActivity.scenarioCode} | ${draftActivity.scenario}` : draftActivity.scenario || "Creditex scenario rule mapping required"}</dd></div>
+            <div><dt>Product category</dt><dd>{draftActivity.productCategory || "Creditex product rule mapping required"}</dd></div>
+            <div><dt>Calculation</dt><dd>{draftCalculation ? `${draftCalculation.unit} | Exact result is generated after the required product, scenario and installation data are verified` : "Creditex calculation rule not released"}</dd></div>
           </dl>
           <a href={draftProgram.officialSourceUrl} target="_blank" rel="noreferrer">Open official program source</a>
         </div>}
@@ -755,13 +815,46 @@ export function TradeNewJobForm({
       <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(2)}>Back</button><button type="button" className="btn" onClick={() => next(4)}>Set appointment</button></div>
     </section>
 
-    <section data-step="4" hidden={step !== 4} className="crm-wizard-panel"><header><span>4 of 5</span><h3 tabIndex={-1}>Set the appointment</h3><p>Set the field visit once. The technician receives the same job, activity and evidence context used by the assigned compliance team.</p></header>
-      <div className="crm-form-grid crm-appointment-grid">{canChooseTeamAssignee ? <><label><span>Team member</span><select name="assigneeMemberId" required={step === 4} value={effectiveAssigneeMemberId} onChange={(event) => setAssigneeMemberId(event.target.value)}><option value="">Choose team member</option>{allAssignableMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label><label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /><button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeSearch)}>{assigneesLoading ? "Searching..." : "Search team"}</button>{assigneeRoster && assigneeRoster.page < assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeRoster.search, assigneeRoster.page + 1, true)}>Load more</button>}</label></> : <label><span>Team member</span><input type="hidden" name="assigneeMemberId" value={effectiveAssigneeMemberId} /><strong>{selectedTeamMember?.displayName || "Assigned to you"}</strong><small>This scheduled job starts in your own work queue. You can hand it to another active teammate from the saved job if your access allows it.</small></label>}<label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} /></label>
-        <label><span>Appointment type</span><select name="appointmentType" value={appointmentType} onChange={(event) => { const value = event.target.value; if (value !== "installation") nonComplianceAppointmentType.current = value; setAppointmentType(value); }}>{Object.entries(appointmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{complianceMode === "planned" ? "Installation is recommended for certificate work, but earlier field visits can also start the job." : "Choose the first appointment for this job."}</small></label>
-        <label className="schedule-duration"><span>Duration <strong>{duration < 60 ? `${duration} minutes` : duration === 60 ? "1 hour" : `${Math.floor(duration / 60)} hours${duration % 60 ? ` ${duration % 60} minutes` : ""}`}</strong></span><input type="range" name="durationMinutes" min="15" max="480" step="15" value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
-        <label className="wide"><span>Appointment notes, optional</span><textarea name="appointmentNotes" maxLength={1000} rows={3} placeholder="Access, parking or visit notes" value={appointmentNotes} onChange={(event) => setAppointmentNotes(event.target.value)} /></label>
+    <section data-step="4" hidden={step !== 4} className="crm-wizard-panel"><header><span>4 of 5</span><h3 tabIndex={-1}>Set the appointment</h3><p>Choose the worker and time beside the authorised schedule. TLink checks that worker&apos;s loaded week again before the job can be created, and the technician receives the same job, activity and evidence context used by the assigned compliance team.</p></header>
+      <div className="crm-job-schedule-layout crm-new-job-schedule-layout">
+        {step === 4 && <TradeScheduleWorkspace
+          user={user}
+          variant="job"
+          initialWeekStart={scheduledStart.slice(0, 10) || undefined}
+          focusedMemberId={effectiveAssigneeMemberId}
+          proposal={{
+            startsAt: scheduledStart,
+            durationMinutes: duration,
+            assigneeMemberId: effectiveAssigneeMemberId,
+            assigneeLabel: selectedTeamMember?.displayName || "Selected worker",
+            title: `${customerName} | ${serviceLabels[serviceCategory]}`,
+          }}
+          proposalStatusId={appointmentScheduleStatusId}
+          onProposalValidation={handleAppointmentProposalValidation}
+          onProposalChange={handleAppointmentProposalChange}
+        />}
+        <div className="crm-job-schedule-controls">
+          <section className="crm-job-schedule-panel">
+            <div className="crm-section-heading"><div><span>First appointment</span><h4>Assign and schedule</h4><p>Double-click an open calendar time, or enter the time below. Different workers may overlap; the selected worker may not.</p></div></div>
+            <div className="crm-job-booking-form">
+              <fieldset aria-describedby={appointmentScheduleStatusId}>
+                {canChooseTeamAssignee ? <>
+                  <label><span>Team member</span><select name="assigneeMemberId" required={step === 4} value={effectiveAssigneeMemberId} onChange={(event) => setAssigneeMemberId(event.target.value)}><option value="">Choose team member</option>{allAssignableMembers.map((member) => <option key={member.id} value={member.id}>{member.displayName}{member.isSelf ? " (you)" : member.isOwner ? " (owner)" : ""}</option>)}</select></label>
+                  <div className="crm-assignee-search">
+                    <label><span>Find an active teammate</span><input type="search" value={assigneeSearch} onChange={(event) => setAssigneeSearch(event.target.value)} placeholder="Search by name" /></label>
+                    <div><button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeSearch)}>{assigneesLoading ? "Searching..." : "Search team"}</button>{assigneeRoster && assigneeRoster.page < assigneeRoster.totalPages && <button type="button" disabled={assigneesLoading} onClick={() => void loadAssignees(assigneeRoster.search, assigneeRoster.page + 1, true)}>Load more</button>}</div>
+                  </div>
+                </> : <label><span>Team member</span><input type="hidden" name="assigneeMemberId" value={effectiveAssigneeMemberId} /><strong>{selectedTeamMember?.displayName || "Assigned to you"}</strong><small>This scheduled job starts in your own work queue. You can hand it to another active teammate from the saved job if your access allows it.</small></label>}
+                <label><span>Date and start time</span><input type="datetime-local" name="startsAt" min={minimumStart} step="900" required={step === 4} value={scheduledStart} onChange={(event) => setScheduledStart(event.target.value)} /></label>
+                <label><span>Appointment type</span><select name="appointmentType" value={appointmentType} onChange={(event) => { const value = event.target.value; if (value !== "installation") nonComplianceAppointmentType.current = value; setAppointmentType(value); }}>{Object.entries(appointmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{complianceMode === "planned" ? "Installation is recommended for certificate work, but earlier field visits can also start the job." : "Choose the first appointment for this job."}</small></label>
+                <label className="schedule-duration"><span>Duration <strong>{duration < 60 ? `${duration} minutes` : duration === 60 ? "1 hour" : `${Math.floor(duration / 60)} hours${duration % 60 ? ` ${duration % 60} minutes` : ""}`}</strong></span><input type="range" name="durationMinutes" min="15" max="480" step="15" value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
+                <label><span>Appointment notes, optional</span><textarea name="appointmentNotes" maxLength={1000} rows={3} placeholder="Access, parking or visit notes" value={appointmentNotes} onChange={(event) => setAppointmentNotes(event.target.value)} /></label>
+              </fieldset>
+            </div>
+          </section>
+        </div>
       </div>
-      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(3)}>Back</button><button type="button" className="btn" onClick={() => next(5)}>Review job</button></div>
+      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(3)}>Back</button><button type="button" className="btn" disabled={!appointmentCalendarReady} onClick={() => next(5)}>{appointmentActionLabel()}</button></div>
     </section>
 
     <section data-step="5" hidden={step !== 5} className="crm-wizard-panel"><header><span>5 of 5</span><h3 tabIndex={-1}>Review and create</h3><p>Confirm the complete work record. Saving creates the TLink job, field appointment and planned activity review records together.</p></header>
@@ -791,11 +884,11 @@ export function TradeNewJobForm({
                 <div><dt>Activity</dt><dd>{activity.title}</dd></div>
                 <div><dt>Certificate output</dt><dd>{program.claimOutputCode} | {program.claimOutputLabel}</dd></div>
                 <div><dt>Specification</dt><dd>{activity.specificationPart || "No separate specification part"}</dd></div>
-                <div><dt>Scenario</dt><dd>{activity.scenarioCode ? `${activity.scenarioCode} | ${activity.scenario}` : activity.scenario || "No separate scenario"}</dd></div>
-                <div><dt>Product category</dt><dd>{activity.productCategory || "No product category listed"}</dd></div>
+                <div><dt>Scenario</dt><dd>{activity.scenarioCode ? `${activity.scenarioCode} | ${activity.scenario}` : activity.scenario || "Creditex scenario rule mapping required"}</dd></div>
+                <div><dt>Product category</dt><dd>{activity.productCategory || "Creditex product rule mapping required"}</dd></div>
                 <div><dt>Approved product</dt><dd>Current government register selection required</dd></div>
                 <div><dt>Evidence form</dt><dd>Published governed policy required</dd></div>
-                <div><dt>Calculation</dt><dd>{calculation ? `${calculation.unit} | ${calculation.state.replaceAll("_", " ")}` : "Governed calculation not published"}</dd></div>
+                <div><dt>Calculation</dt><dd>{calculation ? `${calculation.unit} | Exact result is generated after the required product, scenario and installation data are verified` : "Creditex calculation rule not released"}</dd></div>
                 <div><dt>Certificate status</dt><dd>Not created</dd></div>
               </dl>
               <a href={program.officialSourceUrl} target="_blank" rel="noreferrer">Open {program.administeringBody} source</a>
@@ -809,7 +902,7 @@ export function TradeNewJobForm({
           <div className="wide"><dt>Visit notes</dt><dd>{appointmentNotes || "No visit notes"}</dd></div>
         </dl></section>
       </div>
-      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(4)}>Back</button><button type="submit" className="btn" disabled={busy}>{busy ? "Creating job..." : "Create job"}</button></div>
+      <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(4)}>Back</button><button type="submit" className="btn" disabled={busy || !appointmentCalendarReady}>{busy ? "Creating job..." : appointmentCalendarReady ? "Create job" : "Recheck calendar"}</button></div>
     </section>
   </form>;
 }

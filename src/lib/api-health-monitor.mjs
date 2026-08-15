@@ -1,7 +1,13 @@
+import {
+  CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES,
+} from "./creditex-official-product-registry.ts";
+
 const CHECK_TIMEOUT_MS = 12_000;
 const LEAD_CHECK_TIMEOUT_MS = 5_000;
 const REPEAT_ALERT_MS = 6 * 60 * 60 * 1000;
 const STATE_KEY = "api-health/v1";
+const REQUIRED_OFFICIAL_PRODUCT_REGISTRIES =
+  CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES;
 
 async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
   const startedAt = now();
@@ -21,6 +27,79 @@ async function checkSiteAvailability({ fetchImpl, siteUrl, now }) {
   } catch (error) {
     return {
       name: "site_runtime",
+      ok: false,
+      status: 0,
+      durationMs: now() - startedAt,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    };
+  }
+}
+
+async function checkOfficialProductRegistries({ fetchImpl, siteUrl, now }) {
+  const startedAt = now();
+  try {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      new URL("/api/creditex/official-products", siteUrl),
+      {
+        method: "GET",
+        headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        cache: "no-store",
+      },
+    );
+    const body = await response.json().catch(() => null);
+    const registries = Array.isArray(body?.registries) ? body.registries : [];
+    const byCode = new Map(
+      registries
+        .filter((registry) => registry && typeof registry === "object")
+        .map((registry) => [String(registry.registryCode || ""), registry]),
+    );
+    const required = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.map(
+      (registryCode) => byCode.get(registryCode),
+    );
+    const missingRegistryCodes = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.filter(
+      (_registryCode, index) => !required[index],
+    );
+    const staleRegistryCodes = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.filter(
+      (_registryCode, index) => required[index]?.status === "stale",
+    );
+    const unavailableRegistryCodes = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.filter(
+      (_registryCode, index) => required[index]?.status === "unavailable",
+    );
+    const degradedRegistryCodes = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.filter(
+      (_registryCode, index) => (
+        required[index]?.status === "current"
+        && required[index]?.lastAttempt?.status === "failed"
+      ),
+    );
+    const refreshBlockedRegistryCodes = REQUIRED_OFFICIAL_PRODUCT_REGISTRIES
+      .filter((_registryCode, index) => (
+        required[index]?.readiness?.refreshReady === false
+      ));
+    const currentRegistryCount = required.filter((registry) => (
+      registry?.status === "current"
+      && registry?.lastAttempt
+      && ["success", "unchanged"].includes(registry.lastAttempt.status)
+    )).length;
+    return {
+      name: "official_product_registries",
+      ok: response.ok
+        && body?.ok === true
+        && currentRegistryCount === REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.length
+        && refreshBlockedRegistryCodes.length === 0,
+      status: response.status,
+      durationMs: now() - startedAt,
+      requiredRegistryCount: REQUIRED_OFFICIAL_PRODUCT_REGISTRIES.length,
+      currentRegistryCount,
+      missingRegistryCodes,
+      staleRegistryCodes,
+      unavailableRegistryCodes,
+      degradedRegistryCodes,
+      refreshBlockedRegistryCodes,
+    };
+  } catch (error) {
+    return {
+      name: "official_product_registries",
       ok: false,
       status: 0,
       durationMs: now() - startedAt,
@@ -243,6 +322,7 @@ export async function runApiHealthMonitor({
   const monitorId = `api-health-${currentTime}`;
   const checks = await Promise.all([
     checkSiteAvailability({ fetchImpl, siteUrl, now }),
+    checkOfficialProductRegistries({ fetchImpl, siteUrl, now }),
     checkElectricityPlans({ fetchImpl, siteUrl, monitorId, now }),
     checkGasPlans({ fetchImpl, siteUrl, monitorId, now }),
     checkLeadDelivery({ fetchImpl, siteUrl, leadProbeToken, now }),

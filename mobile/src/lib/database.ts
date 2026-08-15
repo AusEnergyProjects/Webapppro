@@ -5,7 +5,26 @@ import * as SQLite from 'expo-sqlite';
 import { ADDRESS_MAX_AGE_MS } from '@/lib/config';
 import { deleteEncryptedBundle, encryptFileForQueue, purgeEncryptedFiles, purgeEncryptionKey } from '@/lib/encrypted-files';
 import { completeEvidenceEnvelope, type EvidenceCaptureEnvelope } from '@/lib/evidence';
-import type { FieldAccessMode, FieldJob, OfflineAction, QueueRow, SyncChange, UploadRow } from '@/lib/types';
+import type {
+  FieldAccessMode,
+  FieldJob,
+  FieldWorkPackArtifactLink,
+  FieldWorkPackReferenceAcknowledgementInput,
+  FieldWorkPackSectionPatch,
+  FieldWorkPackSignaturePacket,
+  OfflineAction,
+  OfflineActionType,
+  QueueRow,
+  SyncChange,
+  UploadRow,
+} from '@/lib/types';
+import {
+  clearFieldWorkPackSignatureAnswers,
+  createFieldWorkPackReferenceDocumentAcknowledgement,
+  mergeFieldWorkPackSectionPatches,
+  purgeFieldWorkPackReferenceDocuments,
+  projectedFieldActivityWorkPackCompletion,
+} from '@/lib/work-packs';
 
 const DATABASE_NAME = 'aea-field.db';
 const DATABASE_KEY_NAME = 'aea-field-database-key-v1';
@@ -282,8 +301,156 @@ export async function queueAction(action: OfflineAction) {
   const db = await getDatabase();
   const now = new Date().toISOString();
   const lane = await workOrderFieldLane(db, action.workOrderId, action.fieldLane);
-  let queuedAction = { ...action, fieldLane: lane };
-  if (action.type === 'save_job_form' && action.formId) {
+  const phaseError = workPackActionPhaseError(action);
+  if (phaseError) throw new Error(phaseError);
+  let queuedAction: OfflineAction = { ...action, fieldLane: lane };
+  if (action.type === 'work_pack_commit' && action.caseInstanceId) {
+    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+      lane,
+    );
+    const existing = candidates.map((candidate) => ({
+      ...candidate,
+      action: JSON.parse(candidate.payload) as OfflineAction,
+    })).find((candidate) => candidate.action.type === 'work_pack_commit'
+      && candidate.action.caseInstanceId === action.caseInstanceId);
+    if (existing) {
+      if (
+        existing.action.expectedResponseSha256 !== action.expectedResponseSha256
+        || existing.action.baseRevision !== action.baseRevision
+      ) {
+        throw new Error('This work pack has a newer saved base. Sync it before adding another change.');
+      }
+      queuedAction = mergeQueuedWorkPackCommit(existing.action, { ...action, fieldLane: lane });
+      await db.runAsync(
+        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
+        JSON.stringify(queuedAction),
+        now,
+        existing.id,
+      );
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
+    }
+  } else if (action.type === 'work_pack_capture_signatures' && action.caseInstanceId) {
+    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+      lane,
+    );
+    const parsed = candidates.map((candidate) => ({
+      ...candidate,
+      action: JSON.parse(candidate.payload) as OfflineAction,
+    }));
+    const wrongPhase = parsed.find((candidate) =>
+      candidate.action.caseInstanceId === action.caseInstanceId
+      && ['work_pack_commit', 'work_pack_prepare_signing'].includes(candidate.action.type));
+    if (wrongPhase) {
+      throw new Error('Sync the saved work-pack changes and prepared version before signing.');
+    }
+    const existing = parsed.find((candidate) =>
+      candidate.action.type === 'work_pack_capture_signatures'
+      && candidate.action.caseInstanceId === action.caseInstanceId);
+    if (existing) {
+      queuedAction = mergeQueuedWorkPackSignatureCapture(
+        existing.action,
+        { ...action, fieldLane: lane },
+      );
+      await db.runAsync(
+        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
+        JSON.stringify(queuedAction),
+        now,
+        existing.id,
+      );
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
+    }
+  } else if (action.type === 'work_pack_update_customer_context' && action.caseInstanceId) {
+    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+      lane,
+    );
+    const existing = candidates.map((candidate) => ({
+      ...candidate,
+      action: JSON.parse(candidate.payload) as OfflineAction,
+    })).find((candidate) => candidate.action.type === 'work_pack_update_customer_context'
+      && candidate.action.caseInstanceId === action.caseInstanceId);
+    if (existing) {
+      queuedAction = mergeQueuedWorkPackCustomerContext(
+        existing.action,
+        { ...action, fieldLane: lane },
+      );
+      await db.runAsync(
+        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
+        JSON.stringify(queuedAction),
+        now,
+        existing.id,
+      );
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
+    }
+  } else if (
+    action.caseInstanceId
+    && [
+      'work_pack_select_scenario',
+      'work_pack_select_official_products',
+      'work_pack_run_calculator',
+    ].includes(action.type)
+  ) {
+    const candidates = await db.getAllAsync<{ id: string; payload: string }>(
+      "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
+      action.workOrderId,
+      lane,
+    );
+    const parsed = candidates.map((candidate) => ({
+      ...candidate,
+      action: JSON.parse(candidate.payload) as OfflineAction,
+    }));
+    const differentPendingStep = parsed.find((candidate) =>
+      candidate.action.caseInstanceId === action.caseInstanceId
+      && candidate.action.type.startsWith('work_pack_')
+      && (
+        candidate.action.type !== action.type
+        || candidate.action.dependencyKey !== action.dependencyKey
+      ));
+    if (differentPendingStep) {
+      throw new Error('Sync the current work-pack change before choosing another governed setup item.');
+    }
+    const existing = parsed.find((candidate) =>
+      candidate.action.type === action.type
+      && candidate.action.caseInstanceId === action.caseInstanceId
+      && candidate.action.dependencyKey === action.dependencyKey);
+    if (existing) {
+      if (
+        existing.action.expectedResponseSha256 !== action.expectedResponseSha256
+        || existing.action.baseRevision !== action.baseRevision
+      ) {
+        throw new Error('This work pack has a newer saved base. Sync it before changing this setup item.');
+      }
+      queuedAction = {
+        ...action,
+        fieldLane: lane,
+        clientActionId: existing.action.clientActionId,
+      };
+      await db.runAsync(
+        "UPDATE action_queue SET payload = ?, status = 'queued', retry_after = '', updated_at = ? WHERE id = ?",
+        JSON.stringify(queuedAction),
+        now,
+        existing.id,
+      );
+    } else {
+      await db.runAsync(`INSERT INTO action_queue (id, work_order_id, field_lane, payload, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'queued', ?, ?)`,
+      action.clientActionId, action.workOrderId, lane, JSON.stringify(queuedAction), now, now);
+    }
+  } else if (action.type === 'save_job_form' && action.formId) {
     const candidates = await db.getAllAsync<{ id: string; payload: string }>(
       "SELECT id, payload FROM action_queue WHERE work_order_id = ? AND field_lane = ? AND status IN ('queued', 'retry')",
       action.workOrderId,
@@ -341,7 +508,288 @@ export async function queueAction(action: OfflineAction) {
       form.updatedAt = now;
     }
   }
+  if (action.type === 'work_pack_commit' && action.caseInstanceId) {
+    const pack = job.activityWorkPacks?.find(
+      (item) => item.instance.id === action.caseInstanceId,
+    );
+    if (pack && (
+      action.sectionPatches?.length
+      || action.referenceAcknowledgements?.length
+      || action.dependencyResolutions
+    )) {
+      const referencePatches = (action.referenceAcknowledgements || []).flatMap(
+        (acknowledgement) => {
+          const document = pack.referenceDocuments.find((item) =>
+            item.sectionKey === acknowledgement.sectionKey
+            && item.repeatInstanceKey === acknowledgement.repeatInstanceKey
+            && item.promptKey === acknowledgement.promptKey
+            && item.sourceArtifactId === acknowledgement.sourceArtifactId
+          );
+          if (!document) return [];
+          return [{
+            sectionKey: acknowledgement.sectionKey,
+            repeatInstanceKey: acknowledgement.repeatInstanceKey,
+            remove: false,
+            answers: {
+              [acknowledgement.promptKey]:
+                createFieldWorkPackReferenceDocumentAcknowledgement(
+                  document,
+                  acknowledgement.acknowledgedAt,
+                ),
+            },
+          } satisfies FieldWorkPackSectionPatch];
+        },
+      );
+      const changed = mergeFieldWorkPackSectionPatches(
+        pack.response,
+        pack.definition.schema.sections,
+        [...(action.sectionPatches || []), ...referencePatches],
+        action.dependencyResolutions,
+      );
+      pack.response = clearFieldWorkPackSignatureAnswers(
+        changed,
+        pack.definition.schema.sections,
+      );
+      pack.signatures = [];
+      pack.completion = projectedFieldActivityWorkPackCompletion(pack);
+    }
+  }
+  if (queuedAction.type === 'work_pack_update_customer_context' && queuedAction.caseInstanceId) {
+    const pack = job.activityWorkPacks?.find(
+      (item) => item.instance.id === queuedAction.caseInstanceId,
+    );
+    const context = pack?.customerContext;
+    if (pack && context?.editable) {
+      pack.customerContext = {
+        ...context,
+        ...queuedAction.customerPatch,
+        ...queuedAction.sitePatch,
+        ...queuedAction.contactPatch,
+      };
+      pack.response = clearFieldWorkPackSignatureAnswers(
+        pack.response,
+        pack.definition.schema.sections,
+      );
+      pack.signatures = [];
+      pack.completion = projectedFieldActivityWorkPackCompletion(pack);
+      job.customerName = [
+        pack.customerContext.firstName,
+        pack.customerContext.lastName,
+      ].filter(Boolean).join(' ');
+      job.customerPhone = pack.customerContext.phone;
+      job.serviceAddress = [
+        pack.customerContext.addressLine1,
+        pack.customerContext.addressLine2,
+        pack.customerContext.suburb,
+        pack.customerContext.state,
+        pack.customerContext.postcode,
+      ].filter(Boolean).join(', ');
+    }
+  }
   await saveJob(db, job, now);
+}
+
+function patchKey(patch: Pick<FieldWorkPackSectionPatch, 'sectionKey' | 'repeatInstanceKey'>) {
+  return `${patch.sectionKey}:${patch.repeatInstanceKey}`;
+}
+
+function mergeSectionPatches(
+  previous: readonly FieldWorkPackSectionPatch[] = [],
+  next: readonly FieldWorkPackSectionPatch[] = [],
+) {
+  const merged = new Map<string, FieldWorkPackSectionPatch>();
+  for (const patch of [...previous, ...next]) {
+    const key = patchKey(patch);
+    const current = merged.get(key);
+    merged.set(key, patch.remove
+      ? { ...patch, remove: true, answers: {} }
+      : {
+          ...patch,
+          remove: false,
+          answers: {
+            ...(current?.remove ? {} : current?.answers || {}),
+            ...patch.answers,
+          },
+        });
+  }
+  return [...merged.values()];
+}
+
+function mergeUniqueByUploadId<T extends FieldWorkPackArtifactLink | FieldWorkPackSignaturePacket>(
+  previous: readonly T[] = [],
+  next: readonly T[] = [],
+) {
+  return [...new Map([...previous, ...next].map((item) => [item.clientUploadId, item])).values()];
+}
+
+function mergeReferenceAcknowledgements(
+  previous: readonly FieldWorkPackReferenceAcknowledgementInput[] = [],
+  next: readonly FieldWorkPackReferenceAcknowledgementInput[] = [],
+) {
+  return [...new Map([...previous, ...next].map((item) => [
+    `${item.sectionKey}:${item.repeatInstanceKey}:${item.promptKey}`,
+    item,
+  ])).values()];
+}
+
+function workPackUploadIds(action: OfflineAction) {
+  if (action.type === 'work_pack_commit') {
+    return [...new Set((action.artifactLinks || [])
+      .map((item) => item.clientUploadId).filter(Boolean))];
+  }
+  if (action.type === 'work_pack_capture_signatures') {
+    return [...new Set((action.signaturePackets || [])
+      .map((item) => item.clientUploadId).filter(Boolean))];
+  }
+  return [];
+}
+
+function workPackActionPhaseError(action: OfflineAction) {
+  if (!action.type.startsWith('work_pack_')) return '';
+  const hasCommitChanges = Boolean(
+    action.sectionPatches?.length
+    || action.artifactLinks?.length
+    || action.referenceAcknowledgements?.length
+    || Object.keys(action.dependencyResolutions || {}).length,
+  );
+  const hasSignatures = Boolean(action.signaturePackets?.length);
+  const hasCustomerChanges = Boolean(
+    action.customerContextBinding
+    || action.baseCustomerRevision
+    || action.baseSiteRevision
+    || action.baseContactRevision
+    || Object.keys(action.customerPatch || {}).length
+    || Object.keys(action.sitePatch || {}).length
+    || Object.keys(action.contactPatch || {}).length,
+  );
+  if (action.type === 'work_pack_commit') {
+    if (hasSignatures) return 'Save answers and files before preparing and capturing signatures.';
+    return hasCustomerChanges ? 'Save customer corrections in their own step.' : '';
+  }
+  if (action.type === 'work_pack_capture_signatures') {
+    if (hasCommitChanges) return 'Sync answers and files before capturing signatures.';
+    return hasCustomerChanges ? 'Sync customer corrections before capturing signatures.' : '';
+  }
+  if (action.type === 'work_pack_update_customer_context') {
+    return hasCommitChanges || hasSignatures
+      ? 'This work-pack action contains changes from the wrong step.'
+      : '';
+  }
+  if (action.type === 'work_pack_select_scenario') {
+    if (hasCommitChanges || hasSignatures || hasCustomerChanges) {
+      return 'Save answers, files and customer corrections before choosing a scenario.';
+    }
+    return action.dependencyKey && action.scenarioCode
+      ? ''
+      : 'Choose a governed scenario before saving.';
+  }
+  if (action.type === 'work_pack_select_official_products') {
+    if (hasCommitChanges || hasSignatures || hasCustomerChanges) {
+      return 'Save answers, files and customer corrections before choosing products.';
+    }
+    return action.dependencyKey && action.selections?.length
+      ? ''
+      : 'Choose at least one exact approved product before saving.';
+  }
+  if (action.type === 'work_pack_run_calculator') {
+    if (hasCommitChanges || hasSignatures || hasCustomerChanges) {
+      return 'Save answers, files and customer corrections before running the calculator.';
+    }
+    return action.dependencyKey
+      ? ''
+      : 'Choose the governed calculator before running it.';
+  }
+  if (action.type === 'work_pack_prepare_signing' || action.type === 'work_pack_finalize') {
+    return hasCommitChanges || hasSignatures || hasCustomerChanges
+      ? 'This work-pack action contains changes from the wrong step.'
+      : '';
+  }
+  return 'This work-pack action is not supported by this app version.';
+}
+
+export function mergeQueuedWorkPackCommit(
+  previous: OfflineAction,
+  next: OfflineAction,
+): OfflineAction {
+  if (
+    previous.type !== 'work_pack_commit'
+    || next.type !== 'work_pack_commit'
+    || previous.workOrderId !== next.workOrderId
+    || previous.caseInstanceId !== next.caseInstanceId
+    || previous.expectedResponseSha256 !== next.expectedResponseSha256
+    || previous.baseRevision !== next.baseRevision
+  ) {
+    throw new Error('Only changes for the same work-pack base can be coalesced.');
+  }
+  return {
+    ...previous,
+    fieldLane: next.fieldLane || previous.fieldLane,
+    signaturePackets: undefined,
+    sectionPatches: mergeSectionPatches(previous.sectionPatches, next.sectionPatches),
+    dependencyResolutions: {
+      ...previous.dependencyResolutions,
+      ...next.dependencyResolutions,
+    },
+    artifactLinks: mergeUniqueByUploadId(previous.artifactLinks, next.artifactLinks),
+    referenceAcknowledgements: mergeReferenceAcknowledgements(
+      previous.referenceAcknowledgements,
+      next.referenceAcknowledgements,
+    ),
+  };
+}
+
+export function mergeQueuedWorkPackSignatureCapture(
+  previous: OfflineAction,
+  next: OfflineAction,
+): OfflineAction {
+  if (
+    previous.type !== 'work_pack_capture_signatures'
+    || next.type !== 'work_pack_capture_signatures'
+    || previous.workOrderId !== next.workOrderId
+    || previous.caseInstanceId !== next.caseInstanceId
+    || previous.expectedResponseSha256 !== next.expectedResponseSha256
+    || previous.baseRevision !== next.baseRevision
+  ) {
+    throw new Error('Only signatures for the same prepared work-pack version can be coalesced.');
+  }
+  return {
+    ...previous,
+    fieldLane: next.fieldLane || previous.fieldLane,
+    sectionPatches: undefined,
+    dependencyResolutions: undefined,
+    artifactLinks: undefined,
+    referenceAcknowledgements: undefined,
+    signaturePackets: mergeUniqueByUploadId(
+      previous.signaturePackets,
+      next.signaturePackets,
+    ),
+  };
+}
+
+export function mergeQueuedWorkPackCustomerContext(
+  previous: OfflineAction,
+  next: OfflineAction,
+): OfflineAction {
+  if (
+    previous.type !== 'work_pack_update_customer_context'
+    || next.type !== 'work_pack_update_customer_context'
+    || previous.workOrderId !== next.workOrderId
+    || previous.caseInstanceId !== next.caseInstanceId
+    || previous.expectedResponseSha256 !== next.expectedResponseSha256
+    || previous.baseRevision !== next.baseRevision
+    || previous.baseCustomerRevision !== next.baseCustomerRevision
+    || previous.baseSiteRevision !== next.baseSiteRevision
+    || previous.baseContactRevision !== next.baseContactRevision
+  ) {
+    throw new Error('Only corrections for the same work-pack customer base can be coalesced.');
+  }
+  return {
+    ...previous,
+    fieldLane: next.fieldLane || previous.fieldLane,
+    customerPatch: { ...previous.customerPatch, ...next.customerPatch },
+    sitePatch: { ...previous.sitePatch, ...next.sitePatch },
+    contactPatch: { ...previous.contactPatch, ...next.contactPatch },
+  };
 }
 
 export async function queuedActions(mode: FieldAccessMode, limit = 50) {
@@ -362,7 +810,20 @@ export async function resolveAction(
   const db = await getDatabase();
   const now = new Date().toISOString();
   if (result.status === 'applied' || result.status === 'duplicate') {
-    await db.runAsync('DELETE FROM action_queue WHERE id = ?', id);
+    const row = await db.getFirstAsync<{ payload: string }>(
+      'SELECT payload FROM action_queue WHERE id = ?',
+      id,
+    );
+    const uploadIds = row ? workPackUploadIds(JSON.parse(row.payload) as OfflineAction) : [];
+    await db.withTransactionAsync(async () => {
+      for (const clientUploadId of uploadIds) {
+        await db.runAsync(
+          "DELETE FROM upload_queue WHERE client_upload_id = ? AND status = 'completed'",
+          clientUploadId,
+        );
+      }
+      await db.runAsync('DELETE FROM action_queue WHERE id = ?', id);
+    });
     return;
   }
   const status = result.status === 'conflict' ? 'conflict' : result.status === 'rejected' ? 'rejected' : 'retry';
@@ -416,6 +877,49 @@ export async function listProblemActions() {
   return db.getAllAsync<QueueRow>(
     "SELECT * FROM action_queue WHERE status IN ('conflict', 'rejected') ORDER BY updated_at DESC",
   );
+}
+
+export async function listWorkPackProblems(workOrderId: string) {
+  const rows = (await listProblemActions()).filter(
+    (row) => row.work_order_id === workOrderId,
+  );
+  const problems: Record<string, string> = {};
+  for (const row of rows) {
+    try {
+      const action = JSON.parse(row.payload) as OfflineAction;
+      if (!action.caseInstanceId || !action.type.startsWith('work_pack_')) continue;
+      problems[action.caseInstanceId] = row.error_message
+        || (row.status === 'conflict'
+          ? 'The server has a newer work-pack or customer record.'
+          : 'This saved work-pack change was rejected.');
+    } catch {
+      // Invalid queue rows remain visible in the generic Sync problem list.
+    }
+  }
+  return problems;
+}
+
+export async function listPendingWorkPackActions(workOrderId: string) {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ payload: string }>(
+    `SELECT payload FROM action_queue
+      WHERE work_order_id = ? AND status IN ('queued', 'retry')
+      ORDER BY created_at`,
+    workOrderId,
+  );
+  const pending: Record<string, OfflineActionType[]> = {};
+  for (const row of rows) {
+    try {
+      const action = JSON.parse(row.payload) as OfflineAction;
+      if (!action.caseInstanceId || !action.type.startsWith('work_pack_')) continue;
+      const actions = pending[action.caseInstanceId] || [];
+      if (!actions.includes(action.type)) actions.push(action.type);
+      pending[action.caseInstanceId] = actions;
+    } catch {
+      // Invalid rows remain isolated in the generic Sync problem list.
+    }
+  }
+  return pending;
 }
 
 type AddUploadInput = Omit<
@@ -508,10 +1012,29 @@ export async function completeUpload(id: string) {
   if (row) {
     deleteEncryptedBundle(row.local_uri);
   }
+  const workPackLink = await db.getFirstAsync<{ found: number }>(`SELECT 1 found
+    FROM action_queue
+    WHERE status IN ('queued', 'retry', 'conflict')
+      AND instr(payload, ?) > 0
+    LIMIT 1`, `"clientUploadId":"${id}"`);
+  if (workPackLink) {
+    await db.runAsync(`UPDATE upload_queue
+      SET local_uri = '', status = 'completed', error_message = '', updated_at = ?
+      WHERE id = ?`, new Date().toISOString(), id);
+    return;
+  }
   await db.runAsync('DELETE FROM upload_queue WHERE id = ?', id);
 }
 
-export const discardUpload = completeUpload;
+export async function discardUpload(id: string) {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ local_uri: string }>(
+    'SELECT local_uri FROM upload_queue WHERE id = ?',
+    id,
+  );
+  if (row?.local_uri) deleteEncryptedBundle(row.local_uri);
+  await db.runAsync('DELETE FROM upload_queue WHERE id = ?', id);
+}
 
 export async function queueCounts() {
   const db = await getDatabase();
@@ -561,6 +1084,7 @@ export async function purgeLocalData() {
     await SecureStore.deleteItemAsync(DATABASE_KEY_NAME);
     await SecureStore.deleteItemAsync(DATABASE_OWNER_KEY);
     purgeEncryptedFiles();
+    purgeFieldWorkPackReferenceDocuments();
     await purgeEncryptionKey();
   })().finally(() => {
     purgePromise = null;

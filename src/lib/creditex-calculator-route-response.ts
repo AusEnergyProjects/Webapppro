@@ -7,6 +7,7 @@ export type CreditexCalculatorRouteErrorDescriptor = Readonly<{
   status: 401 | 503;
   code:
     | "AUTH_REQUIRED"
+    | "OFFICIAL_PRODUCT_FLEET_BUSY"
     | "CREDITEX_SCHEMA_GUARDS_INSTALLING"
     | "CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED";
   error: string;
@@ -51,6 +52,14 @@ export function describeCreditexCalculatorRouteError(
       status: 401,
       code: "AUTH_REQUIRED",
       error: "Sign in to continue.",
+    };
+  }
+  if (code === "OFFICIAL_PRODUCT_FLEET_BUSY") {
+    return {
+      status: 503,
+      code: "OFFICIAL_PRODUCT_FLEET_BUSY",
+      error: "Refreshing the governed official product register. Retrying shortly.",
+      headers: { "Retry-After": "3" },
     };
   }
   if (INSTALLING_SCHEMA_PREFIXES.some((prefix) => code.startsWith(prefix))) {
@@ -107,6 +116,16 @@ function projectedRegistryStatus(value: unknown) {
     lastCheckedAt: status.lastCheckedAt,
     lastAttempt: projectedLastAttempt(status.lastAttempt),
   };
+  const readiness = record(status.readiness);
+  if (readiness) {
+    projected.readiness = {
+      calculatorReady: readiness.calculatorReady === true,
+      refreshReady: readiness.refreshReady === true,
+      blocker: typeof readiness.blocker === "string"
+        ? readiness.blocker.slice(0, 500)
+        : null,
+    };
+  }
   if (Object.hasOwn(status, "snapshot")) {
     projected.snapshot = projectedSresSnapshot(status.snapshot);
   } else {

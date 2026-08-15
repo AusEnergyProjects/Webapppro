@@ -27,6 +27,7 @@ function executableFunction(source, name) {
 }
 
 const uploads = read('../src/lib/uploads.ts');
+const database = read('../src/lib/database.ts');
 const api = read('../src/lib/api.ts');
 const provider = read('../src/providers/app-provider.tsx');
 
@@ -62,15 +63,26 @@ test('not-found, expired and invalid upload-session failures are recoverable but
   assert.equal(recoverable(409, 'EVIDENCE_HASH_MISMATCH', 'Hash mismatch.'), false);
 });
 
-test('restart rotates and persists one client upload ID while clearing only that row session', () => {
+test('restart preserves the stable client upload ID while clearing only its server session', () => {
   const restart = sourceFunction(uploads, 'restartUpload');
-  assert.match(restart, /clientUploadId = `upload-\$\{Crypto\.randomUUID\(\)\}`/);
   assert.match(restart, /updateUpload\(row\.id/);
-  assert.match(restart, /client_upload_id:\s*clientUploadId/);
+  assert.doesNotMatch(restart, /client_upload_id\s*:/);
+  assert.doesNotMatch(restart, /randomUUID/);
   assert.match(restart, /session_id:\s*''/);
   assert.match(restart, /uploaded_parts:\s*'\[\]'/);
   assert.doesNotMatch(restart, /purgeLocalData|completeUpload/);
   assert.match(uploads, /clientUploadId:\s*row\.client_upload_id \|\| row\.id/);
+});
+
+test('completed work-pack uploads retain their stable link identity until the action is applied', () => {
+  const complete = sourceFunction(database, 'completeUpload');
+  assert.match(complete, /"clientUploadId":"\$\{id\}"/);
+  assert.match(complete, /status = 'completed'/);
+  assert.match(complete, /local_uri = ''/);
+  const resolve = sourceFunction(database, 'resolveAction');
+  assert.match(resolve, /workPackUploadIds/);
+  assert.match(resolve, /client_upload_id = \?/);
+  assert.match(resolve, /status = 'completed'/);
 });
 
 test('upload routing is explicit and queue processing remains lane-bound', () => {

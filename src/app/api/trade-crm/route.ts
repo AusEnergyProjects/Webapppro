@@ -22,7 +22,12 @@ import {
   type TeamAccess,
 } from "@/lib/trade-team-server";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
-import { ComplianceDomainError } from "@/lib/creditex-compliance-server";
+import {
+  autoOpenReadyPlannedComplianceWorkPacks,
+  ComplianceDomainError,
+  type PlannedComplianceWorkPackBlocker,
+  type PlannedComplianceWorkPackReadiness,
+} from "@/lib/creditex-compliance-server";
 import {
   CREDITEX_PARTNER_ORGANISATION_CODE,
   resolveTradeComplianceIntents,
@@ -1371,6 +1376,42 @@ async function assertMemberCapability(
   return member;
 }
 
+function tradeCrmScheduleMemberGuardStatement(
+  db: D1Database,
+  {
+    ownerUid,
+    memberId,
+    serviceCategory,
+    changedAt,
+  }: {
+    ownerUid: string;
+    memberId: string;
+    serviceCategory: string;
+    changedAt: string;
+  },
+) {
+  return db.prepare(`INSERT INTO trade_crm_write_guards
+    (id, firebase_uid, operation_id, step_number, verified, created_at)
+    VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
+      SELECT 1 FROM trade_team_members selected_member
+      WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
+        AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
+          SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
+        ))
+    ) THEN 1 ELSE 0 END, ?)`)
+    .bind(
+      crypto.randomUUID(),
+      ownerUid,
+      `schedule-member:${crypto.randomUUID()}`,
+      memberId,
+      ownerUid,
+      ownerUid,
+      serviceCategory,
+      serviceCategory,
+      changedAt,
+    );
+}
+
 async function assertCustomerDetailAccess(identity: CrmIdentity, customerId: string) {
   if (!identity.access.canViewCustomers) throw new Error("CUSTOMER_VIEW_REQUIRED");
   if (identity.access.isOwner || identity.access.canSearchCustomers) return;
@@ -1883,6 +1924,7 @@ export async function POST(request: Request) {
       let appointmentTitle = "";
       if (guided) {
         if (!customerId || !serviceSiteId) return adminJson({ ok: false, error: "Attach a customer and service address before scheduling." }, 400);
+        if (!assigneeMemberId) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
         scheduledStart = dateValue(body.startsAt);
         if (!scheduledStart) return adminJson({ ok: false, error: "Choose an appointment start." }, 400);
         assertAppointmentSlot(scheduledStart.slice(0, 16));
@@ -1891,6 +1933,12 @@ export async function POST(request: Request) {
         catch { return adminJson({ ok: false, error: "Choose a duration from 15 minutes to 8 hours in 15-minute steps." }, 400); }
         appointmentId = crypto.randomUUID();
         appointmentTitle = `${displayName} ${SERVICE_LABELS[serviceCategory]}`.trim();
+        await assertTradeScheduleAvailable({
+          ownerUid: identity.uid,
+          memberId: assigneeMemberId,
+          startsAt: scheduledStart,
+          endsAt: scheduledEnd,
+        });
       }
       const templateTasks = template ? cleanTemplateTasks(storedList(template.task_titles, 24)) : [];
       let serviceArea = cleanAdminText(body.siteArea, 80);
@@ -1955,6 +2003,25 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, 1, ?, ?)`)
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
+          tradeCrmScheduleMemberGuardStatement(db, {
+            ownerUid: identity.uid,
+            memberId: assigneeMemberId,
+            serviceCategory,
+            changedAt: now,
+          }),
+          tradeJobScheduleEligibilityGuardStatement(db, {
+            ownerUid: identity.uid,
+            workOrderId,
+            changedAt: now,
+          }),
+          tradeScheduleAvailabilityGuardStatement(db, {
+            ownerUid: identity.uid,
+            memberId: assigneeMemberId,
+            startsAt: scheduledStart,
+            endsAt: scheduledEnd,
+            changedAt: now,
+            excludeAppointmentId: appointmentId,
+          }),
         ] : []),
         ...preparedComplianceIntents.flatMap((preparedIntent) => [
           db.prepare(`INSERT INTO trade_work_order_compliance_intents
@@ -1998,6 +2065,27 @@ export async function POST(request: Request) {
         ...jobSyncChangeStatements(db, { ownerUid: identity.uid, workOrderId, revision: 1, changedAt: now }),
       ];
       await db.batch(batchStatements);
+      let complianceWorkPacks: readonly PlannedComplianceWorkPackReadiness[] = [];
+      let workPackBlockers: readonly PlannedComplianceWorkPackBlocker[] = [];
+      if (guided && preparedComplianceIntents.length) {
+        try {
+          complianceWorkPacks = await autoOpenReadyPlannedComplianceWorkPacks(db, {
+            workOrderId,
+            installerUid: identity.uid,
+            actorUid: identity.uid,
+            createdAt: now,
+          });
+          workPackBlockers = complianceWorkPacks.flatMap((item) => item.blockers);
+        } catch {
+          workPackBlockers = [{
+            code: "work_pack_auto_open_failed",
+            message: "The job and appointment were saved, but the activity form could not be attached. Refresh the job before field work or ask Creditex to restore the governed form.",
+          }];
+        }
+      }
+      const workPackReady = preparedComplianceIntents.length > 0
+        && complianceWorkPacks.length === preparedComplianceIntents.length
+        && complianceWorkPacks.every((item) => item.workPackReady);
       let calendarSynced = 0;
       let calendarFailed = 0;
       if (guided) {
@@ -2012,6 +2100,9 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
         appointmentId, complianceIntentPlanned: complianceIntents.length > 0,
         complianceIntentCount: complianceIntents.length,
+        complianceWorkPacks,
+        workPackReady,
+        workPackBlockers,
         calendarSynced, calendarFailed }, 201);
     }
 
@@ -2143,18 +2234,12 @@ export async function POST(request: Request) {
         .bind(appointmentId, workOrderId, identity.uid, appointmentType,
           appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
           cleanAdminText(body.notes, 1000), now, now),
-        db.prepare(`INSERT INTO trade_crm_write_guards
-          (id, firebase_uid, operation_id, step_number, verified, created_at)
-          VALUES (?, ?, ?, 1, CASE WHEN EXISTS (
-            SELECT 1 FROM trade_team_members selected_member
-            WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
-              AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
-                SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
-              ))
-          ) THEN 1 ELSE 0 END, ?)`)
-          .bind(crypto.randomUUID(), identity.uid, `appointment-member:${crypto.randomUUID()}`,
-            assigneeMemberId, identity.uid, identity.uid, String(job.service_category || ""),
-            String(job.service_category || ""), now),
+        tradeCrmScheduleMemberGuardStatement(db, {
+          ownerUid: identity.uid,
+          memberId: assigneeMemberId,
+          serviceCategory: String(job.service_category || ""),
+          changedAt: now,
+        }),
       ];
       if (installation) {
         statements.push(

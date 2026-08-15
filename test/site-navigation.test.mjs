@@ -12,6 +12,7 @@ const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
 const holographicField = read("../src/components/HolographicEnergyField.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
+const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
 const gas = read("../src/app/gas-compare/page.tsx");
@@ -91,12 +92,18 @@ test("public navigation keeps TLink visible without promoting customer accounts"
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
-test("shared navigation never clips its first destination and explains mobile overflow", () => {
-  assert.match(chrome, /className="site-nav-shell"/);
-  assert.match(chrome, /className="site-nav-discovery" id="site-nav-discovery"/);
-  assert.match(chrome, /aria-describedby="site-nav-discovery"/);
-  assert.match(chrome, /Energy services/);
-  assert.match(chrome, /Scroll for more options/);
+test("shared navigation only advertises options that remain offscreen", () => {
+  assert.match(chrome, /<ResponsiveSiteNav>/);
+  assert.match(responsiveNav, /nav\.scrollWidth - nav\.clientWidth - nav\.scrollLeft/);
+  assert.match(responsiveNav, /remainingOverflow > OVERFLOW_TOLERANCE_PX/);
+  assert.match(responsiveNav, /hasHiddenOptions \? \(/);
+  assert.match(responsiveNav, /className="site-nav-discovery" id="site-nav-discovery"/);
+  assert.match(responsiveNav, /aria-describedby=\{hasHiddenOptions \? "site-nav-discovery" : undefined\}/);
+  assert.match(responsiveNav, /Scroll for more options/);
+  assert.match(responsiveNav, /new ResizeObserver\(updateOverflowState\)/);
+  assert.match(responsiveNav, /new MutationObserver/);
+  assert.match(responsiveNav, /nav\.addEventListener\("scroll", updateOverflowState/);
+  assert.match(responsiveNav, /window\.addEventListener\("resize", updateOverflowState\)/);
   assert.match(
     styles,
     /\.comparator-nav \{[^}]*justify-content: flex-start;[^}]*overflow-x: auto;/,
@@ -107,9 +114,10 @@ test("shared navigation never clips its first destination and explains mobile ov
   );
   assert.match(
     styles,
-    /@media \(max-width: 1320px\) \{[\s\S]*?\.site-nav-discovery \{[^}]*display: flex;/,
+    /\.site-nav-shell\.has-hidden-options \.site-nav-discovery \{[^}]*display: flex;/,
   );
-  assert.match(styles, /\.site-nav-shell::after \{[^}]*linear-gradient/);
+  assert.doesNotMatch(styles, /@media \(max-width: 1320px\) \{[\s\S]*?\.site-nav-discovery \{[^}]*display: flex;/);
+  assert.match(styles, /\.site-nav-shell\.has-hidden-options::after \{[^}]*linear-gradient/);
   assert.match(styles, /\.comparator-nav \{[^}]*padding: 2px 34px 5px 2px;/);
   assert.match(styles, /scroll-snap-type: x proximity/);
   assert.match(styles, /\.comparator-nav a \{ scroll-snap-align: start; \}/);

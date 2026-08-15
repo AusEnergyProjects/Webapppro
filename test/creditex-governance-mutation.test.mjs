@@ -29,6 +29,17 @@ const require = (specifier) => {
       ),
     };
   }
+  if (specifier === "./creditex-activity-work-pack-server") {
+    return {
+      CreditexActivityWorkPackServerError: class extends Error {},
+      prepareCreditexActivityWorkPackAttachment: async () => {
+        throw new Error("Unexpected work-pack attachment in governance test");
+      },
+      resolvePublishedCreditexActivityWorkPack: async () => {
+        throw new Error("Unexpected work-pack resolution in governance test");
+      },
+    };
+  }
   throw new Error(`Unexpected module dependency: ${specifier}`);
 };
 new Function("require", "module", "exports", output)(

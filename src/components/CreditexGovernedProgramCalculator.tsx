@@ -58,6 +58,8 @@ export type CreditexGovernedEstimate = {
   scenario?: string;
   supportedScenario?: string;
   formulaKey: string;
+  sourceVersion?: string;
+  specificationVersion?: string;
   effectiveDate?: string;
   effectiveDateLabel?: "Installation date" | "Purchase date";
   installationDate?: string;
@@ -89,6 +91,7 @@ export type CreditexGovernedEstimate = {
     };
   };
   productRegistryRequirements?: readonly string[];
+  productRegistryUrl?: string;
   approvedProducts?: ApprovedProduct[];
   registryReceiptHash?: string;
   propertyItems?: Array<{
@@ -112,6 +115,10 @@ export type CreditexGovernedEstimate = {
   }>;
   certificateActionEnabled: false;
   operatorMessage: string;
+  eligibilityWarnings?: Array<{
+    inputKey?: string;
+    message: string;
+  }>;
   receiptHash: string;
 };
 
@@ -268,6 +275,65 @@ function outputQuantity(estimate: CreditexGovernedEstimate) {
   return estimate.output.wholeCertificates ?? estimate.output.unroundedTonnes ?? "";
 }
 
+export function creditexGovernedOutputLabel(label?: string) {
+  const normalized = label?.trim();
+  if (!normalized) return "Calculated certificate quantity";
+  return normalized.replace(/^Estimated\b/i, "Calculated");
+}
+
+export function creditexCalculationBoundaryMessage(message?: string) {
+  return (message || "")
+    .trim()
+    .replace(
+      /^(?:Potential rebate estimate only\.|Estimate only\.|The amount is an estimate only\.)\s*/i,
+      "",
+    );
+}
+
+export function creditexGovernedResultFacts(
+  estimate: CreditexGovernedEstimate,
+) {
+  const effectiveDateLabel = estimate.effectiveDateLabel
+    || (estimate.purchaseDate ? "Purchase date" : "Installation date");
+  const effectiveDate = estimate.purchaseDate
+    || estimate.installationDate
+    || estimate.effectiveDate
+    || "";
+  const approvedProducts = estimate.approvedProducts || [];
+  const approvedProductSnapshotIds = Array.from(new Set(
+    approvedProducts
+      .map((product) => (
+        typeof product.snapshotId === "string" ? product.snapshotId.trim() : ""
+      ))
+      .filter(Boolean),
+  ));
+  const sourceVersion = estimate.sourceVersion
+    || (estimate.specificationVersion
+      ? `VEU specification ${estimate.specificationVersion}`
+      : "");
+  const approvedProductSnapshotRequired = Boolean(
+    estimate.productRegistryUrl
+    || (estimate.productRegistryRequirements || []).length > 0,
+  );
+  const approvedProductSnapshotsComplete = approvedProducts.every((product) => (
+    typeof product.snapshotId === "string" && Boolean(product.snapshotId.trim())
+  )) && (!approvedProductSnapshotRequired || approvedProducts.length > 0);
+
+  return {
+    effectiveDate,
+    effectiveDateLabel,
+    approvedProductSnapshotIds,
+    approvedProductSnapshotRequired,
+    sourceVersion,
+    provenanceComplete: Boolean(
+      effectiveDate
+      && estimate.formulaKey
+      && sourceVersion
+      && approvedProductSnapshotsComplete
+    ),
+  };
+}
+
 function traceOutput(
   output: CreditexGovernedEstimate["trace"][number]["output"],
   fallbackUnit = "",
@@ -280,15 +346,43 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
   const waterHeaterEstimate = (
     VEU_WATER_HEATER_ACTIVITY_CODES as readonly string[]
   ).includes(estimate.activityCode);
+  const facts = creditexGovernedResultFacts(estimate);
   return (
     <section className={styles.estimateResult} aria-live="polite">
       <header>
         <div>
-          <span>{estimate.output.label || "Estimated whole certificates"}</span>
+          <span>{creditexGovernedOutputLabel(estimate.output.label)}</span>
           <strong>{outputQuantity(estimate)} {estimate.output.unit}</strong>
         </div>
-        <b>Estimate only</b>
+        <b>{facts.provenanceComplete
+          ? "Source-verified result"
+          : "Calculation provenance incomplete"}</b>
       </header>
+      <div className={styles.estimateResolution}>
+        {facts.provenanceComplete ? (
+          <span>
+            Exact, source-verified calculation for the selected inputs and
+            {" "}{facts.effectiveDateLabel.toLowerCase()} {facts.effectiveDate}.
+          </span>
+        ) : (
+          <span>
+            The calculation returned a result, but its complete date, product
+            snapshot or source-version provenance is unavailable.
+          </span>
+        )}
+        <span>
+          Approved product snapshot:{" "}
+          {facts.approvedProductSnapshotIds.length > 0
+            ? facts.approvedProductSnapshotIds.join(", ")
+            : facts.approvedProductSnapshotRequired
+              ? "not recorded"
+              : "Not required for this activity"}.
+        </span>
+        <span>
+          Formula/source version: {estimate.formulaKey || "not recorded"}
+          {facts.sourceVersion ? ` | ${facts.sourceVersion}` : " | not recorded"}.
+        </span>
+      </div>
       {estimate.propertyItems && estimate.propertyItems.length > 0 ? (
         <div className={styles.estimateResolution}>
           {estimate.propertyItems.map((item) => {
@@ -332,6 +426,11 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
           before certificate creation.
         </p>
       )}
+      <p>
+        This confirms the calculation only. Final eligibility and evidence must
+        still be confirmed. Certificate creation and provider acceptance remain
+        separate workflows.
+      </p>
       <details>
         <summary>Calculation details</summary>
         <ol>
@@ -350,7 +449,21 @@ function GovernedResult({ estimate }: { estimate: CreditexGovernedEstimate }) {
             {estimate.approvedProducts.map(creditexProductOptionLabel).join("; ")}
           </p>
         )}
-        <p>{estimate.operatorMessage}</p>
+        {creditexCalculationBoundaryMessage(estimate.operatorMessage) && (
+          <p>
+            <strong>Eligibility boundary:</strong>{" "}
+            {creditexCalculationBoundaryMessage(estimate.operatorMessage)}
+          </p>
+        )}
+        {estimate.eligibilityWarnings && estimate.eligibilityWarnings.length > 0 && (
+          <ul>
+            {estimate.eligibilityWarnings.map((warning, index) => (
+              <li key={`${warning.inputKey || "eligibility"}:${index}`}>
+                {warning.message}
+              </li>
+            ))}
+          </ul>
+        )}
         <footer>
           <a href={estimate.officialSourceUrl} target="_blank" rel="noreferrer">
             Open official source
@@ -467,7 +580,7 @@ function CreditexNswCalculator({
       if (requestRef.current === requestVersion) {
         setError(caught instanceof Error
           ? caught.message
-          : "The NSW estimate could not be completed safely.");
+          : "The NSW calculation could not be completed safely.");
       }
     } finally {
       if (requestRef.current === requestVersion) setBusy(false);
@@ -545,9 +658,12 @@ function CreditexNswCalculator({
     <section className={styles.stcEstimator} aria-labelledby="nsw-estimator-title">
       <header>
         <div>
-          <span>NSW REBATE ESTIMATE</span>
+          <span>NSW GOVERNED CALCULATION</span>
           <h4 id="nsw-estimator-title">{program.name}</h4>
-          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
+          <small>
+            Source-pinned calculation for quote planning. Eligibility, certificate
+            creation and provider acceptance are checked separately.
+          </small>
         </div>
       </header>
       <form className={styles.estimatorForm} onSubmit={calculate}>
@@ -631,7 +747,7 @@ function CreditexNswCalculator({
               <strong>Official registry refresh required</strong>
               <small>
                 The selected row has no defensible approval start date in the
-                active snapshot and cannot be used for a dated estimate.
+                active snapshot and cannot be used for a dated calculation.
               </small>
             </div>
           </div>
@@ -643,7 +759,7 @@ function CreditexNswCalculator({
           type="submit"
           disabled={busy}
         >
-          {busy ? "Calculating..." : "Calculate rebate estimate"}
+          {busy ? "Calculating..." : "Calculate source-verified result"}
         </button>
       </form>
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -1222,7 +1338,7 @@ function CreditexVeuCalculator({
       if (requestRef.current === requestVersion) {
         setError(caught instanceof Error
           ? caught.message
-          : "The VEU estimate could not be completed safely.");
+          : "The VEU calculation could not be completed safely.");
       }
     } finally {
       if (requestRef.current === requestVersion) setBusy(false);
@@ -1426,9 +1542,12 @@ function CreditexVeuCalculator({
     <section className={styles.stcEstimator} aria-labelledby="veu-estimator-title">
       <header>
         <div>
-          <span>VICTORIAN REBATE ESTIMATE</span>
+          <span>VICTORIAN GOVERNED CALCULATION</span>
           <h4 id="veu-estimator-title">Victorian Energy Upgrades</h4>
-          <small>Estimate only. Final eligibility is checked before certificate creation.</small>
+          <small>
+            Source-pinned calculation for quote planning. Eligibility, certificate
+            creation and provider acceptance are checked separately.
+          </small>
         </div>
       </header>
       <form className={styles.estimatorForm} onSubmit={calculate}>
@@ -1476,7 +1595,7 @@ function CreditexVeuCalculator({
         {activity.activityCode === "46" && date >= CREDITEX_VEU_PART_46_CURRENT_RULES_FROM && (
           <p>
             Current rules do not use the old brand and model list. Choose the
-            product type only. This estimate assumes an eligible electricity-only
+            product type only. This quote calculation assumes an eligible electricity-only
             product that is at least 550 mm wide and 380 mm deep, has at least
             three separately controlled cooking zones and a two-year warranty.
             It must replace gas or LPG in a Victorian home at least two years old,
@@ -1703,7 +1822,7 @@ function CreditexVeuCalculator({
                 : `Choose an approved model and between 1 and ${waterHeaterUnitTotal.limit} systems for this upgrade.`}
             </p>
             <small>
-              Estimate assumes no earlier VEU-funded water-heater upgrades at
+              Quote planning assumes no earlier VEU-funded water-heater upgrades at
               this property. An accredited provider confirms property history
               and final eligibility before certificate creation.
             </small>
@@ -1878,7 +1997,7 @@ function CreditexVeuCalculator({
           type="submit"
           disabled={busy || (waterHeaterActivity && !waterHeaterUnitTotal.complete)}
         >
-          {busy ? "Calculating..." : "Calculate rebate estimate"}
+          {busy ? "Calculating..." : "Calculate source-verified result"}
         </button>
       </form>
       {error && <p className={styles.error} role="alert">{error}</p>}

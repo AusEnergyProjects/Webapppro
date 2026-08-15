@@ -12,6 +12,32 @@ import {
   BoundedJsonRequestError,
   readBoundedJsonRequest,
 } from "@/lib/bounded-json-request";
+import {
+  captureAssignedCreditexActivityWorkPackSignatures,
+  commitAssignedCreditexActivityWorkPack,
+  CreditexActivityWorkPackServerError,
+  finaliseAssignedCreditexActivityWorkPack,
+  listAssignedCreditexActivityWorkPacks,
+  loadAssignedCreditexActivityWorkPack,
+  prepareAssignedCreditexActivityWorkPackSigning,
+  runAssignedCreditexActivityWorkPackCalculator,
+  selectAssignedCreditexActivityWorkPackOfficialProducts,
+  selectAssignedCreditexActivityWorkPackScenario,
+  updateAssignedCreditexActivityWorkPackCustomerContext,
+  type CreditexWorkPackArtifactLinkInput,
+  type CreditexWorkPackDependencyInput,
+  type CreditexWorkPackOfficialProductSelectionInput,
+  type CreditexWorkPackReferenceAcknowledgementInput,
+  type CreditexWorkPackSectionPatch,
+  type CreditexWorkPackSignaturePacketInput,
+  type CreditexWorkPackTradeScope,
+} from "@/lib/creditex-activity-work-pack-server";
+import type {
+  CreditexActivityWorkPackCustomerContext,
+} from "@/lib/creditex-activity-work-pack";
+import {
+  reconcileReadyPlannedComplianceWorkPacks,
+} from "@/lib/creditex-compliance-server";
 
 export const runtime = "edge";
 
@@ -21,6 +47,7 @@ const MAX_CHANGES = 200;
 const MAX_SYNC_JSON_BYTES = 512 * 1024;
 const MAX_SYNC_JOBS = 500;
 const MAX_SYNC_COMPANION_ROWS = 10_000;
+const MAX_ACTIVE_COMPLIANCE_INTENTS_PER_JOB = 12;
 const MAX_ACTIVE_COMPLIANCE_CASES_PER_JOB = 12;
 const MAX_COMPLIANCE_REQUIREMENTS_PER_CASE = 200;
 const TASK_STATUSES = new Set(["pending", "done"]);
@@ -57,6 +84,402 @@ const ACCESSIBLE_JOB_COHORT_SQL = `SELECT cohort.id
   LIMIT ${MAX_SYNC_JOBS}`;
 
 type OfflineAction = Record<string, unknown>;
+
+async function reconcilePlannedWorkPacksAfterSync(
+  access: TeamAccess,
+  actions: readonly OfflineAction[],
+  results: readonly Record<string, unknown>[],
+) {
+  const workOrderIds = new Set<string>();
+  for (let index = 0; index < actions.length; index += 1) {
+    const result = results[index];
+    if (result?.status !== "applied" && result?.status !== "duplicate") continue;
+    const workOrderId = cleanAdminText(actions[index]?.workOrderId, 180);
+    if (workOrderId) workOrderIds.add(workOrderId);
+  }
+  const pending = await getD1().prepare(`SELECT DISTINCT work_order.id
+    FROM trade_work_order_compliance_intents intent
+    JOIN trade_work_orders work_order
+      ON work_order.id = intent.work_order_id
+      AND work_order.firebase_uid = intent.installer_uid
+      AND work_order.firebase_uid = ?
+      AND work_order.partner_type = 'installer'
+      AND work_order.record_status = 'active'
+      AND (? <> 'own' OR work_order.assignee_member_id = ?)
+    WHERE intent.status = 'planned'
+      AND intent.compliance_case_id = ''
+    ORDER BY work_order.updated_at, work_order.id
+    LIMIT ${MAX_SYNC_JOBS}`)
+    .bind(access.ownerUid, access.jobScope, access.memberId)
+    .all<{ id: string }>();
+  for (const row of pending.results) workOrderIds.add(String(row.id));
+  const reconciled = [];
+  for (const workOrderId of workOrderIds) {
+    try {
+      await assignedJob(access, workOrderId);
+      const workPacks = await reconcileReadyPlannedComplianceWorkPacks(getD1(), {
+        workOrderId,
+        installerUid: access.ownerUid,
+        // This is the idempotent continuation of the owner-authored guided job
+        // transaction. The signed-in member is still independently checked by
+        // assignedJob above before it may trigger the repair.
+        actorUid: access.ownerUid,
+      });
+      reconciled.push(Object.freeze({
+        workOrderId,
+        workPackReady: workPacks.length > 0
+          && workPacks.every((item) => item.workPackReady),
+        blockers: workPacks.flatMap((item) => item.blockers),
+      }));
+    } catch {
+      reconciled.push(Object.freeze({
+        workOrderId,
+        workPackReady: false,
+        blockers: [Object.freeze({
+          code: "work_pack_reconciliation_retry_required",
+          message:
+            "The governed activity form could not be attached during this sync. A later assigned-job sync will retry safely.",
+        })],
+      }));
+    }
+  }
+  return Object.freeze(reconciled);
+}
+
+const WORK_PACK_ACTIONS = new Set([
+  "work_pack_commit",
+  "work_pack_prepare_signing",
+  "work_pack_capture_signatures",
+  "work_pack_update_customer_context",
+  "work_pack_select_scenario",
+  "work_pack_select_official_products",
+  "work_pack_run_calculator",
+  "work_pack_finalize",
+]);
+
+function workPackTradeScope(access: TeamAccess): CreditexWorkPackTradeScope {
+  return {
+    ownerUid: access.ownerUid,
+    actorUid: access.actorUid,
+    actorMemberId: access.memberId,
+    scope: access.jobScope,
+  };
+}
+
+function actionObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function workPackSectionPatches(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const patch = actionObject(item);
+    return {
+      sectionKey: cleanAdminText(patch.sectionKey, 180),
+      ...(cleanAdminText(patch.repeatInstanceKey, 180)
+        ? { repeatInstanceKey: cleanAdminText(patch.repeatInstanceKey, 180) }
+        : {}),
+      ...(patch.remove === true ? { remove: true } : {}),
+      answers: actionObject(patch.answers),
+    } satisfies CreditexWorkPackSectionPatch;
+  });
+}
+
+function workPackDependencyResolutions(value: unknown) {
+  const supplied = actionObject(value);
+  return Object.fromEntries(Object.entries(supplied).map(([dependencyKey, item]) => {
+    const dependency = actionObject(item);
+    const referenceIds = Array.isArray(dependency.referenceIds)
+      ? dependency.referenceIds.map((referenceId) =>
+        cleanAdminText(referenceId, 180)
+      ).filter(Boolean)
+      : [];
+    return [cleanAdminText(dependencyKey, 180), {
+      referenceIds,
+    } satisfies CreditexWorkPackDependencyInput];
+  }).filter(([dependencyKey]) => Boolean(dependencyKey)));
+}
+
+function workPackOfficialProductSelections(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const selection = actionObject(item);
+    return {
+      selectionId: cleanAdminText(selection.selectionId, 700),
+      snapshotId: cleanAdminText(selection.snapshotId, 180),
+      quantity: Number(selection.quantity),
+    } satisfies CreditexWorkPackOfficialProductSelectionInput;
+  });
+}
+
+function workPackReferenceAcknowledgements(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const acknowledgement = actionObject(item);
+    return {
+      sectionKey: cleanAdminText(acknowledgement.sectionKey, 180),
+      ...(cleanAdminText(acknowledgement.repeatInstanceKey, 180)
+        ? {
+            repeatInstanceKey: cleanAdminText(
+              acknowledgement.repeatInstanceKey,
+              180,
+            ),
+          }
+        : {}),
+      promptKey: cleanAdminText(acknowledgement.promptKey, 180),
+      sourceArtifactId: cleanAdminText(
+        acknowledgement.sourceArtifactId,
+        180,
+      ),
+      acknowledgedAt: cleanAdminText(acknowledgement.acknowledgedAt, 40),
+    } satisfies CreditexWorkPackReferenceAcknowledgementInput;
+  });
+}
+
+function workPackArtifactLinks(value: unknown, deviceId: string) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const link = actionObject(item);
+    return {
+      sectionKey: cleanAdminText(link.sectionKey, 180),
+      ...(cleanAdminText(link.repeatInstanceKey, 180)
+        ? { repeatInstanceKey: cleanAdminText(link.repeatInstanceKey, 180) }
+        : {}),
+      promptKey: cleanAdminText(link.promptKey, 180),
+      clientUploadId: cleanAdminText(link.clientUploadId, 180),
+      // Never trust a packet-level device override. The registered request
+      // device is the custody boundary for the completed upload.
+      deviceId,
+    } satisfies CreditexWorkPackArtifactLinkInput;
+  });
+}
+
+function workPackStringRecord(value: unknown, maximumValues = 500) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(actionObject(value)).slice(0, 40).map(([key, item]) => [
+      cleanAdminText(key, 120),
+      cleanAdminText(item, maximumValues),
+    ]).filter(([key]) => Boolean(key)),
+  ));
+}
+
+function workPackIdentitySource(value: unknown) {
+  const source = cleanAdminText(value, 40);
+  if (
+    source === "customer_context"
+    || source === "assigned_worker"
+    || source === "authenticated_actor"
+    || source === "manual_verified"
+  ) return source;
+  throw new CreditexActivityWorkPackServerError(
+    "WORK_PACK_SIGNER_IDENTITY_INVALID",
+    400,
+    "The signer identity source is invalid.",
+  );
+}
+
+function workPackSignerIdentity(value: unknown) {
+  const identity = actionObject(value);
+  return Object.freeze({
+    contract: "creditex-activity-work-pack-signer-identity/v1" as const,
+    roleKey: cleanAdminText(identity.roleKey, 180),
+    capacity: cleanAdminText(identity.capacity, 180),
+    identitySource: workPackIdentitySource(identity.identitySource),
+    signerName: cleanAdminText(identity.signerName, 240),
+    signerUid: cleanAdminText(identity.signerUid, 240),
+    fields: workPackStringRecord(identity.fields),
+  }) satisfies CreditexWorkPackSignaturePacketInput["signerIdentity"];
+}
+
+function workPackSignatureStrokes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 100).map((strokeValue) => {
+    const stroke = actionObject(strokeValue);
+    const points = Array.isArray(stroke.points) ? stroke.points : [];
+    return Object.freeze({
+      points: Object.freeze(points.slice(0, 10_000).map((pointValue) => {
+        const point = actionObject(pointValue);
+        return Object.freeze({
+          x: Number(point.x),
+          y: Number(point.y),
+          pressure: point.pressure === null ? null : Number(point.pressure),
+          capturedAtOffsetMs: Number(point.capturedAtOffsetMs),
+        });
+      })),
+    });
+  });
+}
+
+function workPackDeviceContext(value: unknown) {
+  const entries: Array<[string, string | number | boolean]> = [];
+  for (const [key, item] of Object.entries(actionObject(value)).slice(0, 40)) {
+    const fieldKey = cleanAdminText(key, 120);
+    if (!fieldKey) continue;
+    if (typeof item === "string") {
+      entries.push([fieldKey, cleanAdminText(item, 500)]);
+    } else if (typeof item === "number" || typeof item === "boolean") {
+      entries.push([fieldKey, item]);
+    }
+  }
+  return Object.freeze(Object.fromEntries(entries)) as Readonly<
+    Record<string, string | number | boolean>
+  >;
+}
+
+function workPackSignaturePackets(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((packetValue) => {
+    const packet = actionObject(packetValue);
+    const signerIdentity = workPackSignerIdentity(packet.signerIdentity);
+    const attestationValue = actionObject(packet.attestation);
+    const attestation = Object.freeze({
+      contract: "creditex-activity-work-pack-signature-attestation/v1" as const,
+      promptKey: cleanAdminText(attestationValue.promptKey, 240),
+      signerRoleKey: cleanAdminText(attestationValue.signerRoleKey, 180),
+      text: cleanAdminText(attestationValue.text, 20_000),
+      version: cleanAdminText(attestationValue.version, 180),
+      sourceBindingTargetKey: cleanAdminText(
+        attestationValue.sourceBindingTargetKey,
+        180,
+      ),
+      signerIdentity: workPackSignerIdentity(attestationValue.signerIdentity),
+      signerIdentitySha256: cleanAdminText(
+        attestationValue.signerIdentitySha256,
+        80,
+      ),
+      definitionSha256: cleanAdminText(attestationValue.definitionSha256, 80),
+      prefillSha256: cleanAdminText(attestationValue.prefillSha256, 80),
+      responseSha256: cleanAdminText(attestationValue.responseSha256, 80),
+      declarationsSha256: cleanAdminText(
+        attestationValue.declarationsSha256,
+        80,
+      ),
+    });
+    const payloadValue = actionObject(packet.signaturePayload);
+    const signaturePayload = Object.freeze({
+      contract: "creditex-activity-work-pack-signature-payload/v1" as const,
+      instanceKey: cleanAdminText(payloadValue.instanceKey, 240),
+      caseInstanceId: cleanAdminText(payloadValue.caseInstanceId, 240),
+      promptKey: cleanAdminText(payloadValue.promptKey, 240),
+      signerRoleKey: cleanAdminText(payloadValue.signerRoleKey, 180),
+      signerName: cleanAdminText(payloadValue.signerName, 240),
+      signerCapacity: cleanAdminText(payloadValue.signerCapacity, 180),
+      signerIdentitySha256: cleanAdminText(payloadValue.signerIdentitySha256, 80),
+      attestationSha256: cleanAdminText(payloadValue.attestationSha256, 80),
+      definitionSha256: cleanAdminText(payloadValue.definitionSha256, 80),
+      prefillSha256: cleanAdminText(payloadValue.prefillSha256, 80),
+      responseSha256: cleanAdminText(payloadValue.responseSha256, 80),
+      declarationsSha256: cleanAdminText(payloadValue.declarationsSha256, 80),
+      strokes: Object.freeze(workPackSignatureStrokes(payloadValue.strokes)),
+      signedAt: cleanAdminText(payloadValue.signedAt, 40),
+    });
+    const deviceValue = actionObject(packet.deviceAttestation);
+    const deviceAttestation = Object.freeze({
+      contract: "creditex-activity-work-pack-device-attestation/v1" as const,
+      deviceId: cleanAdminText(deviceValue.deviceId, 180),
+      appId: cleanAdminText(deviceValue.appId, 180),
+      appVersion: cleanAdminText(deviceValue.appVersion, 80),
+      appBuild: cleanAdminText(deviceValue.appBuild, 80),
+      sessionId: cleanAdminText(deviceValue.sessionId, 180),
+      capturedByUid: cleanAdminText(deviceValue.capturedByUid, 240),
+      signedAt: cleanAdminText(deviceValue.signedAt, 40),
+      deviceContext: workPackDeviceContext(deviceValue.deviceContext),
+    });
+    return Object.freeze({
+      sectionKey: cleanAdminText(packet.sectionKey, 180),
+      ...(cleanAdminText(packet.repeatInstanceKey, 180)
+        ? { repeatInstanceKey: cleanAdminText(packet.repeatInstanceKey, 180) }
+        : {}),
+      promptKey: cleanAdminText(packet.promptKey, 180),
+      clientUploadId: cleanAdminText(packet.clientUploadId, 180),
+      signerIdentity,
+      signerIdentitySha256: cleanAdminText(packet.signerIdentitySha256, 80),
+      signaturePayload,
+      signaturePayloadSha256: cleanAdminText(packet.signaturePayloadSha256, 80),
+      attestation,
+      attestationSha256: cleanAdminText(packet.attestationSha256, 80),
+      deviceAttestation,
+      deviceAttestationSha256: cleanAdminText(packet.deviceAttestationSha256, 80),
+      signatureSha256: cleanAdminText(packet.signatureSha256, 80),
+    }) satisfies CreditexWorkPackSignaturePacketInput;
+  });
+}
+
+function workPackCustomerContextBinding(value: unknown) {
+  const binding = actionObject(value);
+  return Object.freeze({
+    contract: "creditex-activity-work-pack-customer-context/v1" as const,
+    editable: binding.editable === true,
+    customerId: cleanAdminText(binding.customerId, 180),
+    siteId: cleanAdminText(binding.siteId, 180),
+    contactId: cleanAdminText(binding.contactId, 180),
+    customerRevision: cleanAdminText(binding.customerRevision, 40),
+    siteRevision: cleanAdminText(binding.siteRevision, 40),
+    contactRevision: cleanAdminText(binding.contactRevision, 40),
+    contextSha256: cleanAdminText(binding.contextSha256, 80),
+  }) satisfies CreditexActivityWorkPackCustomerContext;
+}
+
+function workPackCustomerPatch(value: unknown) {
+  const patch = actionObject(value);
+  return {
+    ...(patch.firstName !== undefined
+      ? { firstName: cleanAdminText(patch.firstName, 80) }
+      : {}),
+    ...(patch.lastName !== undefined
+      ? { lastName: cleanAdminText(patch.lastName, 80) }
+      : {}),
+  };
+}
+
+function workPackSitePatch(value: unknown) {
+  const patch = actionObject(value);
+  return {
+    ...(patch.addressLine1 !== undefined
+      ? { addressLine1: cleanAdminText(patch.addressLine1, 180) }
+      : {}),
+    ...(patch.addressLine2 !== undefined
+      ? { addressLine2: cleanAdminText(patch.addressLine2, 180) }
+      : {}),
+    ...(patch.suburb !== undefined
+      ? { suburb: cleanAdminText(patch.suburb, 100) }
+      : {}),
+    ...(patch.state !== undefined
+      ? { state: cleanAdminText(patch.state, 3) }
+      : {}),
+    ...(patch.postcode !== undefined
+      ? { postcode: cleanAdminText(patch.postcode, 4) }
+      : {}),
+  };
+}
+
+function workPackContactPatch(value: unknown) {
+  const patch = actionObject(value);
+  return {
+    ...(patch.phone !== undefined
+      ? { phone: cleanAdminText(patch.phone, 40) }
+      : {}),
+    ...(patch.email !== undefined
+      ? { email: cleanAdminText(patch.email, 254) }
+      : {}),
+  };
+}
+
+function workPackActionError(clientActionId: string, error: unknown) {
+  if (!(error instanceof CreditexActivityWorkPackServerError)) throw error;
+  const conflict = error.status === 409 && [
+    "WORK_PACK_REVISION_CONFLICT",
+    "WORK_PACK_CUSTOMER_CONTEXT_STALE",
+  ].includes(error.code);
+  return {
+    clientActionId,
+    status: conflict ? "conflict" : "rejected",
+    code: error.code,
+    error: error.message,
+  };
+}
 
 function terminalJobResult(clientActionId: string) {
   return {
@@ -149,6 +572,20 @@ function hasConfiguredJson(value: unknown) {
   }
 }
 
+function jsonObject(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 function evidenceCaptureCompatibility(item: Record<string, unknown>) {
   const evidenceType = String(item.evidence_type || "");
   const allowedContentTypes = jsonStringArray(item.allowed_content_types);
@@ -220,7 +657,7 @@ function cursorValue(value: string | null) {
 
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
-  const [jobRows, taskRows, mediaRows, formRows, complianceRows] = await Promise.all([
+  const [jobRows, taskRows, mediaRows, formRows, intentRows, complianceRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, d.description,
@@ -303,6 +740,43 @@ async function accessibleJobs(access: TeamAccess) {
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
     db.prepare(`SELECT
+        intent.id, intent.work_order_id, intent.intent_key,
+        intent.program_template_id, intent.activity_template_id,
+        intent.program_code, intent.registry_activity_code,
+        intent.planned_start, intent.status, intent.intent_snapshot,
+        intent.compliance_case_id,
+        linked_case.id linked_case_id,
+        linked_case.case_number linked_case_number,
+        linked_case.status linked_case_status,
+        linked_case.evidence_status linked_case_evidence_status
+      FROM trade_work_order_compliance_intents intent
+      JOIN trade_work_orders work_order
+        ON work_order.id = intent.work_order_id
+        AND work_order.firebase_uid = intent.installer_uid
+      LEFT JOIN compliance_cases linked_case
+        ON linked_case.id = intent.compliance_case_id
+        AND linked_case.work_order_id = intent.work_order_id
+        AND linked_case.compliance_intent_id = intent.id
+        AND linked_case.installer_uid = intent.installer_uid
+        AND linked_case.organisation_id = intent.compliance_organisation_id
+        AND linked_case.status NOT IN ('rejected', 'closed')
+      WHERE intent.installer_uid = ?
+        AND work_order.record_status = 'active'
+        AND (? <> 'own' OR work_order.assignee_member_id = ?)
+        AND intent.status IN ('planned', 'case_linked')
+        AND intent.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
+      ORDER BY intent.work_order_id, intent.created_at, intent.intent_key
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.jobScope,
+        access.memberId,
+        access.ownerUid,
+        access.jobScope,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
+    db.prepare(`SELECT
         c.work_order_id, c.id case_id, c.case_number, c.activity_version_id,
         c.status case_status, c.evidence_status case_evidence_status,
         c.revision case_revision,
@@ -361,13 +835,23 @@ async function accessibleJobs(access: TeamAccess) {
   const companionRowCount = taskRows.results.length
     + mediaRows.results.length
     + formRows.results.length
+    + intentRows.results.length
     + complianceRows.results.length;
+  const workPacks = await listAssignedCreditexActivityWorkPacks(db, {
+    ownerUid: access.ownerUid,
+    actorUid: access.actorUid,
+    actorMemberId: access.memberId,
+    scope: access.jobScope === "own" ? "own" : "team",
+    workOrderIds: jobRows.results.map((row) => String(row.id)),
+  });
   if (
     taskRows.results.length > MAX_SYNC_COMPANION_ROWS
     || mediaRows.results.length > MAX_SYNC_COMPANION_ROWS
     || formRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || intentRows.results.length > MAX_SYNC_COMPANION_ROWS
     || complianceRows.results.length > MAX_SYNC_COMPANION_ROWS
-    || companionRowCount > MAX_SYNC_COMPANION_ROWS
+    || workPacks.length > MAX_SYNC_COMPANION_ROWS
+    || companionRowCount + workPacks.length > MAX_SYNC_COMPANION_ROWS
   ) {
     throw new Error("SYNC_RESPONSE_CARDINALITY_EXCEEDED");
   }
@@ -433,6 +917,61 @@ async function accessibleJobs(access: TeamAccess) {
           revision: Number(form.revision || 1), ready: completion.ready, missing: completion.missing,
           completedAt: form.completed_at, updatedAt: form.updated_at };
       }),
+      activityWorkPacks: workPacks.filter(
+        (pack) => pack.instance.workOrderId === row.id,
+      ),
+      complianceIntents: (() => {
+        const workOrderIntents = intentRows.results.filter(
+          (intent) => intent.work_order_id === row.id,
+        );
+        if (workOrderIntents.length > MAX_ACTIVE_COMPLIANCE_INTENTS_PER_JOB) {
+          throw new Error("SYNC_RESPONSE_CARDINALITY_EXCEEDED");
+        }
+        return workOrderIntents.map((intent) => {
+          const snapshot = jsonObject(intent.intent_snapshot);
+          const program = jsonObject(snapshot.program);
+          const activity = jsonObject(snapshot.activity);
+          const governance = jsonObject(snapshot.governance);
+          const requestedCaseId = String(intent.compliance_case_id || "");
+          const linkedCaseId = String(intent.linked_case_id || "");
+          const linkedCaseReady = Boolean(requestedCaseId)
+            && requestedCaseId === linkedCaseId;
+          const plannedStart = String(intent.planned_start || "");
+          return {
+            id: String(intent.id),
+            intentKey: String(intent.intent_key || ""),
+            programTemplateId: String(intent.program_template_id || ""),
+            programCode: String(intent.program_code || ""),
+            programName: String(program.name || ""),
+            activityTemplateId: String(intent.activity_template_id || ""),
+            activityCode: String(
+              intent.registry_activity_code
+              || activity.activityKey
+              || "",
+            ),
+            activityTitle: String(activity.title || ""),
+            plannedStart,
+            plannedDate: plannedStart.slice(0, 10),
+            status: String(intent.status || "planned"),
+            governanceState: String(governance.state || "setup_required"),
+            governanceMessage: String(
+              governance.message
+              || "Creditex must publish and link the exact governed case before regulated field work can be finished.",
+            ),
+            linkedCaseReady,
+            complianceCaseId: linkedCaseReady ? linkedCaseId : "",
+            caseNumber: linkedCaseReady
+              ? String(intent.linked_case_number || "")
+              : "",
+            caseStatus: linkedCaseReady
+              ? String(intent.linked_case_status || "")
+              : "",
+            evidenceStatus: linkedCaseReady
+              ? String(intent.linked_case_evidence_status || "")
+              : "",
+          };
+        });
+      })(),
       ...(() => {
         const cases = new Map<string, {
           caseId: unknown;
@@ -1002,20 +1541,92 @@ const UNSATISFIED_GOVERNED_EVIDENCE_SQL = `SELECT 1
         )
     ) < governed_requirement.minimum_count`;
 
+const UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL = `SELECT 1
+  FROM trade_work_order_compliance_intents planned_intent
+  JOIN trade_work_orders planned_work
+    ON planned_work.id = planned_intent.work_order_id
+    AND planned_work.firebase_uid = planned_intent.installer_uid
+    AND planned_work.partner_type = 'installer'
+    AND planned_work.record_status = 'active'
+  WHERE planned_intent.work_order_id = ?
+    AND planned_intent.installer_uid = ?
+    AND planned_intent.status IN ('planned', 'case_linked')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM compliance_cases linked_case
+      WHERE linked_case.id = planned_intent.compliance_case_id
+        AND linked_case.work_order_id = planned_intent.work_order_id
+        AND linked_case.compliance_intent_id = planned_intent.id
+        AND linked_case.installer_uid = planned_intent.installer_uid
+        AND linked_case.organisation_id = planned_intent.compliance_organisation_id
+        AND linked_case.status NOT IN ('rejected', 'closed')
+    )`;
+
+const INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL = `SELECT 1
+  FROM trade_work_order_compliance_intents active_intent
+  JOIN trade_work_orders active_work
+    ON active_work.id = active_intent.work_order_id
+    AND active_work.firebase_uid = active_intent.installer_uid
+    AND active_work.partner_type = 'installer'
+    AND active_work.record_status = 'active'
+  JOIN compliance_cases linked_case
+    ON linked_case.id = active_intent.compliance_case_id
+    AND linked_case.work_order_id = active_intent.work_order_id
+    AND linked_case.compliance_intent_id = active_intent.id
+    AND linked_case.installer_uid = active_intent.installer_uid
+    AND linked_case.organisation_id = active_intent.compliance_organisation_id
+    AND linked_case.status NOT IN ('rejected', 'closed')
+  WHERE active_intent.work_order_id = ?
+    AND active_intent.installer_uid = ?
+    AND active_intent.status IN ('planned', 'case_linked')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM compliance_activity_work_pack_instances current_pack
+      WHERE current_pack.organisation_id = linked_case.organisation_id
+        AND current_pack.compliance_case_id = linked_case.id
+        AND current_pack.work_order_id = linked_case.work_order_id
+        AND current_pack.compliance_intent_id = active_intent.id
+        AND current_pack.status = 'completed'
+        AND EXISTS (
+          SELECT 1
+          FROM compliance_activity_work_pack_final_records final_record
+          WHERE final_record.organisation_id = current_pack.organisation_id
+            AND final_record.instance_key = current_pack.instance_key
+            AND final_record.case_instance_id = current_pack.id
+            AND final_record.work_pack_version_id = current_pack.work_pack_version_id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM compliance_activity_work_pack_instances newer_pack
+          WHERE newer_pack.organisation_id = current_pack.organisation_id
+            AND newer_pack.compliance_case_id = current_pack.compliance_case_id
+            AND newer_pack.revision > current_pack.revision
+        )
+    )`;
+
 async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
-  const [tasks, forms, issues, plan, compliance, photo] = await Promise.all([
+  const [tasks, forms, issues, plan, unlinkedWorkPack, incompleteWorkPack, compliance, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required')`).bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT EXISTS (${UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL}) blocked`)
+      .bind(workOrderId, ownerUid)
+      .first<Record<string, unknown>>(),
+    db.prepare(`SELECT EXISTS (${INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL}) blocked`)
+      .bind(workOrderId, ownerUid)
+      .first<Record<string, unknown>>(),
     db.prepare(`SELECT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL}) blocked`)
       .bind(workOrderId, ownerUid)
       .first<Record<string, unknown>>(),
     photoFinishState(db, ownerUid, workOrderId),
   ]);
   const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
+  if (Number(unlinkedWorkPack?.blocked || 0) || Number(incompleteWorkPack?.blocked || 0)) {
+    blockers.push("Creditex compliance work packs");
+  }
   if (Number(compliance?.blocked || 0)) blockers.push("governed evidence");
   if (!photo.ready) blockers.push("required photo proof");
   return { blockers, photoGuard: photo.guard };
@@ -1027,10 +1638,353 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
   if (!MOBILE_CLIENT_ID_PATTERN.test(clientActionId)) return { clientActionId, status: "rejected", code: "INVALID_ACTION_ID",
     error: "Use a stable action ID with at least eight letters or numbers." };
   const hash = await payloadHash(action);
-  const replay = await replayResult(access, action, hash);
-  if (replay) return replay;
+  // Work-pack mutations own their receipt and business change in one D1 batch.
+  // Running the legacy replay/reservation path first would split that atomic
+  // boundary and could report an action applied without its governed revision.
+  if (!WORK_PACK_ACTIONS.has(actionType)) {
+    const replay = await replayResult(access, action, hash);
+    if (replay) return replay;
+  }
   const db = getD1();
   const now = new Date().toISOString();
+
+  if (actionType === "work_pack_commit" || actionType === "work_pack_prepare_signing") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const caseInstanceId = cleanAdminText(action.caseInstanceId, 180);
+    const expectedResponseSha256 = cleanAdminText(
+      action.expectedResponseSha256,
+      180,
+    );
+    try {
+      const scope = workPackTradeScope(access);
+      const [, current, jobState] = await Promise.all([
+        assignedJob(access, workOrderId),
+        loadAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+        }),
+        workOrderMutationState(access, workOrderId),
+      ]);
+      if (String(current.instance.workOrderId) !== workOrderId) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "WORK_PACK_JOB_MISMATCH",
+          error: "This work pack does not belong to the selected job.",
+        };
+      }
+      if (!jobState || TERMINAL_WORK_STAGES.has(String(jobState.stage || ""))) {
+        return terminalJobResult(clientActionId);
+      }
+      if (actionType === "work_pack_commit") {
+        if (Array.isArray(action.signaturePackets) && action.signaturePackets.length) {
+          return {
+            clientActionId,
+            status: "rejected",
+            code: "WORK_PACK_SIGNATURE_PHASE_REQUIRED",
+            error: "Save the work pack, prepare signing, then capture signatures against the prepared version.",
+          };
+        }
+        const result = await commitAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+          expectedResponseSha256,
+          sectionPatches: workPackSectionPatches(action.sectionPatches),
+          dependencyResolutions: workPackDependencyResolutions(
+            action.dependencyResolutions,
+          ),
+          referenceAcknowledgements: workPackReferenceAcknowledgements(
+            action.referenceAcknowledgements,
+          ),
+          artifactLinks: workPackArtifactLinks(action.artifactLinks, deviceId),
+          idempotency: {
+            clientActionId,
+            deviceId,
+            payloadHash: hash,
+          },
+          now,
+        });
+        return {
+          clientActionId,
+          status: result.status,
+          actionType: result.action,
+          entityId: workOrderId,
+          caseInstanceId: result.projection.instance.id,
+          resultRevision: result.projection.instance.revision,
+          responseSha256: result.projection.instance.responseSha256,
+          appliedAt: now,
+        };
+      }
+      const result = await prepareAssignedCreditexActivityWorkPackSigning(db, {
+        ...scope,
+        caseInstanceId,
+        expectedResponseSha256,
+        idempotency: {
+          clientActionId,
+          deviceId,
+          payloadHash: hash,
+        },
+        now,
+      });
+      return {
+        clientActionId,
+        status: result.status,
+        actionType: result.action,
+        entityId: workOrderId,
+        caseInstanceId: result.projection.instance.id,
+        resultRevision: result.projection.instance.revision,
+        responseSha256: result.projection.instance.responseSha256,
+        appliedAt: now,
+      };
+    } catch (error) {
+      return workPackActionError(clientActionId, error);
+    }
+  }
+
+  if (actionType === "work_pack_capture_signatures") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const caseInstanceId = cleanAdminText(action.caseInstanceId, 180);
+    const expectedResponseSha256 = cleanAdminText(
+      action.expectedResponseSha256,
+      180,
+    );
+    try {
+      const scope = workPackTradeScope(access);
+      const [, current, jobState] = await Promise.all([
+        assignedJob(access, workOrderId),
+        loadAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+        }),
+        workOrderMutationState(access, workOrderId),
+      ]);
+      if (String(current.instance.workOrderId) !== workOrderId) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "WORK_PACK_JOB_MISMATCH",
+          error: "This work pack does not belong to the selected job.",
+        };
+      }
+      if (!jobState || TERMINAL_WORK_STAGES.has(String(jobState.stage || ""))) {
+        return terminalJobResult(clientActionId);
+      }
+      const result = await captureAssignedCreditexActivityWorkPackSignatures(
+        db,
+        {
+          ...scope,
+          caseInstanceId,
+          expectedResponseSha256,
+          packets: workPackSignaturePackets(action.signaturePackets),
+          idempotency: {
+            clientActionId,
+            deviceId,
+            payloadHash: hash,
+          },
+          now,
+        },
+      );
+      return {
+        clientActionId,
+        status: result.status,
+        actionType: result.action,
+        entityId: workOrderId,
+        caseInstanceId: result.projection.instance.id,
+        resultRevision: result.projection.instance.revision,
+        responseSha256: result.projection.instance.responseSha256,
+        appliedAt: now,
+      };
+    } catch (error) {
+      return workPackActionError(clientActionId, error);
+    }
+  }
+
+  if (
+    actionType === "work_pack_select_scenario"
+    || actionType === "work_pack_select_official_products"
+    || actionType === "work_pack_run_calculator"
+  ) {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const caseInstanceId = cleanAdminText(action.caseInstanceId, 180);
+    const expectedResponseSha256 = cleanAdminText(
+      action.expectedResponseSha256,
+      180,
+    );
+    try {
+      const scope = workPackTradeScope(access);
+      const [, current, jobState] = await Promise.all([
+        assignedJob(access, workOrderId),
+        loadAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+        }),
+        workOrderMutationState(access, workOrderId),
+      ]);
+      if (String(current.instance.workOrderId) !== workOrderId) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "WORK_PACK_JOB_MISMATCH",
+          error: "This work pack does not belong to the selected job.",
+        };
+      }
+      if (!jobState || TERMINAL_WORK_STAGES.has(String(jobState.stage || ""))) {
+        return terminalJobResult(clientActionId);
+      }
+      const common = {
+        ...scope,
+        caseInstanceId,
+        expectedResponseSha256,
+        dependencyKey: cleanAdminText(action.dependencyKey, 180),
+        idempotency: {
+          clientActionId,
+          deviceId,
+          payloadHash: hash,
+        },
+        now,
+      };
+      const result = actionType === "work_pack_select_scenario"
+        ? await selectAssignedCreditexActivityWorkPackScenario(db, {
+          ...common,
+          scenarioCode: cleanAdminText(action.scenarioCode, 180),
+        })
+        : actionType === "work_pack_select_official_products"
+          ? await selectAssignedCreditexActivityWorkPackOfficialProducts(db, {
+            ...common,
+            selections: workPackOfficialProductSelections(action.selections),
+          })
+          : await runAssignedCreditexActivityWorkPackCalculator(db, common);
+      return {
+        clientActionId,
+        status: result.status,
+        actionType: result.action,
+        entityId: workOrderId,
+        caseInstanceId: result.projection.instance.id,
+        resultRevision: result.projection.instance.revision,
+        responseSha256: result.projection.instance.responseSha256,
+        appliedAt: now,
+      };
+    } catch (error) {
+      return workPackActionError(clientActionId, error);
+    }
+  }
+
+  if (actionType === "work_pack_update_customer_context") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const caseInstanceId = cleanAdminText(action.caseInstanceId, 180);
+    const expectedResponseSha256 = cleanAdminText(
+      action.expectedResponseSha256,
+      180,
+    );
+    try {
+      const scope = workPackTradeScope(access);
+      const [, current, jobState] = await Promise.all([
+        assignedJob(access, workOrderId),
+        loadAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+        }),
+        workOrderMutationState(access, workOrderId),
+      ]);
+      if (String(current.instance.workOrderId) !== workOrderId) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "WORK_PACK_JOB_MISMATCH",
+          error: "This work pack does not belong to the selected job.",
+        };
+      }
+      if (!jobState || TERMINAL_WORK_STAGES.has(String(jobState.stage || ""))) {
+        return terminalJobResult(clientActionId);
+      }
+      const result = await updateAssignedCreditexActivityWorkPackCustomerContext(
+        db,
+        {
+          ...scope,
+          caseInstanceId,
+          expectedResponseSha256,
+          customerContextBinding: workPackCustomerContextBinding(
+            action.customerContextBinding,
+          ),
+          customerPatch: workPackCustomerPatch(action.customerPatch),
+          sitePatch: workPackSitePatch(action.sitePatch),
+          contactPatch: workPackContactPatch(action.contactPatch),
+          idempotency: {
+            clientActionId,
+            deviceId,
+            payloadHash: hash,
+          },
+          now,
+        },
+      );
+      return {
+        clientActionId,
+        status: result.status,
+        actionType: result.action,
+        entityId: workOrderId,
+        caseInstanceId: result.projection.instance.id,
+        resultRevision: result.projection.instance.revision,
+        responseSha256: result.projection.instance.responseSha256,
+        appliedAt: now,
+      };
+    } catch (error) {
+      return workPackActionError(clientActionId, error);
+    }
+  }
+
+  if (actionType === "work_pack_finalize") {
+    const workOrderId = cleanAdminText(action.workOrderId, 180);
+    const caseInstanceId = cleanAdminText(action.caseInstanceId, 180);
+    const expectedResponseSha256 = cleanAdminText(
+      action.expectedResponseSha256,
+      180,
+    );
+    try {
+      const scope = workPackTradeScope(access);
+      const [, current, jobState] = await Promise.all([
+        assignedJob(access, workOrderId),
+        loadAssignedCreditexActivityWorkPack(db, {
+          ...scope,
+          caseInstanceId,
+        }),
+        workOrderMutationState(access, workOrderId),
+      ]);
+      if (String(current.instance.workOrderId) !== workOrderId) {
+        return {
+          clientActionId,
+          status: "rejected",
+          code: "WORK_PACK_JOB_MISMATCH",
+          error: "This work pack does not belong to the selected job.",
+        };
+      }
+      if (!jobState || TERMINAL_WORK_STAGES.has(String(jobState.stage || ""))) {
+        return terminalJobResult(clientActionId);
+      }
+      const result = await finaliseAssignedCreditexActivityWorkPack(db, {
+        ...scope,
+        caseInstanceId,
+        expectedResponseSha256,
+        idempotency: {
+          clientActionId,
+          deviceId,
+          payloadHash: hash,
+        },
+        now,
+      });
+      return {
+        clientActionId,
+        status: result.status,
+        actionType: result.action,
+        entityId: workOrderId,
+        caseInstanceId: result.projection.instance.id,
+        resultRevision: result.projection.instance.revision,
+        responseSha256: result.projection.instance.responseSha256,
+        appliedAt: now,
+      };
+    } catch (error) {
+      return workPackActionError(clientActionId, error);
+    }
+  }
 
   if (actionType === "advance_field_job") {
     const workOrderId = cleanAdminText(action.workOrderId, 180); const transitionName = cleanAdminText(action.transition, 30);
@@ -1115,6 +2069,8 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
               'installed', 'complete', 'completed', 'done', 'not_required'
             )
         )
+        AND NOT EXISTS (${UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL})
+        AND NOT EXISTS (${INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL})
         AND NOT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL})
         AND (
           (
@@ -1150,6 +2106,10 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const photoGuard = finishState.photoGuard;
     const finishBlockerValues = [
       transitionName,
+      workOrderId,
+      access.ownerUid,
+      workOrderId,
+      access.ownerUid,
       workOrderId,
       access.ownerUid,
       workOrderId,
@@ -1970,14 +2930,14 @@ export async function POST(request: Request) {
     if (!MOBILE_CLIENT_ID_PATTERN.test(deviceId)) return adminJson({ ok: false, error: "Register a stable device ID before syncing field actions." }, 400);
     const device = await requireRegisteredMobileDevice(request, access, deviceId,
       cleanAdminText(body.platform, 20), cleanAdminText(body.appVersion, 40));
-    if (!actions.length || actions.length > MAX_ACTIONS) return adminJson({ ok: false, error: `Send between 1 and ${MAX_ACTIONS} offline actions at a time.` }, 400);
+    if (actions.length > MAX_ACTIONS) return adminJson({ ok: false, error: `Send at most ${MAX_ACTIONS} offline actions at a time.` }, 400);
     const results = [];
     for (const action of actions) {
       try {
         const actionType = cleanAdminText(action.type, 80);
         if (["advance_field_job", "set_job_stage", "set_task_status"].includes(actionType)
           && !access.canManageJobs) throw new Error("JOB_MANAGEMENT_REQUIRED");
-        if (["save_job_form", "add_time_entry"].includes(actionType)
+        if (["save_job_form", "add_time_entry", ...WORK_PACK_ACTIONS].includes(actionType)
           && !access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
         results.push(await applyAction(access, deviceId, action));
       }
@@ -1987,10 +2947,16 @@ export async function POST(request: Request) {
           error: code === "JOB_NOT_ASSIGNED" ? "This job is no longer assigned to this team account." : "The action could not be applied." });
       }
     }
+    const workPackReconciliation = await reconcilePlannedWorkPacksAfterSync(
+      access,
+      actions,
+      results,
+    );
     return adminJson({ ok: true, contractVersion: CONTRACT_VERSION, serverTime: new Date().toISOString(),
       accepted: results.filter((item) => item.status === "applied" || item.status === "duplicate").length,
       conflicts: results.filter((item) => item.status === "conflict").length,
       retrying: results.filter((item) => item.status === "retry").length,
-      devicePolicy: mobileAppPolicy(device.platform), results });
+      devicePolicy: mobileAppPolicy(device.platform), results,
+      workPackReconciliation });
   } catch (error) { return syncError(error); }
 }

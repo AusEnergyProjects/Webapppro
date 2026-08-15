@@ -47,6 +47,20 @@ const officialProductMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const refreshQueueMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0148_creditex_official_product_refresh_requests.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const streamStagingMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0149_creditex_official_product_stream_staging.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const productRouteSource = fs.readFileSync(
   new URL(
@@ -314,6 +328,8 @@ function fixture() {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(migration);
   database.exec(officialProductMigration);
+  database.exec(refreshQueueMigration);
+  database.exec(streamStagingMigration);
   for (const guard of CREDITEX_SRES_PRODUCT_REGISTRY_SCHEMA_GUARDS) {
     database.exec(guard.sql);
   }
@@ -838,6 +854,38 @@ test("retained source custody is verified from exact R2 bytes", async () => {
   );
 });
 
+test("reused SRES R2 bytes reconcile the exact official source URL", async () => {
+  const { d1, artifactStore } = fixture();
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T00:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  const [key, retained] = artifactStore.objects.entries().next().value;
+  const expectedMetadata = { ...retained.customMetadata };
+  artifactStore.objects.set(key, {
+    ...retained,
+    customMetadata: {
+      ...retained.customMetadata,
+      sourceUrl: "https://untrusted.invalid/reused-object",
+    },
+  });
+  const result = await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: new Date("2026-08-08T01:00:00.000Z"),
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  assert.equal(result.changed, false);
+  assert.deepEqual(
+    artifactStore.objects.get(key).customMetadata,
+    expectedMetadata,
+  );
+});
+
 test("a per-source record-count decrease requires exact audited approval", async () => {
   const { database, d1, artifactStore } = fixture();
   const first = await syncCerSresProductRegistry(d1, {
@@ -864,7 +912,7 @@ test("a per-source record-count decrease requires exact audited approval", async
     (await loadCerSresRegistryStatus(d1, {
       now: new Date("2026-08-09T00:00:01.000Z"),
     })).status,
-    "stale",
+    "current",
   );
 
   await assert.rejects(
@@ -1521,15 +1569,50 @@ test("schema drift is quarantined without replacing a valid current snapshot", a
   const status = await loadCerSresRegistryStatus(d1, {
     now: new Date("2026-08-08T03:00:00.000Z"),
   });
-  assert.equal(status.status, "stale");
+  assert.equal(status.status, "current");
   assert.equal(status.lastAttempt.status, "failed");
+  const stillCurrent = await estimateCreditexStcsFromRegistry(d1, {
+    technology: "solar_pv",
+    installationDate: "2026-08-08",
+    postcode: "3000",
+    ratedCapacityKw: "6.6",
+  }, { now: new Date("2026-08-08T03:00:00.000Z") });
+  assert.equal(stillCurrent.resolution.snapshotId, first.snapshotId);
+  const expiredAt = new Date("2026-08-10T00:00:01.000Z");
+  assert.equal((await loadCerSresRegistryStatus(d1, {
+    now: expiredAt,
+  })).status, "stale");
   await assert.rejects(
     estimateCreditexStcsFromRegistry(d1, {
       technology: "solar_pv",
-      installationDate: "2026-08-08",
+      installationDate: "2026-08-10",
       postcode: "3000",
       ratedCapacityKw: "6.6",
-    }, { now: new Date("2026-08-08T03:00:00.000Z") }),
+    }, { now: expiredAt }),
+    expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
+  );
+});
+
+test("a future-dated SRES registry check is never treated as current", async () => {
+  const { d1, artifactStore } = fixture();
+  const checkedAt = new Date("2026-08-08T00:00:00.000Z");
+  await syncCerSresProductRegistry(d1, {
+    fetchImpl: fetchFixture(),
+    artifactStore,
+    now: checkedAt,
+    references: REFERENCES,
+    sources: SOURCES,
+  });
+  const beforeCheck = new Date(checkedAt.getTime() - 1);
+  const status = await loadCerSresRegistryStatus(d1, { now: beforeCheck });
+  assert.equal(status.lastCheckedAt, checkedAt.toISOString());
+  assert.equal(status.status, "stale");
+  await assert.rejects(
+    searchCerSresProducts(d1, {
+      technology: "air_source_heat_pump",
+      installationDate: "2026-08-08",
+      query: "Aestiva",
+    }, { now: beforeCheck }),
     expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
   );
 });
@@ -1565,7 +1648,7 @@ test("changed postcode source bytes immediately quarantine zone calculations", a
     (await loadCerSresRegistryStatus(d1, {
       now: new Date("2026-08-08T04:00:01.000Z"),
     })).status,
-    "stale",
+    "current",
   );
 });
 
@@ -1644,7 +1727,10 @@ test("an expired older refresh cannot replace a newer activated snapshot", async
     sources: SOURCES,
   });
   releaseOlderFetches();
-  await assert.rejects(olderRefresh, /CHECK constraint failed/);
+  await assert.rejects(
+    olderRefresh,
+    expectedRegistryError("SRES_REFRESH_IN_PROGRESS"),
+  );
 
   const status = await loadCerSresRegistryStatus(d1, {
     now: new Date("2026-08-08T00:17:00.000Z"),
@@ -1704,7 +1790,7 @@ test("stale or date-ineligible registry data blocks product-backed estimates", a
   );
 });
 
-test("protected APIs, daily Worker and UI enforce server-derived registry values", () => {
+test("protected APIs, bounded scheduled Worker and UI enforce server-derived registry values", () => {
   assert.match(
     productRouteSource,
     /requireCreditexCalculatorAccess\(request, database, \{\s*allowPublicQuote: true,\s*\}\)/,
@@ -1725,8 +1811,9 @@ test("protected APIs, daily Worker and UI enforce server-derived registry values
     estimateRouteSource,
     /allowPublicQuote: estimatePurpose === "quote"/,
   );
-  assert.match(workerSource, /SRES_REGISTRY_CRON/);
-  assert.match(workerSource, /syncCerSresProductRegistry\(db, \{ artifactStore \}\)/);
+  assert.match(workerSource, /maintainNextCreditexProductRegistry/);
+  assert.match(workerSource, /creditexAutomaticProductRegistryMaintenanceTargets/);
+  assert.doesNotMatch(workerSource, /SRES_REGISTRY_CRON/);
   assert.match(calculatorSource, /Product type/);
   assert.match(calculatorSource, /Brand/);
   assert.match(calculatorSource, /Model/);

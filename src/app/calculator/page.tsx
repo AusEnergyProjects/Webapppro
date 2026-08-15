@@ -5,7 +5,7 @@ import { PublicRebateCalculatorWorkspace } from "@/components/PublicRebateCalcul
 export const metadata: Metadata = {
   title: "Rebate Calculator | Australian Energy Assessments",
   description:
-    "Calculate a fast Australian energy-upgrade rebate estimate using official program and approved-product data.",
+    "Calculate Australian energy-upgrade rebate results using official program and approved-product data, with exact provenance for governed programs.",
 };
 
 export default function PublicRebateCalculatorPage() {
@@ -14,8 +14,9 @@ export default function PublicRebateCalculatorPage() {
       <SiteHeader active="calculator" />
       <PublicRebateCalculatorWorkspace />
       <SiteFooter>
-        Estimates use the selected activity date and available official
-        scheme data. Your installer confirms the final work and discount.
+        Governed results are exact for the selected inputs and dated source and
+        product snapshots. Eligibility, certificate creation and provider
+        acceptance remain separate workflows.
       </SiteFooter>
     </main>
   );

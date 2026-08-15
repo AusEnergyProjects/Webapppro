@@ -90,7 +90,7 @@ export const WA_HORIZON_POWER_SUPPORTED_SOLUTIONS_CONNECTOR:
     connectorKey: "wa-horizon-power-compatible-inverters",
     registryCode: "wa-horizon-supported-solutions",
     productKind: "inverter_compatibility",
-    url: "https://www.horizonpower.com.au/contractors-installers/connect-solar-battery-ev/community-wave/#inverters",
+    url: "https://www.horizonpower.com.au/for-home/solar-battery/community-wave/",
     productionMode: "controlled_manual",
     automatedSyncAvailable: false,
     reason:

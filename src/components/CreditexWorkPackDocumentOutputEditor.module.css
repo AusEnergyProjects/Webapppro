@@ -1,0 +1,32 @@
+.editor { display: grid; gap: 14px; }
+.editor > header, .output > header, .placements > header, .placementEditor > header { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.editor h4, .editor p, .output strong, .output span { margin: 0; }
+.editor h4 { color: #103f34; font-size: .82rem; }
+.editor p, .output span, .output small, .empty span { color: #627a72; font-size: .6rem; line-height: 1.5; }
+.editor button { background: #fff; border: 1px solid #9fc8b8; border-radius: 8px; color: #174f3e; cursor: pointer; font: inherit; font-size: .58rem; font-weight: 850; min-height: 38px; padding: 7px 10px; }
+.empty { background: #fff8e8; border: 1px solid #e7cb8a; border-radius: 10px; display: grid; gap: 4px; padding: 12px; }
+.output { border: 1px solid #bdd5cc; border-left: 4px solid #148260; border-radius: 12px; display: grid; gap: 14px; padding: 14px; }
+.output > header > div { display: grid; gap: 3px; }
+.outputGrid, .formGrid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.outputGrid label, .formGrid label { color: #48675d; display: grid; font-size: .56rem; font-weight: 800; gap: 4px; }
+.outputGrid input, .formGrid input, .formGrid select { background: #fff; border: 1px solid #bed2cb; border-radius: 7px; color: #153f34; font: inherit; min-height: 38px; padding: 8px; width: 100%; }
+.wide { grid-column: 1 / -1; }
+.check { align-items: center; display: flex !important; gap: 8px !important; grid-column: 1 / -1; }
+.check input { min-height: auto; width: auto; }
+.pagePreviewList { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+.pagePreview { aspect-ratio: 210 / 297; background: #f8faf9; border: 1px solid #b8cbc4; border-radius: 4px; box-shadow: 0 4px 12px rgb(18 58 46 / 10%); flex: 0 0 210px; overflow: hidden; position: relative; }
+.pagePreview > span { color: #6a8179; font-size: .5rem; left: 6px; position: absolute; top: 4px; }
+.textPlacement, .signaturePlacement { align-items: center; border: 1px solid; display: flex; font-size: .42rem; line-height: 1.15; overflow: hidden; padding: 2px; position: absolute; }
+.textPlacement { background: rgb(43 111 173 / 14%); border-color: #2b6fad; color: #1a4f7c; }
+.signaturePlacement { background: rgb(24 130 96 / 14%); border-color: #188260; color: #125d46; font-weight: 850; }
+.placements { display: grid; gap: 10px; }
+.placementEditor { background: #f7faf9; border: 1px solid #d1dfda; border-radius: 10px; display: grid; gap: 10px; padding: 11px; }
+.placementEditor > header strong { color: #214e41; font-size: .62rem; overflow-wrap: anywhere; }
+.geometry, .textRules { border: 1px solid #ccdcd6; border-radius: 8px; display: grid; gap: 8px; grid-column: 1 / -1; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; padding: 10px; }
+.geometry legend, .textRules legend { color: #356354; font-size: .56rem; font-weight: 900; padding: 0 5px; }
+@media (max-width: 760px) {
+  .editor > header, .output > header, .placements > header, .placementEditor > header { flex-direction: column; }
+  .editor button { min-height: 46px; width: 100%; }
+  .outputGrid, .formGrid, .geometry, .textRules { grid-template-columns: 1fr; }
+  .pagePreview { flex-basis: 180px; }
+}

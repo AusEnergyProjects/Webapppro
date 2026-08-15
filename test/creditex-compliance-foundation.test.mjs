@@ -18,6 +18,29 @@ const approvedSourceReviewMock = {
   requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
 };
 
+class MockCreditexActivityWorkPackServerError extends Error {}
+
+const activityWorkPackMock = {
+  CreditexActivityWorkPackServerError: MockCreditexActivityWorkPackServerError,
+  prepareCreditexActivityWorkPackAttachment: async (database, input) => {
+    const statement = database.prepare("SELECT 1");
+    return {
+      instanceId: `work-pack:${input.caseId}:revision:1`,
+      instanceKey: `case:${input.caseId}:work-pack:test-version`,
+      workPackVersionId: "test-work-pack-version",
+      definitionSha256: "e".repeat(64),
+      compositionLockId: `work-pack-lock:${input.caseId}`,
+      compositionSha256: "f".repeat(64),
+      responseSha256: "0".repeat(64),
+      statement,
+      statements: [statement],
+    };
+  },
+  resolvePublishedCreditexActivityWorkPack: async () => {
+    throw new Error("Unexpected work-pack resolution in isolated domain test");
+  },
+};
+
 class TestD1Statement {
   constructor(database, sql, values = []) {
     this.database = database;
@@ -307,6 +330,7 @@ test("published programs and activity versions are source-backed, immutable, and
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": sourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
   assert.throws(() => domain.prepareComplianceProgramCreateStatement(d1, {
@@ -712,6 +736,7 @@ test("case creation derives the organisation, snapshots the exact rule date, and
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
 

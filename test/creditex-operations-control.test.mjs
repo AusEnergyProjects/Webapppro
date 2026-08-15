@@ -15,6 +15,27 @@ const approvedSourceReviewMock = {
   CreditexSourceLookupReviewError: MockCreditexSourceLookupReviewError,
   requireCurrentApprovedOfficialSourceBinding: async () => "test-binding",
 };
+class MockCreditexActivityWorkPackServerError extends Error {}
+const activityWorkPackMock = {
+  CreditexActivityWorkPackServerError: MockCreditexActivityWorkPackServerError,
+  prepareCreditexActivityWorkPackAttachment: async (database, input) => {
+    const statement = database.prepare("SELECT 1");
+    return {
+      instanceId: `work-pack:${input.caseId}:revision:1`,
+      instanceKey: `case:${input.caseId}:work-pack:test-version`,
+      workPackVersionId: "test-work-pack-version",
+      definitionSha256: "e".repeat(64),
+      compositionLockId: `work-pack-lock:${input.caseId}`,
+      compositionSha256: "f".repeat(64),
+      responseSha256: "0".repeat(64),
+      statement,
+      statements: [statement],
+    };
+  },
+  resolvePublishedCreditexActivityWorkPack: async () => {
+    throw new Error("Unexpected work-pack resolution in isolated domain test");
+  },
+};
 const foundationMigration = read("../drizzle/0093_creditex_compliance_foundation.sql");
 const dataforceMigration = read("../drizzle/0100_creditex_dataforce_staging.sql");
 const acceptedHandoffMigration = read(
@@ -1275,6 +1296,7 @@ test("installer case creation is quote-free while optional handoff linkage remai
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
   const governed = seedGovernedActivity(database);
@@ -1683,6 +1705,7 @@ test("audited local operations execute against the schema and financial guards r
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
   const now = TEST_NOW;
@@ -3046,6 +3069,7 @@ test("publication requires two different named administrators and a sealed appro
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
   database.prepare(`INSERT INTO admin_users
@@ -3222,6 +3246,7 @@ test("evidence policy governance blocks unverified originals and publishes one i
         ensureCreditexSchemaGuards: async () => {},
       },
       "./creditex-source-lookup-review-server": approvedSourceReviewMock,
+      "./creditex-activity-work-pack-server": activityWorkPackMock,
     },
   );
   const governed = seedGovernedActivity(database, {

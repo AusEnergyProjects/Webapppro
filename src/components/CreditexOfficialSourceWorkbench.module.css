@@ -420,6 +420,39 @@
   background: #071f2d;
 }
 
+.libraryReviewNotice {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--source-border-soft);
+  border-radius: 11px;
+  background: #071f2d;
+}
+
+.libraryReviewNotice span,
+.libraryReviewNotice strong {
+  display: block;
+}
+
+.libraryReviewNotice span {
+  color: var(--source-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.libraryReviewNotice strong {
+  margin-top: 4px;
+  color: var(--source-text);
+}
+
+.libraryReviewNotice p {
+  margin: 9px 0 0;
+  color: var(--source-muted);
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+
 .reviewPanel header {
   align-items: center;
 }

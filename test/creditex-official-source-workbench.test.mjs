@@ -97,6 +97,19 @@ test("official source review enforces artifact before binding approval", async (
   assert.doesNotMatch(source, /submit\("withdrawn"\)/);
 });
 
+test("artifact-only Forms uploads remain visible without inventing a source binding", async () => {
+  const source = await readFile(componentPath, "utf8");
+
+  assert.match(source, /binding: bindingId\s*\?/);
+  assert.match(source, /: null,/);
+  assert.match(source, /Forms document library \| placement pending/);
+  assert.match(source, /Waiting for artifact approval/);
+  assert.match(source, /Chosen when the approved document is attached to a workflow/);
+  assert.match(source, /subjectType="artifact"/);
+  assert.match(source, /binding \? \(\s*<ReviewControls/);
+  assert.match(source, /Approve the exact artifact first/);
+});
+
 test("official source workbench states its no activation boundary and has a compact layout", async () => {
   const [source, css] = await Promise.all([
     readFile(componentPath, "utf8"),

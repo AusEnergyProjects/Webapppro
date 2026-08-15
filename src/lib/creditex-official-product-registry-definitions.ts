@@ -29,6 +29,12 @@ import {
 import {
   CREDITEX_TESSA_PRODUCT_REGISTRY,
 } from "./creditex-tessa-product-source.ts";
+import {
+  parseWaSupportedSolutionsSource,
+} from "./creditex-wa-product-parsers.ts";
+import {
+  WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE,
+} from "./creditex-wa-product-sources.ts";
 
 export {
   CREDITEX_CEC_BATTERY_ALL_RECORDS_URL,
@@ -126,6 +132,61 @@ CreditexOfficialProductRegistryDefinition = {
   fetchSources: CREDITEX_VEU_PRODUCT_REGISTRY_FETCH,
 };
 
+const CREDITEX_WA_SYNERGY_PRODUCT_SOURCE:
+CreditexOfficialProductSourceDefinition = {
+  registryCode: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.registryCode,
+  sourceKey: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.sourceKey,
+  productKind: "wa_synergy_supported_solution",
+  url: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.url,
+  minimumRecords: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.minimumRecords,
+  maximumBytes: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.maxBytes,
+  expectedContentTypes:
+    WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.expectedContentTypes,
+  accept: "text/html",
+  licence: [
+    WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.licence.status,
+    WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.licence.url,
+    WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.licence.note,
+  ].join(" | "),
+  productionMode: "controlled_manual",
+  requiresOfficialEligibleFrom: true,
+  parse: (bytes, contentType) => parseWaSupportedSolutionsSource(
+    WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE,
+    bytes,
+    contentType,
+  ).map((item) => ({
+    sourceKey: item.sourceKey,
+    sourceRecordKey: item.sourceRecordKey,
+    productKind: "wa_synergy_supported_solution" as const,
+    manufacturer: item.manufacturer,
+    brand: item.brand,
+    model: item.model,
+    series: item.series,
+    registrationNumber: "",
+    certificateNumber: "",
+    approvalStatus: "approved",
+    eligibleFrom: item.effectiveSnapshotDate,
+    eligibleTo: "",
+    availableInAustralia: true,
+    attributes: {
+      ...item.attributes,
+      derGeneratorProvisional: item.derGeneratorProvisional,
+      derGeneratorFullListing: item.derGeneratorFullListing,
+      derStorageProvisional: item.derStorageProvisional,
+      derStorageFullListing: item.derStorageFullListing,
+      derStorageSupported: item.derStorageSupported,
+      derStorageActivationReady: item.derStorageActivationReady,
+    },
+  })),
+};
+
+export const CREDITEX_WA_SYNERGY_PRODUCT_REGISTRY:
+CreditexOfficialProductRegistryDefinition = {
+  registryCode: WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE.registryCode,
+  title: "Synergy supported solutions list",
+  sources: [CREDITEX_WA_SYNERGY_PRODUCT_SOURCE],
+};
+
 export const CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES = [
   CREDITEX_GEMS_PRODUCT_REGISTRY,
   CREDITEX_TESSA_PRODUCT_REGISTRY,
@@ -140,7 +201,16 @@ export const CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS = {
 
 export const CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES = [
   CREDITEX_CER_CEC_PRODUCT_REGISTRY,
+  CREDITEX_WA_SYNERGY_PRODUCT_REGISTRY,
 ] as const;
+
+export function creditexControlledManualProductRegistry(
+  registryCode: string,
+) {
+  return CREDITEX_CONTROLLED_MANUAL_PRODUCT_REGISTRIES.find(
+    (registry) => registry.registryCode === registryCode,
+  );
+}
 
 function cecBatteryConnectorState(
   environment: Readonly<Record<string, unknown>>,
@@ -152,7 +222,11 @@ function cecBatteryConnectorState(
     ]),
   ) as CreditexLicensedCecBatteryCredentials;
   const configured = Object.values(credentials).filter((value) => value !== "");
-  if (configured.length === 0) return {};
+  if (configured.length === 0) {
+    return {
+      issue: `The platform CEC battery connector is not configured. Configure ${Object.values(CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS).join(", ")} together.`,
+    };
+  }
   if (configured.length !== 3) {
     return {
       issue: `The platform CEC battery connector configuration is incomplete. Configure ${Object.values(CREDITEX_CEC_BATTERY_ENVIRONMENT_KEYS).join(", ")} together.`,

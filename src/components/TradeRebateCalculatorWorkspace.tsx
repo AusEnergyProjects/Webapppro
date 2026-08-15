@@ -20,8 +20,16 @@ type ApiAttempt = {
 export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
   const [preparingMessage, setPreparingMessage] = useState("");
 
-  const api = useCallback(async (path: string, init: RequestInit = {}) => {
+  const api = useCallback(async (
+    path: string,
+    init: RequestInit = {},
+    options: { requestTimeoutMs?: number } = {},
+  ) => {
     try {
+      const requestTimeoutMs = Math.min(
+        Math.max(options.requestTimeoutMs ?? 20_000, 1_000),
+        300_000,
+      );
       const activeUid = user.uid;
       const assertActiveIdentity = () => {
         if (firebaseAuth.currentUser?.uid !== activeUid) {
@@ -45,10 +53,13 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
         isUnauthorized: (attempt) => attempt.response.status === 401,
         request: async (idToken) => {
           headers.set("Authorization", `Bearer ${idToken}`);
-          for (let attempt = 0; attempt < 10; attempt += 1) {
+          for (let attempt = 0; attempt < 20; attempt += 1) {
             assertActiveIdentity();
             const controller = new AbortController();
-            const timeout = window.setTimeout(() => controller.abort(), 20_000);
+            const timeout = window.setTimeout(
+              () => controller.abort(),
+              requestTimeoutMs,
+            );
             let response: Response;
             try {
               response = await fetch(path, {
@@ -60,7 +71,9 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
             } catch (error) {
               if (error instanceof DOMException && error.name === "AbortError") {
                 throw new Error(
-                  "The rebate calculator did not respond within 20 seconds. Try again.",
+                  `The rebate calculator did not respond within ${Math.ceil(
+                    requestTimeoutMs / 1_000,
+                  )} seconds. Try again.`,
                 );
               }
               throw error;
@@ -71,8 +84,11 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
             assertActiveIdentity();
             if (
               response.status === 503
-              && result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
-              && attempt < 9
+              && (
+                result.code === "CREDITEX_SCHEMA_GUARDS_INSTALLING"
+                || result.code === "OFFICIAL_PRODUCT_FLEET_BUSY"
+              )
+              && attempt < 19
             ) {
               const retryAfterSeconds = Number(response.headers.get("Retry-After"));
               const retryAfterMilliseconds = Number.isFinite(retryAfterSeconds)
@@ -107,12 +123,14 @@ export function TradeRebateCalculatorWorkspace({ user }: { user: User }) {
   return (
     <section className="dashboard-panel trade-rebate-calculator" aria-labelledby="trade-rebate-calculator-title">
       <header className="dashboard-panel-heading">
-        <span>REBATES AND CERTIFICATE ESTIMATES</span>
+        <span>REBATE AND CERTIFICATE CALCULATIONS</span>
         <h2 id="trade-rebate-calculator-title">Calculate before you quote</h2>
         <p>
           Use the same source-pinned calculator as Creditex while preparing a
-          customer quote or invoice. Results remain estimates and do not create,
-          register or trade certificates.
+          customer quote or invoice. Successful governed results are exact for
+          their selected inputs, date, approved product snapshot and formula/source
+          version. They do not create or trade certificates and do not record
+          provider acceptance.
         </p>
       </header>
       {preparingMessage && (

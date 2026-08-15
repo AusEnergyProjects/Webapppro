@@ -56,36 +56,17 @@ test("nightly registry candidates resolve once at Sydney midnight across DST", (
   assert.equal(matchesAustralianRegulatorClock(Date.now(), 24, 0), false);
 });
 
-test("the Worker gates both UTC candidates against the Sydney regulator clock", () => {
+test("the Worker runs one durable registry maintenance target on the minute schedule", () => {
   const worker = fs.readFileSync(
     new URL("../worker/index.ts", import.meta.url),
     "utf8",
   );
-  assert.match(worker, /SRES_REGISTRY_CRON = "5 13,14 \* \* \*"/);
-  assert.match(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON = "25 13,14 \* \* \*"/);
+  assert.match(worker, /NOTIFICATION_DELIVERY_CRON = "\* \* \* \* \*"/);
+  assert.match(worker, /controller\.cron === NOTIFICATION_DELIVERY_CRON/);
+  assert.match(worker, /maintainNextCreditexProductRegistry\(/);
+  assert.match(worker, /creditexAutomaticProductRegistryMaintenanceTargets\(/);
+  assert.doesNotMatch(worker, /SRES_REGISTRY_CRON/);
+  assert.doesNotMatch(worker, /OFFICIAL_PRODUCT_REGISTRY_CRON/);
   assert.doesNotMatch(worker, /VEU_PRODUCT_REGISTRY_CRON/);
-  assert.match(
-    worker,
-    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 5\)/,
-  );
-  assert.match(
-    worker,
-    /matchesAustralianRegulatorClock\(controller\.scheduledTime, 0, 25\)/,
-  );
-  assert.match(
-    worker,
-    /controller\.cron === NOTIFICATION_DELIVERY_CRON[\s\S]*matchesAustralianRegulatorClock\(controller\.scheduledTime, 7, 25\)/,
-  );
-  assert.match(
-    worker,
-    /definition\.registryCode === VEU_PRODUCT_REGISTRY_CODE\) continue/,
-  );
-  assert.match(
-    worker,
-    /creditexAutomaticProductRegistry\([\s\S]*"cec-products"[\s\S]*workerEnv as Readonly<Record<string, unknown>>/,
-  );
-  assert.match(
-    worker,
-    /CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES\.find\([\s\S]*candidate\.registryCode === VEU_PRODUCT_REGISTRY_CODE/,
-  );
+  assert.doesNotMatch(worker, /matchesAustralianRegulatorClock/);
 });

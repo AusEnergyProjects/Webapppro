@@ -32,6 +32,10 @@ test("the root layout installs one delegated picker for current and future date 
   const styles = fs.readFileSync(path.join(root, "src", "app", "globals.css"), "utf8");
   assert.match(layout, /<SiteDatePicker \/>/);
   assert.match(picker, /target\.type === "date" \|\| target\.type === "datetime-local"/);
+  assert.match(picker, /document\.addEventListener\("click", click, true\)/);
+  assert.match(picker, /event\.preventDefault\(\);[\s\S]*aria-expanded/);
+  assert.match(picker, /event\.pointerType !== "mouse"/);
+  assert.match(picker, /restoreFocus && current\.restoreFocusOnClose/);
   assert.match(picker, /data-date-range-group/);
   assert.match(picker, />Apply<\/button>/);
   assert.match(picker, /event\.key === "Escape"/);

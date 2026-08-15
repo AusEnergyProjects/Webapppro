@@ -18,6 +18,8 @@ import {
   projectCreditexCalculatorReadResponse,
 } from "@/lib/creditex-calculator-route-response";
 import {
+  CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES,
+  CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS,
   CREDITEX_PRODUCT_KIND_REGISTRY,
   CreditexOfficialProductError,
 } from "@/lib/creditex-official-product-registry";
@@ -31,7 +33,18 @@ import {
 import {
   CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES,
   creditexAutomaticProductRegistry,
+  creditexCecBatteryConnectorConfigurationIssue,
 } from "@/lib/creditex-official-product-registry-definitions";
+import {
+  loadCerSresRegistryStatus,
+  syncCerSresProductRegistry,
+  type CreditexSresArtifactStore,
+} from "@/lib/creditex-sres-registry-server";
+import {
+  enqueueCreditexProductRegistryRefresh,
+  withCreditexProductRegistryFleetLease,
+} from
+  "@/lib/creditex-product-registry-maintenance";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -139,20 +152,52 @@ export async function GET(request: Request) {
     const productKind = parameters.get("productKind");
     const installationDate = parameters.get("installationDate");
     if (!productKind && !installationDate) {
-      const registryCodes = [...new Set(
-        Object.values(CREDITEX_PRODUCT_KIND_REGISTRY),
-      )].sort();
+      const runtimeEnvironment = env as unknown as Record<string, unknown>;
       const registries = await Promise.all(
-        registryCodes.map((registryCode) => (
-          loadOfficialProductRegistryStatus(database, registryCode)
-        )),
+        CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES.map(
+          async (registryCode) => {
+            const status = registryCode === "cer_sres_swh"
+              ? await loadCerSresRegistryStatus(database)
+              : await loadOfficialProductRegistryStatus(database, registryCode);
+            return {
+              ...status,
+              refreshDesign:
+                CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode],
+              readiness: {
+                calculatorReady: status.status === "current",
+                refreshReady: registryCode === "cec-products"
+                  ? creditexCecBatteryConnectorConfigurationIssue(
+                      runtimeEnvironment,
+                    ) === null
+                  : CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode]
+                        .refreshMode === "blocked"
+                    ? false
+                  : CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode]
+                        .refreshMode !== "governed_manual"
+                    || status.status === "current",
+                blocker: registryCode === "cec-products"
+                  ? creditexCecBatteryConnectorConfigurationIssue(
+                      runtimeEnvironment,
+                    )
+                  : CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode]
+                        .refreshMode === "blocked"
+                    ? `External acquisition is blocked: ${CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode].requiredConfiguration.join(", ")}.`
+                  : CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode]
+                        .refreshMode === "governed_manual"
+                    && status.status !== "current"
+                    ? `Complete the governed acquisition requirements: ${CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS[registryCode].requiredConfiguration.join(", ")}.`
+                    : null,
+              },
+            };
+          },
+        ),
       );
       return json(projectCreditexCalculatorReadResponse(access.accessType, {
         ok: true,
         registries,
       }));
     }
-    const result = await searchOfficialProducts(database, {
+    const searchInput = {
       productKind,
       installationDate,
       query: parameters.get("q") || "",
@@ -162,7 +207,35 @@ export async function GET(request: Request) {
       veuActivityCode: parameters.get("veuActivityCode") || "",
       veuScenario: parameters.get("veuScenario") || "",
       limit: parameters.get("limit") || "50",
-    });
+    };
+    let result;
+    try {
+      result = await searchOfficialProducts(database, searchInput);
+    } catch (error) {
+      const automaticRecoveryRequired = error instanceof CreditexOfficialProductError
+        && (
+          error.code === "OFFICIAL_PRODUCT_REGISTRY_STALE"
+          || error.code === "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE"
+        );
+      if (!automaticRecoveryRequired) throw error;
+      const registryCode = CREDITEX_PRODUCT_KIND_REGISTRY[
+        String(productKind || "") as keyof typeof CREDITEX_PRODUCT_KIND_REGISTRY
+      ];
+      const runtimeEnvironment = env as unknown as Record<string, unknown>;
+      const definition = registryCode
+        ? creditexAutomaticProductRegistry(registryCode, runtimeEnvironment)
+        : undefined;
+      if (!definition) throw error;
+      await enqueueCreditexProductRegistryRefresh(
+        database,
+        definition.registryCode,
+      );
+      throw new CreditexOfficialProductError(
+        "OFFICIAL_PRODUCT_FLEET_BUSY",
+        503,
+        "The exact official product registry refresh is queued. Retry shortly.",
+      );
+    }
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,
       ...result,
@@ -244,6 +317,17 @@ export async function POST(request: Request) {
         (value) => value !== undefined,
       );
     if (definitions.length === 0) {
+      if (body.registryCode === "cer_sres_swh") {
+        const artifactStore = (env as unknown as {
+          EVIDENCE?: CreditexSresArtifactStore;
+        }).EVIDENCE;
+        const result = await withCreditexProductRegistryFleetLease(
+          database,
+          () => syncCerSresProductRegistry(database, { artifactStore }),
+        );
+        const registry = await loadCerSresRegistryStatus(database);
+        return json({ ok: true, results: [result], registries: [registry] });
+      }
       throw new CreditexOfficialProductError(
         "OFFICIAL_PRODUCT_REQUEST_INVALID",
         400,
@@ -255,10 +339,13 @@ export async function POST(request: Request) {
     }).EVIDENCE;
     const results = [];
     for (const definition of definitions) {
-      results.push(await syncOfficialProductRegistry(database, definition, {
-        artifactStore,
-        reviewedCountDecrease,
-      }));
+      results.push(await withCreditexProductRegistryFleetLease(
+        database,
+        () => syncOfficialProductRegistry(database, definition, {
+          artifactStore,
+          reviewedCountDecrease,
+        }),
+      ));
     }
     if (body.registryCode === "all") {
       const licensedCecBattery = creditexAutomaticProductRegistry(
@@ -267,18 +354,41 @@ export async function POST(request: Request) {
       );
       if (licensedCecBattery) {
         definitions.push(licensedCecBattery);
-        results.push(await syncOfficialProductRegistry(
+        results.push(await withCreditexProductRegistryFleetLease(
           database,
-          licensedCecBattery,
-          { artifactStore, reviewedCountDecrease },
+          () => syncOfficialProductRegistry(
+            database,
+            licensedCecBattery,
+            { artifactStore, reviewedCountDecrease },
+          ),
         ));
       }
+      const sresArtifactStore = (env as unknown as {
+        EVIDENCE?: CreditexSresArtifactStore;
+      }).EVIDENCE;
+      results.push(await withCreditexProductRegistryFleetLease(
+        database,
+        () => syncCerSresProductRegistry(database, {
+          artifactStore: sresArtifactStore,
+        }),
+      ));
+      if (!licensedCecBattery) {
+        throw new CreditexOfficialProductError(
+          "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE",
+          503,
+          creditexCecBatteryConnectorConfigurationIssue(runtimeEnvironment)
+            || "The licensed CEC battery connector is unavailable.",
+        );
+      }
     }
-    const registries = await Promise.all(
-      definitions.map((definition) => (
+    const registries = await Promise.all([
+      ...definitions.map((definition) => (
         loadOfficialProductRegistryStatus(database, definition.registryCode)
       )),
-    );
+      ...(body.registryCode === "all"
+        ? [loadCerSresRegistryStatus(database)]
+        : []),
+    ]);
     return json({ ok: true, results, registries });
   } catch (error) {
     return errorResponse(error);

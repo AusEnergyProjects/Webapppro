@@ -930,7 +930,7 @@ test("field evidence source enforces guarded finalisation and pinned custody rul
   assert.doesNotMatch(
     mediaRouteSource.slice(
       mediaRouteSource.indexOf("async function sweepTerminalUploadCleanup"),
-      mediaRouteSource.indexOf("async function initiate"),
+      mediaRouteSource.indexOf("const RESTARTABLE_UPLOAD_STATUSES"),
     ),
     /access\.ownerUid|actor_uid = \?|device_id = \?/,
   );

@@ -18,6 +18,7 @@ type ActivePicker = {
   kind: "date" | "datetime-local";
   rangeStartInput: HTMLInputElement | null;
   rangeEndInput: HTMLInputElement | null;
+  restoreFocusOnClose: boolean;
 };
 
 type Position = { left: number; top: number };
@@ -85,7 +86,9 @@ export function SiteDatePicker() {
     setActive((current) => {
       if (current) {
         current.input.setAttribute("aria-expanded", "false");
-        if (restoreFocus) queueMicrotask(() => current.input.focus({ preventScroll: true }));
+        if (restoreFocus && current.restoreFocusOnClose) {
+          queueMicrotask(() => current.input.focus({ preventScroll: true }));
+        }
       }
       return null;
     });
@@ -105,7 +108,7 @@ export function SiteDatePicker() {
     setPosition((current) => current.left === left && current.top === top ? current : { left, top });
   }, []);
 
-  const open = useCallback((input: HTMLInputElement) => {
+  const open = useCallback((input: HTMLInputElement, restoreFocusOnClose = true) => {
     const kind = input.type === "datetime-local" ? "datetime-local" : "date";
     const range = findRangeInputs(input);
     const initial = datePart(input.value) || datePart(range.start?.value || "") || todayIso();
@@ -119,7 +122,7 @@ export function SiteDatePicker() {
     input.setAttribute("aria-haspopup", "dialog");
     input.setAttribute("aria-expanded", "true");
     updatePosition(input);
-    setActive({ input, kind, rangeStartInput: range.start, rangeEndInput: range.end });
+    setActive({ input, kind, rangeStartInput: range.start, rangeEndInput: range.end, restoreFocusOnClose });
   }, [updatePosition]);
 
   useEffect(() => {
@@ -128,11 +131,22 @@ export function SiteDatePicker() {
       if (target instanceof HTMLInputElement && (target.type === "date" || target.type === "datetime-local")) {
         if (target.disabled || target.readOnly || event.button !== 0) return;
         event.preventDefault();
-        target.focus({ preventScroll: true });
-        open(target);
+        const pointerUsesNativePicker = event.pointerType !== "mouse";
+        if (!pointerUsesNativePicker) target.focus({ preventScroll: true });
+        open(target, !pointerUsesNativePicker);
         return;
       }
       if (active && target instanceof Node && !popoverRef.current?.contains(target)) close(false);
+    };
+    const click = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || (target.type !== "date" && target.type !== "datetime-local")) return;
+      if (target.disabled || target.readOnly || event.button !== 0) return;
+      // Android and tablet browsers may still run the native date-input click
+      // activation after a cancelled pointerdown. Cancelling click as well keeps
+      // the delegated TLink calendar as the single picker surface.
+      event.preventDefault();
+      if (target.getAttribute("aria-expanded") !== "true") open(target, event.detail === 0);
     };
     const keyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -144,9 +158,11 @@ export function SiteDatePicker() {
       }
     };
     document.addEventListener("pointerdown", pointerDown, true);
+    document.addEventListener("click", click, true);
     document.addEventListener("keydown", keyDown, true);
     return () => {
       document.removeEventListener("pointerdown", pointerDown, true);
+      document.removeEventListener("click", click, true);
       document.removeEventListener("keydown", keyDown, true);
     };
   }, [active, close, open]);

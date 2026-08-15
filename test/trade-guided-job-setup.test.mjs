@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (file) => fs.readFileSync(path.join(here, file), "utf8");
 const form = read("../src/components/TradeNewJobForm.tsx");
+const schedule = read("../src/components/TradeScheduleWorkspace.tsx");
+const styles = read("../src/app/globals.css");
 const workspace = read("../src/components/InstallerCrmWorkspace.tsx");
 const enquiryInbox = read("../src/components/TradeEnquiryInbox.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");
@@ -64,11 +66,73 @@ test("guided setup attaches duplicates and creates one appointment plus planned 
   assert.match(crm, /INSERT INTO trade_work_order_events[\s\S]*'compliance_intent_planned'/);
   assert.doesNotMatch(crm, /INSERT INTO trade_crm_photo_requests|sendPhotoRequestDelivery/);
   assert.doesNotMatch(crm, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
-  assert.match(workspace, /planned government activity is available to the assigned compliance team for setup review/);
+  assert.match(workspace, /governed activity form was attached to its draft compliance case and is ready for the assigned technician/);
+  assert.match(workspace, /field work is blocked until Creditex completes the governed activity form/);
   assert.match(workspace, /TradePhotoRequestPanel/);
   assert.match(workspace, /TradeQuickInvoicePanel/);
   assert.match(crm, /appointmentTitle = `\$\{displayName\} \$\{SERVICE_LABELS\[serviceCategory\]\}`/);
   assert.match(form, /technician receives the same job, activity and evidence context used by the assigned compliance team/);
+});
+
+test("guided appointment setup keeps the authorised week visible and fails closed on conflicts", () => {
+  assert.match(form, /import \{ TradeScheduleWorkspace \} from "\.\/TradeScheduleWorkspace"/);
+  assert.match(form, /<TradeScheduleWorkspace[\s\S]*variant="job"[\s\S]*proposalStatusId=\{appointmentScheduleStatusId\}/);
+  assert.match(form, /onProposalValidation=\{handleAppointmentProposalValidation\}/);
+  assert.match(form, /onProposalChange=\{handleAppointmentProposalChange\}/);
+  assert.match(form, /appointmentScheduleValidation\.key === appointmentProposalKey[\s\S]*appointmentScheduleValidation\.status === "clear"/);
+  assert.match(form, /if \(nextStep === 5 && !appointmentCalendarReady\)/);
+  assert.match(form, /if \(!appointmentCalendarReady\) \{[\s\S]*setStep\(4\)/);
+  assert.match(form, /disabled=\{!appointmentCalendarReady\}[\s\S]*\{appointmentActionLabel\(\)\}/);
+  assert.match(form, /Different workers may overlap; the selected worker may not/);
+  assert.match(schedule, /fetch\(`\/api\/trade-schedule\?rangeStart=\$\{rangeStart\}&rangeWeeks=\$\{SCHEDULE_BUFFER_WEEKS\}`/);
+  assert.match(schedule, /schedulePermissions\?\.scheduleScope === "own" \? "Your calendar" : "Team calendar"/);
+  assert.match(crm, /APPOINTMENT_CONFLICT/);
+});
+
+test("guided job creation rechecks the selected worker before and inside its atomic batch", () => {
+  const guidedCreate = crm.slice(
+    crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")'),
+    crm.indexOf('const workOrderId = cleanAdminText(body.workOrderId', crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")')),
+  );
+  const precheck = guidedCreate.indexOf("await assertTradeScheduleAvailable({");
+  const batch = guidedCreate.indexOf("const batchStatements: D1PreparedStatement[] = [");
+  const appointmentInsert = guidedCreate.indexOf("INSERT INTO trade_crm_appointments", batch);
+  const memberGuard = guidedCreate.indexOf("tradeCrmScheduleMemberGuardStatement", appointmentInsert);
+  const eligibilityGuard = guidedCreate.indexOf("tradeJobScheduleEligibilityGuardStatement", appointmentInsert);
+  const availabilityGuard = guidedCreate.indexOf("tradeScheduleAvailabilityGuardStatement", appointmentInsert);
+  const commit = guidedCreate.indexOf("await db.batch(batchStatements)");
+
+  assert.ok(precheck > 0 && precheck < batch, "availability must be checked before preparing writes");
+  assert.ok(appointmentInsert > batch, "the first appointment must be part of the creation batch");
+  assert.ok(memberGuard > appointmentInsert && memberGuard < commit, "member capability must be guarded inside the batch");
+  assert.ok(eligibilityGuard > appointmentInsert && eligibilityGuard < commit, "job eligibility must be guarded inside the batch");
+  assert.ok(availabilityGuard > appointmentInsert && availabilityGuard < commit, "availability must be guarded inside the batch");
+  assert.match(guidedCreate.slice(availabilityGuard, commit), /excludeAppointmentId: appointmentId/);
+});
+
+test("guided activity forms auto-open only after the job and intent commit", () => {
+  const guidedCreate = crm.slice(
+    crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")'),
+    crm.indexOf('const workOrderId = cleanAdminText(body.workOrderId', crm.indexOf('if (action === "create_job" || action === "create_scheduled_job")')),
+  );
+  const commit = guidedCreate.indexOf("await db.batch(batchStatements)");
+  const autoOpen = guidedCreate.indexOf("await autoOpenReadyPlannedComplianceWorkPacks", commit);
+  const calendarSync = guidedCreate.indexOf("syncCreatedAppointmentToConnectedCalendars", autoOpen);
+
+  assert.match(crm, /import \{[\s\S]*autoOpenReadyPlannedComplianceWorkPacks,[\s\S]*\} from "@\/lib\/creditex-compliance-server"/);
+  assert.ok(commit > 0 && autoOpen > commit, "the governed form resolver must read the committed job and intent");
+  assert.ok(calendarSync > autoOpen, "form attachment readiness must be known before external calendar sync and response");
+  assert.match(guidedCreate, /installerUid: identity\.uid,[\s\S]*actorUid: identity\.uid/);
+  assert.match(guidedCreate, /workPackReady = preparedComplianceIntents\.length > 0[\s\S]*complianceWorkPacks\.every\(\(item\) => item\.workPackReady\)/);
+  assert.match(guidedCreate, /complianceWorkPacks,[\s\S]*workPackReady,[\s\S]*workPackBlockers,/);
+  assert.match(guidedCreate, /The job and appointment were saved, but the activity form could not be attached/);
+});
+
+test("guided appointment controls align search actions and expand only while scheduling", () => {
+  assert.match(form, /className="crm-assignee-search"[\s\S]*<label><span>Find an active teammate<\/span><input[\s\S]*<div><button/);
+  assert.match(styles, /\.crm-create-card:has\(\.crm-job-wizard-scheduling\) \{ max-width: 1560px; \}/);
+  assert.match(styles, /\.crm-assignee-search > div \{[^}]*display: flex;[^}]*flex-wrap: wrap/);
+  assert.match(styles, /\.crm-new-job-schedule-layout > \.job-calendar \{ order: 1; \}/);
 });
 
 test("enquiry handoff keeps the selected service site and safely supports customers without one", () => {
@@ -117,8 +181,11 @@ test("guided jobs collect a bounded deduplicated list of controlled activities",
   for (const label of ["Program", "Activity", "Certificate output", "Product category", "Approved product", "Evidence form", "Calculation"]) {
     assert.match(form, new RegExp(`<dt>${label}</dt>`));
   }
+  assert.match(form, /Exact result is generated after the required product, scenario and installation data are verified/);
+  assert.match(form, /Creditex product rule mapping required/);
+  assert.match(form, /Creditex scenario rule mapping required/);
+  assert.doesNotMatch(form, /calculation\.state\.replaceAll|partial estimate available|deterministic local estimate/i);
   assert.match(form, /plannedActivityDetails\.map/);
-  assert.doesNotMatch(form, /Creditex/);
 });
 
 test("enquiry selection ignores stale detail responses and refreshes only the current record", () => {

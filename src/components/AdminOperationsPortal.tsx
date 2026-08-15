@@ -23,6 +23,8 @@ import { AdminHandoverReview } from "@/components/AdminHandoverReview";
 import { AdminAssetSafety } from "@/components/AdminAssetSafety";
 import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
 import { AdminFormTemplates } from "@/components/AdminFormTemplates";
+import { CreditexActivityWorkPackGovernance } from "@/components/CreditexActivityWorkPackGovernance";
+import { CreditexOutputActions } from "@/components/CreditexOutputActions";
 import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
 import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
 import { AdminServiceFollowUpReporting } from "@/components/AdminServiceFollowUpReporting";
@@ -173,7 +175,11 @@ export function AdminOperationsPortal() {
     const token = await activeUser.getIdToken();
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    if (init.body && !headers.has("Content-Type"))
+    if (
+      init.body
+      && !(init.body instanceof FormData)
+      && !headers.has("Content-Type")
+    )
       headers.set("Content-Type", "application/json");
     const response = await fetch(path, { ...init, headers, cache: "no-store" });
     const result = await response.json().catch(() => ({}));
@@ -185,6 +191,48 @@ export function AdminOperationsPortal() {
       throw error;
     }
     return result;
+  }, []);
+
+  const downloadOfficialSource = useCallback(async (
+    artifactId: string,
+    originalFileName: string,
+  ) => {
+    const activeUser = firebaseAuth.currentUser;
+    if (!activeUser) throw new Error("Sign in to continue.");
+    const token = await activeUser.getIdToken();
+    const response = await fetch(
+      `/api/admin/compliance-official-sources/${encodeURIComponent(artifactId)}`,
+      {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        String(result.error || "The retained official source could not be opened."),
+      );
+    }
+    const receipt = response.headers.get(
+      "X-Creditex-Official-Source-Receipt",
+    )?.trim();
+    if (!receipt) {
+      throw new Error(
+        "The retained source was verified but no access receipt was returned.",
+      );
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = originalFileName
+      .replace(/[^A-Za-z0-9._ ()-]/g, "_")
+      .slice(0, 180) || "official-source";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    return receipt;
   }, []);
 
   const loadWorkspace = useCallback(
@@ -803,7 +851,28 @@ export function AdminOperationsPortal() {
           {tab === "handovers" && user && <AdminHandoverReview user={user} role={session.role} />}
           {tab === "asset-safety" && user && <AdminAssetSafety user={user} role={session.role} />}
           {tab === "asset-governance" && user && <AdminAssetGovernance user={user} role={session.role} />}
-          {tab === "form-governance" && <AdminFormTemplates api={api} role={session.role} />}
+          {tab === "form-governance" && (
+            <>
+              <CreditexActivityWorkPackGovernance
+                api={api}
+                endpoint="/api/admin/compliance-work-packs"
+                sourceEndpoint="/api/admin/compliance-official-sources"
+                sourceBatchEndpoint="/api/admin/compliance-official-sources/batch-import"
+                canCaptureSource={["owner", "admin"].includes(session.role)}
+                onDownloadSource={downloadOfficialSource}
+                contextLabel="Australian Energy Assessments operations"
+              />
+              <CreditexOutputActions
+                api={api}
+                endpoint="/api/admin/compliance-output-actions"
+                contextLabel="Australian Energy Assessments administration"
+              />
+              <details className="admin-card admin-supporting-form-templates">
+                <summary>Supporting non-program field templates</summary>
+                <AdminFormTemplates api={api} role={session.role} />
+              </details>
+            </>
+          )}
           {tab === "field-pilot" && <AdminUsabilityPilot api={api} role={session.role} />}
           {tab === "overview" && (
             <>
@@ -961,7 +1030,7 @@ export function AdminOperationsPortal() {
                         <article key={item.id}>
                           <strong>{item.summary}</strong>
                           <span>
-                            {item.administrator} Ãƒâ€šÃ‚Â· {dateTime(item.created_at)}
+                            {item.administrator} · {dateTime(item.created_at)}
                           </span>
                         </article>
                       ))
@@ -1048,14 +1117,14 @@ export function AdminOperationsPortal() {
                         setInviteRole(event.target.value as AdminRole)
                       }
                     >
-                      <option value="support">Support Ãƒâ€šÃ‚Â· read accounts</option>
+                      <option value="support">Support · read accounts</option>
                       <option value="reviewer">
-                        Reviewer Ãƒâ€šÃ‚Â· verification decisions
+                        Reviewer · verification decisions
                       </option>
                       <option value="admin">
-                        Administrator Ãƒâ€šÃ‚Â· partners and projects
+                        Administrator · partners and projects
                       </option>
-                      <option value="owner">Owner Ãƒâ€šÃ‚Â· access management</option>
+                      <option value="owner">Owner · access management</option>
                     </select>
                   </label>
                   <button type="submit">Create invitation</button>
@@ -1124,7 +1193,7 @@ export function AdminOperationsPortal() {
                       <span>{dateTime(item.created_at)}</span>
                       <strong>{item.summary}</strong>
                       <small>
-                        {item.administrator} Ãƒâ€šÃ‚Â· {readable(item.action)}
+                        {item.administrator} · {readable(item.action)}
                       </small>
                     </article>
                   ))}

@@ -30,11 +30,13 @@ export function TradeRebateEstimateAction({
   return (
     <section className="trade-rebate-document-action">
       <div>
-        <span>USE THIS ESTIMATE</span>
+        <span>USE FOR QUOTE PLANNING</span>
         <strong>{estimate.quantity} {estimate.unit}</strong>
         <small>
-          Enter the discount you will pass to the customer. Certificate market
-          value and provider fees can vary.
+          Enter the discount you plan to pass to the customer. The recorded
+          calculation and certificate market value are different: market value
+          and provider fees can vary, and saving this does not create certificates
+          or record provider acceptance.
         </small>
       </div>
       <label>

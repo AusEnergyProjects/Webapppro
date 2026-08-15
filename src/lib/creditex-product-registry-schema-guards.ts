@@ -52,6 +52,8 @@ const REQUIRED_PRODUCT_REGISTRY_TABLES = [
   "compliance_official_product_artifacts",
   "compliance_official_product_sync_runs",
   "compliance_official_product_sync_leases",
+  "compliance_official_product_refresh_requests",
+  "compliance_official_product_stream_values",
 ] as const;
 
 const readinessByDatabase = new WeakMap<object, Promise<void>>();

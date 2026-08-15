@@ -457,6 +457,109 @@ test("a settled current registry does not schedule another parent render", () =>
   );
 });
 
+test("successful governed results expose exact dated source and product provenance", () => {
+  assert.equal(
+    governedModule.creditexGovernedOutputLabel(
+      "Estimated whole Energy Savings Certificates",
+    ),
+    "Calculated whole Energy Savings Certificates",
+  );
+  assert.equal(
+    governedModule.creditexGovernedOutputLabel(),
+    "Calculated certificate quantity",
+  );
+  assert.equal(
+    governedModule.creditexCalculationBoundaryMessage(
+      "Estimate only. Product status and evidence must be reconciled before certificate creation.",
+    ),
+    "Product status and evidence must be reconciled before certificate creation.",
+  );
+  assert.deepEqual(governedModule.creditexGovernedResultFacts({
+    formulaKey: "veu-part-6-equation/v3",
+    specificationVersion: "25.0",
+    effectiveDateLabel: "Installation date",
+    installationDate: "2026-08-15",
+    productRegistryUrl: "https://www.veu-registry.example/products",
+    approvedProducts: [
+      { snapshotId: "veu-snapshot-2026-08-15" },
+      { snapshotId: "veu-snapshot-2026-08-15" },
+    ],
+  }), {
+    effectiveDate: "2026-08-15",
+    effectiveDateLabel: "Installation date",
+    approvedProductSnapshotIds: ["veu-snapshot-2026-08-15"],
+    approvedProductSnapshotRequired: true,
+    sourceVersion: "VEU specification 25.0",
+    provenanceComplete: true,
+  });
+  assert.deepEqual(governedModule.creditexGovernedResultFacts({
+    formulaKey: "veu-part-46-equation/v2",
+    specificationVersion: "25.0",
+    effectiveDateLabel: "Purchase date",
+    purchaseDate: "2026-08-15",
+    approvedProducts: [],
+  }), {
+    effectiveDate: "2026-08-15",
+    effectiveDateLabel: "Purchase date",
+    approvedProductSnapshotIds: [],
+    approvedProductSnapshotRequired: false,
+    sourceVersion: "VEU specification 25.0",
+    provenanceComplete: true,
+  });
+  assert.equal(governedModule.creditexGovernedResultFacts({
+    formulaKey: "veu-part-6-equation/v3",
+    installationDate: "2026-08-15",
+    approvedProducts: [],
+  }).provenanceComplete, false);
+
+  const governedSource = fs.readFileSync(
+    path.resolve("src/components/CreditexGovernedProgramCalculator.tsx"),
+    "utf8",
+  );
+  const resultSource = governedSource.slice(
+    governedSource.indexOf("function GovernedResult"),
+    governedSource.indexOf("function CreditexNswCalculator"),
+  );
+  assert.match(resultSource, /Source-verified result/);
+  assert.match(resultSource, /Exact, source-verified calculation for the selected inputs/);
+  assert.match(resultSource, /Approved product snapshot/);
+  assert.match(resultSource, /Formula\/source version/);
+  assert.match(
+    resultSource,
+    /Certificate creation and provider acceptance remain[\s\S]*separate workflows/,
+  );
+  assert.match(resultSource, /eligibilityWarnings/);
+  assert.doesNotMatch(resultSource, /Estimate only|Estimated whole certificates/);
+  assert.match(resultSource, /Eligibility boundary/);
+  assert.match(resultSource, /creditexCalculationBoundaryMessage\(estimate\.operatorMessage\)/);
+
+  const allProgramSource = fs.readFileSync(
+    path.resolve("src/components/CreditexAllProgramCalculator.tsx"),
+    "utf8",
+  );
+  const localResultSource = allProgramSource.slice(
+    allProgramSource.indexOf("function CreditexLocalProgramResult"),
+    allProgramSource.indexOf("function effectiveDate"),
+  );
+  assert.match(localResultSource, /Calculated quote-planning amount/);
+  assert.match(localResultSource, /installation date \{estimate\.effectiveDate\}/);
+  assert.match(localResultSource, /Formula\/source version/);
+  assert.match(localResultSource, /provider[\s\S]*acceptance remain separate workflows/);
+  assert.match(localResultSource, /Eligibility boundary/);
+  assert.doesNotMatch(localResultSource, /Estimate only|operatorMessage\}<\/p>/);
+  assert.match(allProgramSource, /Market reference only/);
+
+  const pageSource = fs.readFileSync(
+    path.resolve("src/app/calculator/page.tsx"),
+    "utf8",
+  );
+  assert.match(pageSource, /exact provenance for governed programs/);
+  assert.match(
+    pageSource,
+    /Eligibility, certificate creation and provider[\s\S]*acceptance remain separate workflows/,
+  );
+});
+
 test("shared admin and trade VEU rendering leads with a short quote flow", () => {
   const api = async () => ({ ok: true });
   const adminHtml = renderToStaticMarkup(React.createElement(
@@ -477,7 +580,7 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
       ">Postcode<",
       ">Premises type<",
       ">Eligibility and evidence<",
-      ">Calculate rebate estimate<",
+      ">Calculate source-verified result<",
     ];
     let previous = -1;
     for (const marker of visibleOrder) {
@@ -494,10 +597,10 @@ test("shared admin and trade VEU rendering leads with a short quote flow", () =>
     assert.match(html, /Add another approved model/);
     assert.match(html, /aria-pressed="true">1 system/);
     assert.match(html, />2 systems<\/button>/);
-    assert.match(html, /Estimate assumes no earlier VEU-funded water-heater upgrades/);
+    assert.match(html, /Quote planning assumes no earlier VEU-funded water-heater upgrades/);
     assert.doesNotMatch(html, /Previous VEU water-heating products at this property/);
     assert.doesNotMatch(html, /type="date"[^>]*max=/);
-    assert.match(html, /<button type="submit" disabled="">Calculate rebate estimate<\/button>/);
+    assert.match(html, /<button type="submit" disabled="">Calculate source-verified result<\/button>/);
     assert.doesNotMatch(html, /AS\/NZS 4234 system size|Bs2021/);
     assert.doesNotMatch(
       html,
@@ -594,7 +697,7 @@ test("VEU water-heater quote combines exact reductions once and hides scheme his
   assert.match(source, /total is rounded once/);
   assert.match(source, /definition\.key === "prior_relevant_period_water_heater_products"/);
   assert.match(source, /VEU_WATER_HEATER_PRIOR_PRODUCT_QUOTE_ASSUMPTION = "0"/);
-  assert.match(source, /Estimate assumes no earlier VEU-funded water-heater upgrades/);
+  assert.match(source, /Quote planning assumes no earlier VEU-funded water-heater upgrades/);
   assert.match(source, /connected in-line/);
   assert.doesNotMatch(source, /Each system is treated as its own prescribed/);
   assert.doesNotMatch(source, /Unrounded estimate, regulator confirmation required/);
@@ -748,6 +851,14 @@ test("the shared approved-product picker shows only choices that remain necessar
   assert.match(pickerSource, /products\.length > 1/);
   assert.doesNotMatch(pickerSource, /hasUnclassifiedProducts/);
   assert.match(pickerSource, /Retry official registry/);
+  assert.match(
+    pickerSource,
+    /OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000/,
+  );
+  assert.match(
+    pickerSource,
+    /requestTimeoutMs: OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS/,
+  );
   assert.doesNotMatch(pickerSource, /Start product selection again/);
   assert.doesNotMatch(pickerSource, /modelQuery|official rows|snapshot \$\{/);
   assert.match(pickerSource, /aria-busy=\{busy\}/);

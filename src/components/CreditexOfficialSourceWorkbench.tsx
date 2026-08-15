@@ -55,7 +55,7 @@ type OfficialSourceBinding = {
 
 type OfficialSource = {
   artifact: OfficialSourceArtifact;
-  binding: OfficialSourceBinding;
+  binding: OfficialSourceBinding | null;
   artifactReview: SourceReview | null;
   bindingReview: SourceReview | null;
 };
@@ -159,7 +159,7 @@ function officialSource(value: unknown): OfficialSource | null {
   const binding = objectValue(source.binding);
   const artifactId = textValue(artifact.id);
   const bindingId = textValue(binding.id);
-  if (!artifactId || !bindingId) return null;
+  if (!artifactId) return null;
   return {
     artifact: {
       id: artifactId,
@@ -177,15 +177,17 @@ function officialSource(value: unknown): OfficialSource | null {
       custodyState: textValue(artifact.custodyState),
       capturedAt: textValue(artifact.capturedAt),
     },
-    binding: {
-      id: bindingId,
-      artifactId: textValue(binding.artifactId),
-      targetType: textValue(binding.targetType),
-      targetId: textValue(binding.targetId),
-      citationLocation: textValue(binding.citationLocation),
-      bindingState: textValue(binding.bindingState),
-      createdAt: textValue(binding.createdAt),
-    },
+    binding: bindingId
+      ? {
+          id: bindingId,
+          artifactId: textValue(binding.artifactId),
+          targetType: textValue(binding.targetType),
+          targetId: textValue(binding.targetId),
+          citationLocation: textValue(binding.citationLocation),
+          bindingState: textValue(binding.bindingState),
+          createdAt: textValue(binding.createdAt),
+        }
+      : null,
     artifactReview: sourceReview(source.artifactReview),
     bindingReview: sourceReview(source.bindingReview),
   };
@@ -806,17 +808,23 @@ export function CreditexOfficialSourceWorkbench({
             {sources.map((source) => {
               const artifactApproved =
                 source.artifactReview?.decision === "approved";
+              const binding = source.binding;
               const currentUrl = source.artifact.sourceUrl.startsWith("https://")
                 ? source.artifact.sourceUrl
                 : "";
               return (
-                <article className={styles.sourceCard} key={source.binding.id}>
+                <article
+                  className={styles.sourceCard}
+                  key={`${source.artifact.id}:${binding?.id || "library"}`}
+                >
                   <header className={styles.sourceHeader}>
                     <div>
                       <span>
-                        {targetLabels.get(
-                          `${source.binding.targetType}:${source.binding.targetId}`,
-                        ) || `${readable(source.binding.targetType)} | ${source.binding.targetId}`}
+                        {binding
+                          ? targetLabels.get(
+                            `${binding.targetType}:${binding.targetId}`,
+                          ) || `${readable(binding.targetType)} | ${binding.targetId}`
+                          : "Forms document library | placement pending"}
                       </span>
                       <h4>{source.artifact.sourceTitle}</h4>
                       <p>
@@ -864,17 +872,27 @@ export function CreditexOfficialSourceWorkbench({
                       <dt>Custody status</dt>
                       <dd>{readable(source.artifact.custodyState)}</dd>
                     </div>
-                    <div>
-                      <dt>Binding status</dt>
-                      <dd>{readable(source.binding.bindingState)}</dd>
-                    </div>
+                    {binding ? (
+                      <div>
+                        <dt>Binding status</dt>
+                        <dd>{readable(binding.bindingState)}</dd>
+                      </div>
+                    ) : (
+                      <div>
+                        <dt>Workflow placement</dt>
+                        <dd>Waiting for artifact approval</dd>
+                      </div>
+                    )}
                     <div>
                       <dt>Retrieved</dt>
                       <dd>{formattedDate(source.artifact.assertedRetrievedAt)}</dd>
                     </div>
                     <div>
                       <dt>Citation</dt>
-                      <dd>{source.binding.citationLocation}</dd>
+                      <dd>
+                        {binding?.citationLocation
+                          || "Chosen when the approved document is attached to a workflow"}
+                      </dd>
                     </div>
                   </dl>
 
@@ -885,10 +903,12 @@ export function CreditexOfficialSourceWorkbench({
                         <dt>Artifact ID</dt>
                         <dd>{source.artifact.id}</dd>
                       </div>
-                      <div>
-                        <dt>Binding ID</dt>
-                        <dd>{source.binding.id}</dd>
-                      </div>
+                      {binding ? (
+                        <div>
+                          <dt>Binding ID</dt>
+                          <dd>{binding.id}</dd>
+                        </div>
+                      ) : null}
                       <div>
                         <dt>Content type</dt>
                         <dd>{source.artifact.contentType || "Not supplied"}</dd>
@@ -923,15 +943,27 @@ export function CreditexOfficialSourceWorkbench({
                       subjectType="artifact"
                       onDecision={recordDecision}
                     />
-                    <ReviewControls
-                      approvalDisabled={!artifactApproved}
-                      busy={reviewBusy === `binding:${source.binding.id}`}
-                      canReview={canReview}
-                      current={source.bindingReview}
-                      subjectId={source.binding.id}
-                      subjectType="binding"
-                      onDecision={recordDecision}
-                    />
+                    {binding ? (
+                      <ReviewControls
+                        approvalDisabled={!artifactApproved}
+                        busy={reviewBusy === `binding:${binding.id}`}
+                        canReview={canReview}
+                        current={source.bindingReview}
+                        subjectId={binding.id}
+                        subjectType="binding"
+                        onDecision={recordDecision}
+                      />
+                    ) : (
+                      <section className={styles.libraryReviewNotice}>
+                        <span>Workflow placement</span>
+                        <strong>Not attached yet</strong>
+                        <p>
+                          Approve the exact artifact first. A Forms author can
+                          then place it against a precise workflow question,
+                          declaration or requirement for separate review.
+                        </p>
+                      </section>
+                    )}
                   </div>
                 </article>
               );

@@ -20,14 +20,41 @@ const officialMigration = fs.readFileSync(
   ),
   "utf8",
 );
+const refreshQueueMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0148_creditex_official_product_refresh_requests.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const streamStagingMigration = fs.readFileSync(
+  new URL(
+    "../drizzle/0149_creditex_official_product_stream_staging.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const worker = fs.readFileSync(
   new URL("../worker/index.ts", import.meta.url),
+  "utf8",
+);
+const maintenance = fs.readFileSync(
+  new URL(
+    "../src/lib/creditex-product-registry-maintenance.ts",
+    import.meta.url,
+  ),
   "utf8",
 );
 
 test("Sites-safe product registry migrations contain no trigger bodies", () => {
   assert.doesNotMatch(sresMigration, /CREATE\s+TRIGGER/i);
   assert.doesNotMatch(officialMigration, /CREATE\s+TRIGGER/i);
+  assert.doesNotMatch(refreshQueueMigration, /CREATE\s+TRIGGER/i);
+  assert.doesNotMatch(streamStagingMigration, /CREATE\s+TRIGGER/i);
+  assert.match(
+    streamStagingMigration,
+    /CREATE TABLE `compliance_official_product_stream_values`/,
+  );
   assert.match(
     `${sresMigration}\n${officialMigration}`,
     /triggers are installed through the D1 prepared-statement schema guard/g,
@@ -47,12 +74,9 @@ test("all product registry trigger guards have one unique prepared statement", (
 });
 
 test("scheduled registry refresh installs guards before either sync", () => {
-  assert.match(
-    worker,
-    /ensureCreditexProductRegistrySchemaGuards\(db\)[\s\S]*syncCerSresProductRegistry/,
-  );
-  assert.match(
-    worker,
-    /ensureCreditexProductRegistrySchemaGuards\(db\)[\s\S]*CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES/,
-  );
+  assert.match(worker, /maintainNextCreditexProductRegistry\(/);
+  assert.match(worker, /creditexAutomaticProductRegistryMaintenanceTargets\(/);
+  assert.match(maintenance, /ensureCreditexProductRegistrySchemaGuards/);
+  assert.match(maintenance, /syncCerSresProductRegistry/);
+  assert.match(maintenance, /syncOfficialProductRegistry/);
 });

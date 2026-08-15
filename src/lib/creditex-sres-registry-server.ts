@@ -21,6 +21,9 @@ import {
   ensureCreditexProductRegistrySchemaGuards,
 } from "./creditex-product-registry-schema-guards.ts";
 import { australianRegulatorDate } from "./creditex-australian-regulator-date.ts";
+import type {
+  CreditexSresOfficialProductKind,
+} from "./creditex-official-product-registry.ts";
 
 const REGISTRY_CODE = "cer_sres_swh" as const;
 const SOURCE_MAXIMUM_BYTES = 1_900_000;
@@ -31,6 +34,10 @@ const XLSX_CONTENT_TYPE =
 const PRODUCT_INSERT_CHUNK = 1_000;
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
 const SYNC_LEASE_MS = 15 * 60 * 1000;
+const AUTOMATIC_REFRESH_WAIT_MS = 55_000;
+const AUTOMATIC_REFRESH_POLL_MS = 2_000;
+const AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
+const SRES_SOURCE_FETCH_TIMEOUT_MS = 45_000;
 const PRODUCT_FACET_MAXIMUM_VALUES = 20_000;
 const EXACT_PRODUCT_MAXIMUM_RECORDS = 500;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,6 +47,28 @@ type FetchLike = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>;
+
+function withSresSourceFetchDeadline(fetchImpl: FetchLike): FetchLike {
+  return async (input, init = {}) => {
+    const controller = new AbortController();
+    const externalSignal = init.signal;
+    const abortFromExternal = () => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) abortFromExternal();
+    else externalSignal?.addEventListener("abort", abortFromExternal, {
+      once: true,
+    });
+    const timeout = setTimeout(
+      () => controller.abort("sres-official-source-timeout"),
+      SRES_SOURCE_FETCH_TIMEOUT_MS,
+    );
+    try {
+      return await fetchImpl(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromExternal);
+    }
+  };
+}
 
 type SnapshotRow = {
   id: string;
@@ -60,10 +89,12 @@ type SyncRunRow = {
 
 type ProductRow = {
   snapshot_id: string;
+  snapshot_status: "current" | "superseded";
   snapshot_source_manifest_json: string;
   snapshot_source_sha256: string;
   snapshot_activated_at: string;
   snapshot_activated_on: string;
+  snapshot_superseded_on: string | null;
   source_record_key: string;
   source_item: string;
   technology: CerSresRegisteredTechnology;
@@ -77,6 +108,16 @@ type ProductRow = {
   zone_3_stcs: number | null;
   zone_4_stcs: number | null;
   zone_5_stcs: number | null;
+};
+
+type ProductSourceArtifactRow = {
+  source_key: string;
+  source_url: string;
+  source_sha256: string;
+  content_type: string;
+  byte_length: number;
+  record_count: number;
+  object_key: string;
 };
 
 type ProductFacetRow = {
@@ -176,6 +217,67 @@ export type CreditexSresRegistryStatus = {
     sourceManifest: unknown;
   } | null;
 };
+
+export type CreditexSresOfficialProductProjection = Readonly<{
+  registryCode: typeof REGISTRY_CODE;
+  productKind: CreditexSresOfficialProductKind;
+  installationDate: string;
+  snapshotId: string;
+  snapshotStatus: "current" | "superseded";
+  snapshotSourceSha256: string;
+  snapshotActivatedAt: string;
+  snapshotActivatedOn: string;
+  snapshotSupersededOn: string | null;
+  registryLastCheckedAt: string;
+  sourceArtifact: Readonly<{
+    sourceKey: CerSresProductSource["sourceKey"];
+    sourceUrl: string;
+    sourceSha256: string;
+    contentType: string;
+    byteLength: number;
+    recordCount: number;
+  }>;
+  registrationIdentity: Readonly<{
+    registryCode: typeof REGISTRY_CODE;
+    sourceKey: CerSresProductSource["sourceKey"];
+    sourceRecordKey: string;
+    sourceItem: string;
+  }>;
+  sourceRecordKey: string;
+  sourceItem: string;
+  technology: CerSresRegisteredTechnology;
+  category: string;
+  brand: string;
+  model: string;
+  eligibleFrom: string;
+  eligibleTo: string;
+  registeredTenYearStcs: Readonly<{
+    zone1: number | null;
+    zone2: number | null;
+    zone3: number | null;
+    zone4: number | null;
+    zone5: number | null;
+  }>;
+}>;
+
+export type CreditexSresOfficialProductResolutionInput = Readonly<{
+  productKind: CreditexSresOfficialProductKind;
+  productKey: string;
+  installationDate: string;
+  now?: Date;
+}>;
+
+export type CreditexSresOfficialProductSearchInput = Readonly<{
+  productKind: CreditexSresOfficialProductKind;
+  installationDate: string;
+  category?: unknown;
+  brand?: unknown;
+  model?: unknown;
+  query?: string;
+  limit?: number;
+  now?: Date;
+  cascade?: boolean;
+}>;
 
 function fail(code: string, status: number, message: string): never {
   throw new CreditexSresRegistryError(code, status, message);
@@ -767,6 +869,7 @@ async function retainArtifact(
       || Number(retained.size) !== artifact.bytes.byteLength
       || retained.customMetadata?.sha256 !== artifact.sha256
       || retained.customMetadata?.sourceKey !== artifact.source.sourceKey
+      || retained.customMetadata?.sourceUrl !== artifact.source.url
     ) {
       return fail(
         "SRES_SOURCE_CUSTODY_FAILED",
@@ -801,8 +904,14 @@ async function retainArtifact(
   };
   const existing = await store.head(objectKey);
   if (existing) {
-    await validate(existing);
-    return objectKey;
+    const exactMetadata = Number(existing.size) === artifact.bytes.byteLength
+      && existing.customMetadata?.sha256 === artifact.sha256
+      && existing.customMetadata?.sourceKey === artifact.source.sourceKey
+      && existing.customMetadata?.sourceUrl === artifact.source.url;
+    if (exactMetadata) {
+      await validate(existing);
+      return objectKey;
+    }
   }
   await store.put(objectKey, artifact.bytes, {
     httpMetadata: { contentType: artifact.contentType },
@@ -848,6 +957,27 @@ async function releaseSyncLease(db: D1Database, leaseId: string) {
     WHERE registry_code = ? AND lease_id = ?`)
     .bind(REGISTRY_CODE, leaseId)
     .run();
+}
+
+async function renewSyncLease(
+  db: D1Database,
+  leaseId: string,
+  leaseStartedAt: string,
+) {
+  const now = new Date(Math.max(Date.now(), Date.parse(leaseStartedAt)));
+  const expiresAt = new Date(now.getTime() + SYNC_LEASE_MS).toISOString();
+  const result = await db.prepare(`UPDATE compliance_product_registry_sync_leases
+    SET expires_at = ?
+    WHERE registry_code = ? AND lease_id = ?`)
+    .bind(expiresAt, REGISTRY_CODE, leaseId)
+    .run();
+  if (Number(result.meta?.changes || 0) !== 1) {
+    return fail(
+      "SRES_REFRESH_IN_PROGRESS",
+      409,
+      "Official product registry refresh ownership was lost.",
+    );
+  }
 }
 
 async function cleanAbandonedRegistryRows(db: D1Database) {
@@ -969,7 +1099,7 @@ export async function syncCerSresProductRegistry(
   } = {},
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = withSresSourceFetchDeadline(options.fetchImpl || fetch);
   const now = options.now || new Date();
   const checkedAt = now.toISOString();
   const checkedOn = australianRegulatorDate(now);
@@ -993,10 +1123,12 @@ export async function syncCerSresProductRegistry(
     const productArtifacts: SourceArtifact[] = [];
     for (const source of sources) {
       productArtifacts.push(await fetchSource(source, fetchImpl));
+      await renewSyncLease(db, leaseId, checkedAt);
     }
     const referenceArtifacts: ReferenceArtifact[] = [];
     for (const source of references) {
       referenceArtifacts.push(await fetchReference(source, fetchImpl));
+      await renewSyncLease(db, leaseId, checkedAt);
     }
     const registerMetadataArtifacts = productArtifacts.map(
       (artifact) => artifact.registerMetadata,
@@ -1096,6 +1228,7 @@ export async function syncCerSresProductRegistry(
         artifact.source.sourceKey,
         await retainArtifact(artifactStore, artifact),
       );
+      await renewSyncLease(db, leaseId, checkedAt);
     }
     const manifest = {
       contract: CREDITEX_SRES_REGISTRY_CONTRACT,
@@ -1174,6 +1307,7 @@ export async function syncCerSresProductRegistry(
       .run();
 
     for (const artifact of artifacts) {
+      await renewSyncLease(db, leaseId, checkedAt);
       await db.prepare(`INSERT INTO compliance_product_registry_source_artifacts (
         id, snapshot_id, source_key, source_url, source_sha256, content_type,
         byte_length, record_count, object_key, created_at
@@ -1194,6 +1328,7 @@ export async function syncCerSresProductRegistry(
       if (artifact.records.length) {
         await insertProductChunks(db, stagingSnapshotId, artifact.records);
       }
+      await renewSyncLease(db, leaseId, checkedAt);
     }
     const inserted = await db.prepare(`SELECT COUNT(*) AS count
       FROM compliance_product_registry_products WHERE snapshot_id = ?`)
@@ -1240,6 +1375,7 @@ export async function syncCerSresProductRegistry(
           reviewAuditMessage,
         ),
     );
+    await renewSyncLease(db, leaseId, checkedAt);
     await db.batch(activationStatements);
     await cleanAbandonedRegistryRows(db);
     return {
@@ -1295,14 +1431,16 @@ export async function loadCerSresRegistryStatus(
       .bind(REGISTRY_CODE).first<SyncRunRow>(),
   ]);
   const lastCheckedAt = lastSuccessfulCheck?.checked_at || null;
+  const checkedAgeMs = lastCheckedAt
+    ? now.getTime() - new Date(lastCheckedAt).getTime()
+    : Number.NaN;
   const current = Boolean(
     snapshot
     && lastCheckedAt
-    && lastAttempt?.status !== "failed"
-    && lastAttempt?.snapshot_id === snapshot.id
     && lastSuccessfulCheck?.snapshot_id === snapshot.id
-    && now.getTime() - new Date(lastCheckedAt).getTime()
-      <= FRESHNESS_WINDOW_MS,
+    && Number.isFinite(checkedAgeMs)
+    && checkedAgeMs >= 0
+    && checkedAgeMs <= FRESHNESS_WINDOW_MS,
   );
   return {
     registryCode: REGISTRY_CODE,
@@ -1327,6 +1465,85 @@ export async function loadCerSresRegistryStatus(
         }
       : null,
   };
+}
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function failedRefreshBackoffActive(
+  status: CreditexSresRegistryStatus,
+  now: Date,
+) {
+  if (status.lastAttempt?.status !== "failed") return false;
+  const attemptedAt = Date.parse(status.lastAttempt.checkedAt);
+  const elapsed = now.getTime() - attemptedAt;
+  return Number.isFinite(elapsed)
+    && elapsed >= 0
+    && elapsed < AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS;
+}
+
+export async function ensureCerSresProductRegistryCurrent(
+  db: D1Database,
+  options: {
+    artifactStore?: CreditexSresArtifactStore;
+    fetchImpl?: FetchLike;
+    now?: Date;
+    waitForRefreshMs?: number;
+    pollIntervalMs?: number;
+  } = {},
+) {
+  const now = options.now || new Date();
+  let status = await loadCerSresRegistryStatus(db, { now });
+  if (status.status === "current") return status;
+  if (failedRefreshBackoffActive(status, now)) {
+    return fail(
+      status.status === "stale"
+        ? "SRES_PRODUCT_REGISTRY_STALE"
+        : "SRES_PRODUCT_REGISTRY_UNAVAILABLE",
+      503,
+      "The previous official product refresh failed recently. The controlled retry window is still active.",
+    );
+  }
+  try {
+    await syncCerSresProductRegistry(db, {
+      artifactStore: options.artifactStore,
+      fetchImpl: options.fetchImpl,
+      now: options.now,
+    });
+  } catch (error) {
+    if (
+      !(error instanceof CreditexSresRegistryError)
+      || error.code !== "SRES_REFRESH_IN_PROGRESS"
+    ) {
+      throw error;
+    }
+    const waitForRefreshMs = Math.min(
+      Math.max(Number(options.waitForRefreshMs ?? AUTOMATIC_REFRESH_WAIT_MS), 0),
+      AUTOMATIC_REFRESH_WAIT_MS,
+    );
+    const pollIntervalMs = Math.min(
+      Math.max(Number(options.pollIntervalMs ?? AUTOMATIC_REFRESH_POLL_MS), 250),
+      AUTOMATIC_REFRESH_POLL_MS,
+    );
+    const deadline = Date.now() + waitForRefreshMs;
+    while (Date.now() < deadline) {
+      await wait(Math.min(pollIntervalMs, Math.max(deadline - Date.now(), 1)));
+      status = await loadCerSresRegistryStatus(db, { now });
+      if (status.status === "current") return status;
+    }
+  }
+  status = await loadCerSresRegistryStatus(db, { now });
+  if (status.status !== "current") {
+    return fail(
+      status.status === "stale"
+        ? "SRES_PRODUCT_REGISTRY_STALE"
+        : "SRES_PRODUCT_REGISTRY_UNAVAILABLE",
+      503,
+      "The official product registry refresh did not produce a current snapshot.",
+    );
+  }
+  return status;
 }
 
 type CurrentRegistryStatus = CreditexSresRegistryStatus & {
@@ -1363,6 +1580,31 @@ const SRES_PRODUCT_CATEGORIES = {
   CerSresRegisteredTechnology,
   readonly string[]
 >;
+
+const SRES_OFFICIAL_PRODUCT_KIND_TECHNOLOGY = {
+  sres_air_source_heat_pump: "air_source_heat_pump",
+  sres_solar_water_heater: "solar_water_heater",
+} as const satisfies Record<
+  CreditexSresOfficialProductKind,
+  CerSresRegisteredTechnology
+>;
+
+function technologyForOfficialProductKind(value: unknown) {
+  const productKind = String(value || "") as CreditexSresOfficialProductKind;
+  const technology = (
+    SRES_OFFICIAL_PRODUCT_KIND_TECHNOLOGY as Readonly<
+      Partial<Record<CreditexSresOfficialProductKind, CerSresRegisteredTechnology>>
+    >
+  )[productKind];
+  if (!technology) {
+    return fail(
+      "SRES_PRODUCT_KIND_INVALID",
+      400,
+      "Choose a CER-registered air-source heat pump or solar water heater.",
+    );
+  }
+  return { productKind, technology };
+}
 
 const EFFECTIVE_SRES_PRODUCT_CANDIDATES = `WITH candidates AS (
     SELECT
@@ -1574,18 +1816,22 @@ export async function searchCerSresProducts(
       )
       .all<Omit<ProductRow,
         | "snapshot_id"
+        | "snapshot_status"
         | "snapshot_source_manifest_json"
         | "snapshot_source_sha256"
         | "snapshot_activated_at"
         | "snapshot_activated_on"
+        | "snapshot_superseded_on"
       >>()
     : Promise.resolve({
         results: [] as Array<Omit<ProductRow,
           | "snapshot_id"
+          | "snapshot_status"
           | "snapshot_source_manifest_json"
           | "snapshot_source_sha256"
           | "snapshot_activated_at"
           | "snapshot_activated_on"
+          | "snapshot_superseded_on"
         >>,
       });
   const matchCountRequest = loadProducts
@@ -1671,8 +1917,9 @@ async function resolveRegisteredProduct(
     installationDate: string;
     now?: Date;
   },
+  currentRegistry?: CurrentRegistryStatus,
 ) {
-  const registry = await requireCurrentRegistry(db, input.now);
+  const registry = currentRegistry || await requireCurrentRegistry(db, input.now);
   const productKey = String(input.productKey || "").trim();
   if (!/^cer-[a-z0-9-]+:\d+$/.test(productKey) || productKey.length > 100) {
     return fail(
@@ -1687,10 +1934,12 @@ async function resolveRegisteredProduct(
   );
   const product = await db.prepare(`SELECT
       p.snapshot_id,
+      s.status AS snapshot_status,
       s.source_manifest_json AS snapshot_source_manifest_json,
       s.source_sha256 AS snapshot_source_sha256,
       s.activated_at AS snapshot_activated_at,
       s.activated_on AS snapshot_activated_on,
+      s.superseded_on AS snapshot_superseded_on,
       p.source_record_key, p.source_item, p.technology, p.category,
       p.brand, p.model, p.eligible_from, p.eligible_to,
       p.zone_1_stcs, p.zone_2_stcs, p.zone_3_stcs,
@@ -1755,6 +2004,276 @@ async function resolveRegisteredProduct(
   }
   parseManifest(product.snapshot_source_manifest_json);
   return { registry, product, installationDate };
+}
+
+function manifestRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function exactProductSource(product: ProductRow) {
+  const sources = CER_SRES_PRODUCT_SOURCES.filter((source) =>
+    source.technology === product.technology
+    && source.category === product.category
+  );
+  if (sources.length !== 1) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product does not resolve to one canonical CER source.",
+    );
+  }
+  const source = sources[0];
+  if (
+    product.source_record_key !== `${source.sourceKey}:${product.source_item}`
+  ) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product registration identity does not match its CER source.",
+    );
+  }
+  return source;
+}
+
+async function loadExactProductSourceArtifact(
+  db: D1Database,
+  product: ProductRow,
+) {
+  const source = exactProductSource(product);
+  const manifestSha256 = await sha256Hex(
+    product.snapshot_source_manifest_json,
+  );
+  if (manifestSha256 !== product.snapshot_source_sha256) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product snapshot manifest does not match its sealed hash.",
+    );
+  }
+  const manifest = manifestRecord(parseManifest(
+    product.snapshot_source_manifest_json,
+  ));
+  const sources = Array.isArray(manifest?.sources) ? manifest.sources : [];
+  const matches = sources.filter((candidate) =>
+    manifestRecord(candidate)?.sourceKey === source.sourceKey
+  );
+  if (
+    manifest?.contract !== CREDITEX_SRES_REGISTRY_CONTRACT
+    || manifest.registryCode !== REGISTRY_CODE
+    || matches.length !== 1
+  ) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product source is missing or ambiguous in its sealed manifest.",
+    );
+  }
+  const manifestSource = manifestRecord(matches[0]);
+  const registerMetadata = manifestRecord(manifestSource?.registerMetadata);
+  const artifactRows = await db.prepare(`SELECT source_key, source_url,
+      source_sha256, content_type, byte_length, record_count, object_key
+    FROM compliance_product_registry_source_artifacts
+    WHERE snapshot_id = ? AND source_key = ?`)
+    .bind(product.snapshot_id, source.sourceKey)
+    .all<ProductSourceArtifactRow>();
+  if (artifactRows.results.length !== 1) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product does not resolve to one retained CER source artifact.",
+    );
+  }
+  const artifact = artifactRows.results[0];
+  const exact = manifestSource?.technology === source.technology
+    && manifestSource.category === source.category
+    && manifestSource.url === source.url
+    && manifestSource.contentType === "text/csv"
+    && Number.isSafeInteger(manifestSource.byteLength)
+    && Number(manifestSource.byteLength) > 0
+    && Number.isSafeInteger(manifestSource.recordCount)
+    && Number(manifestSource.recordCount) > 0
+    && typeof manifestSource.sha256 === "string"
+    && /^[a-f0-9]{64}$/.test(manifestSource.sha256)
+    && typeof manifestSource.objectKey === "string"
+    && manifestSource.objectKey.length >= 80
+    && registerMetadata !== null
+    && registerMetadata.url === source.registerMetadataUrl
+    && registerMetadata.contentType === XLSX_CONTENT_TYPE
+    && Number.isSafeInteger(registerMetadata.byteLength)
+    && Number(registerMetadata.byteLength) > 0
+    && typeof registerMetadata.sha256 === "string"
+    && /^[a-f0-9]{64}$/.test(registerMetadata.sha256)
+    && typeof registerMetadata.objectKey === "string"
+    && registerMetadata.objectKey.length >= 80
+    && artifact.source_key === source.sourceKey
+    && artifact.source_url === manifestSource.url
+    && artifact.source_sha256 === manifestSource.sha256
+    && artifact.content_type === manifestSource.contentType
+    && Number(artifact.byte_length) === Number(manifestSource.byteLength)
+    && Number(artifact.record_count) === Number(manifestSource.recordCount)
+    && artifact.object_key === manifestSource.objectKey;
+  if (!exact) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product source artifact does not match its sealed manifest.",
+    );
+  }
+  return Object.freeze({
+    sourceKey: source.sourceKey,
+    sourceUrl: artifact.source_url,
+    sourceSha256: artifact.source_sha256,
+    contentType: artifact.content_type,
+    byteLength: Number(artifact.byte_length),
+    recordCount: Number(artifact.record_count),
+  });
+}
+
+async function projectOfficialProduct(
+  db: D1Database,
+  input: Readonly<{
+    productKind: CreditexSresOfficialProductKind;
+    technology: CerSresRegisteredTechnology;
+    resolved: Awaited<ReturnType<typeof resolveRegisteredProduct>>;
+    sourceArtifact?: Awaited<ReturnType<typeof loadExactProductSourceArtifact>>;
+  }>,
+): Promise<CreditexSresOfficialProductProjection> {
+  const { product, registry, installationDate } = input.resolved;
+  if (
+    product.technology !== input.technology
+    || !registry.lastCheckedAt
+    || (product.snapshot_status === "current"
+      ? product.snapshot_superseded_on !== null
+      : !DATE_PATTERN.test(product.snapshot_superseded_on || "")
+        || String(product.snapshot_superseded_on) <= installationDate)
+  ) {
+    return fail(
+      "SRES_REGISTRY_INTEGRITY_FAILED",
+      503,
+      "The selected product is not bound to one effective current registry history.",
+    );
+  }
+  const sourceArtifact = input.sourceArtifact
+    || await loadExactProductSourceArtifact(db, product);
+  const registrationIdentity = Object.freeze({
+    registryCode: REGISTRY_CODE,
+    sourceKey: sourceArtifact.sourceKey,
+    sourceRecordKey: product.source_record_key,
+    sourceItem: product.source_item,
+  });
+  return Object.freeze({
+    registryCode: REGISTRY_CODE,
+    productKind: input.productKind,
+    installationDate,
+    snapshotId: product.snapshot_id,
+    snapshotStatus: product.snapshot_status,
+    snapshotSourceSha256: product.snapshot_source_sha256,
+    snapshotActivatedAt: product.snapshot_activated_at,
+    snapshotActivatedOn: product.snapshot_activated_on,
+    snapshotSupersededOn: product.snapshot_superseded_on,
+    registryLastCheckedAt: registry.lastCheckedAt,
+    sourceArtifact,
+    registrationIdentity,
+    sourceRecordKey: product.source_record_key,
+    sourceItem: product.source_item,
+    technology: product.technology,
+    category: product.category,
+    brand: product.brand,
+    model: product.model,
+    eligibleFrom: product.eligible_from,
+    eligibleTo: product.eligible_to,
+    registeredTenYearStcs: Object.freeze({
+      zone1: product.zone_1_stcs,
+      zone2: product.zone_2_stcs,
+      zone3: product.zone_3_stcs,
+      zone4: product.zone_4_stcs,
+      zone5: product.zone_5_stcs,
+    }),
+  });
+}
+
+export async function resolveCerSresOfficialProduct(
+  db: D1Database,
+  input: CreditexSresOfficialProductResolutionInput,
+): Promise<CreditexSresOfficialProductProjection> {
+  await ensureCreditexProductRegistrySchemaGuards(db);
+  const { productKind, technology } = technologyForOfficialProductKind(
+    input.productKind,
+  );
+  const resolved = await resolveRegisteredProduct(db, {
+    technology,
+    productKey: input.productKey,
+    installationDate: input.installationDate,
+    now: input.now,
+  });
+  return projectOfficialProduct(db, { productKind, technology, resolved });
+}
+
+export async function searchCerSresOfficialProducts(
+  db: D1Database,
+  input: CreditexSresOfficialProductSearchInput,
+) {
+  const { productKind, technology } = technologyForOfficialProductKind(
+    input.productKind,
+  );
+  const limit = input.limit === undefined ? 30 : Number(input.limit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    return fail(
+      "SRES_PRODUCT_LIMIT_INVALID",
+      400,
+      "Load between 1 and 50 exact CER product registrations at once.",
+    );
+  }
+  const search = await searchCerSresProducts(db, {
+    technology,
+    installationDate: input.installationDate,
+    category: input.category,
+    brand: input.brand,
+    model: input.model,
+    query: input.query,
+    limit,
+    now: input.now,
+    cascade: input.cascade,
+  });
+  const registry = search.registry;
+  const artifactCache = new Map<string, Promise<Awaited<
+    ReturnType<typeof loadExactProductSourceArtifact>
+  >>>();
+  const products = await Promise.all(search.products.map(async (candidate) => {
+    const resolved = await resolveRegisteredProduct(db, {
+      technology,
+      productKey: candidate.sourceRecordKey,
+      installationDate: search.installationDate,
+      now: input.now,
+    }, registry);
+    const source = exactProductSource(resolved.product);
+    const artifactKey = `${resolved.product.snapshot_id}:${source.sourceKey}`;
+    let artifact = artifactCache.get(artifactKey);
+    if (!artifact) {
+      artifact = loadExactProductSourceArtifact(db, resolved.product);
+      artifactCache.set(artifactKey, artifact);
+    }
+    return projectOfficialProduct(db, {
+      productKind,
+      technology,
+      resolved,
+      sourceArtifact: await artifact,
+    });
+  }));
+  const verifiedRegistry = await requireCurrentRegistry(db, input.now);
+  if (
+    verifiedRegistry.snapshot.id !== registry.snapshot.id
+    || verifiedRegistry.lastCheckedAt !== registry.lastCheckedAt
+  ) {
+    return fail(
+      "SRES_PRODUCT_REGISTRY_CHANGED",
+      409,
+      "The CER product registry changed during selection. Search again before choosing a product.",
+    );
+  }
+  return Object.freeze({ ...search, productKind, products: Object.freeze(products) });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

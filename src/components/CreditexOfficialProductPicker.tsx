@@ -10,7 +10,10 @@ import styles from "./CreditexVeuPilotWorkspace.module.css";
 type Api = (
   path: string,
   init?: RequestInit,
+  options?: { requestTimeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
+
+const OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000;
 
 export type CreditexOfficialProductOption = {
   id: string;
@@ -242,7 +245,11 @@ export function CreditexOfficialProductPicker({
       if (productType) parameters.set("productType", productType);
       if (veuActivityCode) parameters.set("veuActivityCode", veuActivityCode);
       if (veuScenario) parameters.set("veuScenario", veuScenario);
-      void api(`/api/creditex/official-products?${parameters.toString()}`)
+      void api(
+        `/api/creditex/official-products?${parameters.toString()}`,
+        {},
+        { requestTimeoutMs: OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS },
+      )
         .then((result) => {
           if (requestRef.current !== requestVersion) return;
           const nextProducts = (result.products || []) as CreditexOfficialProductOption[];

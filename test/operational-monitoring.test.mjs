@@ -4,6 +4,9 @@ import path from "node:path";
 import test from "node:test";
 
 import { runApiHealthMonitor } from "../src/lib/api-health-monitor.mjs";
+import {
+  CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES,
+} from "../src/lib/creditex-official-product-registry.ts";
 import { createOperationalRecorder } from "../src/lib/operational-events.mjs";
 
 const leadRoute = fs.readFileSync(
@@ -61,6 +64,26 @@ function quietLogger() {
 function healthyCheckResponse(url) {
   const value = String(url);
   if (value.includes("/api/health")) return jsonResponse({ ok: true, service: "aea-energy" });
+  if (value.includes("/api/creditex/official-products")) {
+    return jsonResponse({
+      ok: true,
+      registries: CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES.map((registryCode) => ({
+        registryCode,
+        status: "current",
+        lastCheckedAt: "2027-01-15T00:00:00.000Z",
+        lastAttempt: {
+          status: "unchanged",
+          checkedAt: "2027-01-15T00:00:00.000Z",
+          message: "",
+        },
+        readiness: {
+          calculatorReady: true,
+          refreshReady: true,
+          blocker: null,
+        },
+      })),
+    });
+  }
   if (value.includes("electricity-plans") || value.includes("gas-plans")) {
     return jsonResponse({
       plans: [{ id: "plan-1" }],
@@ -122,10 +145,106 @@ test("first healthy monitor run records state without sending a noisy recovery a
 
   assert.equal(result.status, "healthy");
   assert.equal(result.alert.attempted, false);
-  assert.equal(requests.length, 4);
-  assert.deepEqual(result.checks.map((check) => check.name), ["site_runtime", "electricity_plans", "gas_plans", "lead_delivery"]);
+  assert.equal(requests.length, 5);
+  assert.deepEqual(result.checks.map((check) => check.name), [
+    "site_runtime",
+    "official_product_registries",
+    "electricity_plans",
+    "gas_plans",
+    "lead_delivery",
+  ]);
   assert.equal(store.read().status, "healthy");
   assert.equal(store.read().lastAlertAt, null);
+});
+
+test("monitor alerts when a required official product registry is stale or its latest refresh failed", async () => {
+  const scenarios = [
+    {
+      name: "stale",
+      registry: {
+        registryCode: "veu-approved-products",
+        status: "stale",
+        lastAttempt: { status: "failed", checkedAt: "2027-01-15T00:00:00.000Z" },
+      },
+      expectedField: "staleRegistryCodes",
+    },
+    {
+      name: "degraded",
+      registry: {
+        registryCode: "veu-approved-products",
+        status: "current",
+        lastAttempt: { status: "failed", checkedAt: "2027-01-15T00:00:00.000Z" },
+      },
+      expectedField: "degradedRegistryCodes",
+    },
+    {
+      name: "refresh blocked",
+      registry: {
+        registryCode: "cec-products",
+        status: "current",
+        lastAttempt: {
+          status: "unchanged",
+          checkedAt: "2027-01-15T00:00:00.000Z",
+        },
+        readiness: {
+          calculatorReady: true,
+          refreshReady: false,
+          blocker: "The platform CEC battery connector is not configured.",
+        },
+      },
+      expectedField: "refreshBlockedRegistryCodes",
+    },
+    {
+      name: "unavailable",
+      registry: {
+        registryCode: "veu-approved-products",
+        status: "unavailable",
+        lastAttempt: null,
+      },
+      expectedField: "unavailableRegistryCodes",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const store = createStateStore();
+    const alertBodies = [];
+    const result = await runApiHealthMonitor({
+      siteUrl: "https://example.test",
+      leadProbeToken: "probe-secret",
+      alertWebhookUrl: "https://alerts.example.test/hook",
+      stateStore: store,
+      logger: quietLogger(),
+      now: () => 1_800_000_000_000,
+      async fetchImpl(url, options) {
+        if (String(url).includes("/api/creditex/official-products")) {
+          const response = await healthyCheckResponse(url).json();
+          response.registries = response.registries.map((registry) => (
+            registry.registryCode === scenario.registry.registryCode
+              ? scenario.registry
+              : registry
+          ));
+          return jsonResponse(response);
+        }
+        const healthy = healthyCheckResponse(url);
+        if (healthy) return healthy;
+        alertBodies.push(options.body);
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    const registryCheck = result.checks.find(
+      (check) => check.name === "official_product_registries",
+    );
+    assert.equal(result.status, "unhealthy", scenario.name);
+    assert.equal(registryCheck.ok, false, scenario.name);
+    assert.deepEqual(
+      registryCheck[scenario.expectedField],
+      [scenario.registry.registryCode],
+      scenario.name,
+    );
+    assert.equal(result.alert.sent, true, scenario.name);
+    assert.match(alertBodies[0], /official_product_registries/);
+  }
 });
 
 test("monitor rejects the retired downstream acknowledgement response contract", async () => {

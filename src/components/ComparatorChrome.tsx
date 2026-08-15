@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { ReactNode } from "react";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
+import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { TLinkMark } from "@/components/TLinkChrome";
 
 export function BrandBar() {
@@ -30,24 +31,18 @@ export function SiteNav({ active }: { active: SiteActive }) {
     { key: "assessments", href: "/assessments", label: "Assessments" },
   ] as const;
   return (
-    <div className="site-nav-shell">
-      <div className="site-nav-discovery" id="site-nav-discovery">
-        <span>Energy services</span>
-        <span>Scroll for more options <span aria-hidden="true">&#8594;</span></span>
-      </div>
-      <nav aria-describedby="site-nav-discovery" aria-label="Energy services" className="comparator-nav">
-        {links.map((link) => (
-          <a
-            className={active === link.key ? "active" : "inactive"}
-            href={link.href}
-            key={link.key}
-            aria-current={active === link.key ? "page" : undefined}
-          >
-            {link.label}
-          </a>
-        ))}
-      </nav>
-    </div>
+    <ResponsiveSiteNav>
+      {links.map((link) => (
+        <a
+          className={active === link.key ? "active" : "inactive"}
+          href={link.href}
+          key={link.key}
+          aria-current={active === link.key ? "page" : undefined}
+        >
+          {link.label}
+        </a>
+      ))}
+    </ResponsiveSiteNav>
   );
 }
 

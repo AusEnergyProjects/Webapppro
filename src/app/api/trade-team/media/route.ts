@@ -1060,6 +1060,166 @@ async function sweepTerminalUploadCleanup() {
   }
 }
 
+const RESTARTABLE_UPLOAD_STATUSES = new Set(["aborted", "rejected", "expired"]);
+
+async function restartTerminalUploadSession(input: {
+  existing: UploadSession;
+  access: TeamAccess;
+  registeredDevice: RegisteredDeviceContext;
+  deviceId: string;
+  metadataHash: string;
+  workOrderId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  category: string;
+  caption: string;
+  evidence: EvidenceContract;
+  now: string;
+}) {
+  let existing = input.existing;
+  if (
+    ["initiated", "uploading", "completing"].includes(existing.status)
+    && existing.expires_at <= input.now
+  ) {
+    await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+      SET status = 'expired', last_error = ?, updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND metadata_hash = ?
+        AND object_key = ? AND upload_id = ? AND status = ?
+        AND status IN ('initiated', 'uploading', 'completing')
+        AND media_id = '' AND expires_at <= ?`)
+      .bind(
+        `${CLEANUP_PENDING_PREFIX}expired`,
+        input.now,
+        existing.id,
+        input.access.ownerUid,
+        input.metadataHash,
+        existing.object_key,
+        existing.upload_id,
+        existing.status,
+        input.now,
+      ).run();
+    existing = await getD1().prepare(`SELECT *
+      FROM trade_mobile_upload_sessions
+      WHERE id = ? AND owner_uid = ?`)
+      .bind(existing.id, input.access.ownerUid)
+      .first<UploadSession>() || existing;
+  }
+  if (!RESTARTABLE_UPLOAD_STATUSES.has(existing.status)) return null;
+
+  if (pendingCleanupReason(existing.last_error)) {
+    await finishTerminalUploadCleanup(existing);
+    existing = await getD1().prepare(`SELECT *
+      FROM trade_mobile_upload_sessions
+      WHERE id = ? AND owner_uid = ?`)
+      .bind(existing.id, input.access.ownerUid)
+      .first<UploadSession>() || existing;
+  }
+  if (pendingCleanupReason(existing.last_error)) {
+    return adminJson({
+      ok: false,
+      code: "UPLOAD_CLEANUP_PENDING",
+      error: "The previous upload is still being cleared. Try this upload again shortly.",
+    }, 409);
+  }
+
+  const objectKey = `crm-job-media/${input.access.ownerUid}/${input.workOrderId}/${crypto.randomUUID()}`;
+  const expiresAt = new Date(
+    Date.parse(input.now) + SESSION_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+  const multipart = await bucket().createMultipartUpload(objectKey, {
+    httpMetadata: { contentType: input.contentType },
+    customMetadata: {
+      owner: input.access.ownerUid,
+      actor: input.access.actorUid,
+      workOrderId: input.workOrderId,
+      uploadSessionId: existing.id,
+      originalSha256: input.evidence.originalSha256,
+    },
+  });
+  try {
+    const restarted = await getD1().prepare(`UPDATE trade_mobile_upload_sessions
+      SET actor_uid = ?, member_id = ?, device_id = ?, object_key = ?,
+        upload_id = ?, file_name = ?, content_type = ?, size_bytes = ?,
+        category = ?, caption = ?, evidence_envelope = ?, original_sha256 = ?,
+        part_size_bytes = ?, status = 'initiated', media_id = '', expires_at = ?,
+        completed_at = '', last_error = '', updated_at = ?
+      WHERE id = ? AND owner_uid = ? AND client_upload_id = ?
+        AND metadata_hash = ? AND object_key = ? AND upload_id = ?
+        AND status = ? AND status IN ('aborted', 'rejected', 'expired')
+        AND media_id = ''
+        AND NOT (last_error LIKE 'cleanup_pending:%'
+          OR last_error LIKE 'cleanup_claimed:%')
+        AND EXISTS (
+          SELECT 1 FROM trade_mobile_devices device
+          WHERE device.id = ? AND device.owner_uid = ?
+            AND device.actor_uid = ? AND device.member_id = ?
+            AND device.device_id = ? AND device.status = 'active'
+        )`)
+      .bind(
+        input.access.actorUid,
+        input.access.memberId,
+        input.deviceId,
+        objectKey,
+        multipart.uploadId,
+        input.fileName,
+        input.contentType,
+        input.sizeBytes,
+        input.category,
+        input.caption,
+        input.evidence.envelopeJson,
+        input.evidence.originalSha256,
+        PART_SIZE_BYTES,
+        expiresAt,
+        input.now,
+        existing.id,
+        input.access.ownerUid,
+        existing.client_upload_id,
+        input.metadataHash,
+        existing.object_key,
+        existing.upload_id,
+        existing.status,
+        input.registeredDevice.id,
+        input.access.ownerUid,
+        input.access.actorUid,
+        input.access.memberId,
+        input.deviceId,
+      ).run();
+    if (Number(restarted.meta.changes || 0) !== 1) {
+      await multipart.abort();
+      const current = await getD1().prepare(`SELECT *
+        FROM trade_mobile_upload_sessions
+        WHERE id = ? AND owner_uid = ?`)
+        .bind(existing.id, input.access.ownerUid)
+        .first<UploadSession>();
+      if (current && current.metadata_hash === input.metadataHash
+        && !RESTARTABLE_UPLOAD_STATUSES.has(current.status)) {
+        return adminJson({
+          ok: true,
+          duplicate: true,
+          contractVersion: 3,
+          upload: await sessionPayload(current),
+        });
+      }
+      return adminJson({
+        ok: false,
+        code: "UPLOAD_STATE_CHANGED",
+        error: "This upload changed while it was being restarted. Load its latest state and try again.",
+      }, 409);
+    }
+  } catch (error) {
+    await multipart.abort();
+    throw error;
+  }
+  const session = await findSession(input.access, existing.id);
+  return adminJson({
+    ok: true,
+    restarted: true,
+    contractVersion: 3,
+    upload: await sessionPayload(session),
+  }, 201);
+}
+
 async function initiate(request: Request, access: TeamAccess, body: Record<string, unknown>) {
   const now = new Date().toISOString();
   const deviceId = cleanAdminText(body.deviceId, 120);
@@ -1106,6 +1266,22 @@ async function initiate(request: Request, access: TeamAccess, body: Record<strin
   if (existing) {
     if (existing.metadata_hash !== metadataHash) return adminJson({ ok: false, code: "IDEMPOTENCY_MISMATCH",
       error: "This upload ID was already used for different file details." }, 409);
+    const restarted = await restartTerminalUploadSession({
+      existing,
+      access,
+      registeredDevice,
+      deviceId,
+      metadataHash,
+      workOrderId,
+      fileName,
+      contentType,
+      sizeBytes,
+      category,
+      caption,
+      evidence,
+      now,
+    });
+    if (restarted) return restarted;
     return adminJson({ ok: true, duplicate: true, contractVersion: 3, upload: await sessionPayload(existing) });
   }
   const id = crypto.randomUUID(); const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${id}`;

@@ -1,19 +1,41 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Application from 'expo-application';
+import * as Crypto from 'expo-crypto';
+import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import {
+  ActivityWorkPackWizard,
+  type ActivityWorkPackPromptContext,
+} from '@/components/ActivityWorkPackWizard';
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
+import { firebaseAuth } from '@/lib/auth';
+import {
+  apiRequest,
+  downloadAssignedWorkPackDocument,
+  governedReferenceDocumentBytesSha256,
+} from '@/lib/api';
 import {
   complianceCasesForJob,
   type GovernedEvidenceSelection,
 } from '@/lib/compliance';
-import { getSetting, setSetting } from '@/lib/database';
+import {
+  addUpload,
+  discardUpload,
+  getSetting,
+  listPendingWorkPackActions,
+  listWorkPackProblems,
+  setSetting,
+} from '@/lib/database';
+import { APP_VERSION } from '@/lib/config';
+import { getDeviceId } from '@/lib/device';
 import {
   buildEvidenceEnvelope,
   cameraPermissionState,
@@ -27,10 +49,33 @@ import {
 import { colours, radius, spacing } from '@/lib/theme';
 import type {
   ComplianceEvidenceRequirement,
+  FieldComplianceIntent,
+  FieldActivityWorkPack,
   FieldForm,
   FieldJob,
   FieldJobCompliance,
+  FieldWorkPackCustomerContext,
+  FieldWorkPackDeviceAttestation,
+  FieldWorkPackReferenceDocumentProjection,
+  FieldWorkPackOfficialProduct,
+  FieldWorkPackOfficialProductSelection,
+  FieldWorkPackSignatureAttestation,
+  FieldWorkPackSignatureDraft,
+  FieldWorkPackSignerIdentity,
 } from '@/lib/types';
+import {
+  createFieldWorkPackSignaturePdf,
+  fieldWorkPackFinalRecordCacheFile,
+  fieldWorkPackSha256,
+  fieldWorkPackReferenceDocumentCacheFile,
+  FIELD_WORK_PACK_DEVICE_ATTESTATION_CONTRACT,
+  FIELD_WORK_PACK_SIGNATURE_PAYLOAD_CONTRACT,
+  FIELD_WORK_PACK_SIGNATURE_ATTESTATION_CONTRACT,
+  FIELD_WORK_PACK_SIGNER_IDENTITY_CONTRACT,
+  signatureDraftReady,
+  workPackPromptResponseKey,
+  type FieldWorkPackSectionPatch,
+} from '@/lib/work-packs';
 import { useApp } from '@/providers/app-provider';
 
 const fieldActions: Record<string, { transition: 'start_travel' | 'arrive' | 'start_work' | 'finish'; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
@@ -45,7 +90,68 @@ const MAX_EVIDENCE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const DEFAULT_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
+type WorkPackUploadLink = {
+  caseInstanceId: string;
+  sectionKey: string;
+  repeatInstanceKey: string;
+  promptKey: string;
+};
+
+type PendingWorkPackPhotoCapture = PendingPhotoCapture & {
+  workPackLink?: WorkPackUploadLink;
+};
+
 function readable(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+
+async function openVerifiedWorkPackDocument(
+  cacheFile: File,
+  path: string,
+  expected: Readonly<{
+    sha256: string;
+    contentType: string;
+    sizeBytes: number;
+  }>,
+) {
+  const expectedSha256 = expected.sha256.trim().toLowerCase().replace(/^sha256:/, '');
+  let verified = false;
+  if (cacheFile.exists && cacheFile.size === expected.sizeBytes) {
+    verified = await governedReferenceDocumentBytesSha256(await cacheFile.bytes())
+      === expectedSha256;
+  }
+  if (!verified) {
+    if (cacheFile.exists) cacheFile.delete();
+    const downloaded = await downloadAssignedWorkPackDocument(path, expected);
+    cacheFile.write(downloaded.bytes);
+    verified = cacheFile.exists
+      && cacheFile.size === expected.sizeBytes
+      && await governedReferenceDocumentBytesSha256(await cacheFile.bytes())
+        === expectedSha256;
+  }
+  if (!verified) {
+    if (cacheFile.exists) cacheFile.delete();
+    throw new Error('The exact approved document could not be verified on this device.');
+  }
+  const openUri = Platform.OS === 'android' ? cacheFile.contentUri : cacheFile.uri;
+  if (!openUri) throw new Error('This device cannot open the approved document.');
+  await Linking.openURL(openUri);
+}
+
+function boundSignatureStrokes(draft: FieldWorkPackSignatureDraft) {
+  const origin = draft.strokes[0]?.points[0]?.capturedAtMs || Date.now();
+  return draft.strokes.map((stroke) => ({
+    points: stroke.points.map((point) => ({
+      x: point.x,
+      y: point.y,
+      pressure: point.pressure,
+      capturedAtOffsetMs: Math.max(0, point.capturedAtMs - origin),
+    })),
+  }));
+}
+
+function plannedDateLabel(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : 'Date not set';
+}
 
 function maximumReached(requirement: ComplianceEvidenceRequirement) {
   return requirement.maximumCount > 0 && requirement.submittedCount >= requirement.maximumCount;
@@ -118,29 +224,67 @@ function gpsPreflightBlocker(location: PendingPhotoCapture['preCaptureLocation']
 function pendingPhoto(value: string) {
   if (!value) return null;
   try {
-    return JSON.parse(value) as PendingPhotoCapture;
+    return JSON.parse(value) as PendingWorkPackPhotoCapture;
   } catch {
     return null;
   }
 }
 
+function workPackUploadLink(context: ActivityWorkPackPromptContext): WorkPackUploadLink {
+  return {
+    caseInstanceId: context.pack.instance.id,
+    sectionKey: context.section.sectionKey,
+    repeatInstanceKey: context.repeatInstanceKey,
+    promptKey: context.prompt.promptKey,
+  };
+}
+
+function workPackCaptureCategory(context: ActivityWorkPackPromptContext) {
+  const stage = context.prompt.stageKey.toLowerCase();
+  if (stage.includes('before') || stage.startsWith('pre')) return 'before' as const;
+  if (stage.includes('after') || stage.startsWith('post')) return 'after' as const;
+  return 'progress' as const;
+}
+
+function workPackCaption(context: ActivityWorkPackPromptContext) {
+  return `${context.pack.definition.title} | ${context.prompt.label}`.slice(0, 300);
+}
+
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { findJob, saveAction, saveUpload, sync } = useApp();
+  const {
+    findJob,
+    saveAction,
+    saveUpload,
+    sync,
+  } = useApp();
   const [job, setJob] = useState<FieldJob | null>(null);
+  const [workPackProblems, setWorkPackProblems] = useState<Record<string, string>>({});
+  const [pendingWorkPackActions, setPendingWorkPackActions] = useState<Record<string, string[]>>({});
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState('');
   const recoveringPhoto = useRef(false);
   const launchingCamera = useRef(false);
 
-  const load = useCallback(async () => setJob(await findJob(String(id))), [findJob, id]);
+  const load = useCallback(async () => {
+    const workOrderId = String(id);
+    const [nextJob, problems, pendingActions] = await Promise.all([
+      findJob(workOrderId),
+      listWorkPackProblems(workOrderId),
+      listPendingWorkPackActions(workOrderId),
+    ]);
+    setJob(nextJob);
+    setWorkPackProblems(problems);
+    setPendingWorkPackActions(pendingActions);
+  }, [findJob, id]);
 
-  const processPendingPhoto = useCallback(async (pending: PendingPhotoCapture) => {
+  const processPendingPhoto = useCallback(async (pending: PendingWorkPackPhotoCapture) => {
     if (!pending.asset || recoveringPhoto.current) return;
     recoveringPhoto.current = true;
     const busyKey = pendingEvidenceBusyKey(pending);
     setBusy(busyKey);
+    let linkedClientUploadId = '';
     try {
       const location = pending.preCaptureLocation;
       const locationPermission = pending.preCaptureLocationPermission;
@@ -176,17 +320,53 @@ export default function JobScreen() {
         },
       });
       const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
-      await saveUpload({
-        workOrderId: pending.identifiers.jobId,
-        uri: pending.asset.uri,
-        fileName: pending.asset.fileName || `job-photo-${Date.now()}.${extension}`,
-        contentType,
-        sizeBytes: file.size,
-        category: pending.category,
-        caption: pending.caption,
-        evidenceEnvelope: envelope,
-        clearSettingKey: PENDING_PHOTO_SETTING,
-      });
+      if (pending.workPackLink) {
+        const currentJob = await findJob(pending.identifiers.jobId);
+        const pack = currentJob?.activityWorkPacks?.find(
+          (item) => item.instance.id === pending.workPackLink?.caseInstanceId,
+        );
+        if (!currentJob || !pack) {
+          throw new Error('This governed work pack is no longer assigned to this device. Sync before retrying.');
+        }
+        const clientUploadId = `upload-${Crypto.randomUUID()}`;
+        linkedClientUploadId = clientUploadId;
+        await addUpload({
+          id: clientUploadId,
+          work_order_id: currentJob.id,
+          local_uri: pending.asset.uri,
+          file_name: pending.asset.fileName || `work-pack-photo-${Date.now()}.${extension}`,
+          content_type: contentType,
+          size_bytes: file.size,
+          category: pending.category,
+          caption: pending.caption,
+          evidenceEnvelope: envelope,
+          clearSettingKey: PENDING_PHOTO_SETTING,
+        });
+        await saveAction({
+          type: 'work_pack_commit',
+          workOrderId: currentJob.id,
+          baseRevision: currentJob.revision,
+          caseInstanceId: pack.instance.id,
+          expectedResponseSha256: pack.instance.responseSha256,
+          artifactLinks: [{
+            ...pending.workPackLink,
+            clientUploadId,
+            deviceId: await getDeviceId(),
+          }],
+        });
+      } else {
+        await saveUpload({
+          workOrderId: pending.identifiers.jobId,
+          uri: pending.asset.uri,
+          fileName: pending.asset.fileName || `job-photo-${Date.now()}.${extension}`,
+          contentType,
+          sizeBytes: file.size,
+          category: pending.category,
+          caption: pending.caption,
+          evidenceEnvelope: envelope,
+          clearSettingKey: PENDING_PHOTO_SETTING,
+        });
+      }
       const locationMessage = location.state === 'captured'
         ? ` Location accuracy was ${location.accuracyMetres === null ? 'not reported' : `${Math.round(location.accuracyMetres)} metres`}.`
         : ` Location was recorded as ${readable(location.state)}.`;
@@ -194,7 +374,9 @@ export default function JobScreen() {
         'Evidence saved',
         `${sync.online ? 'The original file and capture record are uploading securely.' : 'The original file and capture record will upload when reception returns.'}${locationMessage} Compliance review is still required against the applicable scheme rules.`,
       );
+      return linkedClientUploadId;
     } catch (error) {
+      if (linkedClientUploadId) await discardUpload(linkedClientUploadId);
       Alert.alert(
         'Evidence is still pending',
         error instanceof Error ? error.message : 'The photo could not be secured for upload. Reopen the job and try again.',
@@ -203,7 +385,7 @@ export default function JobScreen() {
       setBusy('');
       recoveringPhoto.current = false;
     }
-  }, [saveUpload, sync.online]);
+  }, [findJob, saveAction, saveUpload, sync.online]);
 
   const recoverPendingPhoto = useCallback(async () => {
     if (recoveringPhoto.current) return;
@@ -238,6 +420,12 @@ export default function JobScreen() {
     void recoverPendingPhoto();
   }, [load, recoverPendingPhoto]));
 
+  useEffect(() => {
+    if (sync.running) return undefined;
+    const reload = setTimeout(() => void load(), 0);
+    return () => clearTimeout(reload);
+  }, [load, sync.conflicts, sync.queuedActions, sync.queuedUploads, sync.running]);
+
   async function advanceFieldJob() {
     if (!job) return; const action = fieldActions[job.appointmentStatus]; if (!action) return;
     const governedEvidenceIncomplete = complianceCasesForJob(job).some(
@@ -245,9 +433,21 @@ export default function JobScreen() {
         (requirement) => requirement.submittedCount < requirement.minimumCount,
       ),
     );
+    const complianceWorkPackMissing = (job.complianceIntents || []).some(
+      (intent) => intent.status === 'planned'
+        || !intent.linkedCaseReady
+        || !intent.complianceCaseId
+        || !(job.activityWorkPacks || []).some(
+          (pack) => pack.instance.complianceIntentId === intent.id,
+        ),
+    );
+    const complianceWorkPackIncomplete = (job.activityWorkPacks || []).some(
+      (pack) => pack.instance.status !== 'completed' || !pack.finalRecord,
+    );
     const localBlockers = [
       job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
       job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
+      complianceWorkPackMissing || complianceWorkPackIncomplete ? 'compliance work packs' : '',
       governedEvidenceIncomplete ? 'governed evidence' : '',
       job.openIssues ? 'open issues' : '',
     ].filter(Boolean);
@@ -428,10 +628,619 @@ export default function JobScreen() {
     }
   }
 
+  async function captureWorkPackPhoto(context: ActivityWorkPackPromptContext) {
+    if (!job || launchingCamera.current) throw new Error('The camera is already open.');
+    const requirement = context.prompt.fileRequirement;
+    if (!requirement || context.prompt.type !== 'photo') {
+      throw new Error('This governed prompt is not configured for camera capture.');
+    }
+    launchingCamera.current = true;
+    const busyKey = `work-pack-artifact:${context.pack.instance.id}:${context.prompt.promptKey}`;
+    setBusy(busyKey);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) throw new Error('Allow camera access in device settings before taking this governed photo.');
+      const preCaptureLocation = await observeLocation(requirement.gpsRequired);
+      const gpsBlocker = requirement.gpsRequired
+        ? gpsPreflightBlocker(preCaptureLocation.location)
+        : '';
+      if (gpsBlocker) throw new Error(gpsBlocker);
+      let pending: PendingWorkPackPhotoCapture = {
+        captureSessionId: captureSessionId(),
+        ...observedTime(),
+        identifiers: evidenceIdentifiers(job),
+        category: workPackCaptureCategory(context),
+        caption: workPackCaption(context),
+        gpsRequired: requirement.gpsRequired,
+        cameraPermission: cameraPermissionState(permission),
+        preCaptureLocationPermission: preCaptureLocation.permission,
+        preCaptureLocation: preCaptureLocation.location,
+        workPackLink: workPackUploadLink(context),
+      };
+      await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        exif: true,
+        cameraType: ImagePicker.CameraType.back,
+      });
+      if (result.canceled || !result.assets[0]) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        throw new Error('The governed photo was cancelled.');
+      }
+      const asset = result.assets[0];
+      const contentType = asset.mimeType || 'image/jpeg';
+      if (!requirement.allowedContentTypes.includes(contentType)) {
+        await setSetting(PENDING_PHOTO_SETTING, '');
+        throw new Error('The captured file type is not allowed by this exact governed prompt.');
+      }
+      pending = { ...pending, asset: serialisableAsset(asset) };
+      await setSetting(PENDING_PHOTO_SETTING, JSON.stringify(pending));
+      launchingCamera.current = false;
+      const clientUploadId = await processPendingPhoto(pending);
+      await load();
+      if (!clientUploadId) throw new Error('The governed upload was not queued.');
+      return clientUploadId;
+    } finally {
+      launchingCamera.current = false;
+      setBusy('');
+    }
+  }
+
+  async function chooseWorkPackDocument(context: ActivityWorkPackPromptContext) {
+    if (!job) throw new Error('This job is no longer available.');
+    const requirement = context.prompt.fileRequirement;
+    if (!requirement || context.prompt.type !== 'document') {
+      throw new Error('This governed prompt is not configured for document capture.');
+    }
+    const configuredTypes = requirement.allowedContentTypes.filter(
+      (contentType) => ALLOWED_EVIDENCE_TYPES.has(contentType),
+    );
+    if (!configuredTypes.length) {
+      throw new Error('This prompt has no file type supported by the installed field app.');
+    }
+    const result = await DocumentPicker.getDocumentAsync({
+      type: configuredTypes,
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled) throw new Error('The governed document was cancelled.');
+    const asset = result.assets[0];
+    const file = new File(asset.uri);
+    const contentType = asset.mimeType || file.type || '';
+    if (!file.exists || file.size < 1 || file.size > MAX_EVIDENCE_BYTES) {
+      throw new Error('Choose an original file from 1 byte to 50 MB.');
+    }
+    if (!configuredTypes.includes(contentType)) {
+      throw new Error('The selected file type is not allowed by this exact governed prompt.');
+    }
+    const captureId = captureSessionId();
+    const envelope = await buildEvidenceEnvelope({
+      captureSessionId: captureId,
+      source: 'document_picker',
+      identifiers: evidenceIdentifiers(job),
+    });
+    const clientUploadId = `upload-${Crypto.randomUUID()}`;
+    const busyKey = `work-pack-artifact:${context.pack.instance.id}:${context.prompt.promptKey}`;
+    setBusy(busyKey);
+    try {
+      await addUpload({
+        id: clientUploadId,
+        work_order_id: job.id,
+        local_uri: asset.uri,
+        file_name: asset.name,
+        content_type: contentType,
+        size_bytes: file.size,
+        category: 'document',
+        caption: workPackCaption(context),
+        evidenceEnvelope: envelope,
+      });
+      await saveAction({
+        type: 'work_pack_commit',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: context.pack.instance.id,
+        expectedResponseSha256: context.pack.instance.responseSha256,
+        artifactLinks: [{
+          ...workPackUploadLink(context),
+          clientUploadId,
+          deviceId: await getDeviceId(),
+        }],
+      });
+      return clientUploadId;
+    } catch (error) {
+      await discardUpload(clientUploadId);
+      throw error;
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function saveWorkPackSections(
+    pack: FieldActivityWorkPack,
+    patches: FieldWorkPackSectionPatch[],
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    setBusy(`work-pack-save:${pack.instance.id}`);
+    try {
+      await saveAction({
+        type: 'work_pack_commit',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+        sectionPatches: patches,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function findWorkPackOfficialProducts(
+    pack: FieldActivityWorkPack,
+    dependencyKey: string,
+    search: string,
+  ) {
+    if (!sync.online) {
+      throw new Error('Reconnect once to search the current approved product register. Saved form answers remain available offline.');
+    }
+    const query = new URLSearchParams({
+      caseInstanceId: pack.instance.id,
+      officialProductDependencyKey: dependencyKey,
+      search: search.trim(),
+      limit: '30',
+    });
+    const response = await apiRequest<{
+      ok: true;
+      officialProducts: FieldWorkPackOfficialProduct[];
+    }>(`/api/trade-team/work-packs?${query.toString()}`);
+    return response.officialProducts;
+  }
+
+  async function selectWorkPackOfficialProducts(
+    pack: FieldActivityWorkPack,
+    dependencyKey: string,
+    selections: FieldWorkPackOfficialProductSelection[],
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    setBusy(`work-pack-products:${pack.instance.id}:${dependencyKey}`);
+    try {
+      await saveAction({
+        type: 'work_pack_select_official_products',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+        dependencyKey,
+        selections,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function selectWorkPackScenario(
+    pack: FieldActivityWorkPack,
+    dependencyKey: string,
+    scenarioCode: string,
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    setBusy(`work-pack-scenario:${pack.instance.id}:${dependencyKey}`);
+    try {
+      await saveAction({
+        type: 'work_pack_select_scenario',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+        dependencyKey,
+        scenarioCode,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function runWorkPackCalculator(
+    pack: FieldActivityWorkPack,
+    dependencyKey: string,
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    setBusy(`work-pack-calculator:${pack.instance.id}:${dependencyKey}`);
+    try {
+      await saveAction({
+        type: 'work_pack_run_calculator',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+        dependencyKey,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function openWorkPackReferenceDocument(
+    context: ActivityWorkPackPromptContext,
+    document: FieldWorkPackReferenceDocumentProjection,
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    const responseKey = workPackPromptResponseKey(
+      context.section,
+      context.repeatInstanceKey,
+      context.prompt,
+    );
+    if (
+      context.prompt.type !== 'reference_document'
+      || document.responseKey !== responseKey
+      || document.sectionKey !== context.section.sectionKey
+      || document.repeatInstanceKey !== context.repeatInstanceKey
+      || document.promptKey !== context.prompt.promptKey
+      || document.sourceBindingTargetKey
+        !== context.prompt.referenceDocument?.sourceBindingTargetKey
+    ) {
+      throw new Error('This approved document does not belong to the selected question. Sync and try again.');
+    }
+    const cacheFile = fieldWorkPackReferenceDocumentCacheFile(document);
+    setBusy(`work-pack-reference:${context.pack.instance.id}:${context.prompt.promptKey}`);
+    try {
+      await openVerifiedWorkPackDocument(
+        cacheFile,
+        document.openUrl,
+        {
+          sha256: document.sourceArtifactSha256,
+          contentType: document.contentType,
+          sizeBytes: document.sizeBytes,
+        },
+      );
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function acknowledgeWorkPackReferenceDocument(
+    context: ActivityWorkPackPromptContext,
+    document: FieldWorkPackReferenceDocumentProjection,
+    acknowledgedAt: string,
+  ) {
+    if (!job) throw new Error('This job is no longer available.');
+    if (
+      context.prompt.type !== 'reference_document'
+      || document.sectionKey !== context.section.sectionKey
+      || document.repeatInstanceKey !== context.repeatInstanceKey
+      || document.promptKey !== context.prompt.promptKey
+      || document.sourceBindingTargetKey
+        !== context.prompt.referenceDocument?.sourceBindingTargetKey
+    ) {
+      throw new Error('This acknowledgement does not belong to the selected document. Sync and try again.');
+    }
+    setBusy(`work-pack-reference-ack:${context.pack.instance.id}:${context.prompt.promptKey}`);
+    try {
+      await saveAction({
+        type: 'work_pack_commit',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: context.pack.instance.id,
+        expectedResponseSha256: context.pack.instance.responseSha256,
+        referenceAcknowledgements: [{
+          sectionKey: context.section.sectionKey,
+          repeatInstanceKey: context.repeatInstanceKey,
+          promptKey: context.prompt.promptKey,
+          sourceArtifactId: document.sourceArtifactId,
+          acknowledgedAt,
+        }],
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function captureWorkPackSignature(
+    context: ActivityWorkPackPromptContext,
+    draft: FieldWorkPackSignatureDraft,
+  ) {
+    if (!job || !context.prompt.attestation) {
+      throw new Error('The governed signature declaration is unavailable. Sync before signing.');
+    }
+    if (context.pack.instance.status !== 'ready_to_sign') {
+      throw new Error('Prepare and sync the exact work-pack version before capturing signatures.');
+    }
+    const role = context.pack.definition.schema.signerRoles.find(
+      (item) => item.roleKey === context.prompt.signerRoleKey,
+    );
+    if (!role || !signatureDraftReady(role, draft)) {
+      throw new Error('Complete the governed signer identity and draw the signature before binding it.');
+    }
+    const signerBinding = context.pack.signerBindings.find(
+      (binding) => binding.roleKey === role.roleKey,
+    );
+    if (
+      !signerBinding
+      || signerBinding.capacity !== role.capacity
+      || signerBinding.identitySource !== role.identitySource
+    ) {
+      throw new Error('Signer details are not available. Sync before signing.');
+    }
+    const signedAt = draft.capturedAt || new Date().toISOString();
+    const fullPromptKey = workPackPromptResponseKey(
+      context.section,
+      context.repeatInstanceKey,
+      context.prompt,
+    );
+    const signerIdentity: FieldWorkPackSignerIdentity = {
+      contract: FIELD_WORK_PACK_SIGNER_IDENTITY_CONTRACT,
+      roleKey: role.roleKey,
+      capacity: role.capacity,
+      identitySource: role.identitySource,
+      signerName: signerBinding.signerName,
+      signerUid: signerBinding.signerUid,
+      fields: { ...signerBinding.fields },
+    };
+    if (
+      ['assigned_worker', 'authenticated_actor'].includes(role.identitySource)
+      && !signerIdentity.signerUid
+    ) {
+      throw new Error('The assigned technician identity is unavailable. Sync before signing.');
+    }
+    if (
+      ['customer_context', 'manual_verified'].includes(role.identitySource)
+      && signerIdentity.signerUid
+    ) {
+      throw new Error('Signer details no longer match this job. Sync before signing.');
+    }
+    const signerIdentitySha256 = await fieldWorkPackSha256(signerIdentity);
+    const attestation = {
+      contract: FIELD_WORK_PACK_SIGNATURE_ATTESTATION_CONTRACT,
+      promptKey: fullPromptKey,
+      signerRoleKey: role.roleKey,
+      text: context.prompt.attestation.text,
+      version: context.prompt.attestation.version,
+      sourceBindingTargetKey: context.prompt.attestation.sourceBindingTargetKey,
+      signerIdentity,
+      signerIdentitySha256,
+      definitionSha256: context.pack.signatureBindings.definitionSha256,
+      prefillSha256: context.pack.signatureBindings.prefillSha256,
+      responseSha256: context.pack.signatureBindings.responseSha256,
+      declarationsSha256: context.pack.signatureBindings.declarationsSha256,
+    } satisfies FieldWorkPackSignatureAttestation;
+    const attestationSha256 = await fieldWorkPackSha256(attestation);
+    const payload = {
+      contract: FIELD_WORK_PACK_SIGNATURE_PAYLOAD_CONTRACT,
+      instanceKey: context.pack.instance.instanceKey,
+      caseInstanceId: context.pack.instance.id,
+      promptKey: fullPromptKey,
+      signerRoleKey: role.roleKey,
+      signerName: signerBinding.signerName,
+      signerCapacity: role.capacity,
+      signerIdentitySha256,
+      attestationSha256,
+      definitionSha256: context.pack.signatureBindings.definitionSha256,
+      prefillSha256: context.pack.signatureBindings.prefillSha256,
+      responseSha256: context.pack.signatureBindings.responseSha256,
+      declarationsSha256: context.pack.signatureBindings.declarationsSha256,
+      strokes: boundSignatureStrokes(draft),
+      signedAt,
+    } as const;
+    const signaturePayloadSha256 = await fieldWorkPackSha256(payload);
+    const clientUploadId = `upload-${Crypto.randomUUID()}`;
+    const signatureFile = new File(Paths.cache, `${clientUploadId}.pdf`);
+    const signaturePdf = createFieldWorkPackSignaturePdf(payload);
+    const sessionId = captureSessionId();
+    const envelope = await buildEvidenceEnvelope({
+      captureSessionId: sessionId,
+      source: 'document_picker',
+      identifiers: evidenceIdentifiers(job),
+    });
+    const deviceId = await getDeviceId();
+    const capturedByUid = firebaseAuth.currentUser?.uid || '';
+    const appId = Application.applicationId?.trim() || '';
+    const appVersion = Application.nativeApplicationVersion?.trim() || APP_VERSION;
+    const appBuild = Application.nativeBuildVersion?.trim() || '';
+    if (!capturedByUid || !appId || !appBuild) {
+      throw new Error('Install and sign in to the current AEA Field app before signing.');
+    }
+    const deviceContext = {
+      appName: Application.applicationName || '',
+      platform: Platform.OS,
+      platformVersion: String(Platform.Version),
+      isPhysicalDevice: Device.isDevice,
+      manufacturer: Device.manufacturer || '',
+      modelName: Device.modelName || '',
+      osName: Device.osName || '',
+      osVersion: Device.osVersion || '',
+    };
+    const deviceAttestation = {
+      contract: FIELD_WORK_PACK_DEVICE_ATTESTATION_CONTRACT,
+      deviceId,
+      appId,
+      appVersion,
+      appBuild,
+      sessionId,
+      capturedByUid,
+      signedAt,
+      deviceContext,
+    } satisfies FieldWorkPackDeviceAttestation;
+    const deviceAttestationSha256 = await fieldWorkPackSha256(deviceAttestation);
+    let actionQueued = false;
+    setBusy(`work-pack-signature:${context.pack.instance.id}:${context.prompt.promptKey}`);
+    try {
+      signatureFile.write(signaturePdf);
+      if (!signatureFile.exists || signatureFile.size < 1) {
+        throw new Error('The exact signature record could not be secured on this device.');
+      }
+      const signatureSha256 = await governedReferenceDocumentBytesSha256(
+        await signatureFile.bytes(),
+      );
+      await addUpload({
+        id: clientUploadId,
+        work_order_id: job.id,
+        local_uri: signatureFile.uri,
+        file_name: `governed-signature-${context.prompt.promptKey}.pdf`,
+        content_type: 'application/pdf',
+        size_bytes: signatureFile.size,
+        category: 'document',
+        caption: `Governed signature | ${context.prompt.label}`.slice(0, 300),
+        evidenceEnvelope: envelope,
+      });
+      await saveAction({
+        type: 'work_pack_capture_signatures',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: context.pack.instance.id,
+        expectedResponseSha256: context.pack.instance.responseSha256,
+        signaturePackets: [{
+          sectionKey: context.section.sectionKey,
+          repeatInstanceKey: context.repeatInstanceKey,
+          promptKey: context.prompt.promptKey,
+          clientUploadId,
+          signerIdentity,
+          signerIdentitySha256,
+          attestation,
+          attestationSha256,
+          deviceAttestation,
+          deviceAttestationSha256,
+          signatureSha256,
+          signaturePayloadSha256,
+          signaturePayload: payload,
+        }],
+      });
+      actionQueued = true;
+      await load();
+    } catch (error) {
+      if (signatureFile.exists) signatureFile.delete();
+      if (!actionQueued) await discardUpload(clientUploadId);
+      throw error;
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function updateWorkPackCustomerContext(
+    pack: FieldActivityWorkPack,
+    next: FieldWorkPackCustomerContext,
+  ) {
+    const binding = pack.customerContextBinding;
+    if (
+      !job
+      || !pack.customerContext.editable
+      || !binding?.editable
+      || !binding.customerId
+      || !binding.siteId
+      || !binding.contactId
+      || !/^sha256:[0-9a-f]{64}$/.test(binding.contextSha256)
+    ) {
+      throw new Error('Customer correction is not permitted for this protected record.');
+    }
+    setBusy(`work-pack-customer:${pack.instance.id}`);
+    try {
+      await saveAction({
+        type: 'work_pack_update_customer_context',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+        customerContextBinding: binding,
+        baseCustomerRevision: binding.customerRevision,
+        baseSiteRevision: binding.siteRevision,
+        baseContactRevision: binding.contactRevision,
+        customerPatch: { firstName: next.firstName, lastName: next.lastName },
+        sitePatch: {
+          addressLine1: next.addressLine1,
+          addressLine2: next.addressLine2,
+          suburb: next.suburb,
+          state: next.state,
+          postcode: next.postcode,
+        },
+        contactPatch: { phone: next.phone, email: next.email },
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function prepareWorkPackSigning(pack: FieldActivityWorkPack) {
+    if (!job) throw new Error('This job is no longer available.');
+    if (!['not_started', 'in_progress'].includes(pack.instance.status)) {
+      throw new Error('This work pack is not waiting for signing preparation. Sync and review its current state.');
+    }
+    setBusy(`work-pack-prepare-signing:${pack.instance.id}`);
+    try {
+      await saveAction({
+        type: 'work_pack_prepare_signing',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function finalizeWorkPack(pack: FieldActivityWorkPack) {
+    if (!job) throw new Error('This job is no longer available.');
+    setBusy(`work-pack-finalize:${pack.instance.id}`);
+    try {
+      await saveAction({
+        type: 'work_pack_finalize',
+        workOrderId: job.id,
+        baseRevision: job.revision,
+        caseInstanceId: pack.instance.id,
+        expectedResponseSha256: pack.instance.responseSha256,
+      });
+      await load();
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function openWorkPackFinalRecord(pack: FieldActivityWorkPack) {
+    const record = pack.finalRecord;
+    if (
+      pack.instance.status !== 'completed'
+      || !record
+      || record.caseInstanceId !== pack.instance.id
+      || record.contentType !== 'application/pdf'
+    ) {
+      throw new Error('The completed activity PDF is not ready. Sync this job and try again.');
+    }
+    const cacheFile = fieldWorkPackFinalRecordCacheFile(record);
+    setBusy(`work-pack-final-record:${pack.instance.id}`);
+    try {
+      await openVerifiedWorkPackDocument(
+        cacheFile,
+        record.downloadUrl,
+        {
+          sha256: record.pdfSha256,
+          contentType: record.contentType,
+          sizeBytes: record.sizeBytes,
+        },
+      );
+    } finally {
+      setBusy('');
+    }
+  }
+
   if (!job) return <Screen><View style={styles.empty}><MaterialCommunityIcons name="briefcase-remove-outline" size={42} color={colours.muted} /><Text style={styles.title}>Job is not available</Text><Text style={styles.body}>It may have been unassigned or removed during sync.</Text></View></Screen>;
 
   const completed = job.tasks.filter((task) => task.status === 'done').length;
   const fieldForms = job.forms || [];
+  const complianceIntents = job.complianceIntents || [];
+  const linkedComplianceIntents = complianceIntents.filter((intent) =>
+    intent.linkedCaseReady
+      && intent.complianceCaseId
+      && (job.activityWorkPacks || []).some(
+        (pack) => pack.instance.complianceIntentId === intent.id,
+      )).length;
   const complianceCases = complianceCasesForJob(job);
   const complianceRequirements = complianceCases.flatMap(
     (complianceCase) => complianceCase.requirements,
@@ -465,6 +1274,49 @@ export default function JobScreen() {
         {fieldAction ? <Pressable accessibilityRole="button" accessibilityLabel={fieldAction.label} disabled={busy !== ''} onPress={() => void advanceFieldJob()} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><MaterialCommunityIcons name={fieldAction.icon} size={28} color={colours.white} /><Text style={styles.primaryActionText}>{busy === `field:${fieldAction.transition}` ? 'Saving...' : fieldAction.label}</Text></Pressable> : <Text style={styles.body}>{job.appointmentStatus === 'completed' && job.stage === 'completed' ? 'Field work is complete. Invoice and handover are ready in TLink.' : job.appointmentStatus === 'completed' ? 'This appointment was completed outside the field workflow. Ask dispatch to reopen or reschedule it.' : 'Schedule this job before starting travel.'}</Text>}
         {!job.protectedJob && (job.customerPhone || job.serviceAddress) ? <View style={styles.row}>{job.customerPhone ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`tel:${job.customerPhone.replace(/[^+\d]/g, '')}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Call</Text></Pressable> : null}{job.serviceAddress ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.serviceAddress)}`)} style={[styles.contactAction, styles.flex]}><Text style={styles.contactActionText}>Get directions</Text></Pressable> : null}</View> : null}
       </View>
+
+      {complianceIntents.length ? <View style={styles.card}>
+        <View style={styles.cardHeading}>
+          <View><Text style={styles.label}>COMPLIANCE WORK PACKS</Text><Text style={styles.cardTitle}>Selected activities</Text></View>
+          <Text style={styles.progress}>{linkedComplianceIntents}/{complianceIntents.length}</Text>
+        </View>
+        <Text style={styles.body}>Every selected activity needs its exact governed case before regulated field work can be finished. Generic forms and general uploads do not replace the linked pack.</Text>
+        {complianceIntents.map((intent, index) => {
+          const pack = (job.activityWorkPacks || []).find(
+            (item) => item.instance.complianceIntentId === intent.id,
+          );
+          return pack ? <ActivityWorkPackWizard
+            key={`${pack.instance.id}:${pack.instance.responseSha256}`}
+            pack={pack}
+            conflict={workPackProblems[pack.instance.id]}
+            pendingActions={pendingWorkPackActions[pack.instance.id] || []}
+            busy={busy}
+            onSaveSections={(patches) => saveWorkPackSections(pack, patches)}
+            onCaptureArtifact={(context) => context.prompt.type === 'photo'
+              ? captureWorkPackPhoto(context)
+              : chooseWorkPackDocument(context)}
+            onOpenReferenceDocument={openWorkPackReferenceDocument}
+            onAcknowledgeReferenceDocument={acknowledgeWorkPackReferenceDocument}
+            onCaptureSignature={captureWorkPackSignature}
+            onPrepareSigning={() => prepareWorkPackSigning(pack)}
+            onFinalize={() => finalizeWorkPack(pack)}
+            onOpenFinalRecord={() => openWorkPackFinalRecord(pack)}
+            onUpdateCustomerContext={(next) => updateWorkPackCustomerContext(pack, next)}
+            onFindOfficialProducts={(dependencyKey, search) =>
+              findWorkPackOfficialProducts(pack, dependencyKey, search)}
+            onSelectOfficialProducts={(dependencyKey, selections) =>
+              selectWorkPackOfficialProducts(pack, dependencyKey, selections)}
+            onSelectScenario={(dependencyKey, scenarioCode) =>
+              selectWorkPackScenario(pack, dependencyKey, scenarioCode)}
+            onRunCalculator={(dependencyKey) => runWorkPackCalculator(pack, dependencyKey)}
+          /> : <UnlinkedComplianceWorkPack
+            key={intent.id}
+            intent={intent}
+            index={index}
+            total={complianceIntents.length}
+          />;
+        })}
+      </View> : null}
 
       <View style={styles.card}>
         <View style={styles.cardHeading}><View><Text style={styles.label}>TODAY</Text><Text style={styles.cardTitle}>What must happen</Text></View></View>
@@ -516,6 +1368,42 @@ export default function JobScreen() {
       <View style={styles.syncLine}><MaterialCommunityIcons name={sync.online ? sync.conflicts ? 'cloud-alert-outline' : 'cloud-check-outline' : 'cloud-off-outline'} size={20} color={colours.green} /><Text style={styles.body}>{syncLabel}</Text></View>
     </Screen>
   );
+}
+
+function UnlinkedComplianceWorkPack({
+  intent,
+  index,
+  total,
+}: {
+  intent: FieldComplianceIntent;
+  index: number;
+  total: number;
+}) {
+  const activityLabel = [intent.activityCode, intent.activityTitle]
+    .filter(Boolean)
+    .join(' | ') || 'Selected government activity';
+  return <View style={[styles.workPackBlock, styles.workPackSetup]}>
+    <View style={styles.caseSequence}>
+      <Text style={styles.caseSequenceText}>ACTIVITY {index + 1} OF {total}</Text>
+    </View>
+    <View style={styles.complianceHeading}>
+      <MaterialCommunityIcons
+        name="shield-alert-outline"
+        size={25}
+        color={colours.amber}
+      />
+      <View style={styles.flex}>
+        <Text style={styles.taskTitle}>{activityLabel}</Text>
+        <Text style={styles.meta}>{[intent.programCode, intent.programName].filter(Boolean).join(' | ')}</Text>
+        <Text style={styles.meta}>Planned {plannedDateLabel(intent.plannedDate || intent.plannedStart)} | {readable(intent.status)}</Text>
+      </View>
+    </View>
+    <>
+      <Text style={styles.setupRequired}>CREDITEX RELEASE BLOCK</Text>
+      <Text style={styles.body}>This activity does not yet have its complete approved form, documents and calculation controls. Dispatch or Creditex must resolve it before regulated work starts. Syncing alone will not clear this block.</Text>
+      <Text style={styles.warningText}>Do not start the regulated activity yet. The job cannot finish until its activity form appears here.</Text>
+    </>
+  </View>;
 }
 
 function ComplianceCaseEvidence({
@@ -676,6 +1564,11 @@ const styles = StyleSheet.create({
   optionText: { color: colours.ink, fontWeight: '700' },
   formActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   complianceBlock: { backgroundColor: colours.mint, borderColor: colours.mintStrong, borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  workPackBlock: { borderRadius: radius.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  workPackLinked: { backgroundColor: colours.mint, borderColor: colours.mintStrong },
+  workPackSetup: { backgroundColor: '#fff8e7', borderColor: colours.amber },
+  workPackReady: { color: colours.green, fontSize: 13, fontWeight: '800' },
+  setupRequired: { color: '#674b00', fontSize: 12, fontWeight: '900', letterSpacing: 0.7 },
   complianceHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
   caseSequence: { alignSelf: 'flex-start', backgroundColor: colours.forest, borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 5 },
   caseSequenceText: { color: colours.white, fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },

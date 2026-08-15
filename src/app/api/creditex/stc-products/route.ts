@@ -17,6 +17,8 @@ import {
   describeCreditexCalculatorRouteError,
   projectCreditexCalculatorReadResponse,
 } from "@/lib/creditex-calculator-route-response";
+import { CreditexOfficialProductError } from
+  "@/lib/creditex-official-product-registry";
 import { CreditexSresRegistryError } from "@/lib/creditex-sres-registry";
 import {
   loadCerSresRegistryStatus,
@@ -25,6 +27,11 @@ import {
   type CreditexSresArtifactStore,
   type CreditexSresReviewedProductCountDecrease,
 } from "@/lib/creditex-sres-registry-server";
+import {
+  enqueueCreditexProductRegistryRefresh,
+  withCreditexProductRegistryFleetLease,
+} from
+  "@/lib/creditex-product-registry-maintenance";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -138,7 +145,7 @@ export async function GET(request: Request) {
         registry,
       }));
     }
-    const result = await searchCerSresProducts(database, {
+    const searchInput = {
       technology: String(technology || "") as
         | "solar_water_heater"
         | "air_source_heat_pump",
@@ -149,7 +156,27 @@ export async function GET(request: Request) {
       query: parameters.get("q") || "",
       limit: Number(parameters.get("limit") || 30),
       cascade: parameters.get("mode") === "cascade",
-    });
+    };
+    let result;
+    try {
+      result = await searchCerSresProducts(database, searchInput);
+    } catch (error) {
+      const recoveryRequired = error instanceof CreditexSresRegistryError
+        && (
+          error.code === "SRES_PRODUCT_REGISTRY_STALE"
+          || error.code === "SRES_PRODUCT_REGISTRY_UNAVAILABLE"
+        );
+      if (!recoveryRequired) throw error;
+      await enqueueCreditexProductRegistryRefresh(
+        database,
+        "cer_sres_swh",
+      );
+      throw new CreditexOfficialProductError(
+        "OFFICIAL_PRODUCT_FLEET_BUSY",
+        503,
+        "The exact CER product registry refresh is queued. Retry shortly.",
+      );
+    }
     return json(projectCreditexCalculatorReadResponse(access.accessType, {
       ok: true,
       ...result,
@@ -218,10 +245,13 @@ export async function POST(request: Request) {
     const artifactStore = (env as unknown as {
       EVIDENCE?: CreditexSresArtifactStore;
     }).EVIDENCE;
-    const result = await syncCerSresProductRegistry(database, {
-      artifactStore,
-      reviewedCountDecrease,
-    });
+    const result = await withCreditexProductRegistryFleetLease(
+      database,
+      () => syncCerSresProductRegistry(database, {
+        artifactStore,
+        reviewedCountDecrease,
+      }),
+    );
     const registry = await loadCerSresRegistryStatus(database);
     return json({ ok: true, result, registry });
   } catch (error) {

@@ -122,6 +122,22 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       revision integer NOT NULL,
       updated_at text NOT NULL
     );
+    CREATE TABLE trade_work_order_compliance_intents (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      intent_key text NOT NULL,
+      installer_uid text NOT NULL,
+      compliance_organisation_id text NOT NULL,
+      program_template_id text NOT NULL,
+      activity_template_id text NOT NULL,
+      program_code text NOT NULL,
+      registry_activity_code text NOT NULL,
+      planned_start text NOT NULL,
+      status text NOT NULL,
+      intent_snapshot text NOT NULL,
+      compliance_case_id text NOT NULL,
+      created_at text NOT NULL
+    );
     CREATE TABLE trade_work_order_tasks (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
@@ -327,6 +343,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       case_number text NOT NULL,
       organisation_id text NOT NULL,
       work_order_id text NOT NULL,
+      compliance_intent_id text NOT NULL DEFAULT '',
       installer_uid text NOT NULL,
       activity_version_id text NOT NULL,
       evidence_policy_version_id text NOT NULL,
@@ -334,6 +351,24 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       evidence_status text NOT NULL,
       revision integer NOT NULL,
       updated_at text NOT NULL
+    );
+    CREATE TABLE compliance_activity_work_pack_instances (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      compliance_case_id text NOT NULL,
+      work_order_id text NOT NULL,
+      compliance_intent_id text NOT NULL,
+      instance_key text NOT NULL,
+      work_pack_version_id text NOT NULL,
+      revision integer NOT NULL,
+      status text NOT NULL
+    );
+    CREATE TABLE compliance_activity_work_pack_final_records (
+      id text PRIMARY KEY NOT NULL,
+      organisation_id text NOT NULL,
+      instance_key text NOT NULL,
+      case_instance_id text NOT NULL,
+      work_pack_version_id text NOT NULL
     );
     CREATE TABLE compliance_case_evidence (
       id text PRIMARY KEY NOT NULL,
@@ -415,8 +450,10 @@ function syncDatabase(stage = "in_progress", revision = 5) {
   return database;
 }
 
-function routeHarness(database, { assigned = true } = {}) {
+function routeHarness(database, { assigned = true, workPacks = [] } = {}) {
   const d1 = testD1(database);
+  const workPackCalls = [];
+  const workPackMutationCalls = [];
   const access = {
     ownerUid: "owner-1",
     actorUid: "actor-1",
@@ -485,8 +522,104 @@ function routeHarness(database, { assigned = true } = {}) {
     "@/lib/trade-photo-requests": {
       normalisePhotoRequirements: (value) => value,
     },
+    "@/lib/creditex-activity-work-pack-server": {
+      CreditexActivityWorkPackServerError: class extends Error {
+        constructor(code, status, message) {
+          super(message);
+          this.code = code;
+          this.status = status;
+        }
+      },
+      listAssignedCreditexActivityWorkPacks: async (_database, input) => {
+        workPackCalls.push(input);
+        return workPacks;
+      },
+      loadAssignedCreditexActivityWorkPack: async (_database, input) => (
+        workPacks.find((pack) => pack.instance.id === input.caseInstanceId) || {
+          instance: {
+            id: input.caseInstanceId,
+            workOrderId: "job-1",
+            revision: 2,
+            responseSha256: `sha256:${"a".repeat(64)}`,
+          },
+        }
+      ),
+      commitAssignedCreditexActivityWorkPack: async (_database, input) => {
+        workPackMutationCalls.push({ action: "commit", input });
+        return {
+          status: "applied",
+          action: "work_pack_commit",
+          projection: {
+            instance: {
+              id: input.caseInstanceId,
+              revision: 3,
+              responseSha256: `sha256:${"b".repeat(64)}`,
+            },
+          },
+        };
+      },
+      prepareAssignedCreditexActivityWorkPackSigning: async (_database, input) => {
+        workPackMutationCalls.push({ action: "prepare", input });
+        return {
+          status: "applied",
+          action: "work_pack_prepare_signing",
+          projection: {
+            instance: {
+              id: input.caseInstanceId,
+              revision: 3,
+              responseSha256: `sha256:${"c".repeat(64)}`,
+            },
+          },
+        };
+      },
+      captureAssignedCreditexActivityWorkPackSignatures: async (_database, input) => {
+        workPackMutationCalls.push({ action: "capture", input });
+        return {
+          status: "applied",
+          action: "work_pack_capture_signatures",
+          projection: {
+            instance: {
+              id: input.caseInstanceId,
+              revision: 3,
+              responseSha256: input.expectedResponseSha256,
+            },
+          },
+        };
+      },
+      updateAssignedCreditexActivityWorkPackCustomerContext: async (_database, input) => {
+        workPackMutationCalls.push({ action: "customer", input });
+        return {
+          status: "applied",
+          action: "work_pack_update_customer_context",
+          projection: {
+            instance: {
+              id: input.caseInstanceId,
+              revision: 3,
+              responseSha256: `sha256:${"d".repeat(64)}`,
+            },
+          },
+        };
+      },
+      finaliseAssignedCreditexActivityWorkPack: async (_database, input) => {
+        workPackMutationCalls.push({ action: "finalize", input });
+        return {
+          status: "applied",
+          action: "work_pack_finalize",
+          projection: {
+            instance: {
+              id: input.caseInstanceId,
+              revision: 4,
+              responseSha256: input.expectedResponseSha256,
+            },
+          },
+        };
+      },
+    },
+    "@/lib/creditex-compliance-server": {
+      reconcileReadyPlannedComplianceWorkPacks: async () => [],
+    },
   });
-  return { route, d1 };
+  return { route, d1, workPackCalls, workPackMutationCalls };
 }
 
 function seedReadyPhotoProof(database) {
@@ -538,6 +671,122 @@ function prepareFinishableJob(database) {
   seedReadyPhotoProof(database);
 }
 
+function seedComplianceIntent(database, {
+  id = "intent-1",
+  workOrderId = "job-1",
+  installerUid = "owner-1",
+  complianceOrganisationId = "org-veec",
+  programTemplateId = "program-veu",
+  programCode = "VEU",
+  programName = "Victorian Energy Upgrades",
+  activityTemplateId = "activity-template-1",
+  activityCode = "6",
+  activityTitle = "High-efficiency space conditioning",
+  plannedStart = "2026-08-20T00:00:00.000Z",
+  status = "planned",
+  complianceCaseId = "",
+} = {}) {
+  const snapshot = JSON.stringify({
+    contract: "tlink-creditex-job-intent-v1",
+    plannedStart,
+    program: {
+      templateId: programTemplateId,
+      programCode,
+      name: programName,
+    },
+    activity: {
+      templateId: activityTemplateId,
+      activityKey: `${programCode}_${activityCode}`,
+      registryActivityCode: activityCode,
+      title: activityTitle,
+    },
+    governance: {
+      state: "setup_required",
+      message: "Creditex must resolve and publish the exact governed field pack.",
+    },
+  });
+  database.prepare(`INSERT INTO trade_work_order_compliance_intents
+    (id, work_order_id, intent_key, installer_uid,
+     compliance_organisation_id, program_template_id, activity_template_id,
+     program_code, registry_activity_code, planned_start, status,
+     intent_snapshot, compliance_case_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(
+      id,
+      workOrderId,
+      id,
+      installerUid,
+      complianceOrganisationId,
+      programTemplateId,
+      activityTemplateId,
+      programCode,
+      activityCode,
+      plannedStart,
+      status,
+      snapshot,
+      complianceCaseId,
+      "2026-08-01T00:00:00.000Z",
+    );
+}
+
+function seedLinkedWorkPack(database, {
+  intentId = "intent-linked-pack",
+  caseId = "case-linked-pack",
+  organisationId = "org-veec",
+  status = "in_progress",
+  revision = 1,
+  withFinalRecord = status === "completed",
+} = {}) {
+  if (!database.prepare(`SELECT 1 found FROM trade_work_order_compliance_intents
+    WHERE id = ?`).get(intentId)) {
+    seedComplianceIntent(database, {
+      id: intentId,
+      complianceOrganisationId: organisationId,
+      status: "case_linked",
+      complianceCaseId: caseId,
+    });
+  }
+  if (!database.prepare("SELECT 1 found FROM compliance_cases WHERE id = ?").get(caseId)) {
+    database.prepare(`INSERT INTO compliance_cases
+      (id, case_number, organisation_id, work_order_id, compliance_intent_id,
+       installer_uid, activity_version_id, evidence_policy_version_id, status,
+       evidence_status, revision, updated_at)
+      VALUES (?, ?, ?, 'job-1', ?, 'owner-1', 'activity-linked-pack',
+        'policy-linked-pack', 'draft', 'in_progress', 1,
+        '2026-08-01T00:00:00.000Z')`)
+      .run(caseId, `CASE-${intentId}`, organisationId, intentId);
+  }
+  const caseInstanceId = `${caseId}-pack-${revision}`;
+  const instanceKey = `${caseId}-pack`;
+  const workPackVersionId = `version-${caseId}`;
+  database.prepare(`INSERT INTO compliance_activity_work_pack_instances
+    (id, organisation_id, compliance_case_id, work_order_id,
+     compliance_intent_id, instance_key, work_pack_version_id, revision, status)
+    VALUES (?, ?, ?, 'job-1', ?, ?, ?, ?, ?)`)
+    .run(
+      caseInstanceId,
+      organisationId,
+      caseId,
+      intentId,
+      instanceKey,
+      workPackVersionId,
+      revision,
+      status,
+    );
+  if (withFinalRecord) {
+    database.prepare(`INSERT INTO compliance_activity_work_pack_final_records
+      (id, organisation_id, instance_key, case_instance_id, work_pack_version_id)
+      VALUES (?, ?, ?, ?, ?)`)
+      .run(
+        `final-${caseInstanceId}`,
+        organisationId,
+        instanceKey,
+        caseInstanceId,
+        workPackVersionId,
+      );
+  }
+}
+
 function seedGovernedComplianceCases(database) {
   const activities = [
     ["activity-stc", "SRES_HEAT_PUMP", "STC", "Heat-pump water heater"],
@@ -555,9 +804,9 @@ function seedGovernedComplianceCases(database) {
     ["requirement-foreign", "org-foreign", "policy-foreign", "FOREIGN_PROOF", "Foreign proof"],
   ];
   const cases = [
-    ["case-stc", "STC-001", "org-stc", "owner-1", "activity-stc", "policy-stc"],
-    ["case-veec", "VEEC-001", "org-veec", "owner-1", "activity-veec", "policy-veec"],
-    ["case-foreign", "FOREIGN-001", "org-foreign", "owner-2", "activity-foreign", "policy-foreign"],
+    ["case-stc", "STC-001", "org-stc", "intent-linked", "owner-1", "activity-stc", "policy-stc"],
+    ["case-veec", "VEEC-001", "org-veec", "", "owner-1", "activity-veec", "policy-veec"],
+    ["case-foreign", "FOREIGN-001", "org-foreign", "", "owner-2", "activity-foreign", "policy-foreign"],
   ];
   const insertActivity = database.prepare(`INSERT INTO compliance_activity_versions
     (id, activity_key, registry_activity_code, title) VALUES (?, ?, ?, ?)`);
@@ -575,10 +824,10 @@ function seedGovernedComplianceCases(database) {
       '["image/jpeg"]', '{}', '{}', 1)`);
   for (const row of requirements) insertRequirement.run(...row);
   const insertCase = database.prepare(`INSERT INTO compliance_cases
-    (id, case_number, organisation_id, work_order_id, installer_uid,
+    (id, case_number, organisation_id, compliance_intent_id, work_order_id, installer_uid,
      activity_version_id, evidence_policy_version_id, status, evidence_status,
      revision, updated_at)
-    VALUES (?, ?, ?, 'job-1', ?, ?, ?, 'draft', 'in_progress', 1,
+    VALUES (?, ?, ?, ?, 'job-1', ?, ?, ?, 'draft', 'in_progress', 1,
       '2026-08-01T00:00:00.000Z')`);
   for (const row of cases) insertCase.run(...row);
   database.prepare(`INSERT INTO compliance_case_evidence
@@ -627,6 +876,469 @@ test("bootstrap fails closed before companion rows can exceed its response cap",
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
   assert.match(result.payload.error, /too much active field data/);
+});
+
+test("bootstrap returns every current activity intent with its validated case link and preserves own-job scope", async () => {
+  const database = syncDatabase("in_progress", 5);
+  seedGovernedComplianceCases(database);
+  seedComplianceIntent(database, {
+    id: "intent-linked",
+    complianceOrganisationId: "org-stc",
+    programTemplateId: "program-sres",
+    programCode: "SRES",
+    programName: "Small-scale Renewable Energy Scheme",
+    activityTemplateId: "activity-stc-template",
+    activityCode: "STC",
+    activityTitle: "Heat-pump water heater",
+    status: "case_linked",
+    complianceCaseId: "case-stc",
+  });
+  seedComplianceIntent(database, {
+    id: "intent-setup",
+    activityTemplateId: "activity-setup-template",
+    activityCode: "6",
+    activityTitle: "High-efficiency space conditioning",
+  });
+  database.prepare(`INSERT INTO trade_work_orders
+    (id, firebase_uid, partner_type, record_status, stage, revision,
+     assignee_member_id, updated_at)
+    VALUES ('job-other-member', 'owner-1', 'installer', 'active',
+      'scheduled', 1, 'member-2', 'initial')`).run();
+  seedComplianceIntent(database, {
+    id: "intent-other-member",
+    workOrderId: "job-other-member",
+  });
+  database.prepare(`INSERT INTO trade_work_orders
+    (id, firebase_uid, partner_type, record_status, stage, revision,
+     assignee_member_id, updated_at)
+    VALUES ('job-foreign-owner', 'owner-2', 'installer', 'active',
+      'scheduled', 1, 'member-1', 'initial')`).run();
+  seedComplianceIntent(database, {
+    id: "intent-foreign-owner",
+    workOrderId: "job-foreign-owner",
+    installerUid: "owner-2",
+  });
+  const { route } = routeHarness(database);
+
+  const result = await bootstrap(route);
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(
+    result.payload.changes.map((change) => change.entityId),
+    ["job-1"],
+  );
+  const job = result.payload.changes[0].entity;
+  assert.deepEqual(
+    job.complianceIntents.map((intent) => ({
+      id: intent.id,
+      programCode: intent.programCode,
+      activityCode: intent.activityCode,
+      activityTitle: intent.activityTitle,
+      plannedDate: intent.plannedDate,
+      status: intent.status,
+      governanceState: intent.governanceState,
+      governanceMessage: intent.governanceMessage,
+      linkedCaseReady: intent.linkedCaseReady,
+      complianceCaseId: intent.complianceCaseId,
+      caseNumber: intent.caseNumber,
+      caseStatus: intent.caseStatus,
+      evidenceStatus: intent.evidenceStatus,
+    })),
+    [
+      {
+        id: "intent-linked",
+        programCode: "SRES",
+        activityCode: "STC",
+        activityTitle: "Heat-pump water heater",
+        plannedDate: "2026-08-20",
+        status: "case_linked",
+        governanceState: "setup_required",
+        governanceMessage: "Creditex must resolve and publish the exact governed field pack.",
+        linkedCaseReady: true,
+        complianceCaseId: "case-stc",
+        caseNumber: "STC-001",
+        caseStatus: "draft",
+        evidenceStatus: "in_progress",
+      },
+      {
+        id: "intent-setup",
+        programCode: "VEU",
+        activityCode: "6",
+        activityTitle: "High-efficiency space conditioning",
+        plannedDate: "2026-08-20",
+        status: "planned",
+        governanceState: "setup_required",
+        governanceMessage: "Creditex must resolve and publish the exact governed field pack.",
+        linkedCaseReady: false,
+        complianceCaseId: "",
+        caseNumber: "",
+        caseStatus: "",
+        evidenceStatus: "",
+      },
+    ],
+  );
+});
+
+test("bootstrap loads pinned work packs through the assigned own scope without exposing protected customer PII", async () => {
+  const database = syncDatabase("scheduled", 1);
+  const protectedPack = {
+    instance: {
+      id: "work-pack-1",
+      workOrderId: "job-1",
+      complianceIntentId: "intent-protected",
+      responseSha256: `sha256:${"a".repeat(64)}`,
+    },
+    protectedCustomer: true,
+    customerContextBinding: {
+      contract: "creditex-activity-work-pack-customer-context/v1",
+      editable: false,
+      customerId: "",
+      siteId: "",
+      contactId: "",
+      customerRevision: "",
+      siteRevision: "",
+      contactRevision: "",
+      contextSha256: `sha256:${"b".repeat(64)}`,
+    },
+    customerContext: {
+      editable: false,
+      firstName: "",
+      lastName: "",
+      phone: "",
+      email: "",
+      addressLine1: "",
+      addressLine2: "",
+      suburb: "",
+      state: "",
+      postcode: "",
+      customerRevision: "",
+      siteRevision: "",
+      contactRevision: "",
+    },
+  };
+  const { route, workPackCalls } = routeHarness(database, {
+    workPacks: [protectedPack],
+  });
+
+  const result = await bootstrap(route);
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(workPackCalls, [{
+    ownerUid: "owner-1",
+    actorUid: "actor-1",
+    actorMemberId: "member-1",
+    scope: "own",
+    workOrderIds: ["job-1"],
+  }]);
+  const [projected] = result.payload.changes[0].entity.activityWorkPacks;
+  assert.equal(projected.instance.id, "work-pack-1");
+  assert.equal(projected.protectedCustomer, true);
+  assert.equal(projected.customerContext.editable, false);
+  assert.equal(projected.customerContext.firstName, "");
+  assert.equal(projected.customerContext.phone, "");
+  assert.equal(projected.customerContext.addressLine1, "");
+});
+
+test("work-pack signatures use the separate prepared-revision capture action", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const { route, workPackMutationCalls } = routeHarness(database);
+  const sha = (character) => `sha256:${character.repeat(64)}`;
+  const signedAt = "2026-08-14T10:00:00.000Z";
+  const signerIdentity = {
+    contract: "creditex-activity-work-pack-signer-identity/v1",
+    roleKey: "customer",
+    capacity: "Customer",
+    identitySource: "customer_context",
+    signerName: "Test Customer",
+    signerUid: "",
+    fields: { authority: "Owner" },
+  };
+  const attestation = {
+    contract: "creditex-activity-work-pack-signature-attestation/v1",
+    promptKey: "customer-signature",
+    signerRoleKey: "customer",
+    text: "I confirm the work and declaration.",
+    version: "2026-08-14",
+    sourceBindingTargetKey: "customer-declaration",
+    signerIdentity,
+    signerIdentitySha256: sha("1"),
+    definitionSha256: sha("2"),
+    prefillSha256: sha("3"),
+    responseSha256: sha("4"),
+    declarationsSha256: sha("5"),
+  };
+  const signaturePayload = {
+    contract: "creditex-activity-work-pack-signature-payload/v1",
+    instanceKey: "instance-key",
+    caseInstanceId: "work-pack-1",
+    promptKey: "customer-signature",
+    signerRoleKey: "customer",
+    signerName: "Test Customer",
+    signerCapacity: "Customer",
+    signerIdentitySha256: sha("1"),
+    attestationSha256: sha("6"),
+    definitionSha256: sha("2"),
+    prefillSha256: sha("3"),
+    responseSha256: sha("4"),
+    declarationsSha256: sha("5"),
+    strokes: [{ points: [
+      { x: 0.1, y: 0.2, pressure: null, capturedAtOffsetMs: 0 },
+      { x: 0.4, y: 0.5, pressure: 0.5, capturedAtOffsetMs: 10 },
+      { x: 0.7, y: 0.3, pressure: 0.6, capturedAtOffsetMs: 20 },
+    ] }],
+    signedAt,
+  };
+  const deviceAttestation = {
+    contract: "creditex-activity-work-pack-device-attestation/v1",
+    deviceId: "device-001",
+    appId: "au.com.australianenergyassessments.field",
+    appVersion: "1.0.0",
+    appBuild: "1",
+    sessionId: "capture-session-1",
+    capturedByUid: "actor-1",
+    signedAt,
+    deviceContext: { platform: "ios", physicalDevice: true },
+  };
+  const packet = {
+    sectionKey: "signatures",
+    repeatInstanceKey: "",
+    promptKey: "customer-signature",
+    clientUploadId: "upload-signature-1",
+    signerIdentity,
+    signerIdentitySha256: sha("1"),
+    signaturePayload,
+    signaturePayloadSha256: sha("7"),
+    attestation,
+    attestationSha256: sha("6"),
+    deviceAttestation,
+    deviceAttestationSha256: sha("8"),
+    signatureSha256: "9".repeat(64),
+  };
+
+  const commitAttempt = await postActions(route, [{
+    clientActionId: "work-pack-bad-signature-phase",
+    type: "work_pack_commit",
+    workOrderId: "job-1",
+    caseInstanceId: "work-pack-1",
+    expectedResponseSha256: sha("a"),
+    signaturePackets: [packet],
+  }]);
+  assert.equal(commitAttempt.payload.results[0].code, "WORK_PACK_SIGNATURE_PHASE_REQUIRED");
+  assert.equal(workPackMutationCalls.length, 0);
+
+  const captured = await postActions(route, [{
+    clientActionId: "work-pack-signature-capture",
+    type: "work_pack_capture_signatures",
+    workOrderId: "job-1",
+    caseInstanceId: "work-pack-1",
+    expectedResponseSha256: sha("a"),
+    signaturePackets: [packet],
+  }]);
+  assert.equal(captured.payload.results[0].status, "applied");
+  assert.equal(workPackMutationCalls[0].action, "capture");
+  assert.equal(workPackMutationCalls[0].input.packets[0].promptKey, "customer-signature");
+  assert.equal(workPackMutationCalls[0].input.packets[0].deviceAttestation.deviceId, "device-001");
+  assert.equal(workPackMutationCalls[0].input.packets[0].deviceAttestation.capturedByUid, "actor-1");
+  assert.equal(workPackMutationCalls[0].input.packets[0].signaturePayload.strokes[0].points.length, 3);
+});
+
+test("customer correction echoes the authoritative non-PII binding", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const { route, workPackMutationCalls } = routeHarness(database);
+  const binding = {
+    contract: "creditex-activity-work-pack-customer-context/v1",
+    editable: true,
+    customerId: "customer-1",
+    siteId: "site-1",
+    contactId: "contact-1",
+    customerRevision: "2026-08-14T01:00:00.000Z",
+    siteRevision: "2026-08-14T01:00:00.000Z",
+    contactRevision: "2026-08-14T01:00:00.000Z",
+    contextSha256: `sha256:${"a".repeat(64)}`,
+  };
+  const result = await postActions(route, [{
+    clientActionId: "work-pack-customer-correct",
+    type: "work_pack_update_customer_context",
+    workOrderId: "job-1",
+    caseInstanceId: "work-pack-1",
+    expectedResponseSha256: `sha256:${"b".repeat(64)}`,
+    customerContextBinding: binding,
+    customerPatch: { firstName: "Correct" },
+    sitePatch: { postcode: "3000" },
+    contactPatch: { phone: "0400000000" },
+  }]);
+  assert.equal(result.payload.results[0].status, "applied");
+  assert.deepEqual(workPackMutationCalls[0].input.customerContextBinding, binding);
+  assert.deepEqual(workPackMutationCalls[0].input.customerPatch, { firstName: "Correct" });
+  assert.deepEqual(workPackMutationCalls[0].input.sitePatch, { postcode: "3000" });
+});
+
+test("offline finalization uses the governed renderer and returns the completed projection", async () => {
+  const database = syncDatabase("in_progress", 5);
+  const { route, workPackMutationCalls } = routeHarness(database);
+  const responseSha256 = `sha256:${"e".repeat(64)}`;
+  const result = await postActions(route, [{
+    clientActionId: "work-pack-finalize-record",
+    type: "work_pack_finalize",
+    workOrderId: "job-1",
+    caseInstanceId: "work-pack-1",
+    expectedResponseSha256: responseSha256,
+  }]);
+  assert.equal(result.payload.results[0].status, "applied");
+  assert.equal(result.payload.results[0].actionType, "work_pack_finalize");
+  assert.equal(workPackMutationCalls[0].action, "finalize");
+  assert.equal(workPackMutationCalls[0].input.expectedResponseSha256, responseSha256);
+  assert.equal(workPackMutationCalls[0].input.idempotency.deviceId, "device-001");
+});
+
+test("bootstrap fails closed when one job exceeds the selected-activity work-pack limit", async () => {
+  const database = syncDatabase("scheduled", 1);
+  for (let index = 0; index < 13; index += 1) {
+    seedComplianceIntent(database, {
+      id: `intent-limit-${index}`,
+      activityTemplateId: `activity-limit-${index}`,
+      activityCode: String(index + 1),
+    });
+  }
+  const { route } = routeHarness(database);
+
+  const result = await bootstrap(route);
+  assert.equal(result.response.status, 409);
+  assert.equal(result.payload.code, "SYNC_RESPONSE_CARDINALITY_EXCEEDED");
+});
+
+test("an activity awaiting its governed case blocks both server finish paths", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  seedComplianceIntent(database, { id: "intent-awaiting-pack" });
+  const { route } = routeHarness(database);
+
+  const stageAttempt = await postActions(route, [{
+    clientActionId: "work-pack-stage-finish",
+    type: "set_job_stage",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    stage: "completed",
+  }]);
+  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(stageAttempt.payload.results[0].error, /Creditex compliance work packs/);
+
+  const fieldAttempt = await postActions(route, [{
+    clientActionId: "work-pack-field-finish",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(fieldAttempt.payload.results[0].error, /Creditex compliance work packs/);
+  assert.deepEqual(
+    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
+      WHERE id = 'job-1'`).get() },
+    { stage: "in_progress", revision: 5 },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_offline_actions").get().count, 0);
+});
+
+test("a linked activity remains blocked until its current work pack is completed", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  seedLinkedWorkPack(database, { status: "in_progress" });
+  const { route } = routeHarness(database);
+
+  const stageAttempt = await postActions(route, [{
+    clientActionId: "linked-work-pack-stage-finish",
+    type: "set_job_stage",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    stage: "completed",
+  }]);
+  assert.equal(stageAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(stageAttempt.payload.results[0].error, /Creditex compliance work packs/);
+
+  const fieldAttempt = await postActions(route, [{
+    clientActionId: "linked-work-pack-field-finish",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(fieldAttempt.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(fieldAttempt.payload.results[0].error, /Creditex compliance work packs/);
+});
+
+test("only the current completed work-pack revision with its final PDF satisfies field finish", async () => {
+  const completedDatabase = syncDatabase("in_progress", 5);
+  prepareFinishableJob(completedDatabase);
+  seedLinkedWorkPack(completedDatabase, { status: "completed" });
+  const completedHarness = routeHarness(completedDatabase);
+  const completed = await postActions(completedHarness.route, [{
+    clientActionId: "current-completed-work-pack",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(completed.payload.results[0].status, "applied");
+
+  const missingRecordDatabase = syncDatabase("in_progress", 5);
+  prepareFinishableJob(missingRecordDatabase);
+  seedLinkedWorkPack(missingRecordDatabase, {
+    status: "completed",
+    withFinalRecord: false,
+  });
+  const missingRecordHarness = routeHarness(missingRecordDatabase);
+  const missingRecord = await postActions(missingRecordHarness.route, [{
+    clientActionId: "completed-work-pack-without-pdf",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(missingRecord.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(missingRecord.payload.results[0].error, /Creditex compliance work packs/);
+
+  const supersededDatabase = syncDatabase("in_progress", 5);
+  prepareFinishableJob(supersededDatabase);
+  seedLinkedWorkPack(supersededDatabase, { status: "completed" });
+  seedLinkedWorkPack(supersededDatabase, { status: "in_progress", revision: 2 });
+  const supersededHarness = routeHarness(supersededDatabase);
+  const blocked = await postActions(supersededHarness.route, [{
+    clientActionId: "superseded-completed-work-pack",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(blocked.payload.results[0].code, "FINISH_BLOCKED");
+  assert.match(blocked.payload.results[0].error, /Creditex compliance work packs/);
+});
+
+test("the atomic finish guard rejects a work pack added after preflight", async () => {
+  const database = syncDatabase("in_progress", 5);
+  prepareFinishableJob(database);
+  const { route, d1 } = routeHarness(database);
+  d1.injectBeforeNextBatch(() => {
+    seedComplianceIntent(database, { id: "intent-raced-pack" });
+  });
+
+  const result = await postActions(route, [{
+    clientActionId: "work-pack-finish-race",
+    type: "advance_field_job",
+    workOrderId: "job-1",
+    baseRevision: 5,
+    transition: "finish",
+  }]);
+  assert.equal(result.payload.results[0].status, "conflict");
+  assert.deepEqual(
+    { ...database.prepare(`SELECT stage, revision FROM trade_work_orders
+      WHERE id = 'job-1'`).get() },
+    { stage: "in_progress", revision: 5 },
+  );
+  assert.deepEqual(
+    { ...database.prepare(`SELECT status, revision FROM trade_crm_appointments
+      WHERE id = 'appointment-1'`).get() },
+    { status: "in_progress", revision: 1 },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events").get().count, 0);
 });
 
 test("offline stage changes cannot complete blocked work or reopen a terminal job", async () => {

@@ -7,6 +7,8 @@ export const CREDITEX_OFFICIAL_PRODUCT_KINDS = [
   "inverter",
   "battery",
   "cec_battery",
+  "sres_air_source_heat_pump",
+  "sres_solar_water_heater",
   "nsw_heat_pump_water_heater",
   "nsw_solar_water_heater",
   "air_conditioner",
@@ -49,11 +51,21 @@ export const CREDITEX_OFFICIAL_PRODUCT_KINDS = [
 export type CreditexOfficialProductKind =
   typeof CREDITEX_OFFICIAL_PRODUCT_KINDS[number];
 
+export const CREDITEX_SRES_OFFICIAL_PRODUCT_KINDS = [
+  "sres_air_source_heat_pump",
+  "sres_solar_water_heater",
+] as const satisfies readonly CreditexOfficialProductKind[];
+
+export type CreditexSresOfficialProductKind =
+  typeof CREDITEX_SRES_OFFICIAL_PRODUCT_KINDS[number];
+
 export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   pv_module: "cer-cec-products",
   inverter: "cer-cec-products",
   battery: "cer-cec-products",
   cec_battery: "cec-products",
+  sres_air_source_heat_pump: "cer_sres_swh",
+  sres_solar_water_heater: "cer_sres_swh",
   nsw_heat_pump_water_heater: "nsw-tessa-products",
   nsw_solar_water_heater: "nsw-tessa-products",
   air_conditioner: "gems-products",
@@ -92,6 +104,109 @@ export const CREDITEX_PRODUCT_KIND_REGISTRY = {
   wa_synergy_supported_solution: "wa-synergy-supported-solutions",
   wa_horizon_supported_solution: "wa-horizon-supported-solutions",
 } as const satisfies Record<CreditexOfficialProductKind, string>;
+
+export type CreditexProductRegistryRefreshDesign = Readonly<{
+  registryCode: string;
+  producer:
+    | "official_product_registry"
+    | "cer_sres_registry"
+    | "licensed_cec_battery_registry"
+    | "controlled_official_import"
+    | "blocked_external_source";
+  refreshMode:
+    | "automatic"
+    | "licensed_automatic"
+    | "governed_manual"
+    | "blocked";
+  requiredConfiguration: readonly string[];
+  controlledImportPath: string | null;
+}>;
+
+/**
+ * The complete executable acquisition inventory for every registry referenced
+ * by a live calculator product kind. Keep this derived contract beside the
+ * product-kind mapping so a new dependency cannot be added without declaring
+ * how it is refreshed or governed.
+ */
+export const CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS = {
+  "cer-cec-products": {
+    registryCode: "cer-cec-products",
+    producer: "controlled_official_import",
+    refreshMode: "governed_manual",
+    requiredConfiguration: ["CEC third-party content reuse approval"],
+    controlledImportPath: "/api/creditex/official-products/controlled-import",
+  },
+  "cec-products": {
+    registryCode: "cec-products",
+    producer: "licensed_cec_battery_registry",
+    refreshMode: "licensed_automatic",
+    requiredConfiguration: [
+      "CREDITEX_CEC_BATTERY_API_USERNAME",
+      "CREDITEX_CEC_BATTERY_API_PASSWORD",
+      "CREDITEX_CEC_BATTERY_LICENCE_REFERENCE",
+    ],
+    controlledImportPath: null,
+  },
+  cer_sres_swh: {
+    registryCode: "cer_sres_swh",
+    producer: "cer_sres_registry",
+    refreshMode: "automatic",
+    requiredConfiguration: [],
+    controlledImportPath: null,
+  },
+  "nsw-tessa-products": {
+    registryCode: "nsw-tessa-products",
+    producer: "official_product_registry",
+    refreshMode: "automatic",
+    requiredConfiguration: [],
+    controlledImportPath: null,
+  },
+  "gems-products": {
+    registryCode: "gems-products",
+    producer: "official_product_registry",
+    refreshMode: "automatic",
+    requiredConfiguration: [],
+    controlledImportPath: null,
+  },
+  "veu-approved-products": {
+    registryCode: "veu-approved-products",
+    producer: "official_product_registry",
+    refreshMode: "automatic",
+    requiredConfiguration: [],
+    controlledImportPath: null,
+  },
+  "wa-synergy-supported-solutions": {
+    registryCode: "wa-synergy-supported-solutions",
+    producer: "controlled_official_import",
+    refreshMode: "governed_manual",
+    requiredConfiguration: ["Synergy commercial reuse approval"],
+    controlledImportPath: "/api/creditex/official-products/controlled-import",
+  },
+  "wa-horizon-supported-solutions": {
+    registryCode: "wa-horizon-supported-solutions",
+    producer: "blocked_external_source",
+    refreshMode: "blocked",
+    requiredConfiguration: [
+      "Horizon Power supported export or authorised acquisition access",
+    ],
+    controlledImportPath: null,
+  },
+} as const satisfies Record<string, CreditexProductRegistryRefreshDesign>;
+
+export type CreditexCalculatorProductRegistryCode =
+  keyof typeof CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS;
+
+export const CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES = [
+  ...new Set(Object.values(CREDITEX_PRODUCT_KIND_REGISTRY)),
+].sort() as readonly CreditexCalculatorProductRegistryCode[];
+
+for (const registryCode of CREDITEX_CALCULATOR_REQUIRED_PRODUCT_REGISTRY_CODES) {
+  if (!Object.hasOwn(CREDITEX_PRODUCT_REGISTRY_REFRESH_DESIGNS, registryCode)) {
+    throw new Error(
+      `Missing official product registry refresh design for ${registryCode}.`,
+    );
+  }
+}
 
 export type CreditexOfficialProductRecord = {
   sourceKey: string;
@@ -163,6 +278,7 @@ export type CreditexOfficialProductErrorCode =
   | "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED"
   | "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED"
   | "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"
+  | "OFFICIAL_PRODUCT_FLEET_BUSY"
   | "OFFICIAL_PRODUCT_SELECTION_REQUIRED"
   | "OFFICIAL_PRODUCT_NOT_ELIGIBLE";
 
@@ -186,6 +302,12 @@ export function officialProductKindsForLocalActivity(
   programCode: string,
   activityCode: string,
 ): readonly CreditexOfficialProductKind[] {
+  if (programCode === "SRES" && activityCode === "ASHP") {
+    return ["sres_air_source_heat_pump"];
+  }
+  if (programCode === "SRES" && activityCode === "SWH") {
+    return ["sres_solar_water_heater"];
+  }
   if (programCode === "QLD-SSR") return ["pv_module", "inverter"];
   if (programCode === "QLD-QCHEU" && activityCode === "PV") {
     return ["pv_module", "inverter"];
@@ -1857,6 +1979,8 @@ export function officialProductKindLabel(kind: CreditexOfficialProductKind) {
     inverter: "inverter",
     battery: "battery",
     cec_battery: "CEC-approved battery",
+    sres_air_source_heat_pump: "CER-registered air-source heat pump",
+    sres_solar_water_heater: "CER-registered solar water heater",
     nsw_heat_pump_water_heater: "TESSA-accepted heat-pump water heater",
     nsw_solar_water_heater: "TESSA-accepted solar water heater",
     air_conditioner: "air conditioner",

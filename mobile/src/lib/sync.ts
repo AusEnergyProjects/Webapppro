@@ -131,8 +131,11 @@ async function performSync(): Promise<SyncOutcome> {
     await purgeExpiredAddresses();
     for (const mode of modes) {
       await registerDevice(mode);
-      await sendActions(mode);
+      // Work-pack artifact commits and prepared-revision signature captures
+      // reference exact uploaded bytes by stable clientUploadId. Complete the
+      // uploads before sending either authoritative action.
       await processUploadQueue(mode);
+      await sendActions(mode);
       await fetchChanges(mode);
     }
     const lastSyncedAt = new Date().toISOString();

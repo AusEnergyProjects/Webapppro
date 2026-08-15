@@ -71,6 +71,22 @@ export interface CreditexCalculatorFactorStep {
   factor: string;
 }
 
+/**
+ * Multiplies two preceding, independently typed values. This is deliberately
+ * binary rather than accepting an expression string: the governed
+ * specification names both exact inputs and their units, and the fixed-decimal
+ * engine retains both operands in the execution trace.
+ */
+export interface CreditexCalculatorMultiplyStep {
+  kind: "multiply";
+  key: string;
+  leftSource: string;
+  rightSource: string;
+  leftUnit: string;
+  rightUnit: string;
+  outputUnit: string;
+}
+
 export interface CreditexCalculatorLookupEntry {
   match: string;
   value: string;
@@ -110,6 +126,7 @@ export interface CreditexCalculatorRoundingStep {
 
 export type CreditexCalculatorStep =
   | CreditexCalculatorFactorStep
+  | CreditexCalculatorMultiplyStep
   | CreditexCalculatorLookupStep
   | CreditexCalculatorCapStep
   | CreditexCalculatorRoundingStep;
@@ -147,6 +164,11 @@ export interface CreditexCalculatorTraceEntry {
   kind: CreditexCalculatorStep["kind"];
   source: string;
   input: {
+    decimal: string;
+    unit: string;
+  };
+  secondarySource?: string;
+  secondaryInput?: {
     decimal: string;
     unit: string;
   };
@@ -641,6 +663,67 @@ function factorStep(
   return step;
 }
 
+function multiplyStep(
+  value: UnknownRecord,
+  index: number,
+  symbols: Map<string, string>,
+): CreditexCalculatorMultiplyStep {
+  const path = `specification.steps[${index}]`;
+  exactKeys(
+    value,
+    [
+      "kind",
+      "key",
+      "leftSource",
+      "rightSource",
+      "leftUnit",
+      "rightUnit",
+      "outputUnit",
+    ],
+    path,
+    "invalid_specification",
+  );
+  const key = validateStepKey(value.key, symbols, path);
+  const leftSource = keyValue(
+    value.leftSource,
+    `${path}.leftSource`,
+    "invalid_specification",
+  );
+  const rightSource = keyValue(
+    value.rightSource,
+    `${path}.rightSource`,
+    "invalid_specification",
+  );
+  const leftUnit = unitValue(
+    value.leftUnit,
+    `${path}.leftUnit`,
+    "invalid_specification",
+  );
+  const rightUnit = unitValue(
+    value.rightUnit,
+    `${path}.rightUnit`,
+    "invalid_specification",
+  );
+  const outputUnit = unitValue(
+    value.outputUnit,
+    `${path}.outputUnit`,
+    "invalid_specification",
+  );
+  validateSourceUnit(symbols, leftSource, leftUnit, `${path}.left`);
+  validateSourceUnit(symbols, rightSource, rightUnit, `${path}.right`);
+  const step: CreditexCalculatorMultiplyStep = {
+    kind: "multiply",
+    key,
+    leftSource,
+    rightSource,
+    leftUnit,
+    rightUnit,
+    outputUnit,
+  };
+  symbols.set(key, outputUnit);
+  return step;
+}
+
 function lookupStep(
   value: UnknownRecord,
   index: number,
@@ -872,6 +955,9 @@ function calculatorStep(
   if (step.kind === "factor") {
     return factorStep(step, index, symbols);
   }
+  if (step.kind === "multiply") {
+    return multiplyStep(step, index, symbols);
+  }
   if (step.kind === "lookup") {
     return lookupStep(step, index, symbols);
   }
@@ -884,7 +970,7 @@ function calculatorStep(
   fail(
     "invalid_specification",
     `${path}.kind`,
-    "must be factor, lookup, cap, or rounding",
+    "must be factor, multiply, lookup, cap, or rounding",
   );
 }
 
@@ -1148,6 +1234,21 @@ function executeStep(
   index: number,
 ): RuntimeValue {
   const path = `steps[${index}]`;
+  if (step.kind === "multiply") {
+    const left = sourceValue(values, step.leftSource, `${path}.leftSource`);
+    const right = sourceValue(values, step.rightSource, `${path}.rightSource`);
+    if (left.unit !== step.leftUnit || right.unit !== step.rightUnit) {
+      fail(
+        "unit_mismatch",
+        path,
+        `expected ${step.leftUnit} multiplied by ${step.rightUnit}, received ${left.unit} multiplied by ${right.unit}`,
+      );
+    }
+    return {
+      decimal: multiplyDecimals(left.decimal, right.decimal, `${path}.output`),
+      unit: step.outputUnit,
+    };
+  }
   const source = sourceValue(values, step.source, `${path}.source`);
   if (step.kind === "factor") {
     if (source.unit !== step.inputUnit) {
@@ -1260,17 +1361,36 @@ export function evaluateCreditexCalculator(
   const values = inputs.values;
   const trace: CreditexCalculatorTraceEntry[] = [];
   specification.steps.forEach((step, index) => {
-    const source = sourceValue(values, step.source, `steps[${index}].source`);
+    const source = step.kind === "multiply"
+      ? sourceValue(values, step.leftSource, `steps[${index}].leftSource`)
+      : sourceValue(values, step.source, `steps[${index}].source`);
     const output = executeStep(step, values, index);
     values.set(step.key, output);
     trace.push({
       stepKey: step.key,
       kind: step.kind,
-      source: step.source,
+      source: step.kind === "multiply" ? step.leftSource : step.source,
       input: {
         decimal: decimalText(source.decimal),
         unit: source.unit,
       },
+      ...(step.kind === "multiply"
+        ? {
+            secondarySource: step.rightSource,
+            secondaryInput: {
+              decimal: decimalText(sourceValue(
+                values,
+                step.rightSource,
+                `steps[${index}].rightSource`,
+              ).decimal),
+              unit: sourceValue(
+                values,
+                step.rightSource,
+                `steps[${index}].rightSource`,
+              ).unit,
+            },
+          }
+        : {}),
       output: {
         decimal: decimalText(output.decimal),
         unit: output.unit,

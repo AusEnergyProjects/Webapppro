@@ -57,8 +57,10 @@ test("trade JSON routes use the bounded reader and retain their workflow caps", 
   assert.match(syncRoute, /MAX_ACTIONS = 50/);
   assert.match(
     syncRoute,
-    /!actions\.length \|\| actions\.length > MAX_ACTIONS/,
+    /actions\.length > MAX_ACTIONS/,
   );
+  assert.doesNotMatch(syncRoute, /!actions\.length/);
+  assert.match(syncRoute, /reconcilePlannedWorkPacksAfterSync\(\s*access,\s*actions,\s*results,\s*\)/);
   assert.doesNotMatch(syncRoute, /request\.json\(\)/);
 
   assert.match(
@@ -85,6 +87,7 @@ test("mobile bootstrap companions share the selected job cohort and a total card
     "trade_work_order_tasks",
     "trade_crm_job_media",
     "trade_job_forms",
+    "trade_work_order_compliance_intents",
     "compliance_cases",
   ]) {
     const start = accessibleJobs.indexOf(`FROM ${table}`);
@@ -99,10 +102,15 @@ test("mobile bootstrap companions share the selected job cohort and a total card
   }
   assert.match(
     syncRoute,
-    /const companionRowCount = taskRows\.results\.length[\s\S]*\+ complianceRows\.results\.length/,
+    /const companionRowCount = taskRows\.results\.length[\s\S]*\+ intentRows\.results\.length[\s\S]*\+ complianceRows\.results\.length/,
   );
   assert.match(
     syncRoute,
-    /companionRowCount > MAX_SYNC_COMPANION_ROWS[\s\S]*SYNC_RESPONSE_CARDINALITY_EXCEEDED/,
+    /listAssignedCreditexActivityWorkPacks\(db, \{[\s\S]*workOrderIds: jobRows\.results\.map\(\(row\) => String\(row\.id\)\),[\s\S]*\}\)/,
+  );
+  assert.match(syncRoute, /workPacks\.length > MAX_SYNC_COMPANION_ROWS/);
+  assert.match(
+    syncRoute,
+    /companionRowCount \+ workPacks\.length > MAX_SYNC_COMPANION_ROWS[\s\S]*SYNC_RESPONSE_CARDINALITY_EXCEEDED/,
   );
 });

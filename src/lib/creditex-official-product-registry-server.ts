@@ -15,6 +15,10 @@ import { ensureCreditexProductRegistrySchemaGuards } from "./creditex-product-re
 
 const FRESHNESS_WINDOW_MS = 48 * 60 * 60 * 1000;
 const SYNC_LEASE_MS = 20 * 60 * 1000;
+const AUTOMATIC_REFRESH_WAIT_MS = 55_000;
+const AUTOMATIC_REFRESH_POLL_MS = 2_000;
+const AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
+const OFFICIAL_SOURCE_FETCH_TIMEOUT_MS = 45_000;
 const PRODUCT_LOOKUP_CHUNK = 500;
 const PRODUCT_INSERT_MAX_ROWS = 500;
 const PRODUCT_INSERT_MAX_BIND_BYTES = 1_500_000;
@@ -47,6 +51,26 @@ export type CreditexFetchedOfficialProductSource = Readonly<{
   bytes: Uint8Array;
 }>;
 
+export type CreditexOfficialProductStreamValue = Readonly<{
+  sourceRecordKey: string;
+  value: Readonly<Record<string, unknown>>;
+}>;
+
+export type CreditexOfficialProductStreamingParser = Readonly<{
+  inspect(bytes: Uint8Array, contentType: string): number;
+  supplementalBatches(
+    bytes: Uint8Array,
+    contentType: string,
+  ): Iterable<readonly CreditexOfficialProductStreamValue[]>;
+  recordBatches(
+    bytes: Uint8Array,
+    contentType: string,
+    loadValues: (
+      sourceRecordKeys: readonly string[],
+    ) => Promise<ReadonlyMap<string, Readonly<Record<string, unknown>>>>,
+  ): AsyncIterable<readonly CreditexOfficialProductRecord[]>;
+}>;
+
 export type CreditexOfficialProductSourceDefinition = {
   registryCode: string;
   sourceKey: string;
@@ -64,6 +88,7 @@ export type CreditexOfficialProductSourceDefinition = {
     bytes: Uint8Array,
     contentType: string,
   ) => readonly CreditexOfficialProductRecord[];
+  streamingParser?: CreditexOfficialProductStreamingParser;
 };
 
 export type CreditexOfficialProductRegistryDefinition = {
@@ -92,6 +117,82 @@ export type CreditexOfficialProductArtifactStore = {
     },
   ): Promise<unknown>;
 };
+
+export type CreditexControlledProductPermissionArtifact = Readonly<{
+  organisationId: string;
+  artifactId: string;
+  sha256: string;
+  objectKey: string;
+  sizeBytes: number;
+}>;
+
+export async function verifyCreditexControlledProductPermissionArtifact(
+  store: CreditexOfficialProductArtifactStore | undefined,
+  permission: CreditexControlledProductPermissionArtifact,
+) {
+  if (!store) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_CUSTODY_UNAVAILABLE",
+      503,
+      "Immutable permission evidence storage is unavailable.",
+    );
+  }
+  const head = await store.head(permission.objectKey).catch(() => null);
+  const metadata = head?.customMetadata;
+  if (
+    !head
+    || !Number.isSafeInteger(permission.sizeBytes)
+    || permission.sizeBytes < 1
+    || Number(head.size) !== permission.sizeBytes
+    || metadata?.organisationId !== permission.organisationId
+    || metadata?.artifactId !== permission.artifactId
+    || metadata?.sha256 !== permission.sha256
+    || metadata?.custodyState !== "pending_review"
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED",
+      503,
+      "The retained controlled-import permission evidence could not be verified.",
+    );
+  }
+  const object = await store.get(permission.objectKey).catch(() => null);
+  const bytes = object ? new Uint8Array(await object.arrayBuffer()) : null;
+  if (
+    !bytes
+    || bytes.byteLength !== permission.sizeBytes
+    || await sha256Hex(bytes) !== permission.sha256
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED",
+      503,
+      "The retained controlled-import permission evidence could not be verified.",
+    );
+  }
+}
+
+function withOfficialSourceFetchDeadline(
+  fetchImpl: CreditexOfficialProductFetch,
+): CreditexOfficialProductFetch {
+  return async (input, init = {}) => {
+    const controller = new AbortController();
+    const externalSignal = init.signal;
+    const abortFromExternal = () => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) abortFromExternal();
+    else externalSignal?.addEventListener("abort", abortFromExternal, {
+      once: true,
+    });
+    const timeout = setTimeout(
+      () => controller.abort("official-product-source-timeout"),
+      OFFICIAL_SOURCE_FETCH_TIMEOUT_MS,
+    );
+    try {
+      return await fetchImpl(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromExternal);
+    }
+  };
+}
 
 type SnapshotRow = {
   id: string;
@@ -128,6 +229,16 @@ export type CreditexReviewedProductCountDecrease = Readonly<{
     previousRecordCount: number;
     acceptedRecordCount: number;
   }>[];
+}>;
+
+export type CreditexControlledProductImportReview = Readonly<{
+  importedByUid: string;
+  governanceIdentityVerified: true;
+  permissionArtifactId: string;
+  permissionArtifactSha256: string;
+  permissionArtifactObjectKey: string;
+  permissionReviewDecisionId: string;
+  permissionReviewedByUid: string;
 }>;
 
 type ProductRow = {
@@ -310,8 +421,16 @@ function sourceProductKinds(source: CreditexOfficialProductSourceDefinition) {
 function validateSourceDefinition(
   definition: CreditexOfficialProductRegistryDefinition,
   source: CreditexOfficialProductSourceDefinition,
+  controlledImportReview?: CreditexControlledProductImportReview,
+  supplied?: CreditexFetchedOfficialProductSource,
 ) {
   const kinds = sourceProductKinds(source);
+  const productionModeAccepted = source.productionMode === "automatic"
+    || (
+      source.productionMode === "controlled_manual"
+      && controlledImportReview?.governanceIdentityVerified === true
+      && supplied !== undefined
+    );
   if (
     source.registryCode !== definition.registryCode
     || !TOKEN_PATTERN.test(source.registryCode)
@@ -331,7 +450,7 @@ function validateSourceDefinition(
     || source.maximumBytes < 1
     || source.maximumBytes > 100_000_000
     || source.expectedContentTypes.length === 0
-    || source.productionMode !== "automatic"
+    || !productionModeAccepted
   ) {
     return fail(
       "OFFICIAL_PRODUCT_SOURCE_INVALID",
@@ -736,8 +855,14 @@ async function fetchSourceBytes(
   source: CreditexOfficialProductSourceDefinition,
   fetchImpl: CreditexOfficialProductFetch,
   supplied?: CreditexFetchedOfficialProductSource,
+  controlledImportReview?: CreditexControlledProductImportReview,
 ): Promise<FetchedSourceArtifact> {
-  validateSourceDefinition(definition, source);
+  validateSourceDefinition(
+    definition,
+    source,
+    controlledImportReview,
+    supplied,
+  );
   if (supplied) {
     const contentType = supplied.contentType.split(";", 1)[0]
       .trim()
@@ -857,6 +982,8 @@ function assertRetainedArtifactHead(
     || Number(retained.size) !== artifact.byteLength
     || retained.customMetadata?.sha256 !== artifact.sha256
     || retained.customMetadata?.sourceKey !== artifact.source.sourceKey
+    || retained.customMetadata?.sourceUrl !== artifact.source.url
+    || retained.customMetadata?.licence !== artifact.source.licence
   ) {
     return fail(
       "OFFICIAL_PRODUCT_SOURCE_CUSTODY_FAILED",
@@ -896,16 +1023,23 @@ async function retainArtifact(
   artifact: FetchedSourceArtifact,
 ) {
   const objectKey = artifactObjectKey(artifact);
+  const retainedMetadata = {
+    sha256: artifact.sha256,
+    sourceKey: artifact.source.sourceKey,
+    sourceUrl: artifact.source.url,
+    licence: artifact.source.licence,
+  };
   const existing = await store.head(objectKey);
-  if (!existing) {
+  const metadataMatches = existing
+    && Number(existing.size) === artifact.bytes.byteLength
+    && existing.customMetadata?.sha256 === retainedMetadata.sha256
+    && existing.customMetadata?.sourceKey === retainedMetadata.sourceKey
+    && existing.customMetadata?.sourceUrl === retainedMetadata.sourceUrl
+    && existing.customMetadata?.licence === retainedMetadata.licence;
+  if (!metadataMatches) {
     await store.put(objectKey, artifact.bytes, {
       httpMetadata: { contentType: artifact.contentType },
-      customMetadata: {
-        sha256: artifact.sha256,
-        sourceKey: artifact.source.sourceKey,
-        sourceUrl: artifact.source.url,
-        licence: artifact.source.licence,
-      },
+      customMetadata: retainedMetadata,
     });
   }
   const descriptor = {
@@ -924,20 +1058,25 @@ async function fetchInspectAndRetainSource(
   fetchImpl: CreditexOfficialProductFetch,
   store: CreditexOfficialProductArtifactStore,
   supplied?: CreditexFetchedOfficialProductSource,
+  controlledImportReview?: CreditexControlledProductImportReview,
 ): Promise<RetainedSourceArtifact> {
   const artifact = await fetchSourceBytes(
     definition,
     source,
     fetchImpl,
     supplied,
+    controlledImportReview,
   );
-  let inspectedRecords: readonly CreditexOfficialProductRecord[] | null = parseSourceRecords(
-    artifact.source,
-    artifact.bytes,
-    artifact.contentType,
-  );
-  const recordCount = inspectedRecords.length;
-  inspectedRecords = null;
+  const recordCount = artifact.source.streamingParser
+    ? artifact.source.streamingParser.inspect(
+        artifact.bytes,
+        artifact.contentType,
+      )
+    : parseSourceRecords(
+        artifact.source,
+        artifact.bytes,
+        artifact.contentType,
+      ).length;
   const objectKey = await retainArtifact(store, artifact);
   return {
     source: artifact.source,
@@ -1040,6 +1179,28 @@ async function releaseLease(
     WHERE registry_code = ? AND lease_id = ?`)
     .bind(registryCode, leaseId)
     .run();
+}
+
+async function renewLease(
+  db: D1Database,
+  registryCode: string,
+  leaseId: string,
+  leaseStartedAt: string,
+) {
+  const now = new Date(Math.max(Date.now(), Date.parse(leaseStartedAt)));
+  const expiresAt = new Date(now.getTime() + SYNC_LEASE_MS).toISOString();
+  const result = await db.prepare(`UPDATE compliance_official_product_sync_leases
+    SET expires_at = ?
+    WHERE registry_code = ? AND lease_id = ?`)
+    .bind(expiresAt, registryCode, leaseId)
+    .run();
+  if (Number(result.meta?.changes || 0) !== 1) {
+    return fail(
+      "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS",
+      409,
+      `Official registry ${registryCode} refresh ownership was lost.`,
+    );
+  }
 }
 
 async function cleanStagingRows(db: D1Database, registryCode: string) {
@@ -1223,6 +1384,179 @@ async function insertProductChunks(
   await flushPendingStatements();
 }
 
+async function insertStreamingValues(
+  db: D1Database,
+  snapshotId: string,
+  sourceKey: string,
+  batch: readonly CreditexOfficialProductStreamValue[],
+  createdAt: string,
+) {
+  if (batch.length < 1 || batch.length > PRODUCT_INSERT_MAX_ROWS) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      502,
+      `Official source ${sourceKey} returned an invalid stream batch.`,
+    );
+  }
+  const seen = new Set<string>();
+  const values = batch.map((item) => {
+    const sourceRecordKey = cleanText(
+      item.sourceRecordKey,
+      "stream value sourceRecordKey",
+      500,
+      true,
+    );
+    const valueJson = canonicalJson(item.value);
+    if (
+      seen.has(sourceRecordKey)
+      || valueJson.length > 65_536
+    ) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${sourceKey} returned duplicate or oversized stream values.`,
+      );
+    }
+    seen.add(sourceRecordKey);
+    return { sourceRecordKey, value: item.value };
+  });
+  await db.prepare(`INSERT INTO compliance_official_product_stream_values (
+      snapshot_id, source_key, source_record_key, value_json, created_at
+    ) SELECT ?, ?,
+      json_extract(value, '$.sourceRecordKey'),
+      json_extract(value, '$.value'), ?
+    FROM json_each(?)`)
+    .bind(snapshotId, sourceKey, createdAt, canonicalJson(values))
+    .run();
+}
+
+async function loadStreamingValues(
+  db: D1Database,
+  snapshotId: string,
+  sourceKey: string,
+  sourceRecordKeys: readonly string[],
+) {
+  if (
+    sourceRecordKeys.length < 1
+    || sourceRecordKeys.length > PRODUCT_INSERT_MAX_ROWS
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      502,
+      `Official source ${sourceKey} requested an invalid stream lookup.`,
+    );
+  }
+  const rows = await db.prepare(`WITH requested AS (
+      SELECT value source_record_key FROM json_each(?)
+    ) SELECT staged.source_record_key, staged.value_json
+    FROM requested
+    JOIN compliance_official_product_stream_values staged
+      ON staged.snapshot_id = ?
+      AND staged.source_key = ?
+      AND staged.source_record_key = requested.source_record_key`)
+    .bind(canonicalJson(sourceRecordKeys), snapshotId, sourceKey)
+    .all<{ source_record_key: string; value_json: string }>();
+  const values = new Map<string, Readonly<Record<string, unknown>>>();
+  for (const row of rows.results || []) {
+    const value = parseAttributes(row.value_json);
+    values.set(row.source_record_key, value);
+  }
+  return values;
+}
+
+async function stageStreamingSource(
+  db: D1Database,
+  artifactStore: CreditexOfficialProductArtifactStore,
+  artifact: RetainedSourceArtifact,
+  snapshotId: string,
+  currentSnapshotId: string | null,
+  activatedOn: string,
+  checkedAt: string,
+) {
+  const parser = artifact.source.streamingParser;
+  if (!parser) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      500,
+      `Official source ${artifact.source.sourceKey} has no stream parser.`,
+    );
+  }
+  let bytes: Uint8Array | null = await readRetainedArtifactBytes(
+    artifactStore,
+    artifact,
+  );
+  for (const batch of parser.supplementalBatches(
+    bytes,
+    artifact.contentType,
+  )) {
+    await insertStreamingValues(
+      db,
+      snapshotId,
+      artifact.source.sourceKey,
+      batch,
+      checkedAt,
+    );
+  }
+  let recordCount = 0;
+  for await (const rawBatch of parser.recordBatches(
+    bytes,
+    artifact.contentType,
+    (sourceRecordKeys) => loadStreamingValues(
+      db,
+      snapshotId,
+      artifact.source.sourceKey,
+      sourceRecordKeys,
+    ),
+  )) {
+    if (rawBatch.length < 1 || rawBatch.length > PRODUCT_INSERT_MAX_ROWS) {
+      return fail(
+        "OFFICIAL_PRODUCT_SOURCE_INVALID",
+        502,
+        `Official source ${artifact.source.sourceKey} returned an invalid product batch.`,
+      );
+    }
+    const validated = validateRecords(
+      { ...artifact.source, minimumRecords: 1 },
+      rawBatch,
+    );
+    const resolved = await resolveEligibilityStarts(
+      db,
+      artifact.source.registryCode,
+      validated,
+      activatedOn,
+      Boolean(currentSnapshotId),
+    );
+    const staged = resolveRegistryEffectiveStarts(
+      resolved,
+      activatedOn,
+      Boolean(currentSnapshotId),
+    );
+    await insertProductChunks(
+      db,
+      snapshotId,
+      currentSnapshotId,
+      staged,
+    );
+    recordCount += staged.length;
+  }
+  bytes = null;
+  if (
+    recordCount !== artifact.recordCount
+    || recordCount < artifact.source.minimumRecords
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_SOURCE_INVALID",
+      502,
+      `Official source ${artifact.source.sourceKey} stream count did not reconcile.`,
+    );
+  }
+  await db.prepare(`DELETE FROM compliance_official_product_stream_values
+    WHERE snapshot_id = ? AND source_key = ?`)
+    .bind(snapshotId, artifact.source.sourceKey)
+    .run();
+  return recordCount;
+}
+
 async function recordFailure(
   db: D1Database,
   registryCode: string,
@@ -1245,6 +1579,9 @@ export async function syncOfficialProductRegistry(
     fetchImpl?: CreditexOfficialProductFetch;
     now?: Date;
     reviewedCountDecrease?: CreditexReviewedProductCountDecrease;
+    controlledImportReview?: CreditexControlledProductImportReview;
+    controlledImportPermissionArtifact?:
+      CreditexControlledProductPermissionArtifact;
   } = {},
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
@@ -1261,7 +1598,81 @@ export async function syncOfficialProductRegistry(
   }
   const checkedAt = (options.now || new Date()).toISOString();
   const checkedOn = australianRegulatorDate(checkedAt);
-  const fetchImpl = options.fetchImpl || fetch;
+  const controlledImportReview = options.controlledImportReview
+    ? {
+        importedByUid: cleanText(
+          options.controlledImportReview.importedByUid,
+          "controlled import operator",
+          128,
+          true,
+        ),
+        governanceIdentityVerified:
+          options.controlledImportReview.governanceIdentityVerified,
+        permissionArtifactId: cleanText(
+          options.controlledImportReview.permissionArtifactId,
+          "controlled import permission artifact",
+          180,
+          true,
+        ),
+        permissionArtifactSha256: cleanText(
+          options.controlledImportReview.permissionArtifactSha256,
+          "controlled import permission artifact hash",
+          64,
+          true,
+        ).toLowerCase(),
+        permissionArtifactObjectKey: cleanText(
+          options.controlledImportReview.permissionArtifactObjectKey,
+          "controlled import permission object key",
+          2_000,
+          true,
+        ),
+        permissionReviewDecisionId: cleanText(
+          options.controlledImportReview.permissionReviewDecisionId,
+          "controlled import permission decision",
+          180,
+          true,
+        ),
+        permissionReviewedByUid: cleanText(
+          options.controlledImportReview.permissionReviewedByUid,
+          "controlled import permission reviewer",
+          128,
+          true,
+        ),
+      }
+    : undefined;
+  const controlledImportPermissionArtifact =
+    options.controlledImportPermissionArtifact;
+  if (
+    Boolean(controlledImportReview)
+      !== Boolean(controlledImportPermissionArtifact)
+    || (
+      controlledImportReview
+      && controlledImportPermissionArtifact
+      && (
+        controlledImportReview.governanceIdentityVerified !== true
+        || !/^[0-9a-f]{64}$/.test(
+          controlledImportReview.permissionArtifactSha256,
+        )
+        || controlledImportReview.permissionReviewedByUid
+          === controlledImportReview.importedByUid
+        || controlledImportPermissionArtifact.artifactId
+          !== controlledImportReview.permissionArtifactId
+        || controlledImportPermissionArtifact.sha256
+          !== controlledImportReview.permissionArtifactSha256
+        || controlledImportPermissionArtifact.objectKey
+          !== controlledImportReview.permissionArtifactObjectKey
+      )
+    )
+  ) {
+    return fail(
+      "OFFICIAL_PRODUCT_REQUEST_INVALID",
+      403,
+      "Controlled official product imports require a governance-verified reviewer.",
+    );
+  }
+  const fetchImpl = withOfficialSourceFetchDeadline(
+    options.fetchImpl || fetch,
+  );
   const leaseId = crypto.randomUUID();
   let leaseAcquired = false;
   let stagingSnapshotId = "";
@@ -1291,8 +1702,10 @@ export async function syncOfficialProductRegistry(
         fetchImpl,
         options.artifactStore,
         acquiredSource,
+        controlledImportReview,
       ));
       acquiredSources?.delete(source.sourceKey);
+      await renewLease(db, definition.registryCode, leaseId, checkedAt);
     }
     const recordCount = artifacts.reduce(
       (total, artifact) => total + artifact.recordCount,
@@ -1349,6 +1762,25 @@ export async function syncOfficialProductRegistry(
       contract: CREDITEX_OFFICIAL_PRODUCT_REGISTRY_CONTRACT,
       registryCode: definition.registryCode,
       title: definition.title,
+      ...(controlledImportReview
+        ? {
+            controlledImportReview: {
+              contract: "creditex-controlled-product-import-review/v1",
+              importedByUid: controlledImportReview.importedByUid,
+              reviewedAt: checkedAt,
+              permissionArtifactId:
+                controlledImportReview.permissionArtifactId,
+              permissionArtifactSha256:
+                controlledImportReview.permissionArtifactSha256,
+              permissionArtifactObjectKey:
+                controlledImportReview.permissionArtifactObjectKey,
+              permissionReviewDecisionId:
+                controlledImportReview.permissionReviewDecisionId,
+              permissionReviewedByUid:
+                controlledImportReview.permissionReviewedByUid,
+            },
+          }
+        : {}),
       sources: artifacts.map((artifact) => ({
         sourceKey: artifact.source.sourceKey,
         ...(artifact.source.productKind
@@ -1409,31 +1841,7 @@ export async function syncOfficialProductRegistry(
     // Phase two replays each exact R2 artifact independently into the staging
     // snapshot. The current snapshot is not changed until every replay reconciles.
     for (const artifact of artifacts) {
-      let records: readonly CreditexOfficialProductRecord[] | null = await loadRetainedSourceRecords(
-        options.artifactStore,
-        artifact,
-      );
-      if (records.length !== artifact.recordCount) {
-        return fail(
-          "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
-          500,
-          `Retained source ${artifact.source.sourceKey} no longer matches its inspected record count.`,
-        );
-      }
-      records = await resolveEligibilityStarts(
-        db,
-        definition.registryCode,
-        records,
-        checkedOn,
-        current !== null,
-      );
-      let stagedRecords: readonly StagedOfficialProductRecord[] | null =
-        resolveRegistryEffectiveStarts(
-          records,
-          checkedOn,
-          current !== null,
-        );
-      records = null;
+      await renewLease(db, definition.registryCode, leaseId, checkedAt);
       await db.prepare(`INSERT INTO compliance_official_product_artifacts (
         id, snapshot_id, source_key, source_url, source_sha256, content_type,
         byte_length, record_count, object_key, created_at
@@ -1451,13 +1859,52 @@ export async function syncOfficialProductRegistry(
           checkedAt,
         )
         .run();
-      await insertProductChunks(
-        db,
-        stagingSnapshotId,
-        current?.id || null,
-        stagedRecords,
-      );
-      stagedRecords = null;
+      if (artifact.source.streamingParser) {
+        await stageStreamingSource(
+          db,
+          options.artifactStore,
+          artifact,
+          stagingSnapshotId,
+          current?.id || null,
+          checkedOn,
+          checkedAt,
+        );
+      } else {
+        let records: readonly CreditexOfficialProductRecord[] | null =
+          await loadRetainedSourceRecords(
+            options.artifactStore,
+            artifact,
+          );
+        if (records.length !== artifact.recordCount) {
+          return fail(
+            "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED",
+            500,
+            `Retained source ${artifact.source.sourceKey} no longer matches its inspected record count.`,
+          );
+        }
+        records = await resolveEligibilityStarts(
+          db,
+          definition.registryCode,
+          records,
+          checkedOn,
+          current !== null,
+        );
+        let stagedRecords: readonly StagedOfficialProductRecord[] | null =
+          resolveRegistryEffectiveStarts(
+            records,
+            checkedOn,
+            current !== null,
+          );
+        records = null;
+        await insertProductChunks(
+          db,
+          stagingSnapshotId,
+          current?.id || null,
+          stagedRecords,
+        );
+        stagedRecords = null;
+      }
+      await renewLease(db, definition.registryCode, leaseId, checkedAt);
     }
     const inserted = await db.prepare(`SELECT count(*) AS count
       FROM compliance_official_products WHERE snapshot_id = ?`)
@@ -1509,6 +1956,16 @@ export async function syncOfficialProductRegistry(
           reviewAuditMessage,
         ),
     );
+    await renewLease(db, definition.registryCode, leaseId, checkedAt);
+    if (controlledImportPermissionArtifact) {
+      // Permission is mutable independently of the staged product artifacts.
+      // Re-read its exact retained bytes at the activation boundary, after all
+      // staging work and with no intervening await before the atomic D1 batch.
+      await verifyCreditexControlledProductPermissionArtifact(
+        options.artifactStore,
+        controlledImportPermissionArtifact,
+      );
+    }
     await db.batch(activationStatements);
     await cleanStagingRows(db, definition.registryCode);
     return {
@@ -1571,13 +2028,16 @@ export async function loadOfficialProductRegistryStatus(
       .bind(registryCode).first<SyncRunRow>(),
   ]);
   const lastCheckedAt = lastSuccessfulCheck?.checked_at || null;
+  const checkedAgeMs = lastCheckedAt
+    ? now.getTime() - new Date(lastCheckedAt).getTime()
+    : Number.NaN;
   const current = Boolean(
     snapshot
     && lastCheckedAt
-    && lastAttempt?.status !== "failed"
-    && lastAttempt?.snapshot_id === snapshot.id
     && lastSuccessfulCheck?.snapshot_id === snapshot.id
-    && now.getTime() - new Date(lastCheckedAt).getTime() <= FRESHNESS_WINDOW_MS,
+    && Number.isFinite(checkedAgeMs)
+    && checkedAgeMs >= 0
+    && checkedAgeMs <= FRESHNESS_WINDOW_MS,
   );
   return {
     registryCode,
@@ -1622,6 +2082,86 @@ function registryFailure(
     503,
     `Official registry ${status.registryCode} is stale or its latest refresh failed.`,
   );
+}
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function failedAutomaticRefreshBackoffActive(
+  status: CreditexOfficialProductRegistryStatus,
+  now: Date,
+) {
+  if (status.lastAttempt?.status !== "failed") return false;
+  const attemptedAt = Date.parse(status.lastAttempt.checkedAt);
+  const elapsed = now.getTime() - attemptedAt;
+  return Number.isFinite(elapsed)
+    && elapsed >= 0
+    && elapsed < AUTOMATIC_REFRESH_FAILURE_BACKOFF_MS;
+}
+
+export async function ensureAutomaticOfficialProductRegistryCurrent(
+  db: D1Database,
+  definition: CreditexOfficialProductRegistryDefinition,
+  options: {
+    artifactStore?: CreditexOfficialProductArtifactStore;
+    fetchImpl?: CreditexOfficialProductFetch;
+    now?: Date;
+    waitForRefreshMs?: number;
+    pollIntervalMs?: number;
+  } = {},
+): Promise<CreditexOfficialProductRegistryStatus> {
+  const statusOptions = options.now ? { now: options.now } : {};
+  let status = await loadOfficialProductRegistryStatus(
+    db,
+    definition.registryCode,
+    statusOptions,
+  );
+  if (status.status === "current") return status;
+  if (failedAutomaticRefreshBackoffActive(status, options.now || new Date())) {
+    registryFailure(status);
+  }
+
+  try {
+    await syncOfficialProductRegistry(db, definition, {
+      artifactStore: options.artifactStore,
+      fetchImpl: options.fetchImpl,
+      now: options.now,
+    });
+  } catch (error) {
+    if (
+      !(error instanceof CreditexOfficialProductError)
+      || error.code !== "OFFICIAL_PRODUCT_REFRESH_IN_PROGRESS"
+    ) {
+      throw error;
+    }
+    const waitForRefreshMs = Math.min(
+      Math.max(Number(options.waitForRefreshMs ?? AUTOMATIC_REFRESH_WAIT_MS), 0),
+      AUTOMATIC_REFRESH_WAIT_MS,
+    );
+    const pollIntervalMs = Math.min(
+      Math.max(Number(options.pollIntervalMs ?? AUTOMATIC_REFRESH_POLL_MS), 250),
+      AUTOMATIC_REFRESH_POLL_MS,
+    );
+    const deadline = Date.now() + waitForRefreshMs;
+    while (Date.now() < deadline) {
+      await wait(Math.min(pollIntervalMs, Math.max(deadline - Date.now(), 1)));
+      status = await loadOfficialProductRegistryStatus(
+        db,
+        definition.registryCode,
+        statusOptions,
+      );
+      if (status.status === "current") return status;
+    }
+  }
+
+  status = await loadOfficialProductRegistryStatus(
+    db,
+    definition.registryCode,
+    statusOptions,
+  );
+  if (status.status !== "current") registryFailure(status);
+  return status;
 }
 
 function productSelectionId(sourceKey: string, sourceRecordKey: string) {

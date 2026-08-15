@@ -1,0 +1,192 @@
+.workspace {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1.1rem;
+  border: 1px solid #c7ded8;
+  border-radius: 18px;
+  background: #f8fcfa;
+  color: #173f3b;
+}
+
+.heading,
+.cardHeader,
+.actions,
+.grid,
+.split {
+  display: flex;
+  gap: .75rem;
+}
+
+.heading,
+.cardHeader {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.heading h2,
+.cardHeader h3 {
+  margin: 0;
+}
+
+.heading p,
+.cardHeader p,
+.empty,
+.meta {
+  margin: .25rem 0 0;
+  color: #5a716e;
+  line-height: 1.45;
+}
+
+.grid,
+.split {
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.grid > label,
+.split > label {
+  flex: 1 1 220px;
+}
+
+.workspace label {
+  display: grid;
+  gap: .35rem;
+  color: #335d58;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.workspace input,
+.workspace select,
+.workspace textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: .7rem .8rem;
+  border: 1px solid #b8d2cc;
+  border-radius: 10px;
+  background: white;
+  color: #163d38;
+  font: inherit;
+  text-transform: none;
+}
+
+.workspace textarea { min-height: 88px; resize: vertical; }
+
+.workspace button,
+.download {
+  min-height: 42px;
+  padding: .65rem .9rem;
+  border: 1px solid #187965;
+  border-radius: 10px;
+  background: #08765e;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workspace button:disabled { opacity: .55; cursor: wait; }
+.workspace button[data-variant="secondary"],
+.download { background: white; color: #116956; }
+.workspace button[data-variant="danger"] { border-color: #a83a45; background: #a83a45; }
+
+.notice {
+  margin: 0;
+  padding: .75rem .9rem;
+  border-radius: 10px;
+  background: #e9f6f1;
+}
+
+.notice[data-kind="error"] { background: #fff0f0; color: #8a2631; }
+
+.section {
+  display: grid;
+  gap: .8rem;
+  padding: 1rem;
+  border: 1px solid #d2e3df;
+  border-radius: 14px;
+  background: white;
+}
+
+.cards { display: grid; gap: .75rem; }
+.card { display: grid; gap: .65rem; padding: .9rem; border: 1px solid #d2e3df; border-radius: 12px; background: #fff; }
+.badge { white-space: nowrap; padding: .3rem .55rem; border-radius: 999px; background: #e5f5ef; color: #116956; font-size: .75rem; font-weight: 900; }
+.badge[data-ready="false"] { background: #fff4d7; color: #75520b; }
+.hash { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .72rem; color: #526b67; }
+.actions { flex-wrap: wrap; align-items: center; }
+.receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: .7rem;
+  border: 1px solid #cce0db;
+  border-radius: 10px;
+  background: #f4faf7;
+}
+.receipt > div { display: grid; gap: .18rem; min-width: 0; }
+.receipt span { color: #526b67; font-size: .8rem; }
+.receipt code {
+  overflow-wrap: anywhere;
+  color: #526b67;
+  font-size: .7rem;
+}
+
+.search { max-width: 640px; }
+.candidates { display: grid; gap: .7rem; }
+.candidate {
+  display: grid;
+  gap: .45rem;
+  padding: .75rem;
+  border: 1px solid #d2e3df;
+  border-radius: 12px;
+  background: #fbfdfc;
+}
+.candidate[data-selected="true"] {
+  border-color: #08765e;
+  box-shadow: 0 0 0 2px rgb(8 118 94 / 12%);
+}
+.workspace .candidateSelect {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  padding: .25rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.candidateSelect > span:not(.badge) { display: grid; gap: .18rem; }
+.candidateSelect small { color: #5a716e; font-weight: 600; }
+.blockers {
+  display: grid;
+  gap: .28rem;
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #7a4a00;
+  font-size: .82rem;
+  line-height: 1.4;
+}
+.prepareBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  padding: .8rem;
+  border-radius: 12px;
+  background: #e9f6f1;
+}
+.prepareBar > div { display: grid; gap: .2rem; }
+.prepareBar span { color: #526b67; font-size: .85rem; }
+
+@media (max-width: 700px) {
+  .heading,
+  .cardHeader { display: grid; }
+  .workspace { padding: .8rem; border-radius: 14px; }
+  .workspace .candidateSelect { grid-template-columns: 1fr; }
+  .prepareBar { align-items: stretch; display: grid; }
+  .receipt { align-items: stretch; display: grid; }
+}

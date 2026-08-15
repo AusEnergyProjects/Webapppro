@@ -197,8 +197,10 @@ test('manual compliance jobs cannot show or queue unsupported time entries', () 
   );
 });
 
-test('installer-visible evidence copy does not identify the compliance partner', () => {
-  assert.doesNotMatch(jobScreen, /Creditex/);
+test('assigned work packs identify Creditex only inside the governed activity workflow', () => {
+  assert.match(jobScreen, /Dispatch or Creditex must resolve it before regulated work starts/);
+  assert.match(jobScreen, /return pack \? <ActivityWorkPackWizard/);
+  assert.doesNotMatch(jobScreen, /Creditex[^\n]*customer identity|send[^\n]*Creditex[^\n]*customer/i);
   assert.doesNotMatch(syncScreen, /Creditex/);
 });
 

@@ -12,6 +12,8 @@ import { todayIso } from "@/lib/date-picker";
 import { creditexSresCalculationBlocker } from "@/lib/creditex-official-product-registry";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
+const SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000;
+
 type Api = (
   path: string,
   init?: RequestInit,
@@ -407,7 +409,9 @@ export function CreditexSresCalculator({
               limit: "500",
             }).toString()}`
           : "/api/creditex/stc-products";
-        const result = await api(path);
+        const result = await api(path, undefined, {
+          requestTimeoutMs: SRES_PRODUCT_RECOVERY_TIMEOUT_MS,
+        });
         if (cancelled) return;
         const nextRegistry = (result.registry || null) as RegistryStatus | null;
         const nextSnapshotId = nextRegistry?.snapshot?.id || "";

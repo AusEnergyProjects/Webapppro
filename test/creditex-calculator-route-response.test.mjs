@@ -257,4 +257,25 @@ test("all calculator routes share safe descriptors and registry refresh remains 
     officialProductsRoute,
     /veuScenario: parameters\.get\("veuScenario"\)/,
   );
+  assert.match(
+    officialProductsRoute,
+    /enqueueCreditexProductRegistryRefresh\(/,
+  );
+  assert.match(stcProductsRoute, /enqueueCreditexProductRegistryRefresh\(/);
+  assert.doesNotMatch(
+    officialProductsRoute,
+    /ensureAutomaticOfficialProductRegistryCurrent\(/,
+  );
+  assert.doesNotMatch(
+    stcProductsRoute,
+    /ensureCerSresProductRegistryCurrent\(/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /error\.code === "OFFICIAL_PRODUCT_REGISTRY_STALE"/,
+  );
+  assert.match(
+    officialProductsRoute,
+    /error\.code === "OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE"/,
+  );
 });

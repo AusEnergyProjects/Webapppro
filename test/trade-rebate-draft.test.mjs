@@ -55,8 +55,14 @@ test("trade calculator offers one practical document handoff without a receipt",
   const workspace = read("../src/components/TradeRebateCalculatorWorkspace.tsx");
   assert.match(calculator, /TradeRebateEstimateAction/);
   assert.match(workspace, /documentDraftOwnerUid=\{user\.uid\}/);
+  assert.match(action, /USE FOR QUOTE PLANNING/);
   assert.match(action, /Use in next quote or invoice/);
   assert.match(action, /Customer discount before GST/);
+  assert.match(
+    action,
+    /saving this does not create certificates[\s\S]*provider acceptance/,
+  );
+  assert.doesNotMatch(action, /USE THIS ESTIMATE/);
   assert.doesNotMatch(action, /receipt|download|share/i);
 });
 

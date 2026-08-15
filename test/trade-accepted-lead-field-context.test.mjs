@@ -114,6 +114,12 @@ function syncRoute(accessRecord, jobs) {
     "@/lib/photo-request-review": { photoRequestEvidenceKey: () => "evidence" },
     "@/lib/trade-photo-requests": { normalisePhotoRequirements: (value) => value },
     "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: async (request) => request.json() },
+    "@/lib/creditex-activity-work-pack-server": {
+      listAssignedCreditexActivityWorkPacks: async () => [],
+    },
+    "@/lib/creditex-compliance-server": {
+      reconcileReadyPlannedComplianceWorkPacks: async () => [],
+    },
   });
 }
 
