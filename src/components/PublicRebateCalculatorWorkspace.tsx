@@ -11,7 +11,7 @@ type ApiResult = Record<string, unknown> & {
   error?: string;
 };
 
-const PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 60_000;
+const PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 180_000;
 const PUBLIC_CALCULATOR_MAXIMUM_ATTEMPTS = 20;
 
 export function PublicRebateCalculatorWorkspace() {

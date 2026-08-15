@@ -12,7 +12,7 @@ import { todayIso } from "@/lib/date-picker";
 import { creditexSresCalculationBlocker } from "@/lib/creditex-official-product-registry";
 import styles from "./CreditexVeuPilotWorkspace.module.css";
 
-const SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000;
+const SRES_PRODUCT_RECOVERY_TIMEOUT_MS = 180_000;
 
 type Api = (
   path: string,

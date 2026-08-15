@@ -35,7 +35,11 @@ const VEU_AURA_APP = "siteforce:communityApp";
 const VEU_AURA_LOADED_KEY =
   "APPLICATION@markup://siteforce:communityApp";
 const VEU_PAGE_URI = "/vpr/s/public-registry";
-export const CREDITEX_VEU_PAGE_SIZE = 500;
+// Keep the official Power BI request count within the calculator's bounded
+// on-demand recovery budget. Responses are still capped at 4 MiB, the retained
+// artifact writer is fixed at 32 MiB, and parsing/D1 writes remain chunked at
+// 500 rows.
+export const CREDITEX_VEU_PAGE_SIZE = 5_000;
 export const CREDITEX_VEU_MAX_PAGES = 200;
 export const CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES = 32_000_000;
 const VEU_SOURCE_FRESHNESS_MS = 48 * 60 * 60 * 1_000;

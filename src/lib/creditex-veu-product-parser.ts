@@ -2692,9 +2692,7 @@ function parseCreditexVeuStreamProductArtifact(bytes: Uint8Array) {
       ),
       CREDITEX_VEU_QUERY_FIELDS,
       CREDITEX_VEU_QUERY_FIELD_TYPES,
-      header.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
-        ? CREDITEX_VEU_STREAM_BATCH_SIZE
-        : CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
+      CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (const row of decoded.rows) {
       const id = requiredRowText(row[0], "page Salesforce Id");
@@ -2842,7 +2840,7 @@ function* creditexVeuBoundedSupplementalBatches(
       requiredText(value.response, `artifact supplement ${definition.key} response`, 4_000_000),
       definition.fields,
       fieldTypes,
-      CREDITEX_VEU_STREAM_BATCH_SIZE,
+      CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     const allowedCategories = new Set<string>(definition.categories);
     let batch: CreditexOfficialProductStreamValue[] = [];
@@ -3020,7 +3018,6 @@ function inspectCreditexVeuStreamProductArtifact(
     statuses,
     categories,
     pageCount,
-    contract,
   } = creditexVeuStreamHeader(bytes);
   for (const batch of creditexVeuSupplementalBatches(bytes, contentType)) {
     // Exhausting the generator validates every supplemental page without
@@ -3048,9 +3045,7 @@ function inspectCreditexVeuStreamProductArtifact(
       requiredText(value.response, `artifact page ${decodedPageCount} response`, 4_000_000),
       CREDITEX_VEU_QUERY_FIELDS,
       CREDITEX_VEU_QUERY_FIELD_TYPES,
-      contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
-        ? CREDITEX_VEU_STREAM_BATCH_SIZE
-        : CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
+      CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (const row of decoded.rows) {
       const id = requiredRowText(row[0], "page Salesforce Id");
@@ -3092,7 +3087,6 @@ async function* creditexVeuRecordBatches(
   ) => Promise<ReadonlyMap<string, Readonly<Record<string, unknown>>>>,
 ): AsyncGenerator<readonly CreditexOfficialProductRecord[]> {
   const expectedTotal = inspectCreditexVeuStreamProductArtifact(bytes, contentType);
-  const contract = creditexVeuStreamHeader(bytes).contract;
   let recordIndex = 0;
   for (const { value } of veuStreamLines(bytes)) {
     if (value.recordType !== "page") continue;
@@ -3100,9 +3094,7 @@ async function* creditexVeuRecordBatches(
       requiredText(value.response, "artifact page response", 4_000_000),
       CREDITEX_VEU_QUERY_FIELDS,
       CREDITEX_VEU_QUERY_FIELD_TYPES,
-      contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
-        ? CREDITEX_VEU_STREAM_BATCH_SIZE
-        : CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
+      CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (let offset = 0; offset < decoded.rows.length; offset += CREDITEX_VEU_STREAM_BATCH_SIZE) {
       const rows = decoded.rows.slice(offset, offset + CREDITEX_VEU_STREAM_BATCH_SIZE);
@@ -3150,7 +3142,10 @@ export function parseCreditexVeuProductArtifact(
     }
     if (
       isObject(firstLine)
-      && firstLine.contract === CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT
+      && (
+        firstLine.contract === CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT
+        || firstLine.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
+      )
     ) {
       return parseCreditexVeuStreamProductArtifact(bytes);
     }

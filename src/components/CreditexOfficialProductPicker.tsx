@@ -13,7 +13,7 @@ type Api = (
   options?: { requestTimeoutMs?: number },
 ) => Promise<Record<string, unknown>>;
 
-const OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000;
+const OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 180_000;
 
 export type CreditexOfficialProductOption = {
   id: string;

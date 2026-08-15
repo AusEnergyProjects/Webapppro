@@ -588,7 +588,7 @@ function boundedProductionStreamArtifact(recordCount) {
 
 test("VEU acquisition has a fixed Worker heap envelope and exact page capacity", () => {
   assert.equal(CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES, 32_000_000);
-  assert.equal(CREDITEX_VEU_PAGE_SIZE, 500);
+  assert.equal(CREDITEX_VEU_PAGE_SIZE, 5_000);
   assert.equal(CREDITEX_VEU_MAX_PAGES, 200);
   assert.ok(CREDITEX_VEU_PAGE_SIZE * CREDITEX_VEU_MAX_PAGES >= 70_000);
   assert.deepEqual(
@@ -629,9 +629,23 @@ test("VEU production-scale stream keeps every parse and D1 lookup batch bounded"
     loaded += records.length;
   }
   assert.equal(loaded, recordCount);
-  assert.equal(batches, Math.ceil(recordCount / CREDITEX_VEU_PAGE_SIZE));
+  assert.equal(batches, Math.ceil(recordCount / 500));
   assert.ok(maximumLookup <= 500);
   assert.ok(maximumRecords <= 500);
+});
+
+test("the public VEU parser recognizes the bounded v4 custody contract", () => {
+  const records = parseCreditexVeuProductArtifact(
+    boundedProductionStreamArtifact(5_123),
+    "application/json",
+  );
+  assert.equal(records.length, 5_123);
+  assert.equal(records[0].sourceRecordKey, "000000000");
+  assert.equal(records.at(-1).sourceRecordKey, "000005122");
+  assert.equal(
+    records.at(-1).attributes.veuSalesforceRecordId,
+    "a0O000000005122",
+  );
 });
 
 test("VEU v3 acquisition rejects incomplete streamed custody", () => {

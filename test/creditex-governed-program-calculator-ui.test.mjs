@@ -853,7 +853,7 @@ test("the shared approved-product picker shows only choices that remain necessar
   assert.match(pickerSource, /Retry official registry/);
   assert.match(
     pickerSource,
-    /OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 60_000/,
+    /OFFICIAL_PRODUCT_RECOVERY_TIMEOUT_MS = 180_000/,
   );
   assert.match(
     pickerSource,

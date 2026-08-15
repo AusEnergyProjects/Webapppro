@@ -44,7 +44,7 @@ test("public product reads are redacted and registry refresh stays admin-only", 
 });
 
 test("public requests have bounded retries and no refresh control", () => {
-  assert.match(workspace, /PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 60_000/);
+  assert.match(workspace, /PUBLIC_CALCULATOR_RECOVERY_TIMEOUT_MS = 180_000/);
   assert.match(workspace, /PUBLIC_CALCULATOR_MAXIMUM_ATTEMPTS = 20/);
   assert.match(workspace, /CREDITEX_SCHEMA_GUARDS_INSTALLING/);
   assert.match(workspace, /OFFICIAL_PRODUCT_FLEET_BUSY/);
