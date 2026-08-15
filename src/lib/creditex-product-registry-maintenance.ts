@@ -32,6 +32,7 @@ export const CREDITEX_PRODUCT_REGISTRY_FLEET_HEARTBEAT_MS = 30 * 1000;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MS = 22_000;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS = 64;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS = 18_000;
+export const CREDITEX_PRODUCT_REGISTRY_CONTINUATION_HEADROOM_MS = 4_000;
 export const CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS = 30_000;
 export const CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER =
   "X-AEA-Creditex-Product-Registry-Dispatch";
@@ -464,6 +465,7 @@ async function deferQueuedRefreshRequest(
  */
 export async function maintainNextCreditexProductRegistry({
   database,
+  enqueueRefresh = enqueueCreditexProductRegistryRefresh,
   loadQueuedRefresh = loadQueuedRefreshRequest,
   now = new Date(),
   preferredRegistryCode,
@@ -474,6 +476,7 @@ export async function maintainNextCreditexProductRegistry({
   withFleetLease = withCreditexProductRegistryFleetLease,
 }: {
   database: D1Database;
+  enqueueRefresh?: typeof enqueueCreditexProductRegistryRefresh;
   loadQueuedRefresh?: typeof loadQueuedRefreshRequest;
   now?: Date;
   preferredRegistryCode?: string;
@@ -586,7 +589,7 @@ export async function maintainNextCreditexProductRegistry({
           : false;
         let retryAfterMs = 0;
         if (returnScheduledFailures && !queued) {
-          await enqueueCreditexProductRegistryRefresh(
+          await enqueueRefresh(
             database,
             target.registryCode,
             now,
@@ -612,7 +615,7 @@ export async function maintainNextCreditexProductRegistry({
       }
       if (result.complete === false) {
         if (!queued) {
-          await enqueueCreditexProductRegistryRefresh(
+          await enqueueRefresh(
             database,
             target.registryCode,
             now,
@@ -624,6 +627,27 @@ export async function maintainNextCreditexProductRegistry({
           stagedRecordCount: result.stagedRecordCount || 0,
           recordCount: result.recordCount || 0,
         };
+      }
+      if (queued || pendingWork) {
+        // Activation and historical cleanup can finish in separate invocations.
+        // Keep the durable request until a real source check has superseded any
+        // transient failure recorded between those phases.
+        const completedStatus = await target.loadStatus(database, now);
+        if (completedStatus.lastAttempt?.status === "failed") {
+          if (!queued) {
+            await enqueueRefresh(
+              database,
+              target.registryCode,
+              now,
+            );
+          }
+          return {
+            registryCode: target.registryCode,
+            outcome: "progressed" as const,
+            stagedRecordCount: result.stagedRecordCount || 0,
+            recordCount: result.recordCount || 0,
+          };
+        }
       }
       if (queued) {
         await completeQueuedRefreshRequest(database, target.registryCode);
@@ -689,7 +713,19 @@ export async function drainCreditexProductRegistryMaintenance({
   while (steps < stepLimit) {
     const elapsedMs = now().getTime() - startedAt;
     const remainingMs = elapsedLimit - elapsedMs;
-    if (remainingMs < 100) {
+    const operationBudgetMs = positiveBoundedMilliseconds(
+      operationTimeoutMs,
+      CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+      CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+    );
+    if (
+      remainingMs < 100
+      || (
+        steps > 0
+        && remainingMs < operationBudgetMs
+          + CREDITEX_PRODUCT_REGISTRY_CONTINUATION_HEADROOM_MS
+      )
+    ) {
       continuationRequired = true;
       break;
     }
@@ -698,7 +734,7 @@ export async function drainCreditexProductRegistryMaintenance({
       now: now(),
       preferredRegistryCode: nextPreferredRegistryCode,
       returnScheduledFailures: true,
-      scheduledOperationTimeoutMs: Math.min(operationTimeoutMs, remainingMs),
+      scheduledOperationTimeoutMs: Math.min(operationBudgetMs, remainingMs),
       targets,
     });
     steps += 1;

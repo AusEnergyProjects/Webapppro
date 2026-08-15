@@ -9,6 +9,7 @@ import {
 import {
   CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
   CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+  CREDITEX_PRODUCT_REGISTRY_CONTINUATION_HEADROOM_MS,
   CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS,
   CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS,
   CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS,
@@ -550,13 +551,14 @@ test("a due durable retry overrides the failed-attempt status backoff", async ()
     { ensureSchema: withoutSchemaInstall },
   );
   let failed = false;
+  let recovered = false;
   let refreshCalls = 0;
   const target = {
     registryCode,
     loadStatus: async (_database, now) => registryStatus({
       registryCode,
       status: failed ? "current" : "stale",
-      lastAttempt: failed
+      lastAttempt: failed && !recovered
         ? {
             status: "failed",
             checkedAt: NOW.toISOString(),
@@ -571,6 +573,7 @@ test("a due durable retry overrides the failed-attempt status backoff", async ()
         failed = true;
         throw new Error("transient source failure");
       }
+      recovered = true;
       return { changed: true, complete: true };
     },
   };
@@ -692,6 +695,7 @@ test("retained replay bypasses a failed-source backoff and finishes immediately"
     { ensureSchema: withoutSchemaInstall },
   );
   let refreshCalls = 0;
+  let recovered = false;
   const result = await maintainNextCreditexProductRegistry({
     database,
     now: NOW,
@@ -700,15 +704,18 @@ test("retained replay bypasses a failed-source backoff and finishes immediately"
       loadStatus: async () => registryStatus({
         registryCode,
         status: "stale",
-        lastAttempt: {
-          status: "failed",
-          checkedAt: new Date(NOW.getTime() - 1_000).toISOString(),
-          message: "transient worker cancellation",
-        },
+        lastAttempt: recovered
+          ? registryStatus().lastAttempt
+          : {
+              status: "failed",
+              checkedAt: new Date(NOW.getTime() - 1_000).toISOString(),
+              message: "transient worker cancellation",
+            },
       }),
       hasPendingWork: async () => true,
       refresh: async () => {
         refreshCalls += 1;
+        recovered = true;
         return { changed: true, complete: true };
       },
     }],
@@ -717,6 +724,113 @@ test("retained replay bypasses a failed-source backoff and finishes immediately"
   assert.equal(refreshCalls, 1);
   assert.equal(result.outcome, "refreshed");
   assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("a completed cleanup keeps its queue until a healthy source receipt exists", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let refreshCalls = 0;
+  let healthyReceipt = false;
+  const target = {
+    registryCode,
+    loadStatus: async () => registryStatus({
+      registryCode,
+      status: "current",
+      lastAttempt: healthyReceipt
+        ? registryStatus().lastAttempt
+        : {
+            status: "failed",
+            checkedAt: new Date(NOW.getTime() - 1_000).toISOString(),
+            message: "transient cleanup cancellation",
+          },
+    }),
+    refresh: async () => {
+      refreshCalls += 1;
+      if (refreshCalls === 1) {
+        return { changed: false, complete: true };
+      }
+      healthyReceipt = true;
+      return { changed: false, complete: true };
+    },
+  };
+
+  const cleanup = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    targets: [target],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(cleanup, {
+    registryCode,
+    outcome: "progressed",
+    stagedRecordCount: 0,
+    recordCount: 0,
+  });
+  assert.equal(database.state.refreshRequests.size, 1);
+
+  const verified = await maintainNextCreditexProductRegistry({
+    database,
+    now: new Date(NOW.getTime() + 1),
+    targets: [target],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(verified, {
+    registryCode,
+    outcome: "refreshed",
+    changed: false,
+  });
+  assert.equal(refreshCalls, 2);
+  assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("orphaned retained cleanup recreates its queue until a healthy receipt exists", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    enqueueRefresh: (targetDatabase, code, queuedAt) => (
+      enqueueCreditexProductRegistryRefresh(
+        targetDatabase,
+        code,
+        queuedAt,
+        { ensureSchema: withoutSchemaInstall },
+      )
+    ),
+    now: NOW,
+    preferredRegistryCode: registryCode,
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({
+        registryCode,
+        status: "current",
+        lastAttempt: {
+          status: "failed",
+          checkedAt: new Date(NOW.getTime() - 1_000).toISOString(),
+          message: "worker cancelled after retained progress commit",
+        },
+      }),
+      hasPendingWork: async () => true,
+      refresh: async () => ({ changed: false, complete: true }),
+    }],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(result, {
+    registryCode,
+    outcome: "progressed",
+    stagedRecordCount: 0,
+    recordCount: 0,
+  });
+  assert.equal(database.state.refreshRequests.size, 1);
+  assert.equal(
+    database.state.refreshRequests.get(registryCode).notBefore,
+    NOW.toISOString(),
+  );
 });
 
 test("background drain advances consecutive replay quanta in one invocation", async () => {
@@ -765,8 +879,8 @@ test("background drain requests a new invocation when bounded time expires", asy
       return { registryCode: "veu-approved-products", outcome: "progressed" };
     },
   });
-  assert.equal(calls, 2);
-  assert.equal(result.steps, 2);
+  assert.equal(calls, 1);
+  assert.equal(result.steps, 1);
   assert.equal(result.outcome, "progressed");
   assert.equal(result.continuationRequired, true);
 });
@@ -790,6 +904,30 @@ test("background drain never starts a second slow step beyond its one invocation
   });
   assert.equal(calls, 1);
   assert.equal(result.steps, 1);
+  assert.equal(result.continuationRequired, true);
+});
+
+test("background drain reserves enough time to dispatch after one live-scale replay quantum", async () => {
+  let calls = 0;
+  let elapsed = 0;
+  const result = await drainCreditexProductRegistryMaintenance({
+    database: {},
+    maximumElapsedMs: 22_000,
+    operationTimeoutMs: 18_000,
+    now: () => new Date(NOW.getTime() + elapsed),
+    preferredRegistryCode: "veu-approved-products",
+    targets: [],
+    maintain: async ({ scheduledOperationTimeoutMs }) => {
+      calls += 1;
+      assert.equal(scheduledOperationTimeoutMs, 18_000);
+      elapsed += 15_000;
+      return { registryCode: "veu-approved-products", outcome: "progressed" };
+    },
+  });
+  assert.equal(CREDITEX_PRODUCT_REGISTRY_CONTINUATION_HEADROOM_MS, 4_000);
+  assert.equal(calls, 1);
+  assert.equal(result.steps, 1);
+  assert.equal(result.outcome, "progressed");
   assert.equal(result.continuationRequired, true);
 });
 
