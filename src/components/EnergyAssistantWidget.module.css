@@ -32,7 +32,7 @@
   transform-origin: 55px 108px;
   width: 94px;
   animation: surgeIdle 3.2s ease-in-out infinite;
-  filter: drop-shadow(0 7px 8px rgba(3, 31, 38, 0.22));
+  filter: drop-shadow(0 7px 7px rgba(3, 31, 38, 0.24));
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -50,9 +50,9 @@
 }
 
 .mascotProng {
-  fill: #cfd8d6;
+  fill: url("#surge-prong-gradient");
   stroke: #052e3c;
-  stroke-width: 6px;
+  stroke-width: 4.5px;
 }
 
 .mascotProngShine {
@@ -61,29 +61,39 @@
 }
 
 .mascotBody {
-  fill: #fffef8;
+  fill: url("#surge-body-gradient");
   stroke: #052e3c;
-  stroke-width: 6px;
+  stroke-linejoin: round;
+  stroke-width: 4.5px;
 }
 
 .mascotBodyShade {
-  fill: #dfe4dc;
-  opacity: 0.92;
+  fill: #8e9e98;
+  opacity: 0.16;
+}
+
+.mascotBodyHighlight {
+  fill: #ffffff;
+  opacity: 0.72;
 }
 
 .mascotCap {
-  fill: #1bc8b4;
+  fill: url("#surge-cap-gradient");
   stroke: #052e3c;
-  stroke-width: 6px;
+  stroke-width: 4.5px;
 }
 
 .mascotCapShine {
-  fill: #8bf2df;
-  opacity: 0.9;
+  fill: #d2fff5;
+  opacity: 0.7;
 }
 
 .mascotCapAccent {
-  fill: #42deca;
+  fill: none;
+  stroke: #087b89;
+  stroke-linecap: round;
+  stroke-width: 2.5px;
+  opacity: 0.55;
 }
 
 .mascotArm,
@@ -92,7 +102,7 @@
   stroke: #052e3c;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 6px;
+  stroke-width: 4.5px;
 }
 
 .mascotArmRight {
@@ -118,14 +128,14 @@
 
 .mascotCheek {
   fill: #ffad9f;
-  opacity: 0.78;
+  opacity: 0.48;
 }
 
 .mascotSmile {
   fill: none;
   stroke: #052e3c;
   stroke-linecap: round;
-  stroke-width: 5px;
+  stroke-width: 4px;
 }
 
 .launcher:focus-visible,

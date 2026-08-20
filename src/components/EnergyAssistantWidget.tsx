@@ -1115,6 +1115,24 @@ export function EnergyAssistantWidget() {
             onClick={() => setOpen(true)}
           >
             <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="surge-prong-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#f8fbfa" />
+                  <stop offset="38%" stopColor="#dce4e2" />
+                  <stop offset="72%" stopColor="#aebbb8" />
+                  <stop offset="100%" stopColor="#edf2f1" />
+                </linearGradient>
+                <linearGradient id="surge-cap-gradient" x1="8%" y1="5%" x2="94%" y2="100%">
+                  <stop offset="0%" stopColor="#89f3df" />
+                  <stop offset="42%" stopColor="#2ed8c7" />
+                  <stop offset="100%" stopColor="#0b9fae" />
+                </linearGradient>
+                <linearGradient id="surge-body-gradient" x1="5%" y1="8%" x2="92%" y2="100%">
+                  <stop offset="0%" stopColor="#ffffff" />
+                  <stop offset="54%" stopColor="#f5f7f2" />
+                  <stop offset="100%" stopColor="#cbd3cb" />
+                </linearGradient>
+              </defs>
               <ellipse className={styles.mascotShadow} cx="55" cy="120" rx="30" ry="5" />
               <rect className={styles.mascotProng} x="29" y="4" width="16" height="38" rx="8" />
               <rect className={styles.mascotProng} x="65" y="4" width="16" height="38" rx="8" />
@@ -1125,10 +1143,11 @@ export function EnergyAssistantWidget() {
               <path className={styles.mascotFoot} d="M35 102 Q36 122 47 107 Z" />
               <path className={styles.mascotFoot} d="M63 107 Q74 122 75 101 Z" />
               <path className={styles.mascotBody} d="M18 45 H92 V81 Q92 109 68 109 H42 Q18 109 18 81 Z" />
-              <path className={styles.mascotBodyShade} d="M57 48 H89 V81 Q89 105 67 106 H55 Q67 95 67 73 V48 Z" />
+              <path className={styles.mascotBodyHighlight} d="M24 51 H45 Q39 62 39 82 Q39 96 31 100 Q23 92 23 79 V55 Q23 52 24 51 Z" />
+              <path className={styles.mascotBodyShade} d="M70 49 H88 V81 Q88 101 69 104 Q77 94 77 78 V56 Q77 51 70 49 Z" />
               <rect className={styles.mascotCap} x="11" y="35" width="88" height="26" rx="8" />
-              <path className={styles.mascotCapShine} d="M22 40 H41 V56 H22 Q16 56 16 48 Q16 40 22 40 Z" />
-              <path className={styles.mascotCapAccent} d="M41 40 H66 V56 H41 Z" />
+              <path className={styles.mascotCapShine} d="M22 40 H65 V45 H21 Q16 45 16 49 Q16 40 22 40 Z" />
+              <path className={styles.mascotCapAccent} d="M18 56 H92" />
               <g className={styles.mascotEyes}>
                 <ellipse cx="42" cy="77" rx="8" ry="10" />
                 <ellipse cx="69" cy="77" rx="8" ry="10" />
