@@ -523,6 +523,12 @@ test("the optional quote brief is progressive, phone-safe and trade sharing requ
 test("the guide has modal keyboard behavior and a single responsive scroll region", () => {
   assert.match(widget, /role="dialog"/);
   assert.match(widget, /aria-modal="true"/);
+  assert.match(widget, /tabIndex=\{-1\}/);
+  assert.match(widget, /dialogRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.doesNotMatch(widget, /effectiveOpen[\s\S]{0,700}composerRef\.current\?\.focus/);
+  assert.match(widget, /const hasConversation = messages\.length > 0/);
+  assert.match(widget, /top: hasConversation \? container\.scrollHeight : 0/);
+  assert.match(widget, /behavior: hasConversation \? "smooth" : "auto"/);
   assert.match(widget, /event\.key === "Escape"/);
   assert.match(widget, /event\.key !== "Tab"/);
   assert.match(widget, /returnFocusRef\.current\?\.focus\(\)/);
@@ -532,19 +538,22 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /function SurgeMascot/);
   assert.match(widget, /<SurgeMascot \/>/);
   assert.match(widget, /<SurgeMascot peeking \/>/);
-  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
-  assert.match(styles, /\.mascot\s*\{[\s\S]*background:\s*url\("\/surge-mascot\.png"\)[\s\S]*height:\s*52px[\s\S]*width:\s*42px/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*70px[\s\S]*width:\s*60px/);
+  assert.match(styles, /\.mascot\s*\{[\s\S]*background:\s*url\("\/surge-mascot\.png"\)[\s\S]*height:\s*65px[\s\S]*width:\s*53px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*70px[\s\S]*width:\s*60px/);
   assert.equal(mascotImage.subarray(1, 4).toString("ascii"), "PNG");
   assert.ok(mascotImage.byteLength > 100_000);
   assert.match(widget, /aria-label="Hide Surge mascot"/);
   assert.match(widget, /aria-label="Open Ask Surge"/);
+  assert.match(widget, /aria-label="Close Ask Surge"/);
   assert.match(widget, /aria-label="Bring Surge back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
   assert.match(widget, /setMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);
-  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*56px[\s\S]*width:\s*44px/);
-  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*height:\s*53px[\s\S]*right:\s*-21px[\s\S]*rotate\(-11deg\)[\s\S]*width:\s*42px/);
+  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*70px[\s\S]*width:\s*55px/);
+  assert.match(styles, /\.rootTucked\s*\{[\s\S]*right:\s*calc\(100% - 100vw\)/);
+  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*height:\s*66px[\s\S]*right:\s*-31\.5px[\s\S]*rotate\(-11deg\)[\s\S]*width:\s*53px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.root:not\(\.rootOpen\)\.rootTucked\s*\{[\s\S]*right:\s*calc\(100% - 100vw\)/);
   assert.doesNotMatch(widget, /peekLabel|>Ask Surge<\/span>/);
   assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-12px/);
   for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
@@ -554,10 +563,13 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(styles, /@keyframes surgePeek\s*\{[\s\S]*rotate\(-11deg\)[\s\S]*rotate\(-15deg\)/);
   assert.match(styles, /prefers-reduced-motion:[\s\S]*\.mascot/);
   assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
+  assert.match(styles, /\.rootOpen\s*\{[\s\S]*flex-direction:\s*column-reverse[\s\S]*gap:\s*10px/);
+  assert.match(styles, /\.rootOpen \.panel\s*\{[\s\S]*calc\(100dvh - 98px\)/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);
   assert.match(styles, /\.privacy a,[\s\S]*\.privacy button\s*\{[\s\S]*align-items:\s*center[\s\S]*display:\s*inline-flex/);
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*height:\s*100dvh[\s\S]*width:\s*100vw/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.rootOpen\s*\{[\s\S]*bottom:\s*max\(12px,[\s\S]*top:\s*auto/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.rootOpen \.panel\s*\{[\s\S]*height:\s*min\(72dvh, 620px\)[\s\S]*max-height:\s*calc\(100dvh - 104px - env\(safe-area-inset-bottom\)\)[\s\S]*width:\s*100%/);
   assert.match(styles, /safe-area-inset-bottom/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(styles, /min-height:\s*(?:[0-3]?\d|4[0-3])px/);

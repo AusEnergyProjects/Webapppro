@@ -7,6 +7,17 @@
   z-index: 8000;
 }
 
+.rootOpen {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+}
+
+.rootTucked {
+  right: calc(100% - 100vw);
+}
+
 .launcherWrap {
   align-items: center;
   display: flex;
@@ -20,11 +31,11 @@
   border: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 48px;
-  height: 56px;
+  flex: 0 0 60px;
+  height: 70px;
   justify-content: center;
   padding: 0;
-  width: 48px;
+  width: 60px;
 }
 
 .mascot {
@@ -32,9 +43,9 @@
   background: url("/surge-mascot.png") center / contain no-repeat;
   display: block;
   filter: drop-shadow(0 5px 5px rgba(3, 31, 38, 0.24));
-  height: 52px;
+  height: 65px;
   transform-origin: 50% 88%;
-  width: 42px;
+  width: 53px;
 }
 
 .launcherDismiss {
@@ -76,25 +87,24 @@
   box-shadow: none;
   cursor: pointer;
   display: inline-flex;
-  height: 56px;
+  height: 70px;
   justify-content: center;
-  margin-right: calc(-1 * max(18px, env(safe-area-inset-right)));
   overflow: visible;
   padding: 0;
   position: relative;
-  width: 44px;
+  width: 55px;
 }
 
 .mascotPeeking {
   animation: surgePeek 2.8s ease-in-out infinite;
-  bottom: -5px;
+  bottom: -6px;
   filter: drop-shadow(-3px 5px 5px rgba(3, 31, 38, 0.28));
-  height: 53px;
+  height: 66px;
   position: absolute;
-  right: -21px;
+  right: -31.5px;
   transform: rotate(-11deg);
   transform-origin: 50% 88%;
-  width: 42px;
+  width: 53px;
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -131,6 +141,11 @@
   overflow: hidden;
   pointer-events: auto;
   width: 400px;
+}
+
+.rootOpen .panel {
+  height: min(760px, calc(100dvh - 98px));
+  max-height: calc(100dvh - 98px);
 }
 
 .header {
@@ -991,32 +1006,39 @@
     top: auto;
   }
 
+  .root:not(.rootOpen).rootTucked {
+    right: calc(100% - 100vw);
+  }
+
+  .rootOpen {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    top: auto;
+  }
+
   .launcher {
-    flex-basis: 48px;
-    height: 56px;
-    width: 48px;
+    flex-basis: 60px;
+    height: 70px;
+    width: 60px;
   }
 
   .mascot {
-    height: 52px;
-    width: 42px;
-  }
-
-  .launcherPeek {
-    margin-right: calc(-1 * max(14px, env(safe-area-inset-right)));
+    height: 65px;
+    width: 53px;
   }
 
   .mascotPeeking {
-    height: 53px;
-    width: 42px;
+    height: 66px;
+    width: 53px;
   }
 
-  .panel {
-    border: 0;
-    border-radius: 0;
-    height: 100dvh;
-    max-height: 100dvh;
-    width: 100vw;
+  .rootOpen .panel {
+    border: 1px solid #7eaea1;
+    border-radius: 20px;
+    height: min(72dvh, 620px);
+    max-height: calc(100dvh - 104px - env(safe-area-inset-bottom));
+    width: 100%;
   }
 
   .header {

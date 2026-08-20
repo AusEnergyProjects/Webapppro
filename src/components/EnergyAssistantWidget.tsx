@@ -815,7 +815,7 @@ export function EnergyAssistantWidget() {
     };
     applyBodyLock();
     media.addEventListener("change", applyBodyLock);
-    window.requestAnimationFrame(() => composerRef.current?.focus());
+    window.requestAnimationFrame(() => dialogRef.current?.focus({ preventScroll: true }));
     return () => {
       media.removeEventListener("change", applyBodyLock);
       if (bodyLocked) window.document.body.style.overflow = priorOverflow;
@@ -826,7 +826,11 @@ export function EnergyAssistantWidget() {
   useEffect(() => {
     const container = conversationRef.current;
     if (!effectiveOpen || !container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    const hasConversation = messages.length > 0;
+    container.scrollTo({
+      top: hasConversation ? container.scrollHeight : 0,
+      behavior: hasConversation ? "smooth" : "auto",
+    });
   }, [effectiveOpen, leadOpen, messages]);
 
   const close = () => {
@@ -1118,10 +1122,25 @@ export function EnergyAssistantWidget() {
   if (!hydrated || hidden) return null;
 
   return (
-    <div className={`${styles.root}${effectiveOpen ? ` ${styles.rootOpen}` : ""}`} data-energy-assistant>
-      {!effectiveOpen && (
-        <div className={styles.launcherWrap}>
-          {mascotTucked ? (
+    <div
+      className={`${styles.root}${effectiveOpen ? ` ${styles.rootOpen}` : ""}${!effectiveOpen && mascotTucked ? ` ${styles.rootTucked}` : ""}`}
+      data-energy-assistant
+    >
+      <div className={styles.launcherWrap}>
+        {effectiveOpen ? (
+          <button
+            ref={launcherRef}
+            className={styles.launcher}
+            type="button"
+            data-mascot-state={messages.length > 0 ? "returning" : "idle"}
+            aria-label="Close Ask Surge"
+            aria-controls="aea-energy-guide"
+            aria-expanded="true"
+            onClick={close}
+          >
+            <SurgeMascot />
+          </button>
+        ) : mascotTucked ? (
             <button
               ref={launcherRef}
               className={styles.launcherPeek}
@@ -1137,7 +1156,7 @@ export function EnergyAssistantWidget() {
             >
               <SurgeMascot peeking />
             </button>
-          ) : (
+        ) : (
             <>
               <button
                 ref={launcherRef}
@@ -1164,9 +1183,8 @@ export function EnergyAssistantWidget() {
                 <span aria-hidden="true">×</span>
               </button>
             </>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {effectiveOpen && (
         <section
@@ -1177,6 +1195,7 @@ export function EnergyAssistantWidget() {
           aria-modal="true"
           aria-labelledby="aea-energy-guide-title"
           aria-describedby={messages.length === 0 ? "aea-energy-guide-description" : undefined}
+          tabIndex={-1}
           onKeyDown={trapFocus}
         >
           <header className={styles.header}>
