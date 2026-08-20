@@ -442,11 +442,18 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /document\.body\.style\.overflow = "hidden"/);
   assert.match(widget, /data-mascot-state=\{messages\.length > 0 \? "returning" : "idle"\}/);
   assert.match(widget, /className=\{styles\.mascot\}/);
-  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*108px[\s\S]*width:\s*94px/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*110px[\s\S]*width:\s*96px/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*94px[\s\S]*width:\s*82px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*96px[\s\S]*width:\s*84px/);
   assert.match(widget, /mascotProngShine/);
   assert.match(widget, /mascotBodyShade/);
   assert.match(widget, /mascotSmile/);
+  assert.match(widget, /mascotCore/);
+  assert.match(widget, /mascotCircuit/);
+  assert.match(widget, /aria-label="Hide Surge mascot"/);
+  assert.match(widget, /aria-label="Open Ask Surge"/);
+  assert.match(widget, /mascotTucked \? \(/);
+  assert.match(styles, /\.launcherPeek\s*\{/);
+  assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-7px/);
   for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
     assert.match(styles, new RegExp(`@keyframes ${state}`));
   }

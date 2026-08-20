@@ -594,6 +594,7 @@ export function EnergyAssistantWidget() {
   const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState(false);
   const [openPathname, setOpenPathname] = useState("");
+  const [mascotTucked, setMascotTucked] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1103,20 +1104,40 @@ export function EnergyAssistantWidget() {
     <div className={`${styles.root}${effectiveOpen ? ` ${styles.rootOpen}` : ""}`} data-energy-assistant>
       {!effectiveOpen && (
         <div className={styles.launcherWrap}>
-          <button
-            ref={launcherRef}
-            className={styles.launcher}
-            type="button"
-            data-mascot-state={messages.length > 0 ? "returning" : "idle"}
-            aria-label="Open Ask Surge"
-            aria-controls="aea-energy-guide"
-            aria-expanded="false"
-            onClick={() => {
-              setOpenPathname(pathname);
-              setOpen(true);
-            }}
-          >
-            <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
+          {mascotTucked ? (
+            <button
+              ref={launcherRef}
+              className={styles.launcherPeek}
+              type="button"
+              aria-label="Open Ask Surge"
+              aria-controls="aea-energy-guide"
+              aria-expanded="false"
+              onClick={() => {
+                setOpenPathname(pathname);
+                setOpen(true);
+              }}
+            >
+              <svg viewBox="0 0 34 48" aria-hidden="true" focusable="false">
+                <path d="M8 17V7a4 4 0 0 1 8 0v10M20 17V7a4 4 0 0 1 8 0v10" />
+                <path d="M4 16h28v10H4zM8 26h20v10c0 6-4 9-10 9s-10-3-10-9V26z" />
+              </svg>
+            </button>
+          ) : (
+            <>
+              <button
+                ref={launcherRef}
+                className={styles.launcher}
+                type="button"
+                data-mascot-state={messages.length > 0 ? "returning" : "idle"}
+                aria-label="Open Ask Surge"
+                aria-controls="aea-energy-guide"
+                aria-expanded="false"
+                onClick={() => {
+                  setOpenPathname(pathname);
+                  setOpen(true);
+                }}
+              >
+                <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="surge-prong-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="#f8fbfa" />
@@ -1134,6 +1155,18 @@ export function EnergyAssistantWidget() {
                   <stop offset="54%" stopColor="#f5f7f2" />
                   <stop offset="100%" stopColor="#cbd3cb" />
                 </linearGradient>
+                <radialGradient id="surge-core-gradient" cx="38%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#eafffa" />
+                  <stop offset="44%" stopColor="#66ead7" />
+                  <stop offset="100%" stopColor="#078b96" />
+                </radialGradient>
+                <filter id="surge-core-glow" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="1.8" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
               <ellipse className={styles.mascotShadow} cx="55" cy="120" rx="30" ry="5" />
               <rect className={styles.mascotProng} x="29" y="4" width="16" height="38" rx="8" />
@@ -1150,6 +1183,13 @@ export function EnergyAssistantWidget() {
               <rect className={styles.mascotCap} x="11" y="35" width="88" height="26" rx="8" />
               <path className={styles.mascotCapShine} d="M22 40 H65 V45 H21 Q16 45 16 49 Q16 40 22 40 Z" />
               <path className={styles.mascotCapAccent} d="M18 56 H92" />
+              <path className={styles.mascotCircuit} d="M21 49 H38 M72 49 H89" />
+              <circle className={styles.mascotCircuitNode} cx="24" cy="49" r="2" />
+              <circle className={styles.mascotCircuitNode} cx="86" cy="49" r="2" />
+              <g className={styles.mascotCore} filter="url(#surge-core-glow)">
+                <circle cx="55" cy="49" r="7" />
+                <path d="M56 43 L51 50 H55 L53 56 L60 48 H56 Z" />
+              </g>
               <g className={styles.mascotEyes}>
                 <ellipse cx="42" cy="77" rx="8" ry="10" />
                 <ellipse cx="69" cy="77" rx="8" ry="10" />
@@ -1159,8 +1199,19 @@ export function EnergyAssistantWidget() {
               <circle className={styles.mascotCheek} cx="32" cy="90" r="3.5" />
               <circle className={styles.mascotCheek} cx="79" cy="90" r="3.5" />
               <path className={styles.mascotSmile} d="M42 89 Q55 102 70 88" />
-            </svg>
-          </button>
+                </svg>
+              </button>
+              <button
+                className={styles.launcherDismiss}
+                type="button"
+                aria-label="Hide Surge mascot"
+                title="Hide Surge"
+                onClick={() => setMascotTucked(true)}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </>
+          )}
         </div>
       )}
 

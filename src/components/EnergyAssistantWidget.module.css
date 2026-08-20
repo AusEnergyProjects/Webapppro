@@ -11,6 +11,7 @@
   align-items: center;
   display: flex;
   pointer-events: auto;
+  position: relative;
 }
 
 .launcher {
@@ -19,20 +20,88 @@
   border: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 94px;
-  height: 108px;
+  flex: 0 0 82px;
+  height: 94px;
   justify-content: center;
   padding: 0;
-  width: 94px;
+  width: 82px;
 }
 
 .mascot {
-  height: 108px;
+  height: 94px;
   overflow: visible;
   transform-origin: 55px 108px;
-  width: 94px;
+  width: 82px;
   animation: surgeIdle 3.2s ease-in-out infinite;
   filter: drop-shadow(0 7px 7px rgba(3, 31, 38, 0.24));
+}
+
+.launcherDismiss {
+  align-items: center;
+  background: #07574f;
+  border: 1px solid #72e2cf;
+  border-radius: 999px;
+  box-shadow: 0 3px 9px rgba(3, 31, 38, 0.2);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: 700 1.15rem/1 Arial, sans-serif;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: -5px;
+  top: -4px;
+  width: 30px;
+  z-index: 2;
+}
+
+.launcherDismiss::after {
+  content: "";
+  inset: -7px;
+  position: absolute;
+}
+
+.launcherDismiss:hover,
+.launcherDismiss:focus-visible {
+  background: #0a7064;
+  border-color: #9ff3e4;
+}
+
+.launcherPeek {
+  align-items: center;
+  background: linear-gradient(145deg, #07574f, #043746);
+  border: 1px solid #72e2cf;
+  border-radius: 16px 0 0 16px;
+  box-shadow: 0 7px 18px rgba(3, 31, 38, 0.28);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 58px;
+  justify-content: center;
+  margin-right: calc(-1 * max(18px, env(safe-area-inset-right)));
+  padding: 5px 8px 5px 6px;
+  width: 44px;
+}
+
+.launcherPeek svg {
+  height: 44px;
+  overflow: visible;
+  width: 31px;
+}
+
+.launcherPeek path:first-child {
+  fill: none;
+  stroke: #d8e4e1;
+  stroke-linecap: round;
+  stroke-width: 3px;
+}
+
+.launcherPeek path:last-child {
+  fill: #31d7c4;
+  stroke: #ffffff;
+  stroke-linejoin: round;
+  stroke-width: 1.6px;
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -96,6 +165,32 @@
   opacity: 0.55;
 }
 
+.mascotCircuit {
+  fill: none;
+  opacity: 0.68;
+  stroke: #e8fffa;
+  stroke-linecap: round;
+  stroke-width: 1.4px;
+}
+
+.mascotCircuitNode {
+  fill: #e8fffa;
+  opacity: 0.92;
+}
+
+.mascotCore circle {
+  fill: url("#surge-core-gradient");
+  stroke: #d9fff8;
+  stroke-width: 1.6px;
+}
+
+.mascotCore path {
+  fill: #073f49;
+  stroke: #ffffff;
+  stroke-linejoin: round;
+  stroke-width: 0.7px;
+}
+
 .mascotArm,
 .mascotFoot {
   fill: #19bfb4;
@@ -139,6 +234,8 @@
 }
 
 .launcher:focus-visible,
+.launcherDismiss:focus-visible,
+.launcherPeek:focus-visible,
 .panel button:focus-visible,
 .panel a:focus-visible,
 .panel input:focus-visible,
@@ -1070,14 +1167,18 @@
   }
 
   .launcher {
-    flex-basis: 96px;
-    height: 110px;
-    width: 96px;
+    flex-basis: 84px;
+    height: 96px;
+    width: 84px;
   }
 
   .mascot {
-    height: 110px;
-    width: 96px;
+    height: 96px;
+    width: 84px;
+  }
+
+  .launcherPeek {
+    margin-right: calc(-1 * max(14px, env(safe-area-inset-right)));
   }
 
   .panel {
@@ -1127,6 +1228,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .launcher,
+  .launcherPeek,
   .mascot,
   .mascotEyes,
   .mascotArmRight,
