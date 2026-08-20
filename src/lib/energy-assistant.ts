@@ -343,27 +343,27 @@ const TOPIC_DIRECT_ANSWERS: Readonly<Record<EnergyAssistantTopic, string>> = {
   nathers:
     "A quick online check cannot issue or replace an official NatHERS rating. Use the accredited existing-home pathway when you need a certificate, and use this assistant only to prepare evidence and upgrade questions.",
   comfort_fabric:
-    "Start with the home's comfort problems and building fabric before choosing large equipment. Orientation, insulation, windows, shading, draughts and ventilation change both comfort and the size of heating or cooling needed.",
+    "Before spending big, work out why the home feels bad. Sun, insulation, windows, shade, draughts and ventilation all change comfort and how much heating or cooling you really need.",
   insulation:
-    "Treat insulation as a whole-envelope and installation-quality decision, not a product-only purchase. Confirm existing coverage, construction, moisture and electrical hazards before setting the scope.",
+    "Think of insulation as a warm layer around the whole home, not just a product to buy. Check coverage, construction, moisture and electrical safety before setting the scope.",
   glazing_shading:
-    "Do not choose windows by glass panes alone. Climate, orientation, frame, seals, installation and external shading determine whether a glazing upgrade solves the actual summer or winter problem.",
+    "Windows are more than the glass. Sun direction, climate, frames, seals, installation and outside shade decide whether an upgrade will actually fix the summer or winter problem.",
   draughts_ventilation:
-    "Seal unintended leaks while preserving deliberate ventilation and moisture control. Draught sealing without checking exhaust and fresh-air pathways can create a different comfort or condensation problem.",
+    "Seal accidental gaps, not deliberate vents. Keep kitchen and bathroom exhaust working so a draught fix does not turn into a condensation or air-quality problem.",
   rcac:
-    "Choose reverse-cycle air conditioning by room load, climate-zone performance, capacity, annual energy use, noise and installation design. A brand name alone is not enough to select a system.",
+    "A reverse-cycle air conditioner is often the best electric starting point for heating and cooling. The right one depends on the room, climate, insulation, noise and installation, not just a brand name.",
   heat_pump_hot_water:
-    "A heat-pump water heater can be a strong electrification step when its tank, climate performance, noise, location, tariff and recovery rate suit the household. Check the full installed design before comparing rebates or headline prices.",
+    "A heat-pump hot-water system can be a great move, but it still needs to suit your household, winter weather, location, noise limits and tariff. Check the whole installed setup, not just the sticker price or rebate.",
   induction:
     "Induction is an efficient electric replacement for gas cooking, but the project includes cookware, circuit capacity, switchboard work, ventilation, bench fit and licensed gas disconnection where relevant.",
   solar:
-    "Size solar from the home's load timing, usable roof, shading and export limit. A generic system size or savings claim is not a reliable substitute for interval data and a written site design.",
+    "Solar works best when it suits your daytime use, roof, shade and export limit. A standard system size or big savings promise is no substitute for your bill data and a proper written design.",
   battery_vpp:
-    "A battery should solve a defined job such as shifting solar, backup or VPP participation. Test usable capacity, power, load timing, tariff, backup design, warranty and total installed cost before deciding.",
+    "A battery should earn its place: using extra solar later, keeping key circuits on in an outage, or joining a virtual power plant. Check capacity, power, tariff, backup setup, warranty and the full installed price.",
   ev_charging:
     "Match EV charging to daily driving, parking time, electrical capacity, solar timing and tariff. Faster charging is not automatically better if an overnight lower-power option covers the real daily distance.",
   bills_tariffs:
-    "Compare the full tariff against the household's actual timing, not one headline rate. Supply, usage windows, demand charges, controlled load and solar export terms can change the result.",
+    "Do not choose a power plan from one cheap-looking rate. Your usage times, supply charge, demand charge, controlled load and solar export rate can completely change the winner.",
   rebates_certificates:
     "Do not treat a rebate or certificate discount as available until the current official rules match the postcode, applicant, property, exact product, installer and installation date.",
   products_ratings:
@@ -371,7 +371,7 @@ const TOPIC_DIRECT_ANSWERS: Readonly<Record<EnergyAssistantTopic, string>> = {
   safety_consumer_rights:
     "Put immediate safety first, then separate the product supplier, installer and manufacturer records. Australian Consumer Law guarantees are separate from a written warranty.",
   renters_strata:
-    "Separate portable actions from fixed work. Fixed upgrades usually need written owner or owners corporation approval, and the applicable tenancy or strata rule depends on the state or territory.",
+    "There is still plenty you can do without owning the place. Start with portable or reversible changes; get written approval before fixed work, and check the state rule for tenancy or strata questions.",
   trades:
     "Use the current official assessment, product and program instruments for trade work. Keep exact model, site, installation, consent and evidence records rather than relying on a general assistant answer.",
 };
@@ -3846,7 +3846,7 @@ export function composeEnergyAssistantAnswer(
   if (batteryTimingDecision) {
     return structured("battery_vpp", {
       directAnswer:
-        "There is no single best date. A battery makes most sense when you regularly export solar during the day and buy power back after sunset, or when backup power matters to you. If you already use most of your solar, waiting can be the better deal.",
+        "There is no magic date. A battery can make sense when you regularly export solar in the day and buy power back after sunset, or when backup matters to you. If you already use most of your solar, waiting may be the better deal.",
       status: "needs_context",
       citations: officialCitationsById(["energy-gov-batteries", "energy-gov-solar-batteries"]),
       confidence: "medium",
@@ -3860,7 +3860,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:what|which)\b.{0,28}\bupgrad(?:e|es)\b.{0,20}\bfirst\b|\bwhere\s+(?:should|do|can)\s+I\s+start\b.{0,30}\b(?:home|energy|upgrade)\b/i.test(query)) {
     return structured("comfort_fabric", {
       directAnswer:
-        "Start with the problem you most want to fix. If the home is uncomfortable or damp, tackle the building first; if equipment is failing, replace it with an efficient electric option; then size solar and a battery around your actual electricity use.",
+        "You do not need to do everything at once. Start with the problem making life hardest: fix comfort or damp issues in the building first, replace failing equipment with an efficient electric option, then look at solar and batteries around your real electricity use.",
       status: "needs_context",
       citations: officialCitationsById(["energy-gov-electrification-sequence", "yourhome-passive-design-system"]),
       confidence: "medium",
@@ -5894,6 +5894,27 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
+  const wantsImmediateComfortHelp = /\b(?:bedroom|living room|lounge|room|house|home)\b/i.test(query)
+    && /\b(?:cold|freezing|icy|chilly|too hot|roasting|overheating)\b/i.test(query)
+    && /\b(?:today|tonight|this weekend|weekend|right now|quick|cheap|first)\b/i.test(query)
+    && !/\b(?:rent|renter|rental|tenant)\b/i.test(query);
+  if (wantsImmediateComfortHelp) {
+    return structured("comfort_fabric", {
+      directAnswer:
+        "For this weekend, keep it simple: close curtains before dark, use a door snake only on a real gap, and heat the room you are using instead of the whole house. Do not block vents or heater clearances. If the problem keeps coming back, it is worth checking insulation, windows and draughts before buying bigger heating.",
+      status: "needs_context",
+      citations: officialCitationsById([
+        "energy-gov-insulation-draught-proofing",
+        "yourhome-ventilation-airtightness",
+      ]),
+      confidence: "medium",
+      assumptions: ["The home's climate, existing heating, moisture signs and the source of the discomfort are not known."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["What postcode is the property in?"],
+    });
+  }
+
   const statedRoomTemperature = numericCapture(query, /\b(\d+(?:\.\d+)?)\s*(?:°\s*)?(?:C|degrees?(?:\s+Celsius)?)\b/i);
   const statedRoomTemperatureLabel = statedRoomTemperature === null
     ? "a comfortable air temperature"
@@ -6518,14 +6539,14 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "I will compare options by fit, performance and warranty, not steer you to a brand.";
+      "I will help you compare the right things without pushing a brand.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose
-      ? "A heat-pump water heater can cut hot-water energy use, but the right tank and unit depend on household size, shower timing, winter temperatures and where it can go."
+      ? "A heat-pump hot-water system can cut energy use, but the right tank and unit depend on how many people use it, shower timing, winter weather and where it can go."
       : spaceHeatingPurpose
-        ? "For most Australian homes, reverse-cycle air conditioning is the best electric starting point because it heats and cools efficiently. The right size depends on climate, room size, insulation and layout, and rebates vary by location."
-        : "Heat pumps can be very efficient, but space heating and hot water need different systems.";
+        ? "For most Australian homes, reverse-cycle air conditioning is a great electric starting point because it heats and cools efficiently. The right size depends on climate, room size, insulation and layout."
+        : "Heat pumps are great, but there is not one right one for every job. A reverse-cycle unit heats and cools rooms; a heat-pump hot-water unit heats water.";
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."

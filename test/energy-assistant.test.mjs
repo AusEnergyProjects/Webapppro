@@ -87,7 +87,7 @@ test("Surge gives an immediate heating answer and asks only for the property pos
     });
     assert.equal(answer.status, "needs_context", query);
     assert.match(answer.directAnswer, /reverse-cycle air conditioning/i, query);
-    assert.match(answer.directAnswer, /best electric starting point/i, query);
+    assert.match(answer.directAnswer, /great electric starting point/i, query);
     assert.deepEqual(answer.suggestedQuestions, ["What postcode is the property in?"], query);
     assert.deepEqual(answer.practicalSteps, [], query);
     assert.deepEqual(answer.toolActions, [], query);
@@ -107,7 +107,7 @@ test("Surge answers battery timing in plain language and asks one useful questio
       asOf: "2026-08-20T00:00:00.000Z",
     });
     assert.equal(answer.status, "needs_context", query);
-    assert.match(answer.directAnswer, /export solar during the day/i, query);
+    assert.match(answer.directAnswer, /export solar in the day/i, query);
     assert.match(answer.directAnswer, /buy power back after sunset/i, query);
     assert.doesNotMatch(answer.directAnswer, /STC eligibility|one eligible battery system|accredited participants/i, query);
     assert.deepEqual(answer.practicalSteps, [], query);
@@ -123,13 +123,40 @@ test("Surge treats the starter upgrade question as in-domain and keeps it simple
     asOf: "2026-08-20T00:00:00.000Z",
   });
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /Start with the problem you most want to fix/i);
+  assert.match(answer.directAnswer, /You do not need to do everything at once/i);
   assert.doesNotMatch(answer.directAnswer, /TLink|Creditex|unrelated request/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.toolActions, []);
   assert.deepEqual(answer.suggestedQuestions, [
     "What matters most right now: lower bills, better comfort, or replacing something that is failing?",
   ]);
+});
+
+test("Surge gives immediate, low-risk comfort help in everyday language", () => {
+  const answer = composeEnergyAssistantAnswer("My bedroom is freezing. What can I do this weekend?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /close curtains before dark/i);
+  assert.match(answer.directAnswer, /door snake/i);
+  assert.match(answer.directAnswer, /Do not block vents or heater clearances/i);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.toolActions, []);
+  assert.deepEqual(answer.suggestedQuestions, ["What postcode is the property in?"]);
+});
+
+test("Surge explains a general heat-pump question like a helpful person, not a catalogue", () => {
+  const answer = composeEnergyAssistantAnswer("What heat pump should I get?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /not one right one for every job/i);
+  assert.match(answer.directAnswer, /without pushing a brand/i);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.toolActions, []);
+  assert.deepEqual(answer.suggestedQuestions, ["Is this for space heating and cooling, hot water, or solar water heating?"]);
 });
 
 test("Surge explains thermal mass directly before asking one useful local question", () => {
@@ -324,7 +351,7 @@ test("heat-pump selection remains independent and progressive instead of recomme
     asOf: "2026-08-20T00:00:00.000Z",
   });
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /not steer you to a brand/i);
+  assert.match(answer.directAnswer, /without pushing a brand/i);
   assert.equal(answer.suggestedQuestions.length, 1);
   assert.equal(answer.suggestedQuestions[0], "Is this for space heating and cooling, hot water, or solar water heating?");
   assert.doesNotMatch(answer.directAnswer, /buy (?:a|the)|best brand|our preferred|affiliate|sponsored/i);
