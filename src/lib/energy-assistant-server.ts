@@ -240,6 +240,33 @@ function boundedAnswer(answer: EnergyAssistantAnswer) {
   };
 }
 
+function customerSafeText(value: string) {
+  return value.replace(
+    /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
+    "the trade platform",
+  );
+}
+
+function customerSafeAnswer(answer: EnergyAssistantAnswer): EnergyAssistantAnswer {
+  const exposesInternalPlatformName = (value: unknown) =>
+    /\b(?:TLink|Creditex)\b/i.test(JSON.stringify(value));
+  return {
+    ...answer,
+    directAnswer: customerSafeText(answer.directAnswer),
+    practicalSteps: answer.practicalSteps.map(customerSafeText),
+    nextAction: customerSafeText(answer.nextAction),
+    citations: answer.citations.filter((citation) => !exposesInternalPlatformName(citation)),
+    assumptions: answer.assumptions.map(customerSafeText),
+    suggestedQuestions: answer.suggestedQuestions.map(customerSafeText),
+    toolActions: answer.toolActions
+      .filter((action) => !exposesInternalPlatformName(action)
+        && !action.href.startsWith("/direct-trade")
+        && !action.href.startsWith("/creditex"))
+      .map((action) => ({ ...action, label: customerSafeText(action.label) })),
+    sourceBoundary: customerSafeText(answer.sourceBoundary),
+  };
+}
+
 function buildReply(
   answerInput: EnergyAssistantAnswer,
   now: Date,
@@ -314,7 +341,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const answer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const reply = buildReply(
-    answer,
+    audience === "trade" ? answer : customerSafeAnswer(answer),
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );

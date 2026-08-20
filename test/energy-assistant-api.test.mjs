@@ -96,6 +96,62 @@ test("canonical ask API is stateless and performs zero D1 operations", async () 
   assert.ok(Buffer.byteLength(JSON.stringify(payload.reply)) <= ENERGY_ASSISTANT_MAX_RESPONSE_BYTES);
 });
 
+test("public and customer replies never expose internal platform names or trade routes", async () => {
+  const brandedAnswer = {
+    ...fixedAnswer("TLink and Creditex customer guidance."),
+    practicalSteps: ["Open TLink.", "Use Creditex."],
+    nextAction: "Continue in TLink or Creditex.",
+    assumptions: ["TLink customer assumption."],
+    suggestedQuestions: ["Should Creditex do this?"],
+    toolActions: [
+      { id: "tlink", label: "Open TLink", href: "/direct-trade/dashboard" },
+      { id: "creditex", label: "Open Creditex", href: "/creditex" },
+      { id: "guides", label: "Open guides", href: "/guides" },
+    ],
+    citations: [{
+      sourceId: "internal-platform",
+      title: "Creditex internal guide",
+      publisher: "TLink",
+      url: "https://example.test/internal",
+      jurisdiction: ["AU"],
+      sourceTier: "official",
+      effectiveFrom: null,
+      effectiveTo: null,
+      reviewedAt: "2026-08-20",
+      reviewDue: "2026-08-21",
+      stale: false,
+    }],
+    sourceBoundary: "Confirm in TLink or Creditex.",
+  };
+
+  for (const audience of ["public", "customer"]) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `customer-name-boundary-${audience}`,
+      message: "Help with my home",
+      recentTurns: [],
+      pageContext: "/plan",
+      audience,
+    }), { now: () => new Date(NOW), composeAnswer: () => brandedAnswer });
+    assert.equal(response.status, 200, audience);
+    const payload = await body(response);
+    assert.doesNotMatch(JSON.stringify(payload.reply), /TLink|Creditex/i, audience);
+    assert.deepEqual(payload.reply.toolActions, [{ id: "guides", label: "Open guides", href: "/guides" }], audience);
+    assert.deepEqual(payload.reply.citations, [], audience);
+  }
+
+  const tradeResponse = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "trade-name-boundary-0001",
+    message: "Help with the platform",
+    recentTurns: [],
+    pageContext: "/direct-trade/dashboard",
+    audience: "trade",
+  }), { now: () => new Date(NOW), composeAnswer: () => brandedAnswer });
+  assert.equal(tradeResponse.status, 200);
+  assert.match(JSON.stringify((await body(tradeResponse)).reply), /TLink|Creditex/);
+});
+
 test("normal assistant server code contains no anonymous transcript or rate-limit SQL", () => {
   assert.doesNotMatch(serverSource, /energy_assistant_(?:sessions|messages|request_receipts|rate_limits)/);
   assert.doesNotMatch(serverSource, /\.prepare\(|\.batch\(/);

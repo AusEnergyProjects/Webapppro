@@ -56,8 +56,8 @@ const OFFICIAL_RUNTIME_HOSTS = new Set([
   "moneysmart.gov.au",
 ]);
 
-test("runtime knowledge is a 92-source official Australian corpus", () => {
-  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 92);
+test("runtime knowledge is a 107-source official Australian corpus", () => {
+  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 107);
   assert.deepEqual(
     [...new Set(ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.topic))].sort(),
     [...ENERGY_ASSISTANT_TOPICS].sort(),
@@ -162,6 +162,21 @@ test("official corpus covers every required Australian decision boundary", () =>
     "dcceew-refrigerant-recovery-licensing",
     "esv-carbon-monoxide-alarm-signals",
     "nsw-home-electrical-safety",
+    "yourhome-orientation",
+    "yourhome-concrete-slab-floors",
+    "yourhome-lightweight-framing",
+    "yourhome-brickwork-blockwork",
+    "yourhome-autoclaved-aerated-concrete",
+    "yourhome-cladding-systems",
+    "yourhome-rammed-earth",
+    "yourhome-straw-bale",
+    "yourhome-green-roofs-walls",
+    "yourhome-lighting",
+    "yourhome-appliances-technology",
+    "yourhome-smart-homes-energy-management",
+    "yourhome-renewable-energy",
+    "yourhome-skylights",
+    "yourhome-landscaping-garden-design",
     "energy-rating-zoned-label",
     "energy-rating-product-register",
     "cer-swh-ashp-register",
@@ -290,6 +305,63 @@ test("whole-of-home teaching facts explain causes, trade-offs and safe next chec
   assert.match(facts["dcceew-refrigerant-recovery-licensing"], /illegal to release/);
   assert.match(facts["esv-carbon-monoxide-alarm-signals"], /sensor end-of-life/);
   assert.match(facts["nsw-home-electrical-safety"], /must not be touched, drilled into/);
+  assert.match(facts["yourhome-orientation"], /true or solar north/);
+  assert.match(facts["yourhome-concrete-slab-floors"], /thermal bridges/);
+  assert.match(facts["yourhome-lightweight-framing"], /steel is highly conductive/);
+  assert.match(facts["yourhome-brickwork-blockwork"], /not interchangeable/);
+  assert.match(facts["yourhome-autoclaved-aerated-concrete"], /vapour permeable/);
+  assert.match(facts["yourhome-cladding-systems"], /whole wall system/);
+  assert.match(facts["yourhome-rammed-earth"], /limited insulation/);
+  assert.match(facts["yourhome-straw-bale"], /below 15% moisture/);
+  assert.match(facts["yourhome-green-roofs-walls"], /do not replace verified roof insulation/);
+  assert.match(facts["yourhome-lighting"], /lumens rather than watts/);
+  assert.match(facts["yourhome-appliances-technology"], /annual kilowatt-hour/);
+  assert.match(facts["yourhome-smart-homes-energy-management"], /interoperability/);
+  assert.match(facts["yourhome-renewable-energy"], /demand timing/);
+  assert.match(facts["yourhome-skylights"], /heat gain, heat loss and glare/);
+  assert.match(facts["yourhome-landscaping-garden-design"], /guide cooling breezes/);
+});
+
+test("reviewed household expansion materially strengthens practical topic coverage", () => {
+  const counts = Object.fromEntries(
+    ENERGY_ASSISTANT_TOPICS.map((topic) => [
+      topic,
+      ENERGY_ASSISTANT_KNOWLEDGE.filter((source) => source.topic === topic).length,
+    ]),
+  );
+
+  assert.equal(counts.comfort_fabric, 18);
+  assert.equal(counts.insulation, 3);
+  assert.equal(counts.glazing_shading, 5);
+  assert.equal(counts.products_ratings, 5);
+  assert.equal(counts.solar, 5);
+  assert.equal(counts.battery_vpp, 3);
+
+  const addedIds = new Set([
+    "yourhome-orientation",
+    "yourhome-concrete-slab-floors",
+    "yourhome-lightweight-framing",
+    "yourhome-brickwork-blockwork",
+    "yourhome-autoclaved-aerated-concrete",
+    "yourhome-cladding-systems",
+    "yourhome-rammed-earth",
+    "yourhome-straw-bale",
+    "yourhome-green-roofs-walls",
+    "yourhome-lighting",
+    "yourhome-appliances-technology",
+    "yourhome-smart-homes-energy-management",
+    "yourhome-renewable-energy",
+    "yourhome-skylights",
+    "yourhome-landscaping-garden-design",
+  ]);
+  const yourHomeAdditions = ENERGY_ASSISTANT_KNOWLEDGE.filter((source) =>
+    addedIds.has(source.id),
+  );
+  assert.equal(yourHomeAdditions.length, addedIds.size);
+  for (const source of yourHomeAdditions) {
+    assert.equal(source.publisher, "Your Home, Australian Government");
+    assert.match(source.licence, /CC BY 4\.0/);
+  }
 });
 
 test("heat-pump guidance is exact-model, performance based and commercially neutral", () => {

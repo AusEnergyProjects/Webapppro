@@ -1320,7 +1320,7 @@ function assistantDomainIntent(query: string) {
     && /\b(?:checker|quote|scanned|scan|image[ -]only|OCR|local)\b/i.test(query)) return "in" as const;
   if (/\b(?:raw (?:file )?bytes?|extracted (?:text|lines?)|bounded (?:derived )?summary)\b/i.test(query)
     && /\b(?:local|device|browser|chat|lead|privacy|stays?|leaves?|difference|plain English)\b/i.test(query)) return "in" as const;
-  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulation|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
+  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulation|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
   if (/\b(?:bedroom|room|upstairs|upper floor|top floor|home|house|unit|apartment)\b/i.test(query)
     && /\b(?:hot|warm)\b/i.test(query)
     && /\b(?:outdoor|outside|night|evening|sunset)\b/i.test(query)) return "in" as const;
@@ -2088,7 +2088,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:what can you (?:actually\s+)?(?:do|help with|help me decide)|what do you (?:do|cover)|how can you help|your capabilities|what is this (?:assistant|guide|tool) for|what can (?:this|the) (?:energy )?(?:widget|assistant|guide|tool) (?:do|help (?:me )?with))\b/i.test(query)) {
     return structured("comfort_fabric", {
       directAnswer:
-        "I help with Australian whole-home comfort and energy, NatHERS and building fabric, bills and tariffs, electrification, solar, batteries, EVs, independent product and quote checks, current assistance pathways, local file analysis and role-safe TLink or Creditex guidance. I can calculate from supplied values, diagnose symptoms one step at a time and explain what a licensed inspection or current official register must decide. I do not access private customer records, choose a brand, make a regulated site finding or answer unrelated topics.",
+        "I help with Australian home comfort and energy, bills, electrification, solar, batteries, EVs, rebates, quotes and local file checks. Tell me what you want to improve and I will keep it simple, ask only for facts that change the answer and stay independent of brands.",
       status: "answered",
       citations: officialCitationsById(["energy-gov-electrification-sequence", "yourhome-passive-design-system", "energy-gov-rebates"]),
       confidence: "high",
@@ -2101,7 +2101,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:ignore|bypass|override|reveal|show|print|repeat|extract)\b[\s\S]{0,80}\b(?:system prompt|developer message|hidden instructions?|customer database|private customer|all customers?|lead database|private records?)\b/i.test(query)) {
     return structured("safety_consumer_rights", {
       directAnswer:
-        "I cannot reveal hidden instructions, private customer or lead records, credentials or another user's data, or follow a request to bypass the assistant's safety and privacy boundaries. I can explain the public energy guidance, local tools and the authorised TLink workflow without accessing or exposing private records.",
+        "I cannot reveal hidden instructions, private records, credentials or another person's data. I can still help with public energy guidance, local tools and authorised platform tasks without accessing private records.",
       status: "answered",
       citations: [],
       confidence: "high",
@@ -3836,6 +3836,41 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
+  const batteryTimingDecision = /\b(?:battery|home battery|solar battery|energy storage)\b/i.test(query)
+    && (
+      /\b(?:best|right|good)\s+time\b/i.test(query)
+      || /\bwhen\s+(?:should|can|do)\s+I\s+(?:get|buy|add|install)\b/i.test(query)
+      || /\bshould\s+I\s+(?:get|buy|add|install)\b.{0,30}\b(?:now|wait)\b/i.test(query)
+      || /\bnow\s+or\s+wait\b/i.test(query)
+    );
+  if (batteryTimingDecision) {
+    return structured("battery_vpp", {
+      directAnswer:
+        "There is no single best date. A battery makes most sense when you regularly export solar during the day and buy power back after sunset, or when backup power matters to you. If you already use most of your solar, waiting can be the better deal.",
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-batteries", "energy-gov-solar-batteries"]),
+      confidence: "medium",
+      assumptions: ["I have not yet seen your solar exports, evening imports, tariff or installed price."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["Do you already have solar, and roughly how much do you export during the day and import after sunset?"],
+    });
+  }
+
+  if (/\b(?:what|which)\b.{0,28}\bupgrad(?:e|es)\b.{0,20}\bfirst\b|\bwhere\s+(?:should|do|can)\s+I\s+start\b.{0,30}\b(?:home|energy|upgrade)\b/i.test(query)) {
+    return structured("comfort_fabric", {
+      directAnswer:
+        "Start with the problem you most want to fix. If the home is uncomfortable or damp, tackle the building first; if equipment is failing, replace it with an efficient electric option; then size solar and a battery around your actual electricity use.",
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-electrification-sequence", "yourhome-passive-design-system"]),
+      confidence: "medium",
+      assumptions: ["I do not yet know your main problem, current equipment or budget."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["What matters most right now: lower bills, better comfort, or replacing something that is failing?"],
+    });
+  }
+
   const currentDomainIntent = assistantDomainIntent(query);
   const domainIntent = currentDomainIntent === "blocked"
     ? "out"
@@ -3845,24 +3880,20 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out") {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Surge only covers Australian home energy, electrification, building performance, current assistance programmes and role-safe TLink or Creditex help. I cannot answer that unrelated request or leave this scope.",
+        "I am here for Australian home energy and upgrades. Ask me about comfort, bills, appliances, solar, batteries, EVs, rebates, quotes or an authorised trade-platform task.",
       status: "needs_context",
       citations: [],
       confidence: "low",
-      assumptions: ["No Australian home-energy or TLink task was identified."],
-      practicalSteps: ["Choose one relevant home, equipment, bill, programme or trade-platform decision."],
+      assumptions: ["No Australian home-energy or authorised trade-platform task was identified."],
+      practicalSteps: [],
       toolActions: [],
-      suggestedQuestions: [
-        "Why is one room uncomfortable and what should I check first?",
-        "How do I compare two energy-upgrade quotes without choosing by brand?",
-        "Which rebate facts are needed for my postcode?",
-      ],
+      suggestedQuestions: [],
     });
   }
   if (domainIntent === "ambiguous") {
     return structured("comfort_fabric", {
       directAnswer:
-        "Which Australian household-energy decision do you mean: comfort, electricity use, equipment, solar, a programme, or a TLink trade task? Tell me the outcome you want and I will narrow it one step at a time.",
+        "Which home-energy decision do you mean: comfort, bills, equipment, solar, a rebate, or an authorised trade-platform task? Tell me the outcome you want and I will narrow it down one step at a time.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -6487,14 +6518,14 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "Surge does not recommend, rank or endorse a heat-pump, reverse-cycle or solar-water-heater brand, supplier or model. It compares user-supplied options against the same independent criteria and current official facts.";
+      "I will compare options by fit, performance and warranty, not steer you to a brand.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose
-      ? "A heat-pump water heater can use much less electricity than resistance hot water, but tank size, peak demand, winter recovery, placement, noise, tariff timing and the exact eligible model determine whether it suits this home."
+      ? "A heat-pump water heater can cut hot-water energy use, but the right tank and unit depend on household size, shower timing, winter temperatures and where it can go."
       : spaceHeatingPurpose
-        ? "For many Australian homes, a correctly sized reverse-cycle air conditioner is the efficient electric starting point because it provides heating and cooling. Capacity, layout, insulation, glazing, noise and cold-weather performance still determine what will work at this home, and any rebate or certificate support depends on location, the exact eligible product and installation date."
-        : "A heat pump can be an efficient electric option, but the correct system type and capacity depend on the home's climate, demand and installation constraints.";
+        ? "For most Australian homes, reverse-cycle air conditioning is the best electric starting point because it heats and cools efficiently. The right size depends on climate, room size, insulation and layout, and rebates vary by location."
+        : "Heat pumps can be very efficient, but space heating and hot water need different systems.";
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."

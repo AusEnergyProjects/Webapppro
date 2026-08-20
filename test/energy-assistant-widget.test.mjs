@@ -71,10 +71,10 @@ test("the widget uses the canonical stateless assistant contract and never sends
   assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
 });
 
-test("only bounded local transcript, open state, last activity and guide mode are persisted", () => {
+test("only bounded local transcript, last activity and guide mode are persisted while the panel starts closed", () => {
   const persisted = widget.match(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/);
   assert.ok(persisted);
-  assert.match(persisted[1], /open/);
+  assert.doesNotMatch(persisted[1], /\bopen\b/);
   assert.match(persisted[1], /mode/);
   assert.match(persisted[1], /messages:\s*boundedLocalMessages\(messages\)/);
   assert.match(persisted[1], /lastActive/);
@@ -89,6 +89,11 @@ test("only bounded local transcript, open state, last activity and guide mode ar
   assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*storeSession\(JSON\.stringify/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
+  assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
+  assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(""\)/);
+  assert.match(widget, /const effectiveOpen = open && openPathname === pathname && !hidden/);
+  assert.match(widget, /setOpenPathname\(pathname\);\s*setOpen\(true\)/);
+  assert.match(widget, /const rememberModeForNavigation = \(\) => \{\s*setOpen\(false\)/);
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
@@ -97,6 +102,15 @@ test("same-browser local continuation is explicit and does not create tracking i
   assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
   assert.match(widget, /setLeadRequestId\(""\)/);
+});
+
+test("public and customer widget copy never exposes internal platform names", () => {
+  assert.match(widget, /function customerVisibleText/);
+  assert.match(widget, /customerVisibleText\(message\.directAnswer \|\| message\.content, context\.audience\)/);
+  assert.doesNotMatch(widget, /matched TLink trades/);
+  assert.doesNotMatch(widget, /approved matched TLink trades/);
+  assert.match(widget, /shared with matched trades/);
+  assert.match(widget, /approved matched trades/);
 });
 
 test("expired local conversations and explicit resets atomically clear transcript and lead state", () => {
@@ -231,6 +245,7 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(active.messages.length, 40);
   assert.equal(active.messages[0].id, "message-2");
   assert.equal(active.mode, "trade");
+  assert.equal("open" in active, false);
 
   const recent = helpers.recentTurnsForRequest(active.messages);
   assert.ok(recent.length <= 8);

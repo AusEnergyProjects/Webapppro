@@ -88,7 +88,6 @@ type LocalityLookupStatus = "idle" | "loading" | "ready" | "error";
 type LeadStage = "scope" | "basics" | "questions" | "contact" | "preferences" | "consent";
 
 type SavedConversation = {
-  open: boolean;
   mode: Audience;
   messages: AssistantMessage[];
   lastActive: string;
@@ -296,11 +295,22 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
   };
 }
 
-function naturalFollowUpFor(message: AssistantMessage): string {
-  const suggestion = message.suggestions[0]?.trim() || "";
+function customerVisibleText(value: string, audience: Audience): string {
+  if (audience === "trade") return value;
+  return value.replace(
+    /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
+    "the trade platform",
+  );
+}
+
+function naturalFollowUpFor(message: AssistantMessage, audience: Audience): string {
+  const suggestion = customerVisibleText(message.suggestions[0]?.trim() || "", audience);
   if (!suggestion) return "";
   const normalizedSuggestion = suggestion.replace(/[?.!]+$/u, "").toLocaleLowerCase();
-  const normalizedAnswer = (message.directAnswer || message.content).toLocaleLowerCase();
+  const normalizedAnswer = customerVisibleText(
+    message.directAnswer || message.content,
+    audience,
+  ).toLocaleLowerCase();
   return normalizedAnswer.includes(normalizedSuggestion) ? "" : suggestion;
 }
 
@@ -531,7 +541,6 @@ function savedConversation(value: unknown, now = Date.now()): SavedConversation 
   const activeAt = new Date(lastActive).getTime();
   const expired = !Number.isFinite(activeAt) || now - activeAt > LOCAL_RETENTION_MS;
   return {
-    open: record?.open === true,
     mode: record?.mode === "trade" || record?.mode === "customer" ? record.mode : "public",
     messages: expired ? [] : boundedLocalMessages(record?.messages),
     lastActive: expired ? "" : lastActive,
@@ -584,6 +593,7 @@ export function EnergyAssistantWidget() {
 
   const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState(false);
+  const [openPathname, setOpenPathname] = useState("");
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -608,7 +618,7 @@ export function EnergyAssistantWidget() {
   const [documentBusy, setDocumentBusy] = useState(false);
   const [shareDocumentSummary, setShareDocumentSummary] = useState(false);
 
-  const effectiveOpen = open && !hidden;
+  const effectiveOpen = open && openPathname === pathname && !hidden;
   const structuredDocumentSummary = documentLeadSummary(documentResult);
   const quoteQuestions = useMemo(
     () => energyAssistantQuoteQuestionsForServices(lead.services),
@@ -631,9 +641,9 @@ export function EnergyAssistantWidget() {
   };
 
   const rememberModeForNavigation = () => {
+    setOpen(false);
     setMode(context.audience);
     storeSession(JSON.stringify({
-      open,
       mode: context.audience,
       messages: boundedLocalMessages(messages),
       lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
@@ -645,7 +655,6 @@ export function EnergyAssistantWidget() {
     messagesRef.current = boundedMessages;
     setMessages(boundedMessages);
     storeSession(JSON.stringify({
-      open,
       mode: context.audience,
       messages: boundedMessages,
       lastActive: [...boundedMessages].reverse().find((message) => message.createdAt)?.createdAt || "",
@@ -701,7 +710,6 @@ export function EnergyAssistantWidget() {
         const stored = readStoredSession();
         if (stored) {
           const saved = savedConversation(JSON.parse(stored));
-          setOpen(saved.open);
           messagesRef.current = saved.messages;
           setMessages(saved.messages);
           setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
@@ -725,12 +733,11 @@ export function EnergyAssistantWidget() {
   useEffect(() => {
     if (!hydrated) return;
     storeSession(JSON.stringify({
-      open,
       mode: context.audience,
       messages: boundedLocalMessages(messages),
       lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
-  }, [context.audience, hydrated, messages, open]);
+  }, [context.audience, hydrated, messages]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -1080,7 +1087,7 @@ export function EnergyAssistantWidget() {
         lead.tradeSharingConsent && tradeSharing !== "shared"
           ? "Your request is with Australian Energy Assessments. It has not been shared with trades because the brief still needs more useful detail."
           : lead.tradeSharingConsent
-            ? "Your request is with Australian Energy Assessments and the completed brief was shared with matched TLink trades."
+            ? "Your request is with Australian Energy Assessments and the completed brief was shared with matched trades."
             : "Your request has been sent to Australian Energy Assessments.",
       );
     } catch (caught) {
@@ -1104,7 +1111,10 @@ export function EnergyAssistantWidget() {
             aria-label="Open Ask Surge"
             aria-controls="aea-energy-guide"
             aria-expanded="false"
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              setOpenPathname(pathname);
+              setOpen(true);
+            }}
           >
             <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
               <defs>
@@ -1341,19 +1351,19 @@ export function EnergyAssistantWidget() {
                         {message.answerStatus === "source_review_required" && (
                           <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                         )}
-                        <p className={styles.directAnswer}>{message.directAnswer || message.content}</p>
+                        <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
                         {message.practicalSteps.length > 0 && (
                           <section className={styles.steps}>
                             <h3>What to do next</h3>
                             <ol>
                               {message.practicalSteps.slice(0, 3).map((step, index) => (
-                                <li key={`${message.id}-step-${index + 1}`}>{step}</li>
+                                <li key={`${message.id}-step-${index + 1}`}>{customerVisibleText(step, context.audience)}</li>
                               ))}
                             </ol>
                           </section>
                         )}
-                        {naturalFollowUpFor(message) && (
-                          <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message)}</p>
+                        {naturalFollowUpFor(message, context.audience) && (
+                          <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
                         )}
                       </article>
                     )}
@@ -1513,7 +1523,7 @@ export function EnergyAssistantWidget() {
                   <section className={styles.leadStep} aria-labelledby="aea-lead-consent">
                     <h4 id="aea-lead-consent">6. Choose what may be shared</h4>
                     <label className={styles.consent}><input type="checkbox" required checked={lead.serviceConsent} onChange={(event) => updateLead((current) => ({ ...current, serviceConsent: event.target.checked }))} /><span>I agree that Australian Energy Assessments may use these details to respond to this service request.</span></label>
-                    <label className={styles.consent}><input type="checkbox" checked={lead.tradeSharingConsent} onChange={(event) => updateLead((current) => ({ ...current, tradeSharingConsent: event.target.checked, sharePhone: event.target.checked ? current.sharePhone : false }))} /><span>I separately agree that Australian Energy Assessments may share my name, email, postcode, state, selected services and completed quote brief with approved matched TLink trades. This is optional and unchecked by default.</span></label>
+                    <label className={styles.consent}><input type="checkbox" checked={lead.tradeSharingConsent} onChange={(event) => updateLead((current) => ({ ...current, tradeSharingConsent: event.target.checked, sharePhone: event.target.checked ? current.sharePhone : false }))} /><span>I separately agree that Australian Energy Assessments may share my name, email, postcode, state, selected services and completed quote brief with approved matched trades. This is optional and unchecked by default.</span></label>
                     {lead.tradeSharingConsent && <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Also share my phone number with those matched trades. This is separately optional.</span></label>}
                     <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional Australian Energy Assessments updates. This is optional and is not required for a response.</span></label>
                     <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("preferences")}>Back</button></div>
