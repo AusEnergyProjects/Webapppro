@@ -75,6 +75,24 @@
 }
 
 .stageCard {
+  --home-feature-section-border: 0;
+  --home-feature-section-radius: 0;
+  --home-feature-section-background: transparent;
+  --home-feature-section-padding: 0;
+  --home-feature-heading-color: #fff;
+  --home-feature-heading-font: inherit;
+  --home-feature-copy-color: #bfd0d4;
+  --home-feature-question-border: 0;
+  --home-feature-choice-border: 1px solid rgba(133, 213, 200, 0.32);
+  --home-feature-choice-background: #082431;
+  --home-feature-choice-color: #eafcff;
+  --home-feature-choice-selected-border: #4adead;
+  --home-feature-choice-selected-background: #0b594e;
+  --home-feature-choice-selected-shadow: inset 0 0 0 1px #4adead;
+  --home-feature-choice-hover-border: #4adead;
+  --home-feature-input-size: 0;
+  --home-feature-input-opacity: 0;
+  --home-feature-choice-gap: 0;
   display: grid;
   gap: 1.4rem;
   padding: clamp(1rem, 3vw, 2rem);

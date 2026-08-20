@@ -30,27 +30,29 @@ test("the energy guide is mounted once at the root and excluded from print or PD
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
 
-test("the first screen is task led and the answer card exposes decisions, limits and dated sources", () => {
+test("Surge opens with useful questions and keeps answers compact", () => {
   for (const action of [
-    "Lower my bills",
-    "Make my home more comfortable",
-    "Plan an upgrade",
-    "Check a rebate or rule",
-    "Understand a product or quote",
+    "What should I upgrade first?",
+    "Why is one room uncomfortable?",
+    "How much could solar or a battery save me?",
+    "Which rebates could apply to me?",
+    "Help me compare an energy quote",
   ]) {
     assert.match(widget, new RegExp(action));
   }
-  assert.match(widget, /Ask AEA Energy Guide/);
+  assert.match(widget, /Ask Surge/);
+  assert.match(widget, /All things energy upgrades/);
+  assert.doesNotMatch(widget, /\bAEA\b/);
   assert.doesNotMatch(widget, />AI chat</i);
-  assert.match(widget, />Direct answer</);
+  assert.match(widget, />Surge</);
   assert.match(widget, />What to do next</);
   assert.match(widget, /practicalSteps\.slice\(0, 3\)/);
   assert.match(widget, />Best next action</);
-  assert.match(widget, />Assumptions and limits</);
-  assert.match(widget, />Sources and dates</);
-  assert.match(widget, /Effective \$\{citation\.effectiveDate\}/);
-  assert.match(widget, /Checked \$\{citation\.checkedDate\}/);
-  assert.match(widget, /Review due \$\{citation\.reviewDue\}/);
+  assert.doesNotMatch(widget, />Assumptions and limits</);
+  assert.doesNotMatch(widget, />Sources and dates</);
+  assert.match(widget, /function quickQuestionsFor/);
+  assert.match(widget, /quickQuestionsFor\(message\)\.map/);
+  assert.match(widget, /\.slice\(0, 3\)/);
   assert.match(widget, /answerStatus === "source_review_required"/);
 });
 
@@ -60,8 +62,8 @@ test("the widget uses the canonical stateless assistant contract and never sends
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
-  assert.match(widget, /The guide does not read private account, project or quote records/);
-  assert.match(widget, /The guide does not read customer, job or certificate records/);
+  assert.match(widget, /Surge does not read private account, project or quote records/);
+  assert.match(widget, /Surge does not read customer, job or certificate records/);
   assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
 });
 
@@ -76,8 +78,8 @@ test("only bounded local transcript, open state, last activity and guide mode ar
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
   assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
-  assert.match(widget, /continue for 30 days after your last question/);
-  assert.match(widget, />\s*New conversation \/ Clear history/);
+  assert.match(widget, /Saved on this device for 30 days/);
+  assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
   assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*storeSession\(JSON\.stringify/);
@@ -86,14 +88,11 @@ test("only bounded local transcript, open state, last activity and guide mode ar
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
-  assert.match(widget, /The conversation is not stored on the assistant server/);
-  assert.match(widget, /Last active \$\{lastActive\}/);
-  assert.match(widget, /No third-party cookie, fingerprint or cross-device anonymous identity is used/);
-  assert.match(widget, /Details entered in the optional contact form, lead consent choices, uploaded document bytes and NMI data are not stored in this local conversation/);
-  assert.match(widget, /const lastActive = lastActiveLabel\(messages\)/);
+  assert.match(widget, /Surge does not store this conversation on its server/);
+  assert.doesNotMatch(widget, /Last active \$\{lastActive\}/);
+  assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
   assert.match(widget, /setLeadRequestId\(""\)/);
-  assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
 });
 
 test("expired local conversations and explicit resets atomically clear transcript and lead state", () => {
@@ -274,7 +273,7 @@ test("PDF and CSV analysis is dynamically local, failure-safe and never uploads 
   assert.match(widget, /documentResult && !documentResult\.ok[\s\S]*role="alert"/);
   assert.match(widget, /setDocumentResult\(null\)[\s\S]*setShareDocumentSummary\(false\)/);
   assert.match(widget, /checked=\{shareDocumentSummary\}/);
-  assert.match(widget, /Include only this structured findings summary if I later send the optional AEA service form/);
+  assert.match(widget, /Include only this structured findings summary if I later send the optional Australian Energy Assessments service form/);
 
   const leadSubmitStart = widget.indexOf("const submitLead = async");
   const leadSubmitEnd = widget.indexOf("if (!hydrated", leadSubmitStart);
@@ -355,7 +354,7 @@ test("lead capture is optional, consent separated and retry safe", () => {
   assert.equal(signalsInterest("Help me find a service provider"), true);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
   assert.match(widget, /Your advice is not gated/);
-  assert.match(widget, /does not send the raw conversation to trades/);
+  assert.match(widget, /Surge never sends the raw conversation to trades/);
   assert.match(widget, /Keep exploring or change subject/);
   assert.match(widget, /Continue asking or change subject/);
   assert.match(widget, /fetch\("\/api\/energy-assistant\/leads"/);
@@ -376,7 +375,7 @@ test("lead capture is optional, consent separated and retry safe", () => {
   assert.match(widget, /createEnergyAssistantSubmissionKey\(\)/);
   assert.match(widget, /energyAssistantQuoteQuestionsForServices\(lead\.services\)/);
   assert.match(widget, /\/api\/address-localities\?postcode=/);
-  assert.match(widget, /separately agree that AEA may share my name, email, postcode, state, selected services and completed quote brief/);
+  assert.match(widget, /separately agree that Australian Energy Assessments may share my name, email, postcode, state, selected services and completed quote brief/);
   assert.match(widget, /unchecked by default/);
   assert.match(leadClient, /tradeSharingConsent: lead\?\.tradeSharingConsent === true/);
   assert.match(leadClient, /additionalContext: additionalContext\(lead\?\.message, documentSummary\)/);
@@ -408,9 +407,9 @@ test("the optional quote brief is progressive, phone-safe and trade sharing requ
   assert.match(widget, /length < 2/);
   assert.match(widget, /Add two useful details for each service or leave trade sharing off/);
   assert.match(widget, /Finish the trade brief or leave trade sharing off/);
-  assert.match(widget, /AEA help stays available/);
+  assert.match(widget, /Australian Energy Assessments help stays available/);
   assert.match(widget, /It has not been shared with trades because the brief still needs more useful detail/);
-  assert.match(widget, /message\.suggestions\.slice\(0, 1\)\.map/);
+  assert.match(widget, /quickQuestionsFor\(message\)\.map/);
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
 });
 
@@ -422,7 +421,13 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /returnFocusRef\.current\?\.focus\(\)/);
   assert.match(widget, /matchMedia\("\(max-width: 640px\)"\)/);
   assert.match(widget, /document\.body\.style\.overflow = "hidden"/);
-  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*56px/);
+  assert.match(widget, /data-mascot-state=\{messages\.length > 0 \? "returning" : "idle"\}/);
+  assert.match(widget, /className=\{styles\.mascot\}/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*88px[\s\S]*width:\s*82px/);
+  for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
+    assert.match(styles, new RegExp(`@keyframes ${state}`));
+  }
+  assert.match(styles, /prefers-reduced-motion:[\s\S]*\.mascot/);
   assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*overflow-y:\s*auto/);
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
@@ -438,7 +443,7 @@ test("server-provided tool links are restricted to enumerated internal destinati
   assert.match(widget, /candidate\.includes\("\?"\)/);
   assert.match(widget, /SAFE_EXACT_ACTIONS\.has\(pathname\)/);
   assert.ok(widget.includes("if (/^\\/guides\\/[a-z0-9-]{1,80}$/.test(pathname))"));
-  assert.match(widget, /target="_blank" rel="noreferrer"/);
+  assert.doesNotMatch(widget, /target="_blank" rel="noreferrer"/);
   assert.match(widget, /record\.suggestedQuestions/);
   assert.match(widget, /record\.toolActions/);
 });

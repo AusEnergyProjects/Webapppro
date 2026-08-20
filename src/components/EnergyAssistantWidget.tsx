@@ -110,11 +110,11 @@ const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 const LOCAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const START_ACTIONS = [
-  "Lower my bills",
-  "Make my home more comfortable",
-  "Plan an upgrade",
-  "Check a rebate or rule",
-  "Understand a product or quote",
+  "What should I upgrade first?",
+  "Why is one room uncomfortable?",
+  "How much could solar or a battery save me?",
+  "Which rebates could apply to me?",
+  "Help me compare an energy quote",
 ] as const;
 
 const SAFE_EXACT_ACTIONS = new Set([
@@ -289,11 +289,27 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
     citations: parseCitations(record.citations ?? record.sources),
     suggestions: asStringList(
       record.suggestedQuestions ?? record.suggestions ?? record.followUps,
-      directAnswer.includes("AEA Energy Guide only covers") ? 3 : 1,
+      3,
       180,
     ),
     actions: parseActions(record.toolActions ?? record.actions ?? record.tools),
   };
+}
+
+function quickQuestionsFor(message: AssistantMessage): string[] {
+  const text = `${message.directAnswer} ${message.content} ${message.actions.map((action) => action.label).join(" ")}`.toLowerCase();
+  const related = /\b(?:solar|panel|inverter|export|stc)\b/.test(text)
+    ? ["How much could solar save me?", "What affects my solar rebate?", "What should a solar quote include?"]
+    : /\b(?:battery|storage|backup|vpp)\b/.test(text)
+      ? ["Would a battery suit my usage?", "What would backup actually cover?", "What should I compare in battery quotes?"]
+      : /\b(?:electric vehicle|\bev\b|charger|charging|petrol|diesel)\b/.test(text)
+        ? ["How much could an EV save me?", "What home charger would I need?", "How do I compare EV efficiency?"]
+        : /\b(?:hot water|water heater|heat pump water|tank)\b/.test(text)
+          ? ["What size hot-water system do I need?", "How do I compare heat-pump hot water?", "What should the quote include?"]
+          : /\b(?:cold|hot room|comfort|heating|cooling|insulation|draught|window|glazing)\b/.test(text)
+            ? ["Why is one room uncomfortable?", "What should I check before buying equipment?", "Which upgrade should come first?"]
+            : ["What should I upgrade first?", "How can I lower my bills?", "What do you need to know about my home?"];
+  return [...new Set([...message.suggestions, ...related])].slice(0, 3);
 }
 
 function parseApiError(payload: unknown, fallback: string): string {
@@ -311,20 +327,6 @@ function makeRequestId(prefix: string): string {
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `${prefix}-${random}`.slice(0, 80);
-}
-
-function lastActiveLabel(messages: readonly AssistantMessage[]) {
-  const value = [...messages].reverse().find((message) => message.createdAt)?.createdAt;
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return date.toLocaleString("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function isHiddenRoute(pathname: string): boolean {
@@ -367,7 +369,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: knownPath,
       modeLabel: "Customer guide",
-      intro: "Get source-backed help with your home plan. The guide does not read private account, project or quote records from this page.",
+      intro: "Ask about your home plan or choose a quick question. Surge does not read private account, project or quote records.",
       tools: [
         { id: "account", label: "Account overview", href: "/account" },
         { id: "new-project", label: "Start a home project", href: "/account/projects/new" },
@@ -394,7 +396,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath,
       modeLabel: "Trade guide",
-      intro: "Get source-backed rule, product and workflow guidance. The guide does not read customer, job or certificate records from this page.",
+      intro: "Ask about energy upgrades, platform workflows or compliance. Surge does not read customer, job or certificate records.",
       tools: [
         { id: "tlink", label: "TLink workspace", href: "/direct-trade/dashboard" },
         { id: "calculator", label: "Source-verified calculator", href: "/calculator" },
@@ -410,7 +412,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath: safePublicPath,
       modeLabel: "Trade guide",
-      intro: "Keep source-backed trade and platform context while using shared tools. The guide does not read customer, job or certificate records from this page.",
+      intro: "Ask about energy upgrades, platform workflows or compliance. Surge does not read customer, job or certificate records.",
       tools: [
         { id: "tlink", label: "TLink workspace", href: "/direct-trade/dashboard" },
         { id: "calculator", label: "Source-verified calculator", href: "/calculator" },
@@ -423,7 +425,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: safePublicPath,
       modeLabel: "Customer guide",
-      intro: "Keep your home-planning context while using shared tools. The guide does not read private account, project or quote records from this page.",
+      intro: "Ask about your home plan or choose a quick question. Surge does not read private account, project or quote records.",
       tools: [
         { id: "account", label: "Account overview", href: "/account" },
         { id: "new-project", label: "Start a home project", href: "/account/projects/new" },
@@ -435,7 +437,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
     audience: "public",
     apiPath: safePublicPath,
     modeLabel: "Household guide",
-    intro: "Get practical Australian home energy guidance with the source and review date shown. You can use the guide without sharing contact details.",
+    intro: "Ask about your home or any energy upgrade. No contact details needed.",
     tools: [
       { id: "plan", label: "Build a home plan", href: "/plan" },
       { id: "calculator", label: "Check a rebate", href: "/calculator" },
@@ -615,7 +617,6 @@ export function EnergyAssistantWidget() {
   const [shareDocumentSummary, setShareDocumentSummary] = useState(false);
 
   const effectiveOpen = open && !hidden;
-  const lastActive = lastActiveLabel(messages);
   const structuredDocumentSummary = documentLeadSummary(documentResult);
   const quoteQuestions = useMemo(
     () => energyAssistantQuoteQuestionsForServices(lead.services),
@@ -956,7 +957,7 @@ export function EnergyAssistantWidget() {
 
   const advanceLeadScope = () => {
     if (!lead.services.length) {
-      setLeadError("Choose at least one service so AEA can route your request.");
+      setLeadError("Choose at least one service so Australian Energy Assessments can route your request.");
       return;
     }
     if (!lead.suburb || !lead.state || localityLookupStatus !== "ready") {
@@ -994,11 +995,11 @@ export function EnergyAssistantWidget() {
 
   const advanceLeadContact = () => {
     if (!lead.name.trim()) {
-      setLeadError("Add your name so AEA knows who requested help.");
+      setLeadError("Add your name so Australian Energy Assessments knows who requested help.");
       return;
     }
     if (!lead.email.trim() && !lead.phone.trim()) {
-      setLeadError("Add an email address or phone number so AEA can respond.");
+      setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
       return;
     }
     setLeadError("");
@@ -1009,11 +1010,11 @@ export function EnergyAssistantWidget() {
     event.preventDefault();
     if (leadBusy || !lead.serviceConsent) return;
     if (!lead.email.trim() && !lead.phone.trim()) {
-      setLeadError("Add an email address or phone number so AEA can respond.");
+      setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
       return;
     }
     if (!lead.services.length) {
-      setLeadError("Choose at least one service so AEA can route your request.");
+      setLeadError("Choose at least one service so Australian Energy Assessments can route your request.");
       return;
     }
     if (!lead.suburb || !lead.state || localityLookupStatus !== "ready") {
@@ -1035,7 +1036,7 @@ export function EnergyAssistantWidget() {
       const firstUnanswered = quoteQuestions.findIndex((question) => !lead.quoteAnswers[question.id]);
       setLeadQuestionPage(Math.max(0, Math.floor(firstUnanswered / 3)));
       setLeadStage("questions");
-      setLeadError("Finish the trade brief or leave trade sharing off. Not sure is allowed; AEA help stays available.");
+      setLeadError("Finish the trade brief or leave trade sharing off. Not sure is allowed; Australian Energy Assessments help stays available.");
       return;
     }
     if (lead.tradeSharingConsent) {
@@ -1051,7 +1052,7 @@ export function EnergyAssistantWidget() {
           question.services.length === 1 && question.services.includes(servicesWithoutUsefulDetail[0]));
         setLeadQuestionPage(Math.max(0, Math.floor(firstMissingQuestion / 3)));
         setLeadStage("questions");
-        setLeadError("Add two useful details for each service or leave trade sharing off. AEA help stays available.");
+        setLeadError("Add two useful details for each service or leave trade sharing off. Australian Energy Assessments help stays available.");
         return;
       }
     }
@@ -1080,7 +1081,7 @@ export function EnergyAssistantWidget() {
       const payload: unknown = await response.json().catch(() => null);
       const record = asRecord(payload);
       if (!response.ok || record?.ok !== true) {
-        throw new Error(parseApiError(payload, "AEA could not receive your request."));
+        throw new Error(parseApiError(payload, "Australian Energy Assessments could not receive your request."));
       }
       const tradeSharing = asString(record.tradeSharing, 40);
       setLeadStatus(
@@ -1091,7 +1092,7 @@ export function EnergyAssistantWidget() {
             : "Your request has been sent to Australian Energy Assessments.",
       );
     } catch (caught) {
-      setLeadError(caught instanceof Error ? caught.message : "AEA could not receive your request.");
+      setLeadError(caught instanceof Error ? caught.message : "Australian Energy Assessments could not receive your request.");
     } finally {
       setLeadBusy(false);
     }
@@ -1103,17 +1104,37 @@ export function EnergyAssistantWidget() {
     <div className={`${styles.root}${effectiveOpen ? ` ${styles.rootOpen}` : ""}`} data-energy-assistant>
       {!effectiveOpen && (
         <div className={styles.launcherWrap}>
-          <span className={styles.launcherLabel} aria-hidden="true">Ask AEA Energy Guide</span>
           <button
             ref={launcherRef}
             className={styles.launcher}
             type="button"
-            aria-label="Open Ask AEA Energy Guide"
+            data-mascot-state={messages.length > 0 ? "returning" : "idle"}
+            aria-label="Open Ask Surge"
             aria-controls="aea-energy-guide"
             aria-expanded="false"
             onClick={() => setOpen(true)}
           >
-            <span aria-hidden="true">AEA</span>
+            <svg className={styles.mascot} viewBox="0 0 90 94" aria-hidden="true" focusable="false">
+              <ellipse className={styles.mascotShadow} cx="45" cy="89" rx="25" ry="4" />
+              <rect className={styles.mascotProng} x="25" y="3" width="12" height="25" rx="6" />
+              <rect className={styles.mascotProng} x="53" y="3" width="12" height="25" rx="6" />
+              <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M16 47 C5 48 7 64 13 67 C17 65 19 58 20 51" />
+              <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M74 47 C85 48 83 64 77 67 C73 65 71 58 70 51" />
+              <rect className={styles.mascotBody} x="14" y="22" width="62" height="60" rx="21" />
+              <rect className={styles.mascotCap} x="9" y="19" width="72" height="24" rx="10" />
+              <path className={styles.mascotCapShine} d="M22 23 H38 V39 H22 Q14 39 14 31 Q14 23 22 23 Z" />
+              <g className={styles.mascotEyes}>
+                <ellipse cx="34" cy="53" rx="6" ry="8" />
+                <ellipse cx="57" cy="53" rx="6" ry="8" />
+                <circle cx="36" cy="50" r="2" />
+                <circle cx="59" cy="50" r="2" />
+              </g>
+              <circle className={styles.mascotCheek} cx="27" cy="64" r="3" />
+              <circle className={styles.mascotCheek} cx="64" cy="64" r="3" />
+              <path className={styles.mascotSmile} d="M35 62 Q45 72 56 62" />
+              <path className={styles.mascotFoot} d="M30 79 Q31 92 38 80" />
+              <path className={styles.mascotFoot} d="M52 80 Q59 92 61 78" />
+            </svg>
           </button>
         </div>
       )}
@@ -1131,26 +1152,28 @@ export function EnergyAssistantWidget() {
         >
           <header className={styles.header}>
             <div>
-              <span className={styles.mode}>{context.modeLabel}</span>
-              <h2 id="aea-energy-guide-title">Ask AEA Energy Guide</h2>
+              <span className={styles.mode}>All things energy upgrades</span>
+              <h2 id="aea-energy-guide-title">Ask Surge</h2>
             </div>
-            <button type="button" aria-label="Close AEA Energy Guide" onClick={close}>
+            <button type="button" aria-label="Close Surge" onClick={close}>
               <span aria-hidden="true">×</span>
             </button>
           </header>
 
           <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>
-            <section className={styles.contextCard} aria-labelledby="aea-page-tools-title">
-              <p id="aea-energy-guide-description">{context.intro}</p>
-              <div className={styles.pageTools}>
-                <strong id="aea-page-tools-title">Useful on this page</strong>
-                <div>
-                      {context.tools.map((tool) => (
-                        <a key={tool.id} href={tool.href} onClick={rememberModeForNavigation}>{tool.label}</a>
-                  ))}
+            {messages.length === 0 && (
+              <section className={styles.contextCard} aria-labelledby="aea-page-tools-title">
+                <p id="aea-energy-guide-description">{context.intro}</p>
+                <div className={styles.pageTools}>
+                  <strong id="aea-page-tools-title">Quick tools</strong>
+                  <div>
+                    {context.tools.map((tool) => (
+                      <a key={tool.id} href={tool.href} onClick={rememberModeForNavigation}>{tool.label}</a>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
 
             {messages.length === 0 && (
               <section className={styles.starters} aria-labelledby="aea-start-heading">
@@ -1280,7 +1303,7 @@ export function EnergyAssistantWidget() {
                         resetLeadAttempt();
                       }}
                     />
-                    <span>Include only this structured findings summary if I later send the optional AEA service form. Quote lines, file bytes and raw text stay local.</span>
+                    <span>Include only this structured findings summary if I later send the optional Australian Energy Assessments service form. Quote lines, file bytes and raw text stay local.</span>
                   </label>
                 )}
                 {documentResult && (
@@ -1298,11 +1321,10 @@ export function EnergyAssistantWidget() {
                     ) : (
                       <article className={styles.answerCard}>
                         <header>
-                          <span>Direct answer</span>
-                          {message.confidence && <strong>{`${message.confidence[0].toUpperCase()}${message.confidence.slice(1)} confidence`}</strong>}
+                          <span>Surge</span>
                         </header>
                         {message.answerStatus === "source_review_required" && (
-                          <p className={styles.reviewRequired}>This source needs review before the answer can be used for a current rule, rebate or eligibility decision.</p>
+                          <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                         )}
                         <p className={styles.directAnswer}>{message.directAnswer || message.content}</p>
                         {message.practicalSteps.length > 0 && (
@@ -1322,55 +1344,22 @@ export function EnergyAssistantWidget() {
                           </section>
                         )}
                         {message.actions.length > 0 && (
-                          <nav className={styles.answerTools} aria-label="Recommended AEA tools">
+                          <nav className={styles.answerTools} aria-label="Recommended tools">
                             {message.actions.map((action) => (
                                   <a key={action.id} href={action.href} onClick={rememberModeForNavigation}>{action.label}</a>
                             ))}
                           </nav>
                         )}
-                        {message.assumptions.length > 0 && (
-                          <details className={styles.assumptions}>
-                            <summary>Assumptions and limits</summary>
-                            <ul>{message.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
-                          </details>
-                        )}
-                        <section className={styles.sources} aria-label="Sources and dates">
-                          <h3>Sources and dates</h3>
-                          {message.citations.length > 0 ? (
-                            <ol>
-                              {message.citations.map((citation) => (
-                                <li key={citation.id}>
-                                  <a href={citation.url} target="_blank" rel="noreferrer">{citation.title}</a>
-                                  <span>
-                                    {citation.publisher}
-                                    {citation.jurisdiction ? ` · ${citation.jurisdiction}` : ""}
-                                    {citation.sourceTier === "primary_official" ? " · Official source" : ""}
-                                  </span>
-                                  <small>
-                                    {citation.effectiveDate ? `Effective ${citation.effectiveDate}` : ""}
-                                    {citation.effectiveDate && citation.checkedDate ? " · " : ""}
-                                    {citation.checkedDate ? `Checked ${citation.checkedDate}` : ""}
-                                    {(citation.effectiveDate || citation.checkedDate) && citation.reviewDue ? " · " : ""}
-                                    {citation.reviewDue ? `Review due ${citation.reviewDue}` : ""}
-                                    {citation.stale ? " · Source review required" : ""}
-                                  </small>
-                                </li>
-                              ))}
-                            </ol>
-                          ) : (
-                            <p>General guidance only. Ask for an official rule check before relying on an eligibility or rebate answer.</p>
-                          )}
-                          {message.sourceBoundary && <p className={styles.sourceBoundary}>{message.sourceBoundary}</p>}
-                        </section>
-                        {message.suggestions.length > 0 && (
-                          <div className={styles.followUps} aria-label="Suggested follow-up questions">
-                            {message.suggestions.slice(0, 1).map((suggestion) => (
+                        <div className={styles.followUps} aria-label="Quick follow-up questions">
+                          <strong>Ask next</strong>
+                          <div>
+                            {quickQuestionsFor(message).map((suggestion) => (
                               <button key={suggestion} type="button" disabled={busy} onClick={() => void ask(suggestion)}>
                                 {suggestion}
                               </button>
                             ))}
                           </div>
-                        )}
+                        </div>
                       </article>
                     )}
                   </li>
@@ -1378,21 +1367,21 @@ export function EnergyAssistantWidget() {
               </ol>
             )}
 
-            {busy && <p className={styles.thinking} role="status">Checking the maintained AEA source library...</p>}
+            {busy && <p className={styles.thinking} role="status">Surge is checking that...</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
             {status && <p className={styles.status} role="status">{status}</p>}
 
             {hasUsefulAnswer && serviceInterest && !leadOpen && (
               <section className={styles.leadOffer}>
                 <strong>Explore quote or service options, if you want to</strong>
-                <p>Only details you choose in the optional form go to AEA so its team can contact you. Your advice is not gated, and the guide does not send the raw conversation to trades.</p>
+                <p>Only details you choose in the optional form go to Australian Energy Assessments. Your advice is not gated, and Surge never sends the raw conversation to trades.</p>
                 <button
                   type="button"
                   onClick={() => {
                     setLeadOpen(true);
                   }}
                 >
-                  Explore help from AEA
+                  Explore professional help
                 </button>
                 <button type="button" onClick={() => composerRef.current?.focus()}>
                   Keep exploring or change subject
@@ -1487,7 +1476,7 @@ export function EnergyAssistantWidget() {
                 {leadStage === "questions" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-questions">
                     <h4 id="aea-lead-questions">3. Service details</h4>
-                    <p>Showing {leadQuestionPage * 3 + 1} to {Math.min((leadQuestionPage + 1) * 3, quoteQuestions.length)} of {quoteQuestions.length}. These improve quote readiness. Advice and AEA follow-up stay available if you choose Not sure or Need advice.</p>
+                    <p>Showing {leadQuestionPage * 3 + 1} to {Math.min((leadQuestionPage + 1) * 3, quoteQuestions.length)} of {quoteQuestions.length}. These improve quote readiness. Advice and Australian Energy Assessments follow-up stay available if you choose Not sure or Need advice.</p>
                     {currentQuoteQuestions.map((question) => (
                       <label key={question.id}>
                         <span>{question.label}</span>
@@ -1520,7 +1509,7 @@ export function EnergyAssistantWidget() {
                     <h4 id="aea-lead-preferences">5. Response preferences</h4>
                     <label><span>Preferred contact</span><select value={lead.contactPreference} onChange={(event) => updateLead((current) => ({ ...current, contactPreference: event.target.value }))}><option value="either">Email or phone</option><option value="email">Email</option><option value="phone">Phone</option></select></label>
                     <label><span>Best contact time</span><select value={lead.bestContactTime} onChange={(event) => updateLead((current) => ({ ...current, bestContactTime: event.target.value }))}><option value="business-hours">Business hours</option><option value="after-hours">After hours</option><option value="any-time">Any time</option></select></label>
-                    <label><span>Anything AEA should know? <small>Optional</small></span><textarea rows={3} maxLength={800} value={lead.message} onChange={(event) => updateLead((current) => ({ ...current, message: event.target.value }))} /></label>
+                    <label><span>Anything Australian Energy Assessments should know? <small>Optional</small></span><textarea rows={3} maxLength={800} value={lead.message} onChange={(event) => updateLead((current) => ({ ...current, message: event.target.value }))} /></label>
                     <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("contact")}>Back</button><button type="button" onClick={() => setLeadStage("consent")}>Review consent</button></div>
                   </section>
                 )}
@@ -1529,43 +1518,40 @@ export function EnergyAssistantWidget() {
                   <section className={styles.leadStep} aria-labelledby="aea-lead-consent">
                     <h4 id="aea-lead-consent">6. Choose what may be shared</h4>
                     <label className={styles.consent}><input type="checkbox" required checked={lead.serviceConsent} onChange={(event) => updateLead((current) => ({ ...current, serviceConsent: event.target.checked }))} /><span>I agree that Australian Energy Assessments may use these details to respond to this service request.</span></label>
-                    <label className={styles.consent}><input type="checkbox" checked={lead.tradeSharingConsent} onChange={(event) => updateLead((current) => ({ ...current, tradeSharingConsent: event.target.checked, sharePhone: event.target.checked ? current.sharePhone : false }))} /><span>I separately agree that AEA may share my name, email, postcode, state, selected services and completed quote brief with approved matched TLink trades. This is optional and unchecked by default.</span></label>
+                    <label className={styles.consent}><input type="checkbox" checked={lead.tradeSharingConsent} onChange={(event) => updateLead((current) => ({ ...current, tradeSharingConsent: event.target.checked, sharePhone: event.target.checked ? current.sharePhone : false }))} /><span>I separately agree that Australian Energy Assessments may share my name, email, postcode, state, selected services and completed quote brief with approved matched TLink trades. This is optional and unchecked by default.</span></label>
                     {lead.tradeSharingConsent && <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Also share my phone number with those matched trades. This is separately optional.</span></label>}
-                    <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional AEA energy updates. This is optional and is not required for a response.</span></label>
+                    <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional Australian Energy Assessments updates. This is optional and is not required for a response.</span></label>
                     <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("preferences")}>Back</button></div>
                   </section>
                 )}
                 {leadError && <p className={styles.error} role="alert">{leadError}</p>}
                 {leadStatus && <p className={styles.status} role="status">{leadStatus}</p>}
                 {leadStage === "consent" && <button className={styles.leadSubmit} type="submit" disabled={leadBusy || Boolean(leadStatus) || !lead.serviceConsent}>
-                  {leadBusy ? "Sending request..." : leadStatus ? "Request sent" : "Send request to AEA"}
+                  {leadBusy ? "Sending request..." : leadStatus ? "Request sent" : "Send request"}
                 </button>}
               </form>
             )}
 
             <footer className={styles.privacy}>
-              <p>
-                This browser stores up to {MAX_LOCAL_MESSAGES} recent messages locally so you can continue for 30 days after your last question. The conversation is not stored on the assistant server.{lastActive ? ` Last active ${lastActive}.` : ""}
-              </p>
-              <p>No third-party cookie, fingerprint or cross-device anonymous identity is used. Details entered in the optional contact form, lead consent choices, uploaded document bytes and NMI data are not stored in this local conversation or carried into a new one.</p>
+              <p>Saved on this device for 30 days. Surge does not store this conversation on its server.</p>
               <div>
                 <a href="/privacy">Privacy</a>
                 <button type="button" disabled={busy || leadBusy} onClick={resetConversation}>
-                  New conversation / Clear history
+                  Clear conversation
                 </button>
               </div>
             </footer>
           </div>
 
           <form className={styles.composer} onSubmit={submitQuestion}>
-            <label htmlFor="aea-energy-guide-question">Ask about your home, an upgrade, a product or a rule</label>
+            <label htmlFor="aea-energy-guide-question">Ask Surge</label>
             <div>
               <textarea
                 ref={composerRef}
                 id="aea-energy-guide-question"
                 rows={2}
                 maxLength={MAX_MESSAGE_LENGTH}
-                placeholder="Type your question"
+                placeholder="Ask about your home or energy upgrade"
                 value={draft}
                 disabled={busy}
                 onChange={(event) => setDraft(event.target.value)}
@@ -1576,11 +1562,11 @@ export function EnergyAssistantWidget() {
                   }
                 }}
               />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Ask AEA Energy Guide">
+              <button type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge">
                 <span aria-hidden="true">Send</span>
               </button>
             </div>
-            <small>Source-backed guidance, not a NatHERS rating, trade quote or certificate decision.</small>
+            <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
           </form>
         </section>
       )}

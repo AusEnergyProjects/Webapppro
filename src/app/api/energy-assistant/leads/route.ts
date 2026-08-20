@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         title: "Energy Guide follow-up requested",
         summary: result.tradeSharing === "pending_information"
           ? "A visitor separately consented to trade sharing, but the brief still needs information. No trade opportunity or trade visibility was created."
-          : "A visitor explicitly requested AEA follow-up. Their information request was not gated and no trade sharing was requested.",
+          : "A visitor explicitly requested Australian Energy Assessments follow-up. Their information request was not gated and no trade sharing was requested.",
         entityType: "energy_assistant_lead",
         entityId: result.leadId,
         actorType: "system",
@@ -110,6 +110,6 @@ export async function POST(request: Request) {
       return json({ ok: false, error: error.message, code: error.code }, error.status);
     }
     console.error("Energy assistant lead request failed", error);
-    return json({ ok: false, error: "AEA could not receive this request. Please try again or call 1300 241 149." }, 500);
+    return json({ ok: false, error: "Australian Energy Assessments could not receive this request. Please try again or call 1300 241 149." }, 500);
   }
 }

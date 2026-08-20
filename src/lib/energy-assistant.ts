@@ -3818,7 +3818,7 @@ export function composeEnergyAssistantAnswer(
       : "";
     return structured("bills_tariffs", {
       directAnswer:
-        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. AEA can calculate supplied terms but does not give personal financial advice.`,
+        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. Surge can calculate supplied terms but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById(["asic-moneysmart-personal-loans", "energy-gov-reduce-energy-bills"]),
       confidence: arithmetic ? "medium" : "low",
@@ -3842,7 +3842,7 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out") {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "AEA Energy Guide only covers Australian home energy, electrification, building performance, current assistance programmes and role-safe TLink or Creditex help. I cannot answer that unrelated request or leave this scope.",
+        "Surge only covers Australian home energy, electrification, building performance, current assistance programmes and role-safe TLink or Creditex help. I cannot answer that unrelated request or leave this scope.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -4766,7 +4766,7 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:best|most|rank|recommend|trust|trustworth(?:y|iness)|choose|compare|buy|purchase|select|shortlist|claims?|reputable|good)\b/i.test(query)) {
     return structured("products_ratings", {
       directAnswer:
-        "AEA does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
+        "Surge does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
       status: "needs_context",
       citations: officialCitationsById([
         "energy-rating-product-register",
@@ -5523,7 +5523,7 @@ export function composeEnergyAssistantAnswer(
       : [];
     const stateContext = statePrograms.length
       ? `Separate ${jurisdiction?.[1]} programmes to check are ${statePrograms.map((program) => `${program.name} (${program.outcomeClass.replaceAll("_", " ")})`).join(" and ")}. They do not change the federal STC calculation.`
-      : `No separate state rebate or loan is being assumed for ${jurisdiction?.[1] || "the property"}; AEA's rebate tool must check that independently.`;
+      : `No separate state rebate or loan is being assumed for ${jurisdiction?.[1] || "the property"}; Australian Energy Assessments' rebate tool must check that independently.`;
     const technologyBoundary = wantsBattery && wantsSolar
       ? "The PV and battery components must each be checked under their applicable current rules; one component's eligibility does not prove the other's."
       : wantsBattery
@@ -6035,7 +6035,7 @@ export function composeEnergyAssistantAnswer(
       practicalSteps: [
         "Use SEC guidance as one input, then verify the exact product register, installer licence, written scope, warranty and alternatives.",
         "Recalculate any saving from the household's actual equipment, energy use, tariff and proposed work.",
-        "Check rebates, certificates and finance separately in AEA before treating any support as available.",
+        "Check rebates, certificates and finance separately with Australian Energy Assessments before treating any support as available.",
       ],
       toolActions: [{ id: "open-rebates", label: "Check separate support", href: "/rebates" }],
       suggestedQuestions: ["Which household upgrade or cost are you trying to decide?"],
@@ -6099,7 +6099,7 @@ export function composeEnergyAssistantAnswer(
               };
     return structured(comparedQuoteTopic, {
       directAnswer:
-        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. AEA does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
+        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. Surge does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
       status: "needs_context",
       citations: officialCitationsById(comparison.citations),
       confidence: "medium",
@@ -6156,7 +6156,7 @@ export function composeEnergyAssistantAnswer(
       : ` At ${annualKm.toLocaleString("en-AU")} km a year, that Wh/km difference equals about ${annualDifferenceKwh.toLocaleString("en-AU", { maximumFractionDigits: 1 })} kWh of vehicle energy a year before charging losses.`;
     return structured("ev_charging", {
       directAnswer:
-        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and AEA does not endorse either model.`,
+        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and Surge does not endorse either model.`,
       status: "answered",
       citations: officialCitationsById(["green-vehicle-guide-compare"]),
       confidence: "medium",
@@ -6180,7 +6180,7 @@ export function composeEnergyAssistantAnswer(
   if (comparedVehicles) {
     return structured("ev_charging", {
       directAnswer:
-        `AEA will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
+        `Surge will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
       status: "needs_context",
       citations: officialCitationsById(["green-vehicle-guide-compare", "energy-gov-ev-home-strata-charging"]),
       confidence: "medium",
@@ -6335,7 +6335,7 @@ export function composeEnergyAssistantAnswer(
       : ` If $${financeAmount.toLocaleString("en-AU")} is both the cash price and amount borrowed, ${financeAnnualRate}% is a nominal annual rate charged monthly, the term is ${financeTermYears} years and there are no fees or balloon, the standard repayment is about $${calculatedMonthlyRepayment.toLocaleString("en-AU", { maximumFractionDigits: 2 })} a month and total repayments are about $${calculatedTotalRepayment.toLocaleString("en-AU", { maximumFractionDigits: 0 })}, about $${(calculatedTotalRepayment - financeAmount).toLocaleString("en-AU", { maximumFractionDigits: 0 })} above cash. The lender's comparison rate and disclosure can change that result.`;
     return structured("rebates_certificates", {
       directAnswer:
-        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. AEA can structure the comparison but does not give personal financial advice.`,
+        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. Surge can structure the comparison but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById([
         "energy-gov-household-energy-upgrades-fund",
@@ -6488,7 +6488,7 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "AEA does not recommend, rank or endorse a heat-pump, reverse-cycle or solar-water-heater brand, supplier or model. It compares user-supplied options against the same independent criteria and current official facts.";
+      "Surge does not recommend, rank or endorse a heat-pump, reverse-cycle or solar-water-heater brand, supplier or model. It compares user-supplied options against the same independent criteria and current official facts.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
@@ -6828,7 +6828,7 @@ export function composeEnergyAssistantAnswer(
     const secondaryDestination = programmeAnswer.certificateIntent ? "/rebates" : "/calculator";
     return structured("rebates_certificates", {
       directAnswer:
-        `Potentially relevant pathways for ${programmeAnswer.jurisdictionLabel}, reviewed ${GOVERNMENT_CATALOGUE_REVIEWED_ON}: ${programmeSummary}. ${availabilitySummary}${solarSharerSummary} This is not an eligibility decision.${missingFacts.length ? ` Next I need: ${missingFacts[0]}` : " The collected facts are ready for AEA's eligibility and calculation tools."}`,
+        `Potentially relevant pathways for ${programmeAnswer.jurisdictionLabel}, reviewed ${GOVERNMENT_CATALOGUE_REVIEWED_ON}: ${programmeSummary}. ${availabilitySummary}${solarSharerSummary} This is not an eligibility decision.${missingFacts.length ? ` Next I need: ${missingFacts[0]}` : " The collected facts are ready for Australian Energy Assessments' eligibility and calculation tools."}`,
       status: missingFacts.length ? "needs_context" : "answered",
       citations: uniqueById([
         ...catalogueProgramCitations(programmeAnswer.programs),
@@ -6841,7 +6841,7 @@ export function composeEnergyAssistantAnswer(
         "No postcode, applicant, property, product, installer or installation-date eligibility check was completed.",
       ],
       practicalSteps: [
-        "Add the missing property, applicant, upgrade, product and date facts to the AEA check.",
+        "Add the missing property, applicant, upgrade, product and date facts to the Australian Energy Assessments check.",
         "Use the rebate tool for programme eligibility and the calculator for any governed certificate quantity.",
         "Keep the resulting eligibility basis separate from the installer or agent's commercial discount.",
       ],

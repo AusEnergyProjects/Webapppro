@@ -10,48 +10,107 @@
 .launcherWrap {
   align-items: center;
   display: flex;
-  gap: 10px;
   pointer-events: auto;
-}
-
-.launcherLabel {
-  background: #ffffff;
-  border: 1px solid #b6d8cd;
-  border-radius: 999px;
-  box-shadow: 0 10px 30px rgba(2, 24, 38, 0.2);
-  color: #073a3b;
-  font-size: 0.75rem;
-  font-weight: 850;
-  padding: 10px 13px;
-  white-space: nowrap;
 }
 
 .launcher {
   align-items: center;
-  background: linear-gradient(145deg, #0ac78a, #087653);
-  border: 2px solid rgba(255, 255, 255, 0.88);
-  border-radius: 50%;
-  box-shadow: 0 14px 36px rgba(1, 31, 37, 0.35), 0 0 0 1px rgba(4, 76, 64, 0.3);
-  color: #ffffff;
+  background: transparent;
+  border: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 56px;
-  height: 56px;
+  flex: 0 0 82px;
+  height: 88px;
   justify-content: center;
   padding: 0;
-  transition: transform 160ms ease, box-shadow 160ms ease;
-  width: 56px;
+  width: 82px;
 }
 
-.launcher span {
-  font-size: 0.78rem;
-  font-weight: 950;
-  letter-spacing: -0.03em;
+.mascot {
+  height: 88px;
+  overflow: visible;
+  transform-origin: 45px 80px;
+  width: 82px;
+  animation: surgeIdle 3.2s ease-in-out infinite;
 }
 
-.launcher:hover {
-  box-shadow: 0 18px 40px rgba(1, 31, 37, 0.42), 0 0 0 3px rgba(24, 209, 158, 0.2);
-  transform: translateY(-2px);
+.launcher[data-mascot-state="returning"] .mascot {
+  animation: surgeReturning 2.4s ease-in-out infinite;
+}
+
+.launcher:hover .mascot,
+.launcher:focus-visible .mascot {
+  animation: surgeHello 620ms ease-in-out both;
+}
+
+.mascotShadow {
+  fill: rgba(3, 31, 38, 0.22);
+  transform-origin: 45px 89px;
+}
+
+.mascotProng {
+  fill: #dce8e5;
+  stroke: #052e3c;
+  stroke-width: 5px;
+}
+
+.mascotBody {
+  fill: #f9fcfa;
+  stroke: #052e3c;
+  stroke-width: 5px;
+}
+
+.mascotCap {
+  fill: #14c995;
+  stroke: #052e3c;
+  stroke-width: 5px;
+}
+
+.mascotCapShine {
+  fill: #7aebd0;
+  opacity: 0.72;
+}
+
+.mascotArm,
+.mascotFoot {
+  fill: #14c995;
+  stroke: #052e3c;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5px;
+}
+
+.mascotArmRight {
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+
+.launcher:hover .mascotArmRight,
+.launcher:focus-visible .mascotArmRight {
+  animation: surgeWave 420ms ease-in-out 2 alternate;
+}
+
+.mascotEyes {
+  animation: surgeBlink 4.4s ease-in-out infinite;
+  fill: #052e3c;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.mascotEyes circle {
+  fill: #ffffff;
+}
+
+.mascotCheek {
+  fill: #ffb7a8;
+  opacity: 0.72;
+}
+
+.mascotSmile {
+  fill: none;
+  stroke: #052e3c;
+  stroke-linecap: round;
+  stroke-width: 4px;
 }
 
 .launcher:focus-visible,
@@ -331,8 +390,7 @@
   padding: 11px;
 }
 
-.steps h3,
-.sources h3 {
+.steps h3 {
   color: #184b40;
   font-size: 0.68rem;
   margin: 0 0 7px;
@@ -399,81 +457,20 @@
   gap: 7px;
 }
 
-.assumptions {
+.followUps {
   border-top: 1px solid #dce8e4;
-  color: #516c64;
-  font-size: 0.66rem;
-  padding-top: 9px;
-}
-
-.assumptions summary {
-  color: #315e52;
-  cursor: pointer;
-  font-weight: 850;
-  min-height: 44px;
-  padding: 12px 0 8px;
-}
-
-.assumptions ul {
   display: grid;
-  gap: 5px;
-  line-height: 1.45;
-  margin: 0;
-  padding: 0 0 0 18px;
-}
-
-.sources {
-  border-top: 1px solid #dce8e4;
+  gap: 8px;
   padding-top: 10px;
 }
 
-.sources > p {
-  color: #687b75;
-  font-size: 0.63rem;
-  line-height: 1.45;
-  margin: 0;
+.followUps > strong {
+  color: #315e52;
+  font-size: 0.62rem;
+  text-transform: uppercase;
 }
 
-.sources .sourceBoundary {
-  background: #fff8df;
-  border: 1px solid #e7d493;
-  border-radius: 8px;
-  color: #67551d;
-  margin-top: 8px;
-  padding: 8px;
-}
-
-.sources ol {
-  display: grid;
-  gap: 8px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.sources li {
-  background: #f6f9f8;
-  border-radius: 8px;
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-}
-
-.sources a {
-  color: #076149;
-  font-size: 0.65rem;
-  font-weight: 850;
-  line-height: 1.35;
-}
-
-.sources span,
-.sources small {
-  color: #60756e;
-  font-size: 0.58rem;
-  line-height: 1.35;
-}
-
-.followUps {
+.followUps > div {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
@@ -1049,6 +1046,34 @@
   to { opacity: 1; }
 }
 
+@keyframes surgeIdle {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-5px) rotate(1deg); }
+}
+
+@keyframes surgeHello {
+  0% { transform: translateY(0) rotate(0); }
+  35% { transform: translateY(-8px) rotate(-4deg); }
+  70% { transform: translateY(-3px) rotate(4deg); }
+  100% { transform: translateY(-5px) rotate(0); }
+}
+
+@keyframes surgeReturning {
+  0%, 100% { filter: drop-shadow(0 8px 8px rgba(3, 35, 39, 0.22)); transform: translateY(0) scale(1); }
+  45% { filter: drop-shadow(0 10px 14px rgba(16, 201, 149, 0.5)); transform: translateY(-5px) scale(1.04); }
+  60% { transform: translateY(-3px) scale(1.02); }
+}
+
+@keyframes surgeWave {
+  from { transform: rotate(0); }
+  to { transform: rotate(-24deg); }
+}
+
+@keyframes surgeBlink {
+  0%, 44%, 48%, 100% { transform: scaleY(1); }
+  46% { transform: scaleY(0.12); }
+}
+
 @media (max-width: 640px) {
   .root,
   .rootOpen {
@@ -1063,10 +1088,6 @@
     left: auto;
     right: max(14px, env(safe-area-inset-right));
     top: auto;
-  }
-
-  .launcherLabel {
-    display: none;
   }
 
   .panel {
@@ -1116,6 +1137,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .launcher,
+  .mascot,
+  .mascotEyes,
+  .mascotArmRight,
   .conversation,
   .thinking {
     animation: none;

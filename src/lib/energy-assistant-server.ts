@@ -226,7 +226,7 @@ function limitedText(value: string, maximum: number) {
 }
 
 function boundedAnswer(answer: EnergyAssistantAnswer) {
-  const suggestionLimit = answer.directAnswer.includes("AEA Energy Guide only covers") ? 3 : 1;
+  const suggestionLimit = answer.directAnswer.includes("Surge only covers") ? 3 : 1;
   return {
     ...answer,
     directAnswer: limitedText(answer.directAnswer, 2_400),

@@ -269,7 +269,7 @@ function servicesFrom(value: unknown) {
   }
   const supplied = new Set(value.filter((item): item is string => typeof item === "string"));
   if (supplied.size < 1 || supplied.size > ENERGY_SERVICE_IDS.length || [...supplied].some((item) => !serviceSet.has(item))) {
-    throw new EnergyAssistantLeadError(400, "INVALID_SERVICE", "Choose one or more supported AEA services.");
+    throw new EnergyAssistantLeadError(400, "INVALID_SERVICE", "Choose one or more supported Australian Energy Assessments services.");
   }
   return ENERGY_SERVICE_IDS.filter((service) => supplied.has(service)) as ServiceCategory[];
 }
@@ -537,11 +537,11 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     throw new EnergyAssistantLeadError(
       400,
       "INTEREST_CONFIRMATION_REQUIRED",
-      "Confirm that you asked AEA to follow up. Advice remains available without this request.",
+      "Confirm that you asked Australian Energy Assessments to follow up. Advice remains available without this request.",
     );
   }
   if (typeof input.marketingConsent !== "boolean") {
-    throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Choose whether you want optional AEA updates.");
+    throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Choose whether you want optional Australian Energy Assessments updates.");
   }
 
   const name = cleanLine(input.name, 2, 120, "Name");
@@ -555,7 +555,7 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Enter a valid phone number.");
   }
   if (!emailValue && !phoneValue) {
-    throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Add an email address or phone number so AEA can respond.");
+    throw new EnergyAssistantLeadError(400, "INVALID_LEAD", "Add an email address or phone number so Australian Energy Assessments can respond.");
   }
 
   const postcode = typeof input.postcode === "string" ? input.postcode.trim() : "";
@@ -589,7 +589,7 @@ async function normalizeLead(input: EnergyAssistantLeadInput, now: Date): Promis
     ENERGY_ASSISTANT_SERVICE_CONSENT_VERSION,
     ENERGY_ASSISTANT_SERVICE_CONSENT_PURPOSE,
     now,
-    "AEA follow-up consent",
+    "Australian Energy Assessments follow-up consent",
   );
   const tradeReceipt = tradeReceiptFrom(input.tradeSharingConsent, now, phoneValue || null);
   if (tradeReceipt.accepted && !emailValue) {
@@ -869,7 +869,7 @@ async function reconcileAssistantTradeDispatch(
        assigned_to_uid, assigned_at, due_at, metadata, created_at, updated_at)
       SELECT ?, ?, 'customer.energy_assistant_service_requested', 'customer', 'high',
         'Energy Guide follow-up requested',
-        'A visitor explicitly requested AEA follow-up and separately consented to share the immutable quote brief with approved matched trades.',
+        'A visitor explicitly requested Australian Energy Assessments follow-up and separately consented to share the immutable quote brief with approved matched trades.',
         'energy_assistant_lead', ?, 'system', '', 1, 'open', '', '', '', '', '',
         '', '', ?, ?, ?, ?
       WHERE ${linkedLeadExistsSql}
@@ -1044,7 +1044,7 @@ export async function createEnergyAssistantLead(raw: unknown, dependencies: Crea
     dependencies.database.prepare(`INSERT INTO energy_assistant_lead_events
       (id, lead_id, actor_type, actor_uid, action, note, metadata_json, created_at)
       SELECT ?, id, 'visitor', '', 'created',
-        'The visitor explicitly requested AEA follow-up after receiving information.', ?, ?
+        'The visitor explicitly requested Australian Energy Assessments follow-up after receiving information.', ?, ?
       FROM energy_assistant_leads
       WHERE request_id = ?
         AND NOT EXISTS (

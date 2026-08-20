@@ -712,7 +712,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               {stage > 0 ? <button type="button" className={styles.secondaryButton} onClick={() => { setAttemptedStage(null); setStage((current) => current - 1); }}>Back</button> : <button type="button" className={styles.textButton} onClick={resetPlan}>Reset</button>}
               <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Continue"}</button>
             </footer>
-            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. It is sent to AEA only if you explicitly open the printable plan or request contact.</p>
+            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. It is sent to Australian Energy Assessments only if you explicitly open the printable plan or request contact.</p>
           </section>
         </form>
       ) : (
