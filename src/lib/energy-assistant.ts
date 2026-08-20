@@ -6821,7 +6821,7 @@ export function composeEnergyAssistantAnswer(
       const question = "What is the property postcode?";
       return structured("rebates_certificates", {
         directAnswer:
-          "Victoria has a support pathway for some high-efficiency air-conditioner upgrades, but it is not one fixed cash rebate for every system. The discount is usually worked into an eligible quote through Victorian Energy Upgrades, and the value changes with the exact unit, what it replaces, the installation details and the current activity rules. Treat a large advertised discount as something to verify, not money you automatically receive. A correctly sized reverse-cycle unit can lower heating and cooling energy because it moves heat rather than making it directly, but the right size and installation still matter as much as the incentive.",
+          "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly.",
         status: "needs_context",
         citations: officialCitationsById(["veu-water-space-activity-guide-v3-19"]),
         confidence: "medium",

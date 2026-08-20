@@ -45,8 +45,8 @@ test("Surge opens with useful questions and keeps answers compact", () => {
   assert.doesNotMatch(widget, /\bAEA\b/);
   assert.doesNotMatch(widget, />AI chat</i);
   assert.match(widget, />Surge</);
-  assert.match(widget, />What to do next</);
-  assert.match(widget, /practicalSteps\.slice\(0, 3\)/);
+  assert.doesNotMatch(widget, />What to do next</);
+  assert.doesNotMatch(widget, /practicalSteps\.slice\(0, 3\)/);
   assert.doesNotMatch(widget, />Best next action</);
   assert.doesNotMatch(widget, />Assumptions and limits</);
   assert.doesNotMatch(widget, />Sources and dates</);

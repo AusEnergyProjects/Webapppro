@@ -506,51 +506,6 @@
   padding: 9px;
 }
 
-.steps {
-  background: #f2f8f5;
-  border-radius: 10px;
-  padding: 11px;
-}
-
-.steps h3 {
-  color: #184b40;
-  font-size: 0.68rem;
-  margin: 0 0 7px;
-}
-
-.steps ol {
-  counter-reset: steps;
-  display: grid;
-  gap: 7px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.steps li {
-  color: #3e5f56;
-  display: grid;
-  font-size: 0.68rem;
-  gap: 8px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  line-height: 1.45;
-}
-
-.steps li::before {
-  align-items: center;
-  background: #0a8b65;
-  border-radius: 50%;
-  color: #ffffff;
-  content: counter(steps);
-  counter-increment: steps;
-  display: inline-flex;
-  font-size: 0.58rem;
-  font-weight: 900;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
-}
-
 .clarifyingQuestion {
   color: #075f4a;
   font-size: 0.72rem;

@@ -366,9 +366,9 @@ test("a new Victorian air-conditioner support question does not repeat an earlie
     priorUserMessages: ["What heat pump should I get?"],
   });
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /not one fixed cash rebate/i);
-  assert.match(answer.directAnswer, /moves heat rather than making it directly/i);
-  assert.match(answer.directAnswer, /exact unit.*replaces.*installation details/i);
+  assert.match(answer.directAnswer, /There is no set amount/i);
+  assert.match(answer.directAnswer, /moves heat instead of making it directly/i);
+  assert.match(answer.directAnswer, /exact air conditioner.*replacing.*installed/i);
   assert.deepEqual(answer.suggestedQuestions, ["What is the property postcode?"]);
   assert.doesNotMatch(answer.directAnswer, /not one right one for every job/i);
   assert.equal(answer.citations[0]?.id, "veu-water-space-activity-guide-v3-19");

@@ -1403,16 +1403,6 @@ export function EnergyAssistantWidget() {
                           <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                         )}
                         <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
-                        {message.practicalSteps.length > 0 && (
-                          <section className={styles.steps}>
-                            <h3>What to do next</h3>
-                            <ol>
-                              {message.practicalSteps.slice(0, 3).map((step, index) => (
-                                <li key={`${message.id}-step-${index + 1}`}>{customerVisibleText(step, context.audience)}</li>
-                              ))}
-                            </ol>
-                          </section>
-                        )}
                         {naturalFollowUpFor(message, context.audience) && (
                           <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
                         )}
