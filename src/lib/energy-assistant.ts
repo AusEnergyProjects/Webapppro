@@ -895,6 +895,12 @@ function directPlaybookId(
   return null;
 }
 
+function isStandaloneAssistanceQuestion(message: string) {
+  return /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|VEECs?|STCs?)\b/i.test(message)
+    && /\b(?:Victoria|Victorian|VIC|New South Wales|NSW|Queensland|QLD|South Australia|SA|Tasmania|TAS|Western Australia|WA|ACT|Northern Territory|NT|\d{4})\b/i.test(message)
+    && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|hot[- ]?water|heat[- ]?pump|solar|battery|insulation|glazing|draught|induction|EV|charger)\b/i.test(message);
+}
+
 function decisionPlaybookId(
   query: string,
   priorUserMessages: readonly string[],
@@ -903,6 +909,9 @@ function decisionPlaybookId(
 ) {
   const current = directPlaybookId(query, audience);
   if (current) return current;
+  // A new, self-contained question about support is not a heat-pump selection
+  // follow-up just because the earlier turn happened to mention a heat pump.
+  if (isStandaloneAssistanceQuestion(query)) return null;
   for (const prior of [...priorUserMessages].slice(-8).reverse()) {
     const priorId = directPlaybookId(prior, audience);
     if (priorId && (usePriorContext || isLikelyPlaybookFollowUp(priorId, query))) return priorId;
@@ -1335,14 +1344,14 @@ const PROGRAM_JURISDICTION_SIGNALS: ReadonlyArray<readonly [
   string,
   RegExp,
 ]> = [
-  ["ACT", "Australian Capital Territory", /\b(?:Australian Capital Territory|ACT)\b/],
-  ["NSW", "New South Wales", /\b(?:New South Wales|NSW)\b/],
-  ["NT", "Northern Territory", /\b(?:Northern Territory|NT)\b/],
-  ["QLD", "Queensland", /\b(?:Queensland|Queenslander|QLD)\b/],
-  ["SA", "South Australia", /\b(?:South Australia|South Australian|SA)\b/],
-  ["TAS", "Tasmania", /\b(?:Tasmania|Tasmanian|TAS)\b/],
-  ["VIC", "Victoria", /\b(?:Victoria|Victorian|VIC)\b/],
-  ["WA", "Western Australia", /\b(?:Western Australia|Western Australian|WA)\b/],
+  ["ACT", "Australian Capital Territory", /\b(?:Australian Capital Territory|ACT)\b/i],
+  ["NSW", "New South Wales", /\b(?:New South Wales|NSW)\b/i],
+  ["NT", "Northern Territory", /\b(?:Northern Territory|NT)\b/i],
+  ["QLD", "Queensland", /\b(?:Queensland|Queenslander|QLD)\b/i],
+  ["SA", "South Australia", /\b(?:South Australia|South Australian|SA)\b/i],
+  ["TAS", "Tasmania", /\b(?:Tasmania|Tasmanian|TAS)\b/i],
+  ["VIC", "Victoria", /\b(?:Victoria|Victorian|VIC)\b/i],
+  ["WA", "Western Australia", /\b(?:Western Australia|Western Australian|WA)\b/i],
   ["AU", "Australia", /\b(?:Australia|Australian|national|federal)\b/i],
 ];
 
@@ -1479,7 +1488,7 @@ function catalogueProgramAnswer(query: string): {
   const [jurisdictionCode, jurisdictionLabel] = jurisdiction;
   const certificateIntent = /\b(?:certificates?|STCs?|VEECs?|ESCs?|PRCs?|credit schemes?)\b/i.test(query);
   const financialIntent = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?)\b/i.test(query);
-  const financialOutcomes = new Set(["rebate", "grant", "loan"]);
+  const financialOutcomes = new Set(["rebate", "grant", "loan", "tradable_certificate", "retailer_obligation_credit"]);
   const certificateOutcomes = new Set(["tradable_certificate", "retailer_obligation_credit"]);
   const queryTokens = queryTerms(query).terms;
   const programs = GOVERNMENT_PROGRAM_TEMPLATES
@@ -6543,10 +6552,10 @@ export function composeEnergyAssistantAnswer(
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose
-      ? "A heat-pump hot-water system can cut energy use, but the right tank and unit depend on how many people use it, shower timing, winter weather and where it can go."
+      ? "A heat-pump hot-water system uses electricity to move heat into the tank, which is why it can use much less energy than a standard electric tank. The catch is that the tank size, recovery time, winter weather, noise and location all need to suit the household."
       : spaceHeatingPurpose
-        ? "For most Australian homes, reverse-cycle air conditioning is a great electric starting point because it heats and cools efficiently. The right size depends on climate, room size, insulation and layout."
-        : "Heat pumps are great, but there is not one right one for every job. A reverse-cycle unit heats and cools rooms; a heat-pump hot-water unit heats water.";
+        ? "For most Australian homes, reverse-cycle air conditioning is a strong electric starting point because it moves heat instead of making it directly, so the same electricity can provide more heating or cooling. Its real-world result still depends on climate, room size, insulation, layout and how it is installed."
+        : "‘Heat pump’ describes the way an appliance moves heat, not one single product. A reverse-cycle unit moves heat in or out of rooms for heating and cooling; a heat-pump hot-water unit moves heat into a water tank. Both can be efficient, but they solve different problems and need different sizing, locations and quotes.";
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."
@@ -6804,6 +6813,28 @@ export function composeEnergyAssistantAnswer(
 
   const programmeAnswer = catalogueProgramAnswer(userConversation);
   if (programmeAnswer) {
+    const asksAboutVictorianAirConditioningSupport = programmeAnswer.jurisdictionCode === "VIC"
+      && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|RCAC)\b/i.test(query)
+      && /\b(?:rebates?|grants?|assistance|incentives?|discounts?|how much|support)\b/i.test(query)
+      && programmeAnswer.programs.some((program) => program.templateId === "vic-veu");
+    if (asksAboutVictorianAirConditioningSupport) {
+      const question = "What is the property postcode?";
+      return structured("rebates_certificates", {
+        directAnswer:
+          "Victoria has a support pathway for some high-efficiency air-conditioner upgrades, but it is not one fixed cash rebate for every system. The discount is usually worked into an eligible quote through Victorian Energy Upgrades, and the value changes with the exact unit, what it replaces, the installation details and the current activity rules. Treat a large advertised discount as something to verify, not money you automatically receive. A correctly sized reverse-cycle unit can lower heating and cooling energy because it moves heat rather than making it directly, but the right size and installation still matter as much as the incentive.",
+        status: "needs_context",
+        citations: officialCitationsById(["veu-water-space-activity-guide-v3-19"]),
+        confidence: "medium",
+        assumptions: ["The existing system, exact proposed model, property postcode, installer, installation date and current activity conditions have not been checked."],
+        practicalSteps: [
+          "Ask for the quoted support amount to be shown separately from the equipment and installation price.",
+          "Check the exact unit, replaced equipment and full installed scope before treating the discount as available.",
+          "Compare room sizing, noise, electrical work, warranty and running cost as well as the upfront price.",
+        ],
+        toolActions: [{ id: "open-rebates", label: "Check Victorian support", href: "/rebates" }],
+        suggestedQuestions: [question],
+      });
+    }
     const programmeEffects: Readonly<Record<GovernmentProgramTemplate["outcomeClass"], string>> = {
       tradable_certificate: "is a certificate pathway whose quantity and commercial discount must be calculated separately",
       retailer_obligation_credit: "is delivered through an obligated or accredited programme participant, not as an automatic cash rebate",

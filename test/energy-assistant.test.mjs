@@ -87,7 +87,7 @@ test("Surge gives an immediate heating answer and asks only for the property pos
     });
     assert.equal(answer.status, "needs_context", query);
     assert.match(answer.directAnswer, /reverse-cycle air conditioning/i, query);
-    assert.match(answer.directAnswer, /great electric starting point/i, query);
+    assert.match(answer.directAnswer, /strong electric starting point/i, query);
     assert.deepEqual(answer.suggestedQuestions, ["What postcode is the property in?"], query);
     assert.deepEqual(answer.practicalSteps, [], query);
     assert.deepEqual(answer.toolActions, [], query);
@@ -152,7 +152,7 @@ test("Surge explains a general heat-pump question like a helpful person, not a c
     asOf: "2026-08-20T00:00:00.000Z",
   });
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /not one right one for every job/i);
+  assert.match(answer.directAnswer, /moves heat, not one single product/i);
   assert.match(answer.directAnswer, /without pushing a brand/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.toolActions, []);
@@ -352,10 +352,26 @@ test("heat-pump selection remains independent and progressive instead of recomme
   });
   assert.equal(answer.status, "needs_context");
   assert.match(answer.directAnswer, /without pushing a brand/i);
+  assert.match(answer.directAnswer, /moves heat/i);
+  assert.match(answer.directAnswer, /different sizing, locations and quotes/i);
   assert.equal(answer.suggestedQuestions.length, 1);
   assert.equal(answer.suggestedQuestions[0], "Is this for space heating and cooling, hot water, or solar water heating?");
   assert.doesNotMatch(answer.directAnswer, /buy (?:a|the)|best brand|our preferred|affiliate|sponsored/i);
   assert.ok(answer.citations.every((citation) => citation.sourceTier === "primary_official"));
+});
+
+test("a new Victorian air-conditioner support question does not repeat an earlier heat-pump answer", () => {
+  const answer = composeEnergyAssistantAnswer("how much is the aircon rebate in victoria", {
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: ["What heat pump should I get?"],
+  });
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /not one fixed cash rebate/i);
+  assert.match(answer.directAnswer, /moves heat rather than making it directly/i);
+  assert.match(answer.directAnswer, /exact unit.*replaces.*installation details/i);
+  assert.deepEqual(answer.suggestedQuestions, ["What is the property postcode?"]);
+  assert.doesNotMatch(answer.directAnswer, /not one right one for every job/i);
+  assert.equal(answer.citations[0]?.id, "veu-water-space-activity-guide-v3-19");
 });
 
 test("whole-home teaching answers explain the mechanism and safe next options", () => {
