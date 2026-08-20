@@ -56,8 +56,8 @@ const OFFICIAL_RUNTIME_HOSTS = new Set([
   "moneysmart.gov.au",
 ]);
 
-test("runtime knowledge is a 107-source official Australian corpus", () => {
-  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 107);
+test("runtime knowledge is a 109-source official Australian corpus", () => {
+  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 109);
   assert.deepEqual(
     [...new Set(ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.topic))].sort(),
     [...ENERGY_ASSISTANT_TOPICS].sort(),
@@ -333,7 +333,7 @@ test("reviewed household expansion materially strengthens practical topic covera
   assert.equal(counts.comfort_fabric, 18);
   assert.equal(counts.insulation, 3);
   assert.equal(counts.glazing_shading, 5);
-  assert.equal(counts.products_ratings, 5);
+  assert.equal(counts.products_ratings, 6);
   assert.equal(counts.solar, 5);
   assert.equal(counts.battery_vpp, 3);
 

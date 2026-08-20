@@ -76,6 +76,35 @@ test("household comfort language cannot be outranked by generic official-source 
   }
 });
 
+test("Surge explains the building shell and common upgrade priorities in plain language", () => {
+  const shell = composeEnergyAssistantAnswer("What is a thermal shell?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.match(shell.directAnswer, /roof, ceiling, walls, floor, windows, doors and the gaps/i);
+  assert.match(shell.directAnswer, /Insulation slows heat.*seals stop accidental air leaks/i);
+  assert.deepEqual(shell.suggestedQuestions, ["Which room is hardest to keep comfortable, and is it mainly too hot, too cold or damp?"]);
+
+  const priority = composeEnergyAssistantAnswer("Should I insulate or replace windows first?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.match(priority.directAnswer, /no safe universal winner/i);
+  assert.match(priority.directAnswer, /ceiling insulation.*often lower-cost heat paths/i);
+  assert.doesNotMatch(priority.directAnswer, /here for Australian home energy/i);
+});
+
+test("Surge explains what a NatHERS assessment covers before asking for more detail", () => {
+  const answer = composeEnergyAssistantAnswer("What does NatHERS actually look at?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.match(answer.directAnswer, /whole home is put together/i);
+  assert.match(answer.directAnswer, /local climate, orientation, roof, walls, floors, insulation, windows, shade, air leakage and fixed equipment/i);
+  assert.match(answer.directAnswer, /will not exactly match one family's bills or habits/i);
+  assert.equal(answer.suggestedQuestions.length, 1);
+});
+
 test("Surge gives an immediate heating answer and asks only for the property postcode", () => {
   for (const query of [
     "What reverse cycle heating system should I get? Are rebates available?",

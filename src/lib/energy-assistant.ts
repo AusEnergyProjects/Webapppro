@@ -1329,7 +1329,7 @@ function assistantDomainIntent(query: string) {
     && /\b(?:checker|quote|scanned|scan|image[ -]only|OCR|local)\b/i.test(query)) return "in" as const;
   if (/\b(?:raw (?:file )?bytes?|extracted (?:text|lines?)|bounded (?:derived )?summary)\b/i.test(query)
     && /\b(?:local|device|browser|chat|lead|privacy|stays?|leaves?|difference|plain English)\b/i.test(query)) return "in" as const;
-  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulation|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
+  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulat(?:e|ed|ing|ion)|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|thermal shell|building envelope|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
   if (/\b(?:bedroom|room|upstairs|upper floor|top floor|home|house|unit|apartment)\b/i.test(query)
     && /\b(?:hot|warm)\b/i.test(query)
     && /\b(?:outdoor|outside|night|evening|sunset)\b/i.test(query)) return "in" as const;
@@ -3913,6 +3913,48 @@ export function composeEnergyAssistantAnswer(
         "Which appliance or tariff is driving my bill?",
         "What do I need before requesting an upgrade quote?",
       ],
+    });
+  }
+
+  if (/\b(?:thermal shell|thermal envelope|building envelope)\b/i.test(query)) {
+    return structured("comfort_fabric", {
+      directAnswer:
+        "Your thermal shell is the part of the home that separates inside from outside: roof, ceiling, walls, floor, windows, doors and the gaps between them. A good shell slows unwanted heat moving in or out. Insulation slows heat through the building, seals stop accidental air leaks, and glazing and shade control the sun. It works as one system, so a great heater cannot fully fix a leaky, unshaded or poorly insulated room.",
+      status: "answered",
+      citations: officialCitationsById(["yourhome-passive-design-system", "yourhome-insulation", "yourhome-ventilation-airtightness"]),
+      confidence: "high",
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["Which room is hardest to keep comfortable, and is it mainly too hot, too cold or damp?"],
+    });
+  }
+
+  if (/\b(?:NatHERS|home energy rating)\b/i.test(query)
+    && /\b(?:look at|include|cover|measure|assess|check)\b/i.test(query)) {
+    return structured("nathers", {
+      directAnswer:
+        "A NatHERS assessment looks at how the whole home is put together, not just one appliance. That includes the local climate, orientation, roof, walls, floors, insulation, windows, shade, air leakage and fixed equipment. The result uses standard assumptions so it is useful for comparing the home and planning upgrades, but it will not exactly match one family's bills or habits.",
+      status: "answered",
+      citations: officialCitationsById(["nathers-how-get-assessment", "nathers-certificate", "nathers-guidance-note"]),
+      confidence: "high",
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["Are you trying to understand an existing certificate or decide which part of your home to improve first?"],
+    });
+  }
+
+  if (/\b(?:windows?|glass|glazing)\b/i.test(query)
+    && /\b(?:cold|freez(?:ing|y)?|chill|condensation|wet)\b/i.test(query)
+    && !/\b(?:rent|rental|renter|tenant|mould|mold|damp|shower|bathroom|draught|draft|weatherstripp?ing)\b/i.test(query)) {
+    return structured("glazing_shading", {
+      directAnswer:
+        "Cold windows often mean heat is moving quickly through the glass or frame, and gaps around the frame can make the room feel even colder. Condensation happens when warm indoor air touches a cold surface. Before replacing every window, check close-fitting curtains or blinds, gaps around frames, outside shade, drainage and whether the glass or frame is the coldest part. A better window can help, but the right fix depends on its direction, size, frame and your climate.",
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-windows", "yourhome-glazing", "yourhome-condensation-moisture"]),
+      confidence: "medium",
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["Which way does the window face, and is the problem cold mornings, afternoon heat or water on the glass?"],
     });
   }
 
