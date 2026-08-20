@@ -6865,16 +6865,26 @@ export function composeEnergyAssistantAnswer(
     if (asksAboutVictorianAirConditioningSupport) {
       const postcode = userConversation.match(/\b\d{4}\b/)?.[0] || null;
       const applicant = userConversation.match(/\b(owner-occupier|owner|renter|tenant|landlord|strata|owners corporation|business)\b/i)?.[0] || null;
+      const existingSystem = userConversation.match(/\b(ducted gas(?: heating)?|gas ducted heating|gas heater|electric heater|no fixed heater)\b/i)?.[0] || null;
+      const proposedSystem = userConversation.match(/\b(ducted reverse[ -]cycle|ducted air ?con(?:ditioner)?|multi[ -]?split|separate split systems?|individual split systems?)\b/i)?.[0] || null;
       const question = !postcode
         ? "What is the property postcode?"
         : !applicant
           ? "Do you own the home, rent it, or is it strata?"
-          : "What are you replacing: an old electric heater, gas heater, or no fixed heater?";
+          : !existingSystem
+            ? "What are you replacing: an old electric heater, gas heater, or no fixed heater?"
+            : !proposedSystem
+              ? "Are you considering ducted reverse-cycle or separate split systems?"
+              : "Do you have a quote or the exact proposed model numbers?";
       const directAnswer = !postcode
         ? "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly."
         : !applicant
           ? `Thanks. ${postcode} is in Victoria. The next thing that changes the support and approval checks is whether you own the home, rent it, or need strata approval.`
-          : `Thanks. As an ${applicant.toLowerCase()} in ${postcode}, Victorian Energy Upgrades may reduce the upfront cost of an eligible reverse-cycle air conditioner. It is not a fixed rebate: the amount depends on the exact unit, the system being replaced and the installation. The important comparison is the final installed price, room comfort and running cost, not just the advertised discount.`;
+          : !existingSystem
+            ? `Thanks. As an ${applicant.toLowerCase()} in ${postcode}, Victorian Energy Upgrades may reduce the upfront cost of an eligible reverse-cycle air conditioner. It is not a fixed rebate: the amount depends on the exact unit, the system being replaced and the installation. The important comparison is the final installed price, room comfort and running cost, not just the advertised discount.`
+            : !proposedSystem
+              ? `That helps. Replacing ${existingSystem.toLowerCase()} with reverse-cycle air conditioning may qualify for a Victorian Energy Upgrades discount. The amount still depends on the proposed equipment and installation. Ducted reverse-cycle can reuse the idea of whole-home zoning but ducts can lose heat; separate split systems can target the rooms you use most and avoid duct losses.`
+              : `Good, that is enough to assess the next layer. A ${proposedSystem.toLowerCase()} replacement for ${existingSystem.toLowerCase()} should be compared on room-by-room sizing, cold-weather output, zoning, noise, electrical work, gas decommissioning and the final price after any discount. The exact model numbers are needed before the Victorian Energy Upgrades amount can be checked.`;
       return structured("rebates_certificates", {
         directAnswer,
         status: "needs_context",

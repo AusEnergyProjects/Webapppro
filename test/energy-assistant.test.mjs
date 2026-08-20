@@ -425,6 +425,25 @@ test("Victorian air-conditioner support keeps short answers in the same conversa
   assert.match(owner.directAnswer, /may reduce the upfront cost/i);
   assert.doesNotMatch(owner.directAnswer, /pathway|certificate|commercial discount|I am here for Australian home energy/i);
   assert.deepEqual(owner.suggestedQuestions, ["What are you replacing: an old electric heater, gas heater, or no fixed heater?"]);
+
+  turns.push("ducted gas");
+  const existingSystem = composeEnergyAssistantAnswer(turns.at(-1), {
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: turns.slice(0, -1),
+  });
+  assert.match(existingSystem.directAnswer, /Replacing ducted gas with reverse-cycle/i);
+  assert.match(existingSystem.directAnswer, /ducts can lose heat.*separate split systems/i);
+  assert.doesNotMatch(existingSystem.directAnswer, /As an owner in 3006/i);
+  assert.deepEqual(existingSystem.suggestedQuestions, ["Are you considering ducted reverse-cycle or separate split systems?"]);
+
+  turns.push("ducted reverse-cycle");
+  const proposedSystem = composeEnergyAssistantAnswer(turns.at(-1), {
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: turns.slice(0, -1),
+  });
+  assert.match(proposedSystem.directAnswer, /room-by-room sizing.*cold-weather output.*zoning/i);
+  assert.match(proposedSystem.directAnswer, /exact model numbers/i);
+  assert.deepEqual(proposedSystem.suggestedQuestions, ["Do you have a quote or the exact proposed model numbers?"]);
 });
 
 test("whole-home teaching answers explain the mechanism and safe next options", () => {
