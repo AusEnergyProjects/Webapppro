@@ -911,6 +911,16 @@ function isClarificationRequest(message: string) {
     || /\bsay (?:that|this|it) (?:more )?simply\b/i.test(clean);
 }
 
+function isBatteryTimingQuestion(message: string) {
+  return /\b(?:battery|home battery|solar battery|energy storage)\b/i.test(message)
+    && (
+      /\b(?:best|right|good)\s+time\b/i.test(message)
+      || /\bwhen\s+(?:should|can|do)\s+I\s+(?:get|buy|add|install)\b/i.test(message)
+      || /\bshould\s+I\s+(?:get|buy|add|install)\b.{0,30}\b(?:now|wait)\b/i.test(message)
+      || /\bnow\s+or\s+wait\b/i.test(message)
+    );
+}
+
 function decisionPlaybookId(
   query: string,
   priorUserMessages: readonly string[],
@@ -3866,13 +3876,23 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  const batteryTimingDecision = /\b(?:battery|home battery|solar battery|energy storage)\b/i.test(query)
-    && (
-      /\b(?:best|right|good)\s+time\b/i.test(query)
-      || /\bwhen\s+(?:should|can|do)\s+I\s+(?:get|buy|add|install)\b/i.test(query)
-      || /\bshould\s+I\s+(?:get|buy|add|install)\b.{0,30}\b(?:now|wait)\b/i.test(query)
-      || /\bnow\s+or\s+wait\b/i.test(query)
-    );
+  const clarifyingBatteryTiming = isClarificationRequest(query)
+    && [...priorUserMessages].reverse().some(isBatteryTimingQuestion);
+  if (clarifyingBatteryTiming) {
+    return structured("battery_vpp", {
+      directAnswer:
+        "A battery stores spare solar from the day so you can use it later. It usually saves more when you would otherwise export that solar for a low feed-in tariff, then buy more expensive electricity back after sunset. If you have little spare solar, there is less energy for the battery to shift. Backup is a separate reason to buy one and must be designed into the system.",
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-batteries", "energy-gov-solar-batteries"]),
+      confidence: "medium",
+      assumptions: ["I have not yet seen your solar exports, evening imports, tariff or installed price."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["Do you already have solar, and roughly how much do you export during the day and import after sunset?"],
+    });
+  }
+
+  const batteryTimingDecision = isBatteryTimingQuestion(query);
   if (batteryTimingDecision) {
     return structured("battery_vpp", {
       directAnswer:

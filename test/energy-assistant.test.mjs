@@ -146,6 +146,25 @@ test("Surge answers battery timing in plain language and asks one useful questio
   }
 });
 
+test("Surge explains a battery timing answer simply instead of changing the subject", () => {
+  const answer = composeEnergyAssistantAnswer("What do you mean?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: ["When should I get a home battery?"],
+  });
+
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /stores spare solar from the day/i);
+  assert.match(answer.directAnswer, /use it later/i);
+  assert.match(answer.directAnswer, /low feed-in tariff/i);
+  assert.doesNotMatch(answer.directAnswer, /usable capacity|charge and discharge power|virtual power plant|VPP/i);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.toolActions, []);
+  assert.deepEqual(answer.suggestedQuestions, [
+    "Do you already have solar, and roughly how much do you export during the day and import after sunset?",
+  ]);
+});
+
 test("Surge treats the starter upgrade question as in-domain and keeps it simple", () => {
   const answer = composeEnergyAssistantAnswer("What should I upgrade first?", {
     audience: "household",
