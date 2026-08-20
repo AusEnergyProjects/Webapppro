@@ -14,6 +14,7 @@ import {
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
 import {
+  estimateSurgeModelReservationMicroUsd,
   generateSurgeModelAnswer,
   type SurgeModelRequest,
   type SurgeModelResult,
@@ -43,11 +44,23 @@ export type EnergyAssistantReply = {
   followUpQuestion: string;
 };
 
+export type SurgeModelAdmissionRequest = {
+  requestId: string;
+  estimatedMicroUsd: number;
+};
+
+export type SurgeModelCallReservation =
+  | { allowed: false }
+  | { allowed: true; release: () => Promise<void> };
+
 type ServerDependencies = {
   now?: () => Date;
   randomUUID?: () => string;
   composeAnswer?: typeof composeEnergyAssistantAnswer;
   generateAnswer?: (request: SurgeModelRequest) => Promise<SurgeModelResult | null>;
+  reserveModelCall?: (
+    request: SurgeModelAdmissionRequest,
+  ) => Promise<SurgeModelCallReservation>;
 };
 
 export class EnergyAssistantServerError extends Error {
@@ -363,29 +376,47 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const pageContext = pageContextFrom(requestBody.pageContext);
   const audience = publicAudienceFrom(requestBody.audience);
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
+  const modelRecentTurns = recentTurns.filter((turn) => turn.role === "user");
   const continuation = continuationFrom(requestBody.continuation);
-  const priorUserMessages = recentTurns
-    .filter((turn) => turn.role === "user")
-    .map((turn) => turn.content);
+  const priorUserMessages = modelRecentTurns.map((turn) => turn.content);
   const now = dateFrom(dependencies);
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const deterministicAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   let answer = deterministicAnswer;
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
   if (!needsDeterministicSafetyAnswer(message, deterministicAnswer)) {
-    const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
-    const generated = await generate({
+    const modelRequest: SurgeModelRequest = {
       message,
       audience,
       pageContext,
       asOf: now,
-      recentTurns,
+      recentTurns: modelRecentTurns,
       continuation,
       deterministicAnswer,
-    });
-    if (generated) {
-      answer = generated.answer;
-      nextContinuation = generated.continuation;
+    };
+    const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
+    if (estimatedMicroUsd !== null && dependencies.reserveModelCall) {
+      let reservation: SurgeModelCallReservation = { allowed: false };
+      try {
+        reservation = await dependencies.reserveModelCall({
+          requestId: requestId || (dependencies.randomUUID || (() => crypto.randomUUID()))(),
+          estimatedMicroUsd,
+        });
+      } catch {
+        reservation = { allowed: false };
+      }
+      if (reservation.allowed) {
+        try {
+          const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
+          const generated = await generate(modelRequest).catch(() => null);
+          if (generated) {
+            answer = generated.answer;
+            nextContinuation = generated.continuation;
+          }
+        } finally {
+          await reservation.release().catch(() => undefined);
+        }
+      }
     }
   }
   const reply = buildReply(

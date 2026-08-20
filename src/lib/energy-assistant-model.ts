@@ -39,9 +39,21 @@ export type SurgeModelDependencies = {
   fetch?: typeof fetch;
 };
 
+export type SurgeModelRequestEstimate = {
+  model: "gpt-5.6-terra";
+  serializedBodyBytes: number;
+  maxOutputTokens: 600;
+  worstCaseMicroUsd: number;
+};
+
 const MODEL_ENDPOINT = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5.6-terra";
+const SUPPORTED_MODEL = "gpt-5.6-terra" as const;
 const DEFAULT_TIMEOUT_MS = 18_000;
+const MAX_PROVIDER_INPUT_BYTES = 24_000;
+const MAX_PROVIDER_OUTPUT_TOKENS = 600 as const;
+const TERRA_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE = 2;
+const TERRA_OUTPUT_MICRO_USD_PER_TOKEN = 12;
+const COST_SAFETY_MARGIN_MULTIPLIER = 1.25;
 const MAX_MODEL_ANSWER_CHARS = 2_000;
 const MAX_FOLLOW_UP_CHARS = 220;
 
@@ -204,6 +216,64 @@ function hasOnlyGroundedQuantities(answer: string, groundingText: string) {
   return claims.every((claim) => normalGrounding.includes(claim.toLowerCase().replace(/\s+/g, " ")));
 }
 
+function providerBody(request: SurgeModelRequest, context: ReturnType<typeof contextPayload>) {
+  return {
+    model: SUPPORTED_MODEL,
+    store: false,
+    reasoning: { effort: "none" },
+    max_output_tokens: MAX_PROVIDER_OUTPUT_TOKENS,
+    text: {
+      verbosity: "low",
+      format: {
+        type: "json_schema",
+        name: "surge_energy_answer",
+        strict: true,
+        schema: RESPONSE_SCHEMA,
+      },
+    },
+    input: [
+      {
+        role: "developer",
+        content: [{ type: "input_text", text: instructions(request.audience) }],
+      },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: JSON.stringify(context.payload) }],
+      },
+    ],
+  };
+}
+
+function prepareProviderRequest(request: SurgeModelRequest) {
+  const context = contextPayload(request);
+  const serializedBody = JSON.stringify(providerBody(request, context));
+  const serializedBodyBytes = new TextEncoder().encode(serializedBody).byteLength;
+  if (serializedBodyBytes > MAX_PROVIDER_INPUT_BYTES) return null;
+  const baseMicroUsd = (
+    serializedBodyBytes * TERRA_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE
+    + MAX_PROVIDER_OUTPUT_TOKENS * TERRA_OUTPUT_MICRO_USD_PER_TOKEN
+  );
+  const estimate: SurgeModelRequestEstimate = {
+    model: SUPPORTED_MODEL,
+    serializedBodyBytes,
+    maxOutputTokens: MAX_PROVIDER_OUTPUT_TOKENS,
+    worstCaseMicroUsd: Math.ceil(baseMicroUsd * COST_SAFETY_MARGIN_MULTIPLIER),
+  };
+  return { context, estimate, serializedBody };
+}
+
+export function estimateSurgeModelRequest(
+  request: SurgeModelRequest,
+): SurgeModelRequestEstimate | null {
+  return prepareProviderRequest(request)?.estimate ?? null;
+}
+
+export function estimateSurgeModelReservationMicroUsd(
+  request: SurgeModelRequest,
+): number | null {
+  return estimateSurgeModelRequest(request)?.worstCaseMicroUsd ?? null;
+}
+
 export async function generateSurgeModelAnswer(
   request: SurgeModelRequest,
   dependencies: SurgeModelDependencies = {},
@@ -211,42 +281,21 @@ export async function generateSurgeModelAnswer(
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey || process.env.SURGE_AI_ENABLED === "false") return null;
 
-  const model = dependencies.model ?? process.env.SURGE_MODEL ?? DEFAULT_MODEL;
+  const model = dependencies.model ?? process.env.SURGE_MODEL ?? SUPPORTED_MODEL;
+  if (model !== SUPPORTED_MODEL) return null;
+  const prepared = prepareProviderRequest(request);
+  if (!prepared) return null;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
-    const context = contextPayload(request);
     const response = await (dependencies.fetch ?? fetch)(MODEL_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        store: false,
-        reasoning: { effort: "none" },
-        max_output_tokens: 1_000,
-        text: {
-          verbosity: "low",
-          format: {
-            type: "json_schema",
-            name: "surge_energy_answer",
-            strict: true,
-            schema: RESPONSE_SCHEMA,
-          },
-        },
-        input: [
-          {
-            role: "developer",
-            content: [{ type: "input_text", text: instructions(request.audience) }],
-          },
-          {
-            role: "user",
-            content: [{ type: "input_text", text: JSON.stringify(context.payload) }],
-          },
-        ],
-      }),
+      body: prepared.serializedBody,
       signal: controller.signal,
     });
     if (!response.ok) return null;
@@ -266,10 +315,10 @@ export async function generateSurgeModelAnswer(
     if (
       !answerText
       || !continuation
-      || !hasOnlyGroundedQuantities(answerText, JSON.stringify(context.payload))
+      || !hasOnlyGroundedQuantities(answerText, JSON.stringify(prepared.context.payload))
     ) return null;
 
-    const knownSourceIds = new Set(context.evidenceSourceIds);
+    const knownSourceIds = new Set(prepared.context.evidenceSourceIds);
     if (
       !Array.isArray(record.usedSourceIds)
       || record.usedSourceIds.some((id) => typeof id !== "string" || !knownSourceIds.has(id))

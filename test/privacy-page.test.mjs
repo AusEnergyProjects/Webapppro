@@ -24,7 +24,9 @@ test("the public privacy route covers the operational TLink data boundary", () =
   assert.match(privacy, /provider-side response storage disabled/);
   assert.match(privacy, /does not create or read a server-side conversation record/);
   assert.match(privacy, /conversation text is not placed in analytics/);
-  assert.match(privacy, /No third-party tracking cookie, fingerprint or cross-device anonymous identity/);
+  assert.match(privacy, /random first-party security cookie and short-lived, one-way security counters/);
+  assert.match(privacy, /do not contain conversation text, a raw network address or a cross-device identity/);
+  assert.match(privacy, /No third-party tracking cookie or fingerprint/);
   assert.doesNotMatch(privacy, /No customer question or conversation content is sent to a paid external AI service/);
   assert.match(privacy, /Optional Energy Guide contact requests/);
   assert.match(privacy, /Marketing consent is separate and off/);

@@ -55,6 +55,10 @@ function noDatabaseOperations() {
   };
 }
 
+function allowModelCall() {
+  return Promise.resolve({ allowed: true, release: async () => undefined });
+}
+
 function fixedAnswer(directAnswer) {
   return {
     directAnswer,
@@ -261,6 +265,7 @@ test("model success returns one follow-up and compact continuation without priva
       observedRequest = modelRequest;
       return { answer: modelAnswer, continuation: nextContinuation };
     },
+    reserveModelCall: allowModelCall,
   });
 
   assert.equal(response.status, 200);
@@ -268,7 +273,6 @@ test("model success returns one follow-up and compact continuation without priva
   assert.deepEqual(observedRequest.continuation, priorContinuation);
   assert.deepEqual(observedRequest.recentTurns, [
     { role: "user", content: "How much is the aircon rebate in Victoria?" },
-    { role: "assistant", content: "What is the postcode?" },
     { role: "user", content: "3006" },
   ]);
   assert.equal(payload.reply.directAnswer, modelAnswer.directAnswer);
@@ -324,6 +328,7 @@ test("continuation carries corrections and a topic change without retaining the 
         continuation: batteryState,
       };
     },
+    reserveModelCall: allowModelCall,
   });
 
   assert.equal(response.status, 200);
@@ -365,6 +370,7 @@ test("null model result falls back to the deterministic answer and preserves acc
       modelCalls += 1;
       return null;
     },
+    reserveModelCall: allowModelCall,
   });
 
   assert.equal(response.status, 200);
@@ -376,8 +382,68 @@ test("null model result falls back to the deterministic answer and preserves acc
   assertPublicReplyContract(payload);
 });
 
+test("missing, denied or failed admission never reaches the paid model", async (t) => {
+  for (const scenario of [
+    { name: "missing guard", reserveModelCall: undefined },
+    { name: "denied guard", reserveModelCall: async () => ({ allowed: false }) },
+    { name: "failed guard", reserveModelCall: async () => { throw new Error("D1 unavailable"); } },
+  ]) {
+    await t.test(scenario.name, async () => {
+      let modelCalls = 0;
+      const response = await handleEnergyAssistantRequest(request({
+        action: "ask",
+        requestId: `admission-${scenario.name.replace(/\s+/g, "-")}-0001`,
+        message: "How should I improve my insulation?",
+        recentTurns: [],
+        pageContext: "/plan",
+        audience: "public",
+      }), {
+        now: () => new Date(NOW),
+        composeAnswer: () => fixedAnswer("Start with the ceiling because it commonly has the largest exposed area."),
+        generateAnswer: async () => {
+          modelCalls += 1;
+          return { answer: fixedAnswer("paid answer"), continuation: continuation() };
+        },
+        ...(scenario.reserveModelCall ? { reserveModelCall: scenario.reserveModelCall } : {}),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(modelCalls, 0);
+      assert.match((await body(response)).reply.directAnswer, /Start with the ceiling/i);
+    });
+  }
+});
+
+test("an admitted provider failure releases the lease and returns the deterministic answer", async () => {
+  let releases = 0;
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "admitted-provider-failure-0001",
+    message: "When should I get a home battery?",
+    recentTurns: [],
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("There is no universal calendar date for buying a battery."),
+    reserveModelCall: async () => ({
+      allowed: true,
+      release: async () => { releases += 1; },
+    }),
+    generateAnswer: async () => {
+      modelCalls += 1;
+      throw new Error("provider unavailable");
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1);
+  assert.equal(releases, 1);
+  assert.match((await body(response)).reply.directAnswer, /no universal calendar date/i);
+});
+
 test("dangerous questions bypass the model and keep the deterministic safety answer", async () => {
   let modelCalls = 0;
+  let admissionCalls = 0;
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
     requestId: "model-safety-bypass-0001",
@@ -399,11 +465,16 @@ test("dangerous questions bypass the model and keep the deterministic safety ans
         continuation: continuation(),
       };
     },
+    reserveModelCall: async () => {
+      admissionCalls += 1;
+      return { allowed: false };
+    },
   });
 
   assert.equal(response.status, 200);
   const payload = await body(response);
   assert.equal(modelCalls, 0);
+  assert.equal(admissionCalls, 0);
   assert.match(payload.reply.directAnswer, /Move away.*avoid flames.*licensed professional/i);
   assert.doesNotMatch(payload.reply.directAnswer, /unsafe model answer/i);
 });

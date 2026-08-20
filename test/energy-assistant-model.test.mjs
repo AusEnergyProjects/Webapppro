@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateSurgeModelAnswer } from "../src/lib/energy-assistant-model.ts";
+import {
+  estimateSurgeModelRequest,
+  estimateSurgeModelReservationMicroUsd,
+  generateSurgeModelAnswer,
+} from "../src/lib/energy-assistant-model.ts";
 
 const NOW = new Date("2026-08-21T00:00:00.000Z");
 
@@ -74,7 +78,7 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   let observedOptions;
   const result = await generateSurgeModelAnswer(request(), {
     apiKey: "test-api-key",
-    model: "test-model",
+    model: "gpt-5.6-terra",
     fetch: async (url, options) => {
       observedUrl = url;
       observedOptions = options;
@@ -90,10 +94,10 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.ok(observedOptions.signal instanceof AbortSignal);
 
   const body = JSON.parse(observedOptions.body);
-  assert.equal(body.model, "test-model");
+  assert.equal(body.model, "gpt-5.6-terra");
   assert.equal(body.store, false);
   assert.deepEqual(body.reasoning, { effort: "none" });
-  assert.equal(body.max_output_tokens, 1_000);
+  assert.equal(body.max_output_tokens, 600);
   assert.equal(body.text.verbosity, "low");
   assert.equal(body.text.format.type, "json_schema");
   assert.equal(body.text.format.name, "surge_energy_answer");
@@ -112,6 +116,82 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.input.length, 2);
   assert.equal(body.input[0].role, "developer");
   assert.equal(body.input[1].role, "user");
+});
+
+test("only the reviewed Terra model is allowed", async () => {
+  const previousModel = process.env.SURGE_MODEL;
+  let calls = 0;
+  process.env.SURGE_MODEL = "gpt-5.6-luna";
+  try {
+    const rejected = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      fetch: async () => {
+        calls += 1;
+        return jsonResponse(modelPayload());
+      },
+    });
+    assert.equal(rejected, null);
+    assert.equal(calls, 0);
+
+    const supported = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-terra",
+      fetch: async () => {
+        calls += 1;
+        return jsonResponse(modelPayload());
+      },
+    });
+    assert.ok(supported);
+    assert.equal(calls, 1);
+  } finally {
+    if (previousModel === undefined) delete process.env.SURGE_MODEL;
+    else process.env.SURGE_MODEL = previousModel;
+  }
+});
+
+test("cost estimator exactly matches the serialized provider body and reviewed worst-case rate", async () => {
+  const modelRequest = request();
+  const estimate = estimateSurgeModelRequest(modelRequest);
+  let serializedBody = "";
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-terra",
+    fetch: async (_url, options) => {
+      serializedBody = options.body;
+      return jsonResponse(modelPayload());
+    },
+  });
+
+  assert.ok(result);
+  assert.ok(estimate);
+  const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
+  assert.equal(estimate.model, "gpt-5.6-terra");
+  assert.equal(estimate.serializedBodyBytes, exactBytes);
+  assert.equal(estimate.maxOutputTokens, 600);
+  assert.equal(
+    estimate.worstCaseMicroUsd,
+    Math.ceil(((exactBytes * 2) + (600 * 12)) * 1.25),
+  );
+  assert.equal(
+    estimateSurgeModelReservationMicroUsd(modelRequest),
+    estimate.worstCaseMicroUsd,
+  );
+});
+
+test("oversized serialized model input is rejected before provider fetch", async () => {
+  const oversizedRequest = request({ message: "large input ".repeat(3_000) });
+  assert.equal(estimateSurgeModelRequest(oversizedRequest), null);
+  let calls = 0;
+  const result = await generateSurgeModelAnswer(oversizedRequest, {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-terra",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse(modelPayload());
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(calls, 0);
 });
 
 test("successful output is parsed, bounded and stripped of public internal names, URLs and source lines", async () => {
@@ -161,18 +241,48 @@ test("nested Responses output accepts quantities only when they are grounded in 
   assert.equal(invented, null);
 });
 
-test("provider errors and malformed model output fail soft with null", async (t) => {
-  await t.test("provider error", async () => {
+test("provider errors and timeout make one attempt and fail soft with null", async (t) => {
+  for (const status of [500, 429]) {
+    await t.test(`provider status ${status}`, async () => {
+      let calls = 0;
+      const result = await generateSurgeModelAnswer(request(), {
+        apiKey: "test-api-key",
+        model: "gpt-5.6-terra",
+        fetch: async () => {
+          calls += 1;
+          return new Response("unavailable", { status });
+        },
+      });
+      assert.equal(result, null);
+      assert.equal(calls, 1);
+    });
+  }
+
+  await t.test("provider timeout", async () => {
+    let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      fetch: async () => new Response("unavailable", { status: 503 }),
+      model: "gpt-5.6-terra",
+      timeoutMs: 1,
+      fetch: async (_url, options) => {
+        calls += 1;
+        return new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => {
+            reject(new DOMException("Timed out", "AbortError"));
+          }, { once: true });
+        });
+      },
     });
     assert.equal(result, null);
+    assert.equal(calls, 1);
   });
+});
 
+test("malformed model output fails soft with null", async (t) => {
   await t.test("invalid JSON output", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
+      model: "gpt-5.6-terra",
       fetch: async () => new Response(JSON.stringify({ output_text: "{not-json" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -184,6 +294,7 @@ test("provider errors and malformed model output fail soft with null", async (t)
   await t.test("invalid conversation state", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
+      model: "gpt-5.6-terra",
       fetch: async () => jsonResponse(modelPayload({
         state: state({ facts: Array.from({ length: 17 }, (_, index) => ({
           key: `fact_${index}`,
@@ -197,12 +308,54 @@ test("provider errors and malformed model output fail soft with null", async (t)
   await t.test("unknown evidence id", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
+      model: "gpt-5.6-terra",
       fetch: async () => jsonResponse(modelPayload({
         usedSourceIds: ["invented-source-id"],
       })),
     });
     assert.equal(result, null);
   });
+});
+
+test("disabled model path returns null without calling the provider", async () => {
+  const previous = process.env.SURGE_AI_ENABLED;
+  process.env.SURGE_AI_ENABLED = "false";
+  let calls = 0;
+  try {
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-terra",
+      fetch: async () => {
+        calls += 1;
+        return jsonResponse(modelPayload());
+      },
+    });
+    assert.equal(result, null);
+    assert.equal(calls, 0);
+  } finally {
+    if (previous === undefined) delete process.env.SURGE_AI_ENABLED;
+    else process.env.SURGE_AI_ENABLED = previous;
+  }
+});
+
+test("API secret is never included in the serialized request body, estimate or result", async () => {
+  const secret = "sk-test-private-value-never-output";
+  let serializedBody = "";
+  const modelRequest = request();
+  const estimate = estimateSurgeModelRequest(modelRequest);
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: secret,
+    model: "gpt-5.6-terra",
+    fetch: async (_url, options) => {
+      serializedBody = options.body;
+      return jsonResponse(modelPayload());
+    },
+  });
+  assert.ok(result);
+  assert.ok(estimate);
+  assert.doesNotMatch(serializedBody, new RegExp(secret));
+  assert.doesNotMatch(JSON.stringify(estimate), new RegExp(secret));
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(secret));
 });
 
 test("missing API key returns null without calling the provider", async () => {

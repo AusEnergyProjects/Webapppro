@@ -130,6 +130,27 @@ export const leadRateLimits = sqliteTable("lead_rate_limits", {
   index("lead_rate_limits_updated_idx").on(table.updatedAt),
 ]);
 
+export const surgeModelUsageState = sqliteTable("surge_model_usage_state", {
+  scopeHash: text("scope_hash").primaryKey(),
+  stateJson: text("state_json").notNull(),
+  version: integer("version").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+}, (table) => [
+  index("surge_model_usage_state_updated_idx").on(table.updatedAt),
+  check("surge_model_usage_state_scope_hash_check", sql`
+    length(${table.scopeHash}) = 64
+    AND ${table.scopeHash} = lower(${table.scopeHash})
+    AND ${table.scopeHash} NOT GLOB '*[^0-9a-f]*'
+  `),
+  check("surge_model_usage_state_json_check", sql`
+    json_valid(${table.stateJson})
+    AND json_type(${table.stateJson}) = 'object'
+    AND length(${table.stateJson}) BETWEEN 2 AND 131072
+  `),
+  check("surge_model_usage_state_version_check", sql`${table.version} >= 0`),
+  check("surge_model_usage_state_updated_check", sql`${table.updatedAt} >= 0`),
+]);
+
 export const verificationDocuments = sqliteTable("verification_documents", {
   id: text("id").primaryKey(),
   firebaseUid: text("firebase_uid").notNull(),
