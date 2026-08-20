@@ -539,6 +539,9 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /mascotCore/);
   assert.match(widget, /mascotCircuit/);
   assert.match(widget, /mascotFaceScreen/);
+  assert.match(widget, /mascotVisorGlint/);
+  assert.match(widget, /mascotEyeDepth/);
+  assert.match(widget, /mascotEyeSpark/);
   assert.match(widget, /mascotPanelSeam/);
   assert.match(widget, /mascotStatus/);
   assert.match(widget, /aria-label="Hide Surge mascot"/);
@@ -547,13 +550,15 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /mascotTucked \? \(/);
   assert.match(widget, /setMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);
-  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*height:\s*80px[\s\S]*width:\s*68px/);
-  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*right:\s*-18px/);
+  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
+  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*height:\s*58px[\s\S]*right:\s*-17px[\s\S]*rotate\(-11deg\)[\s\S]*width:\s*47px/);
+  assert.doesNotMatch(widget, /peekLabel|>Ask Surge<\/span>/);
   assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-9px/);
   for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
     assert.match(styles, new RegExp(`@keyframes ${state}`));
   }
   assert.match(styles, /@keyframes surgePeek/);
+  assert.match(styles, /@keyframes surgePeek\s*\{[\s\S]*rotate\(-11deg\)[\s\S]*rotate\(-15deg\)/);
   assert.match(styles, /prefers-reduced-motion:[\s\S]*\.mascot/);
   assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);

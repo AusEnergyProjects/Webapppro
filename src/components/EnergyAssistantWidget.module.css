@@ -70,51 +70,30 @@
 
 .launcherPeek {
   align-items: center;
-  background: linear-gradient(145deg, rgba(7, 87, 79, 0.98), rgba(4, 43, 61, 0.98));
-  border: 1px solid #72e2cf;
-  border-radius: 20px 0 0 20px;
-  box-shadow: 0 7px 18px rgba(3, 31, 38, 0.28);
-  color: #ffffff;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   cursor: pointer;
   display: inline-flex;
-  height: 80px;
+  height: 56px;
   justify-content: center;
   margin-right: calc(-1 * max(18px, env(safe-area-inset-right)));
-  overflow: hidden;
+  overflow: visible;
   padding: 0;
   position: relative;
-  width: 68px;
-}
-
-.launcherPeek::after {
-  background: linear-gradient(90deg, transparent, rgba(126, 242, 207, 0.3));
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+  width: 48px;
 }
 
 .mascotPeeking {
   animation: surgePeek 2.8s ease-in-out infinite;
-  bottom: -13px;
-  height: 88px;
+  bottom: -8px;
+  filter: drop-shadow(-3px 5px 5px rgba(3, 31, 38, 0.28));
+  height: 58px;
   position: absolute;
-  right: -18px;
+  right: -17px;
+  transform: rotate(-11deg);
   transform-origin: 60px 136px;
-  width: 72px;
-}
-
-.peekLabel {
-  color: #d9fff7;
-  font-size: 0.49rem;
-  font-weight: 900;
-  left: 5px;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  position: absolute;
-  text-transform: uppercase;
-  top: 8px;
-  z-index: 2;
+  width: 47px;
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -253,25 +232,47 @@
 
 .mascotFaceScreen {
   fill: #072a35;
-  stroke: #6e8f91;
+  filter: drop-shadow(0 1px 1px rgba(3, 20, 28, 0.55));
+  stroke: #8dc4c4;
+  stroke-width: 1.8px;
+}
+
+.mascotVisorGlint {
+  fill: none;
+  opacity: 0.46;
+  stroke: #ffffff;
+  stroke-linecap: round;
   stroke-width: 1.6px;
 }
 
 .mascotEyes ellipse {
   fill: url("#surge-energy");
   stroke: #8ffff0;
-  stroke-width: 1.2px;
+  stroke-width: 1.5px;
+}
+
+.mascotEyes .mascotEyeDepth {
+  fill: #053541;
+  opacity: 0.78;
+  stroke: #19d8c1;
+  stroke-width: 0.8px;
 }
 
 .mascotEyes circle {
   fill: #ffffff;
+  filter: drop-shadow(0 0 2px rgba(142, 255, 239, 0.95));
+}
+
+.mascotEyes .mascotEyeSpark {
+  fill: #aafff2;
+  opacity: 0.9;
 }
 
 .mascotSmile {
   fill: none;
   stroke: #86ffeb;
   stroke-linecap: round;
-  stroke-width: 2.6px;
+  stroke-width: 3px;
 }
 
 .mascotStatus {
@@ -1145,9 +1146,9 @@
 }
 
 @keyframes surgePeek {
-  0%, 100% { transform: translateX(0) rotate(0); }
-  48% { transform: translateX(-4px) rotate(-1.5deg); }
-  62% { transform: translateX(-2px) rotate(1deg); }
+  0%, 100% { transform: translateX(0) rotate(-11deg); }
+  48% { transform: translateX(-5px) rotate(-15deg); }
+  62% { transform: translateX(-3px) rotate(-9deg); }
 }
 
 @keyframes surgeWave {
@@ -1192,8 +1193,8 @@
   }
 
   .mascotPeeking {
-    height: 88px;
-    width: 72px;
+    height: 58px;
+    width: 47px;
   }
 
   .panel {

@@ -211,14 +211,19 @@ function SurgeMascot({ peeking = false }: { peeking?: boolean }) {
         <path d="M62 55 L56 62 H60 L58 69 L65 60 H61 Z" />
       </g>
 
-      <path className={styles.mascotFaceScreen} d="M32 82 Q32 77 38 77 H82 Q88 77 88 82 V105 Q88 110 82 110 H38 Q32 110 32 105 Z" />
+      <path className={styles.mascotFaceScreen} d="M28 81 Q28 74 36 74 H84 Q92 74 92 81 V108 Q92 115 84 115 H36 Q28 115 28 108 Z" />
+      <path className={styles.mascotVisorGlint} d="M35 80 Q47 76 61 77" />
       <g className={styles.mascotEyes}>
-        <ellipse cx="47" cy="92" rx="7" ry="9" />
-        <ellipse cx="73" cy="92" rx="7" ry="9" />
-        <circle cx="49" cy="89" r="2.2" />
-        <circle cx="75" cy="89" r="2.2" />
+        <ellipse cx="45" cy="93" rx="9" ry="11" />
+        <ellipse cx="75" cy="93" rx="9" ry="11" />
+        <ellipse className={styles.mascotEyeDepth} cx="45" cy="96" rx="4.5" ry="5.5" />
+        <ellipse className={styles.mascotEyeDepth} cx="75" cy="96" rx="4.5" ry="5.5" />
+        <circle cx="48" cy="88" r="3.2" />
+        <circle cx="78" cy="88" r="3.2" />
+        <circle className={styles.mascotEyeSpark} cx="41" cy="96" r="1.5" />
+        <circle className={styles.mascotEyeSpark} cx="71" cy="96" r="1.5" />
       </g>
-      <path className={styles.mascotSmile} d="M52 102 Q60 109 69 101" />
+      <path className={styles.mascotSmile} d="M50 105 Q60 114 71 104" />
       <rect className={styles.mascotStatus} x="56" y="116" width="8" height="13" rx="4" />
     </svg>
   );
@@ -1214,7 +1219,6 @@ export function EnergyAssistantWidget() {
               }}
             >
               <SurgeMascot peeking />
-              <span className={styles.peekLabel}>Ask Surge</span>
             </button>
           ) : (
             <>
