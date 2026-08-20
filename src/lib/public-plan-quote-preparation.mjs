@@ -106,12 +106,30 @@ const ALL_SERVICES = Object.freeze([
   "other",
 ]);
 
-const QUESTION_DEFINITIONS = Object.freeze([
+const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
   {
     id: "timing",
     label: "When would you like the work done?",
     services: ALL_SERVICES,
     options: ["As soon as practical", "Within 3 months", "Within 6 months", "Planning for later", "Not sure"],
+  },
+  {
+    id: "assessment-purpose",
+    label: "What should the energy assessment help you decide?",
+    services: ["assessment"],
+    options: ["Whole-home upgrade priorities", "Thermal comfort and draughts", "Bills and appliance use", "A formal NatHERS assessment", "Rental or strata options", "Not sure"],
+  },
+  {
+    id: "assessment-property-scale",
+    label: "What size home or area needs assessment?",
+    services: ["assessment"],
+    options: ["Apartment or one-bedroom home", "Two or three bedrooms", "Four or more bedrooms", "Selected rooms or areas", "Not sure"],
+  },
+  {
+    id: "assessment-information",
+    label: "What information can you make available to the assessor?",
+    services: ["assessment"],
+    options: ["Recent bills and building plans", "Recent bills only", "Building plans only", "A site visit without documents", "Not sure"],
   },
   {
     id: "solar-scope",
@@ -120,10 +138,58 @@ const QUESTION_DEFINITIONS = Object.freeze([
     options: ["A new system", "Add to an existing system", "Replace an existing system", "Need advice"],
   },
   {
+    id: "solar-existing-system",
+    label: "What solar equipment is already at the property?",
+    services: ["solar"],
+    options: ["No existing solar", "Existing solar to keep", "Existing solar to expand", "Existing solar to replace", "Shared or strata solar", "Not sure"],
+  },
+  {
+    id: "solar-electricity-use",
+    label: "What is the home's typical electricity use?",
+    services: ["solar"],
+    options: ["Under 10 kWh per day", "10 to 20 kWh per day", "20 to 40 kWh per day", "More than 40 kWh per day", "A recent bill is available but usage is unknown", "Not sure"],
+  },
+  {
+    id: "solar-roof-site",
+    label: "What is known about the roof and solar access?",
+    services: ["solar"],
+    options: ["Clear unshaded roof area", "Some shade or several roof faces", "Limited, fragile or difficult-access roof", "Flat roof or ground-mount area", "Shared or strata-controlled roof", "Not sure"],
+  },
+  {
+    id: "solar-electrical-export",
+    label: "What is known about the switchboard, phases and export limits?",
+    services: ["solar"],
+    options: ["Modern single-phase switchboard", "Modern three-phase switchboard", "Older switchboard or fuse board", "A network export limit is already known", "An electrician or installer has assessed the site", "Not sure"],
+  },
+  {
     id: "battery-priority",
     label: "What matters most for the battery quote?",
     services: ["battery"],
     options: ["Use more solar and lower bills", "Backup important circuits", "Both bill savings and backup", "Need advice"],
+  },
+  {
+    id: "battery-solar-system",
+    label: "What solar and inverter setup will the battery connect to?",
+    services: ["battery"],
+    options: ["New solar and battery together", "Existing solar with a hybrid-ready inverter", "Existing solar with inverter compatibility unknown", "Battery without rooftop solar", "Shared or strata solar", "Not sure"],
+  },
+  {
+    id: "battery-load-profile",
+    label: "What is known about evening use, exports and backup loads?",
+    services: ["battery"],
+    options: ["Smart-meter or interval data is available", "Recent bills show imports and exports", "High evening or overnight electricity use", "Critical backup circuits are identified", "No load information yet", "Not sure"],
+  },
+  {
+    id: "battery-installation-site",
+    label: "What installation location is available for the battery?",
+    services: ["battery"],
+    options: ["Garage with clear wall or floor space", "Outdoor wall or ground area", "Limited space or boundary exposure", "Shared or strata-controlled area", "No location chosen", "Not sure"],
+  },
+  {
+    id: "battery-electrical-supply",
+    label: "What is known about the switchboard and electrical supply?",
+    services: ["battery"],
+    options: ["Modern single-phase switchboard", "Modern three-phase switchboard", "Older switchboard or fuse board", "An electrician or installer has assessed the supply", "No electrical assessment yet", "Not sure"],
   },
   {
     id: "heating-coverage",
@@ -132,10 +198,184 @@ const QUESTION_DEFINITIONS = Object.freeze([
     options: ["One main room", "Several rooms", "Whole home", "Need advice"],
   },
   {
+    id: "heating-existing-system",
+    label: "What heating or cooling system is being replaced or supplemented?",
+    services: ["heating-cooling"],
+    options: ["Gas heater or gas ducted system", "Older reverse-cycle system", "Electric resistance or portable heaters", "Evaporative cooler", "No existing fixed system", "Several system types", "Not sure"],
+  },
+  {
+    id: "heating-home-load",
+    label: "What is known about the rooms and thermal load?",
+    services: ["heating-cooling"],
+    options: ["Room sizes and ceiling heights are known", "Home is insulated and reasonably draught-sealed", "Insulation or draughts need improvement", "Large glazing or strong sun exposure affects the rooms", "A heat-load assessment is available", "Not sure"],
+  },
+  {
+    id: "heating-outdoor-unit-site",
+    label: "What is known about outdoor-unit space, access and noise constraints?",
+    services: ["heating-cooling"],
+    options: ["Clear ground-level outdoor space", "Limited space or close boundary", "Upper-storey, roof or difficult access", "Shared or strata-controlled location", "Existing outdoor unit position may be reused", "Not sure"],
+  },
+  {
+    id: "heating-electrical-supply",
+    label: "What is known about the switchboard and electrical supply?",
+    services: ["heating-cooling"],
+    options: ["Modern switchboard with apparent spare capacity", "Older switchboard or fuse board", "Single-phase supply", "Three-phase supply", "An electrician has assessed the proposed system", "Not sure"],
+  },
+  {
+    id: "hot-water-existing-system",
+    label: "What hot-water system is being replaced or reviewed?",
+    services: ["hot-water"],
+    options: ["Gas storage", "Gas continuous flow", "Electric resistance storage", "Heat pump", "Solar hot water", "No existing system", "Other", "Not sure"],
+  },
+  {
+    id: "hot-water-household-demand",
+    label: "What household hot-water demand should the system serve?",
+    services: ["hot-water"],
+    options: ["One or two people", "Three or four people", "Five or more people", "High demand, baths or simultaneous use", "Not sure"],
+  },
+  {
+    id: "hot-water-location-access",
+    label: "What is known about the installation location and access?",
+    services: ["hot-water"],
+    options: ["Outdoor area with clear access", "Outdoor area with limited space or boundary noise concerns", "Indoor, cupboard or roof-space location", "Shared or strata location", "A new location is needed", "Not sure"],
+  },
+  {
+    id: "hot-water-electrical-supply",
+    label: "What is known about the electrical supply for a replacement system?",
+    services: ["hot-water"],
+    options: ["Modern switchboard with apparent spare capacity", "Older switchboard or fuse board", "An electrician has confirmed enabling work", "No electrical assessment yet", "Not sure"],
+  },
+  {
     id: "electric-cooking-scope",
     label: "What should the electric cooking quote cover?",
     services: ["electric-cooking"],
     options: ["Built-in cooktop", "Cooktop and oven", "Freestanding cooker", "Portable induction option", "Need advice"],
+  },
+  {
+    id: "electric-cooking-existing-appliance",
+    label: "What cooking appliance is being replaced?",
+    services: ["electric-cooking"],
+    options: ["Gas cooktop", "Gas cooktop and oven", "Electric or ceramic cooktop", "Existing induction cooktop", "Freestanding gas cooker", "No existing appliance", "Not sure"],
+  },
+  {
+    id: "electric-cooking-dimensions",
+    label: "What is known about the benchtop cut-out or appliance space?",
+    services: ["electric-cooking"],
+    options: ["Exact dimensions are known", "Existing appliance model is known", "Benchtop alteration may be required", "Cabinet or freestanding space needs alteration", "Portable unit needs no fixed opening", "Not sure"],
+  },
+  {
+    id: "electric-cooking-electrical-supply",
+    label: "What is known about the cooking circuit and switchboard?",
+    services: ["electric-cooking"],
+    options: ["Suitable dedicated circuit is confirmed", "New circuit or cable run is expected", "Older switchboard or fuse board", "An electrician has assessed the supply", "Portable plug-in option only", "Not sure"],
+  },
+  {
+    id: "electric-cooking-gas-scope",
+    label: "What gas disconnection or make-safe work may be needed?",
+    services: ["electric-cooking"],
+    options: ["Cooktop branch only", "Cooktop and oven gas supply", "Whole-property gas disconnection is being considered", "No gas work is required", "A licensed gasfitter needs to assess it", "Not sure"],
+  },
+  {
+    id: "draught-scope",
+    label: "How much draught-proofing should be assessed?",
+    services: ["draught-proofing"],
+    options: ["One opening or problem area", "Several doors or windows", "A chimney, exhaust fan or fixed vent", "Whole-home leakage", "Not sure"],
+  },
+  {
+    id: "draught-openings",
+    label: "Where are the main suspected draught paths?",
+    services: ["draught-proofing"],
+    options: ["External doors", "Windows", "Exhaust fans or vents", "Chimney or fireplace", "Floors, skirtings or wall penetrations", "Several or unknown locations", "Not sure"],
+  },
+  {
+    id: "draught-ventilation-safety",
+    label: "What is known about combustion appliances and required ventilation?",
+    services: ["draught-proofing"],
+    options: ["No gas, wood or other combustion appliance", "Has combustion appliances and needs a safety assessment", "Known permanent ventilation must remain open", "An accredited person has assessed ventilation", "Not sure"],
+  },
+  {
+    id: "insulation-scope",
+    label: "Which parts of the home need insulation work or inspection?",
+    services: ["insulation"],
+    options: ["Ceiling or roof", "External walls", "Underfloor", "Several parts of the thermal envelope", "Not sure"],
+  },
+  {
+    id: "insulation-existing-condition",
+    label: "What is known about existing insulation and site condition?",
+    services: ["insulation"],
+    options: ["No insulation is visible or recorded", "Existing insulation appears incomplete or disturbed", "Existing insulation type or R-value is known", "Moisture, pests, wiring or hazardous material may need assessment", "Not sure"],
+  },
+  {
+    id: "insulation-access",
+    label: "What access is available for inspection and installation?",
+    services: ["insulation"],
+    options: ["Safe roof-space access", "Safe underfloor access", "Both roof-space and underfloor access", "Limited or no safe access", "Shared or strata-controlled access", "Not sure"],
+  },
+  {
+    id: "glazing-scope",
+    label: "How many windows or glazed doors should the quote cover?",
+    services: ["glazing"],
+    options: ["One opening", "One room", "Several rooms", "Whole home", "Not sure"],
+  },
+  {
+    id: "glazing-existing-frames",
+    label: "What are the existing window or door frames mainly made from?",
+    services: ["glazing"],
+    options: ["Timber", "Aluminium", "uPVC or composite", "Mixed frame types", "New openings are planned", "Not sure"],
+  },
+  {
+    id: "glazing-priority",
+    label: "What is the main reason for considering glazing work?",
+    services: ["glazing"],
+    options: ["Winter heat loss", "Summer heat gain or glare", "Condensation", "Noise", "Comfort across several seasons", "Not sure"],
+  },
+  {
+    id: "window-covering-scope",
+    label: "How many windows or glazed doors need coverings or shading?",
+    services: ["window-coverings"],
+    options: ["One opening", "One room", "Several rooms", "Whole home", "Not sure"],
+  },
+  {
+    id: "window-covering-type",
+    label: "What kind of window treatment should be considered?",
+    services: ["window-coverings"],
+    options: ["Insulated curtains or internal blinds", "External blinds, shutters or awnings", "Fixed external shading", "A mix of internal and external options", "Need advice", "Not sure"],
+  },
+  {
+    id: "window-covering-access",
+    label: "What is known about orientation, height and installation access?",
+    services: ["window-coverings"],
+    options: ["Ground-floor openings with clear access", "Upper-storey or difficult access", "Several orientations or exposure conditions", "Strata or facade approval may be needed", "Not sure"],
+  },
+  {
+    id: "ev-parking",
+    label: "Where will the vehicle usually be parked for charging?",
+    services: ["ev-charging"],
+    options: ["Private garage", "Private driveway or carport", "Allocated strata parking", "Shared parking", "No fixed off-street parking", "Not sure"],
+  },
+  {
+    id: "ev-vehicle-status",
+    label: "What is known about the vehicle and connector?",
+    services: ["ev-charging"],
+    options: ["EV is owned and connector is known", "EV is ordered or selected", "Comparing vehicles", "Planning for a future EV", "Not sure"],
+  },
+  {
+    id: "ev-charging-priority",
+    label: "What charging outcome matters most?",
+    services: ["ev-charging"],
+    options: ["Reliable overnight charging", "Faster charging between trips", "Use more rooftop solar", "Dynamic load management", "Prepare for bidirectional charging", "Need advice", "Not sure"],
+  },
+  {
+    id: "ev-electrical-path",
+    label: "What is known about the switchboard and cable path to the parking space?",
+    services: ["ev-charging"],
+    options: ["Nearby modern switchboard with an apparent cable path", "Long or difficult cable path", "Older switchboard or fuse board", "An electrician has assessed the supply", "Strata electrical approval may be needed", "Not sure"],
+  },
+  {
+    id: "other-category",
+    label: "What does the other energy request mainly concern?",
+    services: ["other"],
+    options: ["Ventilation or indoor air quality", "Energy monitoring or controls", "Lighting or another appliance", "Pool or spa energy", "Home design, renovation or materials", "Metering or grid connection", "Another upgrade not listed", "Not sure"],
   },
   {
     id: "other-scope",
@@ -144,6 +384,20 @@ const QUESTION_DEFINITIONS = Object.freeze([
     options: ["Replace existing equipment", "Install something new", "Repair or improve performance", "Need advice"],
   },
 ]);
+
+const PUBLIC_PLAN_QUESTION_IDS = new Set([
+  "timing",
+  "solar-scope",
+  "battery-priority",
+  "heating-coverage",
+  "electric-cooking-scope",
+  "other-scope",
+]);
+
+const QUESTION_DEFINITIONS = Object.freeze(
+  ENERGY_ASSISTANT_QUESTION_DEFINITIONS.filter((question) =>
+    PUBLIC_PLAN_QUESTION_IDS.has(question.id)),
+);
 
 const PHOTO_PROMPT_DEFINITIONS = Object.freeze([
   {
@@ -294,6 +548,16 @@ function intersects(services, selected) {
 export function publicPlanQuoteQuestionsForServices(services) {
   const selected = selectedServiceSet(services);
   return QUESTION_DEFINITIONS
+    .filter((question) => intersects(question.services, selected))
+    .map((question) => ({
+      ...question,
+      services: question.services.filter((service) => selected.has(service)),
+    }));
+}
+
+export function energyAssistantQuoteQuestionsForServices(services) {
+  const selected = selectedServiceSet(services);
+  return ENERGY_ASSISTANT_QUESTION_DEFINITIONS
     .filter((question) => intersects(question.services, selected))
     .map((question) => ({
       ...question,

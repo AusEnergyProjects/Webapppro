@@ -5,14 +5,16 @@ import {
   createCustomerProjectPlan,
   customerHomeFeatureSections as rawCustomerHomeFeatureSections,
   customerProjectOptions as rawCustomerProjectOptions,
+  normalizeHomeFeatureSelections,
   updateHomeFeatureSelection,
 } from "@/lib/customer-projects.mjs";
+import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
-import { PlannerHomeJourney } from "@/components/PlannerHomeJourney";
 import {
   PublicPlanEnquiryForm,
   type PublicPlanUpgradeInterest,
 } from "@/components/PublicPlanEnquiryForm";
+import styles from "./HomeEnergyPlanner.module.css";
 
 type Option = [string, string];
 type CustomerPlanItem = {
@@ -39,12 +41,6 @@ type CustomerPlan = {
   }>;
   everydayActionsBoundary: string;
   items: CustomerPlanItem[];
-  nextQuestions: Array<{
-    id: string;
-    prompt: string;
-    whyItMatters: string;
-    notSureAllowed: true;
-  }>;
 };
 type InitialPlannerSelection = {
   goals: string[];
@@ -52,6 +48,7 @@ type InitialPlannerSelection = {
   situation: string;
   approvalContext: string;
   budgetRange: string;
+  postcode: string;
   addressState: string;
   features: string[];
   propertyType: string;
@@ -68,21 +65,13 @@ type InitialPlannerSelection = {
   wallConstruction: string;
   floorConstruction: string;
 };
-type HomeFeatureQuestion = {
-  id: string;
-  options: Option[];
-};
-type HomeFeatureSection = {
-  id: string;
-  title: string;
-  questions: HomeFeatureQuestion[];
-};
+type PlannerDraft = InitialPlannerSelection;
+type HomeFeatureQuestion = { id: string; options: Option[] };
+type HomeFeatureSection = { id: string; questions: HomeFeatureQuestion[] };
 type PropertyQuestionKey =
-  | "propertyType"
   | "storeys"
   | "ageBand"
   | "floorArea"
-  | "occupants"
   | "sharedWalls"
   | "roofType"
   | "roofColour"
@@ -91,16 +80,12 @@ type PropertyQuestionKey =
   | "switchboard"
   | "wallConstruction"
   | "floorConstruction";
-type PlannerStep =
-  | { id: "situation" | "goals" | "shared-property" | "budget" | "pace" | "location"; label: string }
-  | { id: "property"; label: string; propertyKey: PropertyQuestionKey; eyebrow: string; prompt: string; help: string; options: Option[] }
-  | { id: "features"; label: string; featureSection: string; featureQuestion: string }
-  | { id: "result"; label: string };
 
 const customerProjectOptions = rawCustomerProjectOptions as unknown as {
   goals: Option[];
   paces: Option[];
   situations: Option[];
+  approvalContexts: Option[];
   budgets: Option[];
   propertyTypes: Option[];
   storeys: Option[];
@@ -121,162 +106,21 @@ const customerProjectOptions = rawCustomerProjectOptions as unknown as {
 const customerHomeFeatureSections =
   rawCustomerHomeFeatureSections as unknown as HomeFeatureSection[];
 
-const plannerFeatureSteps = customerHomeFeatureSections.flatMap((section) =>
-  section.questions.map((question): PlannerStep => ({
-    id: "features",
-    label: section.title,
-    featureSection: section.id,
-    featureQuestion: question.id,
-  })),
-);
-
-const plannerPropertySteps: PlannerStep[] = [
-  {
-    id: "property",
-    label: "Home type",
-    propertyKey: "propertyType",
-    eyebrow: "Home basics",
-    prompt: "What type of home is it?",
-    help: "This changes shared-wall, access and approval assumptions.",
-    options: customerProjectOptions.propertyTypes,
-  },
-  {
-    id: "property",
-    label: "Storeys",
-    propertyKey: "storeys",
-    eyebrow: "Home basics",
-    prompt: "How many storeys are inside the home?",
-    help: "Home height can affect zoning, access and the scope of fixed work.",
-    options: customerProjectOptions.storeys,
-  },
-  {
-    id: "property",
-    label: "Home size",
-    propertyKey: "floorArea",
-    eyebrow: "Home basics",
-    prompt: "About how large is the home inside?",
-    help: "A broad range is enough to frame scale without asking for a floor plan.",
-    options: customerProjectOptions.floorAreas,
-  },
-  {
-    id: "property",
-    label: "Household size",
-    propertyKey: "occupants",
-    eyebrow: "Home basics",
-    prompt: "How many people usually live here?",
-    help: "This helps frame occupied zones and everyday hot-water demand. It is not used as a NatHERS occupancy input.",
-    options: customerProjectOptions.occupants,
-  },
-  {
-    id: "property",
-    label: "Shared walls",
-    propertyKey: "sharedWalls",
-    eyebrow: "Home basics",
-    prompt: "How many sides share a wall with another dwelling?",
-    help: "Only count walls shared with a neighbouring home, not internal walls within your home.",
-    options: customerProjectOptions.sharedWalls,
-  },
-  {
-    id: "property",
-    label: "Home age",
-    propertyKey: "ageBand",
-    eyebrow: "Construction context",
-    prompt: "When was the main part of the home built?",
-    help: "Use the main construction period. An extension can be checked separately during an assessment.",
-    options: customerProjectOptions.ageBands,
-  },
-  {
-    id: "property",
-    label: "External walls",
-    propertyKey: "wallConstruction",
-    eyebrow: "Construction context",
-    prompt: "What are the walls facing outdoors mainly made from?",
-    help: "Choose from what is safely visible or recorded. This does not prove whether insulation is present.",
-    options: customerProjectOptions.wallConstructions,
-  },
-  {
-    id: "property",
-    label: "Floor construction",
-    propertyKey: "floorConstruction",
-    eyebrow: "Construction context",
-    prompt: "What is the main floor construction?",
-    help: "Do not crawl under the home to check. Use a known record or choose Not sure.",
-    options: customerProjectOptions.floorConstructions,
-  },
-  {
-    id: "property",
-    label: "Roof covering",
-    propertyKey: "roofType",
-    eyebrow: "Roof context",
-    prompt: "What is the main roof covering?",
-    help: "Use what is safely visible from ground level or an existing record. Do not climb onto the roof.",
-    options: customerProjectOptions.roofTypes,
-  },
-  {
-    id: "property",
-    label: "Roof colour",
-    propertyKey: "roofColour",
-    eyebrow: "Roof context",
-    prompt: "What colour is most of the roof?",
-    help: "A broad light, mid or dark answer is enough. Do not climb onto the roof to check.",
-    options: customerProjectOptions.roofColours,
-  },
-  {
-    id: "property",
-    label: "Roof form",
-    propertyKey: "roofForm",
-    eyebrow: "Roof context",
-    prompt: "What is the main roof form?",
-    help: "Choose the closest shape visible safely from ground level.",
-    options: customerProjectOptions.roofForms,
-  },
-  {
-    id: "property",
-    label: "Roof condition",
-    propertyKey: "roofCondition",
-    eyebrow: "Roof context",
-    prompt: "Is there a known roof condition problem?",
-    help: "Answer from known leaks, visible damage or existing records. A professional should verify condition before roof-mounted work.",
-    options: customerProjectOptions.roofConditions,
-  },
-  {
-    id: "property",
-    label: "Switchboard",
-    propertyKey: "switchboard",
-    eyebrow: "Electrical context",
-    prompt: "Which switchboard description looks closest?",
-    help: "Use a safe front-on look or an existing record. Never remove the cover. A licensed electrician must verify capacity.",
-    options: customerProjectOptions.switchboards,
-  },
+const STORAGE_KEY = "aea-home-energy-assessment-v1";
+const PRIMARY_STAGE_COUNT = 4;
+const stageNames = [
+  "Goal and household",
+  "Comfort and building",
+  "Current systems",
+  "Timing and review",
+] as const;
+const comfortQuestionIds = [
+  "comfort-concerns",
+  "ceiling-insulation",
+  "glazing",
+  "heating-cooling-systems",
 ];
-
-const plannerStepsBeforeFeatures: PlannerStep[] = [
-  { id: "situation", label: "Your home" },
-  { id: "shared-property", label: "Shared property" },
-  ...plannerPropertySteps,
-  { id: "goals", label: "Priorities" },
-];
-
-const plannerStepsAfterFeatures: PlannerStep[] = [
-  { id: "budget", label: "Investment" },
-  { id: "pace", label: "Timing" },
-  { id: "location", label: "Location" },
-  { id: "result", label: "Your plan" },
-];
-
-const plannerSteps: PlannerStep[] = [
-  ...plannerStepsBeforeFeatures,
-  ...plannerFeatureSteps,
-  ...plannerStepsAfterFeatures,
-];
-const floorInsulationStepIndex = plannerSteps.findIndex(
-  (step) => step.id === "features" && step.featureQuestion === "floor-insulation",
-);
-const plannerStages = ["understand", "home", "direction", "plan"] as const;
-
-function appendValues(params: URLSearchParams, name: string, values: string[]) {
-  values.forEach((value) => params.append(name, value));
-}
+const systemQuestionIds = ["hot-water", "cooking", "solar", "battery", "ev"];
 
 const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["assessment", "assessment"],
@@ -299,6 +143,24 @@ const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["ev", "ev-charging"],
 ]);
 
+const optionalPropertyQuestions: Array<{
+  key: PropertyQuestionKey;
+  label: string;
+  options: Option[];
+}> = [
+  { key: "storeys", label: "Storeys", options: customerProjectOptions.storeys },
+  { key: "floorArea", label: "Approximate floor area", options: customerProjectOptions.floorAreas },
+  { key: "ageBand", label: "Home age", options: customerProjectOptions.ageBands },
+  { key: "sharedWalls", label: "Shared walls", options: customerProjectOptions.sharedWalls },
+  { key: "wallConstruction", label: "External wall construction", options: customerProjectOptions.wallConstructions },
+  { key: "floorConstruction", label: "Floor construction", options: customerProjectOptions.floorConstructions },
+  { key: "roofType", label: "Roof covering", options: customerProjectOptions.roofTypes },
+  { key: "roofColour", label: "Roof colour", options: customerProjectOptions.roofColours },
+  { key: "roofForm", label: "Roof form", options: customerProjectOptions.roofForms },
+  { key: "roofCondition", label: "Roof condition", options: customerProjectOptions.roofConditions },
+  { key: "switchboard", label: "Switchboard", options: customerProjectOptions.switchboards },
+];
+
 function suggestedPlanInterests(items: CustomerPlanItem[]) {
   const interests: PublicPlanUpgradeInterest[] = [];
   for (const item of items) {
@@ -308,509 +170,559 @@ function suggestedPlanInterests(items: CustomerPlanItem[]) {
   return interests.length ? interests : ["assessment"];
 }
 
-function initialPlannerStep(selection: InitialPlannerSelection) {
-  const isDefault = selection.goals.length === 1
-    && selection.goals[0] === "lower-bills"
-    && selection.pace === "staged"
-    && !selection.situation
-    && selection.approvalContext === "not_sure"
-    && selection.budgetRange === "not_set"
-    && !selection.addressState
-    && selection.features.length === 0
-    && !selection.propertyType
-    && !selection.storeys
-    && !selection.ageBand
-    && !selection.floorArea
-    && !selection.occupants
-    && !selection.sharedWalls
-    && !selection.roofType
-    && !selection.roofColour
-    && !selection.roofForm
-    && !selection.roofCondition
-    && !selection.switchboard
-    && !selection.wallConstruction
-    && !selection.floorConstruction;
-  return isDefault ? 0 : plannerSteps.length - 1;
+function questionAnswered(features: string[], questionId: string) {
+  const question = customerHomeFeatureSections
+    .flatMap((section) => section.questions)
+    .find((item) => item.id === questionId);
+  return question?.options.some(([value]) => features.includes(value)) ?? false;
+}
+
+function normalizeFloorInsulation(draft: PlannerDraft): PlannerDraft {
+  if (draft.floorConstruction !== "slab_on_ground") return draft;
+  return {
+    ...draft,
+    features: updateHomeFeatureSelection(
+      draft.features,
+      "floor-insulation",
+      "floor-insulation-not-applicable",
+      true,
+    ),
+  };
+}
+
+function defaultDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
+  const postcodeState = residentialStateFromPostcode(initialSelection.postcode);
+  return normalizeFloorInsulation({
+    ...initialSelection,
+    goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills"],
+    pace: initialSelection.pace || "staged",
+    approvalContext: initialSelection.approvalContext || "not_sure",
+    budgetRange: initialSelection.budgetRange || "not_set",
+    addressState: postcodeState || "",
+  });
+}
+
+function hasExplicitSelection(selection: InitialPlannerSelection) {
+  return Boolean(
+    selection.postcode
+    || selection.situation
+    || selection.features.length
+    || selection.propertyType
+    || selection.occupants
+    || selection.addressState,
+  );
+}
+
+function firstIncompleteAssessmentStage(draft: PlannerDraft) {
+  const postcodeState = residentialStateFromPostcode(draft.postcode);
+  const householdComplete = Boolean(
+    /^\d{4}$/.test(draft.postcode)
+    && postcodeState
+    && draft.addressState === postcodeState
+    && draft.situation
+    && draft.propertyType
+    && draft.occupants,
+  );
+  if (!householdComplete) return 0;
+  if (!comfortQuestionIds.every((id) => questionAnswered(draft.features, id))) return 1;
+  if (!systemQuestionIds.every((id) => questionAnswered(draft.features, id))) return 2;
+  return 4;
+}
+
+function storedOption(options: Option[], value: unknown, fallback = "") {
+  return typeof value === "string" && options.some(([option]) => option === value)
+    ? value
+    : fallback;
+}
+
+function sanitizeStoredDraft(candidate: Partial<PlannerDraft>): PlannerDraft {
+  const postcode = typeof candidate.postcode === "string"
+    ? candidate.postcode.replace(/\D/g, "").slice(0, 4)
+    : "";
+  const goals = Array.isArray(candidate.goals)
+    ? candidate.goals
+        .filter((item): item is string => typeof item === "string")
+        .filter((item) => customerProjectOptions.goals.some(([option]) => option === item))
+        .slice(0, 10)
+    : [];
+  const rawFeatures = Array.isArray(candidate.features)
+    ? candidate.features.filter((item): item is string => typeof item === "string").slice(0, 36)
+    : [];
+  return normalizeFloorInsulation({
+    goals: goals.length ? goals : ["lower-bills"],
+    pace: storedOption(customerProjectOptions.paces, candidate.pace, "staged"),
+    situation: storedOption(customerProjectOptions.situations, candidate.situation),
+    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext, "not_sure"),
+    budgetRange: storedOption(customerProjectOptions.budgets, candidate.budgetRange, "not_set"),
+    postcode,
+    addressState: residentialStateFromPostcode(postcode) || "",
+    features: normalizeHomeFeatureSelections(rawFeatures),
+    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType),
+    storeys: storedOption(customerProjectOptions.storeys, candidate.storeys),
+    ageBand: storedOption(customerProjectOptions.ageBands, candidate.ageBand),
+    floorArea: storedOption(customerProjectOptions.floorAreas, candidate.floorArea),
+    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants),
+    sharedWalls: storedOption(customerProjectOptions.sharedWalls, candidate.sharedWalls),
+    roofType: storedOption(customerProjectOptions.roofTypes, candidate.roofType),
+    roofColour: storedOption(customerProjectOptions.roofColours, candidate.roofColour),
+    roofForm: storedOption(customerProjectOptions.roofForms, candidate.roofForm),
+    roofCondition: storedOption(customerProjectOptions.roofConditions, candidate.roofCondition),
+    switchboard: storedOption(customerProjectOptions.switchboards, candidate.switchboard),
+    wallConstruction: storedOption(customerProjectOptions.wallConstructions, candidate.wallConstruction),
+    floorConstruction: storedOption(customerProjectOptions.floorConstructions, candidate.floorConstruction),
+  });
+}
+
+function safeStoredDraft(value: string | null): { draft: PlannerDraft; stage: number } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { version?: unknown; draft?: unknown; stage?: unknown };
+    if (parsed.version !== 1 || !parsed.draft || typeof parsed.draft !== "object") return null;
+    const candidate = parsed.draft as Partial<PlannerDraft>;
+    if (!Array.isArray(candidate.goals) || !Array.isArray(candidate.features)) return null;
+    return {
+      draft: sanitizeStoredDraft(candidate),
+      stage: Number.isInteger(parsed.stage) && Number(parsed.stage) >= 0 && Number(parsed.stage) <= 4
+        ? Number(parsed.stage)
+        : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readStoredAssessment() {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeAssessment(value: string) {
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, value);
+  } catch {
+    // The assessment remains fully usable when browser storage is unavailable.
+  }
+}
+
+function removeStoredAssessment() {
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Reset the in-memory assessment even when browser storage is unavailable.
+  }
+}
+
+function appendValues(params: URLSearchParams, name: string, values: string[]) {
+  values.forEach((value) => params.append(name, value));
+}
+
+function ChoiceTiles({
+  legend,
+  name,
+  options,
+  selected,
+  onSelect,
+  multiple = false,
+}: {
+  legend: string;
+  name: string;
+  options: Option[];
+  selected: string[];
+  onSelect: (value: string) => void;
+  multiple?: boolean;
+}) {
+  return (
+    <fieldset className={styles.fieldset}>
+      <legend>{legend}</legend>
+      <div className={styles.tiles}>
+        {options.map(([value, label]) => {
+          const checked = selected.includes(value);
+          return (
+            <label className={checked ? styles.tileSelected : styles.tile} key={value}>
+              <input
+                type={multiple ? "checkbox" : "radio"}
+                name={name}
+                value={value}
+                checked={checked}
+                onChange={() => onSelect(value)}
+              />
+              <span>{label}</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
 }
 
 export function HomeEnergyPlanner({ initialSelection }: { initialSelection: InitialPlannerSelection }) {
-  const [goals, setGoals] = useState(initialSelection.goals);
-  const [pace, setPace] = useState(initialSelection.pace);
-  const [situation, setSituation] = useState(initialSelection.situation);
-  const [approvalContext, setApprovalContext] = useState(initialSelection.approvalContext);
-  const [budgetRange, setBudgetRange] = useState(initialSelection.budgetRange);
-  const [addressState, setAddressState] = useState(initialSelection.addressState);
-  const [features, setFeatures] = useState(() => (
-    initialSelection.floorConstruction === "slab_on_ground"
-      ? updateHomeFeatureSelection(
-          initialSelection.features,
-          "floor-insulation",
-          "floor-insulation-not-applicable",
-        )
-      : initialSelection.features
-  ));
-  const [propertyType, setPropertyType] = useState(initialSelection.propertyType);
-  const [storeys, setStoreys] = useState(initialSelection.storeys);
-  const [ageBand, setAgeBand] = useState(initialSelection.ageBand);
-  const [floorArea, setFloorArea] = useState(initialSelection.floorArea);
-  const [occupants, setOccupants] = useState(initialSelection.occupants);
-  const [sharedWalls, setSharedWalls] = useState(initialSelection.sharedWalls);
-  const [roofType, setRoofType] = useState(initialSelection.roofType);
-  const [roofColour, setRoofColour] = useState(initialSelection.roofColour);
-  const [roofForm, setRoofForm] = useState(initialSelection.roofForm);
-  const [roofCondition, setRoofCondition] = useState(initialSelection.roofCondition);
-  const [switchboard, setSwitchboard] = useState(initialSelection.switchboard);
-  const [wallConstruction, setWallConstruction] = useState(initialSelection.wallConstruction);
-  const [floorConstruction, setFloorConstruction] = useState(initialSelection.floorConstruction);
-  const [stepIndex, setStepIndex] = useState(() => initialPlannerStep(initialSelection));
-  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
-  const hasChangedStep = useRef(false);
-  const currentStep = plannerSteps[stepIndex];
-  const questionCount = plannerSteps.length - 1;
-  const isResult = currentStep.id === "result";
-  const floorInsulationIsInapplicable = floorConstruction === "slab_on_ground";
-  const visibleQuestionCount = questionCount - (floorInsulationIsInapplicable ? 1 : 0);
-  const visibleQuestionNumber = stepIndex + 1 - (
-    floorInsulationIsInapplicable && stepIndex > floorInsulationStepIndex ? 1 : 0
-  );
-  const stageIndex = isResult
-    ? 3
-    : currentStep.id === "features"
-      ? 1
-      : stepIndex < plannerStepsBeforeFeatures.length
-        ? 0
-        : 2;
-  const progressValue = isResult
-    ? 100
-    : Math.round((visibleQuestionNumber / visibleQuestionCount) * 100);
-  const currentFeatureQuestion = currentStep.id === "features"
-    ? customerHomeFeatureSections
-        .find((section) => section.id === currentStep.featureSection)
-        ?.questions.find((question) => question.id === currentStep.featureQuestion)
-    : undefined;
-  const hasCurrentFeatureAnswer = currentFeatureQuestion?.options.some(([value]) =>
-    features.includes(value)) ?? false;
-  const propertyAnswers: Record<PropertyQuestionKey, string> = {
-    propertyType,
-    storeys,
-    ageBand,
-    floorArea,
-    occupants,
-    sharedWalls,
-    roofType,
-    roofColour,
-    roofForm,
-    roofCondition,
-    switchboard,
-    wallConstruction,
-    floorConstruction,
-  };
-  const currentPropertyAnswer = currentStep.id === "property"
-    ? propertyAnswers[currentStep.propertyKey]
-    : "";
+  const initialDraft = useMemo(() => defaultDraft(initialSelection), [initialSelection]);
+  const [draft, setDraft] = useState<PlannerDraft>(initialDraft);
+  const [stage, setStage] = useState(() => firstIncompleteAssessmentStage(initialDraft));
+  const [attemptedStage, setAttemptedStage] = useState<number | null>(null);
+  const [restored, setRestored] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const hydratedRef = useRef(false);
+  const previousStageRef = useRef(stage);
 
   useEffect(() => {
-    if (!hasChangedStep.current) return;
-    stepHeadingRef.current?.focus();
-  }, [stepIndex]);
+    let restoreFrame: number | undefined;
+    if (!hasExplicitSelection(initialSelection)) {
+      const stored = safeStoredDraft(readStoredAssessment());
+      if (stored) {
+        restoreFrame = window.requestAnimationFrame(() => {
+          setDraft({ ...initialDraft, ...stored.draft });
+          previousStageRef.current = stored.stage;
+          setStage(stored.stage);
+          setRestored(true);
+          hydratedRef.current = true;
+        });
+      } else {
+        hydratedRef.current = true;
+      }
+    } else {
+      hydratedRef.current = true;
+    }
+    return () => {
+      if (restoreFrame !== undefined) window.cancelAnimationFrame(restoreFrame);
+    };
+  }, [initialDraft, initialSelection]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    storeAssessment(JSON.stringify({ version: 1, draft, stage }));
+  }, [draft, stage]);
+
+  useEffect(() => {
+    if (previousStageRef.current === stage) return;
+    previousStageRef.current = stage;
+    headingRef.current?.focus();
+  }, [stage]);
 
   const plan = useMemo(
     () => createCustomerProjectPlan({
-      goals,
-      pace,
-      situation,
-      approvalContext,
-      budgetRange,
-      addressState,
-      features,
+      goals: draft.goals,
+      pace: draft.pace,
+      situation: draft.situation,
+      approvalContext: draft.approvalContext,
+      budgetRange: draft.budgetRange,
+      postcode: draft.postcode,
+      addressState: draft.addressState,
+      features: draft.features,
       propertyContext: {
-        propertyType,
-        storeys,
-        ageBand,
-        floorArea,
-        occupants,
-        sharedWalls,
-        roofType,
-        roofColour,
-        roofForm,
-        roofCondition,
-        switchboard,
-        wallConstruction,
-        floorConstruction,
+        propertyType: draft.propertyType,
+        storeys: draft.storeys,
+        ageBand: draft.ageBand,
+        floorArea: draft.floorArea,
+        occupants: draft.occupants,
+        sharedWalls: draft.sharedWalls,
+        roofType: draft.roofType,
+        roofColour: draft.roofColour,
+        roofForm: draft.roofForm,
+        roofCondition: draft.roofCondition,
+        switchboard: draft.switchboard,
+        wallConstruction: draft.wallConstruction,
+        floorConstruction: draft.floorConstruction,
       },
     }) as CustomerPlan,
-    [
-      goals,
-      pace,
-      situation,
-      approvalContext,
-      budgetRange,
-      addressState,
-      features,
-      propertyType,
-      storeys,
-      ageBand,
-      floorArea,
-      occupants,
-      sharedWalls,
-      roofType,
-      roofColour,
-      roofForm,
-      roofCondition,
-      switchboard,
-      wallConstruction,
-      floorConstruction,
-    ],
+    [draft],
   );
 
   const selectionParams = useMemo(() => {
     const params = new URLSearchParams({
-      pace,
-      situation,
-      approvalContext,
-      budgetRange,
+      pace: draft.pace,
+      situation: draft.situation,
+      approvalContext: draft.approvalContext,
+      budgetRange: draft.budgetRange,
     });
-    appendValues(params, "goal", goals);
-    appendValues(params, "feature", features);
-    if (addressState) params.set("addressState", addressState);
-    if (propertyType) params.set("propertyType", propertyType);
-    if (storeys) params.set("storeys", storeys);
-    if (ageBand) params.set("ageBand", ageBand);
-    if (floorArea) params.set("floorArea", floorArea);
-    if (occupants) params.set("occupants", occupants);
-    if (sharedWalls) params.set("sharedWalls", sharedWalls);
-    if (roofType) params.set("roofType", roofType);
-    if (roofColour) params.set("roofColour", roofColour);
-    if (roofForm) params.set("roofForm", roofForm);
-    if (roofCondition) params.set("roofCondition", roofCondition);
-    if (switchboard) params.set("switchboard", switchboard);
-    if (wallConstruction) params.set("wallConstruction", wallConstruction);
-    if (floorConstruction) params.set("floorConstruction", floorConstruction);
+    appendValues(params, "goal", draft.goals);
+    appendValues(params, "feature", draft.features);
+    for (const [key, value] of Object.entries(draft)) {
+      if (["goals", "features", "pace", "situation", "approvalContext", "budgetRange"].includes(key)) continue;
+      if (typeof value === "string" && value) params.set(key, value);
+    }
     return params;
-  }, [
-    goals,
-    pace,
-    situation,
-    approvalContext,
-    budgetRange,
-    addressState,
-    features,
-    propertyType,
-    storeys,
-    ageBand,
-    floorArea,
-    occupants,
-    sharedWalls,
-    roofType,
-    roofColour,
-    roofForm,
-    roofCondition,
-    switchboard,
-    wallConstruction,
-    floorConstruction,
-  ]);
+  }, [draft]);
+
   const printablePlanHref = `/plan/print?${selectionParams.toString()}`;
   const firstActionItem = plan.items.find((item) => Boolean(item.href));
   const enquiryInterests = suggestedPlanInterests(plan.items);
   const enquiryPropertyContext = {
-    propertyType,
-    storeys,
-    ageBand,
-    floorArea,
-    occupants,
-    sharedWalls,
-    roofType,
-    roofColour,
-    roofForm,
-    roofCondition,
-    switchboard,
-    wallConstruction,
-    floorConstruction,
+    propertyType: draft.propertyType,
+    storeys: draft.storeys,
+    ageBand: draft.ageBand,
+    floorArea: draft.floorArea,
+    occupants: draft.occupants,
+    sharedWalls: draft.sharedWalls,
+    roofType: draft.roofType,
+    roofColour: draft.roofColour,
+    roofForm: draft.roofForm,
+    roofCondition: draft.roofCondition,
+    switchboard: draft.switchboard,
+    wallConstruction: draft.wallConstruction,
+    floorConstruction: draft.floorConstruction,
   };
 
-  const sharedPropertyAnswer = approvalContext === "strata"
-    ? "yes"
-    : approvalContext === "none"
-      ? "no"
-      : "not_sure";
+  function setField<K extends keyof PlannerDraft>(key: K, value: PlannerDraft[K]) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
 
-  function setSharedPropertyAnswer(value: string) {
-    setApprovalContext(value === "yes" ? "strata" : value === "no" ? "none" : "not_sure");
+  function setPostcode(value: string) {
+    const postcode = value.replace(/\D/g, "").slice(0, 4);
+    const inferredState = /^\d{4}$/.test(postcode) ? residentialStateFromPostcode(postcode) : "";
+    setDraft((current) => ({
+      ...current,
+      postcode,
+      addressState: inferredState || "",
+    }));
   }
 
   function toggleGoal(value: string) {
-    setGoals((current) => {
-      if (!current.includes(value)) return [...current, value];
-      return current.length > 1 ? current.filter((item) => item !== value) : current;
+    setDraft((current) => {
+      const goals = current.goals.includes(value)
+        ? current.goals.length > 1
+          ? current.goals.filter((item) => item !== value)
+          : current.goals
+        : [...current.goals, value];
+      return { ...current, goals };
     });
   }
 
   function setPropertyAnswer(key: PropertyQuestionKey, value: string) {
-    const setters: Record<PropertyQuestionKey, (next: string) => void> = {
-      propertyType: setPropertyType,
-      storeys: setStoreys,
-      ageBand: setAgeBand,
-      floorArea: setFloorArea,
-      occupants: setOccupants,
-      sharedWalls: setSharedWalls,
-      roofType: setRoofType,
-      roofColour: setRoofColour,
-      roofForm: setRoofForm,
-      roofCondition: setRoofCondition,
-      switchboard: setSwitchboard,
-      wallConstruction: setWallConstruction,
-      floorConstruction: setFloorConstruction,
-    };
-    setters[key](value);
-    if (key === "floorConstruction") {
-      setFeatures((current) => updateHomeFeatureSelection(
-        current,
-        "floor-insulation",
-        "floor-insulation-not-applicable",
-        value === "slab_on_ground",
-      ));
-    }
+    setDraft((current) => ({
+      ...current,
+      [key]: value,
+      features: key === "floorConstruction"
+        ? updateHomeFeatureSelection(
+            current.features,
+            "floor-insulation",
+            "floor-insulation-not-applicable",
+            value === "slab_on_ground",
+          )
+        : current.features,
+    }));
   }
 
-  function goToStep(nextIndex: number) {
-    hasChangedStep.current = true;
-    const direction = Math.sign(nextIndex - stepIndex);
-    let resolvedIndex = Math.max(0, Math.min(plannerSteps.length - 1, nextIndex));
-    const isInapplicableFloorInsulation = (index: number) => {
-      const step = plannerSteps[index];
-      return step?.id === "features"
-        && step.featureQuestion === "floor-insulation"
-        && floorConstruction === "slab_on_ground";
-    };
-    while (direction !== 0 && isInapplicableFloorInsulation(resolvedIndex)) {
-      resolvedIndex = Math.max(
-        0,
-        Math.min(plannerSteps.length - 1, resolvedIndex + direction),
-      );
+  function validationErrors(currentStage: number) {
+    if (currentStage === 0) {
+      const errors: string[] = [];
+      const postcodeState = residentialStateFromPostcode(draft.postcode);
+      if (!/^\d{4}$/.test(draft.postcode) || !postcodeState) {
+        errors.push("Enter a valid four digit Australian residential postcode.");
+      } else if (draft.addressState !== postcodeState) {
+        errors.push("The postcode and detected state must match.");
+      }
+      if (!draft.situation) errors.push("Choose whether the household owns or rents the home.");
+      if (!draft.propertyType) errors.push("Choose the home type, including Not sure.");
+      if (!draft.occupants) errors.push("Choose the household size, including Not sure.");
+      return errors;
     }
-    setStepIndex(resolvedIndex);
+    if (currentStage === 1) {
+      return comfortQuestionIds.every((id) => questionAnswered(draft.features, id))
+        ? []
+        : ["Answer the four core comfort questions. Not sure is a valid answer."];
+    }
+    if (currentStage === 2) {
+      return systemQuestionIds.every((id) => questionAnswered(draft.features, id))
+        ? []
+        : ["Answer the hot water, cooking, solar, battery and vehicle questions. Not sure is a valid answer."];
+    }
+    return [];
+  }
+
+  const errors = attemptedStage === stage ? validationErrors(stage) : [];
+
+  function continueAssessment() {
+    const nextErrors = validationErrors(stage);
+    setAttemptedStage(stage);
+    if (nextErrors.length) return;
+    setAttemptedStage(null);
+    setStage((current) => Math.min(4, current + 1));
   }
 
   function resetPlan() {
-    setGoals(["lower-bills"]);
-    setPace("staged");
-    setSituation("");
-    setApprovalContext("not_sure");
-    setBudgetRange("not_set");
-    setAddressState("");
-    setFeatures([]);
-    setPropertyType("");
-    setStoreys("");
-    setAgeBand("");
-    setFloorArea("");
-    setOccupants("");
-    setSharedWalls("");
-    setRoofType("");
-    setRoofColour("");
-    setRoofForm("");
-    setRoofCondition("");
-    setSwitchboard("");
-    setWallConstruction("");
-    setFloorConstruction("");
-    goToStep(0);
+    removeStoredAssessment();
+    setDraft(defaultDraft({
+      ...initialSelection,
+      goals: ["lower-bills"],
+      pace: "staged",
+      situation: "",
+      approvalContext: "not_sure",
+      budgetRange: "not_set",
+      postcode: "",
+      addressState: "",
+      features: [],
+      propertyType: "",
+      storeys: "",
+      ageBand: "",
+      floorArea: "",
+      occupants: "",
+      sharedWalls: "",
+      roofType: "",
+      roofColour: "",
+      roofForm: "",
+      roofCondition: "",
+      switchboard: "",
+      wallConstruction: "",
+      floorConstruction: "",
+    }));
+    setStage(0);
+    setAttemptedStage(null);
+    setRestored(false);
   }
 
-  const canContinue = currentStep.id === "situation"
-    ? Boolean(situation)
-    : currentStep.id === "property"
-      ? Boolean(currentPropertyAnswer)
-      : currentStep.id === "features"
-        ? hasCurrentFeatureAnswer
-        : true;
-  const continueLabel = currentStep.id === "location"
-    ? "Build my plan"
-    : "Continue";
+  const progressValue = stage === 4 ? 100 : Math.round(((stage + 1) / PRIMARY_STAGE_COUNT) * 100);
 
   return (
-    <section className="planner-layout" aria-label="Home energy planning tool">
-      <PlannerHomeJourney
-        stage={plannerStages[stageIndex]}
-        progress={progressValue}
-        focusLabel={currentStep.label}
-        focusKey={currentStep.id === "features"
-          ? currentStep.featureQuestion
-          : currentStep.id === "property"
-            ? currentStep.propertyKey
-            : currentStep.id}
-        selectedFeatureCount={features.length}
-      />
-      <header className="planner-progress-shell">
-        <div className="planner-progress-copy">
-          <span>{isResult ? "Plan ready" : `Question ${visibleQuestionNumber} of ${visibleQuestionCount}`}</span>
-          <strong>{currentStep.label}</strong>
-          <small>{progressValue}% complete</small>
+    <section className={styles.layout} aria-label="Home energy assessment">
+      <header className={styles.progressHeader}>
+        <div>
+          <span>{stage === 4 ? "Your roadmap is ready" : `Step ${stage + 1} of ${PRIMARY_STAGE_COUNT}`}</span>
+          <strong>{stage === 4 ? "Your home energy roadmap" : stageNames[stage]}</strong>
+          <small>{stage === 4 ? "Edit any stage whenever you need" : "Four grouped steps, about 90 seconds"}</small>
         </div>
-        <div
-          className="planner-progress-track"
-          role="progressbar"
-          aria-label="Home plan progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progressValue}
-        >
+        <div className={styles.progressTrack} role="progressbar" aria-label="Assessment progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
           <span style={{ width: `${progressValue}%` }} />
         </div>
+        {restored ? <p className={styles.restored} role="status">Your unfinished assessment was restored in this browser tab.</p> : null}
       </header>
 
-      {!isResult ? (
-        <form className="planner-controls planner-guided-controls" onSubmit={(event) => event.preventDefault()}>
-          <section className="planner-step-card" aria-labelledby={`planner-step-${stepIndex}`}>
-            <span className={`planner-stage-emblem planner-stage-emblem-${plannerStages[stageIndex]}`} aria-hidden="true" />
-            {currentStep.id === "situation" ? (
+      {stage < 4 ? (
+        <form className={styles.form} onSubmit={(event) => { event.preventDefault(); continueAssessment(); }} noValidate>
+          {errors.length ? (
+            <div className={styles.errorSummary} role="alert" tabIndex={-1}>
+              <strong>Check this step</strong>
+              <ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul>
+            </div>
+          ) : null}
+
+          <section className={styles.stageCard} aria-labelledby={`assessment-stage-${stage}`}>
+            {stage === 0 ? (
               <>
-                <span className="planner-step-eyebrow">First, the permission boundary</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>Do you own or rent the home?</h2>
-                <p>This helps the plan separate changes you control from work that may need permission.</p>
-                <div className="planner-choice-grid planner-choice-grid-compact">
-                  {customerProjectOptions.situations.map(([value, label]) => (
-                    <label className={situation === value ? "selected" : ""} key={value}>
-                      <input type="radio" name="planner-situation" checked={situation === value} onChange={() => setSituation(value)} />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+                <div className={styles.stageIntro}>
+                  <span>Start with what matters</span>
+                  <h2 id="assessment-stage-0" ref={headingRef} tabIndex={-1}>Tell us about the household</h2>
+                  <p>No account, address, bill or contact details are required. Your postcode selects relevant climate and program context.</p>
                 </div>
-              </>
-            ) : null}
-
-            {currentStep.id === "shared-property" ? (
-              <>
-                <span className="planner-step-eyebrow">Building approvals</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>Does the home have strata, a body corporate, an owners corporation or shared common property?</h2>
-                <p>This can apply to apartments, units, townhouses, villas, duplexes and other housing complexes. It helps flag roofs, external walls, gardens, services and equipment locations that may need approval.</p>
-                <div className="planner-choice-grid planner-choice-grid-compact">
-                  {[["yes", "Yes, or it is likely"], ["no", "No, not that I know of"], ["not_sure", "Not sure"]].map(([value, label]) => (
-                    <label className={sharedPropertyAnswer === value ? "selected" : ""} key={value}>
-                      <input type="radio" name="planner-shared-property" checked={sharedPropertyAnswer === value} onChange={() => setSharedPropertyAnswer(value)} />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+                <div className={styles.twoColumns}>
+                  <label className={styles.textField}>
+                    <span>Postcode</span>
+                    <input inputMode="numeric" autoComplete="postal-code" maxLength={4} value={draft.postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="3000" />
+                    <small>{draft.addressState ? `State detected: ${draft.addressState}` : "Four digits"}</small>
+                  </label>
+                  <label className={styles.textField}>
+                    <span>Detected state or territory</span>
+                    <input readOnly value={draft.addressState} placeholder="Enter postcode first" aria-label="Detected state or territory" />
+                  </label>
                 </div>
+                <ChoiceTiles legend="I am planning for" name="assessment-situation" options={customerProjectOptions.situations.map(([value, label]) => [value, value === "owner" ? "A home I own or manage" : label])} selected={draft.situation ? [draft.situation] : []} onSelect={(value) => setField("situation", value)} />
+                <ChoiceTiles legend="Home type" name="assessment-property" options={customerProjectOptions.propertyTypes} selected={draft.propertyType ? [draft.propertyType] : []} onSelect={(value) => setField("propertyType", value)} />
+                <ChoiceTiles legend="Shared property or approval" name="assessment-approval" options={customerProjectOptions.approvalContexts} selected={[draft.approvalContext]} onSelect={(value) => setField("approvalContext", value)} />
+                <ChoiceTiles legend="People usually living here" name="assessment-occupants" options={customerProjectOptions.occupants} selected={draft.occupants ? [draft.occupants] : []} onSelect={(value) => setField("occupants", value)} />
+                <ChoiceTiles legend="What matters most? Choose one or more." name="assessment-goals" options={customerProjectOptions.goals} selected={draft.goals} onSelect={toggleGoal} multiple />
               </>
             ) : null}
 
-            {currentStep.id === "property" ? (
+            {stage === 1 ? (
               <>
-                <span className="planner-step-eyebrow">{currentStep.eyebrow}</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>{currentStep.prompt}</h2>
-                <p>{currentStep.help}</p>
-                <div className="planner-choice-grid planner-choice-grid-compact">
-                  {currentStep.options.map(([value, label]) => (
-                    <label className={currentPropertyAnswer === value ? "selected" : ""} key={value}>
-                      <input
-                        type="radio"
-                        name={`planner-property-${currentStep.propertyKey}`}
-                        checked={currentPropertyAnswer === value}
-                        onChange={() => setPropertyAnswer(currentStep.propertyKey, value)}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+                <div className={styles.stageIntro}>
+                  <span>Comfort before equipment</span>
+                  <h2 id="assessment-stage-1" ref={headingRef} tabIndex={-1}>How does the home feel and perform?</h2>
+                  <p>Choose the closest safe answer. Not sure is always valid and will be shown as an assumption, never silently guessed.</p>
                 </div>
+                <HomeFeatureIntake idPrefix="quick-comfort" sectionId="comfort" questionId="comfort-concerns" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-insulation" sectionId="insulation" questionId="ceiling-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-glazing" sectionId="windows" questionId="glazing" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-heating" sectionId="heating-cooling" questionId="heating-cooling-systems" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <aside className={styles.preliminary} aria-live="polite">
+                  <strong>Preliminary roadmap</strong>
+                  <p>{plan.items.length} practical steps are already available. No dollar saving is invented without bill, tariff and equipment evidence.</p>
+                </aside>
               </>
             ) : null}
 
-            {currentStep.id === "goals" ? (
+            {stage === 2 ? (
               <>
-                <span className="planner-step-eyebrow">Your priorities</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>What would make the biggest difference?</h2>
-                <p>Choose one or more. We will combine them into one ordered plan.</p>
-                <div className="planner-choice-grid">
-                  {customerProjectOptions.goals.map(([value, label]) => (
-                    <label className={goals.includes(value) ? "selected" : ""} key={value}>
-                      <input type="checkbox" checked={goals.includes(value)} onChange={() => toggleGoal(value)} />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+                <div className={styles.stageIntro}>
+                  <span>Systems already at the home</span>
+                  <h2 id="assessment-stage-2" ref={headingRef} tabIndex={-1}>What currently provides energy services?</h2>
+                  <p>These answers help sequence electrification and replacement decisions. They are household observations, not product or electrical verification.</p>
                 </div>
+                <HomeFeatureIntake idPrefix="quick-hot-water-cooking" sectionId="hot-water-cooking" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-solar" sectionId="solar-storage-transport" questionId="solar" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-battery" sectionId="solar-storage-transport" questionId="battery" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <HomeFeatureIntake idPrefix="quick-ev" sectionId="solar-storage-transport" questionId="ev" selected={draft.features} onChange={(features) => setField("features", features)} />
               </>
             ) : null}
 
-            {currentStep.id === "features" ? (
+            {stage === 3 ? (
               <>
-                <span className="planner-step-eyebrow">Home detail</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>{currentStep.label}</h2>
-                <p>Choose the closest answer. Select Not sure whenever you do not safely know.</p>
-                <HomeFeatureIntake
-                  idPrefix="public-home-feature"
-                  sectionId={currentStep.featureSection}
-                  questionId={currentStep.featureQuestion}
-                  selected={features}
-                  onChange={setFeatures}
-                />
-              </>
-            ) : null}
-
-            {currentStep.id === "budget" ? (
-              <>
-                <span className="planner-step-eyebrow">Optional planning comfort</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>What investment range feels comfortable for the first stage?</h2>
-                <p>This only helps stage the plan. It is not a quote, price promise or commitment, and you can skip it.</p>
-                <div className="planner-choice-grid planner-choice-grid-compact">
-                  {customerProjectOptions.budgets.map(([value, label]) => (
-                    <label className={budgetRange === value ? "selected" : ""} key={value}>
-                      <input type="radio" name="planner-budget" checked={budgetRange === value} onChange={() => setBudgetRange(value)} />
-                      <span>{label}</span>
-                    </label>
-                  ))}
+                <div className={styles.stageIntro}>
+                  <span>Review before results</span>
+                  <h2 id="assessment-stage-3" ref={headingRef} tabIndex={-1}>Choose timing, then review your answers</h2>
+                  <p>Budget and advanced details are optional. Your roadmap remains useful without them.</p>
                 </div>
+                <ChoiceTiles legend="How should improvements be staged?" name="assessment-pace" options={customerProjectOptions.paces} selected={[draft.pace]} onSelect={(value) => setField("pace", value)} />
+                <ChoiceTiles legend="Comfortable first-stage budget" name="assessment-budget" options={customerProjectOptions.budgets} selected={[draft.budgetRange]} onSelect={(value) => setField("budgetRange", value)} />
+                <details className={styles.advanced}>
+                  <summary>Optional advanced home details</summary>
+                  <p>Add only what you safely know. Every selector can stay at Not sure.</p>
+                  <div className={styles.selectGrid}>
+                    {optionalPropertyQuestions.map((question) => (
+                      <label className={styles.selectField} key={question.key}>
+                        <span>{question.label}</span>
+                        <select value={draft[question.key]} onChange={(event) => setPropertyAnswer(question.key, event.target.value)}>
+                          <option value="">Not sure or skip</option>
+                          {question.options.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                  <HomeFeatureIntake idPrefix="advanced-wall-insulation" sectionId="insulation" questionId="wall-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  {draft.floorConstruction === "slab_on_ground" ? (
+                    <p className={styles.notApplicable}><strong>Under-floor insulation:</strong> Not applicable for the selected slab-on-ground construction.</p>
+                  ) : (
+                    <HomeFeatureIntake idPrefix="advanced-floor-insulation" sectionId="insulation" questionId="floor-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  )}
+                  <HomeFeatureIntake idPrefix="advanced-window-coverings" sectionId="windows" questionId="window-coverings" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  <HomeFeatureIntake idPrefix="advanced-external-shading" sectionId="windows" questionId="external-shading" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  <HomeFeatureIntake idPrefix="advanced-sun-exposure" sectionId="windows" questionId="sun-exposure" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  <HomeFeatureIntake idPrefix="advanced-electrical" sectionId="solar-storage-transport" questionId="electrical-supply" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  <HomeFeatureIntake idPrefix="advanced-ventilation" sectionId="ventilation" selected={draft.features} onChange={(features) => setField("features", features)} />
+                  <HomeFeatureIntake idPrefix="advanced-lighting" sectionId="lighting-pool" selected={draft.features} onChange={(features) => setField("features", features)} />
+                </details>
+                <section className={styles.review} aria-label="Assessment review">
+                  <h3>Review</h3>
+                  <dl>
+                    <div><dt>Location</dt><dd>{draft.postcode}, {draft.addressState}</dd></div>
+                    <div><dt>Household</dt><dd>{customerProjectOptions.occupants.find(([value]) => value === draft.occupants)?.[1] || "Not sure"}</dd></div>
+                    <div><dt>Home</dt><dd>{customerProjectOptions.propertyTypes.find(([value]) => value === draft.propertyType)?.[1] || "Not sure"}</dd></div>
+                    <div><dt>Priorities</dt><dd>{draft.goals.map((goal) => customerProjectOptions.goals.find(([value]) => value === goal)?.[1]).filter(Boolean).join(", ")}</dd></div>
+                    <div><dt>Core system answers</dt><dd>{systemQuestionIds.filter((id) => questionAnswered(draft.features, id)).length} of {systemQuestionIds.length}</dd></div>
+                  </dl>
+                  <button type="button" onClick={() => setStage(0)}>Edit household details</button>
+                </section>
               </>
             ) : null}
 
-            {currentStep.id === "pace" ? (
-              <>
-                <span className="planner-step-eyebrow">How you want to proceed</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>How should the work be staged?</h2>
-                <div className="planner-choice-grid planner-choice-grid-compact">
-                  {customerProjectOptions.paces.map(([value, label]) => (
-                    <label className={pace === value ? "selected" : ""} key={value}>
-                      <input type="radio" name="planner-pace" checked={pace === value} onChange={() => setPace(value)} />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </>
-            ) : null}
-
-            {currentStep.id === "location" ? (
-              <>
-                <span className="planner-step-eyebrow">Last question</span>
-                <h2 id={`planner-step-${stepIndex}`} ref={stepHeadingRef} tabIndex={-1}>Which state or territory is the home in?</h2>
-                <p>Optional. This makes the guidance more relevant without asking for your address or postcode.</p>
-                <select aria-label="State or territory" value={addressState} onChange={(event) => setAddressState(event.target.value)}>
-                  <option value="">Skip location for now</option>
-                  {customerProjectOptions.states.map((state) => <option value={state} key={state}>{state}</option>)}
-                </select>
-              </>
-            ) : null}
-
-            <footer className="planner-step-actions">
-              {stepIndex > 0 ? <button type="button" className="planner-back" onClick={() => goToStep(stepIndex - 1)}>Back</button> : <span />}
-              <div className="planner-step-forward-actions">
-                <button type="button" className="planner-continue" disabled={!canContinue} onClick={() => goToStep(stepIndex + 1)}>{continueLabel}</button>
-              </div>
+            <footer className={styles.actions}>
+              {stage > 0 ? <button type="button" className={styles.secondaryButton} onClick={() => { setAttemptedStage(null); setStage((current) => current - 1); }}>Back</button> : <button type="button" className={styles.textButton} onClick={resetPlan}>Reset</button>}
+              <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Continue"}</button>
             </footer>
-            {!canContinue ? (
-              <p className="planner-step-prompt" role="status">
-                {currentStep.id === "situation"
-                  ? "Choose whether you own or rent to continue."
-                  : "Choose the closest answer, including Not sure, to continue."}
-              </p>
-            ) : null}
+            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. It is sent to AEA only if you explicitly open the printable plan or request contact.</p>
           </section>
         </form>
       ) : (
         <section className="planner-results" aria-labelledby="planner-results-title">
           <div className="planner-results-heading">
             <span>Your ordered roadmap</span>
-            <h2 id="planner-results-title" ref={stepHeadingRef} tabIndex={-1}>{plan.title}</h2>
+            <h2 id="planner-results-title" ref={headingRef} tabIndex={-1}>{plan.title}</h2>
             <p>{plan.summary}</p>
             <p className="planner-results-status" role="status" aria-live="polite" aria-atomic="true">
-              {plan.items.length} ordered steps prepared from your answers.
+              {plan.items.length} ordered steps prepared from your answers. This is general planning guidance, not a NatHERS rating, site assessment or guaranteed saving.
             </p>
           </div>
           {firstActionItem ? (
@@ -826,22 +738,23 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
             <PublicPlanEnquiryForm
               planHref={printablePlanHref}
+              initialPostcode={draft.postcode}
               suggestedInterests={enquiryInterests}
               planSnapshot={{
-                goals,
-                pace,
-                situation,
-                approvalContext,
-                budgetRange,
-                addressState,
-                features,
+                goals: draft.goals,
+                pace: draft.pace,
+                situation: draft.situation,
+                approvalContext: draft.approvalContext,
+                budgetRange: draft.budgetRange,
+                addressState: draft.addressState,
+                features: draft.features,
                 propertyContext: enquiryPropertyContext,
               }}
             />
           </section>
           <div className="planner-result-actions">
             <a className="planner-primary-result" href={printablePlanHref}>Open my printable plan</a>
-            <button type="button" className="planner-reset" onClick={() => goToStep(0)}>Edit my answers</button>
+            <button type="button" className="planner-reset" onClick={() => setStage(0)}>Edit my answers</button>
             <button type="button" className="planner-reset" onClick={resetPlan}>Start over</button>
           </div>
 
@@ -851,9 +764,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <span>Do these first</span>
                 <h3 id="planner-quick-wins-title">Quick wins for your home</h3>
                 <p>{plan.everydayActionsBoundary}</p>
-                <p>
-                  <a href="https://www.energy.gov.au/households/quick-wins">Read the Australian Government quick-wins guidance</a>
-                </p>
+                <p><a href="https://www.energy.gov.au/households/quick-wins">Read the Australian Government quick-wins guidance</a></p>
               </div>
               <div className="planner-quick-wins-grid">
                 {plan.everydayActions.map((action) => (
@@ -903,33 +814,13 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
             <div className="planner-quick-wins-heading">
               <span>Your next step</span>
               <h3 id="planner-continue-title">Keep the momentum going</h3>
-              <p>Start by checking whether your current energy plan still suits the way this household uses energy. Then estimate upgrade rebates or review available assistance.</p>
+              <p>Compare current plans, calculate source-verified rebates, or review assistance without mixing electricity and gas pricing.</p>
             </div>
             <div className="planner-quick-wins-grid">
-              <article>
-                <small>Recommended next</small>
-                <h4>Compare electricity plans</h4>
-                <p>Follow a guided comparison using your bill or interval data when available.</p>
-                <a href="/compare?from=home-plan">Start electricity comparison</a>
-              </article>
-              <article>
-                <small>If the home uses gas</small>
-                <h4>Compare gas plans</h4>
-                <p>Check gas offers separately so electricity and gas pricing are not mixed together.</p>
-                <a href="/gas-compare?from=home-plan">Start gas comparison</a>
-              </article>
-              <article>
-                <small>Estimate an upgrade</small>
-                <h4>Use the rebate calculator</h4>
-                <p>Choose an activity and approved product to estimate relevant certificates or rebates.</p>
-                <a href="/calculator">Open rebate calculator</a>
-              </article>
-              <article>
-                <small>Understand assistance</small>
-                <h4>Review rebates and support</h4>
-                <p>See current rebate pathways and the checks to make before accepting a quote.</p>
-                <a href="/rebates">View rebates and assistance</a>
-              </article>
+              <article><small>Recommended next</small><h4>Compare electricity plans</h4><p>Use a bill or interval data when available.</p><a href="/compare?from=home-plan">Start electricity comparison</a></article>
+              <article><small>If the home uses gas</small><h4>Compare gas plans</h4><p>Keep gas and electricity pricing separate.</p><a href="/gas-compare?from=home-plan">Start gas comparison</a></article>
+              <article><small>Estimate an upgrade</small><h4>Use the rebate calculator</h4><p>Choose an activity and current approved product.</p><a href="/calculator">Open rebate calculator</a></article>
+              <article><small>Understand assistance</small><h4>Review rebates and support</h4><p>Check current pathways before accepting a quote.</p><a href="/rebates">View rebates and assistance</a></article>
             </div>
           </section>
         </section>

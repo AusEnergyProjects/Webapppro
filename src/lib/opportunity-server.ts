@@ -10,6 +10,9 @@ import { persistLeadOpportunity } from "@/lib/opportunity-source-write.mjs";
 import { ensureOpportunityNotificationDeliveries } from "@/lib/opportunity-notification-server";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import {
+  ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+  ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+  publicPlanContactReleaseDisclosedFieldsAreValid,
   publicPlanContactReleaseAccessSql,
   PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
   PUBLIC_PLAN_CONSENT_PURPOSE,
@@ -259,7 +262,9 @@ async function persistPublicQuotePreparation(
 }
 
 function publicContactRelease(payload: DirectTradeLead) {
-  if (payload.sourceJourney !== "public-home-energy-plan") return null;
+  const publicPlanJourney = payload.sourceJourney === "public-home-energy-plan";
+  const assistantJourney = payload.sourceJourney === "energy-assistant";
+  if (!publicPlanJourney && !assistantJourney) return null;
   const receipt = payload.directTradeTriage?.contactConsentReceipt;
   const sourceReference = String(payload.reference || "").trim();
   const customerFirstName = String(payload.customerFirstName || "")
@@ -294,6 +299,55 @@ function publicContactRelease(payload: DirectTradeLead) {
   const noticeVersion = String(receipt?.noticeVersion || "").trim().slice(0, 120);
   const consentPurpose = String(receipt?.purpose || "").trim().slice(0, 160);
   const grantedAt = String(receipt?.grantedAt || "");
+  const assistantDisclosedFields = [
+    "customer_email",
+    "postcode",
+    "state",
+    "service_categories",
+    "quote_brief",
+    "customer_name",
+    ...(tradeSharing?.phone ? ["customer_phone"] : []),
+  ];
+  if (assistantJourney) {
+    if (
+      receipt?.accepted !== true
+      || !sourceReference
+      || !customerFirstName
+      || !customerLastName
+      || !customerEmail
+      || !customerSuburb
+      || !customerAddressState
+      || customerAddressState !== canonicalAustralianState(payload.state)
+      || tradeSharing?.email !== true
+      || tradeSharing?.postcode !== true
+      || tradeSharing?.name !== true
+      || tradeSharing?.address === true
+      || (tradeSharing?.phone === true && !customerPhone)
+      || noticeVersion !== ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
+      || consentPurpose !== ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE
+      || !publicPlanContactReleaseDisclosedFieldsAreValid(
+        noticeVersion,
+        consentPurpose,
+        assistantDisclosedFields,
+      )
+      || !Number.isFinite(Date.parse(grantedAt))
+    ) return null;
+    return {
+      customerFirstName,
+      customerLastName,
+      customerEmail,
+      customerPhone: tradeSharing?.phone ? customerPhone : "",
+      customerUnitNumber: "",
+      customerStreetAddress: "",
+      customerSuburb,
+      customerAddressState,
+      customerMessage: "",
+      noticeVersion,
+      consentPurpose,
+      grantedAt: new Date(grantedAt).toISOString(),
+      disclosedFields: assistantDisclosedFields,
+    };
+  }
   if (
     receipt?.accepted !== true
     || !sourceReference
@@ -368,6 +422,8 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const stage = readable(String(payload.projectStage || "planning"));
   const summary = `${property} project at the ${stage.toLowerCase()} stage. ${priorities.length ? `Priorities: ${priorities.join(", ")}. ` : ""}${payload.sourceJourney === "public-home-energy-plan"
     ? "Only the contact fields the customer consented to share are available to approved matching TLink trades. The private home plan and PDF are not shared with trades."
+    : payload.sourceJourney === "energy-assistant"
+      ? `${String(payload.projectNotes || "").trim().slice(0, 1_500)} Only the immutable quote brief and contact fields explicitly consented for trade sharing are available. Chat history, documents, bills, photos, NMI and account identifiers are not shared.`
     : "Detailed household notes and contact details remain in the protected enquiry record and are not displayed in the opportunity feed."}`;
   const title =
     categoryNames.length === 1
@@ -383,9 +439,13 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
   const id = crypto.randomUUID();
   const createdAt = submittedAt.toISOString();
   const contactRelease = publicContactRelease(payload);
+  const protectedPublicLead = payload.sourceJourney === "public-home-energy-plan"
+    || payload.sourceJourney === "energy-assistant";
+  const assistantDurableDispatch = payload.sourceJourney === "energy-assistant";
   const opportunityStatus =
-    payload.directTradeTriage?.autoSend === false
-    || (payload.sourceJourney === "public-home-energy-plan" && !contactRelease)
+    assistantDurableDispatch
+    || payload.directTradeTriage?.autoSend === false
+    || (protectedPublicLead && !contactRelease)
       ? "draft"
       : "open";
   const stored = await persistLeadOpportunity(db, {
@@ -404,13 +464,17 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
     maximumConnectedInstallers: DEFAULT_CONNECTED_INSTALLERS,
     expiresAt: opportunityExpiry(submittedAt),
     createdAt,
-    publicPlanEnquiry: payload.sourceJourney === "public-home-energy-plan",
+    publicPlanEnquiry: protectedPublicLead,
   }, contactRelease ? {
     id: crypto.randomUUID(),
     ...contactRelease,
   } : null, {
-    noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
-    purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    noticeVersion: payload.sourceJourney === "energy-assistant"
+      ? ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION
+      : PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    purpose: payload.sourceJourney === "energy-assistant"
+      ? ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE
+      : PUBLIC_PLAN_CONSENT_PURPOSE,
   });
   if (payload.sourceJourney === "public-home-energy-plan") {
     await persistPublicQuotePreparation(
@@ -422,8 +486,14 @@ export async function createOpportunityFromLead(payload: DirectTradeLead) {
       createdAt,
     );
   }
-  const allocation =
-    stored.status === "open" && stored.contactIsCurrent
+  const allocation = assistantDurableDispatch
+    ? {
+        allocated: [],
+        activeCount: 0,
+        eligibleCount: 0,
+        dispatchRequired: true,
+      }
+    : stored.status === "open" && stored.contactIsCurrent
       ? await allocateNearestInstallers(stored.id, "automatic-lead-intake")
       : { allocated: [], activeCount: 0, eligibleCount: 0 };
   return { id: stored.id, allocation };

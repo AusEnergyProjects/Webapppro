@@ -14,6 +14,12 @@ export const PUBLIC_PLAN_CONSENT_PURPOSE =
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-11-quote-preparation-sharing-notice-v7";
 
+export const ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION =
+  "2026-08-20-energy-assistant-trade-sharing-v1";
+
+export const ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE =
+  "Share this quote brief and selected contact details with approved matched TLink trades";
+
 const publicPlanContactReleaseRequiredFields = Object.freeze([
   "customer_email",
   "postcode",
@@ -24,6 +30,7 @@ const publicPlanContactReleasePolicies = Object.freeze([
   Object.freeze({
     noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
     allowedDisclosedFields: Object.freeze([
       ...publicPlanContactReleaseRequiredFields,
       "customer_name",
@@ -36,6 +43,7 @@ const publicPlanContactReleasePolicies = Object.freeze([
     noticeVersion: "2026-08-10-structured-service-address-sharing-v6",
     purpose:
       "Share my email, postcode, services and message with all approved TLink trades in my area, plus name, phone or full service address, and email my private plan",
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
     allowedDisclosedFields: Object.freeze([
       ...publicPlanContactReleaseRequiredFields,
       "customer_name",
@@ -48,11 +56,29 @@ const publicPlanContactReleasePolicies = Object.freeze([
     noticeVersion: "2026-08-10-customer-selected-trade-sharing-v4",
     purpose:
       "Share my email, postcode, service and any message I write with all approved TLink trades in my area, plus chosen name or phone, and email my private plan",
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
     allowedDisclosedFields: Object.freeze([
       ...publicPlanContactReleaseRequiredFields,
       "customer_name",
       "customer_phone",
       "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+    purpose: ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+    requiredDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "state",
+      "quote_brief",
+      "customer_name",
+    ]),
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "state",
+      "quote_brief",
+      "customer_name",
+      "customer_phone",
     ]),
   }),
 ]);
@@ -101,7 +127,7 @@ export function publicPlanContactReleaseDisclosedFieldsAreValid(
   const allowedFields = new Set(policy.allowedDisclosedFields);
   return uniqueFields.size === disclosedFields.length
     && disclosedFields.every((field) => typeof field === "string" && allowedFields.has(field))
-    && publicPlanContactReleaseRequiredFields.every((field) => uniqueFields.has(field));
+    && policy.requiredDisclosedFields.every((field) => uniqueFields.has(field));
 }
 
 export function publicPlanContactReleaseAccessSql(releaseAlias) {
@@ -122,11 +148,11 @@ export function publicPlanContactReleaseAccessSql(releaseAlias) {
       WHERE typeof(disclosed_policy_field.value) <> 'text'
         OR disclosed_policy_field.value NOT IN (${policy.allowedDisclosedFields.map(sqlLiteral).join(", ")})
     )
+    AND ${policy.requiredDisclosedFields.map((requiredField) => `EXISTS (
+      SELECT 1 FROM json_each(${safeFields}) required_disclosed_field
+      WHERE required_disclosed_field.value = ${sqlLiteral(requiredField)}
+    )`).join(" AND ")}
   )`).join(" OR ");
-  const requiredSql = publicPlanContactReleaseRequiredFields.map((requiredField) => `EXISTS (
-    SELECT 1 FROM json_each(${safeFields}) required_disclosed_field
-    WHERE required_disclosed_field.value = ${sqlLiteral(requiredField)}
-  )`).join(" AND ");
   return `(
     json_valid(${alias}.disclosed_fields)
     AND json_type(CASE WHEN json_valid(${alias}.disclosed_fields)
@@ -135,7 +161,6 @@ export function publicPlanContactReleaseAccessSql(releaseAlias) {
     AND length(${alias}.postcode) = 4
     AND ${alias}.postcode NOT GLOB '*[^0-9]*'
     AND (${policySql})
-    AND ${requiredSql}
     AND (
       SELECT COUNT(*) FROM json_each(${safeFields}) disclosed_field_count
     ) = (

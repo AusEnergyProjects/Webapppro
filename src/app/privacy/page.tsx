@@ -23,6 +23,14 @@ const sections = [
     body: "Information is used to provide comparisons and assessments, operate authorised trade workflows, schedule work, prepare quotes and invoices, request evidence, send service messages, reconcile provider status, prevent misuse, meet legal obligations and support account owners. We do not sell personal information or sell household leads.",
   },
   {
+    title: "AEA Energy Guide conversations",
+    body: "The AEA Energy Guide answers from a maintained source library without sending questions to a paid external AI service. Up to 40 recent messages are kept in that browser for up to 30 days so the conversation can continue across AEA and TLink pages. For an answer, the browser sends only the current question and a bounded set of recent turns to AEA's stateless guide endpoint. The endpoint does not create or read a server-side conversation record. Conversation text is not placed in analytics. The user can start a new conversation and clear the browser copy at any time. No third-party tracking cookie, fingerprint or cross-device anonymous identity is used. Trade mode does not read another customer or job unless an authorised platform workflow explicitly supplies that context.",
+  },
+  {
+    title: "Optional Energy Guide contact requests",
+    body: "Advice remains available without contact details. If a person explicitly asks Australian Energy Assessments to help with services, the guide creates a separate request containing only the contact, location, selected services, quote facts, explicit unknowns and consent choices entered in that form. It does not attach the raw conversation. Marketing consent is separate and off unless the person actively selects it. The request goes only to Australian Energy Assessments unless the person separately chooses trade sharing. A trade-sharing choice records exactly which fields may be disclosed and does not include uploaded files, bills, meter identifiers or raw conversation text.",
+  },
+  {
     title: "Protected leads and direct customers",
     body: "Australian Energy Assessments keeps the household name, email, phone, unit number, street address, suburb, state and postcode in the protected enquiry record. When a household submits a trade enquiry, every approved TLink trade whose services and active service area match the selected work receives the email, postcode, selected services and any message the household writes. The household separately chooses whether those trades also receive the name, phone or full property address. The full home plan, PDF, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
   },
@@ -32,7 +40,7 @@ const sections = [
   },
   {
     title: "Files, photos and meter information",
-    body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. Electricity interval files selected in the comparison tool are processed in the browser unless the page clearly asks for a deliberate upload or save action.",
+    body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. A PDF quote or electricity interval file selected in the AEA Energy Guide is read in that browser. Its bytes and extracted text are not uploaded or stored. Known NMI, account, meter, email, phone and street-address patterns are redacted, but free-text quote lines may still contain personal information and remain local. A person may separately choose to include a bounded summary built only from structured findings in a service request; the original file, quote lines and meter identifiers are excluded.",
   },
   {
     title: "Emailing a home energy plan",
@@ -54,7 +62,7 @@ export default function PrivacyPage() {
       <TLinkHeader active="dashboard" />
       <header className="trade-information-hero">
         <div>
-          <span>Effective 10 August 2026</span>
+          <span>Effective 20 August 2026</span>
           <h1>Privacy notice</h1>
           <p>
             This notice explains what Australian Energy Assessments and TLink

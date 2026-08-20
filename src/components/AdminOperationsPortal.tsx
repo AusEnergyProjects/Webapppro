@@ -35,6 +35,7 @@ import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEn
 import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
 import { AdminJobDirectory } from "@/components/AdminJobDirectory";
 import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
+import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLeads";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -142,7 +143,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -168,6 +169,7 @@ export function AdminOperationsPortal() {
   const [partnerTarget, setPartnerTarget] = useState<{ uid: string; nonce: number } | null>(null);
   const [partnerVerificationTarget, setPartnerVerificationTarget] = useState("");
   const [opportunityDemoRequest, setOpportunityDemoRequest] = useState(0);
+  const [assistantLeadTarget, setAssistantLeadTarget] = useState<{ id: string; nonce: number } | null>(null);
 
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
     const activeUser = firebaseAuth.currentUser;
@@ -406,6 +408,11 @@ export function AdminOperationsPortal() {
   }
 
   function openNotificationRecord(notification: AdminNotification) {
+    if (notification.entityType === "energy_assistant_lead") {
+      setAssistantLeadTarget({ id: notification.entityId, nonce: Date.now() });
+      setTab("assistant-leads");
+      return;
+    }
     if (notification.actorType === "customer" || ["customer_account", "customer_project"].includes(notification.entityType)) {
       if (!notification.actorUid) {
         setStatus("The customer record could not be identified from this notification.");
@@ -725,6 +732,12 @@ export function AdminOperationsPortal() {
             onClick={() => setTab("partners")}
           >
             <span>06</span>Partners ({accountCounts.total || 0})
+          </button>
+          <button
+            className={tab === "assistant-leads" ? "active" : ""}
+            onClick={() => setTab("assistant-leads")}
+          >
+            <span>G</span>Guide follow-ups
           </button>
           <button
             className={tab === "opportunities" ? "active" : ""}
@@ -1051,6 +1064,10 @@ export function AdminOperationsPortal() {
 
           {tab === "opportunities" && (
             <AdminOpportunityWorkspace api={api} demoOnlyRequest={opportunityDemoRequest} role={session.role} setStatus={setStatus} />
+          )}
+
+          {tab === "assistant-leads" && (
+            <AdminEnergyAssistantLeads api={api} target={assistantLeadTarget} setStatus={setStatus} />
           )}
 
           {tab === "catalogue" && (

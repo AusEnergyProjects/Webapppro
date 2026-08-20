@@ -1,0 +1,438 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import ts from "typescript";
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+const widget = read("../src/components/EnergyAssistantWidget.tsx");
+const styles = read("../src/components/EnergyAssistantWidget.module.css");
+const layout = read("../src/app/layout.tsx");
+const leadClient = read("../src/lib/energy-assistant-lead-client.mjs");
+
+function functionSource(source, name) {
+  const start = source.indexOf(`function ${name}`);
+  assert.notEqual(start, -1, `missing ${name}`);
+  const bodyStart = source.indexOf("{", start);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] === "}") depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+  throw new Error(`unterminated ${name}`);
+}
+
+test("the energy guide is mounted once at the root and excluded from print or PDF output", () => {
+  assert.match(layout, /import \{ EnergyAssistantWidget \}/);
+  assert.equal((layout.match(/<EnergyAssistantWidget\s*\/>/g) || []).length, 1);
+  assert.match(widget, /pathname === "\/plan\/print"/);
+  assert.match(widget, /pathname\.includes\("\/pdf\/"\)/);
+  assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
+});
+
+test("the first screen is task led and the answer card exposes decisions, limits and dated sources", () => {
+  for (const action of [
+    "Lower my bills",
+    "Make my home more comfortable",
+    "Plan an upgrade",
+    "Check a rebate or rule",
+    "Understand a product or quote",
+  ]) {
+    assert.match(widget, new RegExp(action));
+  }
+  assert.match(widget, /Ask AEA Energy Guide/);
+  assert.doesNotMatch(widget, />AI chat</i);
+  assert.match(widget, />Direct answer</);
+  assert.match(widget, />What to do next</);
+  assert.match(widget, /practicalSteps\.slice\(0, 3\)/);
+  assert.match(widget, />Best next action</);
+  assert.match(widget, />Assumptions and limits</);
+  assert.match(widget, />Sources and dates</);
+  assert.match(widget, /Effective \$\{citation\.effectiveDate\}/);
+  assert.match(widget, /Checked \$\{citation\.checkedDate\}/);
+  assert.match(widget, /Review due \$\{citation\.reviewDue\}/);
+  assert.match(widget, /answerStatus === "source_review_required"/);
+});
+
+test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
+  assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
+  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messages\)/);
+  assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
+  assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
+  assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
+  assert.match(widget, /The guide does not read private account, project or quote records/);
+  assert.match(widget, /The guide does not read customer, job or certificate records/);
+  assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
+});
+
+test("only bounded local transcript, open state, last activity and guide mode are persisted", () => {
+  const persisted = widget.match(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/);
+  assert.ok(persisted);
+  assert.match(persisted[1], /open/);
+  assert.match(persisted[1], /mode/);
+  assert.match(persisted[1], /messages:\s*boundedLocalMessages\(messages\)/);
+  assert.match(persisted[1], /lastActive/);
+  assert.match(widget, /const MAX_LOCAL_MESSAGES = 40/);
+  assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
+  assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
+  assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
+  assert.match(widget, /continue for 30 days after your last question/);
+  assert.match(widget, />\s*New conversation \/ Clear history/);
+});
+
+test("same-browser local continuation is explicit and does not create tracking identity", () => {
+  assert.match(widget, /The conversation is not stored on the assistant server/);
+  assert.match(widget, /Last active \$\{lastActive\}/);
+  assert.match(widget, /No third-party cookie, fingerprint or cross-device anonymous identity is used/);
+  assert.match(widget, /Details entered in the optional contact form, lead consent choices, uploaded document bytes and NMI data are not stored in this local conversation/);
+  assert.match(widget, /const lastActive = lastActiveLabel\(messages\)/);
+  assert.match(widget, /setLead\(EMPTY_LEAD\)/);
+  assert.match(widget, /setLeadRequestId\(""\)/);
+  assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
+});
+
+test("expired local conversations and explicit resets atomically clear transcript and lead state", () => {
+  assert.match(widget, /function savedConversation\(value: unknown, now = Date\.now\(\)\)/);
+  assert.match(widget, /now - activeAt > LOCAL_RETENTION_MS/);
+  assert.match(widget, /messages:\s*expired \? \[\] : boundedLocalMessages/);
+  assert.match(widget, /Your locally saved conversation expired after 30 days of inactivity/);
+  assert.match(widget, /const clearLocalSession = useCallback/);
+  assert.match(widget, /removeStoredSession\(\)/);
+  assert.match(widget, /setMessages\(nextMessages\)/);
+  assert.match(widget, /Local conversation history cleared/);
+  assert.doesNotMatch(widget, /fetch\([^)]*delete|SESSION_CREDENTIAL/);
+});
+
+test("trade and customer guide modes survive navigation into shared utility routes", () => {
+  assert.match(widget, /function pageContext\(pathname: string, rememberedAudience: Audience = "public"\)/);
+  assert.match(widget, /function isSharedUtilityRoute\(pathname: string\)/);
+  for (const route of ["/calculator", "/rebates", "/compare", "/guides"]) {
+    assert.ok(widget.includes(`pathname === "${route}"`), `missing shared route ${route}`);
+  }
+  assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "trade"/);
+  assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "customer"/);
+  assert.match(widget, /const restoredMode = explicitRouteAudience\(pathname\) \|\| saved\.mode/);
+  assert.match(widget, /const rememberModeForNavigation = \(\) =>/);
+  assert.match(widget, /mode:\s*context\.audience/);
+  assert.match(widget, /onClick=\{rememberModeForNavigation\}/);
+  assert.match(widget, /mode:\s*record\?\.mode === "trade" \|\| record\?\.mode === "customer"/);
+  assert.match(widget, /const nextMode = explicitRouteAudience\(pathname\) \|\| "public"/);
+  assert.match(widget, /setMode\(nextMode\)/);
+});
+
+test("browser storage failures cannot break widget hydration, persistence or reset", () => {
+  const helperSource = [
+    functionSource(widget, "accessBrowserStorage"),
+    functionSource(widget, "readStoredSession"),
+    functionSource(widget, "storeSession"),
+    functionSource(widget, "removeStoredSession"),
+  ].join("\n");
+  const compiled = ts.transpileModule(helperSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const helpers = Function(
+    "STORAGE_KEY",
+    `${compiled}; return { readStoredSession, storeSession, removeStoredSession };`,
+  )("test-session");
+  const existingWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  try {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        get localStorage() {
+          throw new Error("browser storage disabled");
+        },
+      },
+    });
+    assert.equal(helpers.readStoredSession(), null);
+    assert.doesNotThrow(() => helpers.storeSession("value"));
+    assert.doesNotThrow(() => helpers.removeStoredSession());
+
+    const values = new Map();
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key) => values.get(key) ?? null,
+          setItem: (key, value) => values.set(key, value),
+          removeItem: (key) => values.delete(key),
+        },
+      },
+    });
+    helpers.storeSession("value");
+    assert.equal(helpers.readStoredSession(), "value");
+    helpers.removeStoredSession();
+    assert.equal(helpers.readStoredSession(), null);
+
+    globalThis.window.localStorage.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    assert.doesNotThrow(() => helpers.storeSession("new value"));
+  } finally {
+    if (existingWindow) Object.defineProperty(globalThis, "window", existingWindow);
+    else delete globalThis.window;
+  }
+});
+
+test("local continuation caps messages and recent API context and expires after 30 days", () => {
+  const helperSource = [
+    functionSource(widget, "boundedLocalMessages"),
+    functionSource(widget, "recentTurnsForRequest"),
+    functionSource(widget, "savedConversation"),
+  ].join("\n");
+  const compiled = ts.transpileModule(helperSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const helpers = Function(
+    "MAX_LOCAL_MESSAGES",
+    "MAX_LOCAL_STORAGE_CHARACTERS",
+    "MAX_RECENT_TURNS",
+    "MAX_MESSAGE_LENGTH",
+    "MAX_RECENT_CONTEXT_CHARACTERS",
+    "LOCAL_RETENTION_MS",
+    "asRecord",
+    "asString",
+    "parseMessage",
+    `${compiled}; return { boundedLocalMessages, recentTurnsForRequest, savedConversation };`,
+  )(
+    40,
+    160_000,
+    8,
+    1_200,
+    6_000,
+    30 * 24 * 60 * 60 * 1000,
+    (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
+    (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
+    (value, role) => ({ ...value, role }),
+  );
+  const now = Date.parse("2026-08-20T02:00:00.000Z");
+  const messages = Array.from({ length: 42 }, (_, index) => ({
+    id: `message-${index}`,
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `${index}-${"x".repeat(998)}`,
+    createdAt: new Date(now - (42 - index) * 1000).toISOString(),
+  }));
+  const active = helpers.savedConversation({
+    open: true,
+    mode: "trade",
+    lastActive: new Date(now - 1_000).toISOString(),
+    messages,
+  }, now);
+  assert.equal(active.expired, false);
+  assert.equal(active.messages.length, 40);
+  assert.equal(active.messages[0].id, "message-2");
+  assert.equal(active.mode, "trade");
+
+  const recent = helpers.recentTurnsForRequest(active.messages);
+  assert.ok(recent.length <= 8);
+  assert.ok(recent.length > 0);
+  assert.ok(recent.every((turn) => turn.role === "user"));
+  assert.ok(recent.every((turn) => Number.parseInt(turn.content, 10) % 2 === 0));
+  assert.ok(recent.reduce((total, turn) => total + turn.content.length, 0) <= 6_000);
+
+  const compactUserHistory = Array.from({ length: 12 }, (_, index) => ({
+    role: "user",
+    content: `fact-${index}`,
+  }));
+  assert.deepEqual(
+    helpers.recentTurnsForRequest(compactUserHistory).map((turn) => turn.content),
+    compactUserHistory.slice(-8).map((turn) => turn.content),
+  );
+
+  const expired = helpers.savedConversation({
+    open: true,
+    mode: "customer",
+    lastActive: new Date(now - 31 * 24 * 60 * 60 * 1000).toISOString(),
+    messages,
+  }, now);
+  assert.equal(expired.expired, true);
+  assert.deepEqual(expired.messages, []);
+});
+
+test("PDF and CSV analysis is dynamically local, failure-safe and never uploads the file", () => {
+  const analyserStart = widget.indexOf("const analyseDocument = async");
+  const analyserEnd = widget.indexOf("const clearDocument", analyserStart);
+  assert.notEqual(analyserStart, -1);
+  assert.notEqual(analyserEnd, -1);
+  const analyser = widget.slice(analyserStart, analyserEnd);
+  assert.match(analyser, /await import\("@\/lib\/energy-assistant-document"\)/);
+  assert.match(analyser, /analyseLocalEnergyDocument\(file\)/);
+  assert.match(analyser, /setShareDocumentSummary\(false\)/);
+  assert.match(analyser, /code:\s*"ANALYSER_LOAD_FAILED"/);
+  assert.match(analyser, /The file was not uploaded/);
+  assert.match(analyser, /input\.value = ""/);
+  assert.doesNotMatch(analyser, /fetch\(|FormData|XMLHttpRequest|sendBeacon/);
+
+  assert.match(widget, /accept="\.pdf,\.csv,application\/pdf,text\/csv,application\/csv"/);
+  assert.match(widget, /The file and extracted text are never uploaded or stored by the guide/);
+  assert.match(widget, /documentResult && !documentResult\.ok[\s\S]*role="alert"/);
+  assert.match(widget, /setDocumentResult\(null\)[\s\S]*setShareDocumentSummary\(false\)/);
+  assert.match(widget, /checked=\{shareDocumentSummary\}/);
+  assert.match(widget, /Include only this structured findings summary if I later send the optional AEA service form/);
+
+  const leadSubmitStart = widget.indexOf("const submitLead = async");
+  const leadSubmitEnd = widget.indexOf("if (!hydrated", leadSubmitStart);
+  const leadSubmit = widget.slice(leadSubmitStart, leadSubmitEnd);
+  assert.match(leadSubmit, /documentSummary:\s*shareDocumentSummary \? structuredDocumentSummary : ""/);
+  assert.doesNotMatch(leadSubmit, /\bfile\b|arrayBuffer|documentResult|rawText|rawBytes|FormData/);
+});
+
+test("the optional quote lead summary never copies free-text quote lines", () => {
+  const compiled = ts.transpileModule(functionSource(widget, "documentLeadSummary"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const summarise = Function(`${compiled}; return documentLeadSummary;`)();
+  const summary = summarise({
+    ok: true,
+    kind: "quote-pdf",
+    summary: {
+      pageCount: 2,
+      topics: ["solar-pv"],
+      scope: ["Supply and install 6.6 kW solar for John James at 42 Example Street"],
+      quotedItems: ["Panels for John James"],
+      metrics: [{ metric: "power-or-capacity", value: "6.6", unit: "kW", context: "for John James" }],
+      amounts: [{ label: "total", amount: "$8,500", context: "John James total" }],
+      missingEvidence: ["Exact products, quantities, datasheets and applicable registrations or approvals"],
+      questions: ["What site inspection and measured design inputs support the proposed scope and sizes?"],
+    },
+  });
+
+  assert.match(summary, /solar-pv/);
+  assert.match(summary, /power-or-capacity: 6\.6 kW/);
+  assert.match(summary, /total: \$8,500/);
+  assert.doesNotMatch(summary, /John James|42 Example Street|Panels for/i);
+});
+
+test("the local GVG result shows exact derived fields and only copies a reviewed summary into the question box", () => {
+  assert.match(widget, /documentResult\.kind === "vehicle-comparison-csv"/);
+  assert.match(widget, />Local Green Vehicle Guide comparison</);
+  for (const field of [
+    "energyConsumptionWhPerKm",
+    "electricRangeKm",
+    "currentModelInFile",
+    "testCycle",
+    "annualFuelCostAud",
+    "sameTestCycle",
+    "excludedRowCount",
+  ]) {
+    assert.ok(widget.includes(field), `missing local GVG field: ${field}`);
+  }
+  assert.match(widget, /Current-model flag in file/);
+  assert.match(widget, /Annual fuel cost in file/);
+  assert.match(widget, /Only the concise fields shown here are copied into the question box/);
+  assert.match(widget, />\s*Put this derived comparison in my question\s*</);
+
+  const copierStart = widget.indexOf("const useVehicleComparisonInQuestion =");
+  const copierEnd = widget.indexOf("const resetConversation", copierStart);
+  assert.notEqual(copierStart, -1);
+  assert.notEqual(copierEnd, -1);
+  const copier = widget.slice(copierStart, copierEnd);
+  assert.match(copier, /kind !== "vehicle-comparison-csv"/);
+  assert.match(copier, /setDraft\(`\$\{structuredDocumentSummary\}/);
+  assert.match(copier, /slice\(0, MAX_MESSAGE_LENGTH\)/);
+  assert.doesNotMatch(copier, /file|arrayBuffer|rawText|rawBytes|fetch\(|FormData/);
+  assert.match(styles, /\.documentVehicles/);
+  assert.match(styles, /\.documentUse/);
+});
+
+test("lead capture is optional, consent separated and retry safe", () => {
+  assert.match(widget, /hasUsefulAnswer && serviceInterest && !leadOpen/);
+  assert.match(widget, /function signalsServiceInterest\(message: string\)/);
+  const interestSource = functionSource(widget, "signalsServiceInterest");
+  const interestCompiled = ts.transpileModule(interestSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const signalsInterest = Function(`${interestCompiled}; return signalsServiceInterest;`)();
+  assert.equal(signalsInterest("What insulation options suit a renter?"), false);
+  assert.equal(signalsInterest("What are my hot water options?"), false);
+  assert.equal(signalsInterest("I want quotes from an installer"), true);
+  assert.equal(signalsInterest("Help me find a service provider"), true);
+  assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
+  assert.match(widget, /Your advice is not gated/);
+  assert.match(widget, /does not send the raw conversation to trades/);
+  assert.match(widget, /Keep exploring or change subject/);
+  assert.match(widget, /Continue asking or change subject/);
+  assert.match(widget, /fetch\("\/api\/energy-assistant\/leads"/);
+  for (const field of [
+    "submissionKey",
+    "suburb",
+    "state",
+    "services",
+    "interestConfirmed",
+    "quoteBrief",
+    "serviceConsent",
+    "marketingConsent",
+    "tradeSharingConsent",
+  ]) {
+    assert.ok(leadClient.includes(field), `missing canonical lead field: ${field}`);
+  }
+  assert.match(widget, /buildEnergyAssistantLeadPayload\(\{/);
+  assert.match(widget, /createEnergyAssistantSubmissionKey\(\)/);
+  assert.match(widget, /energyAssistantQuoteQuestionsForServices\(lead\.services\)/);
+  assert.match(widget, /\/api\/address-localities\?postcode=/);
+  assert.match(widget, /separately agree that AEA may share my name, email, postcode, state, selected services and completed quote brief/);
+  assert.match(widget, /unchecked by default/);
+  assert.match(leadClient, /tradeSharingConsent: lead\?\.tradeSharingConsent === true/);
+  assert.match(leadClient, /additionalContext: additionalContext\(lead\?\.message, documentSummary\)/);
+  assert.doesNotMatch(widget, /sessionId:\s*credentials|accessKey:\s*credentials/);
+  assert.match(widget, /marketingConsent:\s*false/);
+  assert.match(widget, /This is optional and is not required for a response/);
+  assert.match(widget, /Only the details you enter here go to Australian Energy Assessments/);
+  assert.match(widget, /const requestId = leadRequestId \|\| makeRequestId\("lead"\)/);
+  assert.match(widget, /const submissionKey = leadSubmissionKey \|\| createEnergyAssistantSubmissionKey\(\)/);
+  assert.match(widget, /const grantedAt = leadGrantedAt \|\| new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(widget, /setLead\(EMPTY_LEAD\)[\s\S]{0,160}catch/);
+});
+
+test("the optional quote brief is progressive, phone-safe and trade sharing requires useful detail", () => {
+  assert.match(widget, /type LeadStage = "scope" \| "basics" \| "questions" \| "contact" \| "preferences" \| "consent"/);
+  assert.match(widget, /quoteQuestions\.slice\(leadQuestionPage \* 3, leadQuestionPage \* 3 \+ 3\)/);
+  assert.match(widget, /currentQuoteQuestions\.map\(\(question\) =>/);
+  assert.doesNotMatch(widget, /\{quoteQuestions\.map\(\(question\) => \(/);
+  assert.match(widget, /Not sure \/ skip these/);
+  assert.match(widget, /answerCurrentQuoteQuestionsAsUnknown/);
+  assert.match(widget, /Brief so far/);
+  assert.match(widget, /Edit location or services/);
+  assert.match(widget, /Edit property details/);
+  assert.match(widget, /Edit service details/);
+  assert.match(widget, /leadStage === "contact"/);
+  assert.match(widget, /leadStage === "preferences"/);
+  assert.match(widget, /leadStage === "consent"/);
+  assert.match(widget, /question\.id !== "timing"[\s\S]*question\.services\.length === 1/);
+  assert.match(widget, /length < 2/);
+  assert.match(widget, /Add two useful details for each service or leave trade sharing off/);
+  assert.match(widget, /Finish the trade brief or leave trade sharing off/);
+  assert.match(widget, /AEA help stays available/);
+  assert.match(widget, /It has not been shared with trades because the brief still needs more useful detail/);
+  assert.match(widget, /message\.suggestions\.slice\(0, 1\)\.map/);
+  assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
+});
+
+test("the guide has modal keyboard behavior and a single responsive scroll region", () => {
+  assert.match(widget, /role="dialog"/);
+  assert.match(widget, /aria-modal="true"/);
+  assert.match(widget, /event\.key === "Escape"/);
+  assert.match(widget, /event\.key !== "Tab"/);
+  assert.match(widget, /returnFocusRef\.current\?\.focus\(\)/);
+  assert.match(widget, /matchMedia\("\(max-width: 640px\)"\)/);
+  assert.match(widget, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*56px/);
+  assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
+  assert.match(styles, /\.conversation\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*height:\s*100dvh[\s\S]*width:\s*100vw/);
+  assert.match(styles, /safe-area-inset-bottom/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.doesNotMatch(styles, /min-height:\s*(?:[0-3]?\d|4[0-3])px/);
+});
+
+test("server-provided tool links are restricted to enumerated internal destinations", () => {
+  assert.match(widget, /const SAFE_EXACT_ACTIONS = new Set/);
+  assert.match(widget, /candidate\.includes\("\\\\"\)/);
+  assert.match(widget, /candidate\.includes\("\?"\)/);
+  assert.match(widget, /SAFE_EXACT_ACTIONS\.has\(pathname\)/);
+  assert.ok(widget.includes("if (/^\\/guides\\/[a-z0-9-]{1,80}$/.test(pathname))"));
+  assert.match(widget, /target="_blank" rel="noreferrer"/);
+  assert.match(widget, /record\.suggestedQuestions/);
+  assert.match(widget, /record\.toolActions/);
+});

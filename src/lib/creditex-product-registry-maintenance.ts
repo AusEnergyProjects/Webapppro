@@ -324,6 +324,7 @@ export function creditexAutomaticProductRegistryMaintenanceTargets({
 type RefreshRequestRow = Readonly<{
   registry_code: string;
   attempt_count: number;
+  requested_at: string;
 }>;
 
 export async function enqueueCreditexProductRegistryRefresh(
@@ -354,6 +355,40 @@ export async function enqueueCreditexProductRegistryRefresh(
     .run();
 }
 
+/**
+ * Seeds durable work for every automatic registry that is genuinely due.
+ * Root health and cron invocations call this before selecting one target, so a
+ * slow or failing producer cannot prevent the rest of the fleet being queued.
+ */
+export async function seedDueCreditexProductRegistryRefreshRequests({
+  database,
+  enqueueRefresh = enqueueCreditexProductRegistryRefresh,
+  now = new Date(),
+  targets,
+}: {
+  database: D1Database;
+  enqueueRefresh?: typeof enqueueCreditexProductRegistryRefresh;
+  now?: Date;
+  targets: readonly CreditexProductRegistryMaintenanceTarget[];
+}) {
+  const registryCodes = (await Promise.all(targets.map(async (target) => {
+    const [status, pendingWork] = await Promise.all([
+      target.loadStatus(database, now),
+      target.hasPendingWork
+        ? target.hasPendingWork(database)
+        : Promise.resolve(false),
+    ]);
+    if (creditexProductRegistryRetryBackoffActive(status, now)) return null;
+    return pendingWork || creditexProductRegistryRefreshDue(status, now)
+      ? target.registryCode
+      : null;
+  }))).filter((registryCode): registryCode is string => registryCode !== null);
+  await Promise.all(registryCodes.map((registryCode) => (
+    enqueueRefresh(database, registryCode, now)
+  )));
+  return registryCodes;
+}
+
 async function loadQueuedRefreshRequest(
   database: D1Database,
   registryCodes: readonly string[],
@@ -361,12 +396,28 @@ async function loadQueuedRefreshRequest(
 ) {
   if (registryCodes.length < 1) return null;
   const placeholders = registryCodes.map(() => "?").join(", ");
-  return database.prepare(`SELECT registry_code, attempt_count
+  return database.prepare(`SELECT registry_code, attempt_count, requested_at
       FROM compliance_official_product_refresh_requests
       WHERE not_before <= ? AND registry_code IN (${placeholders})
       ORDER BY requested_at, registry_code LIMIT 1`)
     .bind(now.toISOString(), ...registryCodes)
     .first<RefreshRequestRow>();
+}
+
+function healthyAttemptSatisfiesRefreshRequest(
+  status: RegistryMaintenanceStatus,
+  request: RefreshRequestRow,
+) {
+  if (
+    status.status !== "current"
+    || !status.lastAttempt
+    || !["success", "unchanged"].includes(status.lastAttempt.status)
+  ) return false;
+  const acceptedAt = Date.parse(status.lastAttempt.checkedAt);
+  const requestedAt = Date.parse(request.requested_at);
+  return Number.isFinite(acceptedAt)
+    && Number.isFinite(requestedAt)
+    && acceptedAt >= requestedAt;
 }
 
 export async function hasDueCreditexProductRegistryRefreshRequest(
@@ -469,6 +520,7 @@ async function deferQueuedRefreshRequest(
 export async function maintainNextCreditexProductRegistry({
   database,
   enqueueRefresh = enqueueCreditexProductRegistryRefresh,
+  hasQueuedRefresh = hasQueuedCreditexProductRegistryRefreshRequest,
   loadQueuedRefresh = loadQueuedRefreshRequest,
   now = new Date(),
   preferredRegistryCode,
@@ -480,6 +532,7 @@ export async function maintainNextCreditexProductRegistry({
 }: {
   database: D1Database;
   enqueueRefresh?: typeof enqueueCreditexProductRegistryRefresh;
+  hasQueuedRefresh?: typeof hasQueuedCreditexProductRegistryRefreshRequest;
   loadQueuedRefresh?: typeof loadQueuedRefreshRequest;
   now?: Date;
   preferredRegistryCode?: string;
@@ -519,6 +572,16 @@ export async function maintainNextCreditexProductRegistry({
         })));
         const due = candidates.filter((candidate) => (
           creditexProductRegistryRefreshDue(candidate.status, now)
+        ));
+        const dueWithQueueState = await Promise.all(due.map(async (candidate) => ({
+          ...candidate,
+          refreshQueued: await hasQueuedRefresh(
+            database,
+            [candidate.target.registryCode],
+          ),
+        })));
+        const available = dueWithQueueState.filter((candidate) => (
+          !candidate.refreshQueued
         )).sort((left, right) => {
           const leftCheckedAt = left.status.lastCheckedAt
             ? Date.parse(left.status.lastCheckedAt)
@@ -529,12 +592,33 @@ export async function maintainNextCreditexProductRegistry({
           return leftCheckedAt - rightCheckedAt
             || left.target.registryCode.localeCompare(right.target.registryCode);
         });
-        if (due.length === 0) return { outcome: "all_current" as const };
-        ({ target, status } = due[0]);
+        if (available.length === 0) {
+          const deferred = dueWithQueueState.find((candidate) => (
+            candidate.refreshQueued
+          ));
+          return deferred
+            ? {
+                registryCode: deferred.target.registryCode,
+                outcome: "retry_backoff" as const,
+              }
+            : { outcome: "all_current" as const };
+        }
+        ({ target, status } = available[0]);
       }
       const pendingWork = target.hasPendingWork
         ? await target.hasPendingWork(database)
         : false;
+      if (
+        queued
+        && !pendingWork
+        && healthyAttemptSatisfiesRefreshRequest(status, queued)
+      ) {
+        await completeQueuedRefreshRequest(database, target.registryCode);
+        return {
+          registryCode: target.registryCode,
+          outcome: "current" as const,
+        };
+      }
       if (
         creditexProductRegistryRetryBackoffActive(status, now)
         && !pendingWork
@@ -550,9 +634,6 @@ export async function maintainNextCreditexProductRegistry({
         && !pendingWork
         && !queued
       ) {
-        if (queued) {
-          await completeQueuedRefreshRequest(database, target.registryCode);
-        }
         return {
           registryCode: target.registryCode,
           outcome: "current" as const,
@@ -715,6 +796,7 @@ export async function drainCreditexProductRegistryMaintenance({
   now = () => new Date(),
   operationTimeoutMs = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
   preferredRegistryCode,
+  seedRefreshes = seedDueCreditexProductRegistryRefreshRequests,
   targets,
   maintain = maintainNextCreditexProductRegistry,
 }: {
@@ -724,6 +806,7 @@ export async function drainCreditexProductRegistryMaintenance({
   now?: () => Date;
   operationTimeoutMs?: number;
   preferredRegistryCode?: string;
+  seedRefreshes?: typeof seedDueCreditexProductRegistryRefreshRequests;
   targets: readonly CreditexProductRegistryMaintenanceTarget[];
   maintain?: typeof maintainNextCreditexProductRegistry;
 }) {
@@ -738,6 +821,13 @@ export async function drainCreditexProductRegistryMaintenance({
     preferredRegistryCode
     && targets.some((target) => target.registryCode === preferredRegistryCode),
   );
+  if (!exactPreferred) {
+    await seedRefreshes({
+      database,
+      now: now(),
+      targets,
+    });
+  }
   let nextPreferredRegistryCode = preferredRegistryCode;
   while (steps < stepLimit) {
     const elapsedMs = now().getTime() - startedAt;
@@ -774,18 +864,12 @@ export async function drainCreditexProductRegistryMaintenance({
       continuationRequired = false;
       break;
     }
-    const progressed = lastResult.outcome === "progressed";
+    if (lastResult.outcome !== "progressed") break;
     if (
-      progressed
-      && "deferContinuation" in lastResult
+      "deferContinuation" in lastResult
       && lastResult.deferContinuation
     ) break;
-    const completedOne = lastResult.outcome === "refreshed"
-      || lastResult.outcome === "current";
-    if (!progressed && (!completedOne || exactPreferred)) break;
-    nextPreferredRegistryCode = lastResult.outcome === "progressed"
-      ? lastResult.registryCode
-      : undefined;
+    nextPreferredRegistryCode = lastResult.registryCode;
     if (
       steps >= stepLimit
       || now().getTime() - startedAt >= elapsedLimit

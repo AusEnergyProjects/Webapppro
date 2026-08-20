@@ -35,15 +35,15 @@ test("the public plan offers one clear no-account enquiry without promoting an a
 test("the optional enquiry preserves every supported planner selection without double entry", () => {
   assert.match(
     planner,
-    /new URLSearchParams\(\{\s*pace,\s*situation,\s*approvalContext,\s*budgetRange,\s*\}\)/,
+    /new URLSearchParams\(\{\s*pace: draft\.pace,\s*situation: draft\.situation,\s*approvalContext: draft\.approvalContext,\s*budgetRange: draft\.budgetRange/,
   );
-  assert.match(planner, /appendValues\(params, "goal", goals\)/);
-  assert.match(planner, /appendValues\(params, "feature", features\)/);
-  assert.match(
-    planner,
-    /if \(addressState\) params\.set\("addressState", addressState\)/,
-  );
+  assert.match(planner, /appendValues\(params, "goal", draft\.goals\)/);
+  assert.match(planner, /appendValues\(params, "feature", draft\.features\)/);
+  assert.match(planner, /for \(const \[key, value\] of Object\.entries\(draft\)\)/);
+  assert.match(planner, /typeof value === "string" && value/);
   for (const field of [
+    "postcode",
+    "addressState",
     "propertyType",
     "storeys",
     "ageBand",
@@ -58,10 +58,7 @@ test("the optional enquiry preserves every supported planner selection without d
     "wallConstruction",
     "floorConstruction",
   ]) {
-    assert.match(
-      planner,
-      new RegExp(`if \\(${field}\\) params\\.set\\("${field}", ${field}\\)`),
-    );
+    assert.match(planner, new RegExp(`${field}: string`));
   }
   assert.match(planner, /const printablePlanHref = `\/plan\/print\?\$\{selectionParams\.toString\(\)\}`/);
   assert.match(planner, /planHref=\{printablePlanHref\}/);
@@ -197,10 +194,14 @@ test("the enquiry handoff keeps independent plan actions available without imply
   );
 });
 
-test("the result leads with a progressing home journey and visible answer-specific quick wins", () => {
-  assert.match(planner, /<PlannerHomeJourney/);
-  assert.match(planner, /focusKey=\{currentStep\.id === "features"/);
-  assert.match(planner, /currentStep\.id === "property"/);
+test("the result follows four grouped stages and keeps visible answer-specific quick wins", () => {
+  assert.match(planner, /const PRIMARY_STAGE_COUNT = 4/);
+  assert.match(planner, /Goal and household/);
+  assert.match(planner, /Comfort and building/);
+  assert.match(planner, /Current systems/);
+  assert.match(planner, /Timing and review/);
+  assert.doesNotMatch(planner, /<PlannerHomeJourney/);
+  assert.match(planner, /window\.sessionStorage\.setItem\(STORAGE_KEY/);
   assert.match(planner, /<section className="planner-quick-wins"/);
   assert.match(planner, /Quick wins for your home/);
   assert.match(planner, /plan\.everydayActions\.map/);
@@ -211,18 +212,14 @@ test("the result leads with a progressing home journey and visible answer-specif
   assert.match(planner, /href="\/rebates"/);
 });
 
-test("shared property and complete home facts stay clear and one-at-a-time", () => {
-  assert.match(
-    planner,
-    /Does the home have strata, a body corporate, an owners corporation or shared common property\?/,
-  );
-  assert.match(planner, /apartments, units, townhouses, villas, duplexes and other housing complexes/);
-  assert.doesNotMatch(planner, /currentStep\.id === "home-basics"/);
+test("core facts are grouped while advanced property facts stay optional", () => {
+  assert.match(planner, /Optional advanced home details/);
+  assert.match(planner, /Not sure or skip/);
+  assert.match(planner, /No dollar saving is invented without bill, tariff and equipment evidence/);
+  assert.match(planner, /Not sure is a valid answer/);
   for (const key of [
-    "propertyType",
     "storeys",
     "floorArea",
-    "occupants",
     "sharedWalls",
     "ageBand",
     "wallConstruction",
@@ -233,7 +230,7 @@ test("shared property and complete home facts stay clear and one-at-a-time", () 
     "roofCondition",
     "switchboard",
   ]) {
-    assert.match(planner, new RegExp(`propertyKey: "${key}"`));
+    assert.match(planner, new RegExp(`key: "${key}"`));
   }
   assert.match(planner, /planSnapshot=\{\{/);
   assert.match(planner, /const enquiryPropertyContext = \{/);
@@ -256,6 +253,6 @@ test("shared property and complete home facts stay clear and one-at-a-time", () 
     assert.match(planPage, new RegExp(`${field}: value\\(params\\.${field}\\)`));
   }
   assert.match(planPage, /One clear step at a time\. Your plan starts here\./);
-  assert.match(planPage, /no follow-up homework/i);
+  assert.match(planPage, /Four grouped steps use a postcode for local context/);
   assert.doesNotMatch(planner, /\u2013|\u2014/);
 });

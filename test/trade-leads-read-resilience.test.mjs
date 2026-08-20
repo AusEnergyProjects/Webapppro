@@ -4,6 +4,8 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 import {
+  ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+  ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
   publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
@@ -122,8 +124,8 @@ function releaseRow(overrides = {}) {
 test("trade lead reads split base rows from any-release context and validate before serialization", () => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
   assert.ok(consentGuard.length < 1_200, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bAND\b/g) || []).length, 3);
-  assert.equal((consentGuard.match(/\bOR\b/g) || []).length, 2);
+  assert.equal((consentGuard.match(/\bAND\b/g) || []).length, 4);
+  assert.equal((consentGuard.match(/\bOR\b/g) || []).length, 3);
 
   const database = new DatabaseSync(":memory:");
   database.exec("CREATE TABLE public_contact (id TEXT, notice_version TEXT, consent_purpose TEXT)");
@@ -131,13 +133,18 @@ test("trade lead reads split base rows from any-release context and validate bef
   insert.run("v4", V4_NOTICE, V4_PURPOSE);
   insert.run("v6", V6_NOTICE, V6_PURPOSE);
   insert.run("v7", V7_NOTICE, V7_PURPOSE);
+  insert.run(
+    "assistant",
+    ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
+    ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+  );
   insert.run("swapped", V7_NOTICE, V6_PURPOSE);
   insert.run("unknown", "unknown", "unknown");
   assert.deepEqual(
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["v4", "v6", "v7"],
+    ["assistant", "v4", "v6", "v7"],
   );
   database.close();
 

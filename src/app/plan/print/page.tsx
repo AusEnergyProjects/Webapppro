@@ -106,6 +106,7 @@ export default async function PrintableHomeEnergyPlanPage({
   const params = await searchParams;
   const suppliedGoals = values(params.goal, 10);
   const suppliedBudget = value(params.budgetRange);
+  const suppliedPostcode = value(params.postcode).replace(/\D/g, "").slice(0, 4);
   const suppliedState = value(params.addressState).toUpperCase();
   const suppliedPropertyContext = buildInstallerPropertyContext({
     propertyType: value(params.propertyType),
@@ -128,6 +129,7 @@ export default async function PrintableHomeEnergyPlanPage({
     situation: value(params.situation),
     approvalContext: value(params.approvalContext) || "not_sure",
     budgetRange: suppliedBudget,
+    postcode: suppliedPostcode,
     addressState: suppliedState,
     features: values(params.feature, MAX_HOME_FEATURE_SELECTIONS),
     propertyContext: suppliedPropertyContext,
@@ -150,6 +152,7 @@ export default async function PrintableHomeEnergyPlanPage({
   plan.goals.forEach((item) => returnParams.append("goal", item));
   plan.features.forEach((item) => returnParams.append("feature", item));
   if (addressState) returnParams.set("addressState", addressState);
+  if (/^\d{4}$/.test(suppliedPostcode)) returnParams.set("postcode", suppliedPostcode);
   if (plan.propertyContext.propertyType) {
     returnParams.set("propertyType", plan.propertyContext.propertyType);
   }
@@ -226,6 +229,7 @@ export default async function PrintableHomeEnergyPlanPage({
     addressState,
   ].filter(Boolean);
   const report = createPublicPlanCustomerReportView({
+    postcode: suppliedPostcode,
     snapshot: {
       goals: plan.goals,
       pace: plan.pace,

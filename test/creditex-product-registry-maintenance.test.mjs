@@ -21,6 +21,7 @@ import {
   hasQueuedCreditexProductRegistryRefreshRequest,
   maintainCreditexAutomaticProductRegistry,
   maintainNextCreditexProductRegistry,
+  seedDueCreditexProductRegistryRefreshRequests,
   withCreditexProductRegistryFleetLease,
 } from "../src/lib/creditex-product-registry-maintenance.ts";
 import {
@@ -209,6 +210,7 @@ function fleetDatabase() {
         return due ? {
           registry_code: due.registryCode,
           attempt_count: due.attemptCount,
+          requested_at: due.requestedAt,
         } : null;
       }
       throw new Error(`Unexpected first SQL: ${sql}`);
@@ -226,6 +228,17 @@ const withoutSchemaInstall = async () => undefined;
 const realFleetLease = (database, operation) => (
   withCreditexProductRegistryFleetLease(database, operation, {
     ensureSchema: withoutSchemaInstall,
+  })
+);
+const enqueueWithoutSchema = (database, registryCode, now) => (
+  enqueueCreditexProductRegistryRefresh(database, registryCode, now, {
+    ensureSchema: withoutSchemaInstall,
+  })
+);
+const seedWithoutSchema = (input) => (
+  seedDueCreditexProductRegistryRefreshRequests({
+    ...input,
+    enqueueRefresh: enqueueWithoutSchema,
   })
 );
 
@@ -367,6 +380,7 @@ test("unscoped maintenance selects exactly one oldest due registry", async () =>
     }));
   const result = await maintainNextCreditexProductRegistry({
     database: {},
+    hasQueuedRefresh: async () => false,
     now: NOW,
     targets,
     loadQueuedRefresh: async () => null,
@@ -383,6 +397,172 @@ test("unscoped maintenance selects exactly one oldest due registry", async () =>
     outcome: "refreshed",
     changed: true,
   });
+});
+
+test("unscoped maintenance does not bypass a durable request not-before time", async () => {
+  const database = fleetDatabase();
+  const registryCode = "gems-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    NOW,
+    { ensureSchema: withoutSchemaInstall },
+  );
+  database.state.refreshRequests.get(registryCode).notBefore = new Date(
+    NOW.getTime() + 3_000,
+  ).toISOString();
+  let refreshCalls = 0;
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    hasQueuedRefresh: (targetDatabase, registryCodes) => (
+      hasQueuedCreditexProductRegistryRefreshRequest(
+        targetDatabase,
+        registryCodes,
+        { ensureSchema: withoutSchemaInstall },
+      )
+    ),
+    now: NOW,
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({
+        registryCode,
+        status: "stale",
+      }),
+      refresh: async () => {
+        refreshCalls += 1;
+        return { changed: true };
+      },
+    }],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(result, {
+    registryCode,
+    outcome: "retry_backoff",
+  });
+  assert.equal(refreshCalls, 0);
+  assert.equal(database.state.refreshRequests.has(registryCode), true);
+});
+
+test("a fresh fleet root seeds stale GEMS and NSW work then advances only the oldest target", async () => {
+  const database = fleetDatabase();
+  const refreshed = [];
+  const targets = [
+    {
+      registryCode: "gems-products",
+      loadStatus: async () => registryStatus({
+        registryCode: "gems-products",
+        status: "stale",
+      }),
+      refresh: async () => {
+        refreshed.push("gems-products");
+        return { changed: true, complete: true };
+      },
+    },
+    {
+      registryCode: "nsw-tessa-products",
+      loadStatus: async () => registryStatus({
+        registryCode: "nsw-tessa-products",
+        status: "stale",
+      }),
+      refresh: async () => {
+        refreshed.push("nsw-tessa-products");
+        return { changed: true, complete: true };
+      },
+    },
+    {
+      registryCode: "veu-approved-products",
+      loadStatus: async () => registryStatus({
+        registryCode: "veu-approved-products",
+        lastCheckedAt: NOW.toISOString(),
+        lastAttempt: {
+          status: "success",
+          checkedAt: NOW.toISOString(),
+          message: "",
+        },
+      }),
+      refresh: async () => {
+        throw new Error("healthy VEU registry must not churn");
+      },
+    },
+  ];
+  const result = await drainCreditexProductRegistryMaintenance({
+    database,
+    now: () => NOW,
+    seedRefreshes: seedWithoutSchema,
+    targets,
+    maintain: (input) => maintainNextCreditexProductRegistry({
+      ...input,
+      withFleetLease: realFleetLease,
+    }),
+  });
+  assert.deepEqual(refreshed, ["gems-products"]);
+  assert.equal(result.outcome, "refreshed");
+  assert.equal(result.steps, 1);
+  assert.equal(database.state.refreshRequests.has("gems-products"), false);
+  assert.equal(database.state.refreshRequests.has("nsw-tessa-products"), true);
+  assert.equal(database.state.refreshRequests.has("veu-approved-products"), false);
+});
+
+test("a healthy current registry is not seeded or refreshed", async () => {
+  const enqueued = [];
+  const registryCodes = await seedDueCreditexProductRegistryRefreshRequests({
+    database: {},
+    enqueueRefresh: async (_database, registryCode) => {
+      enqueued.push(registryCode);
+    },
+    now: NOW,
+    targets: [{
+      registryCode: "veu-approved-products",
+      loadStatus: async () => registryStatus({
+        lastCheckedAt: NOW.toISOString(),
+        lastAttempt: {
+          status: "unchanged",
+          checkedAt: NOW.toISOString(),
+          message: "",
+        },
+      }),
+      refresh: async () => {
+        throw new Error("healthy current registry must not refresh");
+      },
+    }],
+  });
+  assert.deepEqual(registryCodes, []);
+  assert.deepEqual(enqueued, []);
+});
+
+test("fleet seeding respects failed-attempt backoff", async () => {
+  const enqueued = [];
+  const target = {
+    registryCode: "gems-products",
+    loadStatus: async () => registryStatus({
+      registryCode: "gems-products",
+      status: "stale",
+      lastAttempt: {
+        status: "failed",
+        checkedAt: NOW.toISOString(),
+        message: "temporary source failure",
+      },
+    }),
+    refresh: async () => ({ changed: false }),
+  };
+  assert.deepEqual(await seedDueCreditexProductRegistryRefreshRequests({
+    database: {},
+    enqueueRefresh: async (_database, registryCode) => {
+      enqueued.push(registryCode);
+    },
+    now: new Date(NOW.getTime() + CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS - 1),
+    targets: [target],
+  }), []);
+  assert.deepEqual(enqueued, []);
+  assert.deepEqual(await seedDueCreditexProductRegistryRefreshRequests({
+    database: {},
+    enqueueRefresh: async (_database, registryCode) => {
+      enqueued.push(registryCode);
+    },
+    now: new Date(NOW.getTime() + CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS),
+    targets: [target],
+  }), ["gems-products"]);
+  assert.deepEqual(enqueued, ["gems-products"]);
 });
 
 test("calculator dispatch prioritises its exact queued registry", async () => {
@@ -652,6 +832,46 @@ test("an explicit due queue refreshes a current registry", async () => {
   });
   assert.equal(refreshCalls, 1);
   assert.equal(result.outcome, "refreshed");
+  assert.equal(database.state.refreshRequests.size, 0);
+});
+
+test("a healthy accepted attempt clears an older orphaned current VEU request", async () => {
+  const database = fleetDatabase();
+  const registryCode = "veu-approved-products";
+  await enqueueCreditexProductRegistryRefresh(
+    database,
+    registryCode,
+    new Date(NOW.getTime() - 60_000),
+    { ensureSchema: withoutSchemaInstall },
+  );
+  let refreshCalls = 0;
+  const result = await maintainNextCreditexProductRegistry({
+    database,
+    now: NOW,
+    targets: [{
+      registryCode,
+      loadStatus: async () => registryStatus({
+        registryCode,
+        lastCheckedAt: NOW.toISOString(),
+        lastAttempt: {
+          status: "success",
+          checkedAt: NOW.toISOString(),
+          message: "",
+        },
+      }),
+      hasPendingWork: async () => false,
+      refresh: async () => {
+        refreshCalls += 1;
+        return { changed: false, complete: true };
+      },
+    }],
+    withFleetLease: realFleetLease,
+  });
+  assert.deepEqual(result, {
+    registryCode,
+    outcome: "current",
+  });
+  assert.equal(refreshCalls, 0);
   assert.equal(database.state.refreshRequests.size, 0);
 });
 

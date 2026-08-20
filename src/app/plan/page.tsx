@@ -48,6 +48,7 @@ export default async function HomeEnergyPlanPage({
     MAX_HOME_FEATURE_SELECTIONS,
   );
   const suppliedBudget = value(params.budgetRange);
+  const suppliedPostcode = value(params.postcode).replace(/\D/g, "").slice(0, 4);
   const suppliedState = value(params.addressState).toUpperCase();
   const plan = createCustomerProjectPlan({
     goals: suppliedGoals.length ? suppliedGoals : ["lower-bills"],
@@ -55,6 +56,7 @@ export default async function HomeEnergyPlanPage({
     situation: value(params.situation),
     approvalContext: value(params.approvalContext) || "not_sure",
     budgetRange: suppliedBudget,
+    postcode: suppliedPostcode,
     addressState: suppliedState,
     features: suppliedFeatures,
     propertyContext: {
@@ -85,9 +87,9 @@ export default async function HomeEnergyPlanPage({
           <span>Private home energy planning</span>
           <h1>One clear step at a time. Your plan starts here.</h1>
           <p>
-            No account, address, bill, postcode, meter identifier or contact
-            details are needed. Every home-detail question includes Not sure,
-            and your answers become one ordered roadmap with no follow-up homework.
+            No account, address, bill, meter identifier or contact details are
+            needed. Four grouped steps use a postcode for local context, include
+            Not sure for technical questions, and can save progress in this browser tab.
           </p>
         </div>
       </header>
@@ -100,6 +102,7 @@ export default async function HomeEnergyPlanPage({
           budgetRange: validBudgets.has(suppliedBudget)
             ? suppliedBudget
             : "not_set",
+          postcode: suppliedPostcode,
           addressState: customerProjectOptions.states.includes(suppliedState)
             ? suppliedState
             : "",

@@ -387,6 +387,8 @@ test("Sites exposes a no-store service identity endpoint for independent availab
     "utf8",
   );
   assert.match(route, /service: "aea-energy"/);
+  assert.match(route, /energyAssistantKnowledgeHealth/);
+  assert.match(route, /ok: energyAssistantKnowledge\.ready/);
   assert.match(route, /"Cache-Control": "no-store"/);
   assert.doesNotMatch(route, /process\.env|request|email|postcode|NMI/i);
 });

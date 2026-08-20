@@ -169,8 +169,8 @@ test("public plan opportunity email is mandatory despite the optional account pr
   );
   const finalConsentGuard = publicPlanContactReleaseConsentSql("current_public_contact");
   assert.ok(finalConsentGuard.length < 1_200, "final consent guard must stay shallow for D1");
-  assert.equal((finalConsentGuard.match(/\bAND\b/g) || []).length, 3);
-  assert.equal((finalConsentGuard.match(/\bOR\b/g) || []).length, 2);
+  assert.equal((finalConsentGuard.match(/\bAND\b/g) || []).length, 4);
+  assert.equal((finalConsentGuard.match(/\bOR\b/g) || []).length, 3);
 });
 
 test("Resend submit does not wait for a webhook secret when send credentials are ready", () => {

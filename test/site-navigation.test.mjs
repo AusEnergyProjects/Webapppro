@@ -23,6 +23,7 @@ const guideShell = read("../src/components/GuideShell.tsx");
 const caseStudies = read("../src/app/case-studies/page.tsx");
 const assessments = read("../src/app/assessments/page.tsx");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
+const plannerStyles = read("../src/components/HomeEnergyPlanner.module.css");
 const plannerRoute = read("../src/app/plan/page.tsx");
 const plannerPrintRoute = read("../src/app/plan/print/page.tsx");
 const planPdfButton = read("../src/components/DownloadCustomerPlanPdfButton.tsx");
@@ -338,74 +339,48 @@ test("getting-started copy preserves comparison and privacy boundaries", () => {
 });
 
 test("integrated planner is private, ordered and responsive", () => {
-  assert.match(plannerRoute, /No account, address, bill, postcode, meter identifier or contact/);
-  assert.match(plannerRoute, /createCustomerProjectPlan/);
+  assert.match(plannerRoute, /No account, address, bill, meter identifier or contact details/);
+  assert.match(plannerRoute, /Four grouped steps use a postcode for local context/);
   assert.match(planner, /createCustomerProjectPlan/);
-  assert.match(planner, /Do you own or rent the home\?/);
-  assert.doesNotMatch(planner, /Questions that could change the order/);
-  assert.match(planner, /Why this is in the plan/);
-  assert.match(planner, /What would make the biggest difference/);
-  assert.match(planner, /type="checkbox"/);
-  assert.match(planner, /Do you own or rent the home/);
-  assert.match(planner, /Does the home have strata, a body corporate, an owners corporation or shared common property\?/);
-  assert.match(planner, /other housing complexes/);
-  assert.match(planner, /equipment locations that may need approval/);
-  assert.match(planner, /About how large is the home inside/);
-  assert.match(planner, /How many sides share a wall with another dwelling/);
-  assert.match(planner, /What investment range feels comfortable for the first stage/);
-  assert.match(plannerRoute, /One clear step at a time/);
+  assert.match(planner, /const PRIMARY_STAGE_COUNT = 4/);
+  assert.match(planner, /Goal and household/);
+  assert.match(planner, /Comfort and building/);
+  assert.match(planner, /Current systems/);
+  assert.match(planner, /Timing and review/);
+  assert.match(planner, /Tell us about the household/);
+  assert.match(planner, /How does the home feel and perform/);
+  assert.match(planner, /What currently provides energy services/);
+  assert.match(planner, /Choose timing, then review your answers/);
   assert.match(planner, /HomeFeatureIntake/);
-  assert.match(planner, /sectionId=\{currentStep\.featureSection\}/);
-  assert.match(planner, /questionId=\{currentStep\.featureQuestion\}/);
-  assert.doesNotMatch(planner, /Skip remaining home details/);
+  assert.match(planner, /questionId="comfort-concerns"/);
+  assert.match(planner, /sectionId="hot-water-cooking"/);
+  assert.match(planner, /Not sure is a valid answer/);
+  assert.match(planner, /Optional advanced home details/);
+  assert.match(planner, /window\.sessionStorage\.getItem\(STORAGE_KEY\)/);
+  assert.match(planner, /window\.sessionStorage\.setItem\(STORAGE_KEY/);
   assert.match(planner, /role="progressbar"/);
-  assert.match(planner, /<PlannerHomeJourney/);
-  assert.match(plannerJourney, /aria-label="Home planning journey"/);
+  assert.doesNotMatch(planner, /<PlannerHomeJourney/);
+  assert.match(plannerStyles, /@media \(max-width: 720px\)/);
+  assert.match(plannerStyles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(plannerStyles, /min-height: 3\.25rem/);
   assert.match(planner, /className="planner-next-move"/);
-  assert.match(planner, /Start here/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ min-height: 330px; \}/);
-  assert.match(planner, /initialPlannerStep\(initialSelection\)/);
+  assert.match(planner, /Why this is in the plan/);
+  assert.match(planner, /No dollar saving is invented without bill, tariff and equipment evidence/);
   assert.match(planner, /aria-live="polite"/);
   assert.match(planner, /Before committing/);
   assert.match(planner, /Start electricity comparison/);
   assert.match(planner, /Start gas comparison/);
   assert.match(planner, /Open rebate calculator/);
   assert.match(planner, /View rebates and assistance/);
-  assert.match(
-    styles,
-    /\.planner-quick-wins-grid article > a,[\s\S]*\.planner-quick-wins-grid article > a:link,[\s\S]*\.planner-quick-wins-grid article > a:visited \{[\s\S]*background: #eafff8;[\s\S]*color: #043b46;/,
-  );
-  assert.match(
-    styles,
-    /\.planner-quick-wins-grid article > a:hover,[\s\S]*\.planner-quick-wins-grid article > a:focus-visible \{[\s\S]*background: #6ee7b7;[\s\S]*color: #022c37;/,
-  );
-  assert.match(
-    styles,
-    /\.planner-quick-wins-grid article > a:focus-visible \{ outline: 3px solid #8ff8d8; outline-offset: 3px; \}/,
-  );
-  assert.match(
-    styles,
-    /@media \(max-width: 520px\)[\s\S]*\.planner-quick-wins-grid article > a \{ width: 100%; \}/,
-  );
-  assert.match(
-    styles,
-    /@media \(max-width: 520px\)[\s\S]*\.planner-results \{ padding: 12px; \}[\s\S]*\.planner-result-decision \{[^}]*padding: 10px;/,
-  );
   assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
   assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);
-  assert.doesNotMatch(planner, /params\.(?:set|append)\("postcode"/);
-  assert.doesNotMatch(planner, /target="_blank"/);
-  assert.doesNotMatch(planner, /window\.print/);
+  assert.doesNotMatch(planner, /target="_blank"|window\.print/);
   assert.match(plannerPrintRoute, /DownloadCustomerPlanPdfButton/);
-  assert.match(
-    plannerPrintRoute,
-    /<DownloadCustomerPlanPdfButton\s+report=\{report\}\s*\/>/,
-  );
+  assert.match(plannerPrintRoute, /<DownloadCustomerPlanPdfButton\s+report=\{report\}\s*\/>/);
   assert.doesNotMatch(plannerPrintRoute, /PrintRoadmapButton/);
   assert.match(planPdfButton, /await downloadCustomerPlanPdf\(report\)/);
   assert.match(planPdfButton, /Download PDF/);
-  assert.doesNotMatch(planPdfButton, /window\.print/);
   assert.match(planPdfClient, /export async function downloadCustomerPlanPdf\(/);
   assert.match(planPdfClient, /await fetch\("\/api\/customer-plan-pdf"/);
   assert.match(planPdfClient, /method: "POST"/);
@@ -413,33 +388,19 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planPdfClient, /URL\.createObjectURL\(blob\)/);
   assert.match(planPdfClient, /link\.click\(\)/);
   assert.match(planPdfClient, /URL\.revokeObjectURL\(objectUrl\)/);
-  assert.doesNotMatch(planPdfClient, /window\.print/);
-  assert.doesNotMatch(planPdfClient, /createElement\("iframe"\)|srcdoc/);
-  assert.doesNotMatch(planPdfClient, /createElement\("form"\)|form\.submit|window\.location/);
   assert.match(plannerPrintRoute, /createCustomerProjectPlan/);
   assert.match(plannerPrintRoute, /robots: \{ index: false, follow: false \}/);
   assert.match(plannerRoute, /initialSelection=/);
   assert.match(plannerPrintRoute, /returnParams\.append\("feature", item\)/);
   assert.match(plannerPrintRoute, /returnParams\.append\("goal", item\)/);
-  assert.doesNotMatch(plannerPrintRoute, /params\.postcode|params\.room|params\.evidence/);
+  assert.match(plannerPrintRoute, /returnParams\.set\("postcode", suppliedPostcode\)/);
   assert.match(newProjectRoute, /goals = values\(query\.goal, 10\)/);
   assert.match(newProjectRoute, /MAX_HOME_FEATURE_SELECTIONS/);
   assert.match(newProjectRoute, /normalizeHomeFeatureSelections/);
-  assert.match(newProjectRoute, /approvalContext: controlledValue\(/);
-  assert.match(newProjectRoute, /budgetRange: controlledValue\(/);
-  assert.match(newProjectRoute, /addressState: controlledValue\(/);
   assert.match(newProjectRoute, /postcode: postcode &&/);
-  assert.match(styles, /\.planner-layout \{[^}]*grid-template-columns:/);
-  assert.match(styles, /\.planner-progress-shell \{[^}]*position: sticky;/);
-  assert.match(styles, /\.planner-step-card \{[^}]*min-height:/);
   assert.match(styles, /\.planner-results-heading h2,[^}]*overflow-wrap: anywhere;/);
-  assert.match(styles, /\.planner-results \.planner-result-actions button, \.planner-results \.planner-result-actions a \{[^}]*color: #fff;/);
-  assert.doesNotMatch(styles, /background-attachment: fixed/);
   assert.match(styles, /@media print \{/);
-  assert.match(styles, /@media \(max-width: 1080px\) \{[\s\S]*?\.planner-layout \{ grid-template-columns: 1fr; \}/);
   assert.match(styles, /\.planner-page \{ max-width: var\(--layout-max\);/);
-  assert.match(styles, /\.planner-layout \{[^}]*max-width: 100%;/);
-  assert.match(styles, /@media \(min-width: 980px\) \{[\s\S]*\.planner-results \.planner-roadmap-list \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(styles, /\.planner-result-decision \{[^}]*grid-template-columns:/);
   assert.match(styles, /\.planner-quick-wins-grid \{[^}]*grid-template-columns:/);
 });

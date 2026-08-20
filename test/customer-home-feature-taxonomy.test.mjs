@@ -818,29 +818,44 @@ test("evidence readiness is not an ordered roadmap action", () => {
 
 test("the public planner uses the accessible shared intake and bounded query handoff", () => {
   assert.match(publicPlanner, /HomeFeatureIntake/);
-  assert.match(publicPlanner, /idPrefix="public-home-feature"/);
-  assert.match(publicPlanner, /questionId=\{currentStep\.featureQuestion\}/);
-  assert.match(publicPlanner, /plannerFeatureSteps = customerHomeFeatureSections\.flatMap/);
-  assert.match(publicPlanner, /featureQuestion: question\.id/);
-  assert.match(publicPlanner, /Question \$\{visibleQuestionNumber\} of \$\{visibleQuestionCount\}/);
+  assert.match(publicPlanner, /PRIMARY_STAGE_COUNT = 4/);
+  assert.match(publicPlanner, /Four grouped steps/);
+  assert.match(publicPlanner, /idPrefix="quick-comfort"/);
+  assert.match(publicPlanner, /idPrefix="advanced-wall-insulation"/);
+  assert.match(publicPlanner, /questionId="wall-insulation"/);
+  assert.match(publicPlanner, /questionId="floor-insulation"/);
+  assert.match(publicPlanner, /questionId="window-coverings"/);
+  assert.match(publicPlanner, /questionId="external-shading"/);
+  assert.match(publicPlanner, /questionId="sun-exposure"/);
   assert.doesNotMatch(publicPlanner, /Skip remaining home details/);
   assert.doesNotMatch(publicPlanner, /Skip this question/);
-  assert.match(publicPlanner, /Select Not sure whenever you do not safely know/);
-  assert.match(publicPlanner, /currentStep\.id === "property"/);
-  assert.match(publicPlanner, /propertyKey: "ageBand"/);
-  assert.match(publicPlanner, /propertyKey: "roofColour"/);
-  assert.match(publicPlanner, /propertyKey: "roofForm"/);
-  assert.match(publicPlanner, /propertyKey: "roofCondition"/);
-  assert.match(publicPlanner, /propertyKey: "wallConstruction"/);
-  assert.match(publicPlanner, /propertyKey: "floorConstruction"/);
+  assert.match(publicPlanner, /Not sure is always valid/);
+  assert.match(publicPlanner, /key: "ageBand"/);
+  assert.match(publicPlanner, /key: "roofColour"/);
+  assert.match(publicPlanner, /key: "roofForm"/);
+  assert.match(publicPlanner, /key: "roofCondition"/);
+  assert.match(publicPlanner, /key: "wallConstruction"/);
+  assert.match(publicPlanner, /key: "floorConstruction"/);
+  assert.match(publicPlanner, /approvalContexts/);
+  assert.match(publicPlanner, /initialPostcode=\{draft\.postcode\}/);
   assert.deepEqual(
     customerProjectOptions.propertyTypes.at(-1),
     ["not_sure", "Not sure"],
   );
   assert.match(publicPlanner, /floor-insulation-not-applicable/);
-  assert.match(publicPlanner, /floorConstruction === "slab_on_ground"/);
-  assert.match(publicPlanner, /featureQuestion === "floor-insulation"/);
-  assert.match(publicPlanner, /floorInsulationStepIndex/);
+  assert.match(publicPlanner, /value === "slab_on_ground"/);
+  assert.match(publicPlanner, /normalizeFloorInsulation/);
+  assert.match(publicPlanner, /readStoredAssessment/);
+  assert.match(publicPlanner, /storeAssessment/);
+  assert.match(publicPlanner, /removeStoredAssessment/);
+  assert.match(publicPlanner, /residentialStateFromPostcode\(draft\.postcode\)/);
+  assert.match(publicPlanner, /previousStageRef\.current = stored\.stage/);
+  assert.match(publicPlanner, /firstIncompleteAssessmentStage\(initialDraft\)/);
+  assert.match(publicPlanner, /if \(!householdComplete\) return 0/);
+  assert.match(publicPlanner, /comfortQuestionIds\.every[\s\S]*return 1/);
+  assert.match(publicPlanner, /systemQuestionIds\.every[\s\S]*return 2/);
+  assert.doesNotMatch(publicPlanner, /hasExplicitSelection\(initialSelection\) \? 4 : 0/);
+  assert.match(publicPlanner, /draft\.floorConstruction === "slab_on_ground"/);
   assert.match(sharedIntake, /<fieldset/);
   assert.match(sharedIntake, /questionId\?: string/);
   assert.match(sharedIntake, /!questionId \|\| question\.id === questionId/);

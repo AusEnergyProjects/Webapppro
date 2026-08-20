@@ -15,6 +15,17 @@ const sitemap = read("../src/app/sitemap.ts");
 test("the public privacy route covers the operational TLink data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
+  assert.match(privacy, /AEA Energy Guide conversations/);
+  assert.match(privacy, /kept in that browser for up to 30 days/);
+  assert.match(privacy, /stateless guide endpoint/);
+  assert.match(privacy, /does not create or read a server-side conversation record/);
+  assert.match(privacy, /Conversation text is not placed in analytics/);
+  assert.match(privacy, /No third-party tracking cookie, fingerprint or cross-device anonymous identity/);
+  assert.match(privacy, /Optional Energy Guide contact requests/);
+  assert.match(privacy, /Marketing consent is separate and off/);
+  assert.match(privacy, /does not attach the raw conversation/);
+  assert.match(privacy, /separately chooses trade sharing/);
+  assert.match(privacy, /bytes and extracted text are not uploaded or stored/);
   assert.match(privacy, /Google Calendar, Outlook, Xero, MYOB or QuickBooks/);
   assert.match(privacy, /does not offer payment-provider connections or initiate customer payments/);
   assert.match(privacy, /do not sell personal information/i);
