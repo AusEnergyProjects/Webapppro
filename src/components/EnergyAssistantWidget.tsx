@@ -1114,26 +1114,30 @@ export function EnergyAssistantWidget() {
             aria-expanded="false"
             onClick={() => setOpen(true)}
           >
-            <svg className={styles.mascot} viewBox="0 0 90 94" aria-hidden="true" focusable="false">
-              <ellipse className={styles.mascotShadow} cx="45" cy="89" rx="25" ry="4" />
-              <rect className={styles.mascotProng} x="25" y="3" width="12" height="25" rx="6" />
-              <rect className={styles.mascotProng} x="53" y="3" width="12" height="25" rx="6" />
-              <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M16 47 C5 48 7 64 13 67 C17 65 19 58 20 51" />
-              <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M74 47 C85 48 83 64 77 67 C73 65 71 58 70 51" />
-              <rect className={styles.mascotBody} x="14" y="22" width="62" height="60" rx="21" />
-              <rect className={styles.mascotCap} x="9" y="19" width="72" height="24" rx="10" />
-              <path className={styles.mascotCapShine} d="M22 23 H38 V39 H22 Q14 39 14 31 Q14 23 22 23 Z" />
+            <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
+              <ellipse className={styles.mascotShadow} cx="55" cy="120" rx="30" ry="5" />
+              <rect className={styles.mascotProng} x="29" y="4" width="16" height="38" rx="8" />
+              <rect className={styles.mascotProng} x="65" y="4" width="16" height="38" rx="8" />
+              <rect className={styles.mascotProngShine} x="34" y="10" width="4" height="25" rx="2" />
+              <rect className={styles.mascotProngShine} x="70" y="10" width="4" height="25" rx="2" />
+              <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M19 62 C5 65 6 86 13 92 C20 89 23 78 24 68" />
+              <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M91 62 C105 65 104 86 97 92 C90 89 87 78 86 68" />
+              <path className={styles.mascotFoot} d="M35 102 Q36 122 47 107 Z" />
+              <path className={styles.mascotFoot} d="M63 107 Q74 122 75 101 Z" />
+              <path className={styles.mascotBody} d="M18 45 H92 V81 Q92 109 68 109 H42 Q18 109 18 81 Z" />
+              <path className={styles.mascotBodyShade} d="M57 48 H89 V81 Q89 105 67 106 H55 Q67 95 67 73 V48 Z" />
+              <rect className={styles.mascotCap} x="11" y="35" width="88" height="26" rx="8" />
+              <path className={styles.mascotCapShine} d="M22 40 H41 V56 H22 Q16 56 16 48 Q16 40 22 40 Z" />
+              <path className={styles.mascotCapAccent} d="M41 40 H66 V56 H41 Z" />
               <g className={styles.mascotEyes}>
-                <ellipse cx="34" cy="53" rx="6" ry="8" />
-                <ellipse cx="57" cy="53" rx="6" ry="8" />
-                <circle cx="36" cy="50" r="2" />
-                <circle cx="59" cy="50" r="2" />
+                <ellipse cx="42" cy="77" rx="8" ry="10" />
+                <ellipse cx="69" cy="77" rx="8" ry="10" />
+                <circle cx="45" cy="73" r="2.5" />
+                <circle cx="72" cy="73" r="2.5" />
               </g>
-              <circle className={styles.mascotCheek} cx="27" cy="64" r="3" />
-              <circle className={styles.mascotCheek} cx="64" cy="64" r="3" />
-              <path className={styles.mascotSmile} d="M35 62 Q45 72 56 62" />
-              <path className={styles.mascotFoot} d="M30 79 Q31 92 38 80" />
-              <path className={styles.mascotFoot} d="M52 80 Q59 92 61 78" />
+              <circle className={styles.mascotCheek} cx="32" cy="90" r="3.5" />
+              <circle className={styles.mascotCheek} cx="79" cy="90" r="3.5" />
+              <path className={styles.mascotSmile} d="M42 89 Q55 102 70 88" />
             </svg>
           </button>
         </div>

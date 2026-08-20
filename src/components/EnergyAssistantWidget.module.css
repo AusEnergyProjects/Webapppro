@@ -19,19 +19,20 @@
   border: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 82px;
-  height: 88px;
+  flex: 0 0 94px;
+  height: 108px;
   justify-content: center;
   padding: 0;
-  width: 82px;
+  width: 94px;
 }
 
 .mascot {
-  height: 88px;
+  height: 108px;
   overflow: visible;
-  transform-origin: 45px 80px;
-  width: 82px;
+  transform-origin: 55px 108px;
+  width: 94px;
   animation: surgeIdle 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 7px 8px rgba(3, 31, 38, 0.22));
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -45,39 +46,53 @@
 
 .mascotShadow {
   fill: rgba(3, 31, 38, 0.22);
-  transform-origin: 45px 89px;
+  transform-origin: 55px 120px;
 }
 
 .mascotProng {
-  fill: #dce8e5;
+  fill: #cfd8d6;
   stroke: #052e3c;
-  stroke-width: 5px;
+  stroke-width: 6px;
+}
+
+.mascotProngShine {
+  fill: #ffffff;
+  opacity: 0.72;
 }
 
 .mascotBody {
-  fill: #f9fcfa;
+  fill: #fffef8;
   stroke: #052e3c;
-  stroke-width: 5px;
+  stroke-width: 6px;
+}
+
+.mascotBodyShade {
+  fill: #dfe4dc;
+  opacity: 0.92;
 }
 
 .mascotCap {
-  fill: #14c995;
+  fill: #1bc8b4;
   stroke: #052e3c;
-  stroke-width: 5px;
+  stroke-width: 6px;
 }
 
 .mascotCapShine {
-  fill: #7aebd0;
-  opacity: 0.72;
+  fill: #8bf2df;
+  opacity: 0.9;
+}
+
+.mascotCapAccent {
+  fill: #42deca;
 }
 
 .mascotArm,
 .mascotFoot {
-  fill: #14c995;
+  fill: #19bfb4;
   stroke: #052e3c;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 5px;
+  stroke-width: 6px;
 }
 
 .mascotArmRight {
@@ -102,15 +117,15 @@
 }
 
 .mascotCheek {
-  fill: #ffb7a8;
-  opacity: 0.72;
+  fill: #ffad9f;
+  opacity: 0.78;
 }
 
 .mascotSmile {
   fill: none;
   stroke: #052e3c;
   stroke-linecap: round;
-  stroke-width: 4px;
+  stroke-width: 5px;
 }
 
 .launcher:focus-visible,
@@ -1088,6 +1103,17 @@
     left: auto;
     right: max(14px, env(safe-area-inset-right));
     top: auto;
+  }
+
+  .launcher {
+    flex-basis: 96px;
+    height: 110px;
+    width: 96px;
+  }
+
+  .mascot {
+    height: 110px;
+    width: 96px;
   }
 
   .panel {
