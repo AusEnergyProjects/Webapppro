@@ -403,6 +403,30 @@ test("a new Victorian air-conditioner support question does not repeat an earlie
   assert.equal(answer.citations[0]?.id, "veu-water-space-activity-guide-v3-19");
 });
 
+test("Victorian air-conditioner support keeps short answers in the same conversation", () => {
+  const turns = ["how much is the aircon rebate in victoria"];
+  const first = composeEnergyAssistantAnswer(turns[0], { asOf: "2026-08-20T00:00:00.000Z" });
+  assert.deepEqual(first.suggestedQuestions, ["What is the property postcode?"]);
+
+  turns.push("3006");
+  const postcode = composeEnergyAssistantAnswer(turns.at(-1), {
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: turns.slice(0, -1),
+  });
+  assert.match(postcode.directAnswer, /3006 is in Victoria/i);
+  assert.deepEqual(postcode.suggestedQuestions, ["Do you own the home, rent it, or is it strata?"]);
+
+  turns.push("owner");
+  const owner = composeEnergyAssistantAnswer(turns.at(-1), {
+    asOf: "2026-08-20T00:00:00.000Z",
+    priorUserMessages: turns.slice(0, -1),
+  });
+  assert.match(owner.directAnswer, /As an owner in 3006/i);
+  assert.match(owner.directAnswer, /may reduce the upfront cost/i);
+  assert.doesNotMatch(owner.directAnswer, /pathway|certificate|commercial discount|I am here for Australian home energy/i);
+  assert.deepEqual(owner.suggestedQuestions, ["What are you replacing: an old electric heater, gas heater, or no fixed heater?"]);
+});
+
 test("whole-home teaching answers explain the mechanism and safe next options", () => {
   const cases = [
     [

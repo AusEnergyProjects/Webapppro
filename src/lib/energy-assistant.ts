@@ -3880,10 +3880,13 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
+  const continuingProgrammeConversation = priorUserMessages.length > 0
+    && Boolean(catalogueProgramAnswer(userConversation));
   const currentDomainIntent = assistantDomainIntent(query);
   const domainIntent = currentDomainIntent === "blocked"
     ? "out"
-    : playbookId || wholeHomeConversation !== query || (retrievalQuery !== query && looksLikeTerseFollowUp)
+    : playbookId || wholeHomeConversation !== query || continuingProgrammeConversation
+      || (retrievalQuery !== query && looksLikeTerseFollowUp)
       ? "in"
       : currentDomainIntent;
   if (domainIntent === "out") {
@@ -6856,14 +6859,24 @@ export function composeEnergyAssistantAnswer(
   const programmeAnswer = catalogueProgramAnswer(userConversation);
   if (programmeAnswer) {
     const asksAboutVictorianAirConditioningSupport = programmeAnswer.jurisdictionCode === "VIC"
-      && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|RCAC)\b/i.test(query)
-      && /\b(?:rebates?|grants?|assistance|incentives?|discounts?|how much|support)\b/i.test(query)
+      && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|RCAC)\b/i.test(userConversation)
+      && /\b(?:rebates?|grants?|assistance|incentives?|discounts?|how much|support)\b/i.test(userConversation)
       && programmeAnswer.programs.some((program) => program.templateId === "vic-veu");
     if (asksAboutVictorianAirConditioningSupport) {
-      const question = "What is the property postcode?";
+      const postcode = userConversation.match(/\b\d{4}\b/)?.[0] || null;
+      const applicant = userConversation.match(/\b(owner-occupier|owner|renter|tenant|landlord|strata|owners corporation|business)\b/i)?.[0] || null;
+      const question = !postcode
+        ? "What is the property postcode?"
+        : !applicant
+          ? "Do you own the home, rent it, or is it strata?"
+          : "What are you replacing: an old electric heater, gas heater, or no fixed heater?";
+      const directAnswer = !postcode
+        ? "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly."
+        : !applicant
+          ? `Thanks. ${postcode} is in Victoria. The next thing that changes the support and approval checks is whether you own the home, rent it, or need strata approval.`
+          : `Thanks. As an ${applicant.toLowerCase()} in ${postcode}, Victorian Energy Upgrades may reduce the upfront cost of an eligible reverse-cycle air conditioner. It is not a fixed rebate: the amount depends on the exact unit, the system being replaced and the installation. The important comparison is the final installed price, room comfort and running cost, not just the advertised discount.`;
       return structured("rebates_certificates", {
-        directAnswer:
-          "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly.",
+        directAnswer,
         status: "needs_context",
         citations: officialCitationsById(["veu-water-space-activity-guide-v3-19"]),
         confidence: "medium",
