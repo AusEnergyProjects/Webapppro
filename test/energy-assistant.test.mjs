@@ -76,6 +76,38 @@ test("household comfort language cannot be outranked by generic official-source 
   }
 });
 
+test("Surge gives an immediate heating answer and asks only for the property postcode", () => {
+  for (const query of [
+    "What reverse cycle heating system should I get? Are rebates available?",
+    "What is the best heater for my home?",
+  ]) {
+    const answer = composeEnergyAssistantAnswer(query, {
+      audience: "household",
+      asOf: "2026-08-20T00:00:00.000Z",
+    });
+    assert.equal(answer.status, "needs_context", query);
+    assert.match(answer.directAnswer, /correctly sized reverse-cycle air conditioner/i, query);
+    assert.match(answer.directAnswer, /efficient electric starting point/i, query);
+    assert.deepEqual(answer.suggestedQuestions, ["What is the property postcode?"], query);
+    assert.deepEqual(answer.practicalSteps, [], query);
+    assert.deepEqual(answer.toolActions, [], query);
+    assert.doesNotMatch(answer.directAnswer, /national catalogue helps discover/i, query);
+  }
+});
+
+test("Surge explains thermal mass directly before asking one useful local question", () => {
+  const answer = composeEnergyAssistantAnswer("Why does thermal mass release heat later?", {
+    audience: "household",
+    asOf: "2026-08-20T00:00:00.000Z",
+  });
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /take time to warm through/i);
+  assert.match(answer.directAnswer, /release it gradually/i);
+  assert.deepEqual(answer.suggestedQuestions, ["What is the property postcode?"]);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.toolActions, []);
+});
+
 test("a terse follow-up reuses only bounded prior user topic context", () => {
   const answer = composeEnergyAssistantAnswer("Four people use it", {
     audience: "household",
@@ -256,8 +288,8 @@ test("heat-pump selection remains independent and progressive instead of recomme
   });
   assert.equal(answer.status, "needs_context");
   assert.match(answer.directAnswer, /does not recommend, rank or endorse/i);
-  assert.match(answer.directAnswer, /space heating and cooling, hot water, or solar water heating/i);
   assert.equal(answer.suggestedQuestions.length, 1);
+  assert.equal(answer.suggestedQuestions[0], "Is this for space heating and cooling, hot water, or solar water heating?");
   assert.doesNotMatch(answer.directAnswer, /buy (?:a|the)|best brand|our preferred|affiliate|sponsored/i);
   assert.ok(answer.citations.every((citation) => citation.sourceTier === "primary_official"));
 });

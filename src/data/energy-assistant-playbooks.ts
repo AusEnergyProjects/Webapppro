@@ -74,7 +74,7 @@ export type HeatPumpSelectionSlot = typeof HEAT_PUMP_SELECTION_SLOT_ORDER[number
 
 export const HEAT_PUMP_SELECTION_SLOT_QUESTIONS: Readonly<Record<HeatPumpSelectionSlot, string>> = {
   purpose: "Is this for space heating and cooling, hot water, or solar water heating?",
-  climate: "What postcode and winter and summer design conditions must the system handle?",
+  climate: "What is the property postcode?",
   demand: "What measured or calculated room heat load, or household hot-water demand, must it meet?",
   site: "What electrical supply, installation space, noise limits and condensate or drainage route apply?",
   temperaturePerformance: "What delivered capacity retention and efficiency at the relevant outdoor temperature does the official data show?",

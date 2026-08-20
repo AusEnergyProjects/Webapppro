@@ -296,20 +296,12 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
   };
 }
 
-function quickQuestionsFor(message: AssistantMessage): string[] {
-  const text = `${message.directAnswer} ${message.content} ${message.actions.map((action) => action.label).join(" ")}`.toLowerCase();
-  const related = /\b(?:solar|panel|inverter|export|stc)\b/.test(text)
-    ? ["How much could solar save me?", "What affects my solar rebate?", "What should a solar quote include?"]
-    : /\b(?:battery|storage|backup|vpp)\b/.test(text)
-      ? ["Would a battery suit my usage?", "What would backup actually cover?", "What should I compare in battery quotes?"]
-      : /\b(?:electric vehicle|\bev\b|charger|charging|petrol|diesel)\b/.test(text)
-        ? ["How much could an EV save me?", "What home charger would I need?", "How do I compare EV efficiency?"]
-        : /\b(?:hot water|water heater|heat pump water|tank)\b/.test(text)
-          ? ["What size hot-water system do I need?", "How do I compare heat-pump hot water?", "What should the quote include?"]
-          : /\b(?:cold|hot room|comfort|heating|cooling|insulation|draught|window|glazing)\b/.test(text)
-            ? ["Why is one room uncomfortable?", "What should I check before buying equipment?", "Which upgrade should come first?"]
-            : ["What should I upgrade first?", "How can I lower my bills?", "What do you need to know about my home?"];
-  return [...new Set([...message.suggestions, ...related])].slice(0, 3);
+function naturalFollowUpFor(message: AssistantMessage): string {
+  const suggestion = message.suggestions[0]?.trim() || "";
+  if (!suggestion) return "";
+  const normalizedSuggestion = suggestion.replace(/[?.!]+$/u, "").toLocaleLowerCase();
+  const normalizedAnswer = (message.directAnswer || message.content).toLocaleLowerCase();
+  return normalizedAnswer.includes(normalizedSuggestion) ? "" : suggestion;
 }
 
 function parseApiError(payload: unknown, fallback: string): string {
@@ -1360,29 +1352,9 @@ export function EnergyAssistantWidget() {
                             </ol>
                           </section>
                         )}
-                        {message.nextAction && (
-                          <section className={styles.nextAction}>
-                            <strong>Best next action</strong>
-                            <p>{message.nextAction}</p>
-                          </section>
+                        {naturalFollowUpFor(message) && (
+                          <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message)}</p>
                         )}
-                        {message.actions.length > 0 && (
-                          <nav className={styles.answerTools} aria-label="Recommended tools">
-                            {message.actions.map((action) => (
-                                  <a key={action.id} href={action.href} onClick={rememberModeForNavigation}>{action.label}</a>
-                            ))}
-                          </nav>
-                        )}
-                        <div className={styles.followUps} aria-label="Quick follow-up questions">
-                          <strong>Ask next</strong>
-                          <div>
-                            {quickQuestionsFor(message).map((suggestion) => (
-                              <button key={suggestion} type="button" disabled={busy} onClick={() => void ask(suggestion)}>
-                                {suggestion}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
                       </article>
                     )}
                   </li>
@@ -1556,7 +1528,7 @@ export function EnergyAssistantWidget() {
             )}
 
             <footer className={styles.privacy}>
-              <p>Saved on this device for 30 days. Surge does not store this conversation on its server.</p>
+              <p>Saved only on this device for 30 days.</p>
               <div>
                 <a href="/privacy">Privacy</a>
                 <button type="button" disabled={busy || leadBusy} onClick={resetConversation}>

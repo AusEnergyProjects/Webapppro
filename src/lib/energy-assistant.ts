@@ -885,9 +885,12 @@ function directPlaybookId(
     return "ev1_ev2";
   }
   if (
-    /\b(?:heat[- ]?pump|reverse[ -]cycle|RCAC|solar water heater|SWH|HPHW|HPWH|HWS)\b/i.test(message)
-    && /\b(?:which|what|best|recommend|choose|buy|get|compare|versus|vs\.?|model|brand)\b/i.test(message)
-    && !/\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?)\b/i.test(message)
+    /\b(?:heat[- ]?pump|reverse[ -]cycle|RCAC|solar water heater|SWH|HPHW|HPWH|HWS|heater|heating system|air conditioner|air conditioning)\b/i.test(message)
+    && (
+      /\b(?:what|which)(?:\s+[a-z-]+){0,3}\s+(?:heat[- ]?pump|reverse[ -]cycle|RCAC|solar water heater|SWH|HPHW|HPWH|HWS|heater|heating system|air conditioner|air conditioning)\b/i.test(message)
+      || /\b(?:heat[- ]?pump|reverse[ -]cycle|RCAC|solar water heater|SWH|HPHW|HPWH|HWS|heater|heating system|air conditioner|air conditioning)\b.{0,60}\b(?:should I (?:get|buy|choose)|recommend|best|compare|versus|vs\.?|model|brand)\b/i.test(message)
+      || /\b(?:best|recommend|choose|buy|compare)\b.{0,40}\b(?:heat[- ]?pump|reverse[ -]cycle|RCAC|solar water heater|SWH|HPHW|HPWH|HWS|heater|heating system|air conditioner|air conditioning)\b/i.test(message)
+    )
   ) return "heat_pump_selection";
   return null;
 }
@@ -1067,7 +1070,7 @@ function missingEvChargingSlots(conversation: string): EvChargingSlot[] {
 
 function missingHeatPumpSelectionSlots(conversation: string): HeatPumpSelectionSlot[] {
   const present = new Set<HeatPumpSelectionSlot>();
-  if (/\b(?:space heating|heating and cooling|room heating|hot water|water heating|solar water heating|SWH|HWS|HPWH|HPHW|heat[- ]?pump water heater)\b/i.test(conversation)) {
+  if (/\b(?:space heating|heating and cooling|room heating|hot water|water heating|solar water heating|SWH|HWS|HPWH|HPHW|heat[- ]?pump water heater|reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning)\b/i.test(conversation)) {
     present.add("purpose");
   }
   const hasNamedLocationReply = conversation.split(/\r?\n/).some((line) => {
@@ -1317,7 +1320,7 @@ function assistantDomainIntent(query: string) {
     && /\b(?:checker|quote|scanned|scan|image[ -]only|OCR|local)\b/i.test(query)) return "in" as const;
   if (/\b(?:raw (?:file )?bytes?|extracted (?:text|lines?)|bounded (?:derived )?summary)\b/i.test(query)
     && /\b(?:local|device|browser|chat|lead|privacy|stays?|leaves?|difference|plain English)\b/i.test(query)) return "in" as const;
-  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulation|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
+  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulation|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
   if (/\b(?:bedroom|room|upstairs|upper floor|top floor|home|house|unit|apartment)\b/i.test(query)
     && /\b(?:hot|warm)\b/i.test(query)
     && /\b(?:outdoor|outside|night|evening|sunset)\b/i.test(query)) return "in" as const;
@@ -5950,18 +5953,14 @@ export function composeEnergyAssistantAnswer(
   if (/\bthermal mass\b/i.test(query)) {
     return structured("comfort_fabric", {
       directAnswer:
-        "Thermal mass is material such as a concrete slab or masonry that absorbs heat and releases it later, smoothing temperature swings when the timing is useful. It is a heat store, not insulation. Mass inside the insulated envelope can absorb winter sun and return heat after sunset, or absorb indoor heat before being cooled by suitable night air. The same mass can lock in unwanted summer heat or winter cold when it is unshaded, outside the insulation, cannot cool overnight, or does not match when the home is occupied.",
-      status: "answered",
+        "Thermal mass releases heat later because dense materials such as concrete and brick take time to warm through. They absorb energy while nearby air and surfaces are warmer, then release it gradually after those surroundings cool. That delay can smooth temperatures when winter sun, summer shade and cool nights are managed well, or prolong overheating when the mass cannot cool down.",
+      status: "needs_context",
       citations: officialCitationsById(["yourhome-thermal-mass", "yourhome-passive-design-system"]),
       confidence: "high",
       assumptions: ["The climate, mass location, insulation boundary, solar access, night temperatures and occupancy schedule are not known."],
-      practicalSteps: [
-        "Map the slab or masonry relative to insulation and the rooms that actually need temperature stability.",
-        "Check whether it receives controlled winter sun, is shaded in summer and can release heat to genuinely cooler night air.",
-        "Model shading and ventilation before adding mass; do not treat extra concrete as an automatic efficiency upgrade.",
-      ],
-      toolActions: [{ id: "open-home-plan", label: "Plan the home's passive design", href: "/plan" }],
-      suggestedQuestions: ["Where is the mass relative to the insulation, sun and occupied rooms, and can the home safely cool at night?"],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: ["What is the property postcode?"],
     });
   }
 
@@ -6490,6 +6489,12 @@ export function composeEnergyAssistantAnswer(
     const independence =
       "Surge does not recommend, rank or endorse a heat-pump, reverse-cycle or solar-water-heater brand, supplier or model. It compares user-supplied options against the same independent criteria and current official facts.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
+    const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
+    const immediateCategoryAnswer = hotWaterPurpose
+      ? "A heat-pump water heater can use much less electricity than resistance hot water, but tank size, peak demand, winter recovery, placement, noise, tariff timing and the exact eligible model determine whether it suits this home."
+      : spaceHeatingPurpose
+        ? "For many Australian homes, a correctly sized reverse-cycle air conditioner is the efficient electric starting point because it provides heating and cooling. Capacity, layout, insulation, glazing, noise and cold-weather performance still determine what will work at this home, and any rebate or certificate support depends on location, the exact eligible product and installation date."
+        : "A heat pump can be an efficient electric option, but the correct system type and capacity depend on the home's climate, demand and installation constraints.";
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."
@@ -6513,7 +6518,7 @@ export function composeEnergyAssistantAnswer(
     if (missing.length) {
       return structured(hotWaterPurpose ? "heat_pump_hot_water" : "products_ratings", {
         directAnswer:
-          `${independence} ${hotWaterKnownFacts || "A model name or headline efficiency is not enough to choose safely."} I still need only: ${nextQuestions.join(" ")}`,
+          `${immediateCategoryAnswer} ${independence} ${hotWaterKnownFacts}`.trim(),
         status: "needs_context",
         citations,
         confidence: "low",
@@ -6521,11 +6526,7 @@ export function composeEnergyAssistantAnswer(
           "No brand, supplier or product preference has been applied.",
           "No site load, hot-water demand, official registration, installation design or complete quote has been verified.",
         ],
-        practicalSteps: [
-          "Provide the next missing design and evidence facts.",
-          "Keep every exact model under consideration visible so the same checks can be applied.",
-          "Do not select from a headline COP, rebate or brand claim alone.",
-        ],
+        practicalSteps: [],
         toolActions: [],
         suggestedQuestions: nextQuestions,
       });

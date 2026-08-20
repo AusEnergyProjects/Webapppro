@@ -47,11 +47,15 @@ test("Surge opens with useful questions and keeps answers compact", () => {
   assert.match(widget, />Surge</);
   assert.match(widget, />What to do next</);
   assert.match(widget, /practicalSteps\.slice\(0, 3\)/);
-  assert.match(widget, />Best next action</);
+  assert.doesNotMatch(widget, />Best next action</);
   assert.doesNotMatch(widget, />Assumptions and limits</);
   assert.doesNotMatch(widget, />Sources and dates</);
-  assert.match(widget, /function quickQuestionsFor/);
-  assert.match(widget, /quickQuestionsFor\(message\)\.map/);
+  assert.doesNotMatch(widget, /function quickQuestionsFor/);
+  assert.doesNotMatch(widget, />Ask next</);
+  assert.doesNotMatch(widget, /quickQuestionsFor\(message\)/);
+  assert.match(widget, /function naturalFollowUpFor/);
+  assert.match(widget, /styles\.clarifyingQuestion/);
+  assert.doesNotMatch(widget, /styles\.answerTools/);
   assert.match(widget, /\.slice\(0, 3\)/);
   assert.match(widget, /answerStatus === "source_review_required"/);
 });
@@ -78,7 +82,7 @@ test("only bounded local transcript, open state, last activity and guide mode ar
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
   assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
-  assert.match(widget, /Saved on this device for 30 days/);
+  assert.match(widget, /Saved only on this device for 30 days/);
   assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
@@ -88,7 +92,7 @@ test("only bounded local transcript, open state, last activity and guide mode ar
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
-  assert.match(widget, /Surge does not store this conversation on its server/);
+  assert.match(widget, /Saved only on this device for 30 days/);
   assert.doesNotMatch(widget, /Last active \$\{lastActive\}/);
   assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
@@ -409,7 +413,7 @@ test("the optional quote brief is progressive, phone-safe and trade sharing requ
   assert.match(widget, /Finish the trade brief or leave trade sharing off/);
   assert.match(widget, /Australian Energy Assessments help stays available/);
   assert.match(widget, /It has not been shared with trades because the brief still needs more useful detail/);
-  assert.match(widget, /quickQuestionsFor\(message\)\.map/);
+  assert.doesNotMatch(widget, /quickQuestionsFor\(message\)/);
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
 });
 
@@ -433,7 +437,8 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   }
   assert.match(styles, /prefers-reduced-motion:[\s\S]*\.mascot/);
   assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
-  assert.match(styles, /\.conversation\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);
+  assert.match(styles, /\.privacy a,[\s\S]*\.privacy button\s*\{[\s\S]*align-items:\s*center[\s\S]*display:\s*inline-flex/);
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*height:\s*100dvh[\s\S]*width:\s*100vw/);
   assert.match(styles, /safe-area-inset-bottom/);
