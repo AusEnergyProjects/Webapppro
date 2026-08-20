@@ -8,6 +8,7 @@ const widget = read("../src/components/EnergyAssistantWidget.tsx");
 const styles = read("../src/components/EnergyAssistantWidget.module.css");
 const layout = read("../src/app/layout.tsx");
 const leadClient = read("../src/lib/energy-assistant-lead-client.mjs");
+const mascotImage = readFileSync(new URL("../public/surge-mascot.png", import.meta.url));
 
 function functionSource(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -531,29 +532,21 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /function SurgeMascot/);
   assert.match(widget, /<SurgeMascot \/>/);
   assert.match(widget, /<SurgeMascot peeking \/>/);
-  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*102px[\s\S]*width:\s*82px/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*100px[\s\S]*width:\s*80px/);
-  assert.match(widget, /mascotProngShine/);
-  assert.match(widget, /mascotBodyShade/);
-  assert.match(widget, /mascotSmile/);
-  assert.match(widget, /mascotCore/);
-  assert.match(widget, /mascotCircuit/);
-  assert.match(widget, /mascotFaceScreen/);
-  assert.match(widget, /mascotVisorGlint/);
-  assert.match(widget, /mascotEyeDepth/);
-  assert.match(widget, /mascotEyeSpark/);
-  assert.match(widget, /mascotPanelSeam/);
-  assert.match(widget, /mascotStatus/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
+  assert.match(styles, /\.mascot\s*\{[\s\S]*background:\s*url\("\/surge-mascot\.png"\)[\s\S]*height:\s*52px[\s\S]*width:\s*42px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
+  assert.equal(mascotImage.subarray(1, 4).toString("ascii"), "PNG");
+  assert.ok(mascotImage.byteLength > 100_000);
   assert.match(widget, /aria-label="Hide Surge mascot"/);
   assert.match(widget, /aria-label="Open Ask Surge"/);
   assert.match(widget, /aria-label="Bring Surge back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
   assert.match(widget, /setMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);
-  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*56px[\s\S]*width:\s*48px/);
-  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*height:\s*58px[\s\S]*right:\s*-17px[\s\S]*rotate\(-11deg\)[\s\S]*width:\s*47px/);
+  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*56px[\s\S]*width:\s*44px/);
+  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*height:\s*53px[\s\S]*right:\s*-21px[\s\S]*rotate\(-11deg\)[\s\S]*width:\s*42px/);
   assert.doesNotMatch(widget, /peekLabel|>Ask Surge<\/span>/);
-  assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-9px/);
+  assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-12px/);
   for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
     assert.match(styles, new RegExp(`@keyframes ${state}`));
   }

@@ -139,93 +139,10 @@ const START_ROADMAP = [
 
 function SurgeMascot({ peeking = false }: { peeking?: boolean }) {
   return (
-    <svg
+    <span
       className={`${styles.mascot}${peeking ? ` ${styles.mascotPeeking}` : ""}`}
-      viewBox="0 0 120 150"
       aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient id="surge-metal" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#829a9f" />
-          <stop offset="24%" stopColor="#f7fffe" />
-          <stop offset="51%" stopColor="#b7c9c9" />
-          <stop offset="78%" stopColor="#718a91" />
-          <stop offset="100%" stopColor="#dff0ed" />
-        </linearGradient>
-        <linearGradient id="surge-shell" x1="10%" y1="4%" x2="88%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="46%" stopColor="#e6f2ef" />
-          <stop offset="100%" stopColor="#92aaa7" />
-        </linearGradient>
-        <linearGradient id="surge-armour" x1="8%" y1="10%" x2="92%" y2="90%">
-          <stop offset="0%" stopColor="#62f0d4" />
-          <stop offset="44%" stopColor="#16c9b2" />
-          <stop offset="100%" stopColor="#08798b" />
-        </linearGradient>
-        <radialGradient id="surge-energy" cx="38%" cy="30%" r="72%">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="32%" stopColor="#9ffff0" />
-          <stop offset="72%" stopColor="#20d8bc" />
-          <stop offset="100%" stopColor="#056a7d" />
-        </radialGradient>
-        <filter id="surge-energy-glow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="2.2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-
-      <ellipse className={styles.mascotShadow} cx="60" cy="143" rx="31" ry="5" />
-
-      <g className={styles.mascotProngs}>
-        <rect className={styles.mascotProng} x="33" y="4" width="15" height="47" rx="7.5" />
-        <rect className={styles.mascotProng} x="72" y="4" width="15" height="47" rx="7.5" />
-        <path className={styles.mascotProngShine} d="M39 11V39M78 11V39" />
-      </g>
-
-      <circle className={styles.mascotShoulder} cx="24" cy="87" r="8" />
-      <circle className={styles.mascotShoulder} cx="96" cy="87" r="8" />
-      <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M20 84 C9 89 11 108 18 116 C24 111 28 99 28 90" />
-      <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M100 84 C111 89 109 108 102 116 C96 111 92 99 92 90" />
-      <path className={`${styles.mascotFoot} ${styles.mascotFootLeft}`} d="M37 125 H52 L51 141 H34 Q32 138 35 134 Z" />
-      <path className={`${styles.mascotFoot} ${styles.mascotFootRight}`} d="M68 125 H83 L85 134 Q88 138 86 141 H69 Z" />
-
-      <path className={styles.mascotBody} d="M22 61 H98 V107 C98 126 84 136 60 136 C36 136 22 126 22 107 Z" />
-      <path className={styles.mascotBodyHighlight} d="M29 68 H53 C45 80 43 104 48 123 C41 126 35 123 31 116 C27 108 27 82 29 68 Z" />
-      <path className={styles.mascotBodyShade} d="M80 66 H93 V108 C93 121 83 130 70 132 C78 120 81 92 80 66 Z" />
-      <path className={styles.mascotSidePanel} d="M22 80 L29 75 V117 Q27 113 22 109 ZM98 80 L91 75 V117 Q93 113 98 109 Z" />
-      <path className={styles.mascotPanelSeam} d="M31 93 V111 Q31 125 46 129 H74 Q89 125 89 111 V93" />
-
-      <path className={styles.mascotCap} d="M16 51 Q16 45 24 45 H96 Q104 45 104 51 V69 Q104 76 97 76 H23 Q16 76 16 69 Z" />
-      <path className={styles.mascotCapShine} d="M24 51 H76 Q82 51 86 55 H24 Q20 55 20 60 V55 Q20 51 24 51 Z" />
-      <path className={styles.mascotCapAccent} d="M23 71 H97" />
-      <path className={styles.mascotCircuit} d="M22 63 H41 L46 58 M98 63 H79 L74 58" />
-      <circle className={styles.mascotCircuitNode} cx="23" cy="63" r="2" />
-      <circle className={styles.mascotCircuitNode} cx="97" cy="63" r="2" />
-
-      <g className={styles.mascotCore} filter="url(#surge-energy-glow)">
-        <circle cx="60" cy="62" r="8" />
-        <path d="M62 55 L56 62 H60 L58 69 L65 60 H61 Z" />
-      </g>
-
-      <path className={styles.mascotFaceScreen} d="M28 81 Q28 74 36 74 H84 Q92 74 92 81 V108 Q92 115 84 115 H36 Q28 115 28 108 Z" />
-      <path className={styles.mascotVisorGlint} d="M35 80 Q47 76 61 77" />
-      <g className={styles.mascotEyes}>
-        <ellipse cx="45" cy="93" rx="9" ry="11" />
-        <ellipse cx="75" cy="93" rx="9" ry="11" />
-        <ellipse className={styles.mascotEyeDepth} cx="45" cy="96" rx="4.5" ry="5.5" />
-        <ellipse className={styles.mascotEyeDepth} cx="75" cy="96" rx="4.5" ry="5.5" />
-        <circle cx="48" cy="88" r="3.2" />
-        <circle cx="78" cy="88" r="3.2" />
-        <circle className={styles.mascotEyeSpark} cx="41" cy="96" r="1.5" />
-        <circle className={styles.mascotEyeSpark} cx="71" cy="96" r="1.5" />
-      </g>
-      <path className={styles.mascotSmile} d="M50 105 Q60 114 71 104" />
-      <rect className={styles.mascotStatus} x="56" y="116" width="8" height="13" rx="4" />
-    </svg>
+    />
   );
 }
 

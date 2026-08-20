@@ -20,20 +20,21 @@
   border: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 82px;
-  height: 102px;
+  flex: 0 0 48px;
+  height: 56px;
   justify-content: center;
   padding: 0;
-  width: 82px;
+  width: 48px;
 }
 
 .mascot {
   animation: surgeIdle 3.2s ease-in-out infinite;
-  filter: drop-shadow(0 8px 8px rgba(3, 31, 38, 0.26));
-  height: 102px;
-  overflow: visible;
-  transform-origin: 60px 136px;
-  width: 82px;
+  background: url("/surge-mascot.png") center / contain no-repeat;
+  display: block;
+  filter: drop-shadow(0 5px 5px rgba(3, 31, 38, 0.24));
+  height: 52px;
+  transform-origin: 50% 88%;
+  width: 42px;
 }
 
 .launcherDismiss {
@@ -45,20 +46,20 @@
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
-  font: 800 1rem/1 Arial, sans-serif;
-  height: 27px;
+  font: 800 0.75rem/1 Arial, sans-serif;
+  height: 20px;
   justify-content: center;
   padding: 0;
   position: absolute;
-  right: -3px;
-  top: 0;
-  width: 27px;
+  right: -7px;
+  top: -5px;
+  width: 20px;
   z-index: 2;
 }
 
 .launcherDismiss::after {
   content: "";
-  inset: -9px;
+  inset: -12px;
   position: absolute;
 }
 
@@ -81,19 +82,19 @@
   overflow: visible;
   padding: 0;
   position: relative;
-  width: 48px;
+  width: 44px;
 }
 
 .mascotPeeking {
   animation: surgePeek 2.8s ease-in-out infinite;
-  bottom: -8px;
+  bottom: -5px;
   filter: drop-shadow(-3px 5px 5px rgba(3, 31, 38, 0.28));
-  height: 58px;
+  height: 53px;
   position: absolute;
-  right: -17px;
+  right: -21px;
   transform: rotate(-11deg);
-  transform-origin: 60px 136px;
-  width: 47px;
+  transform-origin: 50% 88%;
+  width: 42px;
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -103,183 +104,6 @@
 .launcher:hover .mascot,
 .launcher:focus-visible .mascot {
   animation: surgeHello 620ms ease-in-out both;
-}
-
-.mascotShadow {
-  fill: rgba(3, 31, 38, 0.22);
-  transform-origin: 60px 143px;
-}
-
-.mascotProng {
-  fill: url("#surge-metal");
-  stroke: #14343d;
-  stroke-width: 3px;
-}
-
-.mascotProngShine {
-  fill: none;
-  opacity: 0.78;
-  stroke: #ffffff;
-  stroke-linecap: round;
-  stroke-width: 2.2px;
-}
-
-.mascotBody {
-  fill: url("#surge-shell");
-  stroke: #123942;
-  stroke-linejoin: round;
-  stroke-width: 3px;
-}
-
-.mascotBodyShade {
-  fill: #34545a;
-  opacity: 0.13;
-}
-
-.mascotBodyHighlight {
-  fill: #ffffff;
-  opacity: 0.62;
-}
-
-.mascotSidePanel {
-  fill: #0d7380;
-  opacity: 0.72;
-}
-
-.mascotPanelSeam {
-  fill: none;
-  opacity: 0.66;
-  stroke: #25d7be;
-  stroke-linecap: round;
-  stroke-width: 1.5px;
-}
-
-.mascotCap {
-  fill: url("#surge-armour");
-  stroke: #113943;
-  stroke-width: 3px;
-}
-
-.mascotCapShine {
-  fill: #d2fff5;
-  opacity: 0.7;
-}
-
-.mascotCapAccent {
-  fill: none;
-  stroke: #055c69;
-  stroke-linecap: round;
-  stroke-width: 2px;
-  opacity: 0.64;
-}
-
-.mascotCircuit {
-  fill: none;
-  opacity: 0.78;
-  stroke: #e8fffa;
-  stroke-linecap: round;
-  stroke-width: 1.4px;
-}
-
-.mascotCircuitNode {
-  fill: #e8fffa;
-  opacity: 0.92;
-}
-
-.mascotCore circle {
-  fill: url("#surge-energy");
-  stroke: #d9fff8;
-  stroke-width: 1.6px;
-}
-
-.mascotCore path {
-  fill: #073f49;
-  stroke: #ffffff;
-  stroke-linejoin: round;
-  stroke-width: 0.7px;
-}
-
-.mascotShoulder {
-  fill: #0b3440;
-  stroke: #74f6dc;
-  stroke-width: 1.2px;
-}
-
-.mascotArm,
-.mascotFoot {
-  fill: url("#surge-armour");
-  stroke: #123942;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 3px;
-}
-
-.mascotArmRight {
-  transform-box: fill-box;
-  transform-origin: left center;
-}
-
-.launcher:hover .mascotArmRight,
-.launcher:focus-visible .mascotArmRight {
-  animation: surgeWave 420ms ease-in-out 2 alternate;
-}
-
-.mascotEyes {
-  animation: surgeBlink 4.4s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.mascotFaceScreen {
-  fill: #072a35;
-  filter: drop-shadow(0 1px 1px rgba(3, 20, 28, 0.55));
-  stroke: #8dc4c4;
-  stroke-width: 1.8px;
-}
-
-.mascotVisorGlint {
-  fill: none;
-  opacity: 0.46;
-  stroke: #ffffff;
-  stroke-linecap: round;
-  stroke-width: 1.6px;
-}
-
-.mascotEyes ellipse {
-  fill: url("#surge-energy");
-  stroke: #8ffff0;
-  stroke-width: 1.5px;
-}
-
-.mascotEyes .mascotEyeDepth {
-  fill: #053541;
-  opacity: 0.78;
-  stroke: #19d8c1;
-  stroke-width: 0.8px;
-}
-
-.mascotEyes circle {
-  fill: #ffffff;
-  filter: drop-shadow(0 0 2px rgba(142, 255, 239, 0.95));
-}
-
-.mascotEyes .mascotEyeSpark {
-  fill: #aafff2;
-  opacity: 0.9;
-}
-
-.mascotSmile {
-  fill: none;
-  stroke: #86ffeb;
-  stroke-linecap: round;
-  stroke-width: 3px;
-}
-
-.mascotStatus {
-  fill: #6dffe2;
-  filter: drop-shadow(0 0 3px rgba(55, 255, 209, 0.9));
-  stroke: #079b8a;
-  stroke-width: 1px;
 }
 
 .launcher:focus-visible,
@@ -1151,16 +975,6 @@
   62% { transform: translateX(-3px) rotate(-9deg); }
 }
 
-@keyframes surgeWave {
-  from { transform: rotate(0); }
-  to { transform: rotate(-24deg); }
-}
-
-@keyframes surgeBlink {
-  0%, 44%, 48%, 100% { transform: scaleY(1); }
-  46% { transform: scaleY(0.12); }
-}
-
 @media (max-width: 640px) {
   .root,
   .rootOpen {
@@ -1178,14 +992,14 @@
   }
 
   .launcher {
-    flex-basis: 80px;
-    height: 100px;
-    width: 80px;
+    flex-basis: 48px;
+    height: 56px;
+    width: 48px;
   }
 
   .mascot {
-    height: 100px;
-    width: 80px;
+    height: 52px;
+    width: 42px;
   }
 
   .launcherPeek {
@@ -1193,8 +1007,8 @@
   }
 
   .mascotPeeking {
-    height: 58px;
-    width: 47px;
+    height: 53px;
+    width: 42px;
   }
 
   .panel {
@@ -1246,8 +1060,6 @@
   .launcher,
   .launcherPeek,
   .mascot,
-  .mascotEyes,
-  .mascotArmRight,
   .conversation,
   .thinking {
     animation: none;
