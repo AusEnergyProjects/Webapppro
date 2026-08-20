@@ -13,6 +13,10 @@ import {
 import { usePathname } from "next/navigation";
 import type { EnergyDocumentAnalysis } from "@/lib/energy-assistant-document";
 import {
+  parseSurgeConversationState,
+  type SurgeConversationState,
+} from "@/lib/energy-assistant-conversation";
+import {
   buildEnergyAssistantLeadPayload,
   createEnergyAssistantSubmissionKey,
 } from "@/lib/energy-assistant-lead-client.mjs";
@@ -90,6 +94,7 @@ type LeadStage = "scope" | "basics" | "questions" | "contact" | "preferences" | 
 type SavedConversation = {
   mode: Audience;
   messages: AssistantMessage[];
+  continuation: SurgeConversationState | null;
   lastActive: string;
   expired: boolean;
 };
@@ -286,11 +291,13 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
     answerStatus: asString(record.status, 80),
     sourceBoundary: asString(record.sourceBoundary ?? record.source_boundary, 700),
     citations: parseCitations(record.citations ?? record.sources),
-    suggestions: asStringList(
-      record.suggestedQuestions ?? record.suggestions ?? record.followUps,
-      3,
-      180,
-    ),
+    suggestions: asString(record.followUpQuestion, 180)
+      ? [asString(record.followUpQuestion, 180)]
+      : asStringList(
+        record.suggestedQuestions ?? record.suggestions ?? record.followUps,
+        1,
+        180,
+      ),
     actions: parseActions(record.toolActions ?? record.actions ?? record.tools),
   };
 }
@@ -543,6 +550,7 @@ function savedConversation(value: unknown, now = Date.now()): SavedConversation 
   return {
     mode: record?.mode === "trade" || record?.mode === "customer" ? record.mode : "public",
     messages: expired ? [] : boundedLocalMessages(record?.messages),
+    continuation: expired ? null : parseSurgeConversationState(record?.continuation),
     lastActive: expired ? "" : lastActive,
     expired,
   };
@@ -589,6 +597,7 @@ export function EnergyAssistantWidget() {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<AssistantMessage[]>([]);
+  const continuationRef = useRef<SurgeConversationState | null>(null);
   const hydrationStartedRef = useRef(false);
 
   const [hydrated, setHydrated] = useState(false);
@@ -596,6 +605,7 @@ export function EnergyAssistantWidget() {
   const [openPathname, setOpenPathname] = useState("");
   const [mascotTucked, setMascotTucked] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -647,6 +657,7 @@ export function EnergyAssistantWidget() {
     storeSession(JSON.stringify({
       mode: context.audience,
       messages: boundedLocalMessages(messages),
+      continuation: continuationRef.current,
       lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
   };
@@ -658,6 +669,7 @@ export function EnergyAssistantWidget() {
     storeSession(JSON.stringify({
       mode: context.audience,
       messages: boundedMessages,
+      continuation: continuationRef.current,
       lastActive: [...boundedMessages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
   };
@@ -673,7 +685,9 @@ export function EnergyAssistantWidget() {
   } = {}) => {
     removeStoredSession();
     messagesRef.current = nextMessages;
+    continuationRef.current = null;
     setMessages(nextMessages);
+    setContinuation(null);
     setHasUsefulAnswer(false);
     setServiceInterest(false);
     setLeadOpen(false);
@@ -712,7 +726,9 @@ export function EnergyAssistantWidget() {
         if (stored) {
           const saved = savedConversation(JSON.parse(stored));
           messagesRef.current = saved.messages;
+          continuationRef.current = saved.continuation;
           setMessages(saved.messages);
+          setContinuation(saved.continuation);
           setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
           setServiceInterest(saved.messages.some((message) =>
             message.role === "user" && signalsServiceInterest(message.content)));
@@ -736,9 +752,10 @@ export function EnergyAssistantWidget() {
     storeSession(JSON.stringify({
       mode: context.audience,
       messages: boundedLocalMessages(messages),
+      continuation,
       lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
-  }, [context.audience, hydrated, messages]);
+  }, [context.audience, continuation, hydrated, messages]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -879,6 +896,7 @@ export function EnergyAssistantWidget() {
           requestId,
           message,
           recentTurns,
+          continuation: continuationRef.current,
           pageContext: context.apiPath,
           audience: context.audience,
         }),
@@ -891,6 +909,9 @@ export function EnergyAssistantWidget() {
       const replySource = record.reply ?? record.answer ?? record.message;
       const reply = parseMessage(replySource, "assistant");
       if (!reply) throw new Error("The guide returned an empty answer. Please try again.");
+      const nextContinuation = parseSurgeConversationState(record.continuation);
+      continuationRef.current = nextContinuation;
+      setContinuation(nextContinuation);
       replaceMessages([...messagesRef.current, reply]);
       setHasUsefulAnswer(true);
     } catch (caught) {
@@ -1579,7 +1600,7 @@ export function EnergyAssistantWidget() {
             )}
 
             <footer className={styles.privacy}>
-              <p>Saved only on this device for 30 days.</p>
+              <p>Chat history stays on this device for 30 days. Your question and recent context are securely processed to answer you.</p>
               <div>
                 <a href="/privacy">Privacy</a>
                 <button type="button" disabled={busy || leadBusy} onClick={resetConversation}>

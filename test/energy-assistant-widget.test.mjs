@@ -71,18 +71,19 @@ test("the widget uses the canonical stateless assistant contract and never sends
   assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
 });
 
-test("only bounded local transcript, last activity and guide mode are persisted while the panel starts closed", () => {
+test("only bounded local transcript, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
   const persisted = widget.match(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/);
   assert.ok(persisted);
   assert.doesNotMatch(persisted[1], /\bopen\b/);
   assert.match(persisted[1], /mode/);
   assert.match(persisted[1], /messages:\s*boundedLocalMessages\(messages\)/);
+  assert.match(persisted[1], /continuation:\s*continuationRef\.current/);
   assert.match(persisted[1], /lastActive/);
   assert.match(widget, /const MAX_LOCAL_MESSAGES = 40/);
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
   assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
-  assert.match(widget, /Saved only on this device for 30 days/);
+  assert.match(widget, /Chat history stays on this device for 30 days\. Your question and recent context are securely processed to answer you\./);
   assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
@@ -97,11 +98,50 @@ test("only bounded local transcript, last activity and guide mode are persisted 
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
-  assert.match(widget, /Saved only on this device for 30 days/);
+  assert.match(widget, /type SavedConversation = \{[\s\S]*continuation: SurgeConversationState \| null/);
+  assert.match(widget, /const continuationRef = useRef<SurgeConversationState \| null>\(null\)/);
+  assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*pageContext:/);
+  assert.match(widget, /const nextContinuation = parseSurgeConversationState\(record\.continuation\)/);
+  assert.match(widget, /continuationRef\.current = nextContinuation/);
+  assert.match(widget, /setContinuation\(nextContinuation\)/);
+  assert.match(widget, /Chat history stays on this device for 30 days/);
   assert.doesNotMatch(widget, /Last active \$\{lastActive\}/);
   assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
   assert.match(widget, /setLeadRequestId\(""\)/);
+});
+
+test("the model reply parser accepts one follow-up question and ignores legacy extras", () => {
+  const compiled = ts.transpileModule(functionSource(widget, "parseMessage"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const parseMessage = Function(
+    "asString",
+    "asRecord",
+    "asStringList",
+    "parseCitations",
+    "parseActions",
+    "makeRequestId",
+    `${compiled}; return parseMessage;`,
+  )(
+    (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
+    (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
+    (value, limit) => Array.isArray(value) ? value.filter((item) => typeof item === "string").slice(0, limit) : [],
+    () => [],
+    () => [],
+    () => "generated-message",
+  );
+
+  const parsed = parseMessage({
+    id: "reply-1",
+    role: "assistant",
+    content: "A clear answer.",
+    directAnswer: "A clear answer.",
+    followUpQuestion: "What is your postcode?",
+    suggestedQuestions: ["Legacy question one", "Legacy question two"],
+  }, "assistant");
+
+  assert.deepEqual(parsed.suggestions, ["What is your postcode?"]);
 });
 
 test("public and customer widget copy never exposes internal platform names", () => {
@@ -120,7 +160,9 @@ test("expired local conversations and explicit resets atomically clear transcrip
   assert.match(widget, /Your locally saved conversation expired after 30 days of inactivity/);
   assert.match(widget, /const clearLocalSession = useCallback/);
   assert.match(widget, /removeStoredSession\(\)/);
+  assert.match(widget, /continuationRef\.current = null/);
   assert.match(widget, /setMessages\(nextMessages\)/);
+  assert.match(widget, /setContinuation\(null\)/);
   assert.match(widget, /Local conversation history cleared/);
   assert.doesNotMatch(widget, /fetch\([^)]*delete|SESSION_CREDENTIAL/);
 });
@@ -216,6 +258,7 @@ test("local continuation caps messages and recent API context and expires after 
     "asRecord",
     "asString",
     "parseMessage",
+    "parseSurgeConversationState",
     `${compiled}; return { boundedLocalMessages, recentTurnsForRequest, savedConversation };`,
   )(
     40,
@@ -227,6 +270,7 @@ test("local continuation caps messages and recent API context and expires after 
     (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
     (value, role) => ({ ...value, role }),
+    (value) => value && typeof value === "object" && value.version === 1 ? value : null,
   );
   const now = Date.parse("2026-08-20T02:00:00.000Z");
   const messages = Array.from({ length: 42 }, (_, index) => ({
@@ -240,11 +284,21 @@ test("local continuation caps messages and recent API context and expires after 
     mode: "trade",
     lastActive: new Date(now - 1_000).toISOString(),
     messages,
+    continuation: {
+      version: 1,
+      activeTopic: "solar",
+      goal: "Work out whether solar suits this home",
+      facts: [{ key: "postcode", value: "3006" }],
+      pendingQuestion: "How much electricity do you use?",
+      lastAnswerSummary: "The roof and electricity use still need checking.",
+    },
   }, now);
   assert.equal(active.expired, false);
   assert.equal(active.messages.length, 40);
   assert.equal(active.messages[0].id, "message-2");
   assert.equal(active.mode, "trade");
+  assert.equal(active.continuation.activeTopic, "solar");
+  assert.deepEqual(active.continuation.facts, [{ key: "postcode", value: "3006" }]);
   assert.equal("open" in active, false);
 
   const recent = helpers.recentTurnsForRequest(active.messages);
@@ -271,6 +325,7 @@ test("local continuation caps messages and recent API context and expires after 
   }, now);
   assert.equal(expired.expired, true);
   assert.deepEqual(expired.messages, []);
+  assert.equal(expired.continuation, null);
 });
 
 test("PDF and CSV analysis is dynamically local, failure-safe and never uploads the file", () => {
@@ -468,13 +523,19 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.doesNotMatch(styles, /min-height:\s*(?:[0-3]?\d|4[0-3])px/);
 });
 
-test("server-provided tool links are restricted to enumerated internal destinations", () => {
+test("page navigation links are restricted and public answer cards do not expose source metadata", () => {
   assert.match(widget, /const SAFE_EXACT_ACTIONS = new Set/);
   assert.match(widget, /candidate\.includes\("\\\\"\)/);
   assert.match(widget, /candidate\.includes\("\?"\)/);
   assert.match(widget, /SAFE_EXACT_ACTIONS\.has\(pathname\)/);
   assert.ok(widget.includes("if (/^\\/guides\\/[a-z0-9-]{1,80}$/.test(pathname))"));
   assert.doesNotMatch(widget, /target="_blank" rel="noreferrer"/);
-  assert.match(widget, /record\.suggestedQuestions/);
-  assert.match(widget, /record\.toolActions/);
+  const answerCardStart = widget.indexOf("{messages.length > 0 && (");
+  const answerCardEnd = widget.indexOf("{busy &&", answerCardStart);
+  assert.notEqual(answerCardStart, -1);
+  assert.notEqual(answerCardEnd, -1);
+  const answerCards = widget.slice(answerCardStart, answerCardEnd);
+  assert.match(answerCards, /message\.directAnswer \|\| message\.content/);
+  assert.match(answerCards, /naturalFollowUpFor\(message, context\.audience\)/);
+  assert.doesNotMatch(answerCards, /citations|sources|sourceBoundary|toolActions|message\.actions/);
 });

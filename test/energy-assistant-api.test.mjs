@@ -70,6 +70,44 @@ function fixedAnswer(directAnswer) {
   };
 }
 
+function continuation(overrides = {}) {
+  return {
+    version: 1,
+    activeTopic: "general",
+    goal: "",
+    facts: [],
+    pendingQuestion: "",
+    lastAnswerSummary: "",
+    ...overrides,
+  };
+}
+
+function assertPublicReplyContract(payload) {
+  assert.deepEqual(Object.keys(payload.reply).sort(), [
+    "confidence",
+    "content",
+    "createdAt",
+    "directAnswer",
+    "followUpQuestion",
+    "id",
+    "role",
+    "status",
+  ]);
+  for (const privateField of [
+    "assumptions",
+    "citations",
+    "nextAction",
+    "practicalSteps",
+    "sourceBoundary",
+    "suggestedQuestions",
+    "toolActions",
+    "usedSourceIds",
+  ]) {
+    assert.equal(privateField in payload.reply, false, privateField);
+  }
+  assert.equal(typeof payload.reply.followUpQuestion, "string");
+}
+
 test("canonical ask API is stateless and performs zero D1 operations", async () => {
   const d1 = noDatabaseOperations();
   const response = await handleEnergyAssistantRequest(request({
@@ -79,16 +117,18 @@ test("canonical ask API is stateless and performs zero D1 operations", async () 
     recentTurns: [],
     pageContext: "/assessments",
     audience: "public",
-  }), { database: d1.database, now: () => new Date(NOW) });
+  }), {
+    database: d1.database,
+    now: () => new Date(NOW),
+    generateAnswer: async () => null,
+  });
   assert.equal(response.status, 200);
   const payload = await body(response);
   assert.equal(payload.ok, true);
   assert.equal(payload.requestId, "ask-request-000001");
   assert.equal(payload.reply.role, "assistant");
   assert.match(payload.reply.directAnswer, /cannot issue or replace an official NatHERS rating/i);
-  assert.ok(payload.reply.practicalSteps.length <= 3);
-  assert.ok(payload.reply.citations.length > 0);
-  assert.ok(payload.reply.toolActions.every((action) => action.href.startsWith("/")));
+  assertPublicReplyContract(payload);
   assert.equal("sessionId" in payload, false);
   assert.equal("accessKey" in payload, false);
   assert.equal("messages" in payload, false);
@@ -132,12 +172,16 @@ test("public and customer replies never expose internal platform names or trade 
       recentTurns: [],
       pageContext: "/plan",
       audience,
-    }), { now: () => new Date(NOW), composeAnswer: () => brandedAnswer });
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => brandedAnswer,
+      generateAnswer: async () => null,
+    });
     assert.equal(response.status, 200, audience);
     const payload = await body(response);
-    assert.doesNotMatch(JSON.stringify(payload.reply), /TLink|Creditex/i, audience);
-    assert.deepEqual(payload.reply.toolActions, [{ id: "guides", label: "Open guides", href: "/guides" }], audience);
-    assert.deepEqual(payload.reply.citations, [], audience);
+    assertPublicReplyContract(payload);
+    assert.doesNotMatch(JSON.stringify(payload), /TLink|Creditex/i, audience);
+    assert.doesNotMatch(JSON.stringify(payload), /https?:\/\//i, audience);
   }
 
   const tradeResponse = await handleEnergyAssistantRequest(request({
@@ -147,9 +191,221 @@ test("public and customer replies never expose internal platform names or trade 
     recentTurns: [],
     pageContext: "/direct-trade/dashboard",
     audience: "trade",
-  }), { now: () => new Date(NOW), composeAnswer: () => brandedAnswer });
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => brandedAnswer,
+    generateAnswer: async () => null,
+  });
   assert.equal(tradeResponse.status, 200);
   assert.match(JSON.stringify((await body(tradeResponse)).reply), /TLink|Creditex/);
+});
+
+test("model success returns one follow-up and compact continuation without private evidence metadata", async () => {
+  const priorContinuation = continuation({
+    activeTopic: "rcac",
+    goal: "Understand a Victorian air-conditioner upgrade",
+    facts: [{ key: "postcode", value: "3006" }],
+    pendingQuestion: "Do you own or rent the property?",
+    lastAnswerSummary: "Explained that the discount is not a fixed amount.",
+  });
+  const nextContinuation = continuation({
+    activeTopic: "rcac",
+    goal: priorContinuation.goal,
+    facts: [
+      { key: "postcode", value: "3006" },
+      { key: "tenure", value: "owner" },
+    ],
+    pendingQuestion: "What heating system are you replacing?",
+    lastAnswerSummary: "Explained why the existing heater changes the available discount.",
+  });
+  let observedRequest;
+  const modelAnswer = {
+    ...fixedAnswer("The available discount depends on the eligible unit, what it replaces and the installation. Compare the final installed price, not just the advertised discount."),
+    citations: [{
+      sourceId: "private-evidence-id",
+      title: "Internal evidence title",
+      publisher: "Official publisher",
+      url: "https://official.example.test/rule",
+      jurisdiction: ["VIC"],
+      sourceTier: "official",
+      effectiveFrom: null,
+      effectiveTo: null,
+      reviewedAt: "2026-08-20",
+      reviewDue: "2026-08-21",
+      stale: false,
+    }],
+    suggestedQuestions: [
+      "What heating system are you replacing?",
+      "How large is the home?",
+      "Which installer are you using?",
+    ],
+    sourceBoundary: "Internal evidence boundary with https://official.example.test/rule",
+  };
+
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "model-success-000001",
+    message: "I own it",
+    recentTurns: [
+      { role: "user", content: "How much is the aircon rebate in Victoria?" },
+      { role: "assistant", content: "What is the postcode?" },
+      { role: "user", content: "3006" },
+    ],
+    continuation: priorContinuation,
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    async generateAnswer(modelRequest) {
+      observedRequest = modelRequest;
+      return { answer: modelAnswer, continuation: nextContinuation };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.deepEqual(observedRequest.continuation, priorContinuation);
+  assert.deepEqual(observedRequest.recentTurns, [
+    { role: "user", content: "How much is the aircon rebate in Victoria?" },
+    { role: "assistant", content: "What is the postcode?" },
+    { role: "user", content: "3006" },
+  ]);
+  assert.equal(payload.reply.directAnswer, modelAnswer.directAnswer);
+  assert.equal(payload.reply.followUpQuestion, "What heating system are you replacing?");
+  assert.match(payload.reply.content, /What heating system are you replacing\?/);
+  assert.doesNotMatch(payload.reply.content, /How large is the home|Which installer/);
+  assert.deepEqual(payload.continuation, nextContinuation);
+  assertPublicReplyContract(payload);
+  assert.doesNotMatch(JSON.stringify(payload), /private-evidence-id|Internal evidence title|official\.example\.test/i);
+});
+
+test("continuation carries corrections and a topic change without retaining the superseded fact", async () => {
+  const airconState = continuation({
+    activeTopic: "rcac",
+    goal: "Understand an air-conditioner upgrade",
+    facts: [
+      { key: "postcode", value: "3006" },
+      { key: "tenure", value: "owner" },
+    ],
+    pendingQuestion: "What heating system are you replacing?",
+    lastAnswerSummary: "Explained the Victorian air-conditioner pathway.",
+  });
+  const batteryState = continuation({
+    activeTopic: "battery_vpp",
+    goal: "Work out whether now is a sensible time to add a battery",
+    facts: [
+      { key: "postcode", value: "3006" },
+      { key: "tenure", value: "renter" },
+    ],
+    pendingQuestion: "Do you already have rooftop solar?",
+    lastAnswerSummary: "Explained that solar use and rental permission affect the battery decision.",
+  });
+  let observedContinuation;
+
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "model-correction-0001",
+    message: "Actually I rent. Forget aircon, when should I get a battery?",
+    recentTurns: [{ role: "user", content: "I said earlier that I own the home." }],
+    continuation: airconState,
+    pageContext: "/plan",
+    audience: "customer",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    async generateAnswer(modelRequest) {
+      observedContinuation = modelRequest.continuation;
+      return {
+        answer: {
+          ...fixedAnswer("For a renter, a permanent battery usually needs the owner's written agreement. It is worth assessing once you know how much daytime solar would otherwise be exported and how much electricity you use after sunset."),
+          suggestedQuestions: ["Do you already have rooftop solar?"],
+        },
+        continuation: batteryState,
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.deepEqual(observedContinuation, airconState);
+  assert.deepEqual(payload.continuation, batteryState);
+  assert.equal(payload.continuation.activeTopic, "battery_vpp");
+  assert.deepEqual(payload.continuation.facts.filter((fact) => fact.key === "tenure"), [
+    { key: "tenure", value: "renter" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(payload.continuation), /owner/i);
+  assert.match(payload.reply.directAnswer, /renter.*battery/i);
+});
+
+test("null model result falls back to the deterministic answer and preserves accepted continuation", async () => {
+  const priorContinuation = continuation({
+    activeTopic: "insulation",
+    goal: "Improve winter comfort",
+    facts: [{ key: "tenure", value: "renter" }],
+    pendingQuestion: "Which room feels coldest?",
+    lastAnswerSummary: "Explained low-risk comfort checks.",
+  });
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "model-null-fallback-0001",
+    message: "The living room is coldest",
+    recentTurns: [],
+    continuation: priorContinuation,
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => ({
+      ...fixedAnswer("Start by checking for obvious draughts around the living-room doors and windows."),
+      suggestedQuestions: ["Is the room cold even when the heater is running?"],
+    }),
+    async generateAnswer() {
+      modelCalls += 1;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalls, 1);
+  assert.match(payload.reply.directAnswer, /obvious draughts/i);
+  assert.equal(payload.reply.followUpQuestion, "Is the room cold even when the heater is running?");
+  assert.deepEqual(payload.continuation, priorContinuation);
+  assertPublicReplyContract(payload);
+});
+
+test("dangerous questions bypass the model and keep the deterministic safety answer", async () => {
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "model-safety-bypass-0001",
+    message: "There is a gas smell near the hot water unit. Should I inspect it myself?",
+    recentTurns: [],
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => ({
+      ...fixedAnswer("Move away from the area, avoid flames or switches and contact the gas emergency service or a licensed professional."),
+      suggestedQuestions: [],
+      status: "answered",
+    }),
+    async generateAnswer() {
+      modelCalls += 1;
+      return {
+        answer: fixedAnswer("unsafe model answer"),
+        continuation: continuation(),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalls, 0);
+  assert.match(payload.reply.directAnswer, /Move away.*avoid flames.*licensed professional/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /unsafe model answer/i);
 });
 
 test("normal assistant server code contains no anonymous transcript or rate-limit SQL", () => {
@@ -169,7 +425,7 @@ test("bounded recent turns retain user context and never trust assistant prose a
     ],
     pageContext: "/plan",
     audience: "public",
-  }), { now: () => new Date(NOW) });
+  }), { now: () => new Date(NOW), generateAnswer: async () => null });
   assert.equal(response.status, 200);
   const payload = await body(response);
   assert.match(payload.reply.directAnswer, /comfort|heating|cooling|reverse-cycle|insulation/i);
@@ -195,6 +451,7 @@ test("API passes all eight bounded user turns in order and strips assistant clai
       observedContext = { message, context };
       return fixedAnswer("bounded context accepted");
     },
+    generateAnswer: async () => null,
   });
   assert.equal(response.status, 200);
   assert.deepEqual(observedContext.context.priorUserMessages, userTurns.map((turn) => turn.content));
@@ -217,6 +474,7 @@ test("API passes all eight bounded user turns in order and strips assistant clai
     composeAnswer(message, context) {
       return fixedAnswer(`${context.priorUserMessages.join(" | ")} :: ${message}`);
     },
+    generateAnswer: async () => null,
   });
   const mixedPayload = await body(mixedResponse);
   assert.match(mixedPayload.reply.directAnswer, /South Australia.*own the detached house.*Continue/i);
@@ -232,10 +490,12 @@ test("stateless API composes progressive STC, HPHW, EV and whole-home user frame
       recentTurns: priorUserMessages.map((content) => ({ role: "user", content })),
       pageContext: "/plan",
       audience: "public",
-    }), { now: () => new Date(NOW) });
+    }), { now: () => new Date(NOW), generateAnswer: async () => null });
     assert.equal(response.status, 200, requestId);
     const payload = await body(response);
-    assert.ok(payload.reply.suggestedQuestions.length <= 1, requestId);
+    assert.equal(typeof payload.reply.followUpQuestion, "string", requestId);
+    assert.ok(payload.reply.followUpQuestion.length <= 220, requestId);
+    assert.equal("suggestedQuestions" in payload.reply, false, requestId);
     return payload.reply;
   }
 
@@ -411,6 +671,7 @@ test("1000 concurrent local-first clients stay isolated, bounded and use zero D1
       composeAnswer(message, context) {
         return fixedAnswer(`${context.priorUserMessages.join(" | ")} :: ${message}`);
       },
+      generateAnswer: async () => null,
     });
     durations.push(performance.now() - requestStarted);
     return { index, token, response, payload: await body(response) };
@@ -451,6 +712,7 @@ test("1000-request burst through the production deterministic composer is bounde
     }, { ip: `203.0.113.${index}` }), {
       now: () => new Date(NOW),
       randomUUID: () => `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      generateAnswer: async () => null,
     });
     durations.push(performance.now() - requestStarted);
     return { response, payload: await body(response) };

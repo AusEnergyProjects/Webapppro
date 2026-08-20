@@ -1,12 +1,23 @@
 import {
   ENERGY_ASSISTANT_AUDIENCES,
+  ENERGY_ASSISTANT_KNOWLEDGE,
+  ENERGY_ASSISTANT_TOPICS,
   type EnergyAssistantAudience,
 } from "../data/energy-assistant-knowledge.ts";
 import {
   composeEnergyAssistantAnswer,
   type EnergyAssistantAnswer,
-  type EnergyAssistantCitation,
 } from "./energy-assistant.ts";
+import {
+  emptySurgeConversationState,
+  parseSurgeConversationState,
+  type SurgeConversationState,
+} from "./energy-assistant-conversation.ts";
+import {
+  generateSurgeModelAnswer,
+  type SurgeModelRequest,
+  type SurgeModelResult,
+} from "./energy-assistant-model.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
 export const ENERGY_ASSISTANT_MAX_MESSAGE_CHARS = 1_200;
@@ -26,22 +37,17 @@ export type EnergyAssistantReply = {
   role: "assistant";
   content: string;
   directAnswer: string;
-  practicalSteps: string[];
-  nextAction: string;
   createdAt: string;
   status: "answered" | "needs_context" | "source_review_required";
-  citations: EnergyAssistantCitation[];
-  assumptions: string[];
   confidence: "high" | "medium" | "low";
-  suggestedQuestions: string[];
-  toolActions: Array<{ id: string; label: string; href: string }>;
-  sourceBoundary: string;
+  followUpQuestion: string;
 };
 
 type ServerDependencies = {
   now?: () => Date;
   randomUUID?: () => string;
   composeAnswer?: typeof composeEnergyAssistantAnswer;
+  generateAnswer?: (request: SurgeModelRequest) => Promise<SurgeModelResult | null>;
 };
 
 export class EnergyAssistantServerError extends Error {
@@ -214,6 +220,23 @@ function recentTurnsFrom(value: unknown): EnergyAssistantRecentTurn[] {
   return turns;
 }
 
+function continuationFrom(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const continuation = parseSurgeConversationState(value);
+  if (
+    !continuation
+    || (continuation.activeTopic !== "general"
+      && !(ENERGY_ASSISTANT_TOPICS as readonly string[]).includes(continuation.activeTopic))
+  ) {
+    throw new EnergyAssistantServerError(
+      400,
+      "INVALID_CONTINUATION",
+      "Conversation context was not accepted. Start a new conversation and retry.",
+    );
+  }
+  return continuation;
+}
+
 function dateFrom(dependencies: ServerDependencies) {
   const value = dependencies.now ? dependencies.now() : new Date();
   if (!Number.isFinite(value.getTime())) throw new Error("Invalid server clock.");
@@ -273,25 +296,19 @@ function buildReply(
   randomUUID: () => string,
 ): EnergyAssistantReply {
   const answer = boundedAnswer(answerInput);
+  const followUpQuestion = limitedText(answer.suggestedQuestions[0] || "", 220);
   const reply: EnergyAssistantReply = {
     id: randomUUID().toLowerCase(),
     role: "assistant",
     content: [
       answer.directAnswer,
-      answer.practicalSteps.map((step, index) => `${index + 1}. ${step}`).join("\n"),
-      `Next action: ${answer.nextAction}`,
+      followUpQuestion,
     ].filter(Boolean).join("\n\n"),
     directAnswer: answer.directAnswer,
-    practicalSteps: answer.practicalSteps,
-    nextAction: answer.nextAction,
     createdAt: now.toISOString(),
     status: answer.status,
-    citations: answer.citations,
-    assumptions: answer.assumptions,
     confidence: answer.confidence,
-    suggestedQuestions: answer.suggestedQuestions,
-    toolActions: answer.toolActions,
-    sourceBoundary: answer.sourceBoundary,
+    followUpQuestion,
   };
   if (new TextEncoder().encode(JSON.stringify(reply)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
@@ -301,6 +318,18 @@ function buildReply(
     );
   }
   return reply;
+}
+
+const SAFETY_SOURCE_TOPICS = new Map<string, string>(
+  ENERGY_ASSISTANT_KNOWLEDGE.map((source) => [source.id, source.topic]),
+);
+
+function needsDeterministicSafetyAnswer(message: string, answer: EnergyAssistantAnswer) {
+  if (answer.status === "source_review_required") return true;
+  if (answer.citations.some((citation) => SAFETY_SOURCE_TOPICS.get(citation.id) === "safety_consumer_rights")) {
+    return true;
+  }
+  return /\b(?:asbestos|vermiculite|smoke|spark|arcing|burning|hissing|swollen|battery fire|gas smell|carbon monoxide|dizzy|woozy|light-headed|live wire|electrical cable|refrigerant|wet roof|main switch|switchboard)\b/i.test(message);
 }
 
 async function readBody(request: Request) {
@@ -334,12 +363,31 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const pageContext = pageContextFrom(requestBody.pageContext);
   const audience = publicAudienceFrom(requestBody.audience);
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
+  const continuation = continuationFrom(requestBody.continuation);
   const priorUserMessages = recentTurns
     .filter((turn) => turn.role === "user")
     .map((turn) => turn.content);
   const now = dateFrom(dependencies);
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
-  const answer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
+  const deterministicAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
+  let answer = deterministicAnswer;
+  let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
+  if (!needsDeterministicSafetyAnswer(message, deterministicAnswer)) {
+    const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
+    const generated = await generate({
+      message,
+      audience,
+      pageContext,
+      asOf: now,
+      recentTurns,
+      continuation,
+      deterministicAnswer,
+    });
+    if (generated) {
+      answer = generated.answer;
+      nextContinuation = generated.continuation;
+    }
+  }
   const reply = buildReply(
     audience === "trade" ? answer : customerSafeAnswer(answer),
     now,
@@ -349,6 +397,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     ok: true,
     ...(requestId ? { requestId } : {}),
     reply,
+    continuation: nextContinuation,
   };
   if (new TextEncoder().encode(JSON.stringify(response)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
