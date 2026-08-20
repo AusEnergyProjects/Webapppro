@@ -821,7 +821,7 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /PRIMARY_STAGE_COUNT = 4/);
   assert.match(publicPlanner, /Common answers are selected\. Review and tap Next\./);
   assert.match(publicPlanner, /idPrefix="quick-comfort"/);
-  assert.match(publicPlanner, /idPrefix="advanced-wall-insulation"/);
+  assert.match(publicPlanner, /idPrefix="insulation-wall"/);
   assert.match(publicPlanner, /questionId="wall-insulation"/);
   assert.match(publicPlanner, /questionId="floor-insulation"/);
   assert.match(publicPlanner, /questionId="window-coverings"/);
@@ -833,20 +833,29 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /commonPlannerFeatureDefaults/);
   for (const commonDefault of [
     "comfort-too-hot",
+    "comfort-too-cold",
     "ceiling-insulation-limited",
     "single-glazing",
-    "reverse-cycle",
-    "electric-storage-hot-water",
-    "electric-resistance-cooking",
+    "gas-heating",
+    "evaporative-cooling",
+    "gas-storage-hot-water",
+    "gas-cooking",
     "solar-none",
     "battery-none",
-    "ev-none",
+    '"ev"',
   ]) {
     assert.match(publicPlanner, new RegExp(commonDefault));
   }
+  assert.match(publicPlanner, /\["lower-bills", "improve-comfort"\]/);
   assert.match(publicPlanner, /situation: initialSelection\.situation \|\| "owner"/);
   assert.match(publicPlanner, /propertyType: initialSelection\.propertyType \|\| "house"/);
-  assert.match(publicPlanner, /occupants: initialSelection\.occupants \|\| "two"/);
+  assert.match(publicPlanner, /occupants: initialSelection\.occupants \|\| "three_four"/);
+  assert.match(publicPlanner, /features: normalizeHomeFeatureSelections\(rawFeatures\)/);
+  assert.doesNotMatch(
+    publicPlanner.match(/function sanitizeStoredDraft[\s\S]+?function safeStoredDraft/)?.[0] || "",
+    /withCommonPlannerFeatureDefaults/,
+  );
+  assert.match(publicPlanner, /hasExplicitSelection\(initialSelection\)[\s\S]*explicitInitialDraft\(initialSelection\)[\s\S]*defaultDraft\(initialSelection\)/);
   assert.match(publicPlanner, /stage === 3 \? "Build my roadmap" : "Next"/);
   assert.match(publicPlanner, /key: "ageBand"/);
   assert.match(publicPlanner, /key: "roofColour"/);
@@ -863,6 +872,8 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /floor-insulation-not-applicable/);
   assert.match(publicPlanner, /value === "slab_on_ground"/);
   assert.match(publicPlanner, /normalizeFloorInsulation/);
+  assert.match(publicPlanPage, /const initialGoals = suppliedGoals\.filter/);
+  assert.match(publicPlanPage, /goals: initialGoals,/);
   assert.match(publicPlanner, /readStoredAssessment/);
   assert.match(publicPlanner, /storeAssessment/);
   assert.match(publicPlanner, /removeStoredAssessment/);
@@ -874,6 +885,12 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /systemQuestionIds\.every[\s\S]*return 2/);
   assert.doesNotMatch(publicPlanner, /hasExplicitSelection\(initialSelection\) \? 4 : 0/);
   assert.match(publicPlanner, /draft\.floorConstruction === "slab_on_ground"/);
+  assert.match(publicPlanner, /Home size and construction/);
+  assert.match(publicPlanner, /Wall and floor insulation/);
+  assert.match(publicPlanner, /Window coverings and shade/);
+  assert.match(publicPlanner, /Draughts and ventilation/);
+  assert.match(publicPlanner, /Electricity supply and other loads/);
+  assert.doesNotMatch(publicPlanner, /Optional advanced home details/);
   assert.match(sharedIntake, /<fieldset/);
   assert.match(sharedIntake, /questionId\?: string/);
   assert.match(sharedIntake, /!questionId \|\| question\.id === questionId/);

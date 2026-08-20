@@ -40,7 +40,6 @@ import {
   customerReviewOptions as rawCustomerReviewOptions,
 } from "@/lib/customer-plan-decision-support.mjs";
 import { Field, SiteFooter, SiteHeader } from "./ComparatorChrome";
-import { TLinkMark } from "./TLinkChrome";
 import { FirebaseAccountPanel } from "./FirebaseAccountPanel";
 import { CustomerAssetLifecycle } from "./CustomerAssetLifecycle";
 import { CustomerTradeQuotes } from "./CustomerTradeQuotes";
@@ -4680,7 +4679,7 @@ function ArrivalCoordination({
         </button>
         <small>
           Australian Energy Assessments records this choice so administrators can see that the connection
-          may continue outside TLink.
+          may continue outside the trade workspace.
         </small>
       </article>
     );
@@ -4716,7 +4715,7 @@ function ArrivalCoordination({
         </dl>
         <small>
           Australian Energy Assessments recorded that you chose direct contact. Agreements or arrangements
-          made outside TLink may not be visible to Australian Energy Assessments.
+          made outside the trade workspace may not be visible to Australian Energy Assessments.
         </small>
       </article>
     );
@@ -7051,13 +7050,9 @@ export function CustomerDashboard({
         <a
           className="customer-dashboard-nav-item customer-dashboard-nav-tlink"
           href="/direct-trade/dashboard"
-          aria-label="Open the TLink trade workspace"
+          aria-label="Open the trade workspace"
         >
-          <TLinkMark
-            className="customer-dashboard-nav-tlink-mark"
-            size={24}
-          />
-          <span className="customer-dashboard-nav-label">TLink</span>
+          <span className="customer-dashboard-nav-label">Trade workspace</span>
         </a>
       )}
       <button

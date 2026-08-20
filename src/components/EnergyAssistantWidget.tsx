@@ -113,13 +113,116 @@ const MAX_RECENT_TURNS = 8;
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 const LOCAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-const START_ACTIONS = [
-  "What should I upgrade first?",
-  "Why is one room uncomfortable?",
-  "How much could solar or a battery save me?",
-  "Which rebates could apply to me?",
-  "Help me compare an energy quote",
+const START_ROADMAP = [
+  {
+    label: "Improve my home",
+    questions: [
+      "What should I upgrade first?",
+      "Why is one room too hot or too cold?",
+    ],
+  },
+  {
+    label: "Costs and support",
+    questions: [
+      "How much could solar, a battery or an EV save me?",
+      "Which rebates could apply to my home?",
+    ],
+  },
+  {
+    label: "Compare my options",
+    questions: [
+      "Help me compare an energy quote",
+      "Which heating, hot water or cooking option suits my home?",
+    ],
+  },
 ] as const;
+
+function SurgeMascot({ peeking = false }: { peeking?: boolean }) {
+  return (
+    <svg
+      className={`${styles.mascot}${peeking ? ` ${styles.mascotPeeking}` : ""}`}
+      viewBox="0 0 120 150"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id="surge-metal" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#829a9f" />
+          <stop offset="24%" stopColor="#f7fffe" />
+          <stop offset="51%" stopColor="#b7c9c9" />
+          <stop offset="78%" stopColor="#718a91" />
+          <stop offset="100%" stopColor="#dff0ed" />
+        </linearGradient>
+        <linearGradient id="surge-shell" x1="10%" y1="4%" x2="88%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="46%" stopColor="#e6f2ef" />
+          <stop offset="100%" stopColor="#92aaa7" />
+        </linearGradient>
+        <linearGradient id="surge-armour" x1="8%" y1="10%" x2="92%" y2="90%">
+          <stop offset="0%" stopColor="#62f0d4" />
+          <stop offset="44%" stopColor="#16c9b2" />
+          <stop offset="100%" stopColor="#08798b" />
+        </linearGradient>
+        <radialGradient id="surge-energy" cx="38%" cy="30%" r="72%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="32%" stopColor="#9ffff0" />
+          <stop offset="72%" stopColor="#20d8bc" />
+          <stop offset="100%" stopColor="#056a7d" />
+        </radialGradient>
+        <filter id="surge-energy-glow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="2.2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      <ellipse className={styles.mascotShadow} cx="60" cy="143" rx="31" ry="5" />
+
+      <g className={styles.mascotProngs}>
+        <rect className={styles.mascotProng} x="33" y="4" width="15" height="47" rx="7.5" />
+        <rect className={styles.mascotProng} x="72" y="4" width="15" height="47" rx="7.5" />
+        <path className={styles.mascotProngShine} d="M39 11V39M78 11V39" />
+      </g>
+
+      <circle className={styles.mascotShoulder} cx="24" cy="87" r="8" />
+      <circle className={styles.mascotShoulder} cx="96" cy="87" r="8" />
+      <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M20 84 C9 89 11 108 18 116 C24 111 28 99 28 90" />
+      <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M100 84 C111 89 109 108 102 116 C96 111 92 99 92 90" />
+      <path className={`${styles.mascotFoot} ${styles.mascotFootLeft}`} d="M37 125 H52 L51 141 H34 Q32 138 35 134 Z" />
+      <path className={`${styles.mascotFoot} ${styles.mascotFootRight}`} d="M68 125 H83 L85 134 Q88 138 86 141 H69 Z" />
+
+      <path className={styles.mascotBody} d="M22 61 H98 V107 C98 126 84 136 60 136 C36 136 22 126 22 107 Z" />
+      <path className={styles.mascotBodyHighlight} d="M29 68 H53 C45 80 43 104 48 123 C41 126 35 123 31 116 C27 108 27 82 29 68 Z" />
+      <path className={styles.mascotBodyShade} d="M80 66 H93 V108 C93 121 83 130 70 132 C78 120 81 92 80 66 Z" />
+      <path className={styles.mascotSidePanel} d="M22 80 L29 75 V117 Q27 113 22 109 ZM98 80 L91 75 V117 Q93 113 98 109 Z" />
+      <path className={styles.mascotPanelSeam} d="M31 93 V111 Q31 125 46 129 H74 Q89 125 89 111 V93" />
+
+      <path className={styles.mascotCap} d="M16 51 Q16 45 24 45 H96 Q104 45 104 51 V69 Q104 76 97 76 H23 Q16 76 16 69 Z" />
+      <path className={styles.mascotCapShine} d="M24 51 H76 Q82 51 86 55 H24 Q20 55 20 60 V55 Q20 51 24 51 Z" />
+      <path className={styles.mascotCapAccent} d="M23 71 H97" />
+      <path className={styles.mascotCircuit} d="M22 63 H41 L46 58 M98 63 H79 L74 58" />
+      <circle className={styles.mascotCircuitNode} cx="23" cy="63" r="2" />
+      <circle className={styles.mascotCircuitNode} cx="97" cy="63" r="2" />
+
+      <g className={styles.mascotCore} filter="url(#surge-energy-glow)">
+        <circle cx="60" cy="62" r="8" />
+        <path d="M62 55 L56 62 H60 L58 69 L65 60 H61 Z" />
+      </g>
+
+      <path className={styles.mascotFaceScreen} d="M32 82 Q32 77 38 77 H82 Q88 77 88 82 V105 Q88 110 82 110 H38 Q32 110 32 105 Z" />
+      <g className={styles.mascotEyes}>
+        <ellipse cx="47" cy="92" rx="7" ry="9" />
+        <ellipse cx="73" cy="92" rx="7" ry="9" />
+        <circle cx="49" cy="89" r="2.2" />
+        <circle cx="75" cy="89" r="2.2" />
+      </g>
+      <path className={styles.mascotSmile} d="M52 102 Q60 109 69 101" />
+      <rect className={styles.mascotStatus} x="56" y="116" width="8" height="13" rx="4" />
+    </svg>
+  );
+}
 
 const SAFE_EXACT_ACTIONS = new Set([
   "/",
@@ -370,7 +473,6 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
   apiPath: string;
   modeLabel: string;
   intro: string;
-  tools: AssistantAction[];
 } {
   if (pathname === "/account" || pathname.startsWith("/account/")) {
     const knownPath = SAFE_EXACT_ACTIONS.has(pathname) ? pathname : "/account";
@@ -378,12 +480,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: knownPath,
       modeLabel: "Customer guide",
-      intro: "Ask about your home plan or choose a quick question. Surge does not read private account, project or quote records.",
-      tools: [
-        { id: "account", label: "Account overview", href: "/account" },
-        { id: "new-project", label: "Start a home project", href: "/account/projects/new" },
-        { id: "calculator", label: "Check a rebate", href: "/calculator" },
-      ],
+      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
     };
   }
   if (
@@ -405,12 +502,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath,
       modeLabel: "Trade guide",
-      intro: "Ask about energy upgrades, platform workflows or compliance. Surge does not read customer, job or certificate records.",
-      tools: [
-        { id: "tlink", label: "TLink workspace", href: "/direct-trade/dashboard" },
-        { id: "calculator", label: "Source-verified calculator", href: "/calculator" },
-        { id: "creditex", label: "Creditex workspace", href: "/creditex/compliance" },
-      ],
+      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
   const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates)$/.test(pathname)
@@ -421,12 +513,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath: safePublicPath,
       modeLabel: "Trade guide",
-      intro: "Ask about energy upgrades, platform workflows or compliance. Surge does not read customer, job or certificate records.",
-      tools: [
-        { id: "tlink", label: "TLink workspace", href: "/direct-trade/dashboard" },
-        { id: "calculator", label: "Source-verified calculator", href: "/calculator" },
-        { id: "creditex", label: "Creditex workspace", href: "/creditex/compliance" },
-      ],
+      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
   if (isSharedUtilityRoute(pathname) && rememberedAudience === "customer") {
@@ -434,24 +521,14 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: safePublicPath,
       modeLabel: "Customer guide",
-      intro: "Ask about your home plan or choose a quick question. Surge does not read private account, project or quote records.",
-      tools: [
-        { id: "account", label: "Account overview", href: "/account" },
-        { id: "new-project", label: "Start a home project", href: "/account/projects/new" },
-        { id: "calculator", label: "Check a rebate", href: "/calculator" },
-      ],
+      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
     };
   }
   return {
     audience: "public",
     apiPath: safePublicPath,
     modeLabel: "Household guide",
-    intro: "Ask about your home or any energy upgrade. No contact details needed.",
-    tools: [
-      { id: "plan", label: "Build a home plan", href: "/plan" },
-      { id: "calculator", label: "Check a rebate", href: "/calculator" },
-      { id: "guides", label: "Browse energy guides", href: "/guides" },
-    ],
+    intro: "Hi, I am Surge. Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
   };
 }
 
@@ -469,14 +546,22 @@ function boundedLocalMessages(value: unknown): AssistantMessage[] {
 }
 
 function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
-  const turns = messages.filter((message) => message.role === "user").slice(-MAX_RECENT_TURNS).map((message) => ({
-    role: "user" as const,
-    content: message.content.slice(0, MAX_MESSAGE_LENGTH),
-  }));
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const message of messages) {
+    const content = message.content.trim().slice(0, MAX_MESSAGE_LENGTH);
+    if (!content) continue;
+    const turn = { role: message.role, content };
+    if (turns.at(-1)?.role === turn.role) turns[turns.length - 1] = turn;
+    else turns.push(turn);
+  }
+  if (turns.length > MAX_RECENT_TURNS) {
+    turns.splice(0, turns.length - MAX_RECENT_TURNS);
+  }
   while (
     turns.length > 0
     && turns.reduce((total, turn) => total + turn.content.length, 0) > MAX_RECENT_CONTEXT_CHARACTERS
   ) turns.shift();
+  if (turns[0]?.role === "assistant") turns.shift();
   return turns;
 }
 
@@ -649,17 +734,6 @@ export function EnergyAssistantWidget() {
   const updateLead = (updater: (current: LeadDraft) => LeadDraft) => {
     setLead(updater);
     resetLeadAttempt();
-  };
-
-  const rememberModeForNavigation = () => {
-    setOpen(false);
-    setMode(context.audience);
-    storeSession(JSON.stringify({
-      mode: context.audience,
-      messages: boundedLocalMessages(messages),
-      continuation: continuationRef.current,
-      lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
-    }));
   };
 
   const replaceMessages = (nextMessages: AssistantMessage[]) => {
@@ -1130,18 +1204,17 @@ export function EnergyAssistantWidget() {
               ref={launcherRef}
               className={styles.launcherPeek}
               type="button"
-              aria-label="Open Ask Surge"
+              aria-label="Bring Surge back and open chat"
               aria-controls="aea-energy-guide"
               aria-expanded="false"
               onClick={() => {
+                setMascotTucked(false);
                 setOpenPathname(pathname);
                 setOpen(true);
               }}
             >
-              <svg viewBox="0 0 34 48" aria-hidden="true" focusable="false">
-                <path d="M8 17V7a4 4 0 0 1 8 0v10M20 17V7a4 4 0 0 1 8 0v10" />
-                <path d="M4 16h28v10H4zM8 26h20v10c0 6-4 9-10 9s-10-3-10-9V26z" />
-              </svg>
+              <SurgeMascot peeking />
+              <span className={styles.peekLabel}>Ask Surge</span>
             </button>
           ) : (
             <>
@@ -1158,69 +1231,7 @@ export function EnergyAssistantWidget() {
                   setOpen(true);
                 }}
               >
-                <svg className={styles.mascot} viewBox="0 0 110 126" aria-hidden="true" focusable="false">
-              <defs>
-                <linearGradient id="surge-prong-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#f8fbfa" />
-                  <stop offset="38%" stopColor="#dce4e2" />
-                  <stop offset="72%" stopColor="#aebbb8" />
-                  <stop offset="100%" stopColor="#edf2f1" />
-                </linearGradient>
-                <linearGradient id="surge-cap-gradient" x1="8%" y1="5%" x2="94%" y2="100%">
-                  <stop offset="0%" stopColor="#89f3df" />
-                  <stop offset="42%" stopColor="#2ed8c7" />
-                  <stop offset="100%" stopColor="#0b9fae" />
-                </linearGradient>
-                <linearGradient id="surge-body-gradient" x1="5%" y1="8%" x2="92%" y2="100%">
-                  <stop offset="0%" stopColor="#ffffff" />
-                  <stop offset="54%" stopColor="#f5f7f2" />
-                  <stop offset="100%" stopColor="#cbd3cb" />
-                </linearGradient>
-                <radialGradient id="surge-core-gradient" cx="38%" cy="30%" r="70%">
-                  <stop offset="0%" stopColor="#eafffa" />
-                  <stop offset="44%" stopColor="#66ead7" />
-                  <stop offset="100%" stopColor="#078b96" />
-                </radialGradient>
-                <filter id="surge-core-glow" x="-80%" y="-80%" width="260%" height="260%">
-                  <feGaussianBlur stdDeviation="1.8" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <ellipse className={styles.mascotShadow} cx="55" cy="120" rx="30" ry="5" />
-              <rect className={styles.mascotProng} x="29" y="4" width="16" height="38" rx="8" />
-              <rect className={styles.mascotProng} x="65" y="4" width="16" height="38" rx="8" />
-              <rect className={styles.mascotProngShine} x="34" y="10" width="4" height="25" rx="2" />
-              <rect className={styles.mascotProngShine} x="70" y="10" width="4" height="25" rx="2" />
-              <path className={`${styles.mascotArm} ${styles.mascotArmLeft}`} d="M19 62 C5 65 6 86 13 92 C20 89 23 78 24 68" />
-              <path className={`${styles.mascotArm} ${styles.mascotArmRight}`} d="M91 62 C105 65 104 86 97 92 C90 89 87 78 86 68" />
-              <path className={styles.mascotFoot} d="M35 102 Q36 122 47 107 Z" />
-              <path className={styles.mascotFoot} d="M63 107 Q74 122 75 101 Z" />
-              <path className={styles.mascotBody} d="M18 45 H92 V81 Q92 109 68 109 H42 Q18 109 18 81 Z" />
-              <path className={styles.mascotBodyHighlight} d="M24 51 H45 Q39 62 39 82 Q39 96 31 100 Q23 92 23 79 V55 Q23 52 24 51 Z" />
-              <path className={styles.mascotBodyShade} d="M70 49 H88 V81 Q88 101 69 104 Q77 94 77 78 V56 Q77 51 70 49 Z" />
-              <rect className={styles.mascotCap} x="11" y="35" width="88" height="26" rx="8" />
-              <path className={styles.mascotCapShine} d="M22 40 H65 V45 H21 Q16 45 16 49 Q16 40 22 40 Z" />
-              <path className={styles.mascotCapAccent} d="M18 56 H92" />
-              <path className={styles.mascotCircuit} d="M21 49 H38 M72 49 H89" />
-              <circle className={styles.mascotCircuitNode} cx="24" cy="49" r="2" />
-              <circle className={styles.mascotCircuitNode} cx="86" cy="49" r="2" />
-              <g className={styles.mascotCore} filter="url(#surge-core-glow)">
-                <circle cx="55" cy="49" r="7" />
-                <path d="M56 43 L51 50 H55 L53 56 L60 48 H56 Z" />
-              </g>
-              <g className={styles.mascotEyes}>
-                <ellipse cx="42" cy="77" rx="8" ry="10" />
-                <ellipse cx="69" cy="77" rx="8" ry="10" />
-                <circle cx="45" cy="73" r="2.5" />
-                <circle cx="72" cy="73" r="2.5" />
-              </g>
-              <circle className={styles.mascotCheek} cx="32" cy="90" r="3.5" />
-              <circle className={styles.mascotCheek} cx="79" cy="90" r="3.5" />
-              <path className={styles.mascotSmile} d="M42 89 Q55 102 70 88" />
-                </svg>
+                <SurgeMascot />
               </button>
               <button
                 className={styles.launcherDismiss}
@@ -1244,7 +1255,7 @@ export function EnergyAssistantWidget() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="aea-energy-guide-title"
-          aria-describedby="aea-energy-guide-description"
+          aria-describedby={messages.length === 0 ? "aea-energy-guide-description" : undefined}
           onKeyDown={trapFocus}
         >
           <header className={styles.header}>
@@ -1259,29 +1270,27 @@ export function EnergyAssistantWidget() {
 
           <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>
             {messages.length === 0 && (
-              <section className={styles.contextCard} aria-labelledby="aea-page-tools-title">
+              <section className={styles.welcome} aria-labelledby="aea-start-heading">
+                <span>Start here</span>
+                <h3 id="aea-start-heading">What would you like help with?</h3>
                 <p id="aea-energy-guide-description">{context.intro}</p>
-                <div className={styles.pageTools}>
-                  <strong id="aea-page-tools-title">Quick tools</strong>
-                  <div>
-                    {context.tools.map((tool) => (
-                      <a key={tool.id} href={tool.href} onClick={rememberModeForNavigation}>{tool.label}</a>
-                    ))}
-                  </div>
-                </div>
               </section>
             )}
 
             {messages.length === 0 && (
-              <section className={styles.starters} aria-labelledby="aea-start-heading">
-                <h3 id="aea-start-heading">What do you need help with?</h3>
-                <div>
-                  {START_ACTIONS.map((action) => (
-                    <button key={action} type="button" disabled={busy} onClick={() => void ask(action)}>
-                      {action}<span aria-hidden="true">›</span>
-                    </button>
-                  ))}
-                </div>
+              <section className={styles.starters} aria-label="Ways Surge can help">
+                {START_ROADMAP.map((group) => (
+                  <div className={styles.starterGroup} key={group.label}>
+                    <h4>{group.label}</h4>
+                    <div>
+                      {group.questions.map((question) => (
+                        <button key={question} type="button" disabled={busy} onClick={() => void ask(question)}>
+                          <span>{question}</span><span aria-hidden="true">›</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </section>
             )}
 

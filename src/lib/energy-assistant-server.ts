@@ -376,9 +376,11 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const pageContext = pageContextFrom(requestBody.pageContext);
   const audience = publicAudienceFrom(requestBody.audience);
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
-  const modelRecentTurns = recentTurns.filter((turn) => turn.role === "user");
+  const modelRecentTurns = recentTurns;
   const continuation = continuationFrom(requestBody.continuation);
-  const priorUserMessages = modelRecentTurns.map((turn) => turn.content);
+  const priorUserMessages = recentTurns
+    .filter((turn) => turn.role === "user")
+    .map((turn) => turn.content);
   const now = dateFrom(dependencies);
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const deterministicAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });

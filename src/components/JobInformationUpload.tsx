@@ -160,7 +160,7 @@ export function JobInformationUpload({ token }: { token: string }) {
   const reviewChecksOutstanding = stagedTotal > 0 && !allConfirmed;
   const currentCompletion = data.request.completion?.current && stagedTotal === 0;
   return <main className={styles.shell}>
-    <header className={styles.header}><Link href="/">TLink</Link><span>Private customer upload</span></header>
+    <header className={styles.header}><Link href="/">Australian Energy Assessments</Link><span>Private customer upload</span></header>
     <section className={styles.hero}>
       <span>Requested by {data.businessName || "your installer"}</span>
       <h1>Add photos to {data.job.workNumber}</h1>

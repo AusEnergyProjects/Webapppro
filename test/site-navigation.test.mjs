@@ -70,8 +70,8 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open TLink trade login"/);
-  assert.match(chrome, /TLinkMark className="site-tlink-mark"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the trade workspace"/);
+  assert.match(chrome, /className="site-tlink-mark"[\s\S]*AEA_BRANDMARK_PNG_DATA_URI/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
   assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
@@ -85,9 +85,10 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("public navigation keeps TLink visible without promoting customer accounts", () => {
+test("public navigation keeps the trade workspace available without exposing an internal product name", () => {
   assert.match(chrome, /active === "account" \? <a className="site-account-link active" href="\/account"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open TLink trade login"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the trade workspace"/);
+  assert.doesNotMatch(chrome, /Open TLink|TLink trade login|title="TLink/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
   assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
   assert.match(guide, /Ask matching trades/);
@@ -145,7 +146,7 @@ test("shared navigation only advertises options that remain offscreen", () => {
 test("direct trade proposition presents the free verified operating model honestly", () => {
   assert.match(guide, /Traditional upgrade channels can include sales and administration businesses/);
   assert.match(guide, /Quotes should separate equipment, labour, certificates or rebates/);
-  assert.match(guide, /TLink gives approved trade businesses the core operating tools at A\$0/);
+  assert.match(guide, /Australian Energy Assessments gives approved trade businesses the core operating tools at A\$0/);
   assert.match(guide, /Household details remain protected, individual leads are not sold and placement is not auctioned/);
   assert.doesNotMatch(guide, /Live service, expanding tool|direct-trade-status/);
 });
@@ -155,9 +156,9 @@ test("direct trade marketplace includes reputable wholesalers", () => {
   assert.match(guide, /reputable suppliers (?:can|to) connect proven products with qualified trades and suitable households/i);
 });
 
-test("TLink approval does not imply government accreditation", () => {
-  assert.match(guide, /TLink approval is not a government accreditation/);
-  assert.match(guide, /submitted ABN and required business evidence passed the TLink review/);
+test("trade workspace approval does not imply government accreditation", () => {
+  assert.match(guide, /Trade workspace approval is not a government accreditation/);
+  assert.match(guide, /submitted ABN and required business evidence passed the Australian Energy Assessments review/);
   assert.match(guide, /does not replace a trade licence, government accreditation or scheme-specific installer approval/);
   assert.doesNotMatch(guide, /accredited Direct Trade Specialist/i);
   assert.doesNotMatch(guide, /\u2013|\u2014/);
@@ -356,7 +357,12 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /questionId="comfort-concerns"/);
   assert.match(planner, /sectionId="hot-water-cooking"/);
   assert.match(planner, /Not sure is a valid answer/);
-  assert.match(planner, /Optional advanced home details/);
+  assert.match(planner, /Home size and construction/);
+  assert.match(planner, /Wall and floor insulation/);
+  assert.match(planner, /Window coverings and shade/);
+  assert.match(planner, /Draughts and ventilation/);
+  assert.match(planner, /Electricity supply and other loads/);
+  assert.doesNotMatch(planner, /Optional advanced home details/);
   assert.match(planner, /window\.sessionStorage\.getItem\(STORAGE_KEY\)/);
   assert.match(planner, /window\.sessionStorage\.setItem\(STORAGE_KEY/);
   assert.match(planner, /role="progressbar"/);

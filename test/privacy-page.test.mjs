@@ -12,7 +12,7 @@ const chrome = read("../src/components/ComparatorChrome.tsx");
 const upload = read("../src/components/JobInformationUpload.tsx");
 const sitemap = read("../src/app/sitemap.ts");
 
-test("the public privacy route covers the operational TLink data boundary", () => {
+test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
   assert.match(privacy, /Surge conversations/);
@@ -37,6 +37,8 @@ test("the public privacy route covers the operational TLink data boundary", () =
   assert.match(privacy, /does not offer payment-provider connections or initiate customer payments/);
   assert.match(privacy, /do not sell personal information/i);
   assert.match(privacy, /info@ausenergyassessments\.com/);
+  assert.doesNotMatch(privacy, /\b(?:TLink|Creditex)\b/);
+  assert.match(privacy, /Open trade workspace/);
 });
 
 test("customer evidence and shared navigation resolve to the public privacy route", () => {

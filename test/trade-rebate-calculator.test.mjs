@@ -100,6 +100,8 @@ test("calculator APIs keep trade access verified while public reads are quote-on
   assert.match(access, /requireVerifiedTradeIdentity\(identity/);
   assert.match(access, /partnerTypes: \["installer"\]/);
   assert.match(access, /CREDITEX_CALCULATOR_ACCESS_REQUIRED/);
+  assert.match(access, /verified trade workspace account is required/);
+  assert.doesNotMatch(access, /active Creditex membership/);
   for (const route of [programEstimateRoute, stcEstimateRoute]) {
     assert.match(route, /requireCreditexCalculatorAccess\(request, database, \{/);
     assert.match(route, /allowPublicQuote: [a-zA-Z]+ === "quote"/);

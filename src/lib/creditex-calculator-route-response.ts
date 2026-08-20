@@ -66,7 +66,7 @@ export function describeCreditexCalculatorRouteError(
     return {
       status: 503,
       code: "CREDITEX_SCHEMA_GUARDS_INSTALLING",
-      error: "Preparing the governed Creditex calculator.",
+      error: "Preparing the governed rebate calculator.",
       headers: { "Retry-After": "1" },
     };
   }
@@ -77,7 +77,7 @@ export function describeCreditexCalculatorRouteError(
       status: 503,
       code: "CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED",
       error:
-        "Creditex calculator integrity controls need a governed upgrade before this request can continue.",
+        "The rebate calculator integrity controls need a governed upgrade before this request can continue.",
     };
   }
   return null;

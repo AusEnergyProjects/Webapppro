@@ -60,7 +60,7 @@
 .stageIntro h2,
 .stageIntro p,
 .preliminary p,
-.advanced > p,
+.detailGroupBody > p,
 .saveNote {
   margin: 0;
 }
@@ -116,7 +116,7 @@
 }
 
 .stageIntro p,
-.advanced > p,
+.detailGroupBody > p,
 .saveNote {
   color: #bfd0d4;
   line-height: 1.55;
@@ -205,7 +205,7 @@
 .tileSelected:focus-within,
 .textField input:focus-visible,
 .selectField select:focus-visible,
-.advanced summary:focus-visible,
+.detailGroup summary:focus-visible,
 .actions button:focus-visible,
 .review button:focus-visible {
   outline: 3px solid #8ff8d8;
@@ -250,23 +250,43 @@
   padding: 0.9rem 1rem;
 }
 
-.advanced {
+.detailGroup {
   border: 1px solid rgba(133, 213, 200, 0.28);
   border-radius: 1rem;
   background: rgba(2, 20, 29, 0.45);
-  padding: 0.9rem;
+  overflow: hidden;
 }
 
-.advanced summary {
-  min-height: 2.75rem;
+.detailGroup > summary {
+  display: grid;
+  min-height: 3.25rem;
+  align-content: center;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
   color: #8ff8d8;
   cursor: pointer;
   font-weight: 800;
 }
 
-.advanced[open] {
+.detailGroup > summary span {
+  color: #8ff8d8;
+}
+
+.detailGroup > summary small {
+  color: #bfd0d4;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.detailGroup[open] {
+  background: rgba(2, 20, 29, 0.72);
+}
+
+.detailGroupBody {
   display: grid;
   gap: 1rem;
+  border-top: 1px solid rgba(133, 213, 200, 0.2);
+  padding: 1rem;
 }
 
 .review {

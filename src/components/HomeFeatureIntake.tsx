@@ -32,12 +32,14 @@ export function HomeFeatureIntake({
   idPrefix,
   sectionId,
   questionId,
+  showSectionHeader = true,
 }: {
   selected: string[];
   onChange: (next: string[]) => void;
   idPrefix: string;
   sectionId?: string;
   questionId?: string;
+  showSectionHeader?: boolean;
 }) {
   const visibleSections = customerHomeFeatureSections
     .filter((section) => !sectionId || section.id === sectionId)
@@ -56,13 +58,16 @@ export function HomeFeatureIntake({
         return (
           <section
             className={styles.section}
-            aria-labelledby={headingId}
+            aria-label={showSectionHeader ? undefined : section.title}
+            aria-labelledby={showSectionHeader ? headingId : undefined}
             key={section.id}
           >
-            <header className={styles.sectionHeader}>
-              <h3 id={headingId}>{section.title}</h3>
-              <p>{section.description}</p>
-            </header>
+            {showSectionHeader ? (
+              <header className={styles.sectionHeader}>
+                <h3 id={headingId}>{section.title}</h3>
+                <p>{section.description}</p>
+              </header>
+            ) : null}
             {section.questions.map((question) => {
               const helpId = question.help
                 ? `${idPrefix}-${question.id}-help`

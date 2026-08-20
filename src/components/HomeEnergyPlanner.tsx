@@ -122,15 +122,15 @@ const comfortQuestionIds = [
 ];
 const systemQuestionIds = ["hot-water", "cooking", "solar", "battery", "ev"];
 const commonPlannerFeatureDefaults = [
-  ["comfort-concerns", "comfort-too-hot"],
-  ["ceiling-insulation", "ceiling-insulation-limited"],
-  ["glazing", "single-glazing"],
-  ["heating-cooling-systems", "reverse-cycle"],
-  ["hot-water", "electric-storage-hot-water"],
-  ["cooking", "electric-resistance-cooking"],
-  ["solar", "solar-none"],
-  ["battery", "battery-none"],
-  ["ev", "ev-none"],
+  ["comfort-concerns", ["comfort-too-hot", "comfort-too-cold"]],
+  ["ceiling-insulation", ["ceiling-insulation-limited"]],
+  ["glazing", ["single-glazing"]],
+  ["heating-cooling-systems", ["gas-heating", "evaporative-cooling"]],
+  ["hot-water", ["gas-storage-hot-water"]],
+  ["cooking", ["gas-cooking"]],
+  ["solar", ["solar-none"]],
+  ["battery", ["battery-none"]],
+  ["ev", ["ev"]],
 ] as const;
 
 const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
@@ -154,21 +154,29 @@ const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["ev", "ev-charging"],
 ]);
 
-const optionalPropertyQuestions: Array<{
+type OptionalPropertyQuestion = {
   key: PropertyQuestionKey;
   label: string;
   options: Option[];
-}> = [
+};
+
+const homeBasicsQuestions: OptionalPropertyQuestion[] = [
   { key: "storeys", label: "Storeys", options: customerProjectOptions.storeys },
   { key: "floorArea", label: "Approximate floor area", options: customerProjectOptions.floorAreas },
   { key: "ageBand", label: "Home age", options: customerProjectOptions.ageBands },
   { key: "sharedWalls", label: "Shared walls", options: customerProjectOptions.sharedWalls },
+];
+
+const constructionQuestions: OptionalPropertyQuestion[] = [
   { key: "wallConstruction", label: "External wall construction", options: customerProjectOptions.wallConstructions },
   { key: "floorConstruction", label: "Floor construction", options: customerProjectOptions.floorConstructions },
   { key: "roofType", label: "Roof covering", options: customerProjectOptions.roofTypes },
   { key: "roofColour", label: "Roof colour", options: customerProjectOptions.roofColours },
   { key: "roofForm", label: "Roof form", options: customerProjectOptions.roofForms },
   { key: "roofCondition", label: "Roof condition", options: customerProjectOptions.roofConditions },
+];
+
+const electricalQuestions: OptionalPropertyQuestion[] = [
   { key: "switchboard", label: "Switchboard", options: customerProjectOptions.switchboards },
 ];
 
@@ -190,9 +198,11 @@ function questionAnswered(features: string[], questionId: string) {
 
 function withCommonPlannerFeatureDefaults(features: string[]) {
   let next = normalizeHomeFeatureSelections(features);
-  for (const [questionId, value] of commonPlannerFeatureDefaults) {
+  for (const [questionId, values] of commonPlannerFeatureDefaults) {
     if (!questionAnswered(next, questionId)) {
-      next = updateHomeFeatureSelection(next, questionId, value, true);
+      for (const value of values) {
+        next = updateHomeFeatureSelection(next, questionId, value, true);
+      }
     }
   }
   return next;
@@ -215,14 +225,14 @@ function defaultDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
   const postcodeState = residentialStateFromPostcode(initialSelection.postcode);
   return normalizeFloorInsulation({
     ...initialSelection,
-    goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills"],
+    goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills", "improve-comfort"],
     pace: initialSelection.pace || "staged",
     situation: initialSelection.situation || "owner",
     approvalContext: initialSelection.approvalContext || "none",
     budgetRange: initialSelection.budgetRange || "not_set",
     features: withCommonPlannerFeatureDefaults(initialSelection.features),
     propertyType: initialSelection.propertyType || "house",
-    occupants: initialSelection.occupants || "two",
+    occupants: initialSelection.occupants || "three_four",
     addressState: postcodeState || "",
   });
 }
@@ -282,19 +292,19 @@ function sanitizeStoredDraft(candidate: Partial<PlannerDraft>): PlannerDraft {
     ? candidate.features.filter((item): item is string => typeof item === "string").slice(0, 36)
     : [];
   return normalizeFloorInsulation({
-    goals: goals.length ? goals : ["lower-bills"],
-    pace: storedOption(customerProjectOptions.paces, candidate.pace, "staged"),
-    situation: storedOption(customerProjectOptions.situations, candidate.situation, "owner"),
-    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext, "none"),
-    budgetRange: storedOption(customerProjectOptions.budgets, candidate.budgetRange, "not_set"),
+    goals,
+    pace: storedOption(customerProjectOptions.paces, candidate.pace),
+    situation: storedOption(customerProjectOptions.situations, candidate.situation),
+    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext),
+    budgetRange: storedOption(customerProjectOptions.budgets, candidate.budgetRange),
     postcode,
     addressState: residentialStateFromPostcode(postcode) || "",
-    features: withCommonPlannerFeatureDefaults(rawFeatures),
-    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType, "house"),
+    features: normalizeHomeFeatureSelections(rawFeatures),
+    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType),
     storeys: storedOption(customerProjectOptions.storeys, candidate.storeys),
     ageBand: storedOption(customerProjectOptions.ageBands, candidate.ageBand),
     floorArea: storedOption(customerProjectOptions.floorAreas, candidate.floorArea),
-    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants, "two"),
+    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants),
     sharedWalls: storedOption(customerProjectOptions.sharedWalls, candidate.sharedWalls),
     roofType: storedOption(customerProjectOptions.roofTypes, candidate.roofType),
     roofColour: storedOption(customerProjectOptions.roofColours, candidate.roofColour),
@@ -391,8 +401,42 @@ function ChoiceTiles({
   );
 }
 
+function PropertySelectGrid({
+  questions,
+  draft,
+  onSelect,
+}: {
+  questions: OptionalPropertyQuestion[];
+  draft: PlannerDraft;
+  onSelect: (key: PropertyQuestionKey, value: string) => void;
+}) {
+  return (
+    <div className={styles.selectGrid}>
+      {questions.map((question) => (
+        <label className={styles.selectField} key={question.key}>
+          <span>{question.label}</span>
+          <select
+            value={draft[question.key]}
+            onChange={(event) => onSelect(question.key, event.target.value)}
+          >
+            <option value="">Not sure or skip</option>
+            {question.options.map(([value, label]) => (
+              <option value={value} key={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function HomeEnergyPlanner({ initialSelection }: { initialSelection: InitialPlannerSelection }) {
-  const initialDraft = useMemo(() => defaultDraft(initialSelection), [initialSelection]);
+  const initialDraft = useMemo(
+    () => hasExplicitSelection(initialSelection)
+      ? explicitInitialDraft(initialSelection)
+      : defaultDraft(initialSelection),
+    [initialSelection],
+  );
   const [draft, setDraft] = useState<PlannerDraft>(initialDraft);
   const [stage, setStage] = useState(() => firstIncompleteAssessmentStage(explicitInitialDraft(initialSelection)));
   const [attemptedStage, setAttemptedStage] = useState<number | null>(null);
@@ -580,7 +624,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     removeStoredAssessment();
     setDraft(defaultDraft({
       ...initialSelection,
-      goals: ["lower-bills"],
+      goals: [],
       pace: "staged",
       situation: "",
       approvalContext: "none",
@@ -656,6 +700,16 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <ChoiceTiles legend="Shared property or approval" name="assessment-approval" options={customerProjectOptions.approvalContexts} selected={[draft.approvalContext]} onSelect={(value) => setField("approvalContext", value)} />
                 <ChoiceTiles legend="People usually living here" name="assessment-occupants" options={customerProjectOptions.occupants} selected={draft.occupants ? [draft.occupants] : []} onSelect={(value) => setField("occupants", value)} />
                 <ChoiceTiles legend="What matters most? Choose one or more." name="assessment-goals" options={customerProjectOptions.goals} selected={draft.goals} onSelect={toggleGoal} multiple />
+                <details className={styles.detailGroup}>
+                  <summary>
+                    <span>Home size and construction</span>
+                    <small>Optional details that make the roadmap more specific</small>
+                  </summary>
+                  <div className={styles.detailGroupBody}>
+                    <p>Add only what you safely know. Every selector can stay at Not sure.</p>
+                    <PropertySelectGrid questions={[...homeBasicsQuestions, ...constructionQuestions]} draft={draft} onSelect={setPropertyAnswer} />
+                  </div>
+                </details>
               </>
             ) : null}
 
@@ -670,6 +724,40 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <HomeFeatureIntake idPrefix="quick-insulation" sectionId="insulation" questionId="ceiling-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-glazing" sectionId="windows" questionId="glazing" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-heating" sectionId="heating-cooling" questionId="heating-cooling-systems" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <details className={styles.detailGroup}>
+                  <summary>
+                    <span>Wall and floor insulation</span>
+                    <small>Optional details about the rest of the thermal shell</small>
+                  </summary>
+                  <div className={styles.detailGroupBody}>
+                    <HomeFeatureIntake idPrefix="insulation-wall" sectionId="insulation" questionId="wall-insulation" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                    {draft.floorConstruction === "slab_on_ground" ? (
+                      <p className={styles.notApplicable}><strong>Under-floor insulation:</strong> Not applicable for the selected slab-on-ground construction.</p>
+                    ) : (
+                      <HomeFeatureIntake idPrefix="insulation-floor" sectionId="insulation" questionId="floor-insulation" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                    )}
+                  </div>
+                </details>
+                <details className={styles.detailGroup}>
+                  <summary>
+                    <span>Window coverings and shade</span>
+                    <small>Optional details about heat gain, heat loss and glare</small>
+                  </summary>
+                  <div className={styles.detailGroupBody}>
+                    <HomeFeatureIntake idPrefix="windows-coverings" sectionId="windows" questionId="window-coverings" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                    <HomeFeatureIntake idPrefix="windows-external-shading" sectionId="windows" questionId="external-shading" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                    <HomeFeatureIntake idPrefix="windows-sun-exposure" sectionId="windows" questionId="sun-exposure" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                  </div>
+                </details>
+                <details className={styles.detailGroup}>
+                  <summary>
+                    <span>Draughts and ventilation</span>
+                    <small>Optional details about fixed vents and exhaust fans</small>
+                  </summary>
+                  <div className={styles.detailGroupBody}>
+                    <HomeFeatureIntake idPrefix="comfort-ventilation" sectionId="ventilation" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                  </div>
+                </details>
                 <aside className={styles.preliminary} aria-live="polite">
                   <strong>Preliminary roadmap</strong>
                   <p>{plan.items.length} practical steps are already available. No dollar saving is invented without bill, tariff and equipment evidence.</p>
@@ -688,6 +776,17 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <HomeFeatureIntake idPrefix="quick-solar" sectionId="solar-storage-transport" questionId="solar" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-battery" sectionId="solar-storage-transport" questionId="battery" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-ev" sectionId="solar-storage-transport" questionId="ev" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <details className={styles.detailGroup}>
+                  <summary>
+                    <span>Electricity supply and other loads</span>
+                    <small>Optional details for electrical planning and everyday energy use</small>
+                  </summary>
+                  <div className={styles.detailGroupBody}>
+                    <PropertySelectGrid questions={electricalQuestions} draft={draft} onSelect={setPropertyAnswer} />
+                    <HomeFeatureIntake idPrefix="systems-electrical" sectionId="solar-storage-transport" questionId="electrical-supply" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                    <HomeFeatureIntake idPrefix="systems-lighting" sectionId="lighting-pool" selected={draft.features} onChange={(features) => setField("features", features)} showSectionHeader={false} />
+                  </div>
+                </details>
               </>
             ) : null}
 
@@ -696,37 +795,10 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <div className={styles.stageIntro}>
                   <span>Review before results</span>
                   <h2 id="assessment-stage-3" ref={headingRef} tabIndex={-1}>Choose timing, then review your answers</h2>
-                  <p>Budget and advanced details are optional. Your roadmap remains useful without them.</p>
+                  <p>Budget is optional. Review the summary and go back if you want to change any home, comfort or system details.</p>
                 </div>
                 <ChoiceTiles legend="How should improvements be staged?" name="assessment-pace" options={customerProjectOptions.paces} selected={[draft.pace]} onSelect={(value) => setField("pace", value)} />
                 <ChoiceTiles legend="Comfortable first-stage budget" name="assessment-budget" options={customerProjectOptions.budgets} selected={[draft.budgetRange]} onSelect={(value) => setField("budgetRange", value)} />
-                <details className={styles.advanced}>
-                  <summary>Optional advanced home details</summary>
-                  <p>Add only what you safely know. Every selector can stay at Not sure.</p>
-                  <div className={styles.selectGrid}>
-                    {optionalPropertyQuestions.map((question) => (
-                      <label className={styles.selectField} key={question.key}>
-                        <span>{question.label}</span>
-                        <select value={draft[question.key]} onChange={(event) => setPropertyAnswer(question.key, event.target.value)}>
-                          <option value="">Not sure or skip</option>
-                          {question.options.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-                        </select>
-                      </label>
-                    ))}
-                  </div>
-                  <HomeFeatureIntake idPrefix="advanced-wall-insulation" sectionId="insulation" questionId="wall-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  {draft.floorConstruction === "slab_on_ground" ? (
-                    <p className={styles.notApplicable}><strong>Under-floor insulation:</strong> Not applicable for the selected slab-on-ground construction.</p>
-                  ) : (
-                    <HomeFeatureIntake idPrefix="advanced-floor-insulation" sectionId="insulation" questionId="floor-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  )}
-                  <HomeFeatureIntake idPrefix="advanced-window-coverings" sectionId="windows" questionId="window-coverings" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  <HomeFeatureIntake idPrefix="advanced-external-shading" sectionId="windows" questionId="external-shading" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  <HomeFeatureIntake idPrefix="advanced-sun-exposure" sectionId="windows" questionId="sun-exposure" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  <HomeFeatureIntake idPrefix="advanced-electrical" sectionId="solar-storage-transport" questionId="electrical-supply" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  <HomeFeatureIntake idPrefix="advanced-ventilation" sectionId="ventilation" selected={draft.features} onChange={(features) => setField("features", features)} />
-                  <HomeFeatureIntake idPrefix="advanced-lighting" sectionId="lighting-pool" selected={draft.features} onChange={(features) => setField("features", features)} />
-                </details>
                 <section className={styles.review} aria-label="Assessment review">
                   <h3>Review</h3>
                   <dl>

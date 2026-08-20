@@ -273,6 +273,7 @@ test("model success returns one follow-up and compact continuation without priva
   assert.deepEqual(observedRequest.continuation, priorContinuation);
   assert.deepEqual(observedRequest.recentTurns, [
     { role: "user", content: "How much is the aircon rebate in Victoria?" },
+    { role: "assistant", content: "What is the postcode?" },
     { role: "user", content: "3006" },
   ]);
   assert.equal(payload.reply.directAnswer, modelAnswer.directAnswer);
@@ -282,6 +283,120 @@ test("model success returns one follow-up and compact continuation without priva
   assert.deepEqual(payload.continuation, nextContinuation);
   assertPublicReplyContract(payload);
   assert.doesNotMatch(JSON.stringify(payload), /private-evidence-id|Internal evidence title|official\.example\.test/i);
+});
+
+test("the exact clarification sequence sends Surge's previous reply to the model and returns a new explanation", async () => {
+  const priorReply = "That helps. Replacing ducted gas with reverse-cycle air conditioning may qualify for a Victorian Energy Upgrades discount. The amount depends on the proposed equipment and installation. Ducted reverse-cycle can serve most of the home, while separate split systems target individual rooms and avoid duct losses.";
+  const priorContinuation = continuation({
+    activeTopic: "rcac",
+    goal: "Understand the air-conditioner discount and system choice",
+    facts: [
+      { key: "postcode", value: "3006" },
+      { key: "tenure", value: "owner" },
+      { key: "existing_heating", value: "ducted gas" },
+    ],
+    pendingQuestion: "Do you want most rooms conditioned or only the rooms you use most?",
+    lastAnswerSummary: "Explained that the discount is not fixed and compared ducted with split systems.",
+  });
+  let observedRequest;
+
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "clarify-screenshot-0001",
+    message: "huh? what do you mean",
+    recentTurns: [
+      { role: "user", content: "how big of a discount can i get on my aircon?" },
+      { role: "assistant", content: priorReply },
+    ],
+    continuation: priorContinuation,
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    async generateAnswer(modelRequest) {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...fixedAnswer("I mean the discount and the type of air conditioner are two separate decisions. The discount cannot be known from 'ducted gas' alone because the new unit and installation scope affect it. A ducted reverse-cycle system uses ducts for several rooms, while split systems use separate indoor units in the rooms you choose."),
+          suggestedQuestions: ["Do you want most rooms conditioned or only the rooms you use most?"],
+        },
+        continuation: {
+          ...priorContinuation,
+          lastAnswerSummary: "Explained the discount and ducted-versus-split choice in simple words.",
+        },
+      };
+    },
+    reserveModelCall: allowModelCall,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.deepEqual(observedRequest.recentTurns, [
+    { role: "user", content: "how big of a discount can i get on my aircon?" },
+    { role: "assistant", content: priorReply },
+  ]);
+  assert.equal(observedRequest.continuation.lastAnswerSummary, priorContinuation.lastAnswerSummary);
+  assert.match(payload.reply.directAnswer, /two separate decisions.*cannot be known.*ducted reverse-cycle.*split systems/i);
+  assert.notEqual(payload.reply.directAnswer, priorReply);
+  assert.equal(payload.reply.followUpQuestion, "Do you want most rooms conditioned or only the rooms you use most?");
+  assertPublicReplyContract(payload);
+});
+
+test("a short answer to Surge's pending question keeps the full conversational thread", async () => {
+  const priorContinuation = continuation({
+    activeTopic: "rcac",
+    goal: "Understand an air-conditioner upgrade",
+    facts: [
+      { key: "postcode", value: "3006" },
+      { key: "tenure", value: "owner" },
+    ],
+    pendingQuestion: "What heating system are you replacing?",
+    lastAnswerSummary: "Explained why the existing heater affects the available discount.",
+  });
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "pending-answer-ducted-gas-0001",
+    message: "ducted gas",
+    recentTurns: [
+      { role: "user", content: "How much is the aircon discount?" },
+      { role: "assistant", content: "The exact discount depends on the new unit and what it replaces. What heating system are you replacing?" },
+    ],
+    continuation: priorContinuation,
+    pageContext: "/plan",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    async generateAnswer(modelRequest) {
+      observedRequest = modelRequest;
+      return {
+        answer: {
+          ...fixedAnswer("Replacing ducted gas can be relevant to the Victorian discount, but it still is not a fixed dollar amount. The proposed reverse-cycle system, its capacity and the installation determine the certificate value and final installed price."),
+          suggestedQuestions: ["Are you considering a ducted system or separate room split systems?"],
+        },
+        continuation: continuation({
+          activeTopic: "rcac",
+          goal: priorContinuation.goal,
+          facts: [...priorContinuation.facts, { key: "existing_heating", value: "ducted gas" }],
+          pendingQuestion: "Are you considering a ducted system or separate room split systems?",
+          lastAnswerSummary: "Explained how replacing ducted gas affects the Victorian air-conditioner discount.",
+        }),
+      };
+    },
+    reserveModelCall: allowModelCall,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(observedRequest.message, "ducted gas");
+  assert.equal(observedRequest.continuation.pendingQuestion, "What heating system are you replacing?");
+  assert.equal(observedRequest.recentTurns[1].role, "assistant");
+  assert.match(payload.reply.directAnswer, /Replacing ducted gas.*not a fixed dollar amount/i);
+  assert.deepEqual(payload.continuation.facts.filter((fact) => fact.key === "existing_heating"), [
+    { key: "existing_heating", value: "ducted gas" },
+  ]);
 });
 
 test("continuation carries corrections and a topic change without retaining the superseded fact", async () => {

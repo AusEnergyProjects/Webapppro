@@ -1,18 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SiteFooter } from "@/components/ComparatorChrome";
-import { TLinkHeader } from "@/components/TLinkChrome";
+import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 
 export const metadata: Metadata = {
-  title: "Privacy notice | Australian Energy Assessments and TLink",
+  title: "Privacy notice | Australian Energy Assessments",
   description:
-    "How Australian Energy Assessments and TLink collect, use, protect and share account, job, customer and integration information.",
+    "How Australian Energy Assessments collects, uses, protects and shares account, job, customer and integration information.",
 };
 
 const sections = [
   {
     title: "Who this notice covers",
-    body: "Australian Energy Assessments operates the public energy tools and TLink trade workspace. This notice covers visitors, households, trade businesses, team members and customers using secure TLink links. It explains the information used to provide the service and the choices available to you.",
+    body: "Australian Energy Assessments operates the public energy tools and trade workspace. This notice covers visitors, households, trade businesses, team members and customers using secure trade workspace links. It explains the information used to provide the service and the choices available to you.",
   },
   {
     title: "Information we collect",
@@ -32,15 +31,15 @@ const sections = [
   },
   {
     title: "Protected leads and direct customers",
-    body: "Australian Energy Assessments keeps the household name, email, phone, unit number, street address, suburb, state and postcode in the protected enquiry record. When a household submits a trade enquiry, every approved TLink trade whose services and active service area match the selected work receives the email, postcode, selected services and any message the household writes. The household separately chooses whether those trades also receive the name, phone or full property address. The full home plan, PDF, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
+    body: "Australian Energy Assessments keeps the household name, email, phone, unit number, street address, suburb, state and postcode in the protected enquiry record. When a household submits a trade enquiry, every approved matched trade whose services and active service area match the selected work receives the email, postcode, selected services and any message the household writes. The household separately chooses whether those trades also receive the name, phone or full property address. The full home plan, PDF, bills, meter data and uploaded documents stay private. Wholesalers do not receive household lead details.",
   },
   {
     title: "Connected services",
-    body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. TLink sends only the information needed for the chosen action. TLink remains the operational source of truth, and connected providers apply their own privacy terms. TLink does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the TLink integration workspace.",
+    body: "A trade account owner chooses whether to connect Google Calendar, Outlook, Xero, MYOB or QuickBooks. The trade workspace sends only the information needed for the chosen action. The trade workspace remains the operational source of truth, and connected providers apply their own privacy terms. The trade workspace does not offer payment-provider connections or initiate customer payments. Account owners can disconnect a connected calendar or accounting provider from the integration workspace.",
   },
   {
     title: "Files, photos and meter information",
-    body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. A PDF quote or electricity interval file selected in the AEA Energy Guide is read in that browser. Its bytes and extracted text are not uploaded or stored. Known NMI, account, meter, email, phone and street-address patterns are redacted, but free-text quote lines may still contain personal information and remain local. A person may separately choose to include a bounded summary built only from structured findings in a service request; the original file, quote lines and meter identifiers are excluded.",
+    body: "Job evidence is attached only to the authorised job and must not include people, identity documents, number plates, account paperwork or unrelated private information. A PDF quote or electricity interval file selected in Surge is read in that browser. Its bytes and extracted text are not uploaded or stored. Known NMI, account, meter, email, phone and street-address patterns are redacted, but free-text quote lines may still contain personal information and remain local. A person may separately choose to include a bounded summary built only from structured findings in a service request; the original file, quote lines and meter identifiers are excluded.",
   },
   {
     title: "Emailing a home energy plan",
@@ -59,19 +58,19 @@ const sections = [
 export default function PrivacyPage() {
   return (
     <main className="wrap trade-information-page">
-      <TLinkHeader active="dashboard" />
+      <SiteHeader active="direct-trade-dashboard" />
       <header className="trade-information-hero">
         <div>
           <span>Effective 20 August 2026</span>
           <h1>Privacy notice</h1>
           <p>
-            This notice explains what Australian Energy Assessments and TLink
-            collect, why it is needed, who can access it and how to ask for a
-            correction or review.
+            This notice explains what Australian Energy Assessments collects,
+            why it is needed, who can access it and how to ask for a correction
+            or review.
           </p>
           <div>
             <Link className="btn" href="/direct-trade/dashboard">
-              Open TLink
+              Open trade workspace
             </Link>
             <Link className="btn ghost" href="/">
               Australian Energy Assessments home

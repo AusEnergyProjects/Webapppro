@@ -46,11 +46,11 @@ export function customerAppointmentCalendar(input: {
   const startsAt = calendarStamp(input.startsAt);
   const endsAt = calendarStamp(input.endsAt);
   if (!startsAt || !endsAt || endsAt <= startsAt) return null;
-  const workNumber = bounded(input.workNumber, 40) || "TLink appointment";
+  const workNumber = bounded(input.workNumber, 40) || "appointment";
   const businessName = bounded(input.businessName, 120) || "your installer";
   const timeZone = Object.values(STATE_TIME_ZONES).includes(input.timeZone) ? input.timeZone : STATE_TIME_ZONES.NSW;
   const title = `${businessName} appointment`;
-  const details = `Appointment with ${businessName}. TLink job reference ${workNumber}.`;
+  const details = `Appointment with ${businessName}. Australian Energy Assessments job reference ${workNumber}.`;
   const attendeeEmail = calendarEmail(input.attendeeEmail);
   const organizerEmail = calendarEmail(input.organizerEmail);
   const invitation = Boolean(attendeeEmail && organizerEmail);
@@ -66,11 +66,11 @@ export function customerAppointmentCalendar(input: {
   const ics = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//TLink//Customer Appointment//EN",
+    "PRODID:-//Australian Energy Assessments//Customer Appointment//EN",
     "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",
-    `UID:${uid}@tlink.ausenergyassessments.com`,
+    `UID:${uid}@calendar.ausenergyassessments.com`,
     `DTSTAMP:${startsAt}Z`,
     `DTSTART;TZID=${timeZone}:${startsAt}`,
     `DTEND;TZID=${timeZone}:${endsAt}`,
@@ -89,7 +89,7 @@ export function customerAppointmentCalendar(input: {
   ].join("\r\n");
   return {
     googleUrl: google.toString(),
-    filename: `${workNumber.replace(/[^a-z0-9-]/gi, "-") || "tlink"}-appointment.ics`,
+    filename: `${workNumber.replace(/[^a-z0-9-]/gi, "-") || "appointment"}-appointment.ics`,
     ics,
     method,
   };

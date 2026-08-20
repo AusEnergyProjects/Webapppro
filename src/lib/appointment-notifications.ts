@@ -32,13 +32,13 @@ export function appointmentNotificationDraft(input: DraftInput) {
   const work = bounded(input.workNumber, 40) || "your project";
   const window = appointmentWindow(input.startsAt, input.endsAt);
   const customerBody: Record<AppointmentNotificationEventType, string> = {
-    appointment_created: `Your appointment with ${business} is scheduled for ${window}. Sign in to TLink to review the current appointment and preparation checklist.`,
-    staff_assigned: `Your appointment with ${business} has been reviewed for ${window}. Internal staff and capacity details remain private. Sign in to TLink for the current appointment.`,
+    appointment_created: `Your appointment with ${business} is scheduled for ${window}. Sign in to your Australian Energy Assessments account to review the current appointment and preparation checklist.`,
+    staff_assigned: `Your appointment with ${business} has been reviewed for ${window}. Internal staff and capacity details remain private. Sign in to your Australian Energy Assessments account for the current appointment.`,
     appointment_changed: `Your appointment with ${business} has changed to ${window}. Any earlier preparation confirmation has been cleared so you can review the current time.`,
     preparation_confirmed: `Your site preparation confirmation for the ${window} appointment with ${business} has been recorded.`,
   };
   const installerBody: Record<AppointmentNotificationEventType, string> = {
-    appointment_created: `${work} now has a customer-selected appointment for ${window}. Assign staff and complete conflict review in TLink before attendance.`,
+    appointment_created: `${work} now has a customer-selected appointment for ${window}. Assign staff and complete conflict review in the trade workspace before attendance.`,
     staff_assigned: `${work} has completed staff assignment and schedule review for ${window}. Customer contact and private dispatch details remain in their authorised workspaces.`,
     appointment_changed: `${work} has an authorised appointment change to ${window}. The customer preparation acknowledgement has been reset for the revised time.`,
     preparation_confirmed: `The customer confirmed the bounded site-preparation checklist for ${work} and the ${window} appointment.`,

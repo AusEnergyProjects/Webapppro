@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import {
+  PUBLIC_PLAN_CONSENT_PURPOSE,
+} from "../src/lib/public-plan-enquiry.mjs";
+import {
+  PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+} from "../src/lib/public-plan-quote-preparation.mjs";
 
 const planner = fs.readFileSync(
   new URL("../src/components/HomeEnergyPlanner.tsx", import.meta.url),
@@ -129,6 +135,18 @@ test("the enquiry keeps admin contact data private unless each field is selected
   assert.doesNotMatch(enquiryForm, /shareMessage|Also share my message/);
 });
 
+test("customer consent describes approved matched trades without internal product names", () => {
+  assert.match(enquiryForm, /approved trades that service my area and offer at least one selected service/);
+  assert.doesNotMatch(enquiryForm, /TLink|Creditex/);
+  for (const purpose of [
+    PUBLIC_PLAN_CONSENT_PURPOSE,
+    PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
+  ]) {
+    assert.match(purpose, /approved trades matched/);
+    assert.doesNotMatch(purpose, /TLink|Creditex/);
+  }
+});
+
 test("the retry key binds the exact address tuple and keeps plan state separate", () => {
   const retryKey = enquiryForm.match(
     /function submissionCoreKey\([\s\S]*?\n\}\n\nexport function PublicPlanEnquiryForm/,
@@ -212,8 +230,13 @@ test("the result follows four grouped stages and keeps visible answer-specific q
   assert.match(planner, /href="\/rebates"/);
 });
 
-test("core facts are grouped while advanced property facts stay optional", () => {
-  assert.match(planner, /Optional advanced home details/);
+test("core facts are grouped while optional details stay in their relevant sections", () => {
+  assert.match(planner, /Home size and construction/);
+  assert.match(planner, /Wall and floor insulation/);
+  assert.match(planner, /Window coverings and shade/);
+  assert.match(planner, /Draughts and ventilation/);
+  assert.match(planner, /Electricity supply and other loads/);
+  assert.doesNotMatch(planner, /Optional advanced home details/);
   assert.match(planner, /Not sure or skip/);
   assert.match(planner, /No dollar saving is invented without bill, tariff and equipment evidence/);
   assert.match(planner, /Not sure is a valid answer/);

@@ -901,6 +901,16 @@ function isStandaloneAssistanceQuestion(message: string) {
     && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|hot[- ]?water|heat[- ]?pump|solar|battery|insulation|glazing|draught|induction|EV|charger)\b/i.test(message);
 }
 
+function isClarificationRequest(message: string) {
+  const clean = message.trim();
+  return /^(?:huh|sorry|wait)\b/i.test(clean)
+    || /\bwhat (?:do you mean|does that mean)\b/i.test(clean)
+    || /\b(?:can|could|would) you explain\b/i.test(clean)
+    || /\bexplain (?:that|this|it)\b/i.test(clean)
+    || /\b(?:I|we) (?:do not|don't|did not|didn't) understand\b/i.test(clean)
+    || /\bsay (?:that|this|it) (?:more )?simply\b/i.test(clean);
+}
+
 function decisionPlaybookId(
   query: string,
   priorUserMessages: readonly string[],
@@ -1491,7 +1501,7 @@ function catalogueProgramAnswer(query: string): {
   const financialOutcomes = new Set(["rebate", "grant", "loan", "tradable_certificate", "retailer_obligation_credit"]);
   const certificateOutcomes = new Set(["tradable_certificate", "retailer_obligation_credit"]);
   const queryTokens = queryTerms(query).terms;
-  const programs = GOVERNMENT_PROGRAM_TEMPLATES
+  const rankedPrograms = GOVERNMENT_PROGRAM_TEMPLATES
     .filter((program) => program.catalogueState === "current" || program.catalogueState === "limited")
     .filter((program) => program.jurisdiction === jurisdictionCode
       || (jurisdictionCode !== "AU" && program.jurisdiction === "AU"))
@@ -1513,8 +1523,19 @@ function catalogueProgramAnswer(query: string): {
       || Number(right.program.jurisdiction === jurisdictionCode)
         - Number(left.program.jurisdiction === jurisdictionCode)
       || left.program.name.localeCompare(right.program.name))
-    .slice(0, 3)
     .map(({ program }) => program);
+  let filteredPrograms = rankedPrograms;
+  const localApplicantMatches = (signal: RegExp) => rankedPrograms.filter((program) =>
+    program.jurisdiction === jurisdictionCode
+    && signal.test(searchable(`${program.name} ${program.officialSourceTitle} ${program.operatingNote}`)));
+  if (/\b(?:rent|renter|tenant|rental)\b/i.test(query)) {
+    const renterSpecific = localApplicantMatches(/\b(?:renters?|rental|apartment residents?|multi dwelling)\b/);
+    if (renterSpecific.length) filteredPrograms = renterSpecific;
+  } else if (/\b(?:small business|business|commercial)\b/i.test(query)) {
+    const businessSpecific = localApplicantMatches(/\b(?:business|commercial)\b/);
+    if (businessSpecific.length) filteredPrograms = businessSpecific;
+  }
+  const programs = filteredPrograms.slice(0, 3);
   return { programs, jurisdictionCode, jurisdictionLabel, certificateIntent };
 }
 
@@ -2097,7 +2118,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:what can you (?:actually\s+)?(?:do|help with|help me decide)|what do you (?:do|cover)|how can you help|your capabilities|what is this (?:assistant|guide|tool) for|what can (?:this|the) (?:energy )?(?:widget|assistant|guide|tool) (?:do|help (?:me )?with))\b/i.test(query)) {
     return structured("comfort_fabric", {
       directAnswer:
-        "I help with Australian home comfort and energy, bills, electrification, solar, batteries, EVs, rebates, quotes and local file checks. Tell me what you want to improve and I will keep it simple, ask only for facts that change the answer and stay independent of brands.",
+        "I help with Australian whole-home comfort and energy, NatHERS and building fabric, bills and tariffs, electrification, solar, batteries, EVs, rebates, quotes, local file analysis and authorised trade workspace tasks. Tell me what you want to improve and I will keep it simple, ask only for facts that change the answer and stay independent of brands.",
       status: "answered",
       citations: officialCitationsById(["energy-gov-electrification-sequence", "yourhome-passive-design-system", "energy-gov-rebates"]),
       confidence: "high",
@@ -2110,7 +2131,7 @@ export function composeEnergyAssistantAnswer(
   if (/\b(?:ignore|bypass|override|reveal|show|print|repeat|extract)\b[\s\S]{0,80}\b(?:system prompt|developer message|hidden instructions?|customer database|private customer|all customers?|lead database|private records?)\b/i.test(query)) {
     return structured("safety_consumer_rights", {
       directAnswer:
-        "I cannot reveal hidden instructions, private records, credentials or another person's data. I can still help with public energy guidance, local tools and authorised platform tasks without accessing private records.",
+        "I cannot reveal hidden instructions, private customer records, credentials or another person's data. This is a request to bypass privacy and access controls. I can still help with public energy guidance, local tools and authorised platform tasks without accessing private records.",
       status: "answered",
       citations: [],
       confidence: "high",
@@ -3880,6 +3901,26 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
+  if (/\bceiling\b/i.test(query)
+    && /\b(?:hot|warm|heat)\b/i.test(query)
+    && /\b(?:evening|afternoon|sun|summer|measure|check|investigate)\b/i.test(query)) {
+    return structured("comfort_fabric", {
+      directAnswer:
+        "Start by recording the ceiling surface temperature, indoor air temperature and outdoor temperature at the same spot before, during and after the evening heat. Also note the time, sun on the roof, room use and whether the ceiling stays hot after outside air cools. That pattern helps separate solar heat through the roof and patchy insulation from warm indoor air or equipment. Do not enter the roof space to measure it.",
+      status: "answered",
+      citations: officialCitationsById(["yourhome-insulation", "yourhome-passive-design-system"]),
+      confidence: "medium",
+      assumptions: ["Roof colour, shade, ceiling construction, insulation coverage and safe access have not been inspected."],
+      practicalSteps: [
+        "Record the three temperatures and time at the same ceiling point for several clear evenings.",
+        "From ground level, note which roof face receives late sun and when shade reaches it.",
+        "Arrange a safe insulation and roof-cavity assessment if the pattern points to the roof or ceiling.",
+      ],
+      toolActions: [],
+      suggestedQuestions: ["Which room and roof face are affected, and does the ceiling stay hot after the outdoor air cools?"],
+    });
+  }
+
   const continuingProgrammeConversation = priorUserMessages.length > 0
     && Boolean(catalogueProgramAnswer(userConversation));
   const currentDomainIntent = assistantDomainIntent(query);
@@ -3892,7 +3933,7 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out") {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "I am here for Australian home energy and upgrades. Ask me about comfort, bills, appliances, solar, batteries, EVs, rebates, quotes or an authorised trade-platform task.",
+        "Surge is here for Australian home energy and upgrades. It only covers Australian home energy and upgrade questions, including comfort, bills, appliances, solar, batteries, EVs, rebates, quotes and authorised trade workspace tasks.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -3948,7 +3989,7 @@ export function composeEnergyAssistantAnswer(
 
   if (/\b(?:windows?|glass|glazing)\b/i.test(query)
     && /\b(?:cold|freez(?:ing|y)?|chill|condensation|wet)\b/i.test(query)
-    && !/\b(?:rent|rental|renter|tenant|mould|mold|damp|shower|bathroom|draught|draft|weatherstripp?ing)\b/i.test(query)) {
+    && !/\b(?:rent|rental|renter|tenant|mould|mold|damp|shower|bathroom|draught|draft|weatherstripp?ing|secondary glazing)\b/i.test(query)) {
     return structured("glazing_shading", {
       directAnswer:
         "Cold windows often mean heat is moving quickly through the glass or frame, and gaps around the frame can make the room feel even colder. Condensation happens when warm indoor air touches a cold surface. Before replacing every window, check close-fitting curtains or blinds, gaps around frames, outside shade, drainage and whether the glass or frame is the coldest part. A better window can help, but the right fix depends on its direction, size, frame and your climate.",
@@ -6593,14 +6634,26 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "I will help you compare the right things without pushing a brand.";
+      "Surge does not recommend, rank or endorse brands. I will help you compare the right things without pushing a brand.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose
       ? "A heat-pump hot-water system uses electricity to move heat into the tank, which is why it can use much less energy than a standard electric tank. The catch is that the tank size, recovery time, winter weather, noise and location all need to suit the household."
       : spaceHeatingPurpose
         ? "For most Australian homes, reverse-cycle air conditioning is a strong electric starting point because it moves heat instead of making it directly, so the same electricity can provide more heating or cooling. Its real-world result still depends on climate, room size, insulation, layout and how it is installed."
-        : "‘Heat pump’ describes the way an appliance moves heat, not one single product. A reverse-cycle unit moves heat in or out of rooms for heating and cooling; a heat-pump hot-water unit moves heat into a water tank. Both can be efficient, but they solve different problems and need different sizing, locations and quotes.";
+        : "‘Heat pump’ describes the way an appliance moves heat, not one single product. A reverse-cycle unit moves heat in or out of rooms for heating and cooling; a heat-pump hot-water unit moves heat into a water tank. Both can be efficient, but they solve different problems and need different sizing, locations and quotes. First say whether it is for space heating and cooling, hot water, or solar water heating.";
+    const selectionIntroduction = !hotWaterPurpose && !spaceHeatingPurpose
+      ? `${independence} ${immediateCategoryAnswer}`
+      : `${immediateCategoryAnswer} ${independence}`;
+    const firstSelectionFact = missing[0] === "climate"
+      ? "The postcode sets the local design conditions used to check winter recovery, delivered capacity and efficiency."
+      : missing[0] === "demand"
+        ? "Next, record the household hot-water demand, including the busiest back-to-back showers or baths."
+        : missing[0] === "site"
+          ? "Next, confirm the electrical supply, installation space, noise limits and condensate drainage route."
+          : missing[0] === "temperaturePerformance"
+            ? "Next, compare delivered capacity retention and efficiency at the relevant outdoor temperature, not only the mild-test COP."
+            : "";
     const hotWaterKnownFacts = hotWaterPurpose ? [
       /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."
@@ -6624,7 +6677,7 @@ export function composeEnergyAssistantAnswer(
     if (missing.length) {
       return structured(hotWaterPurpose ? "heat_pump_hot_water" : "products_ratings", {
         directAnswer:
-          `${immediateCategoryAnswer} ${independence} ${hotWaterKnownFacts}`.trim(),
+          `${selectionIntroduction} ${firstSelectionFact} ${hotWaterKnownFacts}`.trim(),
         status: "needs_context",
         citations,
         confidence: "low",
@@ -6876,7 +6929,10 @@ export function composeEnergyAssistantAnswer(
             : !proposedSystem
               ? "Are you considering ducted reverse-cycle or separate split systems?"
               : "Do you have a quote or the exact proposed model numbers?";
-      const directAnswer = !postcode
+      const clarificationRequested = isClarificationRequest(query);
+      const directAnswer = clarificationRequested && existingSystem && !proposedSystem
+        ? `Reverse-cycle air conditioning is electric heating and cooling. Replacing ${existingSystem.toLowerCase()} could mean one ducted electric system serving several rooms, or separate split systems serving only the rooms you use. Ducted systems can provide familiar whole-home zoning but lose some heat through ducts; separate splits avoid those duct losses but need an indoor unit in each chosen area. The exact Victorian Energy Upgrades discount still depends on the proposed models and installation.`
+        : !postcode
         ? "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly."
         : !applicant
           ? `Thanks. ${postcode} is in Victoria. The next thing that changes the support and approval checks is whether you own the home, rent it, or need strata approval.`

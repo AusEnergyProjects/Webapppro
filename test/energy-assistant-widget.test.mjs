@@ -30,18 +30,29 @@ test("the energy guide is mounted once at the root and excluded from print or PD
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
 
-test("Surge opens with useful questions and keeps answers compact", () => {
-  for (const action of [
+test("Surge opens with a clean grouped roadmap and keeps answers conversational", () => {
+  for (const label of [
+    "Improve my home",
+    "Costs and support",
+    "Compare my options",
     "What should I upgrade first?",
-    "Why is one room uncomfortable?",
-    "How much could solar or a battery save me?",
-    "Which rebates could apply to me?",
+    "Why is one room too hot or too cold?",
+    "How much could solar, a battery or an EV save me?",
+    "Which rebates could apply to my home?",
     "Help me compare an energy quote",
+    "Which heating, hot water or cooking option suits my home?",
   ]) {
-    assert.match(widget, new RegExp(action));
+    assert.match(widget, new RegExp(label.replace(/[?]/g, "\\?")));
   }
   assert.match(widget, /Ask Surge/);
   assert.match(widget, /All things energy upgrades/);
+  assert.match(widget, /Hi, I am Surge/);
+  assert.match(widget, /I will explain it clearly and ask one useful question at a time/);
+  assert.match(widget, /START_ROADMAP\.map\(\(group\) =>/);
+  assert.match(widget, /messages\.length === 0 && \([\s\S]*styles\.welcome/);
+  assert.match(widget, /messages\.length === 0 && \([\s\S]*styles\.starters/);
+  assert.doesNotMatch(widget, /Quick tools|context\.tools\.map|styles\.pageTools/);
+  assert.doesNotMatch(styles, /\.pageTools|\.contextCard/);
   assert.doesNotMatch(widget, /\bAEA\b/);
   assert.doesNotMatch(widget, />AI chat</i);
   assert.match(widget, />Surge</);
@@ -66,23 +77,24 @@ test("the widget uses the canonical stateless assistant contract and never sends
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
-  assert.match(widget, /Surge does not read private account, project or quote records/);
-  assert.match(widget, /Surge does not read customer, job or certificate records/);
+  assert.match(widget, /I do not read private account, project or quote records/);
+  assert.match(widget, /I do not read customer, job or certificate records/);
   assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
 });
 
 test("only bounded local transcript, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
-  const persisted = widget.match(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/);
-  assert.ok(persisted);
-  assert.doesNotMatch(persisted[1], /\bopen\b/);
-  assert.match(persisted[1], /mode/);
-  assert.match(persisted[1], /messages:\s*boundedLocalMessages\(messages\)/);
-  assert.match(persisted[1], /continuation:\s*continuationRef\.current/);
-  assert.match(persisted[1], /lastActive/);
+  const persisted = [...widget.matchAll(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/g)];
+  assert.ok(persisted.length > 0);
+  const persistedSource = persisted.map((match) => match[1]).join("\n");
+  for (const match of persisted) assert.doesNotMatch(match[1], /\bopen\b/);
+  assert.match(persistedSource, /mode/);
+  assert.match(persistedSource, /messages:\s*boundedLocalMessages\(messages\)/);
+  assert.match(persistedSource, /continuation:\s*continuationRef\.current/);
+  assert.match(persistedSource, /lastActive/);
   assert.match(widget, /const MAX_LOCAL_MESSAGES = 40/);
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
-  assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
+  assert.doesNotMatch(persistedSource, /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
   assert.match(widget, /Chat history stays on this device for 30 days\. Your question and recent context are securely processed to answer you\./);
   assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
@@ -94,7 +106,7 @@ test("only bounded local transcript, continuation, last activity and guide mode 
   assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(""\)/);
   assert.match(widget, /const effectiveOpen = open && openPathname === pathname && !hidden/);
   assert.match(widget, /setOpenPathname\(pathname\);\s*setOpen\(true\)/);
-  assert.match(widget, /const rememberModeForNavigation = \(\) => \{\s*setOpen\(false\)/);
+  assert.doesNotMatch(widget, /const rememberModeForNavigation|setOpen\(saved\.open\)/);
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
@@ -151,6 +163,14 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.doesNotMatch(widget, /approved matched TLink trades/);
   assert.match(widget, /shared with matched trades/);
   assert.match(widget, /approved matched trades/);
+
+  const compiled = ts.transpileModule(functionSource(widget, "customerVisibleText"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const visibleText = Function(`${compiled}; return customerVisibleText;`)();
+  assert.equal(visibleText("Open TLink or Creditex", "public"), "Open the trade platform");
+  assert.equal(visibleText("Open Creditex", "customer"), "Open the trade platform");
+  assert.equal(visibleText("Open TLink", "trade"), "Open TLink");
 });
 
 test("expired local conversations and explicit resets atomically clear transcript and lead state", () => {
@@ -176,9 +196,7 @@ test("trade and customer guide modes survive navigation into shared utility rout
   assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "trade"/);
   assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "customer"/);
   assert.match(widget, /const restoredMode = explicitRouteAudience\(pathname\) \|\| saved\.mode/);
-  assert.match(widget, /const rememberModeForNavigation = \(\) =>/);
   assert.match(widget, /mode:\s*context\.audience/);
-  assert.match(widget, /onClick=\{rememberModeForNavigation\}/);
   assert.match(widget, /mode:\s*record\?\.mode === "trade" \|\| record\?\.mode === "customer"/);
   assert.match(widget, /const nextMode = explicitRouteAudience\(pathname\) \|\| "public"/);
   assert.match(widget, /setMode\(nextMode\)/);
@@ -304,17 +322,31 @@ test("local continuation caps messages and recent API context and expires after 
   const recent = helpers.recentTurnsForRequest(active.messages);
   assert.ok(recent.length <= 8);
   assert.ok(recent.length > 0);
-  assert.ok(recent.every((turn) => turn.role === "user"));
-  assert.ok(recent.every((turn) => Number.parseInt(turn.content, 10) % 2 === 0));
+  assert.equal(recent[0].role, "user");
+  assert.ok(recent.some((turn) => turn.role === "assistant"));
+  assert.ok(recent.every((turn, index) => index === 0 || turn.role !== recent[index - 1].role));
+  assert.ok(recent.every((turn) =>
+    turn.role === (Number.parseInt(turn.content, 10) % 2 === 0 ? "user" : "assistant")));
   assert.ok(recent.reduce((total, turn) => total + turn.content.length, 0) <= 6_000);
 
-  const compactUserHistory = Array.from({ length: 12 }, (_, index) => ({
-    role: "user",
+  const compactConversation = Array.from({ length: 12 }, (_, index) => ({
+    role: index % 2 === 0 ? "user" : "assistant",
     content: `fact-${index}`,
   }));
   assert.deepEqual(
-    helpers.recentTurnsForRequest(compactUserHistory).map((turn) => turn.content),
-    compactUserHistory.slice(-8).map((turn) => turn.content),
+    helpers.recentTurnsForRequest(compactConversation).map((turn) => turn.content),
+    compactConversation.slice(-8).map((turn) => turn.content),
+  );
+  assert.deepEqual(
+    helpers.recentTurnsForRequest([
+      { role: "user", content: "first attempt" },
+      { role: "user", content: "clarified attempt" },
+      { role: "assistant", content: "previous Surge answer" },
+    ]),
+    [
+      { role: "user", content: "clarified attempt" },
+      { role: "assistant", content: "previous Surge answer" },
+    ],
   );
 
   const expired = helpers.savedConversation({
@@ -496,22 +528,32 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /matchMedia\("\(max-width: 640px\)"\)/);
   assert.match(widget, /document\.body\.style\.overflow = "hidden"/);
   assert.match(widget, /data-mascot-state=\{messages\.length > 0 \? "returning" : "idle"\}/);
-  assert.match(widget, /className=\{styles\.mascot\}/);
-  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*94px[\s\S]*width:\s*82px/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*96px[\s\S]*width:\s*84px/);
+  assert.match(widget, /function SurgeMascot/);
+  assert.match(widget, /<SurgeMascot \/>/);
+  assert.match(widget, /<SurgeMascot peeking \/>/);
+  assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*102px[\s\S]*width:\s*82px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*100px[\s\S]*width:\s*80px/);
   assert.match(widget, /mascotProngShine/);
   assert.match(widget, /mascotBodyShade/);
   assert.match(widget, /mascotSmile/);
   assert.match(widget, /mascotCore/);
   assert.match(widget, /mascotCircuit/);
+  assert.match(widget, /mascotFaceScreen/);
+  assert.match(widget, /mascotPanelSeam/);
+  assert.match(widget, /mascotStatus/);
   assert.match(widget, /aria-label="Hide Surge mascot"/);
   assert.match(widget, /aria-label="Open Ask Surge"/);
+  assert.match(widget, /aria-label="Bring Surge back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
+  assert.match(widget, /setMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);
-  assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-7px/);
+  assert.match(styles, /\.launcherPeek\s*\{[\s\S]*height:\s*80px[\s\S]*width:\s*68px/);
+  assert.match(styles, /\.mascotPeeking\s*\{[\s\S]*right:\s*-18px/);
+  assert.match(styles, /\.launcherDismiss::after\s*\{[\s\S]*inset:\s*-9px/);
   for (const state of ["surgeIdle", "surgeHello", "surgeReturning"]) {
     assert.match(styles, new RegExp(`@keyframes ${state}`));
   }
+  assert.match(styles, /@keyframes surgePeek/);
   assert.match(styles, /prefers-reduced-motion:[\s\S]*\.mascot/);
   assert.match(styles, /\.panel\s*\{[\s\S]*width:\s*400px/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);

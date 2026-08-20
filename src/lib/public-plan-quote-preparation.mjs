@@ -5,7 +5,7 @@ export const PUBLIC_PLAN_QUOTE_PREPARATION_VERSION =
 export const PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION =
   "2026-08-11-verified-matched-trade-quote-photos-v1";
 export const PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE =
-  "Share my selected quote answers and photos with approved TLink trades matched to this enquiry";
+  "Share my selected quote answers and photos with approved trades matched to this enquiry";
 export const PUBLIC_PLAN_QUOTE_MAX_FILES = 12;
 export const PUBLIC_PLAN_QUOTE_MAX_FILE_BYTES = 8 * 1024 * 1024;
 export const PUBLIC_PLAN_QUOTE_MAX_TOTAL_BYTES = 48 * 1024 * 1024;
@@ -132,12 +132,6 @@ const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
     options: ["Recent bills and building plans", "Recent bills only", "Building plans only", "A site visit without documents", "Not sure"],
   },
   {
-    id: "solar-scope",
-    label: "What should the solar quote cover?",
-    services: ["solar"],
-    options: ["A new system", "Add to an existing system", "Replace an existing system", "Need advice"],
-  },
-  {
     id: "solar-existing-system",
     label: "What solar equipment is already at the property?",
     services: ["solar"],
@@ -190,12 +184,6 @@ const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
     label: "What is known about the switchboard and electrical supply?",
     services: ["battery"],
     options: ["Modern single-phase switchboard", "Modern three-phase switchboard", "Older switchboard or fuse board", "An electrician or installer has assessed the supply", "No electrical assessment yet", "Not sure"],
-  },
-  {
-    id: "heating-coverage",
-    label: "How much of the home should the heating or cooling quote cover?",
-    services: ["heating-cooling"],
-    options: ["One main room", "Several rooms", "Whole home", "Need advice"],
   },
   {
     id: "heating-existing-system",
@@ -387,9 +375,7 @@ const ENERGY_ASSISTANT_QUESTION_DEFINITIONS = Object.freeze([
 
 const PUBLIC_PLAN_QUESTION_IDS = new Set([
   "timing",
-  "solar-scope",
   "battery-priority",
-  "heating-coverage",
   "electric-cooking-scope",
   "other-scope",
 ]);

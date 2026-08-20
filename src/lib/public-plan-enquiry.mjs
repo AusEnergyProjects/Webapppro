@@ -9,10 +9,16 @@ import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 export const PUBLIC_PLAN_ENQUIRY_KIND = "home-plan-upgrade";
 
 export const PUBLIC_PLAN_CONSENT_PURPOSE =
-  "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved matched TLink trades";
+  "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved trades matched to my area";
 
 export const PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
+  "2026-08-21-quote-preparation-sharing-notice-v8";
+
+const LEGACY_PUBLIC_PLAN_CONSENT_NOTICE_VERSION =
   "2026-08-11-quote-preparation-sharing-notice-v7";
+
+const LEGACY_PUBLIC_PLAN_CONSENT_PURPOSE =
+  "Email my private plan and share my email, postcode, services, message, quote answers and selected photos with approved matched TLink trades";
 
 export const ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION =
   "2026-08-20-energy-assistant-trade-sharing-v1";
@@ -30,6 +36,18 @@ const publicPlanContactReleasePolicies = Object.freeze([
   Object.freeze({
     noticeVersion: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
     purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
+    requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
+    allowedDisclosedFields: Object.freeze([
+      ...publicPlanContactReleaseRequiredFields,
+      "customer_name",
+      "customer_phone",
+      "customer_address",
+      "customer_message",
+    ]),
+  }),
+  Object.freeze({
+    noticeVersion: LEGACY_PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    purpose: LEGACY_PUBLIC_PLAN_CONSENT_PURPOSE,
     requiredDisclosedFields: publicPlanContactReleaseRequiredFields,
     allowedDisclosedFields: Object.freeze([
       ...publicPlanContactReleaseRequiredFields,
@@ -110,10 +128,9 @@ export function isRecognizedPublicPlanContactReleaseConsent(
 
 export function publicPlanContactReleaseConsentSql(releaseAlias) {
   const alias = publicPlanContactReleaseAlias(releaseAlias);
-  return `(${publicPlanContactReleasePolicies.map((policy) => `(
-    ${alias}.notice_version = ${sqlLiteral(policy.noticeVersion)}
-    AND ${alias}.consent_purpose = ${sqlLiteral(policy.purpose)}
-  )`).join(" OR ")})`;
+  return `CASE ${alias}.notice_version ${publicPlanContactReleasePolicies.map((policy) =>
+      `WHEN ${sqlLiteral(policy.noticeVersion)} THEN ${sqlLiteral(policy.purpose)}`
+    ).join(" ")} ELSE NULL END = ${alias}.consent_purpose`;
 }
 
 export function publicPlanContactReleaseDisclosedFieldsAreValid(

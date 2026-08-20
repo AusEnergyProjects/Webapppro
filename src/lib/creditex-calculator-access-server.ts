@@ -65,7 +65,7 @@ export async function requireCreditexCalculatorAccess(
     throw new CreditexCalculatorAccessError(
       "CREDITEX_CALCULATOR_ACCESS_REQUIRED",
       403,
-      "An active Creditex membership or verified installer account is required to use this calculator.",
+      "An authorised compliance or verified trade workspace account is required to use this calculator.",
     );
   }
 }

@@ -6,6 +6,8 @@ import { DatabaseSync } from "node:sqlite";
 import {
   ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
   ENERGY_ASSISTANT_TRADE_SHARING_PURPOSE,
+  PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+  PUBLIC_PLAN_CONSENT_PURPOSE,
   publicPlanContactReleaseConsentSql,
 } from "../src/lib/public-plan-enquiry.mjs";
 import { publicTradeContactForMatchedLead } from "../src/lib/public-trade-lead-access.mjs";
@@ -104,8 +106,8 @@ function releaseRow(overrides = {}) {
     public_contact_postcode: "3000",
     opportunity_postcode: "3000",
     public_contact_granted_at: "2026-08-11T01:02:03.000Z",
-    public_contact_notice_version: V7_NOTICE,
-    public_contact_consent_purpose: V7_PURPOSE,
+    public_contact_notice_version: PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    public_contact_consent_purpose: PUBLIC_PLAN_CONSENT_PURPOSE,
     public_contact_disclosed_fields: JSON.stringify(requiredFields),
     public_customer_email: "CUSTOMER@example.com",
     public_customer_first_name: "Private",
@@ -124,8 +126,8 @@ function releaseRow(overrides = {}) {
 test("trade lead reads split base rows from any-release context and validate before serialization", () => {
   const consentGuard = publicPlanContactReleaseConsentSql("public_contact");
   assert.ok(consentGuard.length < 1_200, "lead read consent guard must stay shallow for D1");
-  assert.equal((consentGuard.match(/\bAND\b/g) || []).length, 4);
-  assert.equal((consentGuard.match(/\bOR\b/g) || []).length, 3);
+  assert.equal((consentGuard.match(/\bWHEN\b/g) || []).length, 5);
+  assert.equal((consentGuard.match(/\bELSE\b/g) || []).length, 1);
 
   const database = new DatabaseSync(":memory:");
   database.exec("CREATE TABLE public_contact (id TEXT, notice_version TEXT, consent_purpose TEXT)");
@@ -133,6 +135,11 @@ test("trade lead reads split base rows from any-release context and validate bef
   insert.run("v4", V4_NOTICE, V4_PURPOSE);
   insert.run("v6", V6_NOTICE, V6_PURPOSE);
   insert.run("v7", V7_NOTICE, V7_PURPOSE);
+  insert.run(
+    "current",
+    PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
+    PUBLIC_PLAN_CONSENT_PURPOSE,
+  );
   insert.run(
     "assistant",
     ENERGY_ASSISTANT_TRADE_SHARING_NOTICE_VERSION,
@@ -144,7 +151,7 @@ test("trade lead reads split base rows from any-release context and validate bef
     database.prepare(`SELECT id FROM public_contact WHERE ${consentGuard} ORDER BY id`)
       .all()
       .map((row) => row.id),
-    ["assistant", "v4", "v6", "v7"],
+    ["assistant", "current", "v4", "v6", "v7"],
   );
   database.close();
 
@@ -497,7 +504,7 @@ test("customer-project status mutation rechecks matching consent at mutation tim
   database.close();
 });
 
-test("v4, v6 and v7 contact releases are projected only from their exact policy and selected fields", () => {
+test("current and legacy contact releases are projected only from their exact policy and selected fields", () => {
   const v4 = publicTradeContactForMatchedLead(releaseRow({
     public_contact_notice_version: V4_NOTICE,
     public_contact_consent_purpose: V4_PURPOSE,
@@ -514,6 +521,7 @@ test("v4, v6 and v7 contact releases are projected only from their exact policy 
   );
 
   for (const [noticeVersion, purpose] of [
+    [PUBLIC_PLAN_CONSENT_NOTICE_VERSION, PUBLIC_PLAN_CONSENT_PURPOSE],
     [V6_NOTICE, V6_PURPOSE],
     [V7_NOTICE, V7_PURPOSE],
   ]) {

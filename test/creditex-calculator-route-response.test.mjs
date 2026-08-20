@@ -45,7 +45,7 @@ test("calculator route descriptors preserve authentication and bounded schema re
     assert.deepEqual(describeCreditexCalculatorRouteError(new Error(message)), {
       status: 503,
       code: "CREDITEX_SCHEMA_GUARDS_INSTALLING",
-      error: "Preparing the governed Creditex calculator.",
+      error: "Preparing the governed rebate calculator.",
       headers: { "Retry-After": "1" },
     });
   }
@@ -63,7 +63,7 @@ test("calculator route descriptors preserve authentication and bounded schema re
       status: 503,
       code: "CREDITEX_SCHEMA_GUARD_REVIEW_REQUIRED",
       error:
-        "Creditex calculator integrity controls need a governed upgrade before this request can continue.",
+        "The rebate calculator integrity controls need a governed upgrade before this request can continue.",
     });
     assert.doesNotMatch(JSON.stringify(descriptor), /guard_name|table_name/);
   }

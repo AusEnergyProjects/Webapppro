@@ -50,11 +50,15 @@ export default async function HomeEnergyPlanPage({
   const suppliedBudget = value(params.budgetRange);
   const suppliedPostcode = value(params.postcode).replace(/\D/g, "").slice(0, 4);
   const suppliedState = value(params.addressState).toUpperCase();
+  const validGoals = new Set(
+    customerProjectOptions.goals.map(([optionValue]) => optionValue),
+  );
+  const initialGoals = suppliedGoals.filter((goal) => validGoals.has(goal));
   const plan = createCustomerProjectPlan({
-    goals: suppliedGoals.length ? suppliedGoals : ["lower-bills"],
+    goals: initialGoals.length ? initialGoals : ["lower-bills"],
     pace: value(params.pace),
     situation: value(params.situation),
-    approvalContext: value(params.approvalContext) || "not_sure",
+    approvalContext: value(params.approvalContext),
     budgetRange: suppliedBudget,
     postcode: suppliedPostcode,
     addressState: suppliedState,
@@ -95,10 +99,12 @@ export default async function HomeEnergyPlanPage({
       </header>
       <HomeEnergyPlanner
         initialSelection={{
-          goals: plan.goals.length ? plan.goals : ["lower-bills"],
+          goals: initialGoals,
           pace: plan.pace,
-          situation: plan.situation,
-          approvalContext: plan.approvalContext,
+          situation: value(params.situation) ? plan.situation : "",
+          approvalContext: value(params.approvalContext)
+            ? plan.approvalContext
+            : "",
           budgetRange: validBudgets.has(suppliedBudget)
             ? suppliedBudget
             : "not_set",
@@ -106,20 +112,26 @@ export default async function HomeEnergyPlanPage({
           addressState: customerProjectOptions.states.includes(suppliedState)
             ? suppliedState
             : "",
-          features: plan.features,
-          propertyType: plan.propertyContext.propertyType || "",
-          storeys: plan.propertyContext.storeys || "",
-          ageBand: plan.propertyContext.ageBand || "",
-          floorArea: plan.propertyContext.floorArea || "",
-          occupants: plan.propertyContext.occupants || "",
-          sharedWalls: plan.propertyContext.sharedWalls || "",
-          roofType: plan.propertyContext.roofType || "",
-          roofColour: plan.propertyContext.roofColour || "",
-          roofForm: plan.propertyContext.roofForm || "",
-          roofCondition: plan.propertyContext.roofCondition || "",
-          switchboard: plan.propertyContext.switchboard || "",
-          wallConstruction: plan.propertyContext.wallConstruction || "",
-          floorConstruction: plan.propertyContext.floorConstruction || "",
+          features: suppliedFeatures.length ? plan.features : [],
+          propertyType: value(params.propertyType)
+            ? plan.propertyContext.propertyType || ""
+            : "",
+          storeys: value(params.storeys) ? plan.propertyContext.storeys || "" : "",
+          ageBand: value(params.ageBand) ? plan.propertyContext.ageBand || "" : "",
+          floorArea: value(params.floorArea) ? plan.propertyContext.floorArea || "" : "",
+          occupants: value(params.occupants) ? plan.propertyContext.occupants || "" : "",
+          sharedWalls: value(params.sharedWalls) ? plan.propertyContext.sharedWalls || "" : "",
+          roofType: value(params.roofType) ? plan.propertyContext.roofType || "" : "",
+          roofColour: value(params.roofColour) ? plan.propertyContext.roofColour || "" : "",
+          roofForm: value(params.roofForm) ? plan.propertyContext.roofForm || "" : "",
+          roofCondition: value(params.roofCondition) ? plan.propertyContext.roofCondition || "" : "",
+          switchboard: value(params.switchboard) ? plan.propertyContext.switchboard || "" : "",
+          wallConstruction: value(params.wallConstruction)
+            ? plan.propertyContext.wallConstruction || ""
+            : "",
+          floorConstruction: value(params.floorConstruction)
+            ? plan.propertyContext.floorConstruction || ""
+            : "",
         }}
       />
       <SiteFooter>

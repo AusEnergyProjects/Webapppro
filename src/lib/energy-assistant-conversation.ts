@@ -15,6 +15,38 @@ export type SurgeConversationState = {
   lastAnswerSummary: string;
 };
 
+export type SurgeConversationTurnIntent =
+  | "new_question"
+  | "answer_to_follow_up"
+  | "clarification"
+  | "correction"
+  | "topic_change"
+  | "correction_and_topic_change";
+
+const CLARIFICATION_PATTERN = /(?:^|\b)(?:huh|what do you mean|what does that mean|how so|why is that|i (?:do not|don't) understand|that (?:does not|doesn't) make sense|explain (?:that|it)|say that again|in (?:plain|simple) (?:english|words)|simpler)(?:\b|$)/i;
+const CORRECTION_PATTERN = /(?:^|\b)(?:actually|correction|sorry,? (?:i|it|we)|i meant|that is wrong|that's wrong|not .{0,36}(?:but|,)|i (?:do not|don't) (?:own|rent|have|use)|i (?:rent|own) rather than)(?:\b|$)/i;
+const TOPIC_CHANGE_PATTERN = /(?:(?:^|[.!?]\s*|,\s*)forget\b|\b(?:different question|new question|change (?:the )?(?:subject|topic)|switch (?:the )?(?:subject|topic)|moving on|instead,? (?:i|what|how|when|can)|anyway,? (?:i|what|how|when|can))\b)/i;
+
+export function classifySurgeConversationTurn(
+  message: string,
+  continuation: SurgeConversationState | null,
+): SurgeConversationTurnIntent {
+  const clean = message.trim();
+  const clarification = CLARIFICATION_PATTERN.test(clean);
+  const correction = CORRECTION_PATTERN.test(clean);
+  const topicChange = TOPIC_CHANGE_PATTERN.test(clean);
+
+  if (correction && topicChange) return "correction_and_topic_change";
+  if (clarification) return "clarification";
+  if (correction) return "correction";
+  if (topicChange) return "topic_change";
+  if (
+    continuation?.pendingQuestion
+    && clean.split(/\s+/).filter(Boolean).length <= 24
+  ) return "answer_to_follow_up";
+  return "new_question";
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

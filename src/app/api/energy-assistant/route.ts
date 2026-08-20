@@ -1,10 +1,14 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import {
-  handleEnergyAssistantRequest,
+  handleEnergyAssistantRequest as handleEnergyAssistantServerRequest,
   type SurgeModelAdmissionRequest,
   type SurgeModelCallReservation,
 } from "@/lib/energy-assistant-server";
+import {
+  generateSurgeModelAnswer,
+  type SurgeModelFailure,
+} from "@/lib/energy-assistant-model";
 import { resolveSurgeClientIdentity } from "@/lib/surge-client-identity";
 import {
   createSharedSurgeUsageGuard,
@@ -75,6 +79,50 @@ function usageGuardEnvironment() {
 
 function deniedReservation(): SurgeModelCallReservation {
   return { allowed: false };
+}
+
+function hostedString(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function hostedBoolean(value: string | undefined) {
+  if (value === undefined) return undefined;
+  if (/^(?:1|true|yes|on)$/i.test(value)) return true;
+  return false;
+}
+
+function reportModelFailure(failure: SurgeModelFailure) {
+  console.warn("Surge model used deterministic fallback.", {
+    code: failure.code,
+    ...(failure.providerStatus ? { providerStatus: failure.providerStatus } : {}),
+  });
+}
+
+function generateHostedModelAnswer(
+  modelRequest: Parameters<typeof generateSurgeModelAnswer>[0],
+) {
+  const source = env as unknown as Record<string, unknown>;
+  return generateSurgeModelAnswer(modelRequest, {
+    apiKey: hostedString(source, "OPENAI_API_KEY"),
+    model: hostedString(source, "SURGE_MODEL"),
+    enabled: hostedBoolean(hostedString(source, "SURGE_AI_ENABLED")),
+    onFailure: reportModelFailure,
+  });
+}
+
+function handleEnergyAssistantRequest(
+  request: Request,
+  dependencies: {
+    reserveModelCall: (
+      request: SurgeModelAdmissionRequest,
+    ) => Promise<SurgeModelCallReservation>;
+  },
+) {
+  return handleEnergyAssistantServerRequest(request, {
+    ...dependencies,
+    generateAnswer: generateHostedModelAnswer,
+  });
 }
 
 async function handle(request: Request) {

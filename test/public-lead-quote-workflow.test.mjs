@@ -74,7 +74,7 @@ function publicLeadRow(disclosedFields) {
     matched_categories: JSON.stringify(["hot-water"]),
     public_quote_answers: JSON.stringify([
       { questionId: "timing", label: "When would you like the work done?", answer: "Within 3 months", services: ["hot-water"] },
-      { questionId: "solar-scope", label: "What should the solar quote cover?", answer: "A new system", services: ["solar"] },
+      { questionId: "battery-priority", label: "What matters most for the battery quote?", answer: "Use more solar and lower bills", services: ["battery"] },
     ]),
     public_quote_preparation_id: "preparation-1",
     public_quote_preparation_version: "quote-preparation-v1",

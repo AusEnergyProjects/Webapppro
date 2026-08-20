@@ -4,7 +4,7 @@ import { JobInformationUpload } from "@/components/JobInformationUpload";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Upload requested job photos | TLink",
+  title: "Upload requested job photos | Australian Energy Assessments",
   description: "Privately add the photos requested by your installer.",
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",

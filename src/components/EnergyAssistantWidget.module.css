@@ -21,19 +21,19 @@
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 82px;
-  height: 94px;
+  height: 102px;
   justify-content: center;
   padding: 0;
   width: 82px;
 }
 
 .mascot {
-  height: 94px;
-  overflow: visible;
-  transform-origin: 55px 108px;
-  width: 82px;
   animation: surgeIdle 3.2s ease-in-out infinite;
-  filter: drop-shadow(0 7px 7px rgba(3, 31, 38, 0.24));
+  filter: drop-shadow(0 8px 8px rgba(3, 31, 38, 0.26));
+  height: 102px;
+  overflow: visible;
+  transform-origin: 60px 136px;
+  width: 82px;
 }
 
 .launcherDismiss {
@@ -45,20 +45,20 @@
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
-  font: 700 1.15rem/1 Arial, sans-serif;
-  height: 30px;
+  font: 800 1rem/1 Arial, sans-serif;
+  height: 27px;
   justify-content: center;
   padding: 0;
   position: absolute;
-  right: -5px;
-  top: -4px;
-  width: 30px;
+  right: -3px;
+  top: 0;
+  width: 27px;
   z-index: 2;
 }
 
 .launcherDismiss::after {
   content: "";
-  inset: -7px;
+  inset: -9px;
   position: absolute;
 }
 
@@ -70,38 +70,51 @@
 
 .launcherPeek {
   align-items: center;
-  background: linear-gradient(145deg, #07574f, #043746);
+  background: linear-gradient(145deg, rgba(7, 87, 79, 0.98), rgba(4, 43, 61, 0.98));
   border: 1px solid #72e2cf;
-  border-radius: 16px 0 0 16px;
+  border-radius: 20px 0 0 20px;
   box-shadow: 0 7px 18px rgba(3, 31, 38, 0.28);
   color: #ffffff;
   cursor: pointer;
   display: inline-flex;
-  height: 58px;
+  height: 80px;
   justify-content: center;
   margin-right: calc(-1 * max(18px, env(safe-area-inset-right)));
-  padding: 5px 8px 5px 6px;
-  width: 44px;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 68px;
 }
 
-.launcherPeek svg {
-  height: 44px;
-  overflow: visible;
-  width: 31px;
+.launcherPeek::after {
+  background: linear-gradient(90deg, transparent, rgba(126, 242, 207, 0.3));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
 }
 
-.launcherPeek path:first-child {
-  fill: none;
-  stroke: #d8e4e1;
-  stroke-linecap: round;
-  stroke-width: 3px;
+.mascotPeeking {
+  animation: surgePeek 2.8s ease-in-out infinite;
+  bottom: -13px;
+  height: 88px;
+  position: absolute;
+  right: -18px;
+  transform-origin: 60px 136px;
+  width: 72px;
 }
 
-.launcherPeek path:last-child {
-  fill: #31d7c4;
-  stroke: #ffffff;
-  stroke-linejoin: round;
-  stroke-width: 1.6px;
+.peekLabel {
+  color: #d9fff7;
+  font-size: 0.49rem;
+  font-weight: 900;
+  left: 5px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  position: absolute;
+  text-transform: uppercase;
+  top: 8px;
+  z-index: 2;
 }
 
 .launcher[data-mascot-state="returning"] .mascot {
@@ -115,41 +128,57 @@
 
 .mascotShadow {
   fill: rgba(3, 31, 38, 0.22);
-  transform-origin: 55px 120px;
+  transform-origin: 60px 143px;
 }
 
 .mascotProng {
-  fill: url("#surge-prong-gradient");
-  stroke: #052e3c;
-  stroke-width: 4.5px;
+  fill: url("#surge-metal");
+  stroke: #14343d;
+  stroke-width: 3px;
 }
 
 .mascotProngShine {
-  fill: #ffffff;
-  opacity: 0.72;
+  fill: none;
+  opacity: 0.78;
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-width: 2.2px;
 }
 
 .mascotBody {
-  fill: url("#surge-body-gradient");
-  stroke: #052e3c;
+  fill: url("#surge-shell");
+  stroke: #123942;
   stroke-linejoin: round;
-  stroke-width: 4.5px;
+  stroke-width: 3px;
 }
 
 .mascotBodyShade {
-  fill: #8e9e98;
-  opacity: 0.16;
+  fill: #34545a;
+  opacity: 0.13;
 }
 
 .mascotBodyHighlight {
   fill: #ffffff;
+  opacity: 0.62;
+}
+
+.mascotSidePanel {
+  fill: #0d7380;
   opacity: 0.72;
 }
 
+.mascotPanelSeam {
+  fill: none;
+  opacity: 0.66;
+  stroke: #25d7be;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+}
+
 .mascotCap {
-  fill: url("#surge-cap-gradient");
-  stroke: #052e3c;
-  stroke-width: 4.5px;
+  fill: url("#surge-armour");
+  stroke: #113943;
+  stroke-width: 3px;
 }
 
 .mascotCapShine {
@@ -159,15 +188,15 @@
 
 .mascotCapAccent {
   fill: none;
-  stroke: #087b89;
+  stroke: #055c69;
   stroke-linecap: round;
-  stroke-width: 2.5px;
-  opacity: 0.55;
+  stroke-width: 2px;
+  opacity: 0.64;
 }
 
 .mascotCircuit {
   fill: none;
-  opacity: 0.68;
+  opacity: 0.78;
   stroke: #e8fffa;
   stroke-linecap: round;
   stroke-width: 1.4px;
@@ -179,7 +208,7 @@
 }
 
 .mascotCore circle {
-  fill: url("#surge-core-gradient");
+  fill: url("#surge-energy");
   stroke: #d9fff8;
   stroke-width: 1.6px;
 }
@@ -191,13 +220,19 @@
   stroke-width: 0.7px;
 }
 
+.mascotShoulder {
+  fill: #0b3440;
+  stroke: #74f6dc;
+  stroke-width: 1.2px;
+}
+
 .mascotArm,
 .mascotFoot {
-  fill: #19bfb4;
-  stroke: #052e3c;
+  fill: url("#surge-armour");
+  stroke: #123942;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 4.5px;
+  stroke-width: 3px;
 }
 
 .mascotArmRight {
@@ -212,25 +247,38 @@
 
 .mascotEyes {
   animation: surgeBlink 4.4s ease-in-out infinite;
-  fill: #052e3c;
   transform-box: fill-box;
   transform-origin: center;
+}
+
+.mascotFaceScreen {
+  fill: #072a35;
+  stroke: #6e8f91;
+  stroke-width: 1.6px;
+}
+
+.mascotEyes ellipse {
+  fill: url("#surge-energy");
+  stroke: #8ffff0;
+  stroke-width: 1.2px;
 }
 
 .mascotEyes circle {
   fill: #ffffff;
 }
 
-.mascotCheek {
-  fill: #ffad9f;
-  opacity: 0.48;
-}
-
 .mascotSmile {
   fill: none;
-  stroke: #052e3c;
+  stroke: #86ffeb;
   stroke-linecap: round;
-  stroke-width: 4px;
+  stroke-width: 2.6px;
+}
+
+.mascotStatus {
+  fill: #6dffe2;
+  filter: drop-shadow(0 0 3px rgba(55, 255, 209, 0.9));
+  stroke: #079b8a;
+  stroke-width: 1px;
 }
 
 .launcher:focus-visible,
@@ -328,70 +376,60 @@
   scroll-behavior: smooth;
 }
 
-.contextCard {
-  background: #ffffff;
-  border: 1px solid #c8ded6;
-  border-radius: 14px;
+.welcome {
+  background: linear-gradient(145deg, #e9f8f3, #ffffff 72%);
+  border: 1px solid #b8d9cf;
+  border-radius: 15px;
   display: grid;
-  gap: 12px;
-  padding: 13px;
+  gap: 5px;
+  padding: 13px 14px;
 }
 
-.contextCard > p {
-  color: #48645b;
-  font-size: 0.72rem;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.pageTools {
-  border-top: 1px solid #dfebe7;
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-}
-
-.pageTools strong {
-  color: #315a50;
-  font-size: 0.63rem;
-  letter-spacing: 0.03em;
+.welcome > span {
+  color: #07825f;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.pageTools > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+.welcome h3 {
+  color: #103f39;
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0;
 }
 
-.pageTools a {
-  align-items: center;
-  background: #e9f7f2;
-  border: 1px solid #acd7c8;
-  border-radius: 9px;
-  color: #076149;
-  display: inline-flex;
-  font-size: 0.66rem;
-  font-weight: 850;
-  min-height: 44px;
-  padding: 8px 10px;
-  text-decoration: none;
+.welcome p {
+  color: #48645b;
+  font-size: 0.69rem;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .starters {
   display: grid;
-  gap: 9px;
+  gap: 11px;
 }
 
-.starters h3 {
-  color: #113d38;
-  font-size: 0.8rem;
-  margin: 0;
-}
-
-.starters > div {
+.starterGroup {
   display: grid;
-  gap: 7px;
+  gap: 6px;
+}
+
+.starterGroup h4 {
+  color: #356057;
+  font-size: 0.61rem;
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.starterGroup > div {
+  display: grid;
+  gap: 6px;
 }
 
 .starters button {
@@ -406,13 +444,24 @@
   font-size: 0.73rem;
   font-weight: 820;
   justify-content: space-between;
-  min-height: 46px;
+  min-height: 48px;
   padding: 9px 12px;
   text-align: left;
   width: 100%;
 }
 
-.starters button span {
+.starters button:hover:not(:disabled),
+.starters button:focus-visible {
+  background: #eaf8f3;
+  border-color: #69c9ad;
+}
+
+.starters button > span:first-child {
+  line-height: 1.35;
+  padding-right: 8px;
+}
+
+.starters button > span:last-child {
   color: #07845b;
   font-size: 1.25rem;
 }
@@ -1095,6 +1144,12 @@
   60% { transform: translateY(-3px) scale(1.02); }
 }
 
+@keyframes surgePeek {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  48% { transform: translateX(-4px) rotate(-1.5deg); }
+  62% { transform: translateX(-2px) rotate(1deg); }
+}
+
 @keyframes surgeWave {
   from { transform: rotate(0); }
   to { transform: rotate(-24deg); }
@@ -1122,18 +1177,23 @@
   }
 
   .launcher {
-    flex-basis: 84px;
-    height: 96px;
-    width: 84px;
+    flex-basis: 80px;
+    height: 100px;
+    width: 80px;
   }
 
   .mascot {
-    height: 96px;
-    width: 84px;
+    height: 100px;
+    width: 80px;
   }
 
   .launcherPeek {
     margin-right: calc(-1 * max(14px, env(safe-area-inset-right)));
+  }
+
+  .mascotPeeking {
+    height: 88px;
+    width: 72px;
   }
 
   .panel {

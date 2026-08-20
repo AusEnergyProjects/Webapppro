@@ -160,7 +160,22 @@ test("quote preparation stays materially shorter than the plan and deduplicates 
     "window-coverings",
     "ev-charging",
   ];
-  assert.equal(publicPlanQuoteQuestionsForServices(screenshotServices).length, 3);
+  assert.deepEqual(
+    publicPlanQuoteQuestionsForServices(screenshotServices).map((question) => question.id),
+    ["timing"],
+  );
+  assert.deepEqual(
+    publicPlanQuoteQuestionsForServices(["solar"]).map((question) => question.id),
+    ["timing"],
+  );
+  assert.deepEqual(
+    publicPlanQuoteQuestionsForServices(["heating-cooling"]).map((question) => question.id),
+    ["timing"],
+  );
+  assert.doesNotMatch(
+    publicPlanQuoteQuestionsForServices(SERVICES).map((question) => question.label).join(" "),
+    /What should the solar quote cover|How much of the home should the heating or cooling quote cover/,
+  );
 });
 
 test("electric cooking reuses the plan fact and asks only for useful quote scope and wide photos", () => {
@@ -700,6 +715,9 @@ test("the public form progressively renders mobile capture, explicit sharing con
   assert.match(form, /setIncludeKnownPlanAnswers\(include\)/);
   assert.doesNotMatch(form, /What type of switchboard is installed|What is the main roof covering and condition|What heating or cooling equipment is installed now|What hot-water system is installed now|Which areas need heating or cooling, and what is wrong now|Where are the noticeable draughts|Are any openings required for ventilation or an unflued gas appliance|What useful records are available|What should the assessor focus on first/);
   assert.match(form, /Useful wide photos/);
+  assert.match(form, /<details className=\{styles\.quotePhotos\}>/);
+  assert.doesNotMatch(form, /<details className=\{styles\.quotePhotos\} open>/);
+  assert.match(form, /Optional\. Open this section if photos would help a trade understand the site/);
   assert.match(form, /Close-up labels are secondary/);
   assert.match(form, /accept="image\/jpeg,image\/png"/);
   assert.doesNotMatch(form, /image\/webp|WebP/);

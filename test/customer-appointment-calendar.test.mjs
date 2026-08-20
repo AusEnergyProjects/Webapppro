@@ -22,7 +22,7 @@ test("customer appointments create a timezone-aware Google link and private cale
   assert.equal(google.searchParams.get("dates"), "20260720T110000/20260720T130000");
   assert.equal(google.searchParams.get("ctz"), "Australia/Melbourne");
   assert.match(calendar.ics, /DTSTART;TZID=Australia\/Melbourne:20260720T110000/);
-  assert.match(calendar.ics, /TLink job reference TLJ-00000804/);
+  assert.match(calendar.ics, /Australian Energy Assessments job reference TLJ-00000804/);
   assert.doesNotMatch(calendar.ics, /address|street/i);
   assert.match(calendar.ics, /METHOD:PUBLISH/);
   const invitation = customerAppointmentCalendar({ workNumber: "TLJ-00000804", businessName: "Australian Energy Assessments",

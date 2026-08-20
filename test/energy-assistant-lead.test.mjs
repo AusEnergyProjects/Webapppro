@@ -242,9 +242,9 @@ function shareablePayload(overrides = {}) {
 test("quote preparation exposes bounded service-specific triage questions with an explicit unknown option", () => {
   const requiredByService = {
     assessment: ["assessment-purpose", "assessment-property-scale", "assessment-information"],
-    solar: ["solar-scope", "solar-existing-system", "solar-electricity-use", "solar-roof-site", "solar-electrical-export"],
+    solar: ["solar-existing-system", "solar-electricity-use", "solar-roof-site", "solar-electrical-export"],
     battery: ["battery-priority", "battery-solar-system", "battery-load-profile", "battery-installation-site", "battery-electrical-supply"],
-    "heating-cooling": ["heating-coverage", "heating-existing-system", "heating-home-load", "heating-outdoor-unit-site", "heating-electrical-supply"],
+    "heating-cooling": ["heating-existing-system", "heating-home-load", "heating-outdoor-unit-site", "heating-electrical-supply"],
     "hot-water": ["hot-water-existing-system", "hot-water-household-demand", "hot-water-location-access", "hot-water-electrical-supply"],
     "electric-cooking": ["electric-cooking-scope", "electric-cooking-existing-appliance", "electric-cooking-dimensions", "electric-cooking-electrical-supply", "electric-cooking-gas-scope"],
     "draught-proofing": ["draught-scope", "draught-openings", "draught-ventilation-safety"],

@@ -205,7 +205,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!requirement) return json({ ok: false, error: "Choose one of the requested photo categories." }, 400);
     if (!(file instanceof File) || !file.name) return json({ ok: false, error: "Choose or take a photo." }, 400);
     if (!ALLOWED_TYPES.has(file.type)) return json({ ok: false, error: "Upload a JPEG, PNG or WebP photo. Phone photos are converted to JPEG before sending." }, 400);
-    if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "This photo is still too large to send. Choose it again so TLink can prepare a smaller copy." }, 413);
+    if (file.size <= 0 || file.size > MAX_FILE_BYTES) return json({ ok: false, error: "This photo is still too large to send. Choose it again so a smaller copy can be prepared." }, 413);
     if (form.get("checklistVersion") !== PHOTO_REQUEST_CHECKLIST_VERSION
       || form.get("confirmClarity") !== "true"
       || form.get("confirmRelevance") !== "true"

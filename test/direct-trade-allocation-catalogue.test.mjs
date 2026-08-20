@@ -47,9 +47,11 @@ test("opportunity allocation reaches every qualified trade and preserves determi
   );
   assert.match(partnerRoute, /automatic-decline-refill/);
   assert.match(opportunityServer, /automatic-lead-intake/);
+  assert.match(opportunityServer, /const protectedPublicLead = payload\.sourceJourney === "public-home-energy-plan"[\s\S]+\|\| payload\.sourceJourney === "energy-assistant"/);
+  assert.match(opportunityServer, /const assistantDurableDispatch = payload\.sourceJourney === "energy-assistant"/);
   assert.match(
     opportunityServer,
-    /directTradeTriage\?\.autoSend === false[\s\S]+public-home-energy-plan[\s\S]+!contactRelease[\s\S]+\? "draft"[\s\S]+: "open"/,
+    /const opportunityStatus =[\s\S]+assistantDurableDispatch[\s\S]+\|\| payload\.directTradeTriage\?\.autoSend === false[\s\S]+\|\| \(protectedPublicLead && !contactRelease\)[\s\S]+\? "draft"[\s\S]+: "open"/,
   );
 });
 

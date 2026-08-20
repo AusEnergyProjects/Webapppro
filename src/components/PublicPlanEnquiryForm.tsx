@@ -1279,7 +1279,7 @@ export function PublicPlanEnquiryForm({
             className={`${styles.serviceChoices} ${styles.full}`}
           >
             <legend>Which services would you like help with?</legend>
-            <p id="public-plan-service-hint">Choose one, several or all. Every approved TLink trade that covers your area and offers at least one selected service can receive the lead.</p>
+            <p id="public-plan-service-hint">Choose one, several or all. Every approved trade that covers your area and offers at least one selected service can receive the lead.</p>
             <label className={`${styles.serviceChoice} ${styles.selectAll} ${allInterestsSelected ? styles.serviceChoiceSelected : ""}`}>
               <input
                 checked={allInterestsSelected}
@@ -1383,64 +1383,70 @@ export function PublicPlanEnquiryForm({
                   </label>
                 ))}
               </div>
-              <section className={styles.quotePhotos} aria-labelledby="public-plan-quote-photos-title">
-                <div>
-                  <h4 id="public-plan-quote-photos-title">Useful wide photos</h4>
+              <details className={styles.quotePhotos}>
+                <summary>
+                  <span>
+                    <strong id="public-plan-quote-photos-title">Useful wide photos</strong>
+                    <small>Optional. Open this section if photos would help a trade understand the site.</small>
+                  </span>
+                  <span>{quotePhotos.length} selected</span>
+                </summary>
+                <div className={styles.quotePhotosBody}>
                   <p>
                     Start with the whole appliance, work area or equipment. Close-up labels are secondary. Use your camera or choose JPEG or PNG images, up to {PUBLIC_PLAN_QUOTE_MAX_FILES} photos.
                   </p>
+                  <div className={styles.quotePhotoGrid}>
+                    {quotePhotoPrompts.map((prompt) => {
+                      const selectedForPrompt = quotePhotos.filter((selection) =>
+                        selection.promptId === prompt.id);
+                      const hintId = `public-plan-photo-hint-${prompt.id}`;
+                      return (
+                        <article className={styles.quotePhotoPrompt} key={prompt.id}>
+                          <div>
+                            <strong>{prompt.label}</strong>
+                            <p id={hintId}>{prompt.hint}</p>
+                          </div>
+                          <label className={styles.photoPicker}>
+                            <span>{selectedForPrompt.length ? "Add more photos" : "Add photos"}</span>
+                            <input
+                              accept="image/jpeg,image/png"
+                              aria-describedby={hintId}
+                              aria-label={`Add photos: ${prompt.label}`}
+                              capture="environment"
+                              multiple
+                              type="file"
+                              onChange={(event) => {
+                                void chooseQuotePhotos(prompt.id, event.currentTarget.files);
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          {selectedForPrompt.length ? (
+                            <ul className={styles.selectedPhotoList}>
+                              {selectedForPrompt.map((selection) => (
+                                <li key={selection.clientUploadId}>
+                                  <span>{selection.file.name}</span>
+                                  <button
+                                    aria-label={`Remove ${selection.file.name}`}
+                                    onClick={() => removeQuotePhoto(selection.clientUploadId)}
+                                    type="button"
+                                  >
+                                    Remove
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                  {quotePhotoError ? <p className={styles.serviceError} role="alert">{quotePhotoError}</p> : null}
+                  <p className={styles.quotePhotoPrivacy}>
+                    Selected photos are stripped of location metadata before private storage. They are never attached to email and only approved trades matched to this enquiry can open them after signing in.
+                  </p>
                 </div>
-                <div className={styles.quotePhotoGrid}>
-                  {quotePhotoPrompts.map((prompt) => {
-                    const selectedForPrompt = quotePhotos.filter((selection) =>
-                      selection.promptId === prompt.id);
-                    const hintId = `public-plan-photo-hint-${prompt.id}`;
-                    return (
-                      <article className={styles.quotePhotoPrompt} key={prompt.id}>
-                        <div>
-                          <strong>{prompt.label}</strong>
-                          <p id={hintId}>{prompt.hint}</p>
-                        </div>
-                        <label className={styles.photoPicker}>
-                          <span>{selectedForPrompt.length ? "Add more photos" : "Add photos"}</span>
-                          <input
-                                accept="image/jpeg,image/png"
-                            aria-describedby={hintId}
-                            aria-label={`Add photos: ${prompt.label}`}
-                            capture="environment"
-                            multiple
-                            type="file"
-                            onChange={(event) => {
-                              void chooseQuotePhotos(prompt.id, event.currentTarget.files);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        {selectedForPrompt.length ? (
-                          <ul className={styles.selectedPhotoList}>
-                            {selectedForPrompt.map((selection) => (
-                              <li key={selection.clientUploadId}>
-                                <span>{selection.file.name}</span>
-                                <button
-                                  aria-label={`Remove ${selection.file.name}`}
-                                  onClick={() => removeQuotePhoto(selection.clientUploadId)}
-                                  type="button"
-                                >
-                                  Remove
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </article>
-                    );
-                  })}
-                </div>
-                {quotePhotoError ? <p className={styles.serviceError} role="alert">{quotePhotoError}</p> : null}
-                <p className={styles.quotePhotoPrivacy}>
-                  Selected photos are stripped of location metadata before private storage. They are never attached to email and only approved trades matched to this enquiry can open them after signing in.
-                </p>
-              </section>
+              </details>
             </div>
           </details>
         </div>
@@ -1468,7 +1474,7 @@ export function PublicPlanEnquiryForm({
 
         <label className={styles.consent}>
           <input className={styles.consentBox} type="checkbox" checked={consent} onChange={(event) => changeConsent(event.target.checked)} />
-          <span>I agree that Australian Energy Assessments may send this enquiry to all approved TLink trades that service my area. Trades receive my email, postcode, selected services, message and any quote details or photos I chose to add. Relevant home plan facts are included only when I selected the read-only summary above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
+          <span>I agree that Australian Energy Assessments may send this enquiry to approved trades that service my area and offer at least one selected service. Trades receive my email, postcode, selected services, message and any quote details or photos I chose to add. Relevant home plan facts are included only when I selected the read-only summary above. My name, phone or full property address is shared only if I selected it above. My full plan and PDF stay private and are emailed only to me.</span>
         </label>
 
         <details className={styles.privacy}>

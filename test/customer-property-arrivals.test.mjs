@@ -263,7 +263,7 @@ test("direct installer contact is limited, audited and backed by mandatory trade
   assert.match(customerRoute, /abn: String\(proposal\.installer_abn/);
   assert.match(customerRoute, /customer\.installer_direct_contact_selected/);
   assert.match(customerUi, /Contact installer directly/);
-  assert.match(customerUi, /Agreements or arrangements\s+made\s+outside TLink/);
+  assert.match(customerUi, /Agreements or arrangements\s+made\s+outside the trade workspace/);
   assert.match(tradeProfileRoute, /isValidAbn/);
   assert.match(tradeProfileRoute, /Enter the business contact number/);
   assert.match(tradeProfileRoute, /valid business account email is required/);

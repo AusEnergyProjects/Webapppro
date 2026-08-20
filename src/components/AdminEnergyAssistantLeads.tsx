@@ -216,7 +216,7 @@ export function AdminEnergyAssistantLeads({
         <span>Optional human follow-up</span>
         <h1 id="energy-guide-follow-ups-title">Energy Guide follow-up requests</h1>
         <p>
-          These records exist only when a visitor explicitly asks AEA to follow up.
+          These records exist only when a visitor explicitly asks Australian Energy Assessments to follow up.
           Information and advice remain available without submitting contact details.
         </p>
       </div>
@@ -282,14 +282,14 @@ export function AdminEnergyAssistantLeads({
               <dt>Property and relationship</dt><dd>{readable(quoteBrief.propertyType)} | {readable(quoteBrief.tenure)}</dd>
               <dt>Budget</dt><dd>{readable(quoteBrief.budgetRange)}</dd>
               <dt>Contact preference</dt><dd>{readable(quoteBrief.contactPreference)} | {readable(quoteBrief.bestContactTime)}</dd>
-              <dt>AEA updates</dt><dd>{selected.marketingConsent ? "Opted in separately" : "Not requested"}</dd>
+              <dt>Australian Energy Assessments updates</dt><dd>{selected.marketingConsent ? "Opted in separately" : "Not requested"}</dd>
               <dt>Trade sharing</dt>
               <dd>
                 {selected.tradeSharing.accepted
                   ? selected.opportunityId
                     ? `Explicitly accepted and released at ${dateTime(selected.tradeSharing.grantedAt)}. Snapshot ${selected.tradeSharing.snapshotSha256}.`
-                    : `Explicitly accepted at ${dateTime(selected.tradeSharing.grantedAt)}, but held by AEA because the brief needs information. No trade visibility exists. Snapshot ${selected.tradeSharing.snapshotSha256}.`
-                  : "Not requested. This record is visible to AEA operations only."}
+                    : `Explicitly accepted at ${dateTime(selected.tradeSharing.grantedAt)}, but held by Australian Energy Assessments because the brief needs information. No trade visibility exists. Snapshot ${selected.tradeSharing.snapshotSha256}.`
+                  : "Not requested. This record is visible to Australian Energy Assessments operations only."}
               </dd>
               <dt>Trade opportunity</dt><dd>{selected.opportunityId || "None. No trade record was created."}</dd>
             </dl>

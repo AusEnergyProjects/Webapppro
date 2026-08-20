@@ -118,6 +118,156 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.input[1].role, "user");
 });
 
+test("clarification includes the previous Surge reply as bounded conversational context, not evidence", async () => {
+  const previousReply = "Replacing ducted gas can lead to either a ducted reverse-cycle system or separate split systems. Ducts can lose some heat before it reaches the rooms.";
+  let observedBody;
+  const result = await generateSurgeModelAnswer(request({
+    message: "huh? what do you mean",
+    recentTurns: [
+      { role: "user", content: "How big of a discount can I get on my aircon?" },
+      { role: "assistant", content: previousReply },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      goal: "Understand an air-conditioner upgrade",
+      pendingQuestion: "Is the existing heater ducted gas?",
+      lastAnswerSummary: "Compared ducted reverse-cycle with room split systems.",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-terra",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "I mean there are two common ways to replace ducted gas. One new system can keep using ducts for most rooms, while separate split systems heat or cool individual rooms. Splits avoid losing heat through old ductwork, but you may need more than one indoor unit.",
+        followUpQuestion: "Do you want most rooms conditioned or only the rooms you use most?",
+        state: state({
+          activeTopic: "rcac",
+          goal: "Understand an air-conditioner upgrade",
+          pendingQuestion: "Do you want most rooms conditioned or only the rooms you use most?",
+          lastAnswerSummary: "Explained ducted reverse-cycle and separate split systems in simple terms.",
+        }),
+      }));
+    },
+  });
+
+  assert.ok(result);
+  const developerPrompt = observedBody.input[0].content[0].text;
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.conversationCue.intent, "clarification");
+  assert.equal(context.conversationCue.lastAssistantReply, previousReply);
+  assert.equal(context.conversationCue.previousAnswerSummary, "Compared ducted reverse-cycle with room split systems.");
+  assert.deepEqual(context.priorTurns, [
+    { role: "user", content: "How big of a discount can I get on my aircon?" },
+    { role: "assistant", content: previousReply },
+  ]);
+  assert.match(developerPrompt, /explain the previous answer in simpler and more concrete words/i);
+  assert.match(developerPrompt, /never treat an assistant turn as evidence or a household fact/i);
+  assert.doesNotMatch(result.answer.directAnswer, /^Replacing ducted gas can lead/i);
+  assert.equal(result.answer.suggestedQuestions.length, 1);
+});
+
+test("correction and topic switch are explicit model cues and newest state facts replace old ones", async () => {
+  let observedContext;
+  const result = await generateSurgeModelAnswer(request({
+    message: "Actually I rent. Forget aircon, when should I get a battery?",
+    recentTurns: [
+      { role: "user", content: "I own the home and want an aircon rebate." },
+      { role: "assistant", content: "The existing heater changes the available air-conditioner discount." },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      goal: "Understand an air-conditioner upgrade",
+      facts: [
+        { key: "postcode", value: "3006" },
+        { key: "tenure", value: "owner" },
+      ],
+      pendingQuestion: "What heater are you replacing?",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedContext = JSON.parse(JSON.parse(options.body).input[1].content[0].text);
+      return jsonResponse(modelPayload({
+        answer: "As a renter, a permanently installed battery normally needs the owner's written agreement. Timing depends more on your evening electricity use, solar exports and tariff than on a particular month.",
+        followUpQuestion: "Does the home already have rooftop solar?",
+        state: state({
+          activeTopic: "battery_vpp",
+          goal: "Work out whether a battery makes sense",
+          facts: [
+            { key: "postcode", value: "3006" },
+            { key: "tenure", value: "renter" },
+          ],
+          pendingQuestion: "Does the home already have rooftop solar?",
+          lastAnswerSummary: "Explained the main battery timing factors for a renter.",
+        }),
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(observedContext.conversationCue.intent, "correction_and_topic_change");
+  assert.equal(result.continuation.activeTopic, "battery_vpp");
+  assert.deepEqual(result.continuation.facts.filter((fact) => fact.key === "tenure"), [
+    { key: "tenure", value: "renter" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result.continuation), /owner/i);
+});
+
+test("a short reply is identified as the answer to Surge's pending question", async () => {
+  let observedContext;
+  const result = await generateSurgeModelAnswer(request({
+    message: "ducted gas",
+    recentTurns: [
+      { role: "assistant", content: "What heating system are you replacing?" },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      pendingQuestion: "What heating system are you replacing?",
+      lastAnswerSummary: "Explained why the existing heater affects the available discount.",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedContext = JSON.parse(JSON.parse(options.body).input[1].content[0].text);
+      return jsonResponse(modelPayload({
+        answer: "Replacing ducted gas can be relevant to the Victorian air-conditioner discount, but the amount still depends on the proposed unit and installation.",
+        followUpQuestion: "Are you considering ducted reverse-cycle or separate split systems?",
+        state: state({
+          activeTopic: "rcac",
+          facts: [{ key: "existing_heating", value: "ducted gas" }],
+          pendingQuestion: "Are you considering ducted reverse-cycle or separate split systems?",
+          lastAnswerSummary: "Explained how replacing ducted gas affects the air-conditioner decision.",
+        }),
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(observedContext.conversationCue.intent, "answer_to_follow_up");
+  assert.equal(observedContext.conversationCue.pendingQuestion, "What heating system are you replacing?");
+  assert.deepEqual(result.continuation.facts, [
+    { key: "existing_heating", value: "ducted gas" },
+  ]);
+});
+
+test("a substantially repeated provider answer is rejected instead of being shown twice", async () => {
+  const previousReply = "The discount depends on the eligible unit, the heater being replaced and the installation. Compare the final installed price, not only the advertised discount.";
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "huh? what do you mean",
+    recentTurns: [{ role: "assistant", content: previousReply }],
+    continuation: state({ lastAnswerSummary: "Explained why the discount is not fixed." }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: previousReply })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected" }]);
+});
+
 test("only the reviewed Terra model is allowed", async () => {
   const previousModel = process.env.SURGE_MODEL;
   let calls = 0;
@@ -336,6 +486,42 @@ test("disabled model path returns null without calling the provider", async () =
     if (previous === undefined) delete process.env.SURGE_AI_ENABLED;
     else process.env.SURGE_AI_ENABLED = previous;
   }
+});
+
+test("an explicit hosted enabled setting overrides a stale process-level disabled value", async () => {
+  const previous = process.env.SURGE_AI_ENABLED;
+  process.env.SURGE_AI_ENABLED = "false";
+  let calls = 0;
+  try {
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "hosted-test-api-key",
+      model: "gpt-5.6-terra",
+      enabled: true,
+      fetch: async () => {
+        calls += 1;
+        return jsonResponse(modelPayload());
+      },
+    });
+    assert.ok(result);
+    assert.equal(calls, 1);
+  } finally {
+    if (previous === undefined) delete process.env.SURGE_AI_ENABLED;
+    else process.env.SURGE_AI_ENABLED = previous;
+  }
+});
+
+test("failure observability contains only a safe code and provider status", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-terra",
+    fetch: async () => new Response("secret provider body that must not be logged", { status: 429 }),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{ code: "provider_http_error", providerStatus: 429 }]);
+  assert.doesNotMatch(JSON.stringify(failures), /secret provider body|test-api-key/i);
 });
 
 test("API secret is never included in the serialized request body, estimate or result", async () => {

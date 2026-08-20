@@ -46,19 +46,15 @@ test("customer account destinations expose one consistent navigation contract", 
   );
 });
 
-test("customer trade access is a branded and role-gated TLink destination", () => {
-  assert.match(customerDashboard, /import \{ TLinkMark \} from "\.\/TLinkChrome"/);
+test("customer trade access is a plain and role-gated trade workspace destination", () => {
+  assert.doesNotMatch(customerDashboard, /import \{ TLinkMark \} from "\.\/TLinkChrome"/);
   assert.match(
     customerNavigation,
     /account\.tradeWorkspace[\s\S]*?href="\/direct-trade\/dashboard"/,
   );
-  assert.match(customerNavigation, /aria-label="Open the TLink trade workspace"/);
-  assert.match(
-    customerNavigation,
-    /<TLinkMark[\s\S]*?className="customer-dashboard-nav-tlink-mark"[\s\S]*?size=\{24\}/,
-  );
-  assert.match(customerNavigation, />TLink<\/span>/);
-  assert.doesNotMatch(customerNavigation, />Trade workspace<\/a>/);
+  assert.match(customerNavigation, /aria-label="Open the trade workspace"/);
+  assert.match(customerNavigation, />Trade workspace<\/span>/);
+  assert.doesNotMatch(customerNavigation, /\bTLink\b/);
 });
 
 test("TLink headers keep an obvious reciprocal AEA home link", () => {
