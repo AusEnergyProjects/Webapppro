@@ -121,6 +121,17 @@ const comfortQuestionIds = [
   "heating-cooling-systems",
 ];
 const systemQuestionIds = ["hot-water", "cooking", "solar", "battery", "ev"];
+const commonPlannerFeatureDefaults = [
+  ["comfort-concerns", "comfort-too-hot"],
+  ["ceiling-insulation", "ceiling-insulation-limited"],
+  ["glazing", "single-glazing"],
+  ["heating-cooling-systems", "reverse-cycle"],
+  ["hot-water", "electric-storage-hot-water"],
+  ["cooking", "electric-resistance-cooking"],
+  ["solar", "solar-none"],
+  ["battery", "battery-none"],
+  ["ev", "ev-none"],
+] as const;
 
 const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["assessment", "assessment"],
@@ -177,6 +188,16 @@ function questionAnswered(features: string[], questionId: string) {
   return question?.options.some(([value]) => features.includes(value)) ?? false;
 }
 
+function withCommonPlannerFeatureDefaults(features: string[]) {
+  let next = normalizeHomeFeatureSelections(features);
+  for (const [questionId, value] of commonPlannerFeatureDefaults) {
+    if (!questionAnswered(next, questionId)) {
+      next = updateHomeFeatureSelection(next, questionId, value, true);
+    }
+  }
+  return next;
+}
+
 function normalizeFloorInsulation(draft: PlannerDraft): PlannerDraft {
   if (draft.floorConstruction !== "slab_on_ground") return draft;
   return {
@@ -196,9 +217,21 @@ function defaultDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
     ...initialSelection,
     goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills"],
     pace: initialSelection.pace || "staged",
-    approvalContext: initialSelection.approvalContext || "not_sure",
+    situation: initialSelection.situation || "owner",
+    approvalContext: initialSelection.approvalContext || "none",
     budgetRange: initialSelection.budgetRange || "not_set",
+    features: withCommonPlannerFeatureDefaults(initialSelection.features),
+    propertyType: initialSelection.propertyType || "house",
+    occupants: initialSelection.occupants || "two",
     addressState: postcodeState || "",
+  });
+}
+
+function explicitInitialDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
+  return normalizeFloorInsulation({
+    ...initialSelection,
+    addressState: residentialStateFromPostcode(initialSelection.postcode) || "",
+    features: normalizeHomeFeatureSelections(initialSelection.features),
   });
 }
 
@@ -251,17 +284,17 @@ function sanitizeStoredDraft(candidate: Partial<PlannerDraft>): PlannerDraft {
   return normalizeFloorInsulation({
     goals: goals.length ? goals : ["lower-bills"],
     pace: storedOption(customerProjectOptions.paces, candidate.pace, "staged"),
-    situation: storedOption(customerProjectOptions.situations, candidate.situation),
-    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext, "not_sure"),
+    situation: storedOption(customerProjectOptions.situations, candidate.situation, "owner"),
+    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext, "none"),
     budgetRange: storedOption(customerProjectOptions.budgets, candidate.budgetRange, "not_set"),
     postcode,
     addressState: residentialStateFromPostcode(postcode) || "",
-    features: normalizeHomeFeatureSelections(rawFeatures),
-    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType),
+    features: withCommonPlannerFeatureDefaults(rawFeatures),
+    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType, "house"),
     storeys: storedOption(customerProjectOptions.storeys, candidate.storeys),
     ageBand: storedOption(customerProjectOptions.ageBands, candidate.ageBand),
     floorArea: storedOption(customerProjectOptions.floorAreas, candidate.floorArea),
-    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants),
+    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants, "two"),
     sharedWalls: storedOption(customerProjectOptions.sharedWalls, candidate.sharedWalls),
     roofType: storedOption(customerProjectOptions.roofTypes, candidate.roofType),
     roofColour: storedOption(customerProjectOptions.roofColours, candidate.roofColour),
@@ -361,7 +394,7 @@ function ChoiceTiles({
 export function HomeEnergyPlanner({ initialSelection }: { initialSelection: InitialPlannerSelection }) {
   const initialDraft = useMemo(() => defaultDraft(initialSelection), [initialSelection]);
   const [draft, setDraft] = useState<PlannerDraft>(initialDraft);
-  const [stage, setStage] = useState(() => firstIncompleteAssessmentStage(initialDraft));
+  const [stage, setStage] = useState(() => firstIncompleteAssessmentStage(explicitInitialDraft(initialSelection)));
   const [attemptedStage, setAttemptedStage] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -550,7 +583,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
       goals: ["lower-bills"],
       pace: "staged",
       situation: "",
-      approvalContext: "not_sure",
+      approvalContext: "none",
       budgetRange: "not_set",
       postcode: "",
       addressState: "",
@@ -582,7 +615,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
         <div>
           <span>{stage === 4 ? "Your roadmap is ready" : `Step ${stage + 1} of ${PRIMARY_STAGE_COUNT}`}</span>
           <strong>{stage === 4 ? "Your home energy roadmap" : stageNames[stage]}</strong>
-          <small>{stage === 4 ? "Edit any stage whenever you need" : "Four grouped steps, about 90 seconds"}</small>
+          <small>{stage === 4 ? "Edit any stage whenever you need" : "Common answers are selected. Review and tap Next."}</small>
         </div>
         <div className={styles.progressTrack} role="progressbar" aria-label="Assessment progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
           <span style={{ width: `${progressValue}%` }} />
@@ -605,7 +638,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <div className={styles.stageIntro}>
                   <span>Start with what matters</span>
                   <h2 id="assessment-stage-0" ref={headingRef} tabIndex={-1}>Tell us about the household</h2>
-                  <p>No account, address, bill or contact details are required. Your postcode selects relevant climate and program context.</p>
+                  <p>Enter the postcode, then review the common starting answers already selected below. Change anything that is different.</p>
                 </div>
                 <div className={styles.twoColumns}>
                   <label className={styles.textField}>
@@ -631,7 +664,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <div className={styles.stageIntro}>
                   <span>Comfort before equipment</span>
                   <h2 id="assessment-stage-1" ref={headingRef} tabIndex={-1}>How does the home feel and perform?</h2>
-                  <p>Choose the closest safe answer. Not sure is always valid and will be shown as an assumption, never silently guessed.</p>
+                  <p>Common starting answers are preselected. Not sure is always valid; change every highlighted answer that differs for this home.</p>
                 </div>
                 <HomeFeatureIntake idPrefix="quick-comfort" sectionId="comfort" questionId="comfort-concerns" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-insulation" sectionId="insulation" questionId="ceiling-insulation" selected={draft.features} onChange={(features) => setField("features", features)} />
@@ -649,7 +682,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                 <div className={styles.stageIntro}>
                   <span>Systems already at the home</span>
                   <h2 id="assessment-stage-2" ref={headingRef} tabIndex={-1}>What currently provides energy services?</h2>
-                  <p>These answers help sequence electrification and replacement decisions. They are household observations, not product or electrical verification.</p>
+                  <p>Common systems are preselected so you can review and continue. Change anything that differs; these are planning answers, not electrical verification.</p>
                 </div>
                 <HomeFeatureIntake idPrefix="quick-hot-water-cooking" sectionId="hot-water-cooking" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-solar" sectionId="solar-storage-transport" questionId="solar" selected={draft.features} onChange={(features) => setField("features", features)} />
@@ -710,7 +743,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
             <footer className={styles.actions}>
               {stage > 0 ? <button type="button" className={styles.secondaryButton} onClick={() => { setAttemptedStage(null); setStage((current) => current - 1); }}>Back</button> : <button type="button" className={styles.textButton} onClick={resetPlan}>Reset</button>}
-              <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Continue"}</button>
+              <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Next"}</button>
             </footer>
             <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. It is sent to Australian Energy Assessments only if you explicitly open the printable plan or request contact.</p>
           </section>

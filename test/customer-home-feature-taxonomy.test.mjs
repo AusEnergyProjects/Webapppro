@@ -819,7 +819,7 @@ test("evidence readiness is not an ordered roadmap action", () => {
 test("the public planner uses the accessible shared intake and bounded query handoff", () => {
   assert.match(publicPlanner, /HomeFeatureIntake/);
   assert.match(publicPlanner, /PRIMARY_STAGE_COUNT = 4/);
-  assert.match(publicPlanner, /Four grouped steps/);
+  assert.match(publicPlanner, /Common answers are selected\. Review and tap Next\./);
   assert.match(publicPlanner, /idPrefix="quick-comfort"/);
   assert.match(publicPlanner, /idPrefix="advanced-wall-insulation"/);
   assert.match(publicPlanner, /questionId="wall-insulation"/);
@@ -830,6 +830,24 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.doesNotMatch(publicPlanner, /Skip remaining home details/);
   assert.doesNotMatch(publicPlanner, /Skip this question/);
   assert.match(publicPlanner, /Not sure is always valid/);
+  assert.match(publicPlanner, /commonPlannerFeatureDefaults/);
+  for (const commonDefault of [
+    "comfort-too-hot",
+    "ceiling-insulation-limited",
+    "single-glazing",
+    "reverse-cycle",
+    "electric-storage-hot-water",
+    "electric-resistance-cooking",
+    "solar-none",
+    "battery-none",
+    "ev-none",
+  ]) {
+    assert.match(publicPlanner, new RegExp(commonDefault));
+  }
+  assert.match(publicPlanner, /situation: initialSelection\.situation \|\| "owner"/);
+  assert.match(publicPlanner, /propertyType: initialSelection\.propertyType \|\| "house"/);
+  assert.match(publicPlanner, /occupants: initialSelection\.occupants \|\| "two"/);
+  assert.match(publicPlanner, /stage === 3 \? "Build my roadmap" : "Next"/);
   assert.match(publicPlanner, /key: "ageBand"/);
   assert.match(publicPlanner, /key: "roofColour"/);
   assert.match(publicPlanner, /key: "roofForm"/);
@@ -850,7 +868,7 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.match(publicPlanner, /removeStoredAssessment/);
   assert.match(publicPlanner, /residentialStateFromPostcode\(draft\.postcode\)/);
   assert.match(publicPlanner, /previousStageRef\.current = stored\.stage/);
-  assert.match(publicPlanner, /firstIncompleteAssessmentStage\(initialDraft\)/);
+  assert.match(publicPlanner, /firstIncompleteAssessmentStage\(explicitInitialDraft\(initialSelection\)\)/);
   assert.match(publicPlanner, /if \(!householdComplete\) return 0/);
   assert.match(publicPlanner, /comfortQuestionIds\.every[\s\S]*return 1/);
   assert.match(publicPlanner, /systemQuestionIds\.every[\s\S]*return 2/);
