@@ -585,6 +585,8 @@ export function EnergyAssistantWidget() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<AssistantMessage[]>([]);
+  const hydrationStartedRef = useRef(false);
 
   const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState(false);
@@ -645,6 +647,18 @@ export function EnergyAssistantWidget() {
     }));
   };
 
+  const replaceMessages = (nextMessages: AssistantMessage[]) => {
+    const boundedMessages = boundedLocalMessages(nextMessages);
+    messagesRef.current = boundedMessages;
+    setMessages(boundedMessages);
+    storeSession(JSON.stringify({
+      open,
+      mode: context.audience,
+      messages: boundedMessages,
+      lastActive: [...boundedMessages].reverse().find((message) => message.createdAt)?.createdAt || "",
+    }));
+  };
+
   const clearLocalSession = useCallback(({
     nextMessages = [],
     nextStatus = "",
@@ -655,6 +669,7 @@ export function EnergyAssistantWidget() {
     resetMode?: boolean;
   } = {}) => {
     removeStoredSession();
+    messagesRef.current = nextMessages;
     setMessages(nextMessages);
     setHasUsefulAnswer(false);
     setServiceInterest(false);
@@ -684,14 +699,17 @@ export function EnergyAssistantWidget() {
   }, [pathname]);
 
   useEffect(() => {
+    if (hydrationStartedRef.current) return;
     let cancelled = false;
     window.queueMicrotask(() => {
       if (cancelled) return;
+      hydrationStartedRef.current = true;
       try {
         const stored = readStoredSession();
         if (stored) {
           const saved = savedConversation(JSON.parse(stored));
           setOpen(saved.open);
+          messagesRef.current = saved.messages;
           setMessages(saved.messages);
           setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
           setServiceInterest(saved.messages.some((message) =>
@@ -827,7 +845,7 @@ export function EnergyAssistantWidget() {
   const ask = async (question: string) => {
     const message = question.trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message || busy) return;
-    const recentTurns = recentTurnsForRequest(messages);
+    const recentTurns = recentTurnsForRequest(messagesRef.current);
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
       id: requestId,
@@ -845,7 +863,7 @@ export function EnergyAssistantWidget() {
       suggestions: [],
       actions: [],
     };
-    setMessages((current) => boundedLocalMessages([...current, userMessage]));
+    replaceMessages([...messagesRef.current, userMessage]);
     if (signalsServiceInterest(message)) setServiceInterest(true);
     setDraft("");
     setBusy(true);
@@ -872,7 +890,7 @@ export function EnergyAssistantWidget() {
       const replySource = record.reply ?? record.answer ?? record.message;
       const reply = parseMessage(replySource, "assistant");
       if (!reply) throw new Error("The guide returned an empty answer. Please try again.");
-      setMessages((current) => boundedLocalMessages([...current, reply]));
+      replaceMessages([...messagesRef.current, reply]);
       setHasUsefulAnswer(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The guide could not answer that question.");

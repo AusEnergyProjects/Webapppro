@@ -56,7 +56,7 @@ test("the first screen is task led and the answer card exposes decisions, limits
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
   assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
-  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messages\)/);
+  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current\)/);
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
@@ -78,6 +78,11 @@ test("only bounded local transcript, open state, last activity and guide mode ar
   assert.doesNotMatch(persisted[1], /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
   assert.match(widget, /continue for 30 days after your last question/);
   assert.match(widget, />\s*New conversation \/ Clear history/);
+  assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
+  assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
+  assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*storeSession\(JSON\.stringify/);
+  assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
+  assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
 });
 
 test("same-browser local continuation is explicit and does not create tracking identity", () => {
@@ -118,6 +123,7 @@ test("trade and customer guide modes survive navigation into shared utility rout
   assert.match(widget, /mode:\s*record\?\.mode === "trade" \|\| record\?\.mode === "customer"/);
   assert.match(widget, /const nextMode = explicitRouteAudience\(pathname\) \|\| "public"/);
   assert.match(widget, /setMode\(nextMode\)/);
+  assert.match(widget, /if \(hydrationStartedRef\.current\) return/);
 });
 
 test("browser storage failures cannot break widget hydration, persistence or reset", () => {
