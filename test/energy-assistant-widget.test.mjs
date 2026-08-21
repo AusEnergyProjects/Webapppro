@@ -384,6 +384,23 @@ test("browser storage failures cannot break widget hydration, persistence or res
   }
 });
 
+test("Surge keeps the newest completed home context synchronized across browser tabs", () => {
+  assert.match(widget, /profileUpdatedAtRef = useRef\(""\)/);
+  assert.match(widget, /event\.key !== STORAGE_KEY/);
+  assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
+  assert.match(widget, /incomingActivity <= currentActivity/);
+  assert.match(widget, /setProfileUpdatedAt\(new Date\(\)\.toISOString\(\)\)[\s\S]*updateSurgeProfileField/);
+});
+
+test("Surge inherits the platform typography roles instead of inventing tiny variants", () => {
+  assert.match(styles, /--surge-type-title: clamp\(1\.25rem, 2vw, 1\.375rem\)/);
+  assert.match(styles, /--surge-type-heading: var\(--type-card-title, 1\.125rem\)/);
+  assert.match(styles, /--surge-type-body: var\(--type-action, \.9375rem\)/);
+  assert.match(styles, /--surge-type-label: var\(--type-label, \.875rem\)/);
+  assert.match(styles, /\.panel button,[\s\S]{0,120}\.panel summary/);
+  assert.match(styles, /\.panel small,[\s\S]{0,120}\.panel fieldset > legend/);
+});
+
 test("local continuation caps messages and recent API context and expires after 30 days", () => {
   const helperSource = [
     functionSource(widget, "boundedLocalMessages"),
@@ -625,7 +642,15 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /Keep using Surge AI and your private plan without sharing contact details/);
   assert.match(widget, /No brand, product, supplier or installer is recommended/);
   assert.match(widget, /Keep exploring or change subject/);
-  assert.match(widget, /Continue asking or change subject/);
+  assert.match(widget, /Back to Surge AI/);
+  assert.match(widget, /className=\{styles\.leadReturn\}/);
+  assert.match(widget, /className=\{styles\.leadPrimary\}[\s\S]{0,160}>Save and continue</);
+  assert.match(widget, /className=\{styles\.leadTertiary\}[\s\S]{0,160}>Not sure \/ skip these</);
+  assert.match(widget, /className=\{styles\.leadSecondary\}[\s\S]{0,160}>Edit location or services</);
+  assert.match(styles, /\.leadPrimary\s*\{[\s\S]{0,260}linear-gradient[\s\S]{0,160}color:\s*#ffffff/);
+  assert.match(styles, /\.leadSecondary\s*\{[\s\S]{0,180}border:\s*1px solid #75ac9d/);
+  assert.match(widget, /const ask = async[\s\S]{0,240}if \(leadOpen\)[\s\S]{0,120}setLeadOpen\(false\)[\s\S]{0,120}setLeadStatus\(""\)/);
+  assert.match(widget, /container\.scrollTo\(\{[\s\S]{0,180}container\.scrollHeight/);
   assert.match(widget, /Australian Energy Assessments only/);
   assert.match(widget, /Matched trades \+ my private plan by email/);
   assert.match(widget, /Nothing is shared by default/);

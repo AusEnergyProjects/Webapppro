@@ -167,6 +167,30 @@ test("planner restoration only imports answers from reviewed stages including sw
   assert.equal(surgeProfileFieldIsUnknown(imported, field("switchboard")), false);
 });
 
+test("completed Surge context stays complete and a finished planner import is not reopened", () => {
+  let completed = EMPTY_SURGE_STARTER_PROFILE;
+  for (const step of SURGE_PROFILE_STEPS) completed = markSurgeProfileStepReviewed(completed, step);
+  const parsed = parseSurgeStarterProfile({ ...completed, completed: false });
+  assert.equal(parsed.completed, true, "all reviewed Surge fields are canonical completed context");
+  assert.equal(surgeProfileReviewedAnswerCount(parsed), SURGE_PROFILE_FIELDS.length);
+
+  let plannerProfile = EMPTY_SURGE_STARTER_PROFILE;
+  for (const profileField of SURGE_PROFILE_FIELDS) {
+    if (profileField.kind === "postcode") plannerProfile = answer(plannerProfile, profileField.id, "3006");
+    else {
+      const value = profileField.options?.find((option) =>
+        option.value && option.value !== profileField.unknownValue && option.value !== "not-sure")?.value;
+      if (value) plannerProfile = answer(plannerProfile, profileField.id, value);
+    }
+  }
+  for (const step of SURGE_PROFILE_STEPS) plannerProfile = markSurgeProfileStepReviewed(plannerProfile, step);
+  const plannerDraft = surgeHomeEnergyPlannerSession(plannerProfile).draft;
+  const plannerSession = createHomeEnergyPlannerSession(plannerDraft, 4);
+  const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(EMPTY_SURGE_STARTER_PROFILE, plannerSession);
+  assert.equal(restored.completed, true, "a fully reviewed planner session is sufficient saved home context");
+  assert.equal(restored.postcode, plannerDraft.postcode);
+});
+
 test("the transmitted profile summary keeps whole critical facts inside its hard bound", () => {
   let profile = EMPTY_SURGE_STARTER_PROFILE;
   const critical = [

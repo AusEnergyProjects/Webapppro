@@ -120,6 +120,7 @@ test("the futuristic header links to one dedicated always-present Surge AI page"
   assert.match(surgeHeaderButton, /prefetch=\{false\}/);
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
   assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Surge AI<\/strong>/);
+  assert.doesNotMatch(surgeHeaderButton, /Energy upgrade guide|site-surge-copy"[\s\S]{0,120}<small>/);
   assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>AI guide<\/span>/);
   assert.match(surgeRoute, /SiteHeader active="surge"/);
   assert.match(surgeRoute, /Surge AI \| Australian Energy Assessments/);
@@ -215,6 +216,7 @@ test("customer-facing pages use the shared powered-by footer", () => {
 
 test("shared visual foundation uses the polished responsive system without persistent compositor effects", () => {
   assert.doesNotMatch(layout, /fonts\.(?:googleapis|gstatic)\.com/);
+  assert.match(layout, /<body className="aea-platform">/);
   assert.match(styles, /--font-aea-body: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
   assert.match(styles, /--font-aea-heading: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
   assert.match(styles, /--font-aea-wordmark: Georgia, "Times New Roman", serif/);
@@ -233,6 +235,21 @@ test("shared visual foundation uses the polished responsive system without persi
   assert.match(styles, /radial-gradient\(circle at 8% -4%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
   assert.match(styles, /a:focus-visible/);
+});
+
+test("the customer platform uses one deliberate seven-role typography scale", () => {
+  for (const token of [
+    "--type-display", "--type-page-title", "--type-section-title", "--type-card-title",
+    "--type-body", "--type-label", "--type-action",
+  ]) assert.match(styles, new RegExp(`${token}:`));
+  assert.match(styles, /\.aea-platform \.wrap :where\(h1\)/);
+  assert.match(styles, /\.aea-platform \.wrap :where\(h2\)/);
+  assert.match(styles, /\.aea-platform \.wrap :where\(h3, h4\)/);
+  assert.match(styles, /body\.aea-platform main\.wrap p,/);
+  assert.match(styles, /body\.aea-platform main\.wrap button,/);
+  assert.match(styles, /body\.aea-platform main\.wrap small \{/);
+  assert.match(styles, /body\.aea-platform main\.wrap label,/);
+  assert.match(styles, /text-rendering: optimizeLegibility/);
 });
 
 test("shared layout and component tokens prevent page-level visual drift", () => {

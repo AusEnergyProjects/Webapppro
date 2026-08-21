@@ -1174,15 +1174,78 @@
 
 .leadSummary > div,
 .leadNav {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
 }
 
-.leadSummary button,
-.leadNav button,
-.leadStep > button {
+.leadNav {
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.leadReturn,
+.leadSecondary,
+.leadTertiary,
+.leadPrimary {
+  align-items: center;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 900;
+  justify-content: center;
   min-height: 44px;
+  padding: 9px 14px;
+}
+
+.leadReturn,
+.leadSecondary {
+  background: #ffffff;
+  border: 1px solid #75ac9d;
+  color: #16584a;
+}
+
+.leadReturn {
+  gap: 7px;
+  justify-self: start;
+}
+
+.leadReturn span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.leadTertiary {
+  background: #e8f5f1;
+  border: 1px solid #a8ccc1;
+  color: #285f52;
+}
+
+.leadPrimary {
+  background: linear-gradient(135deg, #069d6e, #18c794);
+  border: 1px solid #55dcb9;
+  box-shadow: 0 7px 18px rgba(0, 110, 79, 0.22);
+  color: #ffffff;
+  margin-inline-start: auto;
+}
+
+.leadReturn:hover,
+.leadSecondary:hover,
+.leadTertiary:hover,
+.leadReturn:focus-visible,
+.leadSecondary:focus-visible,
+.leadTertiary:focus-visible {
+  background: #dff3ed;
+  border-color: #218d70;
+}
+
+.leadPrimary:hover,
+.leadPrimary:focus-visible {
+  background: linear-gradient(135deg, #07855f, #0cac7d);
+  box-shadow: 0 9px 22px rgba(0, 91, 67, 0.3);
 }
 
 .leadForm label > span,
@@ -1659,5 +1722,81 @@
 @media print {
   .root {
     display: none !important;
+  }
+}
+
+/* Surge uses the same compact platform typography roles at every breakpoint. */
+.panel {
+  --surge-type-title: clamp(1.25rem, 2vw, 1.375rem);
+  --surge-type-heading: var(--type-card-title, 1.125rem);
+  --surge-type-body: var(--type-action, .9375rem);
+  --surge-type-label: var(--type-label, .875rem);
+  --surge-type-action: var(--type-action, .9375rem);
+  font-size: var(--surge-type-body);
+  line-height: 1.6;
+}
+
+.panel h2 {
+  font-size: var(--surge-type-title);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.18;
+  text-wrap: balance;
+}
+
+.panel h3,
+.panel h4 {
+  font-size: var(--surge-type-heading);
+  font-weight: 700;
+  letter-spacing: -.012em;
+  line-height: 1.24;
+  text-wrap: balance;
+}
+
+.panel p,
+.panel li,
+.panel dd {
+  font-size: var(--surge-type-body);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.panel button,
+.panel input,
+.panel select,
+.panel textarea,
+.panel summary {
+  font-family: var(--font-aea-body, Arial, Helvetica, sans-serif);
+  font-size: var(--surge-type-action);
+  line-height: 1.4;
+}
+
+.panel small,
+.panel dt,
+.panel label > span,
+.panel fieldset > legend,
+.mode,
+.welcome > span,
+.intake header > span,
+.answerCard > header span,
+.leadForm > header span {
+  font-size: var(--surge-type-label);
+  line-height: 1.45;
+}
+
+.contextGroups dd,
+.contextProgress span,
+.contextProgress p,
+.plannerProgress span,
+.plannerProgress small,
+.privacy p {
+  font-size: .8125rem;
+}
+
+@media (max-width: 640px) {
+  .panel {
+    --surge-type-title: 1.25rem;
+    --surge-type-heading: 1.0625rem;
+    --surge-type-body: .9375rem;
   }
 }

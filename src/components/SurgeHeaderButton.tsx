@@ -16,7 +16,6 @@ export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
       </span>
       <span className="site-surge-copy">
         <strong>Surge AI</strong>
-        <small>Energy upgrade guide</small>
       </span>
       <span className="site-surge-status" aria-hidden="true">AI guide</span>
     </Link>

@@ -432,7 +432,7 @@ export function parseSurgeStarterProfile(value: unknown): SurgeStarterProfile {
     if (selected) (next as Record<string, unknown>)[key] = selected;
   }
   next.reviewed = uniqueStrings(source.reviewed, allowedFieldIds).slice(0, SURGE_PROFILE_FIELDS.length);
-  next.completed = source.completed === true;
+  next.completed = source.completed === true || next.reviewed.length === SURGE_PROFILE_FIELDS.length;
   return next;
 }
 
@@ -576,6 +576,10 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
     for (const [value] of question.options) {
       if (session.draft.features.includes(value)) next = updateSurgeProfileField(next, field, value, true);
     }
+  }
+  const plannerCompletion = homeEnergyPlannerCompletion(session.draft);
+  if (session.stage >= 4 && plannerCompletion.completed === plannerCompletion.total && !next.completed) {
+    next = { ...next, completed: true };
   }
   return next;
 }

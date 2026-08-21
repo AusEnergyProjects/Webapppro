@@ -34,5 +34,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
+  return <html lang="en"><body className="aea-platform"><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
 }

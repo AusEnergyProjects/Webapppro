@@ -791,6 +791,7 @@ export function EnergyAssistantWidget({
   const messagesRef = useRef<AssistantMessage[]>([]);
   const continuationRef = useRef<SurgeConversationState | null>(null);
   const hydrationStartedRef = useRef(false);
+  const profileUpdatedAtRef = useRef("");
 
   const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState(initialOpen);
@@ -999,6 +1000,45 @@ export function EnergyAssistantWidget({
   }, []);
 
   useEffect(() => {
+    profileUpdatedAtRef.current = profileUpdatedAt;
+  }, [profileUpdatedAt]);
+
+  useEffect(() => {
+    const syncStoredConversation = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      if (!event.newValue) {
+        clearLocalSession();
+        return;
+      }
+      try {
+        const saved = savedConversation(JSON.parse(event.newValue));
+        if (saved.expired) return;
+        const incomingActivity = new Date(saved.profileUpdatedAt || saved.lastActive).getTime();
+        const currentActivity = new Date(profileUpdatedAtRef.current).getTime();
+        if (Number.isFinite(currentActivity) && Number.isFinite(incomingActivity) && incomingActivity <= currentActivity) return;
+        messagesRef.current = saved.messages;
+        continuationRef.current = saved.continuation;
+        setMessages(saved.messages);
+        setContinuation(saved.continuation);
+        setProfile(saved.profile);
+        setProfileUpdatedAt(saved.profileUpdatedAt);
+        setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
+        setServiceInterest(saved.messages.some((message) =>
+          message.role === "user" && signalsServiceInterest(message.content)));
+        if (saved.profile.completed) {
+          setProfileEditing(false);
+          setProfileDeferred(false);
+          setProfileStep(0);
+        }
+      } catch {
+        // Ignore malformed writes from another tab; the current valid session remains authoritative.
+      }
+    };
+    window.addEventListener("storage", syncStoredConversation);
+    return () => window.removeEventListener("storage", syncStoredConversation);
+  }, [clearLocalSession]);
+
+  useEffect(() => {
     if (!dedicated || initialDraft.trim()) return;
     const frame = window.requestAnimationFrame(() => {
       const pendingDraft = takePendingSurgeDraft();
@@ -1129,6 +1169,11 @@ export function EnergyAssistantWidget({
   const ask = async (question: string) => {
     const message = question.trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message || busy) return;
+    if (leadOpen) {
+      setLeadOpen(false);
+      setLeadError("");
+      setLeadStatus("");
+    }
     const recentTurns = recentTurnsForRequest(messagesRef.current, profile, profileUpdatedAt);
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
@@ -1195,7 +1240,7 @@ export function EnergyAssistantWidget({
   };
 
   const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
-    if (profile.completed) setProfileUpdatedAt(new Date().toISOString());
+    setProfileUpdatedAt(new Date().toISOString());
     setProfile((current) => updateSurgeProfileField(current, field, value, checked));
     setProfileError("");
   };
@@ -1803,11 +1848,11 @@ export function EnergyAssistantWidget({
                   <button type="button" aria-label="Close service request" onClick={() => setLeadOpen(false)}>×</button>
                 </header>
                 <p>Choose one destination. Nothing is shared by default, and you can close this form without affecting your chat or private plan.</p>
-                <button type="button" onClick={() => {
+                <button className={styles.leadReturn} type="button" onClick={() => {
                   setLeadOpen(false);
                   window.requestAnimationFrame(() => composerRef.current?.focus());
                 }}>
-                  Continue asking or change subject
+                  <span aria-hidden="true">←</span> Back to Surge AI
                 </button>
                 {leadStage === "destination" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-destination">
@@ -1831,8 +1876,8 @@ export function EnergyAssistantWidget({
                     <strong>Brief so far</strong>
                     <p>{lead.suburb}, {lead.state} {lead.postcode}. {lead.services.length} service{lead.services.length === 1 ? "" : "s"}. {answeredQuoteQuestionCount} of {quoteQuestions.length} service details recorded.</p>
                     <div>
-                      <button type="button" onClick={() => setLeadStage("scope")}>Edit location or services</button>
-                      {lead.destination === "matched-trades" && quoteQuestions.length > 0 && <button type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
+                      <button className={styles.leadSecondary} type="button" onClick={() => setLeadStage("scope")}>Edit location or services</button>
+                      {lead.destination === "matched-trades" && quoteQuestions.length > 0 && <button className={styles.leadSecondary} type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
                     </div>
                   </section>
                 )}
@@ -1875,7 +1920,7 @@ export function EnergyAssistantWidget({
                         ))}
                       </div>
                     </fieldset>
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("destination")}>Back</button><button type="button" onClick={advanceLeadScope}>Continue</button></div>
+                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage("destination")}>Back</button><button className={styles.leadPrimary} type="button" onClick={advanceLeadScope}>Continue</button></div>
                   </section>
                 )}
 
@@ -1893,9 +1938,9 @@ export function EnergyAssistantWidget({
                       </label>
                     ))}
                     <div className={styles.leadNav}>
-                      <button type="button" onClick={() => leadQuestionPage ? setLeadQuestionPage((current) => current - 1) : setLeadStage("scope")}>Back</button>
-                      <button type="button" onClick={() => advanceLeadQuestions(true)}>Not sure / skip these</button>
-                      <button type="button" onClick={() => advanceLeadQuestions(false)}>Save and continue</button>
+                      <button className={styles.leadSecondary} type="button" onClick={() => leadQuestionPage ? setLeadQuestionPage((current) => current - 1) : setLeadStage("scope")}>Back</button>
+                      <button className={styles.leadTertiary} type="button" onClick={() => advanceLeadQuestions(true)}>Not sure / skip these</button>
+                      <button className={styles.leadPrimary} type="button" onClick={() => advanceLeadQuestions(false)}>Save and continue</button>
                     </div>
                   </section>
                 )}
@@ -1923,7 +1968,7 @@ export function EnergyAssistantWidget({
                         <label><span>Phone <small>Email or phone required</small></span><input type="tel" maxLength={32} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
                       </>
                     )}
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "scope")}>Back</button><button type="button" onClick={advanceLeadContact}>Continue</button></div>
+                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "scope")}>Back</button><button className={styles.leadPrimary} type="button" onClick={advanceLeadContact}>Continue</button></div>
                   </section>
                 )}
 
@@ -1945,7 +1990,7 @@ export function EnergyAssistantWidget({
                       </>
                     )}
                     <label><span>Anything else to include? <small>Optional</small></span><textarea rows={3} maxLength={500} value={lead.message} onChange={(event) => updateLead((current) => ({ ...current, message: event.target.value }))} /></label>
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("contact")}>Back</button><button type="button" onClick={() => setLeadStage("consent")}>Review consent</button></div>
+                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage("contact")}>Back</button><button className={styles.leadPrimary} type="button" onClick={() => setLeadStage("consent")}>Review consent</button></div>
                   </section>
                 )}
 
@@ -1971,7 +2016,7 @@ export function EnergyAssistantWidget({
                         <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional Australian Energy Assessments updates. This is optional and is not required for a response.</span></label>
                       </>
                     )}
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("preferences")}>Back</button></div>
+                    <div className={styles.leadNav}><button className={styles.leadSecondary} type="button" onClick={() => setLeadStage("preferences")}>Back</button></div>
                   </section>
                 )}
                 {leadError && <p className={styles.error} role="alert">{leadError}</p>}

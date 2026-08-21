@@ -1109,18 +1109,29 @@
   --action-primary-hover: linear-gradient(135deg, #08794c, #0e9f68);
   --action-on-dark: #6ee7b7;
   --action-shadow: 0 10px 24px rgba(18, 166, 106, .25);
+  --type-display: clamp(2.65rem, 5vw, 5rem);
+  --type-page-title: clamp(2rem, 3.4vw, 3.35rem);
+  --type-section-title: clamp(1.45rem, 2.2vw, 2.15rem);
+  --type-card-title: 1.125rem;
+  --type-body: 1rem;
+  --type-label: .875rem;
+  --type-action: .9375rem;
+  --leading-display: 1.04;
+  --leading-heading: 1.18;
+  --leading-body: 1.6;
 }
 
 * { box-sizing: border-box; }
 html { background: var(--surface-page); }
-body { background: radial-gradient(circle at 8% -4%, rgba(18, 126, 167, .38), transparent 34rem), radial-gradient(circle at 94% 18%, rgba(18, 166, 106, .16), transparent 30rem), radial-gradient(circle at 48% 92%, rgba(19, 79, 120, .25), transparent 42rem), linear-gradient(155deg, #020713 0%, #031529 42%, #061d30 70%, #020b18 100%); color: var(--color-aea-text); font-family: var(--font-aea-body); line-height: 1.55; margin: 0; min-height: 100vh; }
+body { background: radial-gradient(circle at 8% -4%, rgba(18, 126, 167, .38), transparent 34rem), radial-gradient(circle at 94% 18%, rgba(18, 166, 106, .16), transparent 30rem), radial-gradient(circle at 48% 92%, rgba(19, 79, 120, .25), transparent 42rem), linear-gradient(155deg, #020713 0%, #031529 42%, #061d30 70%, #020b18 100%); color: var(--color-aea-text); font-family: var(--font-aea-body); font-size: var(--type-body); line-height: var(--leading-body); margin: 0; min-height: 100vh; text-rendering: optimizeLegibility; }
 button, input, select, textarea { font: inherit; }
 a { text-underline-offset: 3px; }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid rgba(20, 168, 100, .32); outline-offset: 3px; }
 
 /* Native comparator pages share the same visual language as the proven electricity tab. */
-h1 { font-family: var(--font-aea-heading); letter-spacing: -.035em; margin: 0; }
-h2, h3 { font-family: var(--font-aea-heading); letter-spacing: -.015em; margin: 0; }
+h1 { font-family: var(--font-aea-heading); font-size: var(--type-page-title); letter-spacing: -.035em; line-height: var(--leading-display); margin: 0; }
+h2 { font-family: var(--font-aea-heading); font-size: var(--type-section-title); letter-spacing: -.02em; line-height: var(--leading-heading); margin: 0; }
+h3, h4 { font-family: var(--font-aea-heading); font-size: var(--type-card-title); letter-spacing: -.012em; line-height: var(--leading-heading); margin: 0; }
 .wrap { margin: 0 auto; max-width: var(--layout-max); padding: 24px var(--layout-gutter) 72px; width: 100%; }
 .site-header { align-items: center; background: linear-gradient(118deg, #020d1d, #042333 58%, #04353c); border: 1px solid rgba(92, 236, 218, .28); border-radius: 15px; box-shadow: 0 14px 36px rgba(0, 4, 14, .42), inset 0 1px rgba(222, 255, 250, .08), inset 0 -1px rgba(32, 203, 184, .12); display: grid; gap: 10px; grid-template-columns: auto minmax(0, 1fr) auto; margin-bottom: 16px; min-height: 66px; overflow: hidden; padding: 8px 9px 8px 11px; }
 .brandbar { align-items: center; display: inline-flex; flex: 0 0 auto; gap: 9px; margin: 0; min-width: 0; padding: 1px 3px 1px 1px; text-decoration: none; }
@@ -5451,7 +5462,6 @@ body input[type="number"]::-webkit-outer-spin-button {
 .site-surge-core img { display: block; filter: drop-shadow(0 0 5px rgba(94, 250, 220, .48)); height: 35px; object-fit: contain; position: relative; width: 28px; z-index: 1; }
 .site-surge-copy { display: grid; gap: 1px; line-height: 1.05; position: relative; z-index: 1; }
 .site-surge-copy strong { color: #f4fffd; font-size: .7rem; font-weight: 850; letter-spacing: .005em; }
-.site-surge-copy small { color: #9fd9d2; font-size: .49rem; font-weight: 700; }
 .site-surge-status { align-items: center; background: rgba(100, 243, 202, .11); border: 1px solid rgba(112, 246, 211, .2); border-radius: 999px; color: #a7f8df; display: inline-flex; font-size: .44rem; font-weight: 850; gap: 4px; letter-spacing: .035em; padding: 3px 5px; position: relative; text-transform: uppercase; z-index: 1; }
 .site-surge-status::before { background: #63f5c9; border-radius: 50%; box-shadow: 0 0 7px #63f5c9; content: ""; height: 4px; width: 4px; }
 .site-surge-link:hover, .site-surge-link:focus-visible { border-color: #a4ffe9; box-shadow: 0 13px 29px rgba(14, 190, 156, .25), 0 0 0 3px rgba(52, 228, 196, .13); transform: translateY(-1px); }
@@ -5661,7 +5671,6 @@ body input[type="number"]::-webkit-outer-spin-button {
   .site-surge-link { min-height: 40px; padding: 3px 7px 3px 5px; }
   .site-surge-core { flex-basis: 29px; height: 32px; width: 29px; }
   .site-surge-core img { height: 31px; width: 25px; }
-  .site-surge-copy small { display: none; }
   .site-tlink-link { flex: 0 0 40px; height: 40px; min-height: 40px; padding: 3px; width: 40px; }
   .site-tlink-mark { height: 33px; width: 33px; }
   .site-tlink-copy { display: none; }
@@ -7673,4 +7682,84 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
 
 @media (prefers-reduced-motion: reduce) {
   .comparison-journey-track > span { transition: none; }
+}
+
+/* Platform typography roles: one interface family and seven deliberate roles. */
+@media screen {
+  .aea-platform .wrap :where(h1) {
+    font-size: var(--type-page-title);
+    font-weight: 700;
+    letter-spacing: -.035em;
+    line-height: var(--leading-display);
+    text-wrap: balance;
+  }
+  .aea-platform .wrap :where(.start-hero, .planner-home-journey-copy, .customer-route-hero) :where(h1, h2) {
+    font-size: var(--type-display);
+    line-height: var(--leading-display);
+  }
+  .aea-platform .wrap :where(h2) {
+    font-size: var(--type-section-title);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: var(--leading-heading);
+    text-wrap: balance;
+  }
+  .aea-platform .wrap :where(h3, h4) {
+    font-size: var(--type-card-title);
+    font-weight: 700;
+    letter-spacing: -.012em;
+    line-height: var(--leading-heading);
+    text-wrap: balance;
+  }
+  body.aea-platform main.wrap p,
+  body.aea-platform main.wrap li,
+  body.aea-platform main.wrap dd {
+    font-size: var(--type-body);
+    line-height: var(--leading-body);
+    text-wrap: pretty;
+  }
+  body.aea-platform main.wrap button,
+  body.aea-platform main.wrap .btn,
+  body.aea-platform main.wrap input,
+  body.aea-platform main.wrap select,
+  body.aea-platform main.wrap textarea,
+  body.aea-platform main.wrap summary {
+    font-family: var(--font-aea-body);
+    font-size: var(--type-action);
+    line-height: 1.4;
+  }
+  body.aea-platform main.wrap small {
+    font-size: var(--type-label);
+    line-height: 1.5;
+  }
+  body.aea-platform main.wrap label,
+  body.aea-platform main.wrap fieldset > legend {
+    font-size: var(--type-action);
+    line-height: 1.4;
+  }
+  body.aea-platform main.wrap dt,
+  body.aea-platform main.wrap th,
+  body.aea-platform main.wrap label > span {
+    font-size: var(--type-label);
+    line-height: 1.45;
+  }
+  .aea-platform :where(.brandtag, .comparator-nav a, .site-surge-copy strong, .site-tlink-copy strong) {
+    font-family: var(--font-aea-body);
+    font-size: var(--type-label);
+    line-height: 1.25;
+  }
+  body.aea-platform .site-header .comparator-nav a,
+  body.aea-platform .site-header .site-surge-copy strong,
+  body.aea-platform .site-header .site-tlink-copy strong {
+    font-size: var(--type-label);
+  }
+  .aea-platform :where(.brandname) {
+    font-size: 1.0625rem;
+    line-height: 1.05;
+  }
+  .aea-platform .wrap :where(.start-eyebrow, .customer-route-eyebrow, .comparison-journey-heading > span, .comparison-results-heading > span, .comparison-complete-next > div > span) {
+    font-size: var(--type-label);
+    letter-spacing: .08em;
+    line-height: 1.3;
+  }
 }
