@@ -807,6 +807,7 @@ export function EnergyAssistantWidget({
   const [profileUpdatedAt, setProfileUpdatedAt] = useState("");
   const [profileStep, setProfileStep] = useState(0);
   const [profileEditing, setProfileEditing] = useState(false);
+  const [contextRailOpen, setContextRailOpen] = useState(false);
   const [profileDeferred, setProfileDeferred] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [draft, setDraft] = useState(initialDraft.trim().slice(0, MAX_MESSAGE_LENGTH));
@@ -1055,9 +1056,7 @@ export function EnergyAssistantWidget({
     if (!dedicated) return;
     const desktop = window.matchMedia("(min-width: 641px)");
     const syncContextRail = () => {
-      const rail = contextRailRef.current;
-      if (!rail) return;
-      rail.open = desktop.matches;
+      setContextRailOpen(desktop.matches);
     };
     syncContextRail();
     desktop.addEventListener("change", syncContextRail);
@@ -1609,10 +1608,13 @@ export function EnergyAssistantWidget({
               ref={contextRailRef}
               className={styles.contextRail}
               aria-label="Your home context"
+              open={contextRailOpen}
               onToggle={(event) => {
-                if (window.matchMedia("(min-width: 641px)").matches && !event.currentTarget.open) {
+                const desktop = window.matchMedia("(min-width: 641px)").matches;
+                if (desktop && !event.currentTarget.open) {
                   event.currentTarget.open = true;
                 }
+                setContextRailOpen(desktop || event.currentTarget.open);
               }}
             >
               <summary className={styles.contextRailSummary}>

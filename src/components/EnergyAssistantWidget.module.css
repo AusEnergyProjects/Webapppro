@@ -338,6 +338,10 @@
     cursor: default;
     pointer-events: none;
   }
+
+  .rootDedicated .contextRail:not([open]) > .contextRailBody {
+    display: flex;
+  }
 }
 
 .contextProgress {
