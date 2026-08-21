@@ -3300,13 +3300,19 @@ Make home-context editing self-revealing and restore the preferred compact horiz
 
 Exact application commit `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 376 under `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f` and deployed publicly through `appgdep_6a8861729c64819198b2e984832b3f06` with environment revision 24. Live 390 by 844 phone QA confirmed the 327-pixel header strip exposes 869 pixels of swipeable destinations without page overflow, the context drawer remains collapsed by default and an `Edit` action moves and focuses its matching intake form at 16 pixels from the viewport top. Desktop retained the eight-column navigation, and public health returned HTTP 200 with all 17 maintained topics and 109 current official sources ready.
 
+## Released milestone: AEA-SURGE-CONTEXT-QUALITY-77
+
+Keep the complete home context permanently visible on desktop while retaining the compact phone drawer, and make every save advance through the next unreviewed section until all 45 details are reviewed. Establish the requested Priority 1 freshness boundary across the 109-source official registry and the requested Priority 2 privacy-safe aggregate quality foundation without storing conversation content or customer identity.
+
+Exact application commit `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 378 under `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4` and deployed publicly through `appgdep_6a8871da825c8191926a9d71cca8f4df` with environment revision 24. Live desktop QA confirmed the rail is open and non-collapsible; sequential QA completed steps 1 through 13 and reached 45 of 45 reviewed; 390 by 844 QA confirmed the same rail remains a collapsed, tappable phone drawer. All 109 official sources carry volatility and reuse metadata, programme facts fail closed past the governed review date, and migration `0154_surge_conversation_quality_daily.sql` stores aggregate outcome counters only.
+
 ## Next five logical product steps
 
-1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
-2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
-4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
-5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
+1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
+2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
+3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
+4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Global stop conditions
 

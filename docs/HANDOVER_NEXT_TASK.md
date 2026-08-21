@@ -1,58 +1,59 @@
 # Next task handover
 
-Status: visible Surge context editing and the compact swipeable phone header are released as Sites version 376. The next executable milestone is governed Surge knowledge.
+Status: Surge context flow and quality foundations are released as Sites version 378. Priority 1 is governed knowledge; Priority 2 is reviewed conversation quality.
 
 Prepared: 21 August 2026
 
-Milestone ID: `AEA-SURGE-MOBILE-NAVIGATION-76`
+Milestone ID: `AEA-SURGE-CONTEXT-QUALITY-77`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `cec5d66422ff9fe140b7d160c4d7ced836d6b74f`
+Current production application source: `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 376 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 378 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4`
 
-Current deployment: `appgdep_6a8861729c64819198b2e984832b3f06`
+Current deployment: `appgdep_6a8871da825c8191926a9d71cca8f4df`
 
 Current environment revision: 24
 
-Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
+Migration inventory: 153 migrations through `0154_surge_conversation_quality_daily.sql`
 
-## Released milestone: AEA-SURGE-MOBILE-NAVIGATION-76
+## Released milestone: AEA-SURGE-CONTEXT-QUALITY-77
 
 ### User outcome
 
-On phones, customers can swipe the compact one-line header again and every home-context `Edit` action visibly lands on the matching form instead of opening it below the current viewport. The compact Surge drawers and page-level chat scrolling remain intact.
+Customers can work through every home-context section without the form unexpectedly closing. Desktop keeps the complete context visible and non-collapsible; phone keeps it in the compact drawer. Surge also has the first governed-source freshness and privacy-safe conversation-quality foundations for the requested Priority 1 and Priority 2 work.
 
 ### Released scope
 
-- Route every context-rail `Edit` and completed-profile `Change details` action through one handler that selects the correct intake step.
-- After the intake form renders, align it at the top of the viewport and move focus to the form, while respecting reduced-motion preferences.
-- Restore the phone header to one horizontally swipeable, scroll-snapped, single-line strip without widening the page.
-- Preserve the desktop eight-column navigation, compact Surge drawers, page-level chat scrolling, quick-chat/full-page boundary, shared type scale, restrained corners and same-browser profile continuity.
+- Keep desktop context open under React control, disable its summary interaction and retain a CSS safety rule so native disclosure state cannot blank the rail after hydration.
+- Keep the same context as a collapsed-by-default native drawer only at phone widths and restore desktop openness when the breakpoint changes.
+- Mark the current section reviewed and advance to the next unreviewed section on every save. Complete only after all 45 fields across all 13 sections are reviewed.
+- Assign every maintained official source a volatility class and reuse basis, bind programme facts to the governed review date and suppress stale programme names and availability after that boundary.
+- Store only daily aggregate conversation-quality counters for controlled outcomes. Do not store prompts, answers, transcripts, contact details or customer identifiers.
+- Preserve released edit focus, phone navigation, page-level scrolling, quick-chat/full-page boundaries, typography, corners and same-browser continuity.
 
 ### Validation and release evidence
 
-- The focused site-navigation, Surge and public-journey regression set passed 53 of 53 tests.
-- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
-- The production performance gate reports a 4,758-byte root launcher, 72,221-byte deferred assistant and 732,292-byte shared stylesheet.
-- Phone QA measured a 327-pixel navigation viewport over 869 pixels of swipeable content with no page-level horizontal overflow. The context rail remains collapsed by default.
-- Selecting the fifth `Edit` action moved its matching form from 1,832.5 pixels below the viewport to 16 pixels from the top, focused the form and selected `Step 5 of 13`.
-- Phone QA confirmed the dedicated conversation still uses visible overflow, `overscroll-behavior: auto` and no maximum height. Desktop retained the eight-column fixed navigation.
-- Exact source `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
-- Sites saved version 376 as `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f`, storing 478 files and 44,513,280 bytes with content hash `sha256:67a9d9a21840831e3ff050cbbd21741a4567b2e05196d51b939ac581bd673ce9`.
-- The matching local archive is 12,187,307 bytes with SHA-256 `D7E457D038AF3A14106D19D9FE41345EEE7DD735A16B4A0B1873653846DB9122`.
-- Deployment `appgdep_6a8861729c64819198b2e984832b3f06` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
-- Live `/api/health?release=376` returned HTTP 200 with `Cache-Control: no-store` and complete maintained knowledge readiness.
+- The focused context-rail and sequential-save regression set passed 33 of 33 tests; governed-knowledge and quality coverage passed 127 of 127; focused migration coverage passed 33 of 33.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 153 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
+- The production performance gate reports a 4,758-byte root launcher, 72,815-byte deferred assistant and 732,292-byte shared stylesheet.
+- Exact source `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
+- Sites saved version 378 as `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4`, storing 479 files and 44,523,520 bytes with content hash `sha256:51fa36a204e87b17d1d5f507483606e376172c2ade6396d88608dd593289595b`.
+- The matching local archive is 12,190,985 bytes with 493 entries and SHA-256 `B358AEB7933FB124DF332F3705859EAF7CADFF62B79272E216BA2818915E0F72`.
+- Deployment `appgdep_6a8871da825c8191926a9d71cca8f4df` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Live desktop QA confirmed the rail is open and non-interactive. Sequential QA advanced through all 13 steps and reached 45 of 45 reviewed. Live 390 by 844 QA confirmed the same rail is collapsed and tappable on phone, exposes all 13 edits when opened and returns to open when desktop width is restored.
 
 ### Boundaries and remaining optimisation work
 
-- No assistant answer, API, authentication, database, migration, calculator, trade workflow or customer-data contract changed.
+- No authentication, calculator, trade workflow, lead, customer-data or customer-identity contract changed.
 - Persistence remains bounded to the same browser, expires after 30 days and does not provide cross-device identity; signed-in association remains a separate milestone.
+- Aggregate telemetry is deliberately content-free. A reviewed evaluation corpus, operating thresholds and a bounded quality view remain Priority 2 rather than being inferred from raw customer conversations.
+- The 109-source registry now has explicit freshness metadata, but broader reviewed household guidance and official-change monitoring remain Priority 1.
 - The shared stylesheet remains approximately 732 KB raw and the production build reports large-chunk warnings. Both pass the current performance gates, but splitting them safely by public, customer, trade and Creditex surfaces remains separate work.
 - No real lead, message, trade record or customer record was created during verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
@@ -145,15 +146,16 @@ Every customer click should feel immediate, the home page must remain visually s
 - Public replies do not expose citations, source URLs, internal platform names or model internals.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
 
-## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-68
+## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-78
 
 ### Objective
 
-Increase Surge's practical Australian household-energy knowledge without copying commercial authors, inventing rebate values or turning unreviewed web pages into answer authority.
+Expand the reviewed official Surge registry beyond the current 109-source foundation and add an operator-owned official-change review workflow without copying commercial authors, inventing rebate values or turning unreviewed web pages into answer authority.
 
 ### Acceptance gate
 
-- Every answer-influencing knowledge record has an official canonical URL, publisher, jurisdiction, reviewed summary, observed date, volatility class, reuse basis and next-review date.
+- Every new answer-influencing record has an official canonical URL, publisher, jurisdiction, reviewed summary, observed date, volatility class, reuse basis and next-review date before it can become active.
+- A bounded official-change queue identifies due, stale and changed high-volatility records without automatically promoting newly discovered content.
 - Stable educational guidance remains separate from volatile programme, certificate, product-list, price and eligibility facts.
 - Volatile records fail closed after their review date.
 - Programme answers state the matching jurisdiction and date basis, answer the posed rule before asking for more input and never invent a dollar amount.
@@ -171,11 +173,11 @@ Increase Surge's practical Australian household-energy knowledge without copying
 
 ## Next five logical product steps
 
-1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
-2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
-4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
-5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
+1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
+2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
+3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
+4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Historical release handovers
 

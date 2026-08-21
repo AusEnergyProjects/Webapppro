@@ -10,50 +10,58 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: visible Surge edits and compact mobile navigation
+## Current production release: complete Surge context flow and quality controls
 
-Application source `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 376 at `https://compare.ausenergyassessments.com`.
+Application source `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 378 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` |
+| Application source | `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f` |
-| Public version | Sites version 376 |
-| Deployment | `appgdep_6a8861729c64819198b2e984832b3f06` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4` |
+| Public version | Sites version 378 |
+| Deployment | `appgdep_6a8871da825c8191926a9d71cca8f4df` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:67a9d9a21840831e3ff050cbbd21741a4567b2e05196d51b939ac581bd673ce9` |
+| Package content hash | `sha256:51fa36a204e87b17d1d5f507483606e376172c2ade6396d88608dd593289595b` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- Every home-context `Edit` action opens its matching intake step, smoothly moves the form to the top of the viewport and transfers focus to that form. Reduced-motion customers receive the same placement without animation.
-- The phone header is again one compact horizontally swipeable strip with no page-level horizontal overflow. Desktop keeps the complete fixed eight-column navigation.
-- The floating mascot opens the lightweight popup chat in place and preserves the current URL. Header, hero, roadmap and other explicit Surge calls to action continue to open the complete `/surge` workspace.
-- On phone widths, the long home-context rail is collapsed behind one `Your home context` disclosure and the four starter prompts are collapsed behind one `Suggested questions` disclosure. The composer therefore remains discoverable without scrolling through every context card or prompt first.
-- The dedicated phone workspace and conversation no longer create nested scroll containers. A gesture that starts inside the conversation continues the document scroll at the chat boundary.
-- The shared typography scale is compact and consistent, button corners are restrained and the homepage secondary copy has an opaque navy contrast panel over the mascot image.
-- Desktop retains the full context rail and suggested-question grid, the shared wide shell and the previously released chronological conversation and same-browser persistence behaviour.
+- Desktop `/surge` always renders the complete home-context rail and disables its disclosure control. The rail cannot be collapsed at desktop widths and reopens when the viewport returns from phone mode.
+- Phone widths keep the context rail collapsed by default as one compact, tappable `Your home context` drawer. Opening it exposes all 13 edit sections without adding a nested page-scroll trap.
+- Saving a home-context section advances to the next unreviewed section instead of closing the intake. The action remains `Save and continue` through steps 1 to 12, changes to `Finish home context` at step 13 and completes only after all 45 fields have been reviewed.
+- Every context `Edit` action retains the released scroll-and-focus behaviour, and the saved profile continues across routes and browser tabs under the existing 30-day same-browser boundary.
+- All 109 maintained official sources now carry an explicit volatility class and reuse basis. Programme guidance uses the governed catalogue review date and fails closed after it instead of presenting stale programme names or availability.
+- Surge records only day-level aggregate quality counters for bounded intent, source status, correction, topic-switch, privacy and follow-up outcomes. Migration `0154_surge_conversation_quality_daily.sql` stores no prompt, answer, transcript, contact detail or customer identifier.
 
 ### Validation and runtime evidence
 
-- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
-- The focused site-navigation, Surge and public-journey regression set passed 53 of 53 tests. `git diff --check` passed.
-- The public-performance audit reports a 4,758-byte root launcher, 72,221-byte deferred assistant and 732,292-byte global stylesheet.
-- Sites stored 44,513,280 bytes across 478 files with the package content hash above. The local release archive was 12,187,307 bytes with SHA-256 `D7E457D038AF3A14106D19D9FE41345EEE7DD735A16B4A0B1873653846DB9122`.
-- Live 390 by 844 phone QA confirmed the context disclosure is collapsed by default, the 327-pixel header strip has 869 pixels of swipeable content, and the page itself has no horizontal overflow. Selecting the fifth `Edit` action moved its form from 1,832.5 pixels below the viewport to 16 pixels from the top, focused the form and opened `Step 5 of 13`.
-- Live phone QA also confirmed the dedicated conversation uses visible overflow, `overscroll-behavior: auto` and no maximum height, so chat-originated scrolling continues through the page.
-- Live desktop QA confirmed the complete navigation remains an eight-column grid with visible overflow and no page-level horizontal overflow.
-- Live `/api/health?release=376` returned HTTP 200, `Cache-Control: no-store` and ready knowledge status for all 17 maintained topics and 109 current official sources.
-- GitHub source, saved version 376 and deployment provenance all resolve to the exact application source above.
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 153 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- The focused context-rail and sequential-save regression set passed 33 of 33 tests. The governed-knowledge and conversation-quality set passed 127 of 127, the focused migration set passed 33 of 33 and `git diff --check` passed.
+- The public-performance audit reports a 4,758-byte root launcher, 72,815-byte deferred assistant and 732,292-byte global stylesheet.
+- Sites stored 44,523,520 bytes across 479 files with the package content hash above. The local release archive was 12,190,985 bytes with 493 entries and SHA-256 `B358AEB7933FB124DF332F3705859EAF7CADFF62B79272E216BA2818915E0F72`.
+- Live desktop QA at 1280 by 720 confirmed the context disclosure is open, its body is rendered, the summary has `pointer-events: none`, all context groups are visible and the rail remains open after returning from phone mode.
+- Live sequential QA exercised all 13 sections in order. Steps 1 to 12 exposed `Save and continue`, step 13 exposed `Finish home context`, the result reported 45 of 45 details reviewed and the chat welcome appeared.
+- Live 390 by 844 phone QA confirmed the same rail starts closed, its summary remains interactive, opening it exposes 13 `Edit` actions, and closing desktop-only behaviour is not applied at the phone breakpoint.
+- GitHub and Sites managed `main` contained the exact application source above before packaging; saved version 378 and its deployment provenance remain pinned to that source even when later documentation-only checkpoints advance those branches.
 
 ### Boundaries
 
-- No assistant answer, API, authentication, database, migration, calculation, trade workflow or customer-data contract changed.
+- No authentication, calculation, trade workflow, lead, customer-data or customer-identity contract changed.
 - Persistence remains bounded to the same browser, expires after 30 days and does not create cross-device identity.
-- The shared stylesheet remains a 732,243-byte raw build asset and the production build still reports large-chunk warnings. Both pass the enforced release budgets but remain structural performance opportunities.
+- Aggregate quality instrumentation is a measurement foundation, not a claim that production conversation quality is already acceptable. Reviewed evaluation cases, thresholds and an operator view remain Priority 2.
+- The governed registry now has freshness metadata and programme fail-closed behaviour, but expanding reviewed household guidance and official-change monitoring remains Priority 1.
+- The shared stylesheet remains a 732,292-byte raw build asset and the production build still reports large-chunk warnings. Both pass the enforced release budgets but remain structural performance opportunities.
 - No real lead, email, trade record or customer record was created during live verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Superseded release checkpoint: Surge quality foundation
+
+Application source `2e811927fe29bd6910064b766f945e2f2c84e2d5` was deployed as Sites version 377 under saved version `appgprj_6a550c378000819185caf094173422bb~appgver_cfd009a238e881918dc9fc72d26bba9b` and deployment `appgdep_6a886f5466e08191a86f591d20659be2`. It contained the sequential context flow, governed-source freshness and aggregate quality foundation, but live desktop QA found the native context disclosure closed after hydration. Version 378 superseded it with the controlled desktop rail correction.
+
+## Previous production release: visible Surge edits and compact mobile navigation
+
+Application source `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` was deployed as public Sites version 376 under saved version `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f` and deployment `appgdep_6a8861729c64819198b2e984832b3f06`. It released visible context editing, the swipeable phone header, compact phone drawers and page-level chat scrolling.
 
 ## Previous production release: responsive Surge quick chat and mobile workspace
 
@@ -869,11 +877,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
-2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
-4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
-5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
+1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
+2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
+3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
+4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Previous quote, job and invoice usability release
 
