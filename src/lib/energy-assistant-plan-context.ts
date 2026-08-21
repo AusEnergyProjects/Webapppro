@@ -51,7 +51,7 @@ export type SurgePlanContext = {
 };
 
 export const SURGE_PLAN_CONTEXT_VERSION = 1 as const;
-export const SURGE_PLAN_CONTEXT_MAX_FACTS = 32;
+export const SURGE_PLAN_CONTEXT_MAX_FACTS = 40;
 export const SURGE_PLAN_CONTEXT_MAX_VALUE_CHARS = 180;
 export const SURGE_PLAN_CONTEXT_MAX_TOTAL_CHARS = 2_600;
 

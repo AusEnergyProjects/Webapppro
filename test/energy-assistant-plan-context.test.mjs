@@ -7,6 +7,7 @@ import {
   SURGE_PLAN_CONTEXT_MAX_TOTAL_CHARS,
   surgePlanContextSummary,
 } from "../src/lib/energy-assistant-plan-context.ts";
+import { customerHomeFeatureSections } from "../src/lib/customer-projects.mjs";
 
 function storedAssessment(stage, overrides = {}) {
   return JSON.stringify({
@@ -131,6 +132,34 @@ test("saved plan parsing is allowlisted, bounded and does not copy unrelated fie
       value: "value",
     })),
   }), null);
+});
+
+test("a completed planner keeps every canonical feature in Surge context", () => {
+  const allFeatureSelections = customerHomeFeatureSections.flatMap((section) => (
+    section.questions.map((question) => question.options[0][0])
+  ));
+  const context = buildSurgePlanContextFromStoredAssessment(storedAssessment(4, {
+    features: allFeatureSelections,
+  }));
+  assert.ok(context);
+  const knownFacts = facts(context);
+  for (const section of customerHomeFeatureSections) {
+    for (const question of section.questions) {
+      assert.equal(
+        knownFacts.has(question.id.replaceAll("-", "_")),
+        true,
+        `missing completed planner question ${question.id}`,
+      );
+    }
+  }
+  assert.equal(context.facts.length, 39);
+  assert.equal(knownFacts.has("cooking"), true);
+  assert.equal(knownFacts.has("electrical_supply"), true);
+  assert.equal(knownFacts.has("solar"), true);
+  assert.equal(knownFacts.has("battery"), true);
+  assert.equal(knownFacts.has("ev"), true);
+  assert.equal(knownFacts.has("lighting"), true);
+  assert.equal(knownFacts.has("pool_spa"), true);
 });
 
 test("the deterministic plan summary states that newer chat corrections win", () => {

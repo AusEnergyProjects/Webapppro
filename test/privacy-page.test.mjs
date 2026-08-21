@@ -16,12 +16,15 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
   assert.match(privacy, /Surge AI conversations/);
-  assert.match(privacy, /Up to 40 recent messages and a small conversation summary/);
+  assert.match(privacy, /Up to 40 recent messages, a small conversation summary and the home profile/);
   assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.match(privacy, /stateless guide endpoint/);
   assert.match(privacy, /bounded set of recent conversation turns/);
-  assert.match(privacy, /relevant maintained energy guidance to OpenAI/);
+  assert.match(privacy, /bounded home-profile summary/);
+  assert.match(privacy, /relevant maintained energy guidance to an external AI processing provider/);
   assert.match(privacy, /provider-side response storage disabled/);
+  assert.match(privacy, /Planner photos, uploaded files and contact details are not included/);
+  assert.match(privacy, /Newer details you tell Surge AI override conflicting profile or saved-plan answers/);
   assert.match(privacy, /does not create or read a server-side conversation record/);
   assert.match(privacy, /conversation text is not placed in analytics/);
   assert.match(privacy, /random first-party security cookie and short-lived, one-way security counters/);

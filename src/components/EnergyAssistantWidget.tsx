@@ -10,19 +10,44 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   parseSurgeConversationState,
   type SurgeConversationState,
 } from "@/lib/energy-assistant-conversation";
+import {
+  EMPTY_SURGE_STARTER_PROFILE,
+  markSurgeProfileStepReviewed,
+  mergeHomeEnergyPlannerSessionIntoSurgeProfile,
+  parseSurgeStarterProfile,
+  SURGE_PROFILE_FIELDS,
+  SURGE_PROFILE_STEPS,
+  SURGE_PROFILE_VERSION,
+  surgeProfileAnswerLabel,
+  surgeProfileFieldIsUnknown,
+  surgeProfileFieldValue,
+  surgeProfileKnownAnswerCount,
+  surgeProfileReviewedAnswerCount,
+  surgePlannerProfileAdapter,
+  surgeStarterProfileContext,
+  updateSurgeProfileField,
+  type SurgeProfileField,
+  type SurgeStarterProfile,
+} from "@/lib/surge-assessor-profile";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
+import { createHomeEnergyPlannerPublicPlanSnapshot } from "@/lib/home-energy-planner-schema";
 import { OPEN_SURGE_EVENT } from "@/lib/energy-assistant-events";
+import {
+  buildEnergyAssistantEnquirySubmission,
+  ENERGY_ASSISTANT_MATCHING_EXPLANATION,
+  ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION,
+} from "@/lib/energy-assistant-enquiry-adapter.mjs";
 import {
   buildEnergyAssistantLeadPayload,
   createEnergyAssistantSubmissionKey,
 } from "@/lib/energy-assistant-lead-client.mjs";
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
-import { energyAssistantQuoteQuestionsForServices } from "@/lib/public-plan-quote-preparation.mjs";
+import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./EnergyAssistantWidget.module.css";
 
 type Audience = "public" | "customer" | "trade";
@@ -64,9 +89,14 @@ type AssistantMessage = {
 };
 
 type LeadDraft = {
+  destination: "" | "aea-follow-up" | "matched-trades";
   name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
+  unitNumber: string;
+  streetAddress: string;
   postcode: string;
   suburb: string;
   state: string;
@@ -79,8 +109,10 @@ type LeadDraft = {
   quoteAnswers: Record<string, string>;
   message: string;
   serviceConsent: boolean;
-  tradeSharingConsent: boolean;
+  shareName: boolean;
   sharePhone: boolean;
+  shareAddress: boolean;
+  shareKnownPlanFacts: boolean;
   marketingConsent: boolean;
 };
 
@@ -90,24 +122,16 @@ type AddressLocality = {
 };
 
 type LocalityLookupStatus = "idle" | "loading" | "ready" | "error";
-type LeadStage = "scope" | "basics" | "questions" | "contact" | "preferences" | "consent";
+type LeadStage = "destination" | "scope" | "questions" | "contact" | "preferences" | "consent";
 
 type SavedConversation = {
   mode: Audience;
   messages: AssistantMessage[];
   continuation: SurgeConversationState | null;
   profile: SurgeStarterProfile;
+  profileUpdatedAt: string;
   lastActive: string;
   expired: boolean;
-};
-
-type SurgeStarterProfile = {
-  postcode: string;
-  relationship: "owner-occupier" | "renter" | "landlord" | "strata" | "not-sure";
-  homeType: "detached-house" | "townhouse" | "apartment-unit" | "rural-home" | "not-sure";
-  householdSize: "one" | "two" | "three-four" | "five-plus" | "not-sure";
-  priority: "lower-bills" | "comfort" | "healthy-home" | "electrify" | "solar-storage" | "not-sure";
-  completed: boolean;
 };
 
 const STORAGE_KEY = "aea-energy-guide-v1";
@@ -120,27 +144,7 @@ const MAX_RECENT_TURNS = 8;
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 const LOCAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-const EMPTY_STARTER_PROFILE: SurgeStarterProfile = {
-  postcode: "",
-  relationship: "owner-occupier",
-  homeType: "detached-house",
-  householdSize: "three-four",
-  priority: "lower-bills",
-  completed: false,
-};
-
-const PROFILE_RELATIONSHIPS = new Set<SurgeStarterProfile["relationship"]>([
-  "owner-occupier", "renter", "landlord", "strata", "not-sure",
-]);
-const PROFILE_HOME_TYPES = new Set<SurgeStarterProfile["homeType"]>([
-  "detached-house", "townhouse", "apartment-unit", "rural-home", "not-sure",
-]);
-const PROFILE_HOUSEHOLD_SIZES = new Set<SurgeStarterProfile["householdSize"]>([
-  "one", "two", "three-four", "five-plus", "not-sure",
-]);
-const PROFILE_PRIORITIES = new Set<SurgeStarterProfile["priority"]>([
-  "lower-bills", "comfort", "healthy-home", "electrify", "solar-storage", "not-sure",
-]);
+const EMPTY_STARTER_PROFILE = EMPTY_SURGE_STARTER_PROFILE;
 
 const START_ROADMAP = [
   {
@@ -157,14 +161,80 @@ const START_ROADMAP = [
       "Which rebates could apply to my home?",
     ],
   },
-  {
-    label: "Compare my options",
-    questions: [
-      "Help me compare an energy quote",
-      "Which heating, hot water or cooking option suits my home?",
-    ],
-  },
 ] as const;
+
+const SAFE_CONVERSATION_FACT_LABELS: Readonly<Record<string, string>> = {
+  approval: "Approval constraint",
+  battery: "Battery",
+  bill: "Energy bills",
+  budget: "Budget",
+  comfort_issue: "Comfort issue",
+  constraints: "Practical constraint",
+  cooking: "Cooking",
+  cooling: "Cooling",
+  disruption: "Disruption",
+  draughts: "Draughts",
+  energy_use: "Energy use",
+  electrical_supply: "Electrical supply",
+  electric_vehicle: "Electric vehicle",
+  floor_area: "Floor area",
+  gas_connection: "Gas connection",
+  glazing: "Glazing",
+  goal: "Current goal",
+  heating: "Heating",
+  heating_cooling: "Heating and cooling",
+  existing_heating: "Existing heating",
+  home_type: "Home type",
+  hot_water: "Hot water",
+  household_size: "Household",
+  insulation: "Insulation",
+  moisture: "Moisture",
+  occupancy: "Occupancy",
+  planned_work: "Planned work",
+  postcode: "Postcode",
+  priority: "Priority",
+  relationship: "Relationship",
+  rooms: "Rooms",
+  solar: "Solar",
+  state: "State",
+  switchboard: "Switchboard",
+  system_replaced: "Existing system",
+  tenure: "Relationship",
+  timing: "Timing",
+};
+
+type ContextRailFact = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+function normalizedFactEvidence(value: string) {
+  return value.toLocaleLowerCase("en-AU").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function safeConversationFacts(
+  state: SurgeConversationState | null,
+  messages: readonly AssistantMessage[],
+): ContextRailFact[] {
+  if (!state) return [];
+  const userEvidence = normalizedFactEvidence(
+    messages.filter((message) => message.role === "user").map((message) => message.content).join(" "),
+  );
+  return state.facts.flatMap((fact) => {
+    const label = SAFE_CONVERSATION_FACT_LABELS[fact.key];
+    const value = fact.value.trim().slice(0, 160);
+    const evidence = normalizedFactEvidence(value);
+    if (
+      !label
+      || !value
+      || evidence.length < 2
+      || !userEvidence.includes(evidence)
+      || /@|(?:\+?61|0)4\d{8}/.test(value.replace(/[\s()-]/g, ""))
+    ) return [];
+    return [{ key: fact.key, label, value }];
+  }).slice(0, 10);
+}
 
 function SurgeMascot({ peeking = false }: { peeking?: boolean }) {
   return (
@@ -198,9 +268,14 @@ const SAFE_EXACT_ACTIONS = new Set([
 ]);
 
 const EMPTY_LEAD: LeadDraft = {
+  destination: "",
   name: "",
+  firstName: "",
+  lastName: "",
   email: "",
   phone: "",
+  unitNumber: "",
+  streetAddress: "",
   postcode: "",
   suburb: "",
   state: "",
@@ -213,8 +288,10 @@ const EMPTY_LEAD: LeadDraft = {
   quoteAnswers: {},
   message: "",
   serviceConsent: false,
-  tradeSharingConsent: false,
+  shareName: false,
   sharePhone: false,
+  shareAddress: false,
+  shareKnownPlanFacts: false,
   marketingConsent: false,
 };
 
@@ -359,10 +436,36 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
 
 function customerVisibleText(value: string, audience: Audience): string {
   if (audience === "trade") return value;
-  return value.replace(
+  const safePlatformNames = value.replace(
     /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
     "the trade platform",
   );
+  if (
+    /\b(?:I|Surge(?: AI)?)\s+(?:am\s+)?(?:run(?:ning)?|built|powered|hosted|provided|based)\s+(?:on|by|with|through)\b/i.test(safePlatformNames)
+    || /\b(?:my|the)\s+(?:underlying\s+)?(?:model|provider|platform|implementation)\s+is\b/i.test(safePlatformNames)
+  ) {
+    return "Surge AI is a specialised Australian home-energy guide. Its implementation details stay private so the answer can stay focused on your home and decision.";
+  }
+  if (
+    /\b(?:private|internal|hidden)\s+(?:source|sources|reference|references|research|training data)\b/i.test(safePlatformNames)
+    || /\b(?:I|we|Surge(?: AI)?)\b[^.!?\n]{0,100}\b(?:use|uses|draw|draws|rely|relies|trained|based)\b[^.!?\n]{0,100}\b(?:source|sources|research|reference|references|training data)\b/i.test(safePlatformNames)
+  ) {
+    return "I keep the background research private and focus on explaining what matters for your home.";
+  }
+  if (
+    /\b(?:I am|I'm|Surge(?: AI)?\s+is)\b[^.!?\n]{0,100}\b(?:accredited|licensed|certified|registered|qualified)\b/i.test(safePlatformNames)
+    || /\b(?:this is|I provide|I issue)\b[^.!?\n]{0,80}\b(?:formal assessment|formal rating|certificate decision)\b/i.test(safePlatformNames)
+  ) {
+    return "Surge AI provides general home-energy guidance, not an accredited rating, certificate or formal assessment.";
+  }
+  if (
+    /\b(?:clear|obvious|definite)\s+winner\b/i.test(safePlatformNames)
+    || /\b(?:best|top)\s+(?:brand|model|product|unit|system)\b/i.test(safePlatformNames)
+    || /\b(?:buy|choose|pick|go with)\s+(?:the\s+)?[A-Z][\w-]+(?:\s+[A-Z0-9][\w-]+){0,4}\b/.test(safePlatformNames)
+  ) {
+    return "I can compare the pros, cons and fit of options you provide, but I will not choose or promote a brand or product for you.";
+  }
+  return safePlatformNames;
 }
 
 function naturalFollowUpFor(message: AssistantMessage, audience: Audience): string {
@@ -391,6 +494,11 @@ function makeRequestId(prefix: string): string {
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `${prefix}-${random}`.slice(0, 80);
+}
+
+function makePublicPlanSubmissionId() {
+  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `${date}.${crypto.randomUUID()}`;
 }
 
 function isHiddenRoute(pathname: string): boolean {
@@ -432,7 +540,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: knownPath,
       modeLabel: "Customer guide",
-      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
+      intro: "Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
     };
   }
   if (
@@ -454,7 +562,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath,
       modeLabel: "Trade guide",
-      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
+      intro: "Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
   const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates|surge)$/.test(pathname)
@@ -465,7 +573,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "trade",
       apiPath: safePublicPath,
       modeLabel: "Trade guide",
-      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
+      intro: "Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
   if (isSharedUtilityRoute(pathname) && rememberedAudience === "customer") {
@@ -473,14 +581,14 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       audience: "customer",
       apiPath: safePublicPath,
       modeLabel: "Customer guide",
-      intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
+      intro: "Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. I do not read private account, project or quote records.",
     };
   }
   return {
     audience: "public",
     apiPath: safePublicPath,
     modeLabel: "Household guide",
-    intro: "Hi, I am Surge AI. Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
+    intro: "Hi, I am Surge AI. Tell me what you want to improve or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
   };
 }
 
@@ -498,67 +606,38 @@ function boundedLocalMessages(value: unknown): AssistantMessage[] {
 }
 
 function starterProfile(value: unknown): SurgeStarterProfile {
-  const record = asRecord(value);
-  const postcode = asString(record?.postcode, 4);
-  const relationship = PROFILE_RELATIONSHIPS.has(record?.relationship as SurgeStarterProfile["relationship"])
-    ? record?.relationship as SurgeStarterProfile["relationship"]
-    : EMPTY_STARTER_PROFILE.relationship;
-  const homeType = PROFILE_HOME_TYPES.has(record?.homeType as SurgeStarterProfile["homeType"])
-    ? record?.homeType as SurgeStarterProfile["homeType"]
-    : EMPTY_STARTER_PROFILE.homeType;
-  const householdSize = PROFILE_HOUSEHOLD_SIZES.has(record?.householdSize as SurgeStarterProfile["householdSize"])
-    ? record?.householdSize as SurgeStarterProfile["householdSize"]
-    : EMPTY_STARTER_PROFILE.householdSize;
-  const priority = PROFILE_PRIORITIES.has(record?.priority as SurgeStarterProfile["priority"])
-    ? record?.priority as SurgeStarterProfile["priority"]
-    : EMPTY_STARTER_PROFILE.priority;
-  return {
-    postcode: /^\d{4}$/.test(postcode) ? postcode : "",
-    relationship,
-    homeType,
-    householdSize,
-    priority,
-    completed: record?.completed === true && /^\d{4}$/.test(postcode),
-  };
+  return parseSurgeStarterProfile(value);
 }
 
 function starterProfileContext(profile: SurgeStarterProfile) {
-  if (!profile.completed) return "";
-  const relationship = {
-    "owner-occupier": "owner-occupier",
-    renter: "renter",
-    landlord: "landlord",
-    strata: "strata or owners corporation member",
-    "not-sure": "relationship to the property not yet confirmed",
-  }[profile.relationship];
-  const homeType = {
-    "detached-house": "detached house",
-    townhouse: "townhouse, terrace, villa or duplex",
-    "apartment-unit": "apartment or unit",
-    "rural-home": "rural home",
-    "not-sure": "home type not yet confirmed",
-  }[profile.homeType];
-  const householdSize = {
-    one: "one person",
-    two: "two people",
-    "three-four": "three or four people",
-    "five-plus": "five or more people",
-    "not-sure": "household size not yet confirmed",
-  }[profile.householdSize];
-  const priority = {
-    "lower-bills": "lower energy bills",
-    comfort: "a warmer winter home and cooler summer home",
-    "healthy-home": "healthier air and moisture control",
-    electrify: "moving away from gas",
-    "solar-storage": "solar or battery options",
-    "not-sure": "the best first upgrade",
-  }[profile.priority];
-  return `Household starting point: postcode ${profile.postcode}; ${relationship}; ${homeType}; ${householdSize}; main goal is ${priority}. Treat newer details in the chat as corrections.`;
+  return surgeStarterProfileContext(profile);
+}
+
+function localSessionLastActive(
+  messages: readonly AssistantMessage[],
+  profile: SurgeStarterProfile,
+  profileUpdatedAt = "",
+  now = Date.now(),
+) {
+  const messageActivity = messages.reduce((latest, message) => {
+    const timestamp = new Date(message.createdAt || "").getTime();
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, Number.NEGATIVE_INFINITY);
+  const profileActivity = new Date(profileUpdatedAt).getTime();
+  const latestActivity = Math.max(
+    messageActivity,
+    Number.isFinite(profileActivity) ? profileActivity : Number.NEGATIVE_INFINITY,
+  );
+  if (Number.isFinite(latestActivity)) return new Date(latestActivity).toISOString();
+  return profile.completed || surgeProfileKnownAnswerCount(profile) > 0
+    ? new Date(now).toISOString()
+    : "";
 }
 
 function recentTurnsForRequest(
   messages: readonly AssistantMessage[],
   profile: SurgeStarterProfile = EMPTY_STARTER_PROFILE,
+  profileUpdatedAt = "",
 ) {
   const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const message of messages) {
@@ -568,23 +647,51 @@ function recentTurnsForRequest(
     if (turns.at(-1)?.role === turn.role) turns[turns.length - 1] = turn;
     else turns.push(turn);
   }
-  const profileContext = starterProfileContext(profile);
-  if (profileContext) {
-    if (turns[0]?.role === "user") {
-      turns[0] = {
-        role: "user",
-        content: `${profileContext}\n${turns[0].content}`.slice(0, MAX_MESSAGE_LENGTH),
-      };
-    } else {
-      turns.unshift({ role: "user", content: profileContext });
-    }
-  }
   if (turns.length > MAX_RECENT_TURNS) {
     turns.splice(0, turns.length - MAX_RECENT_TURNS);
   }
   while (
     turns.length > 0
     && turns.reduce((total, turn) => total + turn.content.length, 0) > MAX_RECENT_CONTEXT_CHARACTERS
+  ) turns.shift();
+  if (turns[0]?.role === "assistant") turns.shift();
+
+  const profileContext = starterProfileContext(profile);
+  if (profileContext) {
+    const profileTime = new Date(profileUpdatedAt).getTime();
+    const newestMessageTime = messages.reduce((latest, message) => {
+      const timestamp = new Date(message.createdAt || "").getTime();
+      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+    }, Number.NEGATIVE_INFINITY);
+    const profileIsNewest = Number.isFinite(profileTime) && profileTime > newestMessageTime;
+    if (profileIsNewest && turns.at(-1)?.role === "user") {
+      const lastIndex = turns.length - 1;
+      const availableForPriorTurn = Math.max(0, MAX_MESSAGE_LENGTH - profileContext.length - 1);
+      turns[lastIndex] = {
+        role: "user",
+        content: availableForPriorTurn > 0
+          ? `${turns[lastIndex].content.slice(0, availableForPriorTurn)}\n${profileContext}`
+          : profileContext,
+      };
+    } else if (profileIsNewest) {
+      if (turns.length >= MAX_RECENT_TURNS) turns.shift();
+      turns.push({ role: "user", content: profileContext });
+    } else if (turns[0]?.role === "user") {
+      const availableForPriorTurn = Math.max(0, MAX_MESSAGE_LENGTH - profileContext.length - 1);
+      turns[0] = {
+        role: "user",
+        content: availableForPriorTurn > 0
+          ? `${profileContext}\n${turns[0].content.slice(-availableForPriorTurn)}`
+          : profileContext,
+      };
+    } else {
+      if (turns.length >= MAX_RECENT_TURNS) turns.shift();
+      turns.unshift({ role: "user", content: profileContext });
+    }
+  }
+  while (
+    turns.length > MAX_RECENT_TURNS
+    || turns.reduce((total, turn) => total + turn.content.length, 0) > MAX_RECENT_CONTEXT_CHARACTERS
   ) turns.shift();
   if (turns[0]?.role === "assistant") turns.shift();
   return turns;
@@ -600,6 +707,7 @@ function savedConversation(value: unknown, now = Date.now()): SavedConversation 
     messages: expired ? [] : boundedLocalMessages(record?.messages),
     continuation: expired ? null : parseSurgeConversationState(record?.continuation),
     profile: expired ? EMPTY_STARTER_PROFILE : starterProfile(record?.profile),
+    profileUpdatedAt: expired ? "" : asString(record?.profileUpdatedAt, 80),
     lastActive: expired ? "" : lastActive,
     expired,
   };
@@ -661,6 +769,7 @@ async function readStoredPlanContext() {
 
 export function EnergyAssistantWidget() {
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const dedicated = pathname === "/surge";
   const [mode, setMode] = useState<Audience>("public");
   const explicitAudience = explicitRouteAudience(pathname);
@@ -685,6 +794,11 @@ export function EnergyAssistantWidget() {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
   const [profile, setProfile] = useState<SurgeStarterProfile>(EMPTY_STARTER_PROFILE);
+  const [profileUpdatedAt, setProfileUpdatedAt] = useState("");
+  const [profileStep, setProfileStep] = useState(0);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileDeferred, setProfileDeferred] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -692,7 +806,7 @@ export function EnergyAssistantWidget() {
   const [hasUsefulAnswer, setHasUsefulAnswer] = useState(false);
   const [serviceInterest, setServiceInterest] = useState(false);
   const [leadOpen, setLeadOpen] = useState(false);
-  const [leadStage, setLeadStage] = useState<LeadStage>("scope");
+  const [leadStage, setLeadStage] = useState<LeadStage>("destination");
   const [leadQuestionPage, setLeadQuestionPage] = useState(0);
   const [lead, setLead] = useState<LeadDraft>(EMPTY_LEAD);
   const [leadBusy, setLeadBusy] = useState(false);
@@ -700,15 +814,34 @@ export function EnergyAssistantWidget() {
   const [leadStatus, setLeadStatus] = useState("");
   const [leadRequestId, setLeadRequestId] = useState("");
   const [leadSubmissionKey, setLeadSubmissionKey] = useState("");
+  const [leadPublicPlanSubmissionId, setLeadPublicPlanSubmissionId] = useState("");
+  const [leadStartedAt, setLeadStartedAt] = useState(0);
   const [leadGrantedAt, setLeadGrantedAt] = useState("");
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [localityLookupStatus, setLocalityLookupStatus] = useState<LocalityLookupStatus>("idle");
   const [localityLookupError, setLocalityLookupError] = useState("");
   const effectiveOpen = dedicated || (open && openPathname === pathname && !hidden);
-  const needsStarterProfile = context.audience !== "trade" && messages.length === 0 && !profile.completed;
+  const needsStarterProfile = context.audience !== "trade"
+    && ((messages.length === 0 && !profile.completed && !profileDeferred) || profileEditing);
+  const currentProfileStep = SURGE_PROFILE_STEPS[profileStep] || SURGE_PROFILE_STEPS[0];
+  const profileKnownAnswerCount = surgeProfileKnownAnswerCount(profile);
+  const profileReviewedAnswerCount = surgeProfileReviewedAnswerCount(profile);
+  const profileUnknownAnswerCount = SURGE_PROFILE_FIELDS.length - profileReviewedAnswerCount;
+  const plannerProfile = useMemo(() => surgePlannerProfileAdapter(profile), [profile]);
+  const conversationFacts = useMemo(
+    () => safeConversationFacts(continuation, messages),
+    [continuation, messages],
+  );
+  const leadPlanSnapshot = useMemo(() => {
+    try {
+      return createHomeEnergyPlannerPublicPlanSnapshot(plannerProfile.draft);
+    } catch {
+      return null;
+    }
+  }, [plannerProfile.draft]);
   const quoteQuestions = useMemo(
-    () => energyAssistantQuoteQuestionsForServices(lead.services),
-    [lead.services],
+    () => publicPlanQuoteQuestionsForSnapshot(lead.services, leadPlanSnapshot),
+    [lead.services, leadPlanSnapshot],
   );
   const currentQuoteQuestions = quoteQuestions.slice(leadQuestionPage * 3, leadQuestionPage * 3 + 3);
   const answeredQuoteQuestionCount = quoteQuestions.filter((question) => lead.quoteAnswers[question.id]).length;
@@ -716,6 +849,7 @@ export function EnergyAssistantWidget() {
   const resetLeadAttempt = () => {
     setLeadRequestId("");
     setLeadSubmissionKey("");
+    setLeadPublicPlanSubmissionId("");
     setLeadGrantedAt("");
     setLeadError("");
     setLeadStatus("");
@@ -724,6 +858,30 @@ export function EnergyAssistantWidget() {
   const updateLead = (updater: (current: LeadDraft) => LeadDraft) => {
     setLead(updater);
     resetLeadAttempt();
+  };
+
+  const openLeadForm = () => {
+    setLead((current) => ({
+      ...current,
+      postcode: current.postcode || profile.postcode,
+    }));
+    setLeadStage("destination");
+    setLeadStartedAt(Date.now());
+    setLeadOpen(true);
+  };
+
+  const chooseLeadDestination = (destination: LeadDraft["destination"]) => {
+    updateLead((current) => ({
+      ...current,
+      destination,
+      serviceConsent: false,
+      shareName: false,
+      sharePhone: false,
+      shareAddress: false,
+      shareKnownPlanFacts: false,
+      marketingConsent: false,
+    }));
+    setLeadStage("scope");
   };
 
   const replaceMessages = (nextMessages: AssistantMessage[]) => {
@@ -735,7 +893,8 @@ export function EnergyAssistantWidget() {
       messages: boundedMessages,
       continuation: continuationRef.current,
       profile,
-      lastActive: [...boundedMessages].reverse().find((message) => message.createdAt)?.createdAt || "",
+      profileUpdatedAt,
+      lastActive: localSessionLastActive(boundedMessages, profile, profileUpdatedAt),
     }));
   };
 
@@ -754,16 +913,23 @@ export function EnergyAssistantWidget() {
     setMessages(nextMessages);
     setContinuation(null);
     setProfile(EMPTY_STARTER_PROFILE);
+    setProfileUpdatedAt("");
+    setProfileStep(0);
+    setProfileEditing(false);
+    setProfileDeferred(false);
+    setProfileError("");
     setHasUsefulAnswer(false);
     setServiceInterest(false);
     setLeadOpen(false);
-    setLeadStage("scope");
+    setLeadStage("destination");
     setLeadQuestionPage(0);
     setLead(EMPTY_LEAD);
     setLeadError("");
     setLeadStatus("");
     setLeadRequestId("");
     setLeadSubmissionKey("");
+    setLeadPublicPlanSubmissionId("");
+    setLeadStartedAt(0);
     setLeadGrantedAt("");
     setLocalities([]);
     setLocalityLookupStatus("idle");
@@ -786,6 +952,7 @@ export function EnergyAssistantWidget() {
       hydrationStartedRef.current = true;
       try {
         setMascotTucked(readStoredMascotTucked());
+        let restoredProfile = EMPTY_STARTER_PROFILE;
         const stored = readStoredSession();
         if (stored) {
           const saved = savedConversation(JSON.parse(stored));
@@ -793,7 +960,8 @@ export function EnergyAssistantWidget() {
           continuationRef.current = saved.continuation;
           setMessages(saved.messages);
           setContinuation(saved.continuation);
-          setProfile(saved.profile);
+          restoredProfile = saved.profile;
+          setProfileUpdatedAt(saved.profileUpdatedAt);
           setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
           setServiceInterest(saved.messages.some((message) =>
             message.role === "user" && signalsServiceInterest(message.content)));
@@ -804,6 +972,10 @@ export function EnergyAssistantWidget() {
             setStatus("Your locally saved conversation expired after 30 days of inactivity.");
           }
         }
+        const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+        const mergedProfile = mergeHomeEnergyPlannerSessionIntoSurgeProfile(restoredProfile, storedAssessment);
+        setProfile(mergedProfile);
+        if (mergedProfile !== restoredProfile) setProfileUpdatedAt(new Date().toISOString());
       } catch {
         removeStoredSession();
       }
@@ -843,9 +1015,10 @@ export function EnergyAssistantWidget() {
       messages: boundedLocalMessages(messages),
       continuation,
       profile,
-      lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
+      profileUpdatedAt,
+      lastActive: localSessionLastActive(messages, profile, profileUpdatedAt),
     }));
-  }, [context.audience, continuation, hydrated, messages, profile]);
+  }, [context.audience, continuation, hydrated, messages, profile, profileUpdatedAt]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -957,7 +1130,7 @@ export function EnergyAssistantWidget() {
   const ask = async (question: string) => {
     const message = question.trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message || busy) return;
-    const recentTurns = recentTurnsForRequest(messagesRef.current, profile);
+    const recentTurns = recentTurnsForRequest(messagesRef.current, profile, profileUpdatedAt);
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
       id: requestId,
@@ -1022,11 +1195,54 @@ export function EnergyAssistantWidget() {
     void ask(draft);
   };
 
+  const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
+    if (profile.completed) setProfileUpdatedAt(new Date().toISOString());
+    setProfile((current) => updateSurgeProfileField(current, field, value, checked));
+    setProfileError("");
+  };
+
   const completeStarterProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!/^\d{4}$/.test(profile.postcode)) return;
-    setProfile((current) => ({ ...current, completed: true }));
+    const reviewedProfile = markSurgeProfileStepReviewed(profile, currentProfileStep);
+    setProfile(reviewedProfile);
+    if (!profileEditing && profileStep < SURGE_PROFILE_STEPS.length - 1) {
+      setProfileStep((current) => current + 1);
+      setProfileError("");
+      return;
+    }
+    const nextProfile: SurgeStarterProfile = {
+      ...reviewedProfile,
+      version: SURGE_PROFILE_VERSION,
+      completed: true,
+    };
+    const nextProfileUpdatedAt = new Date().toISOString();
+    setProfile(nextProfile);
+    setProfileUpdatedAt(nextProfileUpdatedAt);
+    setProfileEditing(false);
+    setProfileDeferred(false);
+    setProfileStep(0);
+    storeSession(JSON.stringify({
+      mode: context.audience,
+      messages: messagesRef.current,
+      continuation: continuationRef.current,
+      profile: nextProfile,
+      profileUpdatedAt: nextProfileUpdatedAt,
+      lastActive: localSessionLastActive(messagesRef.current, nextProfile, nextProfileUpdatedAt),
+    }));
     setStatus("");
+    setProfileError("");
+  };
+
+  const openHomeEnergyPlanner = () => {
+    try {
+      window.sessionStorage.setItem(
+        HOME_ENERGY_ASSESSMENT_STORAGE_KEY,
+        JSON.stringify(plannerProfile.session),
+      );
+    } catch {
+      // The planner still opens when browser session storage is unavailable.
+    }
+    router.push("/plan");
   };
 
   const resetConversation = () => {
@@ -1045,6 +1261,11 @@ export function EnergyAssistantWidget() {
   };
 
   const advanceLeadScope = () => {
+    if (!lead.destination) {
+      setLeadError("Choose one optional help path before continuing.");
+      setLeadStage("destination");
+      return;
+    }
     if (!lead.services.length) {
       setLeadError("Choose at least one service so Australian Energy Assessments can route your request.");
       return;
@@ -1054,7 +1275,7 @@ export function EnergyAssistantWidget() {
       return;
     }
     setLeadError("");
-    setLeadStage("basics");
+    setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "contact");
   };
 
   const answerCurrentQuoteQuestionsAsUnknown = () => {
@@ -1062,7 +1283,8 @@ export function EnergyAssistantWidget() {
       const quoteAnswers = { ...current.quoteAnswers };
       for (const question of currentQuoteQuestions) {
         if (quoteAnswers[question.id]) continue;
-        quoteAnswers[question.id] = question.options.find((option) => /not sure|need advice/i.test(option)) || question.options[0];
+        const unknownAnswer = question.options.find((option) => /not sure|need advice/i.test(option));
+        if (unknownAnswer) quoteAnswers[question.id] = unknownAnswer;
       }
       return { ...current, quoteAnswers };
     });
@@ -1070,10 +1292,6 @@ export function EnergyAssistantWidget() {
 
   const advanceLeadQuestions = (skip: boolean) => {
     if (skip) answerCurrentQuoteQuestionsAsUnknown();
-    if (!skip && currentQuoteQuestions.some((question) => !lead.quoteAnswers[question.id])) {
-      setLeadError("Answer these questions, or choose Not sure / Need advice to continue.");
-      return;
-    }
     setLeadError("");
     if ((leadQuestionPage + 1) * 3 < quoteQuestions.length) {
       setLeadQuestionPage((current) => current + 1);
@@ -1083,13 +1301,24 @@ export function EnergyAssistantWidget() {
   };
 
   const advanceLeadContact = () => {
-    if (!lead.name.trim()) {
-      setLeadError("Add your name so Australian Energy Assessments knows who requested help.");
-      return;
-    }
-    if (!lead.email.trim() && !lead.phone.trim()) {
-      setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
-      return;
+    if (lead.destination === "matched-trades") {
+      if (!lead.firstName.trim() || !lead.lastName.trim()) {
+        setLeadError("Add your first and last name for the private plan record.");
+        return;
+      }
+      if (!lead.email.trim() || !lead.phone.trim() || !lead.streetAddress.trim()) {
+        setLeadError("Add an email, phone and street address for the private plan record.");
+        return;
+      }
+    } else {
+      if (!lead.name.trim()) {
+        setLeadError("Add your name so Australian Energy Assessments knows who requested help.");
+        return;
+      }
+      if (!lead.email.trim() && !lead.phone.trim()) {
+        setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
+        return;
+      }
     }
     setLeadError("");
     setLeadStage("preferences");
@@ -1097,9 +1326,10 @@ export function EnergyAssistantWidget() {
 
   const submitLead = async (event: FormEvent) => {
     event.preventDefault();
-    if (leadBusy || !lead.serviceConsent) return;
-    if (!lead.email.trim() && !lead.phone.trim()) {
-      setLeadError("Add an email address or phone number so Australian Energy Assessments can respond.");
+    if (leadBusy || leadStatus || !lead.serviceConsent) return;
+    if (!lead.destination) {
+      setLeadError("Choose Australian Energy Assessments follow-up or matched trades.");
+      setLeadStage("destination");
       return;
     }
     if (!lead.services.length) {
@@ -1110,40 +1340,20 @@ export function EnergyAssistantWidget() {
       setLeadError("Choose a suburb listed for this residential postcode.");
       return;
     }
-    if (lead.tradeSharingConsent && (!lead.email.trim() || lead.name.trim().split(/\s+/).length < 2)) {
-      setLeadError("Add your first and last name and email before sharing the brief with matched trades.");
-      return;
-    }
-    if (lead.tradeSharingConsent && lead.sharePhone && !lead.phone.trim()) {
-      setLeadError("Add a phone number or turn off phone sharing with matched trades.");
-      return;
-    }
-    if (
-      lead.tradeSharingConsent
-      && quoteQuestions.some((question) => !lead.quoteAnswers[question.id])
-    ) {
-      const firstUnanswered = quoteQuestions.findIndex((question) => !lead.quoteAnswers[question.id]);
-      setLeadQuestionPage(Math.max(0, Math.floor(firstUnanswered / 3)));
-      setLeadStage("questions");
-      setLeadError("Finish the trade brief or leave trade sharing off. Not sure is allowed; Australian Energy Assessments help stays available.");
-      return;
-    }
-    if (lead.tradeSharingConsent) {
-      const servicesWithoutUsefulDetail = lead.services.filter((service) =>
-        quoteQuestions.filter((question) =>
-          question.id !== "timing"
-          && question.services.length === 1
-          && question.services.includes(service)
-          && lead.quoteAnswers[question.id]
-          && !/not sure|need advice/i.test(lead.quoteAnswers[question.id])).length < 2);
-      if (servicesWithoutUsefulDetail.length) {
-        const firstMissingQuestion = quoteQuestions.findIndex((question) =>
-          question.services.length === 1 && question.services.includes(servicesWithoutUsefulDetail[0]));
-        setLeadQuestionPage(Math.max(0, Math.floor(firstMissingQuestion / 3)));
-        setLeadStage("questions");
-        setLeadError("Add two useful details for each service or leave trade sharing off. Australian Energy Assessments help stays available.");
+    if (lead.destination === "matched-trades") {
+      if (!lead.firstName.trim() || !lead.lastName.trim() || !lead.email.trim() || !lead.phone.trim() || !lead.streetAddress.trim()) {
+        setLeadError("Complete the private plan contact and property address fields.");
+        setLeadStage("contact");
         return;
       }
+      if (!leadPlanSnapshot) {
+        setLeadError("Record at least one home-energy priority before requesting trade matching. Your private plan and chat remain available.");
+        return;
+      }
+    } else if (!lead.name.trim() || (!lead.email.trim() && !lead.phone.trim())) {
+      setLeadError("Add your name and an email address or phone number for Australian Energy Assessments follow-up.");
+      setLeadStage("contact");
+      return;
     }
     setLeadBusy(true);
     setLeadError("");
@@ -1151,33 +1361,69 @@ export function EnergyAssistantWidget() {
     try {
       const requestId = leadRequestId || makeRequestId("lead");
       const submissionKey = leadSubmissionKey || createEnergyAssistantSubmissionKey();
+      const publicPlanSubmissionId = leadPublicPlanSubmissionId || makePublicPlanSubmissionId();
       const grantedAt = leadGrantedAt || new Date().toISOString();
       setLeadRequestId(requestId);
       setLeadSubmissionKey(submissionKey);
+      setLeadPublicPlanSubmissionId(publicPlanSubmissionId);
       setLeadGrantedAt(grantedAt);
-      const leadPayload = buildEnergyAssistantLeadPayload({
-        lead,
-        requestId,
-        submissionKey,
-        grantedAt,
-      });
-      const response = await fetch("/api/energy-assistant/leads", {
+      const submission = buildEnergyAssistantEnquirySubmission(
+        lead.destination === "matched-trades"
+          ? {
+              destination: "matched-trades",
+              tradeEnquiry: {
+                submissionId: publicPlanSubmissionId,
+                clientStartedAt: leadStartedAt || Date.now(),
+                consentAccepted: true,
+                consentGrantedAt: grantedAt,
+                customerFirstName: lead.firstName,
+                customerLastName: lead.lastName,
+                email: lead.email,
+                phone: lead.phone,
+                customerUnitNumber: lead.unitNumber,
+                customerStreetAddress: lead.streetAddress,
+                customerSuburb: lead.suburb,
+                customerState: lead.state,
+                postcode: lead.postcode,
+                services: lead.services,
+                customerMessage: lead.message,
+                shareContact: {
+                  name: lead.shareName,
+                  phone: lead.sharePhone,
+                  address: lead.shareAddress,
+                },
+                quoteAnswers: quoteQuestions.flatMap((question) => {
+                  const answer = lead.quoteAnswers[question.id];
+                  return answer ? [{ questionId: question.id, answer }] : [];
+                }),
+                shareKnownPlanFacts: lead.shareKnownPlanFacts,
+                planSnapshot: leadPlanSnapshot,
+              },
+            }
+          : {
+              destination: "aea-follow-up",
+              assistantPayload: buildEnergyAssistantLeadPayload({
+                lead,
+                requestId,
+                submissionKey,
+                grantedAt,
+              }),
+            },
+      );
+      const response = await fetch(submission.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(leadPayload),
+        body: JSON.stringify(submission.payload),
       });
       const payload: unknown = await response.json().catch(() => null);
       const record = asRecord(payload);
       if (!response.ok || record?.ok !== true) {
         throw new Error(parseApiError(payload, "Australian Energy Assessments could not receive your request."));
       }
-      const tradeSharing = asString(record.tradeSharing, 40);
       setLeadStatus(
-        lead.tradeSharingConsent && tradeSharing !== "shared"
-          ? "Your request is with Australian Energy Assessments. It has not been shared with trades because the brief still needs more useful detail."
-          : lead.tradeSharingConsent
-            ? "Your request is with Australian Energy Assessments and the completed brief was shared with matched trades."
-            : "Your request has been sent to Australian Energy Assessments.",
+        lead.destination === "matched-trades"
+          ? "Your matched-trade enquiry was sent. Your private home plan is being prepared for your email; trades receive only the structured details you chose to share."
+          : "Your request has been sent to Australian Energy Assessments only.",
       );
     } catch (caught) {
       setLeadError(caught instanceof Error ? caught.message : "Australian Energy Assessments could not receive your request.");
@@ -1270,9 +1516,97 @@ export function EnergyAssistantWidget() {
           tabIndex={dedicated ? undefined : -1}
           onKeyDown={dedicated ? undefined : trapFocus}
         >
+          {dedicated && (
+            <aside className={styles.contextRail} aria-label="Your home context">
+              <header className={styles.contextRailHeader}>
+                <Image src="/surge-mascot.png" alt="" width={54} height={68} />
+                <div>
+                  <span>Surge AI knows</span>
+                  <h2>Your home context</h2>
+                </div>
+              </header>
+              <div className={styles.contextProgress}>
+                <div>
+                  <strong>{profileReviewedAnswerCount}</strong>
+                  <span>of {SURGE_PROFILE_FIELDS.length} details reviewed</span>
+                </div>
+                <progress max={SURGE_PROFILE_FIELDS.length} value={profileReviewedAnswerCount} aria-label={`${profileReviewedAnswerCount} of ${SURGE_PROFILE_FIELDS.length} home details reviewed`} />
+                <p>{profileUnknownAnswerCount > 0 ? `${profileUnknownAnswerCount} remain to review` : `${profileKnownAnswerCount} useful details recorded`}</p>
+              </div>
+              <section className={styles.plannerProgress} aria-labelledby="surge-planner-progress-title">
+                <div>
+                  <span>Home Energy Planner</span>
+                  <strong id="surge-planner-progress-title">{plannerProfile.completion.completed} of {plannerProfile.completion.total} stages ready</strong>
+                </div>
+                <progress
+                  max={100}
+                  value={plannerProfile.completion.percentage}
+                  aria-label={`${plannerProfile.completion.percentage}% of the Home Energy Planner ready`}
+                />
+                <button type="button" onClick={openHomeEnergyPlanner}>Open my energy plan</button>
+                <small>Only the confirmed answers shown here are copied into your private plan.</small>
+              </section>
+              <div className={styles.contextGroups}>
+                {SURGE_PROFILE_STEPS.map((step, stepIndex) => {
+                  const knownFields = step.fields.filter((field) => !surgeProfileFieldIsUnknown(profile, field));
+                  return (
+                    <section key={step.id}>
+                      <header>
+                        <h3>{step.title}</h3>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProfileStep(stepIndex);
+                            setProfileEditing(true);
+                            setProfileError("");
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </header>
+                      {knownFields.length ? (
+                        <dl>
+                          {knownFields.map((field) => (
+                            <div key={field.id}>
+                              <dt>{field.shortLabel}</dt>
+                              <dd>{surgeProfileAnswerLabel(profile, field)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : <p>Not answered yet</p>}
+                    </section>
+                  );
+                })}
+              </div>
+              {conversationFacts.length > 0 && (
+                <section className={styles.conversationFacts} aria-labelledby="surge-conversation-facts">
+                  <h3 id="surge-conversation-facts">Learned in this chat</h3>
+                  <ul>
+                    {conversationFacts.map((fact) => (
+                      <li key={fact.key}>
+                        <div><span>{fact.label}</span><strong>{customerVisibleText(fact.value, context.audience)}</strong></div>
+                        <button
+                          type="button"
+                          aria-label={`Correct ${fact.label}`}
+                          onClick={() => {
+                            setDraft(`Correction: ${fact.label} is `);
+                            window.requestAnimationFrame(() => composerRef.current?.focus());
+                          }}
+                        >
+                          Correct
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </aside>
+          )}
+
+          <div className={styles.workspace}>
           <header className={styles.header}>
             <div>
-              <span className={styles.mode}>All things energy upgrades</span>
+              <span className={styles.mode}>{dedicated ? "Your future-focused Australian home-energy guide" : "All things energy upgrades"}</span>
               <h2 id="aea-energy-guide-title">Ask Surge AI</h2>
             </div>
             {!dedicated && <button type="button" aria-label="Close Surge AI" onClick={close}>
@@ -1284,88 +1618,89 @@ export function EnergyAssistantWidget() {
             {needsStarterProfile && (
               <form className={styles.intake} onSubmit={completeStarterProfile}>
                 <header>
-                  <span>Set the scene</span>
-                  <h3>Tell Surge AI about the home</h3>
-                  <p>Five quick answers give you a useful first response instead of generic advice. No name, email or phone number is needed.</p>
+                  <span>Build your home context · Step {profileStep + 1} of {SURGE_PROFILE_STEPS.length}</span>
+                  <progress max={SURGE_PROFILE_STEPS.length} value={profileStep + 1} aria-label={`Step ${profileStep + 1} of ${SURGE_PROFILE_STEPS.length}`} />
+                  <h3>{currentProfileStep.title}</h3>
+                  <p>{currentProfileStep.description}</p>
+                  <p>Choose the closest safe answer. Not sure is always valid, and no name, email or phone number is collected here.</p>
                 </header>
                 <div className={styles.intakeGrid}>
-                  <label>
-                    <span>Property postcode</span>
-                    <input
-                      required
-                      pattern="[0-9]{4}"
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                      maxLength={4}
-                      placeholder="For example 3000"
-                      value={profile.postcode}
-                      onChange={(event) => setProfile((current) => ({
-                        ...current,
-                        postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
-                        completed: false,
-                      }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Your relationship to the home</span>
-                    <select value={profile.relationship} onChange={(event) => setProfile((current) => ({
-                      ...current,
-                      relationship: event.target.value as SurgeStarterProfile["relationship"],
-                      completed: false,
-                    }))}>
-                      <option value="owner-occupier">I own and live here</option>
-                      <option value="renter">I rent the home</option>
-                      <option value="landlord">I am the landlord</option>
-                      <option value="strata">Strata or owners corporation</option>
-                      <option value="not-sure">Not sure</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Home type</span>
-                    <select value={profile.homeType} onChange={(event) => setProfile((current) => ({
-                      ...current,
-                      homeType: event.target.value as SurgeStarterProfile["homeType"],
-                      completed: false,
-                    }))}>
-                      <option value="detached-house">Detached house</option>
-                      <option value="townhouse">Townhouse, terrace, villa or duplex</option>
-                      <option value="apartment-unit">Apartment or unit</option>
-                      <option value="rural-home">Rural home</option>
-                      <option value="not-sure">Not sure</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>People usually living here</span>
-                    <select value={profile.householdSize} onChange={(event) => setProfile((current) => ({
-                      ...current,
-                      householdSize: event.target.value as SurgeStarterProfile["householdSize"],
-                      completed: false,
-                    }))}>
-                      <option value="one">One person</option>
-                      <option value="two">Two people</option>
-                      <option value="three-four">Three or four people</option>
-                      <option value="five-plus">Five or more people</option>
-                      <option value="not-sure">Not sure</option>
-                    </select>
-                  </label>
-                  <label className={styles.intakePriority}>
-                    <span>What matters most right now?</span>
-                    <select value={profile.priority} onChange={(event) => setProfile((current) => ({
-                      ...current,
-                      priority: event.target.value as SurgeStarterProfile["priority"],
-                      completed: false,
-                    }))}>
-                      <option value="lower-bills">Lower energy bills</option>
-                      <option value="comfort">Feel warmer in winter and cooler in summer</option>
-                      <option value="healthy-home">Healthier air and moisture control</option>
-                      <option value="electrify">Move away from gas</option>
-                      <option value="solar-storage">Solar or battery options</option>
-                      <option value="not-sure">Help me work out the first priority</option>
-                    </select>
-                  </label>
+                  {currentProfileStep.fields.map((field) => {
+                    const fieldValue = surgeProfileFieldValue(profile, field);
+                    if (field.kind === "postcode") {
+                      return (
+                        <label key={field.id}>
+                          <span>{field.label}</span>
+                          <input
+                            pattern="[0-9]{4}"
+                            inputMode="numeric"
+                            autoComplete="postal-code"
+                            maxLength={4}
+                            placeholder="For example 3000"
+                            value={profile.postcode}
+                            onChange={(event) => updateStarterProfile(field, event.target.value)}
+                          />
+                          <small>{field.hint || "Leave blank to skip for now."}</small>
+                        </label>
+                      );
+                    }
+                    if (field.kind === "multiselect") {
+                      const selectedValues = Array.isArray(fieldValue) ? fieldValue : [];
+                      return (
+                        <fieldset className={styles.intakeMulti} key={field.id}>
+                          <legend>{field.label}</legend>
+                          {field.hint && <small>{field.hint}</small>}
+                          <div>
+                            {field.options?.map((option) => (
+                              <label key={option.value}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedValues.includes(option.value)}
+                                  onChange={(event) => updateStarterProfile(field, option.value, event.target.checked)}
+                                />
+                                <span>{option.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      );
+                    }
+                    return (
+                      <label key={field.id}>
+                        <span>{field.label}</span>
+                        <select
+                          value={typeof fieldValue === "string" ? fieldValue : ""}
+                          onChange={(event) => updateStarterProfile(field, event.target.value)}
+                        >
+                          {!field.options?.some((option) => option.value === "") && <option value="">Not sure or skip</option>}
+                          {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                        {field.hint && <small>{field.hint}</small>}
+                      </label>
+                    );
+                  })}
                 </div>
-                <button className={styles.intakeContinue} type="submit">Start with my home</button>
-                <small>These answers stay in this browser with the conversation and can be changed at any time.</small>
+                {profileError && <p className={styles.error} role="alert">{profileError}</p>}
+                <div className={styles.intakeNav}>
+                  {profileStep > 0 && <button type="button" onClick={() => { setProfileStep((current) => current - 1); setProfileError(""); }}>Back</button>}
+                  {!profileEditing && (
+                    <button
+                      className={styles.intakeSkip}
+                      type="button"
+                      onClick={() => {
+                        setProfileDeferred(true);
+                        setProfileError("");
+                        window.requestAnimationFrame(() => composerRef.current?.focus());
+                      }}
+                    >
+                      Ask a question now
+                    </button>
+                  )}
+                  <button className={styles.intakeContinue} type="submit">
+                    {profileEditing || profileStep === SURGE_PROFILE_STEPS.length - 1 ? "Save my home context" : "Continue"}
+                  </button>
+                </div>
+                <small>These answers stay in this browser with the conversation. Use the context rail to update any answer later.</small>
               </form>
             )}
 
@@ -1374,10 +1709,14 @@ export function EnergyAssistantWidget() {
                 <span>Start here</span>
                 <h3 id="aea-start-heading">What would you like help with?</h3>
                 <p id="aea-energy-guide-description">{context.intro}</p>
-                {context.audience !== "trade" && profile.completed && (
+                {context.audience !== "trade" && profile.completed && !dedicated && (
                   <div className={styles.profileSummary}>
                     <span>Using your postcode and home starting point</span>
-                    <button type="button" onClick={() => setProfile((current) => ({ ...current, completed: false }))}>
+                    <button type="button" onClick={() => {
+                      setProfileStep(0);
+                      setProfileEditing(true);
+                      setProfileError("");
+                    }}>
                       Change details
                     </button>
                   </div>
@@ -1436,17 +1775,15 @@ export function EnergyAssistantWidget() {
             {error && <p className={styles.error} role="alert">{error}</p>}
             {status && <p className={styles.status} role="status">{status}</p>}
 
-            {hasUsefulAnswer && serviceInterest && !leadOpen && (
+            {(profile.completed || (hasUsefulAnswer && serviceInterest)) && !leadOpen && (
               <section className={styles.leadOffer}>
-                <strong>Explore quote or service options, if you want to</strong>
-                <p>Only details you choose in the optional form go to Australian Energy Assessments. Your advice is not gated, and Surge AI never sends the raw conversation to trades.</p>
+                <strong>Optional human help, only if you want it</strong>
+                <p>Keep using Surge AI and your private plan without sharing contact details, or choose one clear follow-up path. No brand, product, supplier or installer is recommended.</p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setLeadOpen(true);
-                  }}
+                  onClick={openLeadForm}
                 >
-                  Explore professional help
+                  See optional help paths
                 </button>
                 <button type="button" onClick={() => composerRef.current?.focus()}>
                   Keep exploring or change subject
@@ -1463,21 +1800,37 @@ export function EnergyAssistantWidget() {
                   </div>
                   <button type="button" aria-label="Close service request" onClick={() => setLeadOpen(false)}>×</button>
                 </header>
-                <p>Only the details you enter here go to Australian Energy Assessments so its team can respond using your contact details. The raw guide conversation is not sent to trades, and all advice above remains available whether or not you submit.</p>
+                <p>Choose one destination. Nothing is shared by default, and you can close this form without affecting your chat or private plan.</p>
                 <button type="button" onClick={() => {
                   setLeadOpen(false);
                   window.requestAnimationFrame(() => composerRef.current?.focus());
                 }}>
                   Continue asking or change subject
                 </button>
-                {leadStage !== "scope" && (
+                {leadStage === "destination" && (
+                  <section className={styles.leadStep} aria-labelledby="aea-lead-destination">
+                    <h4 id="aea-lead-destination">Choose one optional follow-up</h4>
+                    <div className={styles.destinationChoices}>
+                      <button type="button" onClick={() => chooseLeadDestination("aea-follow-up")}>
+                        <strong>Australian Energy Assessments only</strong>
+                        <span>Send a lighter service request to the Australian Energy Assessments team. Nothing goes to matched trades.</span>
+                      </button>
+                      <button type="button" onClick={() => chooseLeadDestination("matched-trades")}>
+                        <strong>Matched trades + my private plan by email</strong>
+                        <span>Route one structured enquiry to suitable approved trades and email your private plan copy to you.</span>
+                      </button>
+                    </div>
+                    <p>{ENERGY_ASSISTANT_MATCHING_EXPLANATION}</p>
+                  </section>
+                )}
+
+                {leadStage !== "destination" && leadStage !== "scope" && (
                   <section className={styles.leadSummary} aria-label="Quote brief summary">
                     <strong>Brief so far</strong>
                     <p>{lead.suburb}, {lead.state} {lead.postcode}. {lead.services.length} service{lead.services.length === 1 ? "" : "s"}. {answeredQuoteQuestionCount} of {quoteQuestions.length} service details recorded.</p>
                     <div>
                       <button type="button" onClick={() => setLeadStage("scope")}>Edit location or services</button>
-                      <button type="button" onClick={() => setLeadStage("basics")}>Edit property details</button>
-                      {quoteQuestions.length > 0 && <button type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
+                      {lead.destination === "matched-trades" && quoteQuestions.length > 0 && <button type="button" onClick={() => { setLeadQuestionPage(0); setLeadStage("questions"); }}>Edit service details</button>}
                     </div>
                   </section>
                 )}
@@ -1520,25 +1873,14 @@ export function EnergyAssistantWidget() {
                         ))}
                       </div>
                     </fieldset>
-                    <button type="button" onClick={advanceLeadScope}>Continue</button>
-                  </section>
-                )}
-
-                {leadStage === "basics" && (
-                  <section className={styles.leadStep} aria-labelledby="aea-lead-basics">
-                    <h4 id="aea-lead-basics">2. Property basics</h4>
-                    <p>Three quick facts improve the brief. Not sure is a valid answer.</p>
-                    <label><span>Property type</span><select value={lead.propertyType} onChange={(event) => updateLead((current) => ({ ...current, propertyType: event.target.value }))}><option value="not-sure">Not sure</option><option value="house">House</option><option value="townhouse">Townhouse</option><option value="apartment-unit">Apartment or unit</option><option value="other">Other</option></select></label>
-                    <label><span>Your relationship to the property</span><select value={lead.tenure} onChange={(event) => updateLead((current) => ({ ...current, tenure: event.target.value }))}><option value="not-sure">Not sure</option><option value="owner-occupier">Owner-occupier</option><option value="landlord">Landlord</option><option value="renter">Renter</option><option value="strata">Strata</option><option value="trade-client">Trade acting for a client</option></select></label>
-                    <label><span>Budget range</span><select value={lead.budgetRange} onChange={(event) => updateLead((current) => ({ ...current, budgetRange: event.target.value }))}><option value="not-set">Not set</option><option value="under-5000">Under $5,000</option><option value="5000-15000">$5,000 to $15,000</option><option value="15000-30000">$15,000 to $30,000</option><option value="30000-plus">$30,000 plus</option></select></label>
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("scope")}>Back</button><button type="button" onClick={() => setLeadStage(quoteQuestions.length ? "questions" : "contact")}>Continue</button></div>
+                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("destination")}>Back</button><button type="button" onClick={advanceLeadScope}>Continue</button></div>
                   </section>
                 )}
 
                 {leadStage === "questions" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-questions">
-                    <h4 id="aea-lead-questions">3. Service details</h4>
-                    <p>Showing {leadQuestionPage * 3 + 1} to {Math.min((leadQuestionPage + 1) * 3, quoteQuestions.length)} of {quoteQuestions.length}. These improve quote readiness. Advice and Australian Energy Assessments follow-up stay available if you choose Not sure or Need advice.</p>
+                    <h4 id="aea-lead-questions">Optional quote details</h4>
+                    <p>Showing {leadQuestionPage * 3 + 1} to {Math.min((leadQuestionPage + 1) * 3, quoteQuestions.length)} of {quoteQuestions.length}. Skip anything you do not know; your private plan remains available either way.</p>
                     {currentQuoteQuestions.map((question) => (
                       <label key={question.id}>
                         <span>{question.label}</span>
@@ -1549,7 +1891,7 @@ export function EnergyAssistantWidget() {
                       </label>
                     ))}
                     <div className={styles.leadNav}>
-                      <button type="button" onClick={() => leadQuestionPage ? setLeadQuestionPage((current) => current - 1) : setLeadStage("basics")}>Back</button>
+                      <button type="button" onClick={() => leadQuestionPage ? setLeadQuestionPage((current) => current - 1) : setLeadStage("scope")}>Back</button>
                       <button type="button" onClick={() => advanceLeadQuestions(true)}>Not sure / skip these</button>
                       <button type="button" onClick={() => advanceLeadQuestions(false)}>Save and continue</button>
                     </div>
@@ -1558,31 +1900,75 @@ export function EnergyAssistantWidget() {
 
                 {leadStage === "contact" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-contact">
-                    <h4 id="aea-lead-contact">4. Contact details</h4>
-                    <label><span>Name</span><input required maxLength={120} autoComplete="name" value={lead.name} onChange={(event) => updateLead((current) => ({ ...current, name: event.target.value }))} /></label>
-                    <label><span>Email</span><input type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
-                    <label><span>Phone</span><input type="tel" maxLength={30} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
-                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage(quoteQuestions.length ? "questions" : "basics")}>Back</button><button type="button" onClick={advanceLeadContact}>Continue</button></div>
+                    <h4 id="aea-lead-contact">Contact details</h4>
+                    {lead.destination === "matched-trades" ? (
+                      <>
+                        <p>These details are required for the private plan record. Only the fields you select on the next screen are shared with approved matched trades; email and postcode are always included so they can reply and match the service area.</p>
+                        <div className={styles.leadColumns}>
+                          <label><span>First name</span><input required maxLength={60} autoComplete="given-name" value={lead.firstName} onChange={(event) => updateLead((current) => ({ ...current, firstName: event.target.value }))} /></label>
+                          <label><span>Last name</span><input required maxLength={60} autoComplete="family-name" value={lead.lastName} onChange={(event) => updateLead((current) => ({ ...current, lastName: event.target.value }))} /></label>
+                          <label><span>Email</span><input required type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
+                          <label><span>Phone</span><input required type="tel" maxLength={40} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
+                          <label><span>Street address</span><input required maxLength={140} autoComplete="address-line1" value={lead.streetAddress} onChange={(event) => updateLead((current) => ({ ...current, streetAddress: event.target.value }))} /></label>
+                          <label><span>Unit number <small>Optional</small></span><input maxLength={40} autoComplete="address-line2" value={lead.unitNumber} onChange={(event) => updateLead((current) => ({ ...current, unitNumber: event.target.value }))} /></label>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p>Only the details you enter here go to Australian Energy Assessments. Nothing is shared with matched trades.</p>
+                        <label><span>Name</span><input required maxLength={120} autoComplete="name" value={lead.name} onChange={(event) => updateLead((current) => ({ ...current, name: event.target.value }))} /></label>
+                        <label><span>Email <small>Email or phone required</small></span><input type="email" maxLength={254} autoComplete="email" inputMode="email" value={lead.email} onChange={(event) => updateLead((current) => ({ ...current, email: event.target.value }))} /></label>
+                        <label><span>Phone <small>Email or phone required</small></span><input type="tel" maxLength={32} autoComplete="tel" inputMode="tel" value={lead.phone} onChange={(event) => updateLead((current) => ({ ...current, phone: event.target.value }))} /></label>
+                      </>
+                    )}
+                    <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage(lead.destination === "matched-trades" && quoteQuestions.length ? "questions" : "scope")}>Back</button><button type="button" onClick={advanceLeadContact}>Continue</button></div>
                   </section>
                 )}
 
                 {leadStage === "preferences" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-preferences">
-                    <h4 id="aea-lead-preferences">5. Response preferences</h4>
-                    <label><span>Preferred contact</span><select value={lead.contactPreference} onChange={(event) => updateLead((current) => ({ ...current, contactPreference: event.target.value }))}><option value="either">Email or phone</option><option value="email">Email</option><option value="phone">Phone</option></select></label>
-                    <label><span>Best contact time</span><select value={lead.bestContactTime} onChange={(event) => updateLead((current) => ({ ...current, bestContactTime: event.target.value }))}><option value="business-hours">Business hours</option><option value="after-hours">After hours</option><option value="any-time">Any time</option></select></label>
-                    <label><span>Anything Australian Energy Assessments should know? <small>Optional</small></span><textarea rows={3} maxLength={800} value={lead.message} onChange={(event) => updateLead((current) => ({ ...current, message: event.target.value }))} /></label>
+                    <h4 id="aea-lead-preferences">{lead.destination === "matched-trades" ? "Choose exactly what trades may see" : "Response preferences"}</h4>
+                    {lead.destination === "matched-trades" ? (
+                      <>
+                        <p>Email, postcode, selected services, your message and any quote answers are included. The following details remain private unless you select them:</p>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareName} onChange={(event) => updateLead((current) => ({ ...current, shareName: event.target.checked }))} /><span>Also share my first and last name.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Also share my phone number.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareAddress} onChange={(event) => updateLead((current) => ({ ...current, shareAddress: event.target.checked }))} /><span>Also share my unit, street, suburb and state.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.shareKnownPlanFacts} onChange={(event) => updateLead((current) => ({ ...current, shareKnownPlanFacts: event.target.checked }))} /><span>Also include confirmed home-plan facts relevant to the selected services. My full plan stays private.</span></label>
+                      </>
+                    ) : (
+                      <>
+                        <label><span>Preferred contact</span><select value={lead.contactPreference} onChange={(event) => updateLead((current) => ({ ...current, contactPreference: event.target.value }))}><option value="either">Email or phone</option><option value="email">Email</option><option value="phone">Phone</option></select></label>
+                        <label><span>Best contact time</span><select value={lead.bestContactTime} onChange={(event) => updateLead((current) => ({ ...current, bestContactTime: event.target.value }))}><option value="business-hours">Business hours</option><option value="after-hours">After hours</option><option value="any-time">Any time</option></select></label>
+                      </>
+                    )}
+                    <label><span>Anything else to include? <small>Optional</small></span><textarea rows={3} maxLength={500} value={lead.message} onChange={(event) => updateLead((current) => ({ ...current, message: event.target.value }))} /></label>
                     <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("contact")}>Back</button><button type="button" onClick={() => setLeadStage("consent")}>Review consent</button></div>
                   </section>
                 )}
 
                 {leadStage === "consent" && (
                   <section className={styles.leadStep} aria-labelledby="aea-lead-consent">
-                    <h4 id="aea-lead-consent">6. Choose what may be shared</h4>
-                    <label className={styles.consent}><input type="checkbox" required checked={lead.serviceConsent} onChange={(event) => updateLead((current) => ({ ...current, serviceConsent: event.target.checked }))} /><span>I agree that Australian Energy Assessments may use these details to respond to this service request.</span></label>
-                    <label className={styles.consent}><input type="checkbox" checked={lead.tradeSharingConsent} onChange={(event) => updateLead((current) => ({ ...current, tradeSharingConsent: event.target.checked, sharePhone: event.target.checked ? current.sharePhone : false }))} /><span>I separately agree that Australian Energy Assessments may share my name, email, postcode, state, selected services and completed quote brief with approved matched trades. This is optional and unchecked by default.</span></label>
-                    {lead.tradeSharingConsent && <label className={styles.consent}><input type="checkbox" checked={lead.sharePhone} onChange={(event) => updateLead((current) => ({ ...current, sharePhone: event.target.checked }))} /><span>Also share my phone number with those matched trades. This is separately optional.</span></label>}
-                    <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional Australian Energy Assessments updates. This is optional and is not required for a response.</span></label>
+                    <h4 id="aea-lead-consent">Confirm this one destination</h4>
+                    {lead.destination === "matched-trades" ? (
+                      <>
+                        <p>{ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION}</p>
+                        <ul className={styles.sharingReceipt} aria-label="Details selected for matched trades">
+                          <li>Email, postcode, selected services and supplied quote answers: shared</li>
+                          <li>Name: {lead.shareName ? "shared" : "private"}</li>
+                          <li>Phone: {lead.sharePhone ? "shared" : "private"}</li>
+                          <li>Street address: {lead.shareAddress ? "shared" : "private"}</li>
+                          <li>Confirmed relevant plan facts: {lead.shareKnownPlanFacts ? "shared" : "private"}</li>
+                          <li>Private plan copy, full saved plan and chat: private</li>
+                        </ul>
+                        <label className={styles.consent}><input type="checkbox" required checked={lead.serviceConsent} onChange={(event) => updateLead((current) => ({ ...current, serviceConsent: event.target.checked }))} /><span>I agree to email my private plan copy and route this selected structured enquiry to suitable approved trades. This consent is optional and unchecked by default.</span></label>
+                      </>
+                    ) : (
+                      <>
+                        <label className={styles.consent}><input type="checkbox" required checked={lead.serviceConsent} onChange={(event) => updateLead((current) => ({ ...current, serviceConsent: event.target.checked }))} /><span>I agree that Australian Energy Assessments may use these details to respond to this service request. Nothing is sent to matched trades.</span></label>
+                        <label className={styles.consent}><input type="checkbox" checked={lead.marketingConsent} onChange={(event) => updateLead((current) => ({ ...current, marketingConsent: event.target.checked }))} /><span>I would also like occasional Australian Energy Assessments updates. This is optional and is not required for a response.</span></label>
+                      </>
+                    )}
                     <div className={styles.leadNav}><button type="button" onClick={() => setLeadStage("preferences")}>Back</button></div>
                   </section>
                 )}
@@ -1605,7 +1991,7 @@ export function EnergyAssistantWidget() {
             </footer>
           </div>
 
-          {(context.audience === "trade" || profile.completed || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
+          {(context.audience === "trade" || profile.completed || profileDeferred || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
             <label htmlFor="aea-energy-guide-question">Ask Surge AI</label>
             <div>
               <textarea
@@ -1630,6 +2016,7 @@ export function EnergyAssistantWidget() {
             </div>
             <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
           </form>}
+          </div>
         </section>
       )}
     </div>

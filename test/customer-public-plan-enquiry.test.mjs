@@ -12,6 +12,10 @@ const planner = fs.readFileSync(
   new URL("../src/components/HomeEnergyPlanner.tsx", import.meta.url),
   "utf8",
 );
+const plannerSchema = fs.readFileSync(
+  new URL("../src/lib/home-energy-planner-schema.ts", import.meta.url),
+  "utf8",
+);
 const planPage = fs.readFileSync(
   new URL("../src/app/plan/page.tsx", import.meta.url),
   "utf8",
@@ -64,8 +68,9 @@ test("the optional enquiry preserves every supported planner selection without d
     "wallConstruction",
     "floorConstruction",
   ]) {
-    assert.match(planner, new RegExp(`${field}: string`));
+    assert.match(plannerSchema, new RegExp(`${field}: string`));
   }
+  assert.match(planner, /type PlannerDraft = HomeEnergyPlannerDraft/);
   assert.match(planner, /const printablePlanHref = `\/plan\/print\?\$\{selectionParams\.toString\(\)\}`/);
   assert.match(planner, /planHref=\{printablePlanHref\}/);
   assert.match(planner, /href=\{printablePlanHref\}/);
@@ -213,11 +218,12 @@ test("the enquiry handoff keeps independent plan actions available without imply
 });
 
 test("the result follows four grouped stages and keeps visible answer-specific quick wins", () => {
-  assert.match(planner, /const PRIMARY_STAGE_COUNT = 4/);
-  assert.match(planner, /Goal and household/);
-  assert.match(planner, /Comfort and building/);
-  assert.match(planner, /Current systems/);
-  assert.match(planner, /Timing and review/);
+  assert.match(plannerSchema, /HOME_ENERGY_PLANNER_STAGE_COUNT = 4/);
+  assert.match(planner, /const PRIMARY_STAGE_COUNT = HOME_ENERGY_PLANNER_STAGE_COUNT/);
+  assert.match(plannerSchema, /Goal and household/);
+  assert.match(plannerSchema, /Comfort and building/);
+  assert.match(plannerSchema, /Current systems/);
+  assert.match(plannerSchema, /Timing and review/);
   assert.doesNotMatch(planner, /<PlannerHomeJourney/);
   assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
   assert.match(
@@ -257,7 +263,7 @@ test("core facts are grouped while optional details stay in their relevant secti
     "roofCondition",
     "switchboard",
   ]) {
-    assert.match(planner, new RegExp(`key: "${key}"`));
+    assert.match(plannerSchema, new RegExp(`key: "${key}"`));
   }
   assert.match(planner, /planSnapshot=\{\{/);
   assert.match(planner, /const enquiryPropertyContext = \{/);

@@ -1,15 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  createCustomerProjectPlan,
-  customerHomeFeatureSections as rawCustomerHomeFeatureSections,
-  customerProjectOptions as rawCustomerProjectOptions,
-  normalizeHomeFeatureSelections,
-  updateHomeFeatureSelection,
-} from "@/lib/customer-projects.mjs";
+import { updateHomeFeatureSelection } from "@/lib/customer-projects.mjs";
 import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
+import {
+  HOME_ENERGY_PLANNER_COMFORT_QUESTION_IDS,
+  HOME_ENERGY_PLANNER_CONSTRUCTION_QUESTIONS,
+  HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS,
+  HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS,
+  HOME_ENERGY_PLANNER_OPTIONS,
+  HOME_ENERGY_PLANNER_STAGE_COUNT,
+  HOME_ENERGY_PLANNER_STAGE_NAMES,
+  HOME_ENERGY_PLANNER_SYSTEM_QUESTION_IDS,
+  createHomeEnergyPlannerSession,
+  createHomeEnergyPlannerPlan,
+  defaultHomeEnergyPlannerDraft,
+  explicitHomeEnergyPlannerDraft,
+  firstIncompleteHomeEnergyPlannerStage,
+  hasExplicitHomeEnergyPlannerSelection,
+  homeEnergyPlannerQuestionAnswered,
+  parseHomeEnergyPlannerSession,
+  type HomeEnergyPlannerDraft,
+  type HomeEnergyPlannerOption,
+  type HomeEnergyPlannerPropertyKey,
+  type HomeEnergyPlannerPropertyQuestion,
+} from "@/lib/home-energy-planner-schema";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
 import { SurgeOpenButton } from "@/components/SurgeOpenButton";
 import {
@@ -18,7 +34,7 @@ import {
 } from "@/components/PublicPlanEnquiryForm";
 import styles from "./HomeEnergyPlanner.module.css";
 
-type Option = [string, string];
+type Option = HomeEnergyPlannerOption;
 type CustomerPlanItem = {
   id: string;
   stage: string;
@@ -44,95 +60,13 @@ type CustomerPlan = {
   everydayActionsBoundary: string;
   items: CustomerPlanItem[];
 };
-type InitialPlannerSelection = {
-  goals: string[];
-  pace: string;
-  situation: string;
-  approvalContext: string;
-  budgetRange: string;
-  postcode: string;
-  addressState: string;
-  features: string[];
-  propertyType: string;
-  storeys: string;
-  ageBand: string;
-  floorArea: string;
-  occupants: string;
-  sharedWalls: string;
-  roofType: string;
-  roofColour: string;
-  roofForm: string;
-  roofCondition: string;
-  switchboard: string;
-  wallConstruction: string;
-  floorConstruction: string;
-};
-type PlannerDraft = InitialPlannerSelection;
-type HomeFeatureQuestion = { id: string; options: Option[] };
-type HomeFeatureSection = { id: string; questions: HomeFeatureQuestion[] };
-type PropertyQuestionKey =
-  | "storeys"
-  | "ageBand"
-  | "floorArea"
-  | "sharedWalls"
-  | "roofType"
-  | "roofColour"
-  | "roofForm"
-  | "roofCondition"
-  | "switchboard"
-  | "wallConstruction"
-  | "floorConstruction";
+type PlannerDraft = HomeEnergyPlannerDraft;
 
-const customerProjectOptions = rawCustomerProjectOptions as unknown as {
-  goals: Option[];
-  paces: Option[];
-  situations: Option[];
-  approvalContexts: Option[];
-  budgets: Option[];
-  propertyTypes: Option[];
-  storeys: Option[];
-  ageBands: Option[];
-  floorAreas: Option[];
-  occupants: Option[];
-  sharedWalls: Option[];
-  roofTypes: Option[];
-  roofColours: Option[];
-  roofForms: Option[];
-  roofConditions: Option[];
-  switchboards: Option[];
-  wallConstructions: Option[];
-  floorConstructions: Option[];
-  states: string[];
-};
-
-const customerHomeFeatureSections =
-  rawCustomerHomeFeatureSections as unknown as HomeFeatureSection[];
-
-const PRIMARY_STAGE_COUNT = 4;
-const stageNames = [
-  "Goal and household",
-  "Comfort and building",
-  "Current systems",
-  "Timing and review",
-] as const;
-const comfortQuestionIds = [
-  "comfort-concerns",
-  "ceiling-insulation",
-  "glazing",
-  "heating-cooling-systems",
-];
-const systemQuestionIds = ["hot-water", "cooking", "solar", "battery", "ev"];
-const commonPlannerFeatureDefaults = [
-  ["comfort-concerns", ["comfort-too-hot", "comfort-too-cold"]],
-  ["ceiling-insulation", ["ceiling-insulation-limited"]],
-  ["glazing", ["single-glazing"]],
-  ["heating-cooling-systems", ["gas-heating", "evaporative-cooling"]],
-  ["hot-water", ["gas-storage-hot-water"]],
-  ["cooking", ["gas-cooking"]],
-  ["solar", ["solar-none"]],
-  ["battery", ["battery-none"]],
-  ["ev", ["ev"]],
-] as const;
+const customerProjectOptions = HOME_ENERGY_PLANNER_OPTIONS;
+const PRIMARY_STAGE_COUNT = HOME_ENERGY_PLANNER_STAGE_COUNT;
+const stageNames = HOME_ENERGY_PLANNER_STAGE_NAMES;
+const comfortQuestionIds = HOME_ENERGY_PLANNER_COMFORT_QUESTION_IDS;
+const systemQuestionIds = HOME_ENERGY_PLANNER_SYSTEM_QUESTION_IDS;
 
 const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["assessment", "assessment"],
@@ -155,31 +89,11 @@ const planInterestByItemId = new Map<string, PublicPlanUpgradeInterest>([
   ["ev", "ev-charging"],
 ]);
 
-type OptionalPropertyQuestion = {
-  key: PropertyQuestionKey;
-  label: string;
-  options: Option[];
-};
+type OptionalPropertyQuestion = HomeEnergyPlannerPropertyQuestion;
 
-const homeBasicsQuestions: OptionalPropertyQuestion[] = [
-  { key: "storeys", label: "Storeys", options: customerProjectOptions.storeys },
-  { key: "floorArea", label: "Approximate floor area", options: customerProjectOptions.floorAreas },
-  { key: "ageBand", label: "Home age", options: customerProjectOptions.ageBands },
-  { key: "sharedWalls", label: "Shared walls", options: customerProjectOptions.sharedWalls },
-];
-
-const constructionQuestions: OptionalPropertyQuestion[] = [
-  { key: "wallConstruction", label: "External wall construction", options: customerProjectOptions.wallConstructions },
-  { key: "floorConstruction", label: "Floor construction", options: customerProjectOptions.floorConstructions },
-  { key: "roofType", label: "Roof covering", options: customerProjectOptions.roofTypes },
-  { key: "roofColour", label: "Roof colour", options: customerProjectOptions.roofColours },
-  { key: "roofForm", label: "Roof form", options: customerProjectOptions.roofForms },
-  { key: "roofCondition", label: "Roof condition", options: customerProjectOptions.roofConditions },
-];
-
-const electricalQuestions: OptionalPropertyQuestion[] = [
-  { key: "switchboard", label: "Switchboard", options: customerProjectOptions.switchboards },
-];
+const homeBasicsQuestions = HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS;
+const constructionQuestions = HOME_ENERGY_PLANNER_CONSTRUCTION_QUESTIONS;
+const electricalQuestions = HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS;
 
 function suggestedPlanInterests(items: CustomerPlanItem[]) {
   const interests: PublicPlanUpgradeInterest[] = [];
@@ -190,150 +104,6 @@ function suggestedPlanInterests(items: CustomerPlanItem[]) {
   return interests.length ? interests : ["assessment"];
 }
 
-function questionAnswered(features: string[], questionId: string) {
-  const question = customerHomeFeatureSections
-    .flatMap((section) => section.questions)
-    .find((item) => item.id === questionId);
-  return question?.options.some(([value]) => features.includes(value)) ?? false;
-}
-
-function withCommonPlannerFeatureDefaults(features: string[]) {
-  let next = normalizeHomeFeatureSelections(features);
-  for (const [questionId, values] of commonPlannerFeatureDefaults) {
-    if (!questionAnswered(next, questionId)) {
-      for (const value of values) {
-        next = updateHomeFeatureSelection(next, questionId, value, true);
-      }
-    }
-  }
-  return next;
-}
-
-function normalizeFloorInsulation(draft: PlannerDraft): PlannerDraft {
-  if (draft.floorConstruction !== "slab_on_ground") return draft;
-  return {
-    ...draft,
-    features: updateHomeFeatureSelection(
-      draft.features,
-      "floor-insulation",
-      "floor-insulation-not-applicable",
-      true,
-    ),
-  };
-}
-
-function defaultDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
-  const postcodeState = residentialStateFromPostcode(initialSelection.postcode);
-  return normalizeFloorInsulation({
-    ...initialSelection,
-    goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills", "improve-comfort"],
-    pace: initialSelection.pace || "staged",
-    situation: initialSelection.situation || "owner",
-    approvalContext: initialSelection.approvalContext || "none",
-    budgetRange: initialSelection.budgetRange || "not_set",
-    features: withCommonPlannerFeatureDefaults(initialSelection.features),
-    propertyType: initialSelection.propertyType || "house",
-    occupants: initialSelection.occupants || "three_four",
-    addressState: postcodeState || "",
-  });
-}
-
-function explicitInitialDraft(initialSelection: InitialPlannerSelection): PlannerDraft {
-  return normalizeFloorInsulation({
-    ...initialSelection,
-    addressState: residentialStateFromPostcode(initialSelection.postcode) || "",
-    features: normalizeHomeFeatureSelections(initialSelection.features),
-  });
-}
-
-function hasExplicitSelection(selection: InitialPlannerSelection) {
-  return Boolean(
-    selection.postcode
-    || selection.situation
-    || selection.features.length
-    || selection.propertyType
-    || selection.occupants
-    || selection.addressState,
-  );
-}
-
-function firstIncompleteAssessmentStage(draft: PlannerDraft) {
-  const postcodeState = residentialStateFromPostcode(draft.postcode);
-  const householdComplete = Boolean(
-    /^\d{4}$/.test(draft.postcode)
-    && postcodeState
-    && draft.addressState === postcodeState
-    && draft.situation
-    && draft.propertyType
-    && draft.occupants,
-  );
-  if (!householdComplete) return 0;
-  if (!comfortQuestionIds.every((id) => questionAnswered(draft.features, id))) return 1;
-  if (!systemQuestionIds.every((id) => questionAnswered(draft.features, id))) return 2;
-  return 4;
-}
-
-function storedOption(options: Option[], value: unknown, fallback = "") {
-  return typeof value === "string" && options.some(([option]) => option === value)
-    ? value
-    : fallback;
-}
-
-function sanitizeStoredDraft(candidate: Partial<PlannerDraft>): PlannerDraft {
-  const postcode = typeof candidate.postcode === "string"
-    ? candidate.postcode.replace(/\D/g, "").slice(0, 4)
-    : "";
-  const goals = Array.isArray(candidate.goals)
-    ? candidate.goals
-        .filter((item): item is string => typeof item === "string")
-        .filter((item) => customerProjectOptions.goals.some(([option]) => option === item))
-        .slice(0, 10)
-    : [];
-  const rawFeatures = Array.isArray(candidate.features)
-    ? candidate.features.filter((item): item is string => typeof item === "string").slice(0, 36)
-    : [];
-  return normalizeFloorInsulation({
-    goals,
-    pace: storedOption(customerProjectOptions.paces, candidate.pace),
-    situation: storedOption(customerProjectOptions.situations, candidate.situation),
-    approvalContext: storedOption(customerProjectOptions.approvalContexts, candidate.approvalContext),
-    budgetRange: storedOption(customerProjectOptions.budgets, candidate.budgetRange),
-    postcode,
-    addressState: residentialStateFromPostcode(postcode) || "",
-    features: normalizeHomeFeatureSelections(rawFeatures),
-    propertyType: storedOption(customerProjectOptions.propertyTypes, candidate.propertyType),
-    storeys: storedOption(customerProjectOptions.storeys, candidate.storeys),
-    ageBand: storedOption(customerProjectOptions.ageBands, candidate.ageBand),
-    floorArea: storedOption(customerProjectOptions.floorAreas, candidate.floorArea),
-    occupants: storedOption(customerProjectOptions.occupants, candidate.occupants),
-    sharedWalls: storedOption(customerProjectOptions.sharedWalls, candidate.sharedWalls),
-    roofType: storedOption(customerProjectOptions.roofTypes, candidate.roofType),
-    roofColour: storedOption(customerProjectOptions.roofColours, candidate.roofColour),
-    roofForm: storedOption(customerProjectOptions.roofForms, candidate.roofForm),
-    roofCondition: storedOption(customerProjectOptions.roofConditions, candidate.roofCondition),
-    switchboard: storedOption(customerProjectOptions.switchboards, candidate.switchboard),
-    wallConstruction: storedOption(customerProjectOptions.wallConstructions, candidate.wallConstruction),
-    floorConstruction: storedOption(customerProjectOptions.floorConstructions, candidate.floorConstruction),
-  });
-}
-
-function safeStoredDraft(value: string | null): { draft: PlannerDraft; stage: number } | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as { version?: unknown; draft?: unknown; stage?: unknown };
-    if (parsed.version !== 1 || !parsed.draft || typeof parsed.draft !== "object") return null;
-    const candidate = parsed.draft as Partial<PlannerDraft>;
-    if (!Array.isArray(candidate.goals) || !Array.isArray(candidate.features)) return null;
-    return {
-      draft: sanitizeStoredDraft(candidate),
-      stage: Number.isInteger(parsed.stage) && Number(parsed.stage) >= 0 && Number(parsed.stage) <= 4
-        ? Number(parsed.stage)
-        : 0,
-    };
-  } catch {
-    return null;
-  }
-}
 
 function readStoredAssessment() {
   try {
@@ -409,7 +179,7 @@ function PropertySelectGrid({
 }: {
   questions: OptionalPropertyQuestion[];
   draft: PlannerDraft;
-  onSelect: (key: PropertyQuestionKey, value: string) => void;
+  onSelect: (key: HomeEnergyPlannerPropertyKey, value: string) => void;
 }) {
   return (
     <div className={styles.selectGrid}>
@@ -431,15 +201,16 @@ function PropertySelectGrid({
   );
 }
 
-export function HomeEnergyPlanner({ initialSelection }: { initialSelection: InitialPlannerSelection }) {
+export function HomeEnergyPlanner({ initialSelection }: { initialSelection: HomeEnergyPlannerDraft }) {
   const initialDraft = useMemo(
-    () => hasExplicitSelection(initialSelection)
-      ? explicitInitialDraft(initialSelection)
-      : defaultDraft(initialSelection),
+    () => hasExplicitHomeEnergyPlannerSelection(initialSelection)
+      ? explicitHomeEnergyPlannerDraft(initialSelection)
+      : defaultHomeEnergyPlannerDraft(initialSelection),
     [initialSelection],
   );
   const [draft, setDraft] = useState<PlannerDraft>(initialDraft);
-  const [stage, setStage] = useState(() => firstIncompleteAssessmentStage(explicitInitialDraft(initialSelection)));
+  const [stage, setStage] = useState(() =>
+    firstIncompleteHomeEnergyPlannerStage(explicitHomeEnergyPlannerDraft(initialSelection)));
   const [attemptedStage, setAttemptedStage] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -448,8 +219,8 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
   useEffect(() => {
     let restoreFrame: number | undefined;
-    if (!hasExplicitSelection(initialSelection)) {
-      const stored = safeStoredDraft(readStoredAssessment());
+    if (!hasExplicitHomeEnergyPlannerSelection(initialSelection)) {
+      const stored = parseHomeEnergyPlannerSession(readStoredAssessment());
       if (stored) {
         restoreFrame = window.requestAnimationFrame(() => {
           setDraft({ ...initialDraft, ...stored.draft });
@@ -471,7 +242,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    storeAssessment(JSON.stringify({ version: 1, draft, stage }));
+    storeAssessment(JSON.stringify(createHomeEnergyPlannerSession(draft, stage)));
   }, [draft, stage]);
 
   useEffect(() => {
@@ -481,31 +252,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
   }, [stage]);
 
   const plan = useMemo(
-    () => createCustomerProjectPlan({
-      goals: draft.goals,
-      pace: draft.pace,
-      situation: draft.situation,
-      approvalContext: draft.approvalContext,
-      budgetRange: draft.budgetRange,
-      postcode: draft.postcode,
-      addressState: draft.addressState,
-      features: draft.features,
-      propertyContext: {
-        propertyType: draft.propertyType,
-        storeys: draft.storeys,
-        ageBand: draft.ageBand,
-        floorArea: draft.floorArea,
-        occupants: draft.occupants,
-        sharedWalls: draft.sharedWalls,
-        roofType: draft.roofType,
-        roofColour: draft.roofColour,
-        roofForm: draft.roofForm,
-        roofCondition: draft.roofCondition,
-        switchboard: draft.switchboard,
-        wallConstruction: draft.wallConstruction,
-        floorConstruction: draft.floorConstruction,
-      },
-    }) as CustomerPlan,
+    () => createHomeEnergyPlannerPlan(draft) as CustomerPlan,
     [draft],
   );
 
@@ -569,7 +316,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
     });
   }
 
-  function setPropertyAnswer(key: PropertyQuestionKey, value: string) {
+  function setPropertyAnswer(key: HomeEnergyPlannerPropertyKey, value: string) {
     setDraft((current) => ({
       ...current,
       [key]: value,
@@ -599,12 +346,12 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
       return errors;
     }
     if (currentStage === 1) {
-      return comfortQuestionIds.every((id) => questionAnswered(draft.features, id))
+      return comfortQuestionIds.every((id) => homeEnergyPlannerQuestionAnswered(draft.features, id))
         ? []
         : ["Answer the four core comfort questions. Not sure is a valid answer."];
     }
     if (currentStage === 2) {
-      return systemQuestionIds.every((id) => questionAnswered(draft.features, id))
+      return systemQuestionIds.every((id) => homeEnergyPlannerQuestionAnswered(draft.features, id))
         ? []
         : ["Answer the hot water, cooking, solar, battery and vehicle questions. Not sure is a valid answer."];
     }
@@ -623,7 +370,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
 
   function resetPlan() {
     removeStoredAssessment();
-    setDraft(defaultDraft({
+    setDraft(defaultHomeEnergyPlannerDraft({
       ...initialSelection,
       goals: [],
       pace: "staged",
@@ -812,7 +559,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                     <div><dt>Household</dt><dd>{customerProjectOptions.occupants.find(([value]) => value === draft.occupants)?.[1] || "Not sure"}</dd></div>
                     <div><dt>Home</dt><dd>{customerProjectOptions.propertyTypes.find(([value]) => value === draft.propertyType)?.[1] || "Not sure"}</dd></div>
                     <div><dt>Priorities</dt><dd>{draft.goals.map((goal) => customerProjectOptions.goals.find(([value]) => value === goal)?.[1]).filter(Boolean).join(", ")}</dd></div>
-                    <div><dt>Core system answers</dt><dd>{systemQuestionIds.filter((id) => questionAnswered(draft.features, id)).length} of {systemQuestionIds.length}</dd></div>
+                    <div><dt>Core system answers</dt><dd>{systemQuestionIds.filter((id) => homeEnergyPlannerQuestionAnswered(draft.features, id)).length} of {systemQuestionIds.length}</dd></div>
                   </dl>
                   <button type="button" onClick={() => setStage(0)}>Edit household details</button>
                 </section>

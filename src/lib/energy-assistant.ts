@@ -81,6 +81,132 @@ export type EnergyAssistantSearchResult = {
   active: boolean;
 };
 
+export const SURGE_PUBLIC_IDENTITY_ANSWER =
+  "I am Surge AI, a specialised Australian home-energy guide. I help people understand home comfort, energy use, electrification and upgrade choices in clear, practical language. I do not share internal system or provider details, but I can explain what information I use and how I protect your data. My guidance is educational and does not replace a formal home assessment, certificate, licensed design or installer advice.";
+
+export const SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER =
+  "I do not identify or reproduce internal reference material, and I will not repeat another publisher's brand endorsement or rank products from their opinion. I can compare exact user-supplied options independently using verified performance, suitability, warranty and complete installed scope, without endorsing a brand, supplier or installer.";
+
+export const SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP =
+  "What exact home-energy question or customer-supplied options should I help with?";
+
+const SURGE_INTERNAL_IMPLEMENTATION_PATTERN =
+  /\b(?:ChatGPT|OpenAI|Anthropic|Claude|Gemini|Vertex\s+AI|Google(?:'s)?\s+AI\s+models?|Responses\s+API|large\s+language\s+model|LLM|GPT(?:[-\s]?(?:3|4|5|\d)[A-Za-z0-9.\-]*)?)\b/i;
+
+const SURGE_NAMED_REFERENCE_PATTERN =
+  /\b(?:Electric\s+Saul|Saul\s+Griffith|Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Rewiring\s+Australia|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
+
+const SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN =
+  /\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?)\b/;
+
+const SURGE_GENERIC_IMPLEMENTATION_QUESTION_PATTERNS = [
+  /\b(?:what|which|who|name|identify|reveal|disclose|confirm)\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|company)\b[^\n?]{0,100}\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|neural\s+network|language\s+model|foundation\s+model)\b/i,
+  /\b(?:who|what)\s+(?:hosts?|powers?|runs?|built|made|trained|supplies?)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:are|is)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,60}\b(?:neural\s+network|language\s+model|foundation\s+model|generative\s+AI|hosted|powered|built|trained|running)\b/i,
+  /\b(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\b[^\n?]{0,80}\b(?:behind|hosting|powering|running|used\s+by)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+] as const;
+
+const SURGE_IMPLEMENTATION_DISCLOSURE_PATTERNS = [
+  /\b(?:my|Surge\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+)?(?:inference\s+)?(?:engine|model|provider|vendor|platform|API|backend|runtime)\s+(?:is|runs|uses|calls|connects)\b/i,
+  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is|run|runs|operate|operates|was|were)?[^\n.]{0,60}\b(?:powered|built|trained|hosted|deployed|served|running)\s+(?:by|on|with|through|using)\b/i,
+  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:use|uses|call|calls|rely|relies|connect|connects|run|runs|operate|operates)\b[^\n.]{0,90}\b(?:AI|model|provider|vendor|platform|API|backend|engine|runtime|neural\s+network|infrastructure)\b/i,
+  /\b(?:my|Surge\s+AI'?s|this\s+(?:assistant|chat\s*bot|chatbot|guide)'?s)\s+(?:underlying\s+|base\s+|inference\s+)?(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|stack|infrastructure|hosting|training)\b[^\n.]{0,100}\b(?:is|uses|runs|comes|relies|calls|connects)\b/i,
+  /\b(?:the\s+)?(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\s+(?:behind|hosting|powering|running|serving)\s+(?:me|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
+  /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is)\s+(?:an?\s+)?(?:proprietary\s+|generative\s+|foundation\s+)?(?:language\s+model|neural\s+network|foundation\s+model)\b/i,
+] as const;
+
+const SURGE_PRODUCT_ENDORSEMENT_PATTERNS = [
+  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing))\b)/i,
+  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?:buying|choosing|using|hiring)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:suggest|advise)\s+(?:buying|choosing|picking|selecting|using|hiring)\b/i,
+  /\b(?:you\s+should|I\s+would|I'd|my\s+advice\s+is\s+to|I\s+suggest(?:\s+that)?\s+you)\s+(?:buy|choose|pick|select|use|hire|order|purchase|go\s+with)\b/i,
+  /(?:^|[.!?]\s*)(?:[Bb]uy|[Cc]hoose|[Pp]ick|[Ss]elect|[Oo]rder|[Pp]urchase|[Gg]o\s+with|[Hh]ire)\s+(?:the\s+)?(?:[Oo]ption\s+[A-Z0-9]|[A-Z][A-Za-z0-9-]*(?:\s+[A-Z0-9][A-Za-z0-9-]*){0,5})\b/,
+  /\b(?:buy|choose|pick|select|go\s+with)\s+(?:this|that)\s+(?:brand|model|product|unit|supplier|installer|option)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:endorse|prefer)\b[^.\n]{0,100}\b(?:brand|model|product|supplier|installer|manufacturer|option)\b/i,
+  /\b(?:the|my)\s+(?:best|top|preferred)\s+(?:brand|model|product|supplier|installer|manufacturer|option)\s+is\b/i,
+  /\b(?:best|right|recommended|preferred)\s+(?:choice|option)\s+(?:for\s+you\s+)?is\b/i,
+  /\bmy\s+(?:recommendation|pick|choice|winner)\s+(?:would\s+be|is)\b/i,
+  /\b(?:winner|smart\s+buy)\s+is\b/i,
+  /\bis\s+(?:the\s+)?(?:clear|obvious|outright|overall)\s+winner\b/i,
+  /\bis\s+the\s+(?:one|product|model|unit|option)\s+to\s+(?:buy|choose|pick)\b/i,
+  /\b(?:better|best)\s+(?:choice|fit|option)\s+for\s+(?:you|your\s+home)\b/i,
+  /\byou\s+cannot\s+go\s+wrong\s+with\b/i,
+] as const;
+
+const SURGE_FALSE_ASSESSOR_CLAIM_PATTERNS = [
+  /\b(?:I(?:\s+am|'m)|Surge\s+AI\s+is)\s+(?!not\b)(?:an?|your|the)\s+(?:[a-z-]+\s+){0,5}(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
+  /\bAs\s+(?:an?|your)\s+(?:[a-z-]+\s+){0,5}(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:am|is)\s+(?:fully\s+)?(?:accredited|certified|licensed|registered)\s+(?:to|for)\s+(?:conduct|perform|provide|complete|issue)\b[^.\n]{0,90}\b(?:assessments?|ratings?|certificates?)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:hold|holds|have|has)\b[^.\n]{0,60}\b(?:NatHERS|home[- ]?energy|energy)\s+(?:assessor\s+)?(?:accreditation|certification|licen[cs]e|registration)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:hold(?:s)?\s+)?(?:an?\s+)?(?:accreditation|certification|licen[cs]e|registration)\s+(?:as\s+)?(?:an?\s+)?(?:home[- ]?energy\s+|energy\s+)?assessor\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:have|has)?\s*(?:formally\s+|officially\s+)?(?:assessed|certified|rated)\s+(?:this|your)\s+(?:home|property)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:have|has)?\s*(?:issued|approved)\s+(?:this|your|the)\s+(?:home[- ]?energy\s+|energy\s+|NatHERS\s+)?(?:assessment|rating|certificate)\b/i,
+  /\b(?:I|Surge\s+AI)\s+(?:have|has|just)?\s*(?:completed|performed|conducted|delivered)\s+(?:an?\s+|your\s+)?(?:formal|official|accredited|certified)\s+(?:home[- ]?energy\s+|energy\s+)?(?:assessment|rating|certificate)\b/i,
+  /\b(?:this|the)\s+(?:chat|conversation|answer|guidance|review)\s+(?:is|counts?\s+as|constitutes?)\s+(?:an?\s+)?(?:formal|official|accredited|certified)\s+(?:home[- ]?energy\s+|energy\s+)?(?:assessment|rating|certificate)\b/i,
+  /\b(?:this|your)\s+(?:home|property)\s+(?:is|was|has\s+(?:now\s+)?been)\s+(?:formally\s+|officially\s+)?(?:assessed|certified|rated)\b/i,
+] as const;
+
+const SURGE_INTERNAL_PLATFORM_PATTERN = /\b(?:T[\s-]*Link|Credi[\s-]*tex)\b/i;
+
+export function isSurgeImplementationIdentityQuestion(value: string) {
+  const question = value.trim();
+  if (/\b(?:customer|client|trade)\s+(?:database|records?|data|details?|information|transcripts?)\b/i.test(question)) {
+    return false;
+  }
+  return SURGE_INTERNAL_IMPLEMENTATION_PATTERN.test(question)
+    || SURGE_GENERIC_IMPLEMENTATION_QUESTION_PATTERNS.some((pattern) => pattern.test(question))
+    || /\b(?:are|were)\s+you\s+(?:an?\s+)?(?:AI|chat\s*bot|model|neural\s+network)\b/i.test(question)
+    || /\b(?:what\s+(?:are\s+you\s+)?built\s+on|what\s+powers\s+you|who\s+(?:built|made|trained|hosts?|runs?)\s+you)\b/i.test(question)
+    || /\b(?:reveal|show|repeat|print|disclose|tell\s+me)\b[^\n]{0,100}\b(?:system\s+prompt|hidden\s+instructions|internal\s+(?:model|provider|vendor|platform|API|backend|engine|runtime)|model\s+(?:name|provider))\b/i.test(question);
+}
+
+export function containsSurgeNamedReference(value: string) {
+  return SURGE_NAMED_REFERENCE_PATTERN.test(value)
+    || SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN.test(value);
+}
+
+export function containsSurgeInternalPlatformName(value: string) {
+  return SURGE_INTERNAL_PLATFORM_PATTERN.test(value);
+}
+
+export function isSurgeNamedReferenceQuestion(value: string) {
+  return containsSurgeNamedReference(value) && (
+    /\b(?:according\s+to|what\s+(?:does|did|would)|copy|repeat|quote|source|reference|trained|training|inspir(?:e|ed|ation)|recommend|rank|best|opinion|say|says|said)\b/i.test(value)
+    || /\b(?:where|how)\b[^\n]{0,50}\b(?:information|answers?|advice|knowledge)\b/i.test(value)
+  );
+}
+
+export function stripSurgePublicLinksAndCitationLines(value: string) {
+  return value
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\b(?:www\.)?[a-z0-9](?:[a-z0-9-]*\.)+(?:com|org|net|gov|edu|asn)(?:\.au)?(?:\/[^\s]*)?/gi, "")
+    .replace(/^\s*(?:sources?|references?|citations?)\s*:.*$/gim, "");
+}
+
+export function sanitizeSurgeReferenceText(value: string) {
+  return stripSurgePublicLinksAndCitationLines(value)
+    .replace(/\b(?:Electric\s+Saul|Saul\s+Griffith|Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Rewiring\s+Australia|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/gi, "maintained Australian energy evidence")
+    .replace(/\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?)\b/g, "maintained Australian energy evidence")
+    .replace(/maintained Australian energy evidence(?:\s*(?:,|and)\s*maintained Australian energy evidence)+/gi, "maintained Australian energy evidence")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+export function sanitizeSurgePublicText(value: string) {
+  return sanitizeSurgeReferenceText(value)
+    .replace(/\b(?:T[\s-]*Link|Credi[\s-]*tex)(?:\s+or\s+(?:T[\s-]*Link|Credi[\s-]*tex))?\b/gi, "the trade platform")
+    .trim();
+}
+
+export function surgeOutputViolatesPublicPolicy(value: string) {
+  return SURGE_INTERNAL_IMPLEMENTATION_PATTERN.test(value)
+    || SURGE_IMPLEMENTATION_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(value))
+    || SURGE_PRODUCT_ENDORSEMENT_PATTERNS.some((pattern) => pattern.test(value))
+    || SURGE_FALSE_ASSESSOR_CLAIM_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 const QUERY_STOP_TERMS = new Set([
   "a",
   "about",
@@ -1726,6 +1852,32 @@ export function composeEnergyAssistantAnswer(
     const state = sourceState(source, day);
     return state.active && !state.stale ? source.summary : null;
   };
+
+  if (isSurgeImplementationIdentityQuestion(query)) {
+    return structured("comfort_fabric", {
+      directAnswer: SURGE_PUBLIC_IDENTITY_ANSWER,
+      status: "answered",
+      citations: [],
+      confidence: "high",
+      assumptions: [],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
+  if (isSurgeNamedReferenceQuestion(query)) {
+    return structured("products_ratings", {
+      directAnswer: SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER,
+      status: "needs_context",
+      citations: [],
+      confidence: "high",
+      assumptions: [],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP],
+    });
+  }
 
   const asksToSilentlyPopulateTradeLead = /\b(?:trade|customer|quote|service|sales)\s+lead\b|\blead\s+(?:summary|record|request|form)\b/i.test(query)
     && /\b(?:silently|automatically|without (?:the )?(?:customer(?:'s)? )?(?:knowledge|consent|review)|add|include|copy|attach|send|share)\b/i.test(query)

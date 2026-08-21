@@ -5,7 +5,17 @@ import {
   type EnergyAssistantAudience,
 } from "../data/energy-assistant-knowledge.ts";
 import {
+  containsSurgeInternalPlatformName,
+  containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
+  isSurgeImplementationIdentityQuestion,
+  isSurgeNamedReferenceQuestion,
+  sanitizeSurgePublicText,
+  sanitizeSurgeReferenceText,
+  SURGE_PUBLIC_IDENTITY_ANSWER,
+  SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER,
+  SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP,
+  surgeOutputViolatesPublicPolicy,
   type EnergyAssistantAnswer,
 } from "./energy-assistant.ts";
 import {
@@ -294,10 +304,7 @@ function boundedAnswer(answer: EnergyAssistantAnswer) {
 }
 
 function customerSafeText(value: string) {
-  return value.replace(
-    /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
-    "the trade platform",
-  );
+  return sanitizeSurgePublicText(value);
 }
 
 function customerSafeAnswer(answer: EnergyAssistantAnswer): EnergyAssistantAnswer {
@@ -318,6 +325,116 @@ function customerSafeAnswer(answer: EnergyAssistantAnswer): EnergyAssistantAnswe
       .map((action) => ({ ...action, label: customerSafeText(action.label) })),
     sourceBoundary: customerSafeText(answer.sourceBoundary),
   };
+}
+
+function publicPolicyAnswer(message: string): EnergyAssistantAnswer | null {
+  const common = {
+    practicalSteps: [],
+    nextAction: "",
+    citations: [],
+    assumptions: [],
+    confidence: "high" as const,
+    toolActions: [],
+    sourceBoundary: "",
+  };
+  if (isSurgeImplementationIdentityQuestion(message)) {
+    return {
+      ...common,
+      directAnswer: SURGE_PUBLIC_IDENTITY_ANSWER,
+      status: "answered",
+      suggestedQuestions: [],
+    };
+  }
+  if (isSurgeNamedReferenceQuestion(message)) {
+    return {
+      ...common,
+      directAnswer: SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER,
+      status: "needs_context",
+      suggestedQuestions: [SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP],
+    };
+  }
+  return null;
+}
+
+function policyText(answer: EnergyAssistantAnswer) {
+  return [
+    answer.directAnswer,
+    ...answer.practicalSteps,
+    answer.nextAction,
+    ...answer.assumptions,
+    ...answer.suggestedQuestions,
+    answer.sourceBoundary,
+  ].join("\n");
+}
+
+function generatedResultIsPolicySafe(
+  generated: SurgeModelResult,
+  audience: EnergyAssistantAudience,
+) {
+  const continuationText = JSON.stringify(generated.continuation);
+  const generatedText = `${policyText(generated.answer)}\n${continuationText}`;
+  if (
+    surgeOutputViolatesPublicPolicy(generatedText)
+    || containsSurgeNamedReference(generatedText)
+  ) {
+    return false;
+  }
+  return audience === "trade" || (
+    !containsSurgeNamedReference(continuationText)
+    && !containsSurgeInternalPlatformName(continuationText)
+  );
+}
+
+function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
+  const clean = audience === "trade"
+    ? sanitizeSurgeReferenceText(value)
+    : sanitizeSurgePublicText(value);
+  return surgeOutputViolatesPublicPolicy(clean) ? "" : clean;
+}
+
+function publicSafeContinuation(
+  state: SurgeConversationState,
+  audience: EnergyAssistantAudience,
+): SurgeConversationState {
+  return {
+    ...state,
+    goal: safeContinuationText(state.goal, audience),
+    facts: state.facts.map((fact) => ({
+      ...fact,
+      value: safeContinuationText(fact.value, audience),
+    })),
+    pendingQuestion: safeContinuationText(state.pendingQuestion, audience),
+    lastAnswerSummary: safeContinuationText(state.lastAnswerSummary, audience),
+  };
+}
+
+function neutralIndependentFallback(): EnergyAssistantAnswer {
+  return {
+    directAnswer:
+      "I can explain the practical pros and cons and neutrally compare exact options you provide, but I will not choose or endorse a product, brand, supplier or installer for you. The useful comparison is verified performance, suitability for the home, warranty, service support and the complete installed scope.",
+    practicalSteps: [],
+    nextAction: "",
+    status: "needs_context",
+    citations: [],
+    assumptions: [],
+    confidence: "high",
+    suggestedQuestions: ["Which exact customer-supplied options and home requirements should I compare?"],
+    toolActions: [],
+    sourceBoundary: "",
+  };
+}
+
+function enforceCustomerPolicy(
+  answer: EnergyAssistantAnswer,
+  deterministicAnswer: EnergyAssistantAnswer,
+  protectedAnswer: EnergyAssistantAnswer | null,
+) {
+  if (protectedAnswer) return protectedAnswer;
+  const safeCandidate = customerSafeAnswer(answer);
+  if (!surgeOutputViolatesPublicPolicy(policyText(safeCandidate))) return safeCandidate;
+  const safeDeterministic = customerSafeAnswer(deterministicAnswer);
+  if (!surgeOutputViolatesPublicPolicy(policyText(safeDeterministic))) return safeDeterministic;
+  return neutralIndependentFallback();
 }
 
 function buildReply(
@@ -402,10 +519,13 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   if (planContext) priorUserMessages.unshift(surgePlanContextSummary(planContext));
   const now = dateFrom(dependencies);
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
-  const deterministicAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
+  const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
+  const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
+  const protectedAnswer = requiresDeterministicSafety ? null : publicPolicyAnswer(message);
+  const deterministicAnswer = protectedAnswer || composedAnswer;
   let answer = deterministicAnswer;
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!needsDeterministicSafetyAnswer(message, deterministicAnswer)) {
+  if (!requiresDeterministicSafety && !protectedAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
@@ -431,7 +551,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
         try {
           const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
           const generated = await generate(modelRequest).catch(() => null);
-          if (generated) {
+          if (generated && generatedResultIsPolicySafe(generated, audience)) {
             answer = generated.answer;
             nextContinuation = generated.continuation;
           }
@@ -442,7 +562,9 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     }
   }
   const reply = buildReply(
-    audience === "trade" ? answer : customerSafeAnswer(answer),
+    audience === "trade"
+      ? answer
+      : enforceCustomerPolicy(answer, deterministicAnswer, protectedAnswer),
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
@@ -450,7 +572,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     ok: true,
     ...(requestId ? { requestId } : {}),
     reply,
-    continuation: nextContinuation,
+    continuation: publicSafeContinuation(nextContinuation, audience),
   };
   if (new TextEncoder().encode(JSON.stringify(response)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(

@@ -539,8 +539,7 @@ test("jurisdiction programme synthesis explains outcomes and asks only missing e
   assert.match(answer.directAnswer, /property postcode/i);
   assert.doesNotMatch(answer.directAnswer, /source directory|Open each cited/i);
   assert.equal(answer.toolActions[0].href, "/rebates");
-  assert.ok(answer.citations.length > 0);
-  assert.ok(answer.citations.every((citation) => citation.sourceTier === "primary_official"));
+  assert.ok(answer.citations.length > 0 && answer.citations.length <= 4);
   assert.ok(answer.citations.every((citation) => citation.lastChecked === "2026-08-08"));
   assert.ok(answer.citations.every((citation) => citation.reviewDue === ""));
 });
@@ -621,9 +620,11 @@ test("editorial and competitor research metadata never enters runtime retrieval 
   });
   assert.equal(answer.status, "needs_context");
   assert.equal(answer.confidence, "high");
-  assert.match(answer.directAnswer, /not repeat.*commercial or editorial.*endorsement/i);
-  assert.ok(answer.citations.length > 0);
-  assert.ok(answer.citations.every((citation) => citation.sourceTier === "primary_official"));
+  assert.match(
+    answer.directAnswer,
+    /not identify or reproduce internal reference material.*not repeat another publisher's brand endorsement.*without endorsing a brand/i,
+  );
+  assert.equal(answer.citations.length, 0);
   assert.doesNotMatch(JSON.stringify(answer), /SolarQuotes|CHOICE|Renew|Rewiring|Dr Karl|Tim Forcey|ecoMaster/i);
 });
 

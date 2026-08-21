@@ -16,6 +16,7 @@ import {
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const publicPlanner = read("../src/components/HomeEnergyPlanner.tsx");
+const plannerSchema = read("../src/lib/home-energy-planner-schema.ts");
 const sharedIntake = read("../src/components/HomeFeatureIntake.tsx");
 const publicPlanPage = read("../src/app/plan/page.tsx");
 const newProjectPage = read("../src/app/account/projects/new/page.tsx");
@@ -818,7 +819,8 @@ test("evidence readiness is not an ordered roadmap action", () => {
 
 test("the public planner uses the accessible shared intake and bounded query handoff", () => {
   assert.match(publicPlanner, /HomeFeatureIntake/);
-  assert.match(publicPlanner, /PRIMARY_STAGE_COUNT = 4/);
+  assert.match(plannerSchema, /HOME_ENERGY_PLANNER_STAGE_COUNT = 4/);
+  assert.match(publicPlanner, /PRIMARY_STAGE_COUNT = HOME_ENERGY_PLANNER_STAGE_COUNT/);
   assert.match(publicPlanner, /Common answers are selected\. Review and tap Next\./);
   assert.match(publicPlanner, /idPrefix="quick-comfort"/);
   assert.match(publicPlanner, /idPrefix="insulation-wall"/);
@@ -830,7 +832,8 @@ test("the public planner uses the accessible shared intake and bounded query han
   assert.doesNotMatch(publicPlanner, /Skip remaining home details/);
   assert.doesNotMatch(publicPlanner, /Skip this question/);
   assert.match(publicPlanner, /Not sure is always valid/);
-  assert.match(publicPlanner, /commonPlannerFeatureDefaults/);
+  assert.match(plannerSchema, /const COMMON_PLANNER_FEATURE_DEFAULTS/);
+  assert.match(plannerSchema, /withCommonHomeEnergyPlannerFeatureDefaults/);
   for (const commonDefault of [
     "comfort-too-hot",
     "comfort-too-cold",
@@ -844,46 +847,46 @@ test("the public planner uses the accessible shared intake and bounded query han
     "battery-none",
     '"ev"',
   ]) {
-    assert.match(publicPlanner, new RegExp(commonDefault));
+    assert.match(plannerSchema, new RegExp(commonDefault));
   }
-  assert.match(publicPlanner, /\["lower-bills", "improve-comfort"\]/);
-  assert.match(publicPlanner, /situation: initialSelection\.situation \|\| "owner"/);
-  assert.match(publicPlanner, /propertyType: initialSelection\.propertyType \|\| "house"/);
-  assert.match(publicPlanner, /occupants: initialSelection\.occupants \|\| "three_four"/);
-  assert.match(publicPlanner, /features: normalizeHomeFeatureSelections\(rawFeatures\)/);
+  assert.match(plannerSchema, /\["lower-bills", "improve-comfort"\]/);
+  assert.match(plannerSchema, /situation: initialSelection\.situation \|\| "owner"/);
+  assert.match(plannerSchema, /propertyType: initialSelection\.propertyType \|\| "house"/);
+  assert.match(plannerSchema, /occupants: initialSelection\.occupants \|\| "three_four"/);
+  assert.match(plannerSchema, /features: normalizeHomeFeatureSelections\(rawFeatures\)/);
   assert.doesNotMatch(
-    publicPlanner.match(/function sanitizeStoredDraft[\s\S]+?function safeStoredDraft/)?.[0] || "",
-    /withCommonPlannerFeatureDefaults/,
+    plannerSchema.match(/function sanitizeHomeEnergyPlannerDraft[\s\S]+?function parseHomeEnergyPlannerSession/)?.[0] || "",
+    /withCommonHomeEnergyPlannerFeatureDefaults/,
   );
-  assert.match(publicPlanner, /hasExplicitSelection\(initialSelection\)[\s\S]*explicitInitialDraft\(initialSelection\)[\s\S]*defaultDraft\(initialSelection\)/);
+  assert.match(publicPlanner, /hasExplicitHomeEnergyPlannerSelection\(initialSelection\)[\s\S]*explicitHomeEnergyPlannerDraft\(initialSelection\)[\s\S]*defaultHomeEnergyPlannerDraft\(initialSelection\)/);
   assert.match(publicPlanner, /stage === 3 \? "Build my roadmap" : "Next"/);
-  assert.match(publicPlanner, /key: "ageBand"/);
-  assert.match(publicPlanner, /key: "roofColour"/);
-  assert.match(publicPlanner, /key: "roofForm"/);
-  assert.match(publicPlanner, /key: "roofCondition"/);
-  assert.match(publicPlanner, /key: "wallConstruction"/);
-  assert.match(publicPlanner, /key: "floorConstruction"/);
-  assert.match(publicPlanner, /approvalContexts/);
+  assert.match(plannerSchema, /key: "ageBand"/);
+  assert.match(plannerSchema, /key: "roofColour"/);
+  assert.match(plannerSchema, /key: "roofForm"/);
+  assert.match(plannerSchema, /key: "roofCondition"/);
+  assert.match(plannerSchema, /key: "wallConstruction"/);
+  assert.match(plannerSchema, /key: "floorConstruction"/);
+  assert.match(plannerSchema, /approvalContexts/);
   assert.match(publicPlanner, /initialPostcode=\{draft\.postcode\}/);
   assert.deepEqual(
     customerProjectOptions.propertyTypes.at(-1),
     ["not_sure", "Not sure"],
   );
-  assert.match(publicPlanner, /floor-insulation-not-applicable/);
+  assert.match(plannerSchema, /floor-insulation-not-applicable/);
   assert.match(publicPlanner, /value === "slab_on_ground"/);
-  assert.match(publicPlanner, /normalizeFloorInsulation/);
+  assert.match(plannerSchema, /normalizeHomeEnergyPlannerFloorInsulation/);
   assert.match(publicPlanPage, /const initialGoals = suppliedGoals\.filter/);
   assert.match(publicPlanPage, /goals: initialGoals,/);
   assert.match(publicPlanner, /readStoredAssessment/);
   assert.match(publicPlanner, /storeAssessment/);
   assert.match(publicPlanner, /removeStoredAssessment/);
-  assert.match(publicPlanner, /residentialStateFromPostcode\(draft\.postcode\)/);
+  assert.match(plannerSchema, /residentialStateFromPostcode\(draft\.postcode\)/);
   assert.match(publicPlanner, /previousStageRef\.current = stored\.stage/);
-  assert.match(publicPlanner, /firstIncompleteAssessmentStage\(explicitInitialDraft\(initialSelection\)\)/);
-  assert.match(publicPlanner, /if \(!householdComplete\) return 0/);
-  assert.match(publicPlanner, /comfortQuestionIds\.every[\s\S]*return 1/);
-  assert.match(publicPlanner, /systemQuestionIds\.every[\s\S]*return 2/);
-  assert.doesNotMatch(publicPlanner, /hasExplicitSelection\(initialSelection\) \? 4 : 0/);
+  assert.match(publicPlanner, /firstIncompleteHomeEnergyPlannerStage\(explicitHomeEnergyPlannerDraft\(initialSelection\)\)/);
+  assert.match(plannerSchema, /if \(!householdComplete\) return 0/);
+  assert.match(plannerSchema, /HOME_ENERGY_PLANNER_COMFORT_QUESTION_IDS\.every[\s\S]*return 1/);
+  assert.match(plannerSchema, /HOME_ENERGY_PLANNER_SYSTEM_QUESTION_IDS\.every[\s\S]*return 2/);
+  assert.doesNotMatch(publicPlanner, /hasExplicitHomeEnergyPlannerSelection\(initialSelection\) \? 4 : 0/);
   assert.match(publicPlanner, /draft\.floorConstruction === "slab_on_ground"/);
   assert.match(publicPlanner, /Home size and construction/);
   assert.match(publicPlanner, /Wall and floor insulation/);

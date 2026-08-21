@@ -25,6 +25,7 @@ const guideShell = read("../src/components/GuideShell.tsx");
 const caseStudies = read("../src/app/case-studies/page.tsx");
 const assessments = read("../src/app/assessments/page.tsx");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
+const plannerSchema = read("../src/lib/home-energy-planner-schema.ts");
 const plannerStyles = read("../src/components/HomeEnergyPlanner.module.css");
 const plannerIntakeStyles = read("../src/components/HomeFeatureIntake.module.css");
 const plannerRoute = read("../src/app/plan/page.tsx");
@@ -388,12 +389,13 @@ test("getting-started copy preserves comparison and privacy boundaries", () => {
 test("integrated planner is private, ordered and responsive", () => {
   assert.match(plannerRoute, /No account, address, bill, meter identifier or contact details/);
   assert.match(plannerRoute, /Four grouped steps use a postcode for local context/);
-  assert.match(planner, /createCustomerProjectPlan/);
-  assert.match(planner, /const PRIMARY_STAGE_COUNT = 4/);
-  assert.match(planner, /Goal and household/);
-  assert.match(planner, /Comfort and building/);
-  assert.match(planner, /Current systems/);
-  assert.match(planner, /Timing and review/);
+  assert.match(plannerSchema, /createCustomerProjectPlan/);
+  assert.match(plannerSchema, /HOME_ENERGY_PLANNER_STAGE_COUNT = 4/);
+  assert.match(planner, /const PRIMARY_STAGE_COUNT = HOME_ENERGY_PLANNER_STAGE_COUNT/);
+  assert.match(plannerSchema, /Goal and household/);
+  assert.match(plannerSchema, /Comfort and building/);
+  assert.match(plannerSchema, /Current systems/);
+  assert.match(plannerSchema, /Timing and review/);
   assert.match(planner, /Tell us about the household/);
   assert.match(planner, /How does the home feel and perform/);
   assert.match(planner, /What currently provides energy services/);
@@ -433,7 +435,7 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /View rebates and assistance/);
   assert.match(planner, /Open my printable plan/);
   assert.match(planner, /Start over/);
-  assert.doesNotMatch(planner, /createHomeEnergyPlan|homeEnergyPlanOptions/);
+  assert.doesNotMatch(planner, /\bcreateHomeEnergyPlan\(|\bhomeEnergyPlanOptions\b/);
   assert.doesNotMatch(planner, /target="_blank"|window\.print/);
   assert.match(plannerPrintRoute, /DownloadCustomerPlanPdfButton/);
   assert.match(plannerPrintRoute, /<DownloadCustomerPlanPdfButton\s+report=\{report\}\s*\/>/);
