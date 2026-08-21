@@ -4,11 +4,54 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 14 August 2026
+Last reconciled locally: 21 August 2026
 
-Deployment evidence last verified: 14 August 2026
+Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
+
+## Current production release: Surge brand, planner context and TLink bridge
+
+Application source `6a8f2db6a3b8e762b734016771b1629996e7abe5` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 366 at `https://compare.ausenergyassessments.com`.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application commit | `6a8f2db6a3b8e762b734016771b1629996e7abe5` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_a9fe5d8d2fcc8191a8817a3fb4dec992` |
+| Public version | Sites version 366 |
+| Deployment | `appgdep_6a87db3408908191bdfca0a142929bae` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:dcd074db87aa8ac1974644096d02cf7fadb749377fc4ed979c186f715233cd13` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Released outcome
+
+- The public AEA header is the primary household identity and again exposes the deliberate TLink logo and trade-workspace bridge. Direct trade routes remain TLink-led.
+- Customer pages, tools, Surge, emails and generated customer PDFs use a readable sans-serif family. The header uses restrained motion that stops when reduced motion is requested.
+- Surge's tucked preference persists in same-origin browser storage across routes, reloads and tabs until the customer explicitly brings Surge back.
+- Customer-only Surge entry points open the one global dialog from Getting Started and the energy planner. They do not mount a second widget, send a message or focus the mobile keyboard.
+- Completed planner answers can inform later public or customer Surge questions in the same browser tab. The server accepts only maintained planner keys and option values, caps the payload, excludes photos, uploads and contact details, and ignores household planner context in trade mode.
+- A newer chat correction overrides a saved-plan baseline in both model and deterministic fallback paths.
+
+### Validation and runtime evidence
+
+- `npm.cmd run validate` passed on the exact application source.
+- Repository tests: 2,799 total, 2,788 passed, 0 failed and 11 skipped.
+- Integration tests: 36 of 36 passed.
+- Typecheck, lint, fresh D1 migration through `0153`, production build and Sites server bundle audit all passed. The release package contains 152 migrations.
+- Customer plan PDF audit passed at 405,219 bytes and 24 pages, with tags, `en-AU`, embedded fonts and no active content.
+- Live desktop QA confirmed the AEA header, TLink trade bridge, Arial-based computed typography and no horizontal overflow.
+- Live 390 by 844 mobile QA confirmed a bounded popup above the launcher, no automatic text-field focus and no horizontal overflow.
+- Live navigation and reload QA confirmed Surge remains tucked on `/plan`, `/compare` and `/guides`, including a second same-origin tab, until explicit unhide.
+- Live planner QA confirmed the roadmap CTA opens Surge and prefills the saved-plan question without sending it.
+- A direct live public API request using generic allowlisted planner facts returned a bounded plan-aware response with no citations, source URLs or internal platform names in the public reply.
+
+### Boundaries
+
+- Mascot preference uses same-origin browser storage and does not cross unrelated domains.
+- Planner context uses same-tab session storage by design. It is sent only when the customer asks Surge and is treated as untrusted customer-reported baseline data.
+- No migration was added by this release. Production remains pre-launch until the product owner explicitly declares it live.
 
 ## Identity
 
@@ -721,11 +764,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Suggest conflict-free slots using working hours, travel time and service duration.
-2. Add customer confirmations, reminders and arrival updates.
-3. Add route-aware multi-stop planning.
-4. Rehearse the bounded pre-launch data reset and enforce the launch gate.
-5. Add schedule conversion telemetry and operational alerts.
+1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
+2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
+3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
+4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
 
 ## Previous quote, job and invoice usability release
 
@@ -2623,7 +2666,7 @@ The release:
 
 - adds one shared design and customer-copy contract for A4 PDF, responsive email HTML and plain text;
 - replaces the dense report export with a branded cover, home snapshot, prominent first three actions, later roadmap, everyday comfort advice, plan confidence, professional attribution, trade checks and privacy;
-- uses readable ten-point PDF body copy, editorial serif headings, compact page furniture and the site's navy, teal, green, mint and warm warning palette;
+- uses readable ten-point PDF body copy, clear sans-serif headings, compact page furniture and the site's navy, teal, green, mint and warm warning palette;
 - keeps recommendation cards together across page breaks and gives completed plans an explicit progress state instead of an empty priority section;
 - creates real allowlisted same-origin PDF link annotations with customer-friendly labels and no raw visible URL;
 - uses a table-based, inline-styled 640-pixel email that stacks at narrow widths and contains no remote image dependency;

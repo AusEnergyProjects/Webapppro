@@ -1,5 +1,70 @@
 # Next task handover
 
+Status: Surge brand, planner context and TLink bridge are released as public Sites version 366. The next executable milestone is governed knowledge depth and programme freshness.
+
+Prepared: 21 August 2026
+
+Working branch: `codex/job-schedule-week-calendar`
+
+Current production application source: `6a8f2db6a3b8e762b734016771b1629996e7abe5`
+
+Current production: Sites version 366 at `https://compare.ausenergyassessments.com`
+
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a9fe5d8d2fcc8191a8817a3fb4dec992`
+
+Current deployment: `appgdep_6a87db3408908191bdfca0a142929bae`
+
+Current environment revision: 24
+
+Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
+
+## Released state to preserve
+
+- AEA remains the primary public household brand. The header's deliberate trade bridge uses the TLink logo and name. Direct trade routes remain TLink-led.
+- Surge is one global customer widget. Customer-only contextual buttons open it; no page mounts a duplicate assistant.
+- Surge's tuck preference persists across same-origin routes, reloads and tabs until explicit unhide.
+- Completed planner answers may inform a later Surge question in the same browser tab. Only maintained fields and option values cross the API boundary.
+- Photos, uploaded bytes, contact details and arbitrary planner properties never enter plan context.
+- Household planner context is ignored in trade mode at the server and model boundaries.
+- Current question and newer chat corrections outrank saved plan context in model and deterministic fallback paths.
+- Customer responses remain provider-neutral, answer first, casually educational and limited to one useful follow-up question.
+- Public replies do not expose citations, source URLs, internal platform names or model internals.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-68
+
+### Objective
+
+Increase Surge's practical Australian household-energy knowledge without copying commercial authors, inventing rebate values or turning unreviewed web pages into answer authority.
+
+### Acceptance gate
+
+- Every answer-influencing knowledge record has an official canonical URL, publisher, jurisdiction, reviewed summary, observed date, volatility class, reuse basis and next-review date.
+- Stable educational guidance remains separate from volatile programme, certificate, product-list, price and eligibility facts.
+- Volatile records fail closed after their review date.
+- Programme answers state the matching jurisdiction and date basis, answer the posed rule before asking for more input and never invent a dollar amount.
+- Deterministic certificate calculations have complete official rules, inputs, units, rounding, caps and maintained test vectors.
+- Retrieval prefers directly reviewed governing sources and cannot promote generic discovery pages on loose keyword overlap.
+- Each released answer family passes two natural paraphrases plus a correction or topic-switch case.
+- Safety routing, model-cost controls, privacy, one-follow-up behaviour and public output sanitisation remain intact.
+- Full validation, build, package audit and bounded live desktop/mobile QA pass before release.
+
+### Stop conditions
+
+- Stop rather than guess when an official rule, effective date, formula, product list or jurisdiction cannot be verified.
+- Do not activate bulk-discovered pages merely to increase a source count.
+- Do not copy proprietary commercial content or claim an author, book or website has been ingested without an explicit licence.
+
+## Next five logical product steps
+
+1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
+2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
+3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
+4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
+
+## Historical release handovers
+
 Status: `TLINK-JOB-SCHEDULE-PLANNING-66` released as current Sites version 335; owner schedule and Google Calendar QA passed; staff team, own-role and accounting-provider draft export QA remain unverified
 
 Prepared: 14 August 2026
@@ -2051,7 +2116,7 @@ Remaining controlled limitations:
 - one independently approved, complete manual VEU, SRES/STC and NSW governed
   bundle has not yet been exercised through the live non-submitting workflow.
 
-## Next five logical product steps
+## Historical next five logical product steps for Sites version 335
 
 1. Suggest conflict-free slots using working hours, travel time and service duration.
 2. Add customer confirmations, reminders and arrival updates.

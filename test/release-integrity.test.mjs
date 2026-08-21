@@ -69,7 +69,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
   const releaseTruth = fs.readFileSync(path.join(root, "docs", "RELEASE_TRUTH.md"), "utf8");
   const roadmap = fs.readFileSync(path.join(root, "ROADMAP.md"), "utf8");
-  const handover = fs.readFileSync(path.join(root, "docs", "HANDOVER_NEXT_TASK.md"), "utf8");
+  const currentHandover = fs.readFileSync(path.join(root, "docs", "HANDOVER_NEXT_TASK.md"), "utf8");
+  const handover = [currentHandover, roadmap, releaseTruth].join("\n");
   const sourceRegister = fs.readFileSync(
     path.join(root, "docs", "compliance", "AUSTRALIAN_PROGRAM_SOURCE_REGISTER.md"),
     "utf8",
@@ -80,10 +81,14 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(agents, /immutable dated evidence baseline; never rewrite it as current status/);
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
-  assert.match(roadmap, /Last reconciled: 14 August 2026/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,220}Prepared: 14 August 2026/);
-  assert.match(releaseTruth, /Last reconciled locally: 14 August 2026/);
-  assert.match(releaseTruth, /Deployment evidence last verified: 14 August 2026/);
+  assert.match(roadmap, /Last reconciled: 21 August 2026/);
+  assert.match(roadmap, /## Released milestone: SURGE-BRAND-PLAN-CONTEXT-67/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,220}Prepared: 21 August 2026/);
+  assert.match(handover, /Current production: Sites version 366/);
+  assert.match(releaseTruth, /Last reconciled locally: 21 August 2026/);
+  assert.match(releaseTruth, /Deployment evidence last verified: 21 August 2026/);
+  assert.match(releaseTruth, /## Current production release: Surge brand, planner context and TLink bridge/);
+  assert.match(releaseTruth, /6a8f2db6a3b8e762b734016771b1629996e7abe5/);
   assert.match(releaseTruth, /## Advisor context and admin stability release/);
   assert.match(releaseTruth, /## Independent customer plan release/);
   assert.match(releaseTruth, /## Customer plan evidence and history release/);
@@ -1012,8 +1017,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-JOB-SCHEDULE-PLANNING-66` released as current Sites version 335/);
-  assert.match(handover, /Milestone ID: `TLINK-JOB-SCHEDULE-PLANNING-66`/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: Surge brand, planner context and TLink bridge are released as public Sites version 366/);
+  assert.match(currentHandover, /## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-68/);
   assert.match(handover, /Working branch: `codex\/job-schedule-week-calendar`/);
   assert.match(handover, /Milestone source baseline: `bc82429e232d00ef83769016839a895c36d8069e`/);
   assert.match(handover, /Current schedule-duration, calendar-sync and deep-link corrective application commit: `df86aa3ced0ee8d67022626369ebb0412af0b8da`/);
@@ -1030,10 +1035,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`/);
   assert.match(handover, /Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`/);
   assert.match(handover, /Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`/);
-  assert.match(handover, /Current production: Sites version 335 at `https:\/\/compare\.ausenergyassessments\.com`/);
-  assert.match(handover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_bfbac71cff188191af22d0819944fb4d`/);
-  assert.match(handover, /Current deployment: `appgdep_6a7eec87402c81918ed74c29a8f03755`/);
-  assert.match(handover, /Migration inventory: all 140 migrations through `0139_trade_accepted_invoice_one_per_job\.sql`/);
+  assert.match(currentHandover, /Current production: Sites version 366 at `https:\/\/compare\.ausenergyassessments\.com`/);
+  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a9fe5d8d2fcc8191a8817a3fb4dec992`/);
+  assert.match(currentHandover, /Current deployment: `appgdep_6a87db3408908191bdfca0a142929bae`/);
+  assert.match(currentHandover, /Migration inventory: 152 migrations through `0153_surge_model_usage_guard\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
   assert.match(handover, /Historical version 334 application source: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
@@ -1788,7 +1793,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   const nextFivePattern =
     /## Next five logical product steps\r?\n\r?\n((?:\d+\. .*(?:\r?\n|$))+)/g;
   const roadmapNextFiveMatches = [...roadmap.matchAll(nextFivePattern)];
-  const handoverNextFiveMatches = [...handover.matchAll(nextFivePattern)];
+  const handoverNextFiveMatches = [...currentHandover.matchAll(nextFivePattern)];
   const releaseTruthNextFiveMatches = [...releaseTruth.matchAll(nextFivePattern)];
   assert.equal(roadmapNextFiveMatches.length, 1, "ROADMAP.md must have one current next-five sequence");
   assert.equal(handoverNextFiveMatches.length, 1, "HANDOVER_NEXT_TASK.md must have one current next-five sequence");
@@ -1811,11 +1816,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(releaseTruthStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.equal(normalisedReleaseTruthNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. Suggest conflict-free slots using working hours, travel time and service duration\./);
-  assert.match(normalisedRoadmapNextFive, /\n2\. Add customer confirmations, reminders and arrival updates\./);
-  assert.match(normalisedRoadmapNextFive, /\n3\. Add route-aware multi-stop planning\./);
-  assert.match(normalisedRoadmapNextFive, /\n4\. Rehearse the bounded pre-launch data reset and enforce the launch gate\./);
-  assert.match(normalisedRoadmapNextFive, /\n5\. Add schedule conversion telemetry and operational alerts\./);
+  assert.match(normalisedRoadmapNextFive, /^1\. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts\./);
+  assert.match(normalisedRoadmapNextFive, /\n2\. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. Add signed-in customer project context with explicit consent/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. Add governed decision tools for bills, payback, solar self-consumption, EV running cost/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot/);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

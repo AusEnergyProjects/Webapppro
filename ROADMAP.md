@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 14 August 2026
+Last reconciled: 21 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -29,6 +29,26 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - TLink remains the authoritative trade record until an approved migration changes that boundary.
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
+
+## Released milestone: SURGE-BRAND-PLAN-CONTEXT-67
+
+Release status: application commit `6a8f2db6a3b8e762b734016771b1629996e7abe5` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 366 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+
+### Outcome
+
+Make Surge a consistent customer-facing AEA guide, restore the clear TLink trade bridge, unify typography, remember the customer's mascot preference and allow completed energy-plan answers to improve later Surge conversations without transferring photos, uploads or contact details.
+
+### Acceptance result
+
+- Public AEA and direct-trade TLink identity boundaries are explicit.
+- Surge hide and unhide preference persists across same-origin routes, reloads and tabs.
+- Planner context is exact-key and exact-option allowlisted, capped, disclosed and excluded from trade mode.
+- New chat corrections beat saved plan facts in both model and deterministic response paths.
+- Customer-facing pages and tools use readable sans-serif typography and respect reduced motion.
+- Contextual buttons open the single global Surge dialog without sending or opening the mobile keyboard.
+- Complete validation, packaging, deployment and live desktop/mobile QA passed.
+
+All acceptance gates above are met for Sites version 366.
 
 ## Released milestone: CUSTOMER-ADVISOR-CONTEXT-02
 
@@ -3212,11 +3232,11 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 ## Next five logical product steps
 
-1. Suggest conflict-free slots using working hours, travel time and service duration.
-2. Add customer confirmations, reminders and arrival updates.
-3. Add route-aware multi-stop planning.
-4. Rehearse the bounded pre-launch data reset and enforce the launch gate.
-5. Add schedule conversion telemetry and operational alerts.
+1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
+2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
+3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
+4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
 
 ## Global stop conditions
 
