@@ -30,7 +30,27 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: SURGE-BRAND-PLAN-CONTEXT-67
+## Released milestone: SURGE-DEDICATED-GUIDE-69
+
+Release status: application commit `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 367 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+
+### Outcome
+
+Give Surge a deliberate header destination that behaves as a normal page rather than reopening the floating mascot, while making the shared Australian Energy Assessments header cleaner, denser and recognisably futuristic without displacing TLink.
+
+### Acceptance result
+
+- The Surge header control navigates to `/surge` and exposes the active page state.
+- `/surge` reuses the one root-mounted assistant and does not mount a second widget.
+- The dedicated chat is always visible and has no popup launcher, hide control, close button, modal focus trap, body lock or automatic mobile keyboard focus.
+- Other routes retain the floating mascot and its persistent tuck preference.
+- The shared header retains the TLink logo and trade-workspace bridge, uses one serif wordmark exception and keeps all controls sans-serif.
+- Motion is decorative, clipped to the rounded header and disabled for reduced-motion users.
+- Complete validation, exact-source packaging, public deployment and desktop, phone and short-landscape QA passed.
+
+All acceptance gates above are met for Sites version 367.
+
+## Previous released milestone: SURGE-BRAND-PLAN-CONTEXT-67
 
 Release status: application commit `6a8f2db6a3b8e762b734016771b1629996e7abe5` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 366 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 

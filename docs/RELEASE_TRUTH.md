@@ -10,46 +10,45 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: Surge brand, planner context and TLink bridge
+## Current production release: dedicated Surge guide and futuristic header
 
-Application source `6a8f2db6a3b8e762b734016771b1629996e7abe5` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 366 at `https://compare.ausenergyassessments.com`.
+Application source `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 367 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application commit | `6a8f2db6a3b8e762b734016771b1629996e7abe5` |
+| Application commit | `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_a9fe5d8d2fcc8191a8817a3fb4dec992` |
-| Public version | Sites version 366 |
-| Deployment | `appgdep_6a87db3408908191bdfca0a142929bae` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_6c1e7b63885c8191af7240e9bc9a19f7` |
+| Public version | Sites version 367 |
+| Deployment | `appgdep_6a87eb0dd5708191a24295797d540d58` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:dcd074db87aa8ac1974644096d02cf7fadb749377fc4ed979c186f715233cd13` |
+| Package content hash | `sha256:89a9dba1ac400743a28d48c2c6d9fad15f96ced240b0c954907066b1cff1d8c3` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- The public AEA header is the primary household identity and again exposes the deliberate TLink logo and trade-workspace bridge. Direct trade routes remain TLink-led.
-- Customer pages, tools, Surge, emails and generated customer PDFs use a readable sans-serif family. The header uses restrained motion that stops when reduced motion is requested.
-- Surge's tucked preference persists in same-origin browser storage across routes, reloads and tabs until the customer explicitly brings Surge back.
-- Customer-only Surge entry points open the one global dialog from Getting Started and the energy planner. They do not mount a second widget, send a message or focus the mobile keyboard.
-- Completed planner answers can inform later public or customer Surge questions in the same browser tab. The server accepts only maintained planner keys and option values, caps the payload, excludes photos, uploads and contact details, and ignores household planner context in trade mode.
-- A newer chat correction overrides a saved-plan baseline in both model and deterministic fallback paths.
+- The shared public header is a compact navy and teal cockpit with a restrained animated energy rail, readable navigation, a serif Australian Energy Assessments wordmark and sans-serif controls. Reduced-motion and forced-colour fallbacks remain explicit.
+- The deliberate TLink logo and trade-workspace bridge remain visible beside Surge. Direct trade routes remain TLink-led.
+- The header's Surge control is a normal link to `/surge`, not a popup trigger. The active Surge page uses the one root-mounted assistant and does not mount a duplicate widget.
+- On `/surge`, the assistant is always present as a normal page region. It has no floating launcher, tuck or show control, close button, modal focus trap, body scroll lock or automatic composer focus.
+- The floating mascot remains available on other customer routes and keeps its existing same-origin tuck preference there.
+- Existing plan context, conversation history, public output filtering, model cost controls and TLink customer-boundary protections remain unchanged.
 
 ### Validation and runtime evidence
 
-- `npm.cmd run validate` passed on the exact application source.
-- Repository tests: 2,799 total, 2,788 passed, 0 failed and 11 skipped.
-- Integration tests: 36 of 36 passed.
-- Typecheck, lint, fresh D1 migration through `0153`, production build and Sites server bundle audit all passed. The release package contains 152 migrations.
+- `npm.cmd run validate` passed on the exact application source, including typecheck, lint, integration tests, the complete repository suite, fresh D1 migration through `0153`, the customer-plan PDF audit, the production build and the Sites server bundle audit.
+- The dedicated Surge and shared-navigation regression set passed 46 of 46 tests.
+- The release package contains all 152 migrations and Sites stored 483 files totalling 50,114,560 bytes.
+- The local release archive is 15,438,659 bytes with SHA-256 `A0B86811DB86B202079291AFDC0CBEAA90680952412308F9570BFEA6B3AE6A9F`.
 - Customer plan PDF audit passed at 405,219 bytes and 24 pages, with tags, `en-AU`, embedded fonts and no active content.
-- Live desktop QA confirmed the AEA header, TLink trade bridge, Arial-based computed typography and no horizontal overflow.
-- Live 390 by 844 mobile QA confirmed a bounded popup above the launcher, no automatic text-field focus and no horizontal overflow.
-- Live navigation and reload QA confirmed Surge remains tucked on `/plan`, `/compare` and `/guides`, including a second same-origin tab, until explicit unhide.
-- Live planner QA confirmed the roadmap CTA opens Surge and prefills the saved-plan question without sending it.
-- A direct live public API request using generic allowlisted planner facts returned a bounded plan-aware response with no citations, source URLs or internal platform names in the public reply.
+- Live desktop QA confirmed the active Surge header tab, TLink bridge and one non-modal in-page Surge region.
+- Live 390 by 844 mobile QA confirmed header navigation from `/plan` to `/surge`, no launcher, no tuck or close control, no body lock, no keyboard activation and no horizontal overflow.
+- Short-landscape QA confirmed the page remains vertically reachable without horizontal overflow.
+- The custom domain and Sites deployment both report exact version 367 with hosted environment revision 24.
 
 ### Boundaries
 
-- Mascot preference uses same-origin browser storage and does not cross unrelated domains.
+- The dedicated route deliberately ignores the mascot tuck preference for page visibility. The preference still applies to the floating mascot on other same-origin routes.
 - Planner context uses same-tab session storage by design. It is sent only when the customer asks Surge and is treated as untrusted customer-reported baseline data.
 - No migration was added by this release. Production remains pre-launch until the product owner explicitly declares it live.
 

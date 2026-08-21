@@ -1,18 +1,18 @@
 # Next task handover
 
-Status: Surge brand, planner context and TLink bridge are released as public Sites version 366. The next executable milestone is governed knowledge depth and programme freshness.
+Status: the dedicated Surge page and futuristic shared header are released as public Sites version 367. The next executable milestone is governed knowledge depth and programme freshness.
 
 Prepared: 21 August 2026
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `6a8f2db6a3b8e762b734016771b1629996e7abe5`
+Current production application source: `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397`
 
-Current production: Sites version 366 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 367 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_a9fe5d8d2fcc8191a8817a3fb4dec992`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_6c1e7b63885c8191af7240e9bc9a19f7`
 
-Current deployment: `appgdep_6a87db3408908191bdfca0a142929bae`
+Current deployment: `appgdep_6a87eb0dd5708191a24295797d540d58`
 
 Current environment revision: 24
 
@@ -20,9 +20,11 @@ Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
 ## Released state to preserve
 
-- AEA remains the primary public household brand. The header's deliberate trade bridge uses the TLink logo and name. Direct trade routes remain TLink-led.
-- Surge is one global customer widget. Customer-only contextual buttons open it; no page mounts a duplicate assistant.
-- Surge's tuck preference persists across same-origin routes, reloads and tabs until explicit unhide.
+- Australian Energy Assessments remains the primary public household brand. Its header wordmark is the sole serif exception; controls and customer content remain sans-serif.
+- The shared header uses a compact navy and teal HUD treatment, restrained motion, an active Surge tab and the deliberate TLink logo and trade-workspace bridge.
+- `/surge` is the dedicated assistant destination. It reuses the one root-mounted widget and never mounts a duplicate assistant.
+- On `/surge`, chat is always present as an in-page region with no launcher, tuck or show control, close button, modal focus trap, body lock or automatic keyboard focus.
+- On other customer routes, Surge's floating mascot and tuck preference continue to persist across same-origin routes, reloads and tabs until explicit unhide.
 - Completed planner answers may inform a later Surge question in the same browser tab. Only maintained fields and option values cross the API boundary.
 - Photos, uploaded bytes, contact details and arbitrary planner properties never enter plan context.
 - Household planner context is ignored in trade mode at the server and model boundaries.
