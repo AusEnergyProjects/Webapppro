@@ -272,29 +272,41 @@
   backdrop-filter: blur(22px) saturate(1.12);
 }
 
-.contextRailHeader {
+.contextRailSummary {
   align-items: center;
   border-bottom: 1px solid rgba(129, 231, 212, 0.24);
   display: flex;
   flex: 0 0 auto;
   gap: 12px;
+  list-style: none;
   padding: 0 0 14px;
 }
 
-.contextRailHeader img {
+.contextRailSummary::-webkit-details-marker {
+  display: none;
+}
+
+.contextRailSummary img {
   filter: drop-shadow(0 9px 14px rgba(0, 0, 0, 0.32));
   height: 68px;
   object-fit: contain;
   width: 54px;
 }
 
-.contextRailHeader span,
-.contextRailHeader h2 {
+.contextRailTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contextRailTitle > span,
+.contextRailTitle > strong,
+.contextRailTitle > small {
   display: block;
   margin: 0;
 }
 
-.contextRailHeader span {
+.contextRailTitle > span {
   color: #79efd5;
   font-size: 0.6rem;
   font-weight: 900;
@@ -302,11 +314,23 @@
   text-transform: uppercase;
 }
 
-.contextRailHeader h2 {
+.contextRailTitle > strong {
   color: #ffffff;
   font-size: 1.04rem;
   line-height: 1.2;
   margin-top: 3px;
+}
+
+.contextRailTitle > small,
+.contextRailToggle {
+  display: none;
+}
+
+.contextRailBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .contextProgress {
@@ -806,6 +830,14 @@
 .starters {
   display: grid;
   gap: 11px;
+}
+
+.starterDrawer > summary {
+  display: none;
+}
+
+.starterDrawer > .starters {
+  display: grid;
 }
 
 .starterGroup {
@@ -1628,11 +1660,11 @@
     padding: 12px;
   }
 
-  .rootDedicated .contextRailHeader {
+  .rootDedicated .contextRailSummary {
     padding-bottom: 8px;
   }
 
-  .rootDedicated .contextRailHeader img {
+  .rootDedicated .contextRailSummary img {
     height: 48px;
     width: 38px;
   }
@@ -1662,8 +1694,17 @@
 
   .rootDedicated .workspace {
     border-radius: 12px;
-    height: min(690px, calc(100dvh - 116px));
-    min-height: 500px;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .rootDedicated .conversation {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+    overscroll-behavior: auto;
+    scroll-behavior: auto;
   }
 
   .intakeGrid {
@@ -1811,7 +1852,7 @@
   padding: 16px;
 }
 
-.contextRailHeader h2 {
+.contextRailTitle > strong {
   font-size: 1rem;
   font-weight: 650;
 }
@@ -1875,6 +1916,45 @@
     padding: 12px;
   }
 
+  .rootDedicated .contextRailSummary {
+    cursor: pointer;
+    min-height: 56px;
+    padding-bottom: 0;
+  }
+
+  .rootDedicated .contextRailTitle > small {
+    color: #b9d8d1;
+    display: block;
+    font-size: .75rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .rootDedicated .contextRailToggle {
+    color: #79efd5;
+    display: block;
+    font-size: 1.4rem;
+    margin-left: auto;
+    transition: transform 160ms ease;
+  }
+
+  .rootDedicated .contextRail[open] .contextRailSummary {
+    border-bottom-color: rgba(129, 231, 212, 0.24);
+    padding-bottom: 10px;
+  }
+
+  .rootDedicated .contextRail:not([open]) .contextRailSummary {
+    border-bottom-color: transparent;
+  }
+
+  .rootDedicated .contextRail[open] .contextRailToggle {
+    transform: rotate(180deg);
+  }
+
+  .rootDedicated .contextRail:not([open]) > .contextRailBody {
+    display: none;
+  }
+
   .rootDedicated .contextGroups {
     display: grid;
     overflow: visible;
@@ -1890,5 +1970,57 @@
 
   .rootDedicated .contextGroups button {
     min-height: 44px;
+  }
+
+  .rootDedicated .starterDrawer {
+    border: 1px solid #b9d5cc;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .78);
+  }
+
+  .rootDedicated .starterDrawer > summary {
+    align-items: center;
+    color: #164d42;
+    cursor: pointer;
+    display: flex;
+    font-size: var(--surge-type-action);
+    font-weight: 700;
+    justify-content: space-between;
+    list-style: none;
+    min-height: 48px;
+    padding: 10px 12px;
+  }
+
+  .rootDedicated .starterDrawer > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rootDedicated .starterDrawer > summary::after {
+    color: #07845b;
+    content: "⌄";
+    font-size: 1.15rem;
+    margin-left: 10px;
+    transition: transform 160ms ease;
+  }
+
+  .rootDedicated .starterDrawer[open] > summary::after {
+    transform: rotate(180deg);
+  }
+
+  .rootDedicated .starterDrawer > summary small {
+    color: #53736c;
+    font-size: .75rem;
+    font-weight: 500;
+    margin-left: auto;
+  }
+
+  .rootDedicated .starterDrawer:not([open]) > .starters {
+    display: none;
+  }
+
+  .rootDedicated .starterDrawer[open] > .starters {
+    border-top: 1px solid #c9ddd7;
+    display: grid;
+    padding: 10px;
   }
 }

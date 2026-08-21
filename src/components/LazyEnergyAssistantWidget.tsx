@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { storePendingSurgeDraft } from "@/lib/surge-page-navigation";
+import { usePathname } from "next/navigation";
 import styles from "./LazyEnergyAssistantWidget.module.css";
 
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
@@ -41,11 +39,21 @@ function Loader() {
   );
 }
 
+function QuickChatLoader() {
+  return (
+    <div className={styles.root} data-surge-loader role="status" aria-label="Opening Surge AI chat">
+      <span className={styles.launcher}>
+        <span className={styles.mascot} aria-hidden="true" />
+      </span>
+    </div>
+  );
+}
+
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
   const dedicated = pathname === "/surge";
   const [tucked, setTucked] = useState(false);
-  const router = useRouter();
+  const [quickChatMounted, setQuickChatMounted] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -80,37 +88,39 @@ export function LazyEnergyAssistantWidget() {
     );
   }
 
+  if (quickChatMounted) {
+    return (
+      <Suspense fallback={<QuickChatLoader />}>
+        <DeferredEnergyAssistantWidget initialOpen />
+      </Suspense>
+    );
+  }
+
   return (
     <div className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`} data-surge-loader>
       {tucked ? (
-        <Link
+        <button
           className={styles.peek}
-          href="/surge"
-          prefetch={false}
-          aria-label="Open the full Surge AI guide"
-          onPointerEnter={() => router.prefetch("/surge")}
-          onFocus={() => router.prefetch("/surge")}
+          type="button"
+          aria-label="Bring Surge AI back and open chat"
           onClick={() => {
             setTucked(false);
             storeTucked(false);
-            storePendingSurgeDraft();
+            setQuickChatMounted(true);
           }}
         >
           <span className={`${styles.mascot} ${styles.mascotPeeking}`} aria-hidden="true" />
-        </Link>
+        </button>
       ) : (
         <>
-          <Link
+          <button
             className={styles.launcher}
-            href="/surge"
-            prefetch={false}
-            aria-label="Open the full Surge AI guide"
-            onPointerEnter={() => router.prefetch("/surge")}
-            onFocus={() => router.prefetch("/surge")}
-            onClick={() => storePendingSurgeDraft()}
+            type="button"
+            aria-label="Open Surge AI chat"
+            onClick={() => setQuickChatMounted(true)}
           >
             <span className={styles.mascot} aria-hidden="true" />
-          </Link>
+          </button>
           <button
             className={styles.dismiss}
             type="button"

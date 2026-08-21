@@ -1564,14 +1564,17 @@ export function EnergyAssistantWidget({
           onKeyDown={dedicated ? undefined : trapFocus}
         >
           {dedicated && (
-            <aside className={styles.contextRail} aria-label="Your home context">
-              <header className={styles.contextRailHeader}>
+            <details className={styles.contextRail} aria-label="Your home context">
+              <summary className={styles.contextRailSummary}>
                 <Image src="/surge-mascot.webp" alt="" width={54} height={68} />
-                <div>
+                <span className={styles.contextRailTitle}>
                   <span>Surge AI knows</span>
-                  <h2>Your home context</h2>
-                </div>
-              </header>
+                  <strong>Your home context</strong>
+                  <small>{profileReviewedAnswerCount} of {SURGE_PROFILE_FIELDS.length} details reviewed</small>
+                </span>
+                <span className={styles.contextRailToggle} aria-hidden="true">⌄</span>
+              </summary>
+              <div className={styles.contextRailBody}>
               <div className={styles.contextProgress}>
                 <div>
                   <strong>{profileReviewedAnswerCount}</strong>
@@ -1650,7 +1653,8 @@ export function EnergyAssistantWidget({
                   </ul>
                 </section>
               )}
-            </aside>
+              </div>
+            </details>
           )}
 
           <div className={styles.workspace}>
@@ -1775,20 +1779,26 @@ export function EnergyAssistantWidget({
             )}
 
             {messages.length === 0 && !needsStarterProfile && (
-              <section className={styles.starters} aria-label="Ways Surge AI can help">
-                {START_ROADMAP.map((group) => (
-                  <div className={styles.starterGroup} key={group.label}>
-                    <h4>{group.label}</h4>
-                    <div>
-                      {group.questions.map((question) => (
-                        <button key={question} type="button" disabled={busy} onClick={() => void ask(question)}>
-                          <span>{question}</span><span aria-hidden="true">›</span>
-                        </button>
-                      ))}
+              <details className={styles.starterDrawer}>
+                <summary>
+                  <span>Suggested questions</span>
+                  <small>{START_ROADMAP.reduce((total, group) => total + group.questions.length, 0)} options</small>
+                </summary>
+                <section className={styles.starters} aria-label="Ways Surge AI can help">
+                  {START_ROADMAP.map((group) => (
+                    <div className={styles.starterGroup} key={group.label}>
+                      <h4>{group.label}</h4>
+                      <div>
+                        {group.questions.map((question) => (
+                          <button key={question} type="button" disabled={busy} onClick={() => void ask(question)}>
+                            <span>{question}</span><span aria-hidden="true">›</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </section>
+                  ))}
+                </section>
+              </details>
             )}
 
             {messages.length > 0 && (

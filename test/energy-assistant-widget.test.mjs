@@ -70,7 +70,7 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(styles, /\.intakeGrid \{[^}]*align-items: start;/);
   assert.match(styles, /\.intakeGrid > label \{[^}]*align-self: start;[^}]*grid-auto-rows: max-content;/);
   assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(widget, /<aside className=\{styles\.contextRail\} aria-label="Your home context">/);
+  assert.match(widget, /<details className=\{styles\.contextRail\} aria-label="Your home context">/);
   assert.match(widget, /<div className=\{styles\.workspace\}>/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);
@@ -180,7 +180,7 @@ test("the tucked mascot preference survives customer-page navigation until expli
   assert.doesNotMatch(resetSource, /DISPLAY_PREFERENCE_KEY|storeMascotTucked|setMascotTucked/);
 });
 
-test("every public Surge entry point opens the full AI page and carries only a bounded pending draft", () => {
+test("page Surge actions open the full guide while the floating mascot retains quick chat", () => {
   assert.match(surgeNavigation, /PENDING_SURGE_DRAFT_KEY = "aea-surge-pending-draft-v1"/);
   assert.match(surgeNavigation, /draft\.trim\(\)\.slice\(0, MAX_SURGE_DRAFT_LENGTH\)/);
   assert.match(surgeNavigation, /window\.sessionStorage\.setItem/);
@@ -190,9 +190,13 @@ test("every public Surge entry point opens the full AI page and carries only a b
   assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget/);
   assert.doesNotMatch(surgeOpenButton, /\bfetch\(/);
   assert.match(lazyWidget, /if \(dedicated\)[\s\S]*<DeferredEnergyAssistantWidget \/>/);
-  assert.equal((lazyWidget.match(/href="\/surge"/g) || []).length, 2);
-  assert.equal((lazyWidget.match(/prefetch=\{false\}/g) || []).length, 2);
-  assert.doesNotMatch(lazyWidget, /setRequested|OPEN_SURGE_EVENT|initialOpen/);
+  assert.doesNotMatch(lazyWidget, /href="\/surge"|router\.prefetch|storePendingSurgeDraft/);
+  assert.match(lazyWidget, /const \[quickChatMounted, setQuickChatMounted\] = useState\(false\)/);
+  assert.match(lazyWidget, /if \(quickChatMounted\)[\s\S]*<DeferredEnergyAssistantWidget initialOpen \/>/);
+  assert.match(lazyWidget, /aria-label="Open Surge AI chat"/);
+  assert.match(lazyWidget, /aria-label="Bring Surge AI back and open chat"/);
+  assert.equal((lazyWidget.match(/setQuickChatMounted\(true\)/g) || []).length, 2);
+  assert.doesNotMatch(lazyWidget, /setRequested|OPEN_SURGE_EVENT/);
   assert.doesNotMatch(widget, /OPEN_SURGE_EVENT|openFromCustomerPage/);
   assert.match(widget, /const pendingDraft = takePendingSurgeDraft\(\)/);
   assert.match(widget, /if \(pendingDraft\) setDraft\(pendingDraft\)/);
@@ -401,12 +405,18 @@ test("Surge inherits the platform typography roles instead of inventing tiny var
   assert.match(styles, /\.panel small,[\s\S]{0,120}\.panel fieldset > legend/);
 });
 
-test("mobile Surge context shows every planner section without a nested scroller", () => {
+test("mobile Surge collapses secondary context and suggestions while chat follows page scroll", () => {
   assert.match(widget, /contextMobileSummary/);
+  assert.match(widget, /<details className=\{styles\.contextRail\}/);
+  assert.match(widget, /<div className=\{styles\.contextRailBody\}>/);
+  assert.match(widget, /<details className=\{styles\.starterDrawer\}>/);
   assert.match(styles, /\.contextMobileSummary \{\s*display: none;/);
   assert.match(styles, /\.rootDedicated \.contextRail \{[^}]*max-height: none;[^}]*overflow: visible;/);
-  assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*display: grid;[^}]*overflow: visible;/);
+  assert.match(styles, /\.rootDedicated \.contextRail:not\(\[open\]\) > \.contextRailBody \{\s*display: none;/);
+  assert.match(styles, /\.rootDedicated \.starterDrawer:not\(\[open\]\) > \.starters \{\s*display: none;/);
   assert.match(styles, /\.rootDedicated \.contextGroups dl \{\s*display: none;/);
+  assert.match(styles, /\.rootDedicated \.workspace \{[^}]*height: auto;[^}]*overflow: visible;/);
+  assert.match(styles, /\.rootDedicated \.conversation \{[^}]*overflow: visible;[^}]*overscroll-behavior: auto;/);
 });
 
 test("local continuation caps messages and recent API context and expires after 30 days", () => {
