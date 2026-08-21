@@ -10,7 +10,46 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: public customer-path performance recovery
+## Current production release: public Surge UX optimisation and shared wide layout
+
+Application source `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 371 at `https://compare.ausenergyassessments.com`.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e` |
+| Public version | Sites version 371 |
+| Deployment | `appgdep_6a883f07c4108191a8f1fcc7db68dba1` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:9c6e002b41303ac3b3874c4cc9bc65b2dd004ac611af13596f4ffa16b6c055db` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Released outcome
+
+- The shared route shell now uses a 1760-pixel maximum across the public and customer platform while retaining responsive gutters and phone overflow protection.
+- The homepage uses a 70,632-byte WebP derivative of the existing Surge command-centre art, plus one subtle CSS scan that is disabled for reduced motion. It does not restore canvas, pointer, particle, blur-sweep or floating-tile work.
+- Every customer-facing Surge card and mascot launcher is a client link to the complete `/surge` page. The ordinary route no longer imports or opens the assistant popup; contextual planner prompts use a bounded one-use session draft.
+- The reported two-column Surge intake stretch is corrected by top-aligning grid items and giving each field max-content rows. Step 11 now renders four equal 46-pixel selects on desktop and phone.
+- Obsolete popup-event code and non-dedicated assistant loading styles were removed.
+
+### Validation and runtime evidence
+
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- The focused Surge, navigation and public-scene suite passed 48 of 48 tests. `git diff --check` passed.
+- The public-performance audit reports a 4,587-byte root launcher, 69,544-byte deferred assistant and 728,155-byte global stylesheet.
+- Sites stored 44,482,560 bytes across 476 files with the package content hash above. The local release archive was 12,199,869 bytes with SHA-256 `5DE26CE8509A0270A839E0754572BDEC27ABCEDE39AA7D15745EF0D00F4FCE6F`.
+- Live desktop and 390 by 844 phone QA confirmed no horizontal overflow, equal Step 11 controls, the wide home and plan shell, the optimised homepage scene and full-page `/surge` navigation with no popup dialog.
+- GitHub, Sites managed source, saved version 371 and deployment provenance all resolve to the exact application source above.
+
+### Boundaries
+
+- No assistant answer, API, authentication, database, migration, calculation, trade workflow or customer-data contract changed.
+- The shared stylesheet remains a 728,155-byte raw build asset. It passed the release budget but remains the next structural performance opportunity.
+- No real lead, email, trade record or customer record was created during live verification.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: public customer-path performance recovery
 
 Deployment source `bc71dda1fa5e79f4529c4ba408bd481a87a066ba` on branch `codex/job-schedule-week-calendar`, containing performance implementation commit `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, is the exact source deployed as public Sites version 370 at `https://compare.ausenergyassessments.com`.
 

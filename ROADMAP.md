@@ -3276,6 +3276,12 @@ Remove continuous decorative rendering and oversized public assets from the home
 
 Deployment source `bc71dda1fa5e79f4529c4ba408bd481a87a066ba`, containing performance implementation `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, passed complete validation and live desktop and phone QA and is deployed as public Sites version 370. Exact package and deployment evidence is recorded in release truth.
 
+## Released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71
+
+Carry the preferred wide format through the public and customer platform, correct the stretched Surge intake controls, make every customer Surge entry open the complete `/surge` workspace and put the mascot-led command-centre treatment on the homepage without restoring the former expensive rendering stack.
+
+Exact application commit `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 371 under `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e` and deployed publicly through `appgdep_6a883f07c4108191a8f1fcc7db68dba1` with environment revision 24. Desktop and 390 by 844 live QA confirmed the 1760-pixel shared shell, optimised 70,632-byte Surge homepage asset, full-page navigation, equal 46-pixel Step 11 fields and no horizontal overflow. Release truth contains exact archive and runtime evidence.
+
 ## Next five logical product steps
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
