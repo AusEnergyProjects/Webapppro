@@ -7802,12 +7802,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
   }
 
   body.aea-platform .site-header .comparator-nav {
-    display: grid;
+    display: flex;
     gap: 3px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    overflow: visible;
-    padding: 3px;
-    scroll-snap-type: none;
+    overflow-x: auto;
+    padding: 3px 30px 5px 3px;
+    scroll-padding-inline: 3px 30px;
+    scroll-snap-type: x proximity;
   }
 
   body.aea-platform .site-header .comparator-nav a {
@@ -7815,12 +7815,14 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { opacity: .55; 
     display: flex;
     font-size: .6875rem;
     font-weight: 650;
+    flex: 0 0 auto;
     justify-content: center;
     min-height: 40px;
-    min-width: 0;
-    padding: 5px 4px;
+    min-width: max-content;
+    padding: 7px 12px;
+    scroll-snap-align: start;
     text-align: center;
-    white-space: normal;
+    white-space: nowrap;
   }
 
   body.aea-platform .start-hero-planner h1 {

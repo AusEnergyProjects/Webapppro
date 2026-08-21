@@ -788,6 +788,8 @@ export function EnergyAssistantWidget({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const intakeRef = useRef<HTMLFormElement>(null);
+  const profileEditScrollPendingRef = useRef(false);
   const messagesRef = useRef<AssistantMessage[]>([]);
   const continuationRef = useRef<SurgeConversationState | null>(null);
   const hydrationStartedRef = useRef(false);
@@ -1139,6 +1141,21 @@ export function EnergyAssistantWidget({
     });
   }, [effectiveOpen, leadOpen, messages]);
 
+  useEffect(() => {
+    if (!profileEditing || !profileEditScrollPendingRef.current) return;
+    profileEditScrollPendingRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const intake = intakeRef.current;
+      if (!intake) return;
+      intake.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+      intake.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [profileEditing, profileStep]);
+
   const close = () => {
     setOpen(false);
     setError("");
@@ -1242,6 +1259,13 @@ export function EnergyAssistantWidget({
   const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
     setProfileUpdatedAt(new Date().toISOString());
     setProfile((current) => updateSurgeProfileField(current, field, value, checked));
+    setProfileError("");
+  };
+
+  const editStarterProfileStep = (stepIndex: number) => {
+    profileEditScrollPendingRef.current = true;
+    setProfileStep(stepIndex);
+    setProfileEditing(true);
     setProfileError("");
   };
 
@@ -1605,11 +1629,7 @@ export function EnergyAssistantWidget({
                         <h3>{step.title}</h3>
                         <button
                           type="button"
-                          onClick={() => {
-                            setProfileStep(stepIndex);
-                            setProfileEditing(true);
-                            setProfileError("");
-                          }}
+                          onClick={() => editStarterProfileStep(stepIndex)}
                         >
                           Edit
                         </button>
@@ -1670,7 +1690,7 @@ export function EnergyAssistantWidget({
 
           <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>
             {needsStarterProfile && (
-              <form className={styles.intake} onSubmit={completeStarterProfile}>
+              <form ref={intakeRef} className={styles.intake} onSubmit={completeStarterProfile} tabIndex={-1}>
                 <header>
                   <span>Build your home context · Step {profileStep + 1} of {SURGE_PROFILE_STEPS.length}</span>
                   <progress max={SURGE_PROFILE_STEPS.length} value={profileStep + 1} aria-label={`Step ${profileStep + 1} of ${SURGE_PROFILE_STEPS.length}`} />
@@ -1766,11 +1786,7 @@ export function EnergyAssistantWidget({
                 {context.audience !== "trade" && profile.completed && !dedicated && (
                   <div className={styles.profileSummary}>
                     <span>Using your postcode and home starting point</span>
-                    <button type="button" onClick={() => {
-                      setProfileStep(0);
-                      setProfileEditing(true);
-                      setProfileError("");
-                    }}>
+                    <button type="button" onClick={() => editStarterProfileStep(0)}>
                       Change details
                     </button>
                   </div>

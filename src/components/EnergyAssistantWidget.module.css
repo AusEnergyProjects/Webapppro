@@ -663,6 +663,7 @@
   display: grid;
   gap: 16px;
   padding: clamp(18px, 2.2vw, 28px);
+  scroll-margin-top: 16px;
 }
 
 .intake header {

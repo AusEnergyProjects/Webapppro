@@ -419,6 +419,16 @@ test("mobile Surge collapses secondary context and suggestions while chat follow
   assert.match(styles, /\.rootDedicated \.conversation \{[^}]*overflow: visible;[^}]*overscroll-behavior: auto;/);
 });
 
+test("context edit actions reveal and move focus to the selected intake step", () => {
+  assert.match(widget, /const intakeRef = useRef<HTMLFormElement>\(null\)/);
+  assert.match(widget, /const editStarterProfileStep = \(stepIndex: number\)/);
+  assert.match(widget, /intake\.scrollIntoView\(\{[\s\S]{0,180}block: "start"/);
+  assert.match(widget, /intake\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(widget, /onClick=\{\(\) => editStarterProfileStep\(stepIndex\)\}/);
+  assert.match(widget, /<form ref=\{intakeRef\} className=\{styles\.intake\}[^>]*tabIndex=\{-1\}>/);
+  assert.match(styles, /\.intake \{[^}]*scroll-margin-top: 16px;/);
+});
+
 test("local continuation caps messages and recent API context and expires after 30 days", () => {
   const helperSource = [
     functionSource(widget, "boundedLocalMessages"),
