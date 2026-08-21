@@ -60,6 +60,11 @@ test("saving an edited section continues to the next unreviewed section until th
 
   for (const step of SURGE_PROFILE_STEPS) profile = markSurgeProfileStepReviewed(profile, step);
   assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 7), -1);
+
+  const restored = parseSurgeStarterProfile(JSON.parse(JSON.stringify(profile)));
+  assert.equal(restored.completed, true);
+  assert.equal(restored.reviewed.length, SURGE_PROFILE_FIELDS.length);
+  assert.deepEqual(restored.reviewed, profile.reviewed, "reviewed unknown answers must survive a browser round trip");
 });
 
 test("Surge reaches every canonical planner question exactly once with exact options", () => {

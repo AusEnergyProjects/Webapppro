@@ -213,7 +213,7 @@
   box-shadow: none;
   display: grid;
   gap: clamp(16px, 2vw, 28px);
-  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+  grid-template-columns: minmax(270px, 310px) minmax(0, 1fr) minmax(230px, 280px);
   height: min(900px, calc(100dvh - 170px));
   justify-content: center;
   margin: 0 auto;
@@ -377,6 +377,26 @@
   accent-color: #22d39f;
   height: 7px;
   width: 100%;
+}
+
+.contextContinue {
+  background: rgba(81, 226, 195, 0.1);
+  border: 1px solid rgba(117, 237, 211, 0.46);
+  border-radius: 8px;
+  color: #8ff6df;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  justify-self: start;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.contextContinue:hover,
+.contextContinue:focus-visible {
+  background: rgba(81, 226, 195, 0.18);
+  border-color: #7cf1d7;
 }
 
 .plannerProgress {
@@ -1054,27 +1074,147 @@
   color: #075e46;
 }
 
-.leadOffer {
-  background: linear-gradient(135deg, #063d43, #08775c);
-  border-radius: 13px;
-  color: #ffffff;
+.guidanceRail {
+  align-content: start;
+  background:
+    radial-gradient(circle at 100% 0, rgba(58, 235, 200, 0.18), transparent 180px),
+    linear-gradient(155deg, rgba(3, 38, 56, 0.96), rgba(2, 24, 42, 0.92));
+  border: 1px solid rgba(111, 237, 214, 0.42);
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(0, 4, 18, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #eafff9;
   display: grid;
-  gap: 6px;
-  padding: 13px;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px;
 }
 
-.leadOffer strong {
-  font-size: 0.75rem;
+.guidanceTips,
+.guidanceHelp {
+  background: rgba(236, 252, 247, 0.06);
+  border: 1px solid rgba(142, 228, 211, 0.2);
+  border-radius: 10px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
 }
 
-.leadOffer p {
-  color: #d7f2e9;
-  font-size: 0.64rem;
-  line-height: 1.45;
+.guidanceTips > span,
+.guidanceHelp > span,
+.mobileGuidance > div > span {
+  color: #79efd5;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.guidanceTips h3,
+.guidanceHelp h3 {
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.25;
   margin: 0;
 }
 
-.leadOffer button,
+.guidanceTips ul,
+.mobileGuidance ul {
+  display: grid;
+  gap: 9px;
+  list-style: none;
+  margin: 3px 0 0;
+  padding: 0;
+}
+
+.guidanceTips li {
+  border-top: 1px solid rgba(142, 228, 211, 0.16);
+  display: grid;
+  gap: 3px;
+  padding-top: 9px;
+}
+
+.guidanceTips li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.guidanceTips strong,
+.mobileGuidance li strong {
+  color: #f5fffc;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.guidanceTips p,
+.guidanceHelp p,
+.mobileGuidance p {
+  color: #b9d8d1;
+  font-size: 0.69rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.guidanceHelp button,
+.mobileGuidance button {
+  background: #22c894;
+  border: 0;
+  border-radius: 8px;
+  color: #032e2b;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-height: 44px;
+  padding: 9px 11px;
+}
+
+.mobileGuidance {
+  display: none;
+}
+
+.mobileGuidance > summary {
+  color: #164d42;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
+  list-style: none;
+  min-height: 44px;
+  padding: 11px 12px;
+}
+
+.mobileGuidance > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobileGuidance > summary::after {
+  color: #07845b;
+  content: "⌄";
+  float: right;
+}
+
+.mobileGuidance[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.mobileGuidance > div {
+  border-top: 1px solid #c5ddd5;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mobileGuidance li {
+  display: grid;
+  gap: 3px;
+}
+
+.conversationEnd {
+  height: 1px;
+  width: 100%;
+}
+
 .leadSubmit {
   background: #16ce8e;
   border: 0;
@@ -1086,11 +1226,6 @@
   font-weight: 900;
   min-height: 44px;
   padding: 9px 12px;
-}
-
-.leadOffer button {
-  justify-self: start;
-  margin-top: 3px;
 }
 
 .leadForm {
@@ -1747,7 +1882,28 @@
   }
 }
 
-@media (min-width: 641px) and (max-width: 1100px) {
+@media (max-width: 1280px) {
+  .guidanceRail {
+    display: none;
+  }
+
+  .rootDedicated .mobileGuidance {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid #b9d5cc;
+    border-radius: 8px;
+    display: block;
+  }
+
+  .rootDedicated .mobileGuidance li strong {
+    color: #12483f;
+  }
+
+  .rootDedicated .mobileGuidance p {
+    color: #496b64;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1280px) {
   .rootDedicated .panel {
     grid-template-columns: minmax(235px, 270px) minmax(0, 1fr);
     width: 100%;
@@ -1886,7 +2042,6 @@
 .leadSecondary,
 .leadTertiary,
 .leadPrimary,
-.leadOffer button,
 .leadSubmit,
 .composer button {
   border-radius: 8px;

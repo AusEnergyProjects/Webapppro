@@ -65,13 +65,15 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge AI"/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*?position: relative;[\s\S]*?width: 100%;/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*url\("\/surge-ai-command-centre-4k\.webp"\)[\s\S]*min-height: 100dvh/);
-  assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?grid-template-columns: minmax\(280px, 330px\) minmax\(0, 1fr\);[\s\S]*?width: min\(var\(--layout-max, 1760px\), 100%\);/);
+  assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?grid-template-columns: minmax\(270px, 310px\) minmax\(0, 1fr\) minmax\(230px, 280px\);[\s\S]*?width: min\(var\(--layout-max, 1760px\), 100%\);/);
   assert.match(styles, /\.rootDedicated \.intake \{[^}]*max-width: 1040px;[^}]*width: 100%;/);
   assert.match(styles, /\.intakeGrid \{[^}]*align-items: start;/);
   assert.match(styles, /\.intakeGrid > label \{[^}]*align-self: start;[^}]*grid-auto-rows: max-content;/);
   assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(widget, /<details[\s\S]{0,120}ref=\{contextRailRef\}[\s\S]{0,120}className=\{styles\.contextRail\}/);
   assert.match(widget, /<div className=\{styles\.workspace\}>/);
+  assert.match(widget, /<aside className=\{styles\.guidanceRail\} aria-label="Home guidance">/);
+  assert.match(styles, /@media \(max-width: 1280px\) \{[\s\S]*?\.guidanceRail \{\s*display: none;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);
   assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return;/);
@@ -118,8 +120,10 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /Learned in this chat/);
   assert.match(widget, /SAFE_CONVERSATION_FACT_LABELS/);
   assert.match(widget, /existing_heating: "Existing heating"/);
-  assert.match(widget, /markSurgeProfileStepReviewed\(profile, currentProfileStep\)/);
-  assert.match(widget, /updateSurgeProfileField\(current, field, value, checked\)/);
+  assert.match(widget, /markSurgeProfileStepReviewed\(profileRef\.current, currentProfileStep\)/);
+  assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
+  assert.match(widget, />\s*Continue setup\s*</);
+  assert.match(widget, /function homeContextTips\(profile: SurgeStarterProfile\)/);
   assert.match(widget, /profileUpdatedAt/);
   assert.doesNotMatch(widget, /autoFocus/);
   assert.match(widget, /className=\{styles\.assistantAvatar\}/);
@@ -140,7 +144,7 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
   assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*planContext,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
-  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current, profile, profileUpdatedAt\)/);
+  assert.match(widget, /const recentTurns = recentTurnsForRequest\(\s*messagesRef\.current,\s*profileRef\.current,\s*profileUpdatedAtRef\.current,\s*\)/);
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
@@ -214,8 +218,8 @@ test("only bounded local transcript, home profile, continuation, last activity a
   const persistedSource = persisted.map((match) => match[1]).join("\n");
   for (const match of persisted) assert.doesNotMatch(match[1], /\bopen\b/);
   assert.match(persistedSource, /mode/);
-  assert.match(persistedSource, /messages:\s*boundedLocalMessages\(messages\)/);
-  assert.match(persistedSource, /continuation:\s*continuationRef\.current/);
+  assert.match(persistedSource, /messages:\s*boundedMessages/);
+  assert.match(persistedSource, /continuation:\s*nextContinuation/);
   assert.match(persistedSource, /profile/);
   assert.match(persistedSource, /lastActive/);
   assert.match(widget, /const MAX_LOCAL_MESSAGES = 40/);
@@ -226,7 +230,9 @@ test("only bounded local transcript, home profile, continuation, last activity a
   assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
-  assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*storeSession\(JSON\.stringify/);
+  assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*persistLocalSession\(\{ nextMessages: boundedMessages \}\)/);
+  assert.match(widget, /window\.addEventListener\("pagehide", flushLocalSession\)/);
+  assert.match(widget, /window\.document\.addEventListener\("visibilitychange", flushHiddenSession\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
   assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
@@ -394,7 +400,10 @@ test("Surge keeps the newest completed home context synchronized across browser 
   assert.match(widget, /event\.key !== STORAGE_KEY/);
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
   assert.match(widget, /incomingActivity <= currentActivity/);
-  assert.match(widget, /setProfileUpdatedAt\(new Date\(\)\.toISOString\(\)\)[\s\S]*updateSurgeProfileField/);
+  assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
+  assert.match(widget, /profileUpdatedAtRef\.current = nextProfileUpdatedAt/);
+  assert.match(widget, /persistLocalSession\(\{ nextProfile, nextProfileUpdatedAt \}\)/);
+  assert.match(widget, /profileRef\.current = saved\.profile/);
 });
 
 test("Surge inherits the platform typography roles instead of inventing tiny variants", () => {
@@ -682,9 +691,12 @@ test("optional help is available after intake and routes one consented destinati
   assert.equal(signalsInterest("I want quotes from an installer"), true);
   assert.equal(signalsInterest("Help me find a service provider"), true);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
-  assert.match(widget, /Keep using Surge AI and your private plan without sharing contact details/);
-  assert.match(widget, /No brand, product, supplier or installer is recommended/);
-  assert.match(widget, /Keep exploring or change subject/);
+  assert.match(widget, /Based on your saved context/);
+  assert.match(widget, /Quick guidance/);
+  assert.match(widget, /className=\{styles\.guidanceRail\}/);
+  assert.match(widget, /className=\{styles\.mobileGuidance\}/);
+  assert.match(widget, /Your chat and private plan stay private unless you deliberately choose a follow-up path/);
+  assert.doesNotMatch(widget, /Keep exploring or change subject/);
   assert.match(widget, /Back to Surge AI/);
   assert.match(widget, /className=\{styles\.leadReturn\}/);
   assert.match(widget, /className=\{styles\.leadPrimary\}[\s\S]{0,160}>Save and continue</);
@@ -733,6 +745,14 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /const grantedAt = leadGrantedAt \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(widget, /if \(leadBusy \|\| leadStatus \|\| !lead\.serviceConsent\) return/);
   assert.doesNotMatch(widget, /setLead\(EMPTY_LEAD\)[\s\S]{0,160}catch/);
+
+  const privacyIndex = widget.indexOf("<footer className={styles.privacy}>");
+  const transcriptIndex = widget.indexOf("{messages.length > 0 && (");
+  const transcriptEndIndex = widget.indexOf("ref={conversationEndRef}");
+  const composerIndex = widget.indexOf("<form className={styles.composer}");
+  assert.ok(privacyIndex < transcriptIndex, "privacy information should precede the live transcript");
+  assert.ok(transcriptIndex < transcriptEndIndex, "the transcript should end at its scroll anchor");
+  assert.ok(transcriptEndIndex < composerIndex, "the chronological transcript should sit immediately above the composer");
 });
 
 test("the matched-trade brief is progressive, phone-safe and privacy explicit", () => {
@@ -771,7 +791,11 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.match(widget, /tabIndex=\{dedicated \? undefined : -1\}/);
   assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return/);
   assert.match(widget, /dialogRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
-  assert.doesNotMatch(widget, /effectiveOpen[\s\S]{0,700}composerRef\.current\?\.focus/);
+  const modalFocusEffect = widget.slice(
+    widget.indexOf("if (!effectiveOpen || dedicated) return;"),
+    widget.indexOf("}, [dedicated, effectiveOpen]);", widget.indexOf("if (!effectiveOpen || dedicated) return;")),
+  );
+  assert.doesNotMatch(modalFocusEffect, /composerRef\.current\?\.focus/);
   assert.match(widget, /const hasConversation = messages\.length > 0/);
   assert.match(widget, /top: hasConversation \? container\.scrollHeight : 0/);
   assert.match(widget, /behavior: hasConversation \? "smooth" : "auto"/);

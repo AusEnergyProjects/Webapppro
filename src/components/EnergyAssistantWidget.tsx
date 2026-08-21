@@ -134,6 +134,18 @@ type SavedConversation = {
   expired: boolean;
 };
 
+type PersistedSessionOverrides = {
+  nextMessages?: AssistantMessage[];
+  nextContinuation?: SurgeConversationState | null;
+  nextProfile?: SurgeStarterProfile;
+  nextProfileUpdatedAt?: string;
+};
+
+type HomeContextTip = {
+  title: string;
+  detail: string;
+};
+
 const STORAGE_KEY = "aea-energy-guide-v1";
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
 const DISPLAY_PREFERENCE_TUCKED = "tucked";
@@ -162,6 +174,57 @@ const START_ROADMAP = [
     ],
   },
 ] as const;
+
+function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] {
+  const tips: HomeContextTip[] = [];
+  const reviewed = new Set(profile.reviewed);
+  if (reviewed.size < SURGE_PROFILE_FIELDS.length) {
+    tips.push({
+      title: "Finish the missing context",
+      detail: "Resume at the next unanswered section so Surge AI can use the complete home picture.",
+    });
+  }
+  if (
+    reviewed.has("feature:ceiling-insulation")
+    && (profile.features.includes("ceiling-insulation-none") || profile.features.includes("ceiling-insulation-limited"))
+  ) {
+    tips.push({
+      title: "Check the ceiling first",
+      detail: "Confirm moisture, safety clearances and continuous insulation coverage before sizing new equipment.",
+    });
+  }
+  if (
+    reviewed.has("feature:comfort-concerns")
+    && (profile.features.includes("draughty") || profile.features.includes("condensation-moisture"))
+  ) {
+    tips.push({
+      title: "Control moisture and unwanted leaks",
+      detail: "Prioritise the largest draught and moisture sources while keeping required ventilation working.",
+    });
+  }
+  if (
+    reviewed.has("feature:glazing")
+    && (profile.features.includes("single-glazing") || profile.features.includes("mixed-glazing"))
+  ) {
+    tips.push({
+      title: "Improve windows in stages",
+      detail: "Start with seals, coverings and external shade before deciding whether full replacement is worthwhile.",
+    });
+  }
+  if (reviewed.has("supplemental:gasConnection") && profile.gasConnection === "connected") {
+    tips.push({
+      title: "Sequence electrification carefully",
+      detail: "Reduce demand first, then confirm electrical capacity before replacing major gas appliances.",
+    });
+  }
+  if (tips.length === 0) {
+    tips.push({
+      title: "Your context is ready",
+      detail: "Ask Surge AI what to prioritise and it will use the confirmed details saved in this browser.",
+    });
+  }
+  return tips.slice(0, 3);
+}
 
 const SAFE_CONVERSATION_FACT_LABELS: Readonly<Record<string, string>> = {
   approval: "Approval constraint",
@@ -789,11 +852,14 @@ export function EnergyAssistantWidget({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const conversationScrollPendingRef = useRef(false);
   const intakeRef = useRef<HTMLFormElement>(null);
   const contextRailRef = useRef<HTMLDetailsElement>(null);
   const profileEditScrollPendingRef = useRef(false);
   const messagesRef = useRef<AssistantMessage[]>([]);
   const continuationRef = useRef<SurgeConversationState | null>(null);
+  const profileRef = useRef<SurgeStarterProfile>(EMPTY_STARTER_PROFILE);
   const hydrationStartedRef = useRef(false);
   const profileUpdatedAtRef = useRef("");
 
@@ -838,7 +904,9 @@ export function EnergyAssistantWidget({
   const profileKnownAnswerCount = surgeProfileKnownAnswerCount(profile);
   const profileReviewedAnswerCount = surgeProfileReviewedAnswerCount(profile);
   const profileUnknownAnswerCount = SURGE_PROFILE_FIELDS.length - profileReviewedAnswerCount;
+  const nextIncompleteProfileStep = nextUnreviewedSurgeProfileStepIndex(profile, -1);
   const plannerProfile = useMemo(() => surgePlannerProfileAdapter(profile), [profile]);
+  const contextTips = useMemo(() => homeContextTips(profile), [profile]);
   const conversationFacts = useMemo(
     () => safeConversationFacts(continuation, messages),
     [continuation, messages],
@@ -856,6 +924,24 @@ export function EnergyAssistantWidget({
   );
   const currentQuoteQuestions = quoteQuestions.slice(leadQuestionPage * 3, leadQuestionPage * 3 + 3);
   const answeredQuoteQuestionCount = quoteQuestions.filter((question) => lead.quoteAnswers[question.id]).length;
+  const optionalHelpAvailable = profile.completed || (hasUsefulAnswer && serviceInterest);
+
+  const persistLocalSession = useCallback(({
+    nextMessages = messagesRef.current,
+    nextContinuation = continuationRef.current,
+    nextProfile = profileRef.current,
+    nextProfileUpdatedAt = profileUpdatedAtRef.current,
+  }: PersistedSessionOverrides = {}) => {
+    const boundedMessages = boundedLocalMessages(nextMessages);
+    storeSession(JSON.stringify({
+      mode: context.audience,
+      messages: boundedMessages,
+      continuation: nextContinuation,
+      profile: nextProfile,
+      profileUpdatedAt: nextProfileUpdatedAt,
+      lastActive: localSessionLastActive(boundedMessages, nextProfile, nextProfileUpdatedAt),
+    }));
+  }, [context.audience]);
 
   const resetLeadAttempt = () => {
     setLeadRequestId("");
@@ -899,14 +985,7 @@ export function EnergyAssistantWidget({
     const boundedMessages = boundedLocalMessages(nextMessages);
     messagesRef.current = boundedMessages;
     setMessages(boundedMessages);
-    storeSession(JSON.stringify({
-      mode: context.audience,
-      messages: boundedMessages,
-      continuation: continuationRef.current,
-      profile,
-      profileUpdatedAt,
-      lastActive: localSessionLastActive(boundedMessages, profile, profileUpdatedAt),
-    }));
+    persistLocalSession({ nextMessages: boundedMessages });
   };
 
   const clearLocalSession = useCallback(({
@@ -921,6 +1000,8 @@ export function EnergyAssistantWidget({
     removeStoredSession();
     messagesRef.current = nextMessages;
     continuationRef.current = null;
+    profileRef.current = EMPTY_STARTER_PROFILE;
+    profileUpdatedAtRef.current = "";
     setMessages(nextMessages);
     setContinuation(null);
     setProfile(EMPTY_STARTER_PROFILE);
@@ -969,6 +1050,8 @@ export function EnergyAssistantWidget({
           const saved = savedConversation(JSON.parse(stored));
           messagesRef.current = saved.messages;
           continuationRef.current = saved.continuation;
+          profileRef.current = saved.profile;
+          profileUpdatedAtRef.current = saved.profileUpdatedAt;
           setMessages(saved.messages);
           setContinuation(saved.continuation);
           restoredProfile = saved.profile;
@@ -985,10 +1068,17 @@ export function EnergyAssistantWidget({
         }
         const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
         const mergedProfile = mergeHomeEnergyPlannerSessionIntoSurgeProfile(restoredProfile, storedAssessment);
+        const mergedProfileUpdatedAt = mergedProfile !== restoredProfile
+          ? new Date().toISOString()
+          : profileUpdatedAtRef.current;
+        profileRef.current = mergedProfile;
+        profileUpdatedAtRef.current = mergedProfileUpdatedAt;
         setProfile(mergedProfile);
-        if (mergedProfile !== restoredProfile) setProfileUpdatedAt(new Date().toISOString());
+        setProfileUpdatedAt(mergedProfileUpdatedAt);
       } catch {
         removeStoredSession();
+        profileRef.current = EMPTY_STARTER_PROFILE;
+        profileUpdatedAtRef.current = "";
       }
       setHydrated(true);
     });
@@ -1005,10 +1095,6 @@ export function EnergyAssistantWidget({
   }, []);
 
   useEffect(() => {
-    profileUpdatedAtRef.current = profileUpdatedAt;
-  }, [profileUpdatedAt]);
-
-  useEffect(() => {
     const syncStoredConversation = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY) return;
       if (!event.newValue) {
@@ -1023,6 +1109,8 @@ export function EnergyAssistantWidget({
         if (Number.isFinite(currentActivity) && Number.isFinite(incomingActivity) && incomingActivity <= currentActivity) return;
         messagesRef.current = saved.messages;
         continuationRef.current = saved.continuation;
+        profileRef.current = saved.profile;
+        profileUpdatedAtRef.current = saved.profileUpdatedAt;
         setMessages(saved.messages);
         setContinuation(saved.continuation);
         setProfile(saved.profile);
@@ -1065,15 +1153,29 @@ export function EnergyAssistantWidget({
 
   useEffect(() => {
     if (!hydrated) return;
-    storeSession(JSON.stringify({
-      mode: context.audience,
-      messages: boundedLocalMessages(messages),
-      continuation,
-      profile,
-      profileUpdatedAt,
-      lastActive: localSessionLastActive(messages, profile, profileUpdatedAt),
-    }));
-  }, [context.audience, continuation, hydrated, messages, profile, profileUpdatedAt]);
+    profileRef.current = profile;
+    profileUpdatedAtRef.current = profileUpdatedAt;
+    persistLocalSession({
+      nextMessages: messages,
+      nextContinuation: continuation,
+      nextProfile: profile,
+      nextProfileUpdatedAt: profileUpdatedAt,
+    });
+  }, [continuation, hydrated, messages, persistLocalSession, profile, profileUpdatedAt]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const flushLocalSession = () => persistLocalSession();
+    const flushHiddenSession = () => {
+      if (window.document.visibilityState === "hidden") flushLocalSession();
+    };
+    window.addEventListener("pagehide", flushLocalSession);
+    window.document.addEventListener("visibilitychange", flushHiddenSession);
+    return () => {
+      window.removeEventListener("pagehide", flushLocalSession);
+      window.document.removeEventListener("visibilitychange", flushHiddenSession);
+    };
+  }, [hydrated, persistLocalSession]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -1149,11 +1251,21 @@ export function EnergyAssistantWidget({
     const container = conversationRef.current;
     if (!effectiveOpen || !container) return;
     const hasConversation = messages.length > 0;
+    if (dedicated && window.matchMedia("(max-width: 640px)").matches) {
+      if (!conversationScrollPendingRef.current) return;
+      conversationScrollPendingRef.current = false;
+      conversationEndRef.current?.scrollIntoView({
+        block: "nearest",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+      return;
+    }
     container.scrollTo({
       top: hasConversation ? container.scrollHeight : 0,
       behavior: hasConversation ? "smooth" : "auto",
     });
-  }, [effectiveOpen, leadOpen, messages]);
+    conversationScrollPendingRef.current = false;
+  }, [dedicated, effectiveOpen, leadOpen, messages]);
 
   useEffect(() => {
     if (!profileEditing || !profileEditScrollPendingRef.current) return;
@@ -1205,7 +1317,11 @@ export function EnergyAssistantWidget({
       setLeadError("");
       setLeadStatus("");
     }
-    const recentTurns = recentTurnsForRequest(messagesRef.current, profile, profileUpdatedAt);
+    const recentTurns = recentTurnsForRequest(
+      messagesRef.current,
+      profileRef.current,
+      profileUpdatedAtRef.current,
+    );
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
       id: requestId,
@@ -1223,6 +1339,7 @@ export function EnergyAssistantWidget({
       suggestions: [],
       actions: [],
     };
+    conversationScrollPendingRef.current = true;
     replaceMessages([...messagesRef.current, userMessage]);
     if (signalsServiceInterest(message)) setServiceInterest(true);
     setDraft("");
@@ -1256,6 +1373,7 @@ export function EnergyAssistantWidget({
       const nextContinuation = parseSurgeConversationState(record.continuation);
       continuationRef.current = nextContinuation;
       setContinuation(nextContinuation);
+      conversationScrollPendingRef.current = true;
       replaceMessages([...messagesRef.current, reply]);
       setHasUsefulAnswer(true);
     } catch (caught) {
@@ -1271,8 +1389,13 @@ export function EnergyAssistantWidget({
   };
 
   const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
-    setProfileUpdatedAt(new Date().toISOString());
-    setProfile((current) => updateSurgeProfileField(current, field, value, checked));
+    const nextProfile = updateSurgeProfileField(profileRef.current, field, value, checked);
+    const nextProfileUpdatedAt = new Date().toISOString();
+    profileRef.current = nextProfile;
+    profileUpdatedAtRef.current = nextProfileUpdatedAt;
+    setProfile(nextProfile);
+    setProfileUpdatedAt(nextProfileUpdatedAt);
+    persistLocalSession({ nextProfile, nextProfileUpdatedAt });
     setProfileError("");
   };
 
@@ -1283,15 +1406,23 @@ export function EnergyAssistantWidget({
     setProfileError("");
   };
 
+  const continueStarterProfile = () => {
+    const nextStep = nextUnreviewedSurgeProfileStepIndex(profileRef.current, -1);
+    if (nextStep >= 0) editStarterProfileStep(nextStep);
+  };
+
   const completeStarterProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const reviewedProfile = markSurgeProfileStepReviewed(profile, currentProfileStep);
+    const reviewedProfile = markSurgeProfileStepReviewed(profileRef.current, currentProfileStep);
     const nextProfileUpdatedAt = new Date().toISOString();
     const nextUnreviewedStep = nextUnreviewedSurgeProfileStepIndex(reviewedProfile, profileStep);
+    profileRef.current = reviewedProfile;
+    profileUpdatedAtRef.current = nextProfileUpdatedAt;
     if (nextUnreviewedStep >= 0) {
       setProfile(reviewedProfile);
       setProfileUpdatedAt(nextProfileUpdatedAt);
       setProfileStep(nextUnreviewedStep);
+      persistLocalSession({ nextProfile: reviewedProfile, nextProfileUpdatedAt });
       setProfileError("");
       return;
     }
@@ -1300,19 +1431,13 @@ export function EnergyAssistantWidget({
       version: SURGE_PROFILE_VERSION,
       completed: true,
     };
+    profileRef.current = nextProfile;
     setProfile(nextProfile);
     setProfileUpdatedAt(nextProfileUpdatedAt);
     setProfileEditing(false);
     setProfileDeferred(false);
     setProfileStep(0);
-    storeSession(JSON.stringify({
-      mode: context.audience,
-      messages: messagesRef.current,
-      continuation: continuationRef.current,
-      profile: nextProfile,
-      profileUpdatedAt: nextProfileUpdatedAt,
-      lastActive: localSessionLastActive(messagesRef.current, nextProfile, nextProfileUpdatedAt),
-    }));
+    persistLocalSession({ nextProfile, nextProfileUpdatedAt });
     setStatus("");
     setProfileError("");
   };
@@ -1634,6 +1759,11 @@ export function EnergyAssistantWidget({
                 </div>
                 <progress max={SURGE_PROFILE_FIELDS.length} value={profileReviewedAnswerCount} aria-label={`${profileReviewedAnswerCount} of ${SURGE_PROFILE_FIELDS.length} home details reviewed`} />
                 <p>{profileUnknownAnswerCount > 0 ? `${profileUnknownAnswerCount} remain to review` : `${profileKnownAnswerCount} useful details recorded`}</p>
+                {nextIncompleteProfileStep >= 0 && (
+                  <button className={styles.contextContinue} type="button" onClick={continueStarterProfile}>
+                    Continue setup
+                  </button>
+                )}
               </div>
               <section className={styles.plannerProgress} aria-labelledby="surge-planner-progress-title">
                 <div>
@@ -1848,54 +1978,22 @@ export function EnergyAssistantWidget({
               </details>
             )}
 
-            {messages.length > 0 && (
-                  <ol className={styles.messages} aria-label="Energy guide conversation" aria-live="polite" aria-relevant="additions text">
-                {messages.map((message) => (
-                  <li key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}>
-                    {message.role === "user" ? (
-                      <p>{message.content}</p>
-                    ) : (
-                      <>
-                        <span className={styles.assistantAvatar} aria-hidden="true">
-                          <Image src="/surge-mascot.webp" alt="" width={56} height={70} />
-                        </span>
-                        <article className={styles.answerCard}>
-                        <header>
-                          <span>Surge AI</span>
-                        </header>
-                        {message.answerStatus === "source_review_required" && (
-                          <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
-                        )}
-                        <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
-                        {naturalFollowUpFor(message, context.audience) && (
-                          <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
-                        )}
-                        </article>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            )}
-
-            {busy && <p className={styles.thinking} role="status">Surge AI is checking that...</p>}
-            {error && <p className={styles.error} role="alert">{error}</p>}
-            {status && <p className={styles.status} role="status">{status}</p>}
-
-            {(profile.completed || (hasUsefulAnswer && serviceInterest)) && !leadOpen && (
-              <section className={styles.leadOffer}>
-                <strong>Optional human help, only if you want it</strong>
-                <p>Keep using Surge AI and your private plan without sharing contact details, or choose one clear follow-up path. No brand, product, supplier or installer is recommended.</p>
-                <button
-                  type="button"
-                  onClick={openLeadForm}
-                >
-                  See optional help paths
-                </button>
-                <button type="button" onClick={() => composerRef.current?.focus()}>
-                  Keep exploring or change subject
-                </button>
-              </section>
+            {dedicated && (
+              <details className={styles.mobileGuidance}>
+                <summary>Home tips and optional help</summary>
+                <div>
+                  <span>Based on your saved context</span>
+                  <ul>
+                    {contextTips.map((tip) => (
+                      <li key={tip.title}><strong>{tip.title}</strong><p>{tip.detail}</p></li>
+                    ))}
+                  </ul>
+                  {optionalHelpAvailable && !leadOpen && (
+                    <button type="button" onClick={openLeadForm}>See optional help paths</button>
+                  )}
+                  {leadOpen && <p>The optional help form is open below. Your chat and private plan remain unchanged.</p>}
+                </div>
+              </details>
             )}
 
             {leadOpen && (
@@ -2096,6 +2194,38 @@ export function EnergyAssistantWidget({
                 </button>
               </div>
             </footer>
+
+            {messages.length > 0 && (
+              <ol className={styles.messages} aria-label="Energy guide conversation" aria-live="polite" aria-relevant="additions text">
+                {messages.map((message) => (
+                  <li key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}>
+                    {message.role === "user" ? (
+                      <p>{message.content}</p>
+                    ) : (
+                      <>
+                        <span className={styles.assistantAvatar} aria-hidden="true">
+                          <Image src="/surge-mascot.webp" alt="" width={56} height={70} />
+                        </span>
+                        <article className={styles.answerCard}>
+                          <header><span>Surge AI</span></header>
+                          {message.answerStatus === "source_review_required" && (
+                            <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
+                          )}
+                          <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
+                          {naturalFollowUpFor(message, context.audience) && (
+                            <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
+                          )}
+                        </article>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {busy && <p className={styles.thinking} role="status">Surge AI is checking that...</p>}
+            {error && <p className={styles.error} role="alert">{error}</p>}
+            {status && <p className={styles.status} role="status">{status}</p>}
+            <div ref={conversationEndRef} className={styles.conversationEnd} aria-hidden="true" />
           </div>
 
           {(context.audience === "trade" || profile.completed || profileDeferred || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
@@ -2124,6 +2254,36 @@ export function EnergyAssistantWidget({
             <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
           </form>}
           </div>
+
+          {dedicated && (
+            <aside className={styles.guidanceRail} aria-label="Home guidance">
+              <section className={styles.guidanceTips}>
+                <span>Based on your saved context</span>
+                <h3>Quick guidance</h3>
+                <ul>
+                  {contextTips.map((tip) => (
+                    <li key={tip.title}><strong>{tip.title}</strong><p>{tip.detail}</p></li>
+                  ))}
+                </ul>
+              </section>
+              {optionalHelpAvailable && !leadOpen && (
+                <section className={styles.guidanceHelp}>
+                  <span>Optional human help</span>
+                  <h3>Only if you want it</h3>
+                  <p>Your chat and private plan stay private unless you deliberately choose a follow-up path.</p>
+                  <button type="button" onClick={openLeadForm}>See optional help paths</button>
+                </section>
+              )}
+              {leadOpen && (
+                <section className={styles.guidanceHelp}>
+                  <span>Optional help</span>
+                  <h3>Form open</h3>
+                  <p>Complete or close the form in the main workspace. Your conversation remains available below it.</p>
+                  <button type="button" onClick={() => setLeadOpen(false)}>Back to chat</button>
+                </section>
+              )}
+            </aside>
+          )}
         </section>
       )}
     </div>
