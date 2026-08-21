@@ -70,7 +70,7 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(styles, /\.intakeGrid \{[^}]*align-items: start;/);
   assert.match(styles, /\.intakeGrid > label \{[^}]*align-self: start;[^}]*grid-auto-rows: max-content;/);
   assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(widget, /<details className=\{styles\.contextRail\} aria-label="Your home context">/);
+  assert.match(widget, /<details[\s\S]{0,120}ref=\{contextRailRef\}[\s\S]{0,120}className=\{styles\.contextRail\}/);
   assert.match(widget, /<div className=\{styles\.workspace\}>/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);
@@ -110,7 +110,8 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(plannerSchemaSource, /Your relationship to the home/);
   assert.match(plannerSchemaSource, /People usually living here/);
   assert.match(plannerSchemaSource, /What matters most\?/);
-  assert.match(widget, /Save my home context/);
+  assert.match(widget, /Save and continue/);
+  assert.match(widget, /Finish home context/);
   assert.doesNotMatch(widget, /Compare my options|Help me compare an energy quote|Which heating, hot water or cooking option suits my home\?/);
   assert.match(widget, /SURGE_PROFILE_STEPS/);
   assert.match(widget, /styles\.contextRail/);
@@ -407,7 +408,7 @@ test("Surge inherits the platform typography roles instead of inventing tiny var
 
 test("mobile Surge collapses secondary context and suggestions while chat follows page scroll", () => {
   assert.match(widget, /contextMobileSummary/);
-  assert.match(widget, /<details className=\{styles\.contextRail\}/);
+  assert.match(widget, /<details[\s\S]{0,160}className=\{styles\.contextRail\}/);
   assert.match(widget, /<div className=\{styles\.contextRailBody\}>/);
   assert.match(widget, /<details className=\{styles\.starterDrawer\}>/);
   assert.match(styles, /\.contextMobileSummary \{\s*display: none;/);
@@ -417,6 +418,17 @@ test("mobile Surge collapses secondary context and suggestions while chat follow
   assert.match(styles, /\.rootDedicated \.contextGroups dl \{\s*display: none;/);
   assert.match(styles, /\.rootDedicated \.workspace \{[^}]*height: auto;[^}]*overflow: visible;/);
   assert.match(styles, /\.rootDedicated \.conversation \{[^}]*overflow: visible;[^}]*overscroll-behavior: auto;/);
+});
+
+test("desktop Surge keeps the full context rail open and saves through every unreviewed section", () => {
+  assert.match(widget, /const contextRailRef = useRef<HTMLDetailsElement>\(null\)/);
+  assert.match(widget, /window\.matchMedia\("\(min-width: 641px\)"\)/);
+  assert.match(widget, /rail\.open = desktop\.matches/);
+  assert.match(widget, /!event\.currentTarget\.open[\s\S]{0,120}event\.currentTarget\.open = true/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]{0,180}\.rootDedicated \.contextRailSummary \{[\s\S]{0,120}pointer-events: none/);
+  assert.match(widget, /nextUnreviewedSurgeProfileStepIndex\(reviewedProfile, profileStep\)/);
+  assert.match(widget, /nextUnreviewedStep >= 0[\s\S]{0,240}setProfileStep\(nextUnreviewedStep\)/);
+  assert.match(widget, /\? "Save and continue"[\s\S]{0,80}: "Finish home context"/);
 });
 
 test("context edit actions reveal and move focus to the selected intake step", () => {

@@ -483,6 +483,18 @@ export function markSurgeProfileStepReviewed(profile: SurgeStarterProfile, step:
   return next;
 }
 
+export function nextUnreviewedSurgeProfileStepIndex(
+  profile: SurgeStarterProfile,
+  currentStepIndex: number,
+) {
+  const orderedIndexes = [
+    ...SURGE_PROFILE_STEPS.map((_, index) => index).filter((index) => index > currentStepIndex),
+    ...SURGE_PROFILE_STEPS.map((_, index) => index).filter((index) => index <= currentStepIndex),
+  ];
+  return orderedIndexes.find((index) =>
+    SURGE_PROFILE_STEPS[index].fields.some((field) => !surgeProfileFieldWasReviewed(profile, field))) ?? -1;
+}
+
 export function surgeProfileAnswerLabel(profile: SurgeStarterProfile, fieldOrId: SurgeProfileField | string) {
   const field = typeof fieldOrId === "string" ? fieldById.get(fieldOrId) : fieldOrId;
   if (!field) return "Not answered";

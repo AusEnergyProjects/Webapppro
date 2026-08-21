@@ -1,4 +1,5 @@
 export const GOVERNMENT_CATALOGUE_REVIEWED_ON = "2026-08-08";
+export const GOVERNMENT_CATALOGUE_REVIEW_DUE = "2026-09-08";
 
 export const COMPLIANCE_OUTCOME_CLASSES = [
   "tradable_certificate",

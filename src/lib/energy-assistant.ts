@@ -22,6 +22,7 @@ import {
   type SolarStcSlot,
 } from "../data/energy-assistant-playbooks.ts";
 import {
+  GOVERNMENT_CATALOGUE_REVIEW_DUE,
   GOVERNMENT_CATALOGUE_REVIEWED_ON,
   GOVERNMENT_PROGRAM_TEMPLATES,
   type GovernmentProgramTemplate,
@@ -47,6 +48,7 @@ export type EnergyAssistantKnowledgeHealth = {
   checkedAt: string;
   sourceCount: number;
   currentOfficialSourceCount: number;
+  volatilityCounts: Record<EnergyAssistantKnowledgeSource["volatilityClass"], number>;
   topicsReady: number;
   topicCount: number;
   overdueOfficialSourceIds: string[];
@@ -657,11 +659,18 @@ export function energyAssistantKnowledgeHealth(
     .map((source) => source.reviewDue)
     .filter((reviewDue) => reviewDue >= day)
     .sort();
+  const volatilityCounts = {
+    volatile_program: 0,
+    operational_guidance: 0,
+    stable_education: 0,
+  } satisfies Record<EnergyAssistantKnowledgeSource["volatilityClass"], number>;
+  for (const source of sources) volatilityCounts[source.volatilityClass] += 1;
   return {
     ready: uncoveredTopics.length === 0 && overdueOfficialSourceIds.length === 0,
     checkedAt,
     sourceCount: sources.length,
     currentOfficialSourceCount: currentOfficial.length,
+    volatilityCounts,
     topicsReady: ENERGY_ASSISTANT_TOPICS.length - uncoveredTopics.length,
     topicCount: ENERGY_ASSISTANT_TOPICS.length,
     overdueOfficialSourceIds,
@@ -1697,7 +1706,9 @@ function catalogueProgramAnswer(query: string): {
 
 function catalogueProgramCitations(
   programs: readonly GovernmentProgramTemplate[],
+  asOf: Date | string,
 ): EnergyAssistantCitation[] {
+  const stale = GOVERNMENT_CATALOGUE_REVIEW_DUE < isoDay(asOf);
   return programs.map((program) => ({
     id: `government-program:${program.templateId}`,
     title: program.officialSourceTitle,
@@ -1708,9 +1719,9 @@ function catalogueProgramCitations(
     effectiveFrom: null,
     effectiveTo: null,
     lastChecked: GOVERNMENT_CATALOGUE_REVIEWED_ON,
-    reviewDue: "",
+    reviewDue: GOVERNMENT_CATALOGUE_REVIEW_DUE,
     storagePolicy: "local_factual_summary",
-    stale: false,
+    stale,
   }));
 }
 
@@ -1739,6 +1750,8 @@ export function composeEnergyAssistantAnswer(
     priorUserMessages?: readonly string[];
   } = {},
 ): EnergyAssistantAnswer {
+  const answerDay = isoDay(options.asOf || new Date());
+  const governmentCatalogueCurrent = GOVERNMENT_CATALOGUE_REVIEW_DUE >= answerDay;
   const searchOptions = {
     audience: options.audience,
     asOf: options.asOf,
@@ -1835,21 +1848,19 @@ export function composeEnergyAssistantAnswer(
     limit = 3,
   ) => citationsFor(playbookOfficial.filter((result) => topicsToCite.includes(result.source.topic)).slice(0, limit));
   const officialCitationsById = (ids: readonly string[]) => {
-    const day = isoDay(options.asOf || new Date());
     const byId = new Map((options.sources || ENERGY_ASSISTANT_KNOWLEDGE).map((source) => [source.id, source]));
     const resultsToCite = ids.flatMap((id) => {
       const source = byId.get(id);
       if (!source || !source.official || source.storagePolicy !== "local_factual_summary") return [];
-      const state = sourceState(source, day);
+      const state = sourceState(source, answerDay);
       return state.active && !state.stale ? [{ source, score: 0, relevanceScore: 0, ...state }] : [];
     });
     return citationsFor(resultsToCite);
   };
   const governedSummaryById = (id: string) => {
-    const day = isoDay(options.asOf || new Date());
     const source = (options.sources || ENERGY_ASSISTANT_KNOWLEDGE).find((candidate) => candidate.id === id);
     if (!source || !source.official || source.storagePolicy !== "local_factual_summary") return null;
-    const state = sourceState(source, day);
+    const state = sourceState(source, answerDay);
     return state.active && !state.stale ? source.summary : null;
   };
 
@@ -5827,7 +5838,7 @@ export function composeEnergyAssistantAnswer(
     const jurisdiction = explicitProgramJurisdiction(playbookConversation);
     const wantsSolar = /\b(?:solar PV|PV system|solar system|install(?:ing|ation)? (?:of )?(?:solar|PV)|new (?:solar|PV))\b/i.test(playbookConversation);
     const wantsBattery = /\b(?:home battery|battery system|battery STC|battery capacity|install(?:ing|ation)? (?:of )?(?:a )?battery|new (?:home )?battery)\b/i.test(playbookConversation);
-    const statePrograms = jurisdiction && jurisdiction[0] !== "AU"
+    const statePrograms = governmentCatalogueCurrent && jurisdiction && jurisdiction[0] !== "AU"
       ? GOVERNMENT_PROGRAM_TEMPLATES.filter((program) => {
         if (
           (program.catalogueState !== "current" && program.catalogueState !== "limited")
@@ -5838,7 +5849,9 @@ export function composeEnergyAssistantAnswer(
           || (wantsBattery && /\b(?:battery|storage)\b/.test(text));
       }).slice(0, 2)
       : [];
-    const stateContext = statePrograms.length
+    const stateContext = !governmentCatalogueCurrent
+      ? `The state programme catalogue passed its scheduled review date on ${GOVERNMENT_CATALOGUE_REVIEW_DUE}, so no state programme is being named until the official entries are refreshed.`
+      : statePrograms.length
       ? `Separate ${jurisdiction?.[1]} programmes to check are ${statePrograms.map((program) => `${program.name} (${program.outcomeClass.replaceAll("_", " ")})`).join(" and ")}. They do not change the federal STC calculation.`
       : `No separate state rebate or loan is being assumed for ${jurisdiction?.[1] || "the property"}; Australian Energy Assessments' rebate tool must check that independently.`;
     const technologyBoundary = wantsBattery && wantsSolar
@@ -5847,7 +5860,7 @@ export function composeEnergyAssistantAnswer(
         ? "Battery STC rules and approved-product requirements must be checked as a battery pathway, not reused from PV rules."
         : "PV STC rules, added-capacity treatment and approved-product requirements must be checked as a PV pathway, not reused for a battery.";
     const citations = uniqueById(
-      [...baseCitations, ...catalogueProgramCitations(statePrograms)],
+      [...baseCitations, ...catalogueProgramCitations(statePrograms, options.asOf || new Date())],
       4,
     );
     return structured("rebates_certificates", {
@@ -7098,6 +7111,23 @@ export function composeEnergyAssistantAnswer(
   }
 
   const programmeAnswer = catalogueProgramAnswer(userConversation);
+  if (programmeAnswer && !governmentCatalogueCurrent) {
+    return structured("rebates_certificates", {
+      directAnswer:
+        `The maintained government programme catalogue passed its scheduled review date on ${GOVERNMENT_CATALOGUE_REVIEW_DUE}. I will not name a programme or describe its availability as current until the official entries are refreshed. Use the official government assistance directory for the property jurisdiction, then return with the exact programme or current source for a governed check.`,
+      status: "source_review_required",
+      citations: officialCitationsById(["energy-gov-rebates"]),
+      confidence: "low",
+      assumptions: ["No programme name, availability, eligibility or amount has been treated as current after the catalogue review deadline."],
+      practicalSteps: [
+        "Confirm the property postcode, applicant type, exact upgrade and proposed application date.",
+        "Open the current administering-government directory and identify the exact programme.",
+        "Refresh the governed catalogue entry before relying on availability or eligibility details.",
+      ],
+      toolActions: [{ id: "open-rebates", label: "Check official assistance sources", href: "/rebates" }],
+      suggestedQuestions: ["Which current official programme page should be checked for the property postcode and upgrade?"],
+    });
+  }
   if (programmeAnswer) {
     const asksAboutVictorianAirConditioningSupport = programmeAnswer.jurisdictionCode === "VIC"
       && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|RCAC)\b/i.test(userConversation)
@@ -7224,7 +7254,7 @@ export function composeEnergyAssistantAnswer(
         `Potentially relevant pathways for ${programmeAnswer.jurisdictionLabel}, reviewed ${GOVERNMENT_CATALOGUE_REVIEWED_ON}: ${programmeSummary}. ${availabilitySummary}${solarSharerSummary} This is not an eligibility decision.${missingFacts.length ? ` Next I need: ${missingFacts[0]}` : " The collected facts are ready for Australian Energy Assessments' eligibility and calculation tools."}`,
       status: missingFacts.length ? "needs_context" : "answered",
       citations: uniqueById([
-        ...catalogueProgramCitations(programmeAnswer.programs),
+        ...catalogueProgramCitations(programmeAnswer.programs, options.asOf || new Date()),
         ...availabilityCitations,
         ...solarSharerCitations,
       ], 4),

@@ -541,7 +541,8 @@ test("jurisdiction programme synthesis explains outcomes and asks only missing e
   assert.equal(answer.toolActions[0].href, "/rebates");
   assert.ok(answer.citations.length > 0 && answer.citations.length <= 4);
   assert.ok(answer.citations.every((citation) => citation.lastChecked === "2026-08-08"));
-  assert.ok(answer.citations.every((citation) => citation.reviewDue === ""));
+  assert.ok(answer.citations.every((citation) => citation.reviewDue === "2026-09-08"));
+  assert.ok(answer.citations.every((citation) => citation.stale === false));
 });
 
 test("answer contract gives direct, bounded, source-backed action instead of generic chat prose", () => {
@@ -760,11 +761,26 @@ test("knowledge health stays ready only while every official topic is current an
   assert.deepEqual(current.uncoveredTopics, []);
   assert.deepEqual(current.overdueOfficialSourceIds, []);
   assert.equal(current.nextReviewDue, "2026-09-20");
+  assert.equal(
+    Object.values(current.volatilityCounts).reduce((total, count) => total + count, 0),
+    ENERGY_ASSISTANT_KNOWLEDGE.length,
+  );
 
   const overdue = energyAssistantKnowledgeHealth("2026-09-21T00:00:00.000Z");
   assert.equal(overdue.ready, false);
   assert.ok(overdue.overdueOfficialSourceIds.includes("nathers-existing-homes"));
   assert.ok(overdue.topicsReady <= ENERGY_ASSISTANT_TOPICS.length);
+});
+
+test("government programme discovery fails closed after its scheduled catalogue review", () => {
+  const staleCatalogue = composeEnergyAssistantAnswer(
+    "Which Victorian rebates apply to a heat pump hot water system in postcode 3000?",
+    { asOf: "2026-09-09" },
+  );
+  assert.equal(staleCatalogue.status, "source_review_required");
+  assert.match(staleCatalogue.directAnswer, /passed its scheduled review date.*will not name a programme/i);
+  assert.doesNotMatch(staleCatalogue.directAnswer, /Victorian Energy Upgrades|VEU|Solar Homes/i);
+  assert.ok(staleCatalogue.citations.every((citation) => citation.stale === false));
 });
 
 test("user-facing assistant copy contains no em dash or en dash", () => {

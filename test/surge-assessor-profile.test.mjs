@@ -10,6 +10,7 @@ import {
   EMPTY_SURGE_STARTER_PROFILE,
   markSurgeProfileStepReviewed,
   mergeHomeEnergyPlannerSessionIntoSurgeProfile,
+  nextUnreviewedSurgeProfileStepIndex,
   parseSurgeStarterProfile,
   SURGE_PROFILE_FIELDS,
   SURGE_PROFILE_STEPS,
@@ -48,6 +49,17 @@ test("a fresh Surge profile asserts no material home facts", () => {
   for (const profileField of SURGE_PROFILE_FIELDS) {
     assert.equal(surgeProfileFieldIsUnknown(EMPTY_SURGE_STARTER_PROFILE, profileField), true);
   }
+});
+
+test("saving an edited section continues to the next unreviewed section until the context is complete", () => {
+  let profile = markSurgeProfileStepReviewed(EMPTY_SURGE_STARTER_PROFILE, SURGE_PROFILE_STEPS[0]);
+  assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 0), 1);
+
+  profile = markSurgeProfileStepReviewed(profile, SURGE_PROFILE_STEPS[2]);
+  assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 2), 3);
+
+  for (const step of SURGE_PROFILE_STEPS) profile = markSurgeProfileStepReviewed(profile, step);
+  assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 7), -1);
 });
 
 test("Surge reaches every canonical planner question exactly once with exact options", () => {

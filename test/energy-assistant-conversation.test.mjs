@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classifySurgeConversationTurn,
   emptySurgeConversationState,
   parseSurgeConversationState,
   SURGE_CONVERSATION_STATE_VERSION,
@@ -96,4 +97,26 @@ test("empty conversation state is a fresh bounded general conversation", () => {
     pendingQuestion: "",
     lastAnswerSummary: "",
   });
+});
+
+test("conversation turn classifier recognises natural corrections and explicit subject changes", () => {
+  const current = state({ activeTopic: "battery", pendingQuestion: "Do you own the home?" });
+  for (const message of [
+    "Actually I rent; I do not own it.",
+    "Sorry, I meant there are four people here.",
+    "I rent rather than own the home.",
+  ]) {
+    assert.equal(classifySurgeConversationTurn(message, current), "correction", message);
+  }
+  for (const message of [
+    "Different question: what about solar?",
+    "Change the subject to insulation.",
+    "Moving on, can you explain rebates?",
+  ]) {
+    assert.equal(classifySurgeConversationTurn(message, current), "topic_change", message);
+  }
+  assert.equal(
+    classifySurgeConversationTurn("Actually, change the subject to solar instead.", current),
+    "correction_and_topic_change",
+  );
 });

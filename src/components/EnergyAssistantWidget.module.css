@@ -333,6 +333,13 @@
   min-height: 0;
 }
 
+@media (min-width: 641px) {
+  .rootDedicated .contextRailSummary {
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
 .contextProgress {
   display: grid;
   flex: 0 0 auto;

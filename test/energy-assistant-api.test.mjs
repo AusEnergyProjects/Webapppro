@@ -140,6 +140,32 @@ test("canonical ask API is stateless and performs zero D1 operations", async () 
   assert.ok(Buffer.byteLength(JSON.stringify(payload.reply)) <= ENERGY_ASSISTANT_MAX_RESPONSE_BYTES);
 });
 
+test("ask API emits one privacy-safe categorical quality event after a successful reply", async () => {
+  const qualityEvents = [];
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "quality-event-000001",
+    message: "Different question: help with insulation at 8 Private Street.",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Start by checking the ceiling insulation."),
+    generateAnswer: async () => null,
+    recordQuality: async (event) => {
+      qualityEvents.push(event);
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(qualityEvents.length, 1);
+  assert.equal(qualityEvents[0].audience, "household");
+  assert.equal(qualityEvents[0].answerSource, "deterministic");
+  assert.equal(qualityEvents[0].answerStatus, "answered");
+  assert.doesNotMatch(JSON.stringify(qualityEvents[0]), /Private Street|insulation at|message|content|request|client|identity|answerText/i);
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),

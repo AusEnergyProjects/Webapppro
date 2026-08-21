@@ -1,10 +1,12 @@
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import {
   handleEnergyAssistantRequest as handleEnergyAssistantServerRequest,
   type SurgeModelAdmissionRequest,
   type SurgeModelCallReservation,
 } from "@/lib/energy-assistant-server";
+import type { SurgeConversationQualityEvent } from "@/lib/energy-assistant-quality";
+import { createSurgeConversationQualityRecorder } from "@/lib/energy-assistant-quality-server";
 import {
   generateSurgeModelAnswer,
   type SurgeModelFailure,
@@ -117,6 +119,7 @@ function handleEnergyAssistantRequest(
     reserveModelCall: (
       request: SurgeModelAdmissionRequest,
     ) => Promise<SurgeModelCallReservation>;
+    recordQuality: (event: SurgeConversationQualityEvent) => Promise<void>;
   },
 ) {
   return handleEnergyAssistantServerRequest(request, {
@@ -129,6 +132,17 @@ async function handle(request: Request) {
   if (!isJsonRequest(request)) return unsupportedMediaType();
 
   let setCookie: string | null = null;
+  let database: D1Database | null = null;
+  try {
+    database = getD1();
+  } catch {
+    database = null;
+  }
+  const recordQuality = async (event: SurgeConversationQualityEvent) => {
+    if (!database) return;
+    const recorder = createSurgeConversationQualityRecorder(database);
+    waitUntil(recorder(event).catch(() => undefined));
+  };
   let reserveModelCall: (
     request: SurgeModelAdmissionRequest,
   ) => Promise<SurgeModelCallReservation> = async () => deniedReservation();
@@ -141,10 +155,11 @@ async function handle(request: Request) {
     setCookie = identity.setCookie;
     if (identity.ready) {
       try {
-        const database = getD1();
+        const usageDatabase = database;
+        if (!usageDatabase) throw new Error("Surge database is unavailable.");
         const usageGuard = createSharedSurgeUsageGuard({
           env: guardEnvironment,
-          getDatabase: () => database,
+          getDatabase: () => usageDatabase,
         });
         reserveModelCall = async ({ requestId, estimatedMicroUsd }) => {
           try {
@@ -168,7 +183,7 @@ async function handle(request: Request) {
 
   try {
     return withSetCookie(
-      await handleEnergyAssistantRequest(request, { reserveModelCall }),
+      await handleEnergyAssistantRequest(request, { reserveModelCall, recordQuality }),
       setCookie,
     );
   } catch {

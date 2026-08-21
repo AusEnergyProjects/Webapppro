@@ -10,10 +10,12 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /if \(!isJsonRequest\(request\)\) return unsupportedMediaType\(\)/);
   assert.ok(
     source.indexOf("if (!isJsonRequest(request))")
-      < source.indexOf("await handleEnergyAssistantRequest(request, { reserveModelCall })"),
+      < source.indexOf("await handleEnergyAssistantRequest(request, { reserveModelCall, recordQuality })"),
   );
-  assert.match(source, /const database = getD1\(\)/);
+  assert.match(source, /database = getD1\(\)/);
   assert.match(source, /createSharedSurgeUsageGuard\(\{/);
+  assert.match(source, /createSurgeConversationQualityRecorder\(database\)/);
+  assert.match(source, /waitUntil\(recorder\(event\)\.catch\(\(\) => undefined\)\)/);
   assert.match(source, /clientKey: identity\.clientKey/);
   assert.match(source, /networkKey: identity\.networkKey/);
   assert.match(source, /requestKey: requestId/);

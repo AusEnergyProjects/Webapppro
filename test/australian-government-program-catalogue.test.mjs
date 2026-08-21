@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   COMPLIANCE_OUTCOME_CLASSES,
   GOVERNMENT_ACTIVITY_TEMPLATES,
+  GOVERNMENT_CATALOGUE_REVIEW_DUE,
   GOVERNMENT_CATALOGUE_REVIEWED_ON,
   GOVERNMENT_PROGRAM_TEMPLATES,
   governmentActivityTemplates,
@@ -29,6 +30,7 @@ const CATALOGUE_STATES = new Set([
 
 test("government discovery catalogue covers every Australian jurisdiction", () => {
   assert.equal(GOVERNMENT_CATALOGUE_REVIEWED_ON, "2026-08-08");
+  assert.equal(GOVERNMENT_CATALOGUE_REVIEW_DUE, "2026-09-08");
   assert.ok(GOVERNMENT_PROGRAM_TEMPLATES.length >= 30);
   assert.ok(GOVERNMENT_ACTIVITY_TEMPLATES.length >= 150);
   assert.deepEqual(

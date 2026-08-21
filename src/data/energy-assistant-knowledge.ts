@@ -35,6 +35,15 @@ export type EnergyAssistantStoragePolicy =
   | "local_factual_summary"
   | "link_only";
 
+export const ENERGY_ASSISTANT_VOLATILITY_CLASSES = [
+  "volatile_program",
+  "operational_guidance",
+  "stable_education",
+] as const;
+
+export type EnergyAssistantVolatilityClass =
+  (typeof ENERGY_ASSISTANT_VOLATILITY_CLASSES)[number];
+
 export type EnergyAssistantKnowledgeSource = {
   id: string;
   title: string;
@@ -48,6 +57,8 @@ export type EnergyAssistantKnowledgeSource = {
   reviewedAt: string;
   reviewDue: string;
   licence: string;
+  reuseBasis: string;
+  volatilityClass: EnergyAssistantVolatilityClass;
   storagePolicy: EnergyAssistantStoragePolicy;
   official: boolean;
   summary: string;
@@ -60,7 +71,12 @@ const YOURHOME_OPEN =
 const OFFICIAL_FACTUAL_SUMMARY =
   "Official public material, locally maintained factual summary; confirm the current instrument before regulated work";
 
-export const ENERGY_ASSISTANT_KNOWLEDGE = [
+type EnergyAssistantKnowledgeRecord = Omit<
+  EnergyAssistantKnowledgeSource,
+  "reuseBasis" | "volatilityClass"
+>;
+
+const ENERGY_ASSISTANT_KNOWLEDGE_RECORDS = [
   {
     id: "nathers-existing-homes",
     title: "NatHERS for existing homes",
@@ -3218,4 +3234,22 @@ export const ENERGY_ASSISTANT_KNOWLEDGE = [
       "exact capacity",
     ],
   },
-] as const satisfies readonly EnergyAssistantKnowledgeSource[];
+] as const satisfies readonly EnergyAssistantKnowledgeRecord[];
+
+function knowledgeVolatilityClass(
+  source: EnergyAssistantKnowledgeRecord,
+): EnergyAssistantVolatilityClass {
+  const reviewedAt = new Date(`${source.reviewedAt}T00:00:00.000Z`).getTime();
+  const reviewDue = new Date(`${source.reviewDue}T00:00:00.000Z`).getTime();
+  const reviewWindowDays = Math.round((reviewDue - reviewedAt) / 86_400_000);
+  if (reviewWindowDays <= 45) return "volatile_program";
+  if (reviewWindowDays <= 120) return "operational_guidance";
+  return "stable_education";
+}
+
+export const ENERGY_ASSISTANT_KNOWLEDGE: readonly EnergyAssistantKnowledgeSource[] =
+  ENERGY_ASSISTANT_KNOWLEDGE_RECORDS.map((source) => ({
+    ...source,
+    reuseBasis: source.licence,
+    volatilityClass: knowledgeVolatilityClass(source),
+  }));

@@ -24,6 +24,10 @@ import {
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
 import {
+  evaluateSurgeConversationQuality,
+  type SurgeConversationQualityEvent,
+} from "./energy-assistant-quality.ts";
+import {
   parseSurgePlanContext,
   surgePlanContextSummary,
 } from "./energy-assistant-plan-context.ts";
@@ -75,6 +79,7 @@ type ServerDependencies = {
   reserveModelCall?: (
     request: SurgeModelAdmissionRequest,
   ) => Promise<SurgeModelCallReservation>;
+  recordQuality?: (event: SurgeConversationQualityEvent) => Promise<void>;
 };
 
 export class EnergyAssistantServerError extends Error {
@@ -524,6 +529,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const protectedAnswer = requiresDeterministicSafety ? null : publicPolicyAnswer(message);
   const deterministicAnswer = protectedAnswer || composedAnswer;
   let answer = deterministicAnswer;
+  let answerSource: "deterministic" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
   if (!requiresDeterministicSafety && !protectedAnswer) {
     const modelRequest: SurgeModelRequest = {
@@ -554,6 +560,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
           if (generated && generatedResultIsPolicySafe(generated, audience)) {
             answer = generated.answer;
             nextContinuation = generated.continuation;
+            answerSource = "model";
           }
         } finally {
           await reservation.release().catch(() => undefined);
@@ -568,11 +575,12 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
+  const safeContinuation = publicSafeContinuation(nextContinuation, audience);
   const response = {
     ok: true,
     ...(requestId ? { requestId } : {}),
     reply,
-    continuation: publicSafeContinuation(nextContinuation, audience),
+    continuation: safeContinuation,
   };
   if (new TextEncoder().encode(JSON.stringify(response)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
@@ -580,6 +588,25 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       "ASSISTANT_RESPONSE_LIMIT",
       "The energy guide could not produce a bounded response. Please narrow the question and retry.",
     );
+  }
+  if (dependencies.recordQuality) {
+    const publicPolicyPassed = audience === "trade" || (
+      !surgeOutputViolatesPublicPolicy(`${reply.content}\n${JSON.stringify(safeContinuation)}`)
+      && !containsSurgeNamedReference(JSON.stringify(safeContinuation))
+      && !containsSurgeInternalPlatformName(JSON.stringify(safeContinuation))
+    );
+    const quality = evaluateSurgeConversationQuality({
+      day: now.toISOString().slice(0, 10),
+      audience,
+      message,
+      before: continuation,
+      after: safeContinuation,
+      answerSource,
+      answerStatus: reply.status,
+      publicPolicyPassed,
+      followUpQuestion: reply.followUpQuestion,
+    });
+    await dependencies.recordQuality(quality).catch(() => undefined);
   }
   return response;
 }

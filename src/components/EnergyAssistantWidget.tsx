@@ -19,6 +19,7 @@ import {
   EMPTY_SURGE_STARTER_PROFILE,
   markSurgeProfileStepReviewed,
   mergeHomeEnergyPlannerSessionIntoSurgeProfile,
+  nextUnreviewedSurgeProfileStepIndex,
   parseSurgeStarterProfile,
   SURGE_PROFILE_FIELDS,
   SURGE_PROFILE_STEPS,
@@ -789,6 +790,7 @@ export function EnergyAssistantWidget({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const intakeRef = useRef<HTMLFormElement>(null);
+  const contextRailRef = useRef<HTMLDetailsElement>(null);
   const profileEditScrollPendingRef = useRef(false);
   const messagesRef = useRef<AssistantMessage[]>([]);
   const continuationRef = useRef<SurgeConversationState | null>(null);
@@ -1050,6 +1052,19 @@ export function EnergyAssistantWidget({
   }, [dedicated, initialDraft]);
 
   useEffect(() => {
+    if (!dedicated) return;
+    const desktop = window.matchMedia("(min-width: 641px)");
+    const syncContextRail = () => {
+      const rail = contextRailRef.current;
+      if (!rail) return;
+      rail.open = desktop.matches;
+    };
+    syncContextRail();
+    desktop.addEventListener("change", syncContextRail);
+    return () => desktop.removeEventListener("change", syncContextRail);
+  }, [dedicated]);
+
+  useEffect(() => {
     if (!hydrated) return;
     storeSession(JSON.stringify({
       mode: context.audience,
@@ -1272,9 +1287,12 @@ export function EnergyAssistantWidget({
   const completeStarterProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const reviewedProfile = markSurgeProfileStepReviewed(profile, currentProfileStep);
-    setProfile(reviewedProfile);
-    if (!profileEditing && profileStep < SURGE_PROFILE_STEPS.length - 1) {
-      setProfileStep((current) => current + 1);
+    const nextProfileUpdatedAt = new Date().toISOString();
+    const nextUnreviewedStep = nextUnreviewedSurgeProfileStepIndex(reviewedProfile, profileStep);
+    if (nextUnreviewedStep >= 0) {
+      setProfile(reviewedProfile);
+      setProfileUpdatedAt(nextProfileUpdatedAt);
+      setProfileStep(nextUnreviewedStep);
       setProfileError("");
       return;
     }
@@ -1283,7 +1301,6 @@ export function EnergyAssistantWidget({
       version: SURGE_PROFILE_VERSION,
       completed: true,
     };
-    const nextProfileUpdatedAt = new Date().toISOString();
     setProfile(nextProfile);
     setProfileUpdatedAt(nextProfileUpdatedAt);
     setProfileEditing(false);
@@ -1588,7 +1605,16 @@ export function EnergyAssistantWidget({
           onKeyDown={dedicated ? undefined : trapFocus}
         >
           {dedicated && (
-            <details className={styles.contextRail} aria-label="Your home context">
+            <details
+              ref={contextRailRef}
+              className={styles.contextRail}
+              aria-label="Your home context"
+              onToggle={(event) => {
+                if (window.matchMedia("(min-width: 641px)").matches && !event.currentTarget.open) {
+                  event.currentTarget.open = true;
+                }
+              }}
+            >
               <summary className={styles.contextRailSummary}>
                 <Image src="/surge-mascot.webp" alt="" width={54} height={68} />
                 <span className={styles.contextRailTitle}>
@@ -1771,7 +1797,10 @@ export function EnergyAssistantWidget({
                     </button>
                   )}
                   <button className={styles.intakeContinue} type="submit">
-                    {profileEditing || profileStep === SURGE_PROFILE_STEPS.length - 1 ? "Save my home context" : "Continue"}
+                    {profileReviewedAnswerCount + currentProfileStep.fields.filter((field) => !profile.reviewed.includes(field.id)).length
+                      < SURGE_PROFILE_FIELDS.length
+                      ? "Save and continue"
+                      : "Finish home context"}
                   </button>
                 </div>
                 <small>These answers stay in this browser with the conversation. Use the context rail to update any answer later.</small>

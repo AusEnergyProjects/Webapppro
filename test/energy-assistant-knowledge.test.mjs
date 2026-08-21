@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ENERGY_ASSISTANT_KNOWLEDGE,
   ENERGY_ASSISTANT_TOPICS,
+  ENERGY_ASSISTANT_VOLATILITY_CLASSES,
 } from "../src/data/energy-assistant-knowledge.ts";
 
 const REVIEWED_AT = "2026-08-20";
@@ -70,6 +71,8 @@ test("runtime knowledge is a 109-source official Australian corpus", () => {
     assert.match(source.reviewDue, /^\d{4}-\d{2}-\d{2}$/, source.id);
     assert.ok(source.reviewDue > source.reviewedAt, source.id);
     assert.ok(source.reviewDue <= "2027-08-20", source.id);
+    assert.ok(ENERGY_ASSISTANT_VOLATILITY_CLASSES.includes(source.volatilityClass), source.id);
+    assert.equal(source.reuseBasis, source.licence, source.id);
     assert.ok(source.jurisdiction.trim().length > 0, source.id);
     assert.ok(source.summary.trim().length >= 80, source.id);
     assert.ok(source.keywords.length >= 5, source.id);
