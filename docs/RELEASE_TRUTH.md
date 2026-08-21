@@ -10,47 +10,55 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: Surge continuity and platform typography
+## Current production release: responsive Surge quick chat and mobile workspace
 
-Application source `9dc33106b51cb708837cbefa911ff1eaa3fa778d` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 372 at `https://compare.ausenergyassessments.com`.
+Application source `93458d308f2861286f2cde673a7f922c24201bac` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 375 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `9dc33106b51cb708837cbefa911ff1eaa3fa778d` |
+| Application source | `93458d308f2861286f2cde673a7f922c24201bac` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3` |
-| Public version | Sites version 372 |
-| Deployment | `appgdep_6a884b8fb4008191a62cea5d73058669` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f` |
+| Public version | Sites version 375 |
+| Deployment | `appgdep_6a885b22f07c8191af4887b6e6331ed9` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:0eb7abd65b80091a1d29f35200ae503742a43ab91ab1ccc0cb1d1c17a827b2c1` |
+| Package content hash | `sha256:8b78239b2464ac4a4cf93dfa13577a29a26d17a94301091651dbd1e58de9023f` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- Public pages now share seven explicit typography roles: display, page, section, card, body, label and action. The AEA wordmark remains the only serif exception.
-- Home, plan and calculator use readable 16-pixel body copy, 14-pixel labels and supporting copy, and 15-pixel controls. Surge consumes the same card, label and action roles.
-- Optional service-request steps now expose a clear primary action, bounded secondary and tertiary actions, and an explicit `Back to Surge AI` return.
-- Asking a question closes any open optional-service form before appending the newest question and answer, preserving chronological conversation order at the bottom.
-- Same-browser tabs synchronise the newest bounded Surge conversation and home profile. Fully reviewed profiles and complete four-stage planner imports remain complete after route or tab changes.
-- The redundant `Energy upgrade guide` subtitle was removed from the compact Surge header control.
+- The floating mascot again opens the lightweight popup chat in place and preserves the current URL. Header, hero, roadmap and other explicit Surge calls to action continue to open the complete `/surge` workspace.
+- On phone widths, the long home-context rail is collapsed behind one `Your home context` disclosure and the four starter prompts are collapsed behind one `Suggested questions` disclosure. The composer therefore remains discoverable without scrolling through every context card or prompt first.
+- The dedicated phone workspace and conversation no longer create nested scroll containers. A gesture that starts inside the conversation continues the document scroll at the chat boundary.
+- The shared typography scale is compact and consistent, button corners are restrained, all eight phone navigation destinations are visible in a four-by-two grid and the homepage secondary copy has an opaque navy contrast panel over the mascot image.
+- Desktop retains the full context rail and suggested-question grid, the shared wide shell and the previously released chronological conversation and same-browser persistence behaviour.
 
 ### Validation and runtime evidence
 
-- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, the complete integration set, 2,806 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
-- The focused Surge, profile and navigation regression set passed 54 of 54 tests. `git diff --check` passed.
-- The public-performance audit reports a 4,587-byte root launcher, 70,897-byte deferred assistant and 730,818-byte global stylesheet.
-- Sites stored 44,492,800 bytes across 476 files with the package content hash above. The local release archive was 12,202,013 bytes with SHA-256 `FF5FDEEAFECA265F958074EBB2F5CF127F582C2FC303E8A7DD8B938D5F1D8B25`.
-- Live desktop QA confirmed 16-pixel public body copy, 15-pixel controls, a 22-pixel Surge title and no horizontal overflow across home, plan, calculator and Surge.
-- Live 390 by 844 phone QA confirmed 15-pixel Surge copy and controls, 48-pixel main actions, a 355-pixel Surge workspace and no horizontal overflow on all four routes.
-- GitHub source, saved version 372 and deployment provenance all resolve to the exact application source above.
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- The focused site-navigation, Surge and public-journey regression set passed 52 of 52 tests. `git diff --check` passed.
+- The public-performance audit reports a 4,758-byte root launcher, 71,820-byte deferred assistant and 732,243-byte global stylesheet.
+- Sites stored 44,482,560 bytes across 473 files with the package content hash above. The local release archive was 12,204,336 bytes with SHA-256 `8BA30B2397AF500D41B3F3B2BF8009196AC96048B3E3957C5CF483806DC34C14`.
+- Live 390 by 844 phone QA confirmed the homepage mascot opens an accessible popup without navigating, the context disclosure is collapsed by default, the workspace and conversation both use visible overflow, and a scroll gesture initiated inside the conversation moved the document from 300 pixels to the page top.
+- Live desktop QA confirmed the complete context body remains displayed beside the conversation and the public shell has no horizontal overflow.
+- Live `/api/health?release=375` returned HTTP 200, `Cache-Control: no-store` and ready knowledge status for all 17 maintained topics and 109 current official sources.
+- GitHub source, saved version 375 and deployment provenance all resolve to the exact application source above.
 
 ### Boundaries
 
 - No assistant answer, API, authentication, database, migration, calculation, trade workflow or customer-data contract changed.
 - Persistence remains bounded to the same browser, expires after 30 days and does not create cross-device identity.
-- The shared stylesheet remains a 730,818-byte raw build asset. It passed the release budget but remains the next structural performance opportunity.
+- The shared stylesheet remains a 732,243-byte raw build asset and the production build still reports large-chunk warnings. Both pass the enforced release budgets but remain structural performance opportunities.
 - No real lead, email, trade record or customer record was created during live verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Superseded interim responsive releases
+
+Sites versions 373 and 374 were deployment checkpoints for the compact typography, restrained radii, complete phone navigation and homepage contrast correction. They are superseded by version 375, which contains those changes plus the quick-chat and mobile-workspace corrections above.
+
+## Previous production release: Surge continuity and platform typography
+
+Application source `9dc33106b51cb708837cbefa911ff1eaa3fa778d` was deployed as public Sites version 372 under saved version `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3` and deployment `appgdep_6a884b8fb4008191a62cea5d73058669`. It introduced the shared seven-role typography system, readable Surge actions, chronological conversation flow, same-browser profile continuity and the simplified compact Surge header.
 
 ## Previous production release: public Surge UX optimisation and shared wide layout
 

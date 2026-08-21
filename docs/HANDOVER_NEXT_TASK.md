@@ -1,62 +1,66 @@
 # Next task handover
 
-Status: Surge continuity, readable actions and the shared seven-role typography system are released as Sites version 372. The next executable milestone is governed Surge knowledge.
+Status: responsive Surge quick chat and the compact mobile workspace are released as Sites version 375. The next executable milestone is governed Surge knowledge.
 
 Prepared: 21 August 2026
 
-Milestone ID: `AEA-SURGE-CONTINUITY-TYPOGRAPHY-72`
+Milestone ID: `AEA-SURGE-RESPONSIVE-QUICKCHAT-75`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `9dc33106b51cb708837cbefa911ff1eaa3fa778d`
+Current production application source: `93458d308f2861286f2cde673a7f922c24201bac`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 372 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 375 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f`
 
-Current deployment: `appgdep_6a884b8fb4008191a62cea5d73058669`
+Current deployment: `appgdep_6a885b22f07c8191af4887b6e6331ed9`
 
 Current environment revision: 24
 
 Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
-## Released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72
+## Released milestone: AEA-SURGE-RESPONSIVE-QUICKCHAT-75
 
 ### User outcome
 
-Customers now see one clean type hierarchy across the public platform, clear primary and secondary actions in Surge, chronological conversation flow, and home context that remains completed when they switch routes or browser tabs.
+Customers can use the small floating mascot as an immediate popup chat again, while deliberate Surge links still open the complete workspace. On phones, long context and starter-prompt lists stay behind compact disclosures and chat scrolling flows naturally into page scrolling.
 
 ### Released scope
 
-- Establish seven reusable platform roles for display, page, section, card, body, label and action text while preserving the AEA wordmark as the only serif exception.
-- Enforce readable 16-pixel public body copy, 14-pixel labels and supporting copy, and 15-pixel controls across home, plan and calculator routes; Surge uses the same shared card, label and action tokens.
-- Give optional service-request steps a visible primary action, bounded secondary and tertiary actions and a clear `Back to Surge AI` return.
-- Close an open optional service form before appending a new question so the newest question and answer remain at the logical bottom of the conversation.
-- Synchronise the newest bounded local Surge conversation and completed home profile between same-browser tabs without creating an account or tracking identity.
-- Canonicalise fully reviewed Surge profiles and completed four-stage planner imports as complete so route and tab changes do not reopen the intake.
-- Remove the redundant `Energy upgrade guide` subtitle from the compact shared Surge header control.
+- Restore the floating mascot as a lazily mounted quick-chat trigger that opens the existing accessible popup without navigating away.
+- Keep the shared header, homepage Surge panel and plan-roadmap Surge actions as explicit full-page `/surge` navigation.
+- Collapse the dedicated phone home-context rail behind one summary while leaving the complete desktop rail visible.
+- Collapse the four starter prompts behind one phone summary while retaining the complete desktop grid.
+- Remove nested phone overflow from the dedicated workspace and conversation so scroll gestures continue through the document.
+- Carry forward the compact shared type scale, restrained corners, complete four-by-two phone navigation, homepage contrast panel, wide shell, chronological messages and same-browser profile continuity.
 
 ### Validation and release evidence
 
-- The focused Surge, profile and navigation regression set passed 54 of 54 tests.
-- `npm.cmd run validate` passed typecheck, warning-free lint, the complete integration set, 2,806 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
-- The production performance gate reports a 4,587-byte root launcher, 70,897-byte deferred assistant and 730,818-byte shared stylesheet.
-- Local and live desktop checks confirmed 16-pixel public body copy, 15-pixel controls, a 22-pixel Surge title and no horizontal overflow across home, plan, calculator and Surge.
-- Live 390 by 844 checks confirmed 15-pixel Surge body and control text, 48-pixel main actions, a 355-pixel Surge workspace and no horizontal overflow on all four routes.
-- Exact source `9dc33106b51cb708837cbefa911ff1eaa3fa778d` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
-- Sites saved version 372 as `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3`, storing 476 files and 44,492,800 bytes with content hash `sha256:0eb7abd65b80091a1d29f35200ae503742a43ab91ab1ccc0cb1d1c17a827b2c1`.
-- The matching local archive is 12,202,013 bytes with SHA-256 `FF5FDEEAFECA265F958074EBB2F5CF127F582C2FC303E8A7DD8B938D5F1D8B25`.
-- Deployment `appgdep_6a884b8fb4008191a62cea5d73058669` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- The focused site-navigation, Surge and public-journey regression set passed 52 of 52 tests.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
+- The production performance gate reports a 4,758-byte root launcher, 71,820-byte deferred assistant and 732,243-byte shared stylesheet.
+- Phone QA confirmed the floating mascot opens the popup without changing the URL, the context rail is collapsed by default, the dedicated workspace and conversation use visible overflow, and a chat-originated gesture scrolls the document.
+- Desktop QA confirmed the full context rail remains visible beside the conversation and the platform shell has no horizontal overflow.
+- Exact source `93458d308f2861286f2cde673a7f922c24201bac` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
+- Sites saved version 375 as `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f`, storing 473 files and 44,482,560 bytes with content hash `sha256:8b78239b2464ac4a4cf93dfa13577a29a26d17a94301091651dbd1e58de9023f`.
+- The matching local archive is 12,204,336 bytes with SHA-256 `8BA30B2397AF500D41B3F3B2BF8009196AC96048B3E3957C5CF483806DC34C14`.
+- Deployment `appgdep_6a885b22f07c8191af4887b6e6331ed9` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Live `/api/health?release=375` returned HTTP 200 with `Cache-Control: no-store` and complete maintained knowledge readiness.
 
 ### Boundaries and remaining optimisation work
 
 - No assistant answer, API, authentication, database, migration, calculator, trade workflow or customer-data contract changed.
 - Persistence remains bounded to the same browser, expires after 30 days and does not provide cross-device identity; signed-in association remains a separate milestone.
-- The shared stylesheet remains approximately 731 KB raw and is the next structural performance opportunity. It passed the current performance budget, but splitting it safely by public, customer, trade and Creditex surfaces remains separate work.
+- The shared stylesheet remains approximately 732 KB raw and the production build reports large-chunk warnings. Both pass the current performance gates, but splitting them safely by public, customer, trade and Creditex surfaces remains separate work.
 - No real lead, message, trade record or customer record was created during verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72
+
+Sites version 372 introduced the shared seven-role typography system, readable Surge actions, chronological conversation flow, same-browser profile continuity and the simplified compact Surge header. Versions 373 and 374 were superseded responsive-layout checkpoints now included in version 375.
 
 ## Previous released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71
 

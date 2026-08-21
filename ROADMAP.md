@@ -3288,6 +3288,12 @@ Replace fragmented page-level typography with seven shared platform roles, make 
 
 Exact application commit `9dc33106b51cb708837cbefa911ff1eaa3fa778d` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 372 under `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3` and deployed publicly through `appgdep_6a884b8fb4008191a62cea5d73058669` with environment revision 24. Desktop and 390 by 844 live QA confirmed the shared type scale, clear 48-pixel actions, correct conversation ordering, retained completion state and no horizontal overflow. Release truth contains exact archive and runtime evidence.
 
+## Released milestone: AEA-SURGE-RESPONSIVE-QUICKCHAT-75
+
+Restore the small floating mascot as a lazy in-place quick chat while keeping deliberate Surge links on the complete `/surge` workspace. On phones, collapse the long context rail and starter prompts behind compact native disclosures, remove the dedicated workspace's nested scroll trap, retain the compact platform typography and corners, and protect homepage copy contrast over the optimised mascot image.
+
+Exact application commit `93458d308f2861286f2cde673a7f922c24201bac` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 375 under `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f` and deployed publicly through `appgdep_6a885b22f07c8191af4887b6e6331ed9` with environment revision 24. Live desktop and 390 by 844 phone QA confirmed the popup/full-page navigation boundary, collapsed mobile context, page-level chat scrolling, preserved desktop context and HTTP 200 health. Versions 373 and 374 were superseded responsive-layout checkpoints contained in this release.
+
 ## Next five logical product steps
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
