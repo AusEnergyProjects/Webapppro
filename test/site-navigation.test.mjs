@@ -13,6 +13,8 @@ const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
 const holographicField = read("../src/components/HolographicEnergyField.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
+const surgeHeaderButton = read("../src/components/SurgeHeaderButton.tsx");
+const surgeRoute = read("../src/app/surge/page.tsx");
 const brandAssets = read("../src/lib/aea-brand-assets.mjs");
 const electricity = read("../src/app/compare/page.tsx");
 const gas = read("../src/app/gas-compare/page.tsx");
@@ -79,13 +81,15 @@ test("the homepage provides one clear starting journey instead of redirecting", 
 test("shared navigation prioritises the planner, electricity and gas journeys", () => {
   assert.match(chrome, /export function SiteHeader/);
   assert.match(chrome, /className="site-header"/);
+  assert.match(chrome, /import \{ SurgeHeaderButton \} from "@\/components\/SurgeHeaderButton"/);
+  assert.match(chrome, /<SurgeHeaderButton active=\{active === "surge"\} \/>/);
   assert.match(chrome, /href: "\/", label: "Start"/);
   assert.match(chrome, /href: "\/plan", label: "My energy plan"/);
   assert.match(chrome, /href: "\/calculator", label: "Rebate calculator"/);
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the TLink trade workspace"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open the TLink trade workspace"/);
   assert.match(chrome, /className="site-tlink-mark" src="\/tlink-icon-192\.png"/);
   assert.match(chrome, /className="site-tlink-copy"[\s\S]*<strong>TLink<\/strong>[\s\S]*<small>Trade workspace<\/small>/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
@@ -101,9 +105,35 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
+test("the futuristic header links to one dedicated always-present Surge page", () => {
+  assert.equal(chrome.match(/<SurgeHeaderButton active=\{active === "surge"\} \/>/g)?.length, 1);
+  assert.doesNotMatch(chrome, /EnergyAssistantWidget|requestSurgeOpen/);
+  assert.match(surgeHeaderButton, /href="\/surge"/);
+  assert.match(surgeHeaderButton, /active = false/);
+  assert.match(surgeHeaderButton, /aria-current=\{active \? "page" : undefined\}/);
+  assert.doesNotMatch(surgeHeaderButton, /requestSurgeOpen|onClick|aria-haspopup|aria-controls|type="button"/);
+  assert.match(surgeHeaderButton, /aria-label="Ask Surge about an energy upgrade"/);
+  assert.match(surgeHeaderButton, /className=\{`site-surge-link\$\{active \? " active" : ""\}`\}/);
+  assert.match(surgeHeaderButton, /className="site-surge-core"/);
+  assert.match(surgeHeaderButton, /src="\/surge-mascot\.png"[\s\S]*?width="28" height="35"/);
+  assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
+  assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Ask Surge<\/strong>/);
+  assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>Energy guide<\/span>/);
+  assert.match(surgeRoute, /SiteHeader active="surge"/);
+  assert.match(surgeRoute, /Ask Surge \| Australian Energy Assessments/);
+  assert.match(styles, /\.site-surge-link \{[^}]*min-height: 44px;/);
+  assert.match(styles, /\.site-surge-link\.active \{/);
+  assert.match(styles, /\.site-surge-core \{[^}]*animation: site-surge-pulse/);
+  assert.match(styles, /\.site-surge-core::before \{[^}]*animation: site-surge-spin/);
+  assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link \{ min-height: 40px;/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-header::after, \.site-surge-core, \.site-surge-core::before \{ animation: none !important; \}/);
+  assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link \{ border: 1px solid ButtonText;/);
+});
+
 test("public navigation keeps the TLink trade workspace clearly branded", () => {
-  assert.match(chrome, /active === "account" \? <a className="site-account-link active" href="\/account"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the TLink trade workspace"/);
+  assert.match(chrome, /active === "account" \? \([\s\S]*?<a className="site-account-link active" href="\/account"/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open the TLink trade workspace"/);
   assert.match(chrome, /title="TLink trade workspace"/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
   assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
@@ -156,7 +186,8 @@ test("shared navigation only advertises options that remain offscreen", () => {
     styles,
     /\.site-header-actions \.site-account-link \{[^}]*grid-column: auto;[^}]*grid-row: auto;/,
   );
-  assert.match(styles, /\.site-header-actions \.site-account-link span \{ display: none; \}/);
+  assert.match(styles, /\.site-header-actions \.site-account-link \{[^}]*flex: 0 0 40px;[^}]*font-size: 0;[^}]*width: 40px;/);
+  assert.match(styles, /\.site-header-actions \.site-account-link span \{ display: inline; font-size: \.62rem; \}/);
 });
 
 test("direct trade proposition presents the free verified operating model honestly", () => {
@@ -198,10 +229,19 @@ test("shared visual foundation uses the polished responsive system", () => {
   assert.doesNotMatch(layout, /fonts\.(?:googleapis|gstatic)\.com/);
   assert.match(styles, /--font-aea-body: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
   assert.match(styles, /--font-aea-heading: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
+  assert.match(styles, /--font-aea-wordmark: Georgia, "Times New Roman", serif/);
+  assert.match(styles, /\.brandname \{[^}]*font-family: var\(--font-aea-wordmark\)/);
+  assert.equal(styles.match(/font-family: var\(--font-aea-wordmark\)/g)?.length, 1);
+  assert.doesNotMatch(styles, /\.electricity-comparison-page \.brandname/);
   assert.doesNotMatch(`${styles}\n${customerAndToolTypography}\n${legacyComparator}`, /Source Serif|Georgia, serif|font-family:'Lato'/);
   assert.match(styles, /\.site-header \{/);
+  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.site-header \{ display: grid;[^}]*overflow: hidden;/);
+  assert.match(styles, /\.site-header \.site-nav-shell \{[^}]*grid-column: 2; grid-row: 1;/);
   assert.match(styles, /@keyframes site-header-atmosphere/);
   assert.match(styles, /@keyframes site-header-sheen/);
+  assert.match(styles, /@keyframes site-surge-pulse/);
+  assert.match(styles, /@keyframes site-surge-spin/);
   assert.match(styles, /prefers-reduced-motion: reduce[\s\S]*\.site-header::after \{ display: none; \}/);
   assert.match(styles, /radial-gradient\(circle at 8% -4%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
@@ -314,6 +354,7 @@ test("public discovery metadata is complete and private operations stay excluded
   assert.match(robots, /\/api\//);
   assert.match(robots, /sitemap\.xml/);
   assert.match(sitemap, /\/direct-trade\/access/);
+  assert.match(sitemap, /\/surge/);
   assert.doesNotMatch(sitemap, /\/operations/);
   assert.match(manifest, /display: "standalone"/);
 });

@@ -18,6 +18,21 @@
   right: calc(100% - 100vw);
 }
 
+.rootDedicated {
+  bottom: auto;
+  display: block;
+  left: auto;
+  margin: 0 auto;
+  max-width: var(--layout-max, 1600px);
+  padding: 0 var(--layout-gutter, 24px) 48px;
+  pointer-events: auto;
+  position: relative;
+  right: auto;
+  top: auto;
+  width: 100%;
+  z-index: auto;
+}
+
 .launcherWrap {
   align-items: center;
   display: flex;
@@ -146,6 +161,23 @@
 .rootOpen .panel {
   height: min(760px, calc(100dvh - 98px));
   max-height: calc(100dvh - 98px);
+}
+
+.rootDedicated .panel {
+  height: min(780px, calc(100dvh - 140px));
+  max-height: none;
+  min-height: 620px;
+  width: 100%;
+}
+
+.rootDedicated .conversation > *,
+.rootDedicated .composer > * {
+  margin-inline: auto;
+  width: min(920px, 100%);
+}
+
+.rootDedicated .starters {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .header {
@@ -1059,6 +1091,27 @@
   }
 
   .leadColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .root.rootDedicated {
+    bottom: auto;
+    left: auto;
+    padding: 0 12px 20px;
+    position: relative;
+    right: auto;
+    top: auto;
+  }
+
+  .rootDedicated .panel {
+    border-radius: 20px;
+    height: calc(100dvh - 152px);
+    max-height: 720px;
+    min-height: 520px;
+    width: 100%;
+  }
+
+  .rootDedicated .starters {
     grid-template-columns: 1fr;
   }
 }

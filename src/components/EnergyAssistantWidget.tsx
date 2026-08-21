@@ -169,6 +169,7 @@ const SAFE_EXACT_ACTIONS = new Set([
   "/platform",
   "/privacy",
   "/rebates",
+  "/surge",
 ]);
 
 const EMPTY_LEAD: LeadDraft = {
@@ -431,7 +432,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
       intro: "Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. I do not read customer, job or certificate records.",
     };
   }
-  const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates)$/.test(pathname)
+  const safePublicPath = /^\/(?:|assessments|calculator|compare(?:\/gas)?|direct-trade\/standards|guides(?:\/[a-z0-9-]+)?|plan|platform|privacy|rebates|surge)$/.test(pathname)
     ? pathname
     : "/";
   if (isSharedUtilityRoute(pathname) && rememberedAudience === "trade") {
@@ -623,6 +624,7 @@ async function readStoredPlanContext() {
 
 export function EnergyAssistantWidget() {
   const pathname = usePathname() || "/";
+  const dedicated = pathname === "/surge";
   const [mode, setMode] = useState<Audience>("public");
   const explicitAudience = explicitRouteAudience(pathname);
   const context = useMemo(
@@ -668,7 +670,7 @@ export function EnergyAssistantWidget() {
   const [documentBusy, setDocumentBusy] = useState(false);
   const [shareDocumentSummary, setShareDocumentSummary] = useState(false);
 
-  const effectiveOpen = open && openPathname === pathname && !hidden;
+  const effectiveOpen = dedicated || (open && openPathname === pathname && !hidden);
   const structuredDocumentSummary = documentLeadSummary(documentResult);
   const quoteQuestions = useMemo(
     () => energyAssistantQuoteQuestionsForServices(lead.services),
@@ -855,7 +857,7 @@ export function EnergyAssistantWidget() {
   }, [lead.postcode]);
 
   useEffect(() => {
-    if (!effectiveOpen) return;
+    if (!effectiveOpen || dedicated) return;
     returnFocusRef.current = window.document.activeElement as HTMLElement;
     const media = window.matchMedia("(max-width: 640px)");
     let bodyLocked = false;
@@ -878,7 +880,7 @@ export function EnergyAssistantWidget() {
       if (bodyLocked) window.document.body.style.overflow = priorOverflow;
       returnFocusRef.current?.focus();
     };
-  }, [effectiveOpen]);
+  }, [dedicated, effectiveOpen]);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -1182,10 +1184,11 @@ export function EnergyAssistantWidget() {
 
   return (
     <div
-      className={`${styles.root}${effectiveOpen ? ` ${styles.rootOpen}` : ""}${!effectiveOpen && mascotTucked ? ` ${styles.rootTucked}` : ""}`}
+      className={`${styles.root}${dedicated ? ` ${styles.rootDedicated}` : ""}${effectiveOpen && !dedicated ? ` ${styles.rootOpen}` : ""}${!effectiveOpen && mascotTucked ? ` ${styles.rootTucked}` : ""}`}
       data-energy-assistant
+      role={dedicated ? "main" : undefined}
     >
-      <div className={styles.launcherWrap}>
+      {!dedicated && <div className={styles.launcherWrap}>
         {effectiveOpen ? (
           <button
             ref={launcherRef}
@@ -1247,28 +1250,28 @@ export function EnergyAssistantWidget() {
               </button>
             </>
         )}
-      </div>
+      </div>}
 
       {effectiveOpen && (
         <section
           ref={dialogRef}
           id="aea-energy-guide"
           className={styles.panel}
-          role="dialog"
-          aria-modal="true"
+          role={dedicated ? "region" : "dialog"}
+          aria-modal={dedicated ? undefined : "true"}
           aria-labelledby="aea-energy-guide-title"
           aria-describedby={messages.length === 0 ? "aea-energy-guide-description" : undefined}
-          tabIndex={-1}
-          onKeyDown={trapFocus}
+          tabIndex={dedicated ? undefined : -1}
+          onKeyDown={dedicated ? undefined : trapFocus}
         >
           <header className={styles.header}>
             <div>
               <span className={styles.mode}>All things energy upgrades</span>
               <h2 id="aea-energy-guide-title">Ask Surge</h2>
             </div>
-            <button type="button" aria-label="Close Surge" onClick={close}>
+            {!dedicated && <button type="button" aria-label="Close Surge" onClick={close}>
               <span aria-hidden="true">×</span>
-            </button>
+            </button>}
           </header>
 
           <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>

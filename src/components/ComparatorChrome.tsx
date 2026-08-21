@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
+import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
 
 export function BrandBar() {
   return (
@@ -16,7 +17,7 @@ export function BrandBar() {
   );
 }
 
-export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies";
+export type SiteActive = "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   const links = [
@@ -46,7 +47,32 @@ export function SiteNav({ active }: { active: SiteActive }) {
 }
 
 export function SiteHeader({ active }: { active: SiteActive }) {
-  return <><header className="site-header"><BrandBar /><SiteNav active={active} /><div className="site-header-actions">{active === "account" ? <a className="site-account-link active" href="/account" aria-current="page"><span aria-hidden="true">&#9679;</span> Account</a> : null}<a className="site-tlink-link" href="/direct-trade/dashboard" aria-label="Open the TLink trade workspace" title="TLink trade workspace"><img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" /><span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span></a></div></header><span className="site-content-anchor" id="site-content" tabIndex={-1} /></>;
+  return (
+    <>
+      <header className="site-header">
+        <BrandBar />
+        <SiteNav active={active} />
+        <div className="site-header-actions">
+          {active === "account" ? (
+            <a className="site-account-link active" href="/account" aria-current="page">
+              <span aria-hidden="true">&#9679;</span> Account
+            </a>
+          ) : null}
+          <SurgeHeaderButton active={active === "surge"} />
+          <a
+            className="site-tlink-link"
+            href="/direct-trade/dashboard"
+            aria-label="Open the TLink trade workspace"
+            title="TLink trade workspace"
+          >
+            <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
+            <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
+          </a>
+        </div>
+      </header>
+      <span className="site-content-anchor" id="site-content" tabIndex={-1} />
+    </>
+  );
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {

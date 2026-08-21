@@ -11,6 +11,8 @@ const leadClient = read("../src/lib/energy-assistant-lead-client.mjs");
 const planner = read("../src/components/HomeEnergyPlanner.tsx");
 const privacy = read("../src/app/privacy/page.tsx");
 const gettingStarted = read("../src/components/GettingStarted.tsx");
+const surgeRoute = read("../src/app/surge/page.tsx");
+const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeEvents = read("../src/lib/energy-assistant-events.ts");
 const mascotImage = readFileSync(new URL("../public/surge-mascot.png", import.meta.url));
@@ -34,6 +36,25 @@ test("the energy guide is mounted once at the root and excluded from print or PD
   assert.match(widget, /pathname === "\/plan\/print"/);
   assert.match(widget, /pathname\.includes\("\/pdf\/"\)/);
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
+});
+
+test("the dedicated Surge route keeps chat present without a launcher, close control or modal behaviour", () => {
+  assert.match(surgeRoute, /SiteHeader active="surge"/);
+  assert.match(surgeRoute, /className=\{styles\.chrome\}/);
+  assert.match(surgeRouteStyles, /max-width: var\(--layout-max\)/);
+  assert.match(widget, /const dedicated = pathname === "\/surge"/);
+  assert.match(widget, /const effectiveOpen = dedicated \|\| \(open && openPathname === pathname && !hidden\)/);
+  assert.match(widget, /dedicated \? ` \$\{styles\.rootDedicated\}`/);
+  assert.match(widget, /\{!dedicated && <div className=\{styles\.launcherWrap\}>/);
+  assert.match(widget, /role=\{dedicated \? "region" : "dialog"\}/);
+  assert.match(widget, /aria-modal=\{dedicated \? undefined : "true"\}/);
+  assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge"/);
+  assert.match(styles, /\.rootDedicated \{[^}]*position: relative;[^}]*width: 100%;/);
+  assert.match(styles, /\.rootDedicated \.panel \{[^}]*width: 100%;/);
+  assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
+  assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);
+  assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return;/);
 });
 
 test("Surge opens with a clean grouped roadmap and keeps answers conversational", () => {
@@ -159,7 +180,7 @@ test("only bounded local transcript, continuation, last activity and guide mode 
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
   assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
   assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(""\)/);
-  assert.match(widget, /const effectiveOpen = open && openPathname === pathname && !hidden/);
+  assert.match(widget, /const effectiveOpen = dedicated \|\| \(open && openPathname === pathname && !hidden\)/);
   assert.match(widget, /setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.doesNotMatch(widget, /const rememberModeForNavigation|setOpen\(saved\.open\)/);
 });
@@ -574,10 +595,11 @@ test("the optional quote brief is progressive, phone-safe and trade sharing requ
   assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
 });
 
-test("the guide has modal keyboard behavior and a single responsive scroll region", () => {
-  assert.match(widget, /role="dialog"/);
-  assert.match(widget, /aria-modal="true"/);
-  assert.match(widget, /tabIndex=\{-1\}/);
+test("the floating guide remains modal while the dedicated page is non-modal", () => {
+  assert.match(widget, /role=\{dedicated \? "region" : "dialog"\}/);
+  assert.match(widget, /aria-modal=\{dedicated \? undefined : "true"\}/);
+  assert.match(widget, /tabIndex=\{dedicated \? undefined : -1\}/);
+  assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return/);
   assert.match(widget, /dialogRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
   assert.doesNotMatch(widget, /effectiveOpen[\s\S]{0,700}composerRef\.current\?\.focus/);
   assert.match(widget, /const hasConversation = messages\.length > 0/);

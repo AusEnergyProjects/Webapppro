@@ -1,0 +1,12 @@
+.chrome {
+  margin: 0 auto;
+  max-width: var(--layout-max);
+  padding: 24px var(--layout-gutter) 0;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .chrome {
+    padding-top: 14px;
+  }
+}
