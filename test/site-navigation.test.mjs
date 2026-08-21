@@ -161,6 +161,7 @@ test("desktop and mobile navigation show every option without hidden scrolling",
   assert.match(styles, /@media \(min-width: 721px\) \{[\s\S]*?\.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(8, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
   assert.match(styles, /@media screen and \(max-width: 720px\) \{[\s\S]*?body\.aea-platform \.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
   assert.match(styles, /body\.aea-platform \.site-header \.comparator-nav a \{[^}]*white-space: normal;/);
+  assert.match(styles, /\.start-hero-planner \.start-hero-secondary \{[^}]*background: rgba\(2, 18, 34, \.94\);[^}]*padding: 10px 12px;/);
   assert.match(
     styles,
     /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; \}/,
