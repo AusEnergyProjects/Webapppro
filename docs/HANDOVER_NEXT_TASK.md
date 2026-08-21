@@ -1,54 +1,53 @@
 # Next task handover
 
-Status: responsive Surge quick chat and the compact mobile workspace are released as Sites version 375. The next executable milestone is governed Surge knowledge.
+Status: visible Surge context editing and the compact swipeable phone header are released as Sites version 376. The next executable milestone is governed Surge knowledge.
 
 Prepared: 21 August 2026
 
-Milestone ID: `AEA-SURGE-RESPONSIVE-QUICKCHAT-75`
+Milestone ID: `AEA-SURGE-MOBILE-NAVIGATION-76`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `93458d308f2861286f2cde673a7f922c24201bac`
+Current production application source: `cec5d66422ff9fe140b7d160c4d7ced836d6b74f`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 375 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 376 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f`
 
-Current deployment: `appgdep_6a885b22f07c8191af4887b6e6331ed9`
+Current deployment: `appgdep_6a8861729c64819198b2e984832b3f06`
 
 Current environment revision: 24
 
 Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
-## Released milestone: AEA-SURGE-RESPONSIVE-QUICKCHAT-75
+## Released milestone: AEA-SURGE-MOBILE-NAVIGATION-76
 
 ### User outcome
 
-Customers can use the small floating mascot as an immediate popup chat again, while deliberate Surge links still open the complete workspace. On phones, long context and starter-prompt lists stay behind compact disclosures and chat scrolling flows naturally into page scrolling.
+On phones, customers can swipe the compact one-line header again and every home-context `Edit` action visibly lands on the matching form instead of opening it below the current viewport. The compact Surge drawers and page-level chat scrolling remain intact.
 
 ### Released scope
 
-- Restore the floating mascot as a lazily mounted quick-chat trigger that opens the existing accessible popup without navigating away.
-- Keep the shared header, homepage Surge panel and plan-roadmap Surge actions as explicit full-page `/surge` navigation.
-- Collapse the dedicated phone home-context rail behind one summary while leaving the complete desktop rail visible.
-- Collapse the four starter prompts behind one phone summary while retaining the complete desktop grid.
-- Remove nested phone overflow from the dedicated workspace and conversation so scroll gestures continue through the document.
-- Carry forward the compact shared type scale, restrained corners, complete four-by-two phone navigation, homepage contrast panel, wide shell, chronological messages and same-browser profile continuity.
+- Route every context-rail `Edit` and completed-profile `Change details` action through one handler that selects the correct intake step.
+- After the intake form renders, align it at the top of the viewport and move focus to the form, while respecting reduced-motion preferences.
+- Restore the phone header to one horizontally swipeable, scroll-snapped, single-line strip without widening the page.
+- Preserve the desktop eight-column navigation, compact Surge drawers, page-level chat scrolling, quick-chat/full-page boundary, shared type scale, restrained corners and same-browser profile continuity.
 
 ### Validation and release evidence
 
-- The focused site-navigation, Surge and public-journey regression set passed 52 of 52 tests.
+- The focused site-navigation, Surge and public-journey regression set passed 53 of 53 tests.
 - `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
-- The production performance gate reports a 4,758-byte root launcher, 71,820-byte deferred assistant and 732,243-byte shared stylesheet.
-- Phone QA confirmed the floating mascot opens the popup without changing the URL, the context rail is collapsed by default, the dedicated workspace and conversation use visible overflow, and a chat-originated gesture scrolls the document.
-- Desktop QA confirmed the full context rail remains visible beside the conversation and the platform shell has no horizontal overflow.
-- Exact source `93458d308f2861286f2cde673a7f922c24201bac` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
-- Sites saved version 375 as `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f`, storing 473 files and 44,482,560 bytes with content hash `sha256:8b78239b2464ac4a4cf93dfa13577a29a26d17a94301091651dbd1e58de9023f`.
-- The matching local archive is 12,204,336 bytes with SHA-256 `8BA30B2397AF500D41B3F3B2BF8009196AC96048B3E3957C5CF483806DC34C14`.
-- Deployment `appgdep_6a885b22f07c8191af4887b6e6331ed9` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
-- Live `/api/health?release=375` returned HTTP 200 with `Cache-Control: no-store` and complete maintained knowledge readiness.
+- The production performance gate reports a 4,758-byte root launcher, 72,221-byte deferred assistant and 732,292-byte shared stylesheet.
+- Phone QA measured a 327-pixel navigation viewport over 869 pixels of swipeable content with no page-level horizontal overflow. The context rail remains collapsed by default.
+- Selecting the fifth `Edit` action moved its matching form from 1,832.5 pixels below the viewport to 16 pixels from the top, focused the form and selected `Step 5 of 13`.
+- Phone QA confirmed the dedicated conversation still uses visible overflow, `overscroll-behavior: auto` and no maximum height. Desktop retained the eight-column fixed navigation.
+- Exact source `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
+- Sites saved version 376 as `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f`, storing 478 files and 44,513,280 bytes with content hash `sha256:67a9d9a21840831e3ff050cbbd21741a4567b2e05196d51b939ac581bd673ce9`.
+- The matching local archive is 12,187,307 bytes with SHA-256 `D7E457D038AF3A14106D19D9FE41345EEE7DD735A16B4A0B1873653846DB9122`.
+- Deployment `appgdep_6a8861729c64819198b2e984832b3f06` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Live `/api/health?release=376` returned HTTP 200 with `Cache-Control: no-store` and complete maintained knowledge readiness.
 
 ### Boundaries and remaining optimisation work
 
@@ -60,7 +59,11 @@ Customers can use the small floating mascot as an immediate popup chat again, wh
 
 ## Previous released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72
 
-Sites version 372 introduced the shared seven-role typography system, readable Surge actions, chronological conversation flow, same-browser profile continuity and the simplified compact Surge header. Versions 373 and 374 were superseded responsive-layout checkpoints now included in version 375.
+Sites version 372 introduced the shared seven-role typography system, readable Surge actions, chronological conversation flow, same-browser profile continuity and the simplified compact Surge header. Versions 373 and 374 were superseded responsive-layout checkpoints now carried into version 376.
+
+## Previous released milestone: AEA-SURGE-RESPONSIVE-QUICKCHAT-75
+
+Sites version 375 restored the floating in-place quick chat, kept deliberate Surge calls on `/surge`, collapsed the long phone context and starter prompts, and removed nested mobile workspace scrolling.
 
 ## Previous released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71
 

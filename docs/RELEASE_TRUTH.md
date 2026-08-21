@@ -10,39 +10,42 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: responsive Surge quick chat and mobile workspace
+## Current production release: visible Surge edits and compact mobile navigation
 
-Application source `93458d308f2861286f2cde673a7f922c24201bac` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 375 at `https://compare.ausenergyassessments.com`.
+Application source `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 376 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `93458d308f2861286f2cde673a7f922c24201bac` |
+| Application source | `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f` |
-| Public version | Sites version 375 |
-| Deployment | `appgdep_6a885b22f07c8191af4887b6e6331ed9` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f` |
+| Public version | Sites version 376 |
+| Deployment | `appgdep_6a8861729c64819198b2e984832b3f06` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:8b78239b2464ac4a4cf93dfa13577a29a26d17a94301091651dbd1e58de9023f` |
+| Package content hash | `sha256:67a9d9a21840831e3ff050cbbd21741a4567b2e05196d51b939ac581bd673ce9` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- The floating mascot again opens the lightweight popup chat in place and preserves the current URL. Header, hero, roadmap and other explicit Surge calls to action continue to open the complete `/surge` workspace.
+- Every home-context `Edit` action opens its matching intake step, smoothly moves the form to the top of the viewport and transfers focus to that form. Reduced-motion customers receive the same placement without animation.
+- The phone header is again one compact horizontally swipeable strip with no page-level horizontal overflow. Desktop keeps the complete fixed eight-column navigation.
+- The floating mascot opens the lightweight popup chat in place and preserves the current URL. Header, hero, roadmap and other explicit Surge calls to action continue to open the complete `/surge` workspace.
 - On phone widths, the long home-context rail is collapsed behind one `Your home context` disclosure and the four starter prompts are collapsed behind one `Suggested questions` disclosure. The composer therefore remains discoverable without scrolling through every context card or prompt first.
 - The dedicated phone workspace and conversation no longer create nested scroll containers. A gesture that starts inside the conversation continues the document scroll at the chat boundary.
-- The shared typography scale is compact and consistent, button corners are restrained, all eight phone navigation destinations are visible in a four-by-two grid and the homepage secondary copy has an opaque navy contrast panel over the mascot image.
+- The shared typography scale is compact and consistent, button corners are restrained and the homepage secondary copy has an opaque navy contrast panel over the mascot image.
 - Desktop retains the full context rail and suggested-question grid, the shared wide shell and the previously released chronological conversation and same-browser persistence behaviour.
 
 ### Validation and runtime evidence
 
 - `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
-- The focused site-navigation, Surge and public-journey regression set passed 52 of 52 tests. `git diff --check` passed.
-- The public-performance audit reports a 4,758-byte root launcher, 71,820-byte deferred assistant and 732,243-byte global stylesheet.
-- Sites stored 44,482,560 bytes across 473 files with the package content hash above. The local release archive was 12,204,336 bytes with SHA-256 `8BA30B2397AF500D41B3F3B2BF8009196AC96048B3E3957C5CF483806DC34C14`.
-- Live 390 by 844 phone QA confirmed the homepage mascot opens an accessible popup without navigating, the context disclosure is collapsed by default, the workspace and conversation both use visible overflow, and a scroll gesture initiated inside the conversation moved the document from 300 pixels to the page top.
-- Live desktop QA confirmed the complete context body remains displayed beside the conversation and the public shell has no horizontal overflow.
-- Live `/api/health?release=375` returned HTTP 200, `Cache-Control: no-store` and ready knowledge status for all 17 maintained topics and 109 current official sources.
-- GitHub source, saved version 375 and deployment provenance all resolve to the exact application source above.
+- The focused site-navigation, Surge and public-journey regression set passed 53 of 53 tests. `git diff --check` passed.
+- The public-performance audit reports a 4,758-byte root launcher, 72,221-byte deferred assistant and 732,292-byte global stylesheet.
+- Sites stored 44,513,280 bytes across 478 files with the package content hash above. The local release archive was 12,187,307 bytes with SHA-256 `D7E457D038AF3A14106D19D9FE41345EEE7DD735A16B4A0B1873653846DB9122`.
+- Live 390 by 844 phone QA confirmed the context disclosure is collapsed by default, the 327-pixel header strip has 869 pixels of swipeable content, and the page itself has no horizontal overflow. Selecting the fifth `Edit` action moved its form from 1,832.5 pixels below the viewport to 16 pixels from the top, focused the form and opened `Step 5 of 13`.
+- Live phone QA also confirmed the dedicated conversation uses visible overflow, `overscroll-behavior: auto` and no maximum height, so chat-originated scrolling continues through the page.
+- Live desktop QA confirmed the complete navigation remains an eight-column grid with visible overflow and no page-level horizontal overflow.
+- Live `/api/health?release=376` returned HTTP 200, `Cache-Control: no-store` and ready knowledge status for all 17 maintained topics and 109 current official sources.
+- GitHub source, saved version 376 and deployment provenance all resolve to the exact application source above.
 
 ### Boundaries
 
@@ -52,9 +55,13 @@ Application source `93458d308f2861286f2cde673a7f922c24201bac` on branch `codex/j
 - No real lead, email, trade record or customer record was created during live verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
 
+## Previous production release: responsive Surge quick chat and mobile workspace
+
+Application source `93458d308f2861286f2cde673a7f922c24201bac` was deployed as public Sites version 375 under saved version `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f` and deployment `appgdep_6a885b22f07c8191af4887b6e6331ed9`. It restored the floating quick chat, collapsed phone context and suggestions, and removed the dedicated mobile workspace scroll trap.
+
 ## Superseded interim responsive releases
 
-Sites versions 373 and 374 were deployment checkpoints for the compact typography, restrained radii, complete phone navigation and homepage contrast correction. They are superseded by version 375, which contains those changes plus the quick-chat and mobile-workspace corrections above.
+Sites versions 373 and 374 were deployment checkpoints for the compact typography, restrained radii, phone navigation and homepage contrast correction. They are superseded by version 376.
 
 ## Previous production release: Surge continuity and platform typography
 

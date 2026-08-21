@@ -3294,6 +3294,12 @@ Restore the small floating mascot as a lazy in-place quick chat while keeping de
 
 Exact application commit `93458d308f2861286f2cde673a7f922c24201bac` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 375 under `appgprj_6a550c378000819185caf094173422bb~appgver_e3e5ced77f708191a734ca186c90c09f` and deployed publicly through `appgdep_6a885b22f07c8191af4887b6e6331ed9` with environment revision 24. Live desktop and 390 by 844 phone QA confirmed the popup/full-page navigation boundary, collapsed mobile context, page-level chat scrolling, preserved desktop context and HTTP 200 health. Versions 373 and 374 were superseded responsive-layout checkpoints contained in this release.
 
+## Released milestone: AEA-SURGE-MOBILE-NAVIGATION-76
+
+Make home-context editing self-revealing and restore the preferred compact horizontally swipeable phone header without regressing the collapsed Surge drawers, page-level chat scrolling or fixed desktop navigation.
+
+Exact application commit `cec5d66422ff9fe140b7d160c4d7ced836d6b74f` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 376 under `appgprj_6a550c378000819185caf094173422bb~appgver_49ef85c0ba9c81919996c18fdb33939f` and deployed publicly through `appgdep_6a8861729c64819198b2e984832b3f06` with environment revision 24. Live 390 by 844 phone QA confirmed the 327-pixel header strip exposes 869 pixels of swipeable destinations without page overflow, the context drawer remains collapsed by default and an `Edit` action moves and focuses its matching intake form at 16 pixels from the viewport top. Desktop retained the eight-column navigation, and public health returned HTTP 200 with all 17 maintained topics and 109 current official sources ready.
+
 ## Next five logical product steps
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
