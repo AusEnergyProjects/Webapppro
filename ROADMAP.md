@@ -3274,7 +3274,7 @@ without weakening privacy, calculation authority or the static trade workspace.
 
 Remove continuous decorative rendering and oversized public assets from the home and planner, defer the full Surge workspace and postcode corpus until explicitly needed, use client navigation across the main household paths, enforce build-time performance budgets and close the work with desktop, phone and sustained-homepage release QA. This recovery stays within the existing visual, planner, assistant, API, privacy and data contracts.
 
-Local implementation, complete validation and desktop and phone browser QA are complete. Exact-source packaging, deployment and live browser verification remain the release gate.
+Local application commit `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, complete validation and desktop and phone browser QA are complete. GitHub publication, exact-source packaging, deployment and live browser verification remain the release gate.
 
 ## Next five logical product steps
 

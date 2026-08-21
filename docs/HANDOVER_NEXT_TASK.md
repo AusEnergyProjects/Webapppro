@@ -10,6 +10,8 @@ Working branch: `codex/job-schedule-week-calendar`
 
 Current production application source: `731b4fad33169d6ed952f4f521f39d7a35b669e6`
 
+Locally validated performance candidate: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
+
 Current production: Sites version 369 at `https://compare.ausenergyassessments.com`
 
 Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_7a79dd6eef688191af31bf26f4bed226`
