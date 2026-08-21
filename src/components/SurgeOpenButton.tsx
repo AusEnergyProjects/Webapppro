@@ -1,6 +1,8 @@
 "use client";
 
-import { requestSurgeOpen } from "@/lib/energy-assistant-events";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { storePendingSurgeDraft } from "@/lib/surge-page-navigation";
 import styles from "./SurgeOpenButton.module.css";
 
 export function SurgeOpenButton({
@@ -12,11 +14,16 @@ export function SurgeOpenButton({
   description: string;
   draft: string;
 }) {
+  const router = useRouter();
+
   return (
-    <button
+    <Link
       className={styles.button}
-      type="button"
-      onClick={() => requestSurgeOpen(draft)}
+      href="/surge"
+      prefetch={false}
+      onPointerEnter={() => router.prefetch("/surge")}
+      onFocus={() => router.prefetch("/surge")}
+      onClick={() => storePendingSurgeDraft(draft)}
     >
       <span className={styles.mascot} aria-hidden="true" />
       <span className={styles.copy}>
@@ -24,6 +31,6 @@ export function SurgeOpenButton({
         <small>{description}</small>
       </span>
       <span className={styles.arrow} aria-hidden="true">›</span>
-    </button>
+    </Link>
   );
 }

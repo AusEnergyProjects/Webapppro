@@ -54,6 +54,7 @@ const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
 const immersiveHomeAsset = path.resolve(directory, "../public/aea-immersive-home-journey.webp");
+const surgeHomeAsset = path.resolve(directory, "../public/surge-command-centre-home.webp");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
   assert.match(
@@ -129,7 +130,7 @@ test("the futuristic header links to one dedicated always-present Surge AI page"
   assert.doesNotMatch(styles, /\.site-surge-core::before \{/);
   assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link \{ min-height: 40px;/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core \{ animation: none !important; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core, \.customer-journey-scene::after \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link \{ border: 1px solid ButtonText;/);
 });
 
@@ -235,7 +236,7 @@ test("shared visual foundation uses the polished responsive system without persi
 });
 
 test("shared layout and component tokens prevent page-level visual drift", () => {
-  assert.match(styles, /--layout-max: 1180px/);
+  assert.match(styles, /--layout-max: 1760px/);
   assert.match(styles, /\.wrap \{[^}]*max-width: var\(--layout-max\)/);
   assert.doesNotMatch(styles, /\.(?:start-page|guide-page) \{[^}]*max-width:/);
   assert.match(styles, /--radius-control: 11px/);
@@ -269,15 +270,15 @@ test("homepage uses an accessible static journey without persistent rendering wo
   assert.match(customerScene, /Prioritise/);
   assert.match(customerScene, /Take action/);
   assert.match(customerScene, /priority/);
-  assert.match(customerScene, /width="1731"/);
-  assert.match(customerScene, /height="909"/);
+  assert.match(customerScene, /width="1920"/);
+  assert.match(customerScene, /height="1080"/);
   assert.doesNotMatch(customerScene, /use client|HolographicEnergyField|<canvas|pointermove|onPointerMove|Comfort<|Energy<|Action</);
   assert.doesNotMatch(styles, /\.customer-scene-home::before|customer-hologram-sweep/);
 });
 
 test("the optimised whole-home scene is visible and drives the planner room journey", () => {
-  assert.match(customerScene, /src="\/aea-immersive-home-journey\.webp"/);
-  assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, 55vw"/);
+  assert.match(customerScene, /src="\/surge-command-centre-home\.webp"/);
+  assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, \(max-width: 1800px\) 100vw, 1760px"/);
   assert.match(plannerJourney, /export function PlannerHomeJourney/);
   assert.match(plannerJourney, /stage: PlannerJourneyStage/);
   assert.match(plannerJourney, /focusKey\?: string/);
@@ -307,6 +308,12 @@ test("the optimised whole-home scene is visible and drives the planner room jour
   const immersiveImage = fs.readFileSync(immersiveHomeAsset);
   assert.equal(immersiveImage.toString("ascii", 0, 4), "RIFF");
   assert.equal(immersiveImage.toString("ascii", 8, 12), "WEBP");
+  assert.equal(fs.existsSync(surgeHomeAsset), true);
+  assert.ok(fs.statSync(surgeHomeAsset).size > 50_000);
+  assert.ok(fs.statSync(surgeHomeAsset).size < 100_000);
+  const surgeHomeImage = fs.readFileSync(surgeHomeAsset);
+  assert.equal(surgeHomeImage.toString("ascii", 0, 4), "RIFF");
+  assert.equal(surgeHomeImage.toString("ascii", 8, 12), "WEBP");
 });
 
 test("social sharing metadata uses one launch-ready AEA energy card", () => {

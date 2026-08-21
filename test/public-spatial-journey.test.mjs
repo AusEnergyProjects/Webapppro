@@ -11,13 +11,16 @@ const landing = read("../src/components/CustomerJourneyScene.tsx");
 const planner = read("../src/components/PlannerHomeJourney.tsx");
 const styles = read("../src/app/globals.css");
 
-test("public journey scenes are static images without permanent canvas or pointer loops", () => {
+test("public journey scenes use static images with no canvas or pointer loops", () => {
+  assert.match(landing, /surge-command-centre-home\.webp/);
+  assert.match(planner, /aea-immersive-home-journey\.webp/);
   for (const source of [landing, planner]) {
-    assert.match(source, /aea-immersive-home-journey\.webp/);
     assert.doesNotMatch(source, /HolographicEnergyField|<canvas|requestAnimationFrame|pointermove|onPointerMove|data-spatial-scene/);
   }
   assert.doesNotMatch(styles, /customer-hologram-sweep|customer-scan-drop|spatial-route-breathe|spatial-nebula-breathe/);
   assert.doesNotMatch(styles, /\.customer-scene-home::before|\.planner-home-scan-plane|\.planner-home-energy-field/);
+  assert.match(styles, /@keyframes customer-surge-sweep[\s\S]*translate3d/);
+  assert.match(styles, /prefers-reduced-motion: reduce[\s\S]*\.customer-journey-scene::after \{ animation: none !important; \}/);
 });
 
 test("planner focus changes preserve a bounded static crop and semantic progress", () => {

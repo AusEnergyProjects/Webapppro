@@ -23,7 +23,7 @@ const gettingStarted = read("../src/components/GettingStarted.tsx");
 const surgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
-const surgeEvents = read("../src/lib/energy-assistant-events.ts");
+const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
 const mascotImage = readFileSync(new URL("../public/surge-mascot.webp", import.meta.url));
 
 function functionSource(source, name) {
@@ -65,7 +65,10 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge AI"/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*?position: relative;[\s\S]*?width: 100%;/);
   assert.match(styles, /\.rootDedicated \{[\s\S]*url\("\/surge-ai-command-centre-4k\.webp"\)[\s\S]*min-height: 100dvh/);
-  assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?grid-template-columns: minmax\(270px, 320px\) minmax\(0, 920px\);[\s\S]*?width: min\(1480px, 100%\);/);
+  assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?grid-template-columns: minmax\(280px, 330px\) minmax\(0, 1fr\);[\s\S]*?width: min\(var\(--layout-max, 1760px\), 100%\);/);
+  assert.match(styles, /\.rootDedicated \.intake \{[^}]*max-width: 1040px;[^}]*width: 100%;/);
+  assert.match(styles, /\.intakeGrid \{[^}]*align-items: start;/);
+  assert.match(styles, /\.intakeGrid > label \{[^}]*align-self: start;[^}]*grid-auto-rows: max-content;/);
   assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(widget, /<aside className=\{styles\.contextRail\} aria-label="Your home context">/);
   assert.match(widget, /<div className=\{styles\.workspace\}>/);
@@ -177,20 +180,22 @@ test("the tucked mascot preference survives customer-page navigation until expli
   assert.doesNotMatch(resetSource, /DISPLAY_PREFERENCE_KEY|storeMascotTucked|setMascotTucked/);
 });
 
-test("customer pages open the single shared Surge widget through one reusable event", () => {
-  assert.match(surgeEvents, /OPEN_SURGE_EVENT = "aea:open-surge"/);
-  assert.match(surgeEvents, /window\.dispatchEvent\(new CustomEvent/);
-  assert.match(surgeEvents, /draft\.trim\(\)\.slice\(0, 1_200\)/);
-  assert.match(surgeOpenButton, /requestSurgeOpen\(draft\)/);
-  assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget|fetch\(/);
-  assert.match(widget, /window\.addEventListener\(OPEN_SURGE_EVENT, openFromCustomerPage\)/);
-  assert.match(lazyWidget, /window\.addEventListener\(OPEN_SURGE_EVENT, openSurge\)/);
-  assert.match(lazyWidget, /setRequested\(true\)/);
-  assert.match(lazyWidget, /initialDraft=\{initialDraft\}/);
-  assert.match(lazyWidget, /initialOpen=\{!dedicated\}/);
-  assert.match(widget, /if \(hidden \|\| context\.audience === "trade"\) return/);
-  assert.match(widget, /setMascotTucked\(false\);[\s\S]*storeMascotTucked\(false\);[\s\S]*setOpenPathname\(pathname\);[\s\S]*setOpen\(true\)/);
-  assert.match(widget, /if \(nextDraft\) setDraft\(nextDraft\)/);
+test("every public Surge entry point opens the full AI page and carries only a bounded pending draft", () => {
+  assert.match(surgeNavigation, /PENDING_SURGE_DRAFT_KEY = "aea-surge-pending-draft-v1"/);
+  assert.match(surgeNavigation, /draft\.trim\(\)\.slice\(0, MAX_SURGE_DRAFT_LENGTH\)/);
+  assert.match(surgeNavigation, /window\.sessionStorage\.setItem/);
+  assert.match(surgeNavigation, /window\.sessionStorage\.removeItem/);
+  assert.match(surgeOpenButton, /<Link[\s\S]*href="\/surge"[\s\S]*prefetch=\{false\}/);
+  assert.match(surgeOpenButton, /storePendingSurgeDraft\(draft\)/);
+  assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget/);
+  assert.doesNotMatch(surgeOpenButton, /\bfetch\(/);
+  assert.match(lazyWidget, /if \(dedicated\)[\s\S]*<DeferredEnergyAssistantWidget \/>/);
+  assert.equal((lazyWidget.match(/href="\/surge"/g) || []).length, 2);
+  assert.equal((lazyWidget.match(/prefetch=\{false\}/g) || []).length, 2);
+  assert.doesNotMatch(lazyWidget, /setRequested|OPEN_SURGE_EVENT|initialOpen/);
+  assert.doesNotMatch(widget, /OPEN_SURGE_EVENT|openFromCustomerPage/);
+  assert.match(widget, /const pendingDraft = takePendingSurgeDraft\(\)/);
+  assert.match(widget, /if \(pendingDraft\) setDraft\(pendingDraft\)/);
   assert.equal((planner.match(/<SurgeOpenButton/g) || []).length, 2);
   assert.match(planner, /Ask Surge AI about the planner/);
   assert.match(planner, /Ask Surge AI about this roadmap/);

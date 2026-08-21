@@ -16,11 +16,11 @@ export function CustomerJourneyScene() {
         <div className="customer-scene-home">
           <Image
             className="customer-scene-render"
-            src="/aea-immersive-home-journey.webp"
+            src="/surge-command-centre-home.webp"
             alt=""
-            width="1731"
-            height="909"
-            sizes="(max-width: 720px) 100vw, 55vw"
+            width="1920"
+            height="1080"
+            sizes="(max-width: 720px) 100vw, (max-width: 1800px) 100vw, 1760px"
             priority
           />
         </div>

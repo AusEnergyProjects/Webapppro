@@ -36,7 +36,7 @@ import {
 } from "@/lib/surge-assessor-profile";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
 import { createHomeEnergyPlannerPublicPlanSnapshot } from "@/lib/home-energy-planner-schema";
-import { OPEN_SURGE_EVENT } from "@/lib/energy-assistant-events";
+import { takePendingSurgeDraft } from "@/lib/surge-page-navigation";
 import {
   ENERGY_ASSISTANT_MATCHING_EXPLANATION,
   ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION,
@@ -999,19 +999,13 @@ export function EnergyAssistantWidget({
   }, []);
 
   useEffect(() => {
-    const openFromCustomerPage = (event: Event) => {
-      if (hidden || context.audience === "trade") return;
-      const detail = event instanceof CustomEvent ? asRecord(event.detail) : null;
-      const nextDraft = asString(detail?.draft, MAX_MESSAGE_LENGTH);
-      setMascotTucked(false);
-      storeMascotTucked(false);
-      setOpenPathname(pathname);
-      setOpen(true);
-      if (nextDraft) setDraft(nextDraft);
-    };
-    window.addEventListener(OPEN_SURGE_EVENT, openFromCustomerPage);
-    return () => window.removeEventListener(OPEN_SURGE_EVENT, openFromCustomerPage);
-  }, [context.audience, hidden, pathname]);
+    if (!dedicated || initialDraft.trim()) return;
+    const frame = window.requestAnimationFrame(() => {
+      const pendingDraft = takePendingSurgeDraft();
+      if (pendingDraft) setDraft(pendingDraft);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dedicated, initialDraft]);
 
   useEffect(() => {
     if (!hydrated) return;

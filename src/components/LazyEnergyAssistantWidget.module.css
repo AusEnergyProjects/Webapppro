@@ -17,6 +17,7 @@
   height: 70px;
   justify-content: center;
   padding: 0;
+  text-decoration: none;
   width: 60px;
 }
 
@@ -73,19 +74,6 @@
   translate: 18px 4px;
 }
 
-.loading {
-  background: #07574f;
-  border: 1px solid #72e2cf;
-  border-radius: 999px;
-  bottom: max(18px, env(safe-area-inset-bottom));
-  color: #ffffff;
-  font: 800 0.72rem/1.2 Arial, sans-serif;
-  padding: 12px 16px;
-  position: fixed;
-  right: max(18px, env(safe-area-inset-right));
-  z-index: 8000;
-}
-
 .dedicatedLoading {
   align-items: center;
   background: #03192d;
@@ -99,7 +87,6 @@
 
 @media print {
   .root,
-  .loading,
   .dedicatedLoading {
     display: none !important;
   }

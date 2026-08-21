@@ -1,17 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import {
-  OPEN_SURGE_EVENT,
-  type OpenSurgeEventDetail,
-} from "@/lib/energy-assistant-events";
+import { usePathname, useRouter } from "next/navigation";
+import { storePendingSurgeDraft } from "@/lib/surge-page-navigation";
 import styles from "./LazyEnergyAssistantWidget.module.css";
 
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
 const DISPLAY_PREFERENCE_TUCKED = "tucked";
-const MAX_DRAFT_LENGTH = 1_200;
-
 function loadEnergyAssistant() {
   return import("./EnergyAssistantWidget").then((module) => ({
     default: module.EnergyAssistantWidget,
@@ -37,9 +33,9 @@ function storeTucked(tucked: boolean) {
   }
 }
 
-function Loader({ dedicated }: { dedicated: boolean }) {
+function Loader() {
   return (
-    <div className={dedicated ? styles.dedicatedLoading : styles.loading} role="status">
+    <div className={styles.dedicatedLoading} role="status">
       Loading Surge AI...
     </div>
   );
@@ -48,9 +44,8 @@ function Loader({ dedicated }: { dedicated: boolean }) {
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";
   const dedicated = pathname === "/surge";
-  const [requested, setRequested] = useState(false);
-  const [initialDraft, setInitialDraft] = useState("");
   const [tucked, setTucked] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -64,37 +59,23 @@ export function LazyEnergyAssistantWidget() {
   }, []);
 
   useEffect(() => {
-    const openSurge = (event: Event) => {
-      const detail = event instanceof CustomEvent
-        ? event.detail as OpenSurgeEventDetail | undefined
-        : undefined;
-      setInitialDraft((detail?.draft || "").trim().slice(0, MAX_DRAFT_LENGTH));
-      setTucked(false);
-      storeTucked(false);
-      setRequested(true);
-    };
     const syncPreference = (event: StorageEvent) => {
       if (event.key === DISPLAY_PREFERENCE_KEY) {
         setTucked(event.newValue === DISPLAY_PREFERENCE_TUCKED);
       }
     };
-    window.addEventListener(OPEN_SURGE_EVENT, openSurge);
     window.addEventListener("storage", syncPreference);
     return () => {
-      window.removeEventListener(OPEN_SURGE_EVENT, openSurge);
       window.removeEventListener("storage", syncPreference);
     };
   }, []);
 
   if (hiddenRoute(pathname)) return null;
 
-  if (requested || dedicated) {
+  if (dedicated) {
     return (
-      <Suspense fallback={<Loader dedicated={dedicated} />}>
-        <DeferredEnergyAssistantWidget
-          initialDraft={initialDraft}
-          initialOpen={!dedicated}
-        />
+      <Suspense fallback={<Loader />}>
+        <DeferredEnergyAssistantWidget />
       </Suspense>
     );
   }
@@ -102,34 +83,34 @@ export function LazyEnergyAssistantWidget() {
   return (
     <div className={`${styles.root}${tucked ? ` ${styles.rootTucked}` : ""}`} data-surge-loader>
       {tucked ? (
-        <button
+        <Link
           className={styles.peek}
-          type="button"
-          aria-label="Bring Surge AI back and open chat"
-          onPointerEnter={() => void loadEnergyAssistant()}
-          onFocus={() => void loadEnergyAssistant()}
+          href="/surge"
+          prefetch={false}
+          aria-label="Open the full Surge AI guide"
+          onPointerEnter={() => router.prefetch("/surge")}
+          onFocus={() => router.prefetch("/surge")}
           onClick={() => {
             setTucked(false);
             storeTucked(false);
-            setRequested(true);
+            storePendingSurgeDraft();
           }}
         >
           <span className={`${styles.mascot} ${styles.mascotPeeking}`} aria-hidden="true" />
-        </button>
+        </Link>
       ) : (
         <>
-          <button
+          <Link
             className={styles.launcher}
-            type="button"
-            aria-label="Open Surge AI"
-            aria-controls="aea-energy-guide"
-            aria-expanded="false"
-            onPointerEnter={() => void loadEnergyAssistant()}
-            onFocus={() => void loadEnergyAssistant()}
-            onClick={() => setRequested(true)}
+            href="/surge"
+            prefetch={false}
+            aria-label="Open the full Surge AI guide"
+            onPointerEnter={() => router.prefetch("/surge")}
+            onFocus={() => router.prefetch("/surge")}
+            onClick={() => storePendingSurgeDraft()}
           >
             <span className={styles.mascot} aria-hidden="true" />
-          </button>
+          </Link>
           <button
             className={styles.dismiss}
             type="button"

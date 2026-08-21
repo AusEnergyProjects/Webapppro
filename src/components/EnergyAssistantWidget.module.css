@@ -213,14 +213,14 @@
   box-shadow: none;
   display: grid;
   gap: clamp(16px, 2vw, 28px);
-  grid-template-columns: minmax(270px, 320px) minmax(0, 920px);
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
   height: min(900px, calc(100dvh - 170px));
   justify-content: center;
   margin: 0 auto;
   max-height: none;
   min-height: 660px;
   overflow: visible;
-  width: min(1480px, 100%);
+  width: min(var(--layout-max, 1760px), 100%);
 }
 
 .rootDedicated .workspace {
@@ -243,6 +243,12 @@
 
 .rootDedicated .conversation {
   background: linear-gradient(145deg, rgba(247, 252, 250, 0.96), rgba(229, 243, 239, 0.92));
+}
+
+.rootDedicated .intake {
+  margin-inline: auto;
+  max-width: 1040px;
+  width: 100%;
 }
 
 .rootDedicated .composer {
@@ -671,14 +677,19 @@
 }
 
 .intakeGrid {
+  align-items: start;
   display: grid;
   gap: 11px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.intakeGrid label {
+.intakeGrid > label {
+  align-content: start;
+  align-self: start;
   display: grid;
   gap: 6px;
+  grid-auto-rows: max-content;
+  width: 100%;
 }
 
 .intakeGrid label > span {
