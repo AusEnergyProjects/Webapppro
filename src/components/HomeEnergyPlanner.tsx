@@ -9,7 +9,9 @@ import {
   updateHomeFeatureSelection,
 } from "@/lib/customer-projects.mjs";
 import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
+import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
+import { SurgeOpenButton } from "@/components/SurgeOpenButton";
 import {
   PublicPlanEnquiryForm,
   type PublicPlanUpgradeInterest,
@@ -106,7 +108,6 @@ const customerProjectOptions = rawCustomerProjectOptions as unknown as {
 const customerHomeFeatureSections =
   rawCustomerHomeFeatureSections as unknown as HomeFeatureSection[];
 
-const STORAGE_KEY = "aea-home-energy-assessment-v1";
 const PRIMARY_STAGE_COUNT = 4;
 const stageNames = [
   "Goal and household",
@@ -336,7 +337,7 @@ function safeStoredDraft(value: string | null): { draft: PlannerDraft; stage: nu
 
 function readStoredAssessment() {
   try {
-    return window.sessionStorage.getItem(STORAGE_KEY);
+    return window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
   } catch {
     return null;
   }
@@ -344,7 +345,7 @@ function readStoredAssessment() {
 
 function storeAssessment(value: string) {
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, value);
+    window.sessionStorage.setItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY, value);
   } catch {
     // The assessment remains fully usable when browser storage is unavailable.
   }
@@ -352,7 +353,7 @@ function storeAssessment(value: string) {
 
 function removeStoredAssessment() {
   try {
-    window.sessionStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
   } catch {
     // Reset the in-memory assessment even when browser storage is unavailable.
   }
@@ -684,6 +685,11 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                   <h2 id="assessment-stage-0" ref={headingRef} tabIndex={-1}>Tell us about the household</h2>
                   <p>Enter the postcode, then review the common starting answers already selected below. Change anything that is different.</p>
                 </div>
+                <SurgeOpenButton
+                  label="Ask Surge about the planner"
+                  description="Get a plain-English answer before you choose."
+                  draft="Help me understand how to answer this home energy planner. What should I check first?"
+                />
                 <div className={styles.twoColumns}>
                   <label className={styles.textField}>
                     <span>Postcode</span>
@@ -817,7 +823,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               {stage > 0 ? <button type="button" className={styles.secondaryButton} onClick={() => { setAttemptedStage(null); setStage((current) => current - 1); }}>Back</button> : <button type="button" className={styles.textButton} onClick={resetPlan}>Reset</button>}
               <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Next"}</button>
             </footer>
-            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. It is sent to Australian Energy Assessments only if you explicitly open the printable plan or request contact.</p>
+            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. If you ask Surge, completed plan answers are sent as bounded context so you do not need to repeat them; photos and contact details are not included. Your plan is otherwise sent to Australian Energy Assessments only if you open the printable plan or request contact.</p>
           </section>
         </form>
       ) : (
@@ -830,6 +836,11 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               {plan.items.length} ordered steps prepared from your answers. This is general planning guidance, not a NatHERS rating, site assessment or guaranteed saving.
             </p>
           </div>
+          <SurgeOpenButton
+            label="Ask Surge about this roadmap"
+            description="Surge can use the completed answers saved in this tab."
+            draft="Use my saved home energy plan to explain what I should do first and why."
+          />
           {firstActionItem ? (
             <section className="planner-next-move" aria-labelledby="planner-next-move-title">
               <div>

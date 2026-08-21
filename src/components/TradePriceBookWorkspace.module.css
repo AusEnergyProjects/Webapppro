@@ -4,7 +4,7 @@
 .librarySwitch button.libraryActive { background: white; box-shadow: 0 2px 7px #06363b12; color: var(--color-aea-green); }
 .hero { align-items: center; display: flex; gap: 18px; justify-content: space-between; }
 .hero span, .editor header span, .firstRun > span { color: var(--color-aea-green); display: block; font-size: .68rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
-.hero h3, .editor h4, .firstRun h4 { color: var(--color-aea-ink); font-family: Georgia, serif; font-size: clamp(1.35rem, 3vw, 2rem); font-weight: 500; margin: 4px 0; }
+.hero h3, .editor h4, .firstRun h4 { color: var(--color-aea-ink); font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-size: clamp(1.35rem, 3vw, 2rem); font-weight: 500; margin: 4px 0; }
 .hero p, .editor header p, .firstRun p { color: var(--color-aea-muted); font-size: .78rem; line-height: 1.5; margin: 0; max-width: 720px; }
 .hero > button, .actions > button:first-child { background: var(--color-aea-green); border: 0; border-radius: 10px; color: white; cursor: pointer; font-weight: 850; padding: 12px 17px; }
 .metrics { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }

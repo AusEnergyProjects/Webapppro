@@ -118,6 +118,52 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.input[1].role, "user");
 });
 
+test("saved planner facts are a lower-priority untrusted baseline than explicit chat corrections", async () => {
+  let observedBody;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What should I do first?",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3006" },
+        { key: "tenure", value: "I own the home" },
+        { key: "glazing", value: "Mostly single glazed" },
+      ],
+    },
+    recentTurns: [{ role: "user", content: "I moved and now rent a home in postcode 5067." }],
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Because you now rent, start with changes you can take with you and ask the owner before changing fixed equipment.",
+        followUpQuestion: "What comfort problem bothers you most?",
+        state: state({
+          facts: [
+            { key: "postcode", value: "5067" },
+            { key: "tenure", value: "renter" },
+          ],
+          pendingQuestion: "What comfort problem bothers you most?",
+        }),
+      }));
+    },
+  });
+
+  assert.ok(result);
+  const developerPrompt = observedBody.input[0].content[0].text;
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.devicePlanContext.facts[1].value, "I own the home");
+  assert.equal(context.priorTurns[0].content, "I moved and now rent a home in postcode 5067.");
+  assert.match(developerPrompt, /devicePlanContext as a user-supplied baseline/i);
+  assert.match(developerPrompt, /current question, then the newest explicit user chat statement/i);
+  assert.match(developerPrompt, /newer explicit correction always replaces a conflicting saved-plan fact/i);
+  assert.deepEqual(result.continuation.facts, [
+    { key: "postcode", value: "5067" },
+    { key: "tenure", value: "renter" },
+  ]);
+});
+
 test("clarification includes the previous Surge reply as bounded conversational context, not evidence", async () => {
   const previousReply = "Replacing ducted gas can lead to either a ducted reverse-cycle system or separate split systems. Ducts can lose some heat before it reaches the rooms.";
   let observedBody;

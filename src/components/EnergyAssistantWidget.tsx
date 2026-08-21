@@ -16,6 +16,8 @@ import {
   parseSurgeConversationState,
   type SurgeConversationState,
 } from "@/lib/energy-assistant-conversation";
+import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
+import { OPEN_SURGE_EVENT } from "@/lib/energy-assistant-events";
 import {
   buildEnergyAssistantLeadPayload,
   createEnergyAssistantSubmissionKey,
@@ -106,6 +108,8 @@ type LocalDocumentState = EnergyDocumentAnalysis | {
 };
 
 const STORAGE_KEY = "aea-energy-guide-v1";
+const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
+const DISPLAY_PREFERENCE_TUCKED = "tucked";
 const MAX_MESSAGE_LENGTH = 1200;
 const MAX_LOCAL_MESSAGES = 40;
 const MAX_LOCAL_STORAGE_CHARACTERS = 160_000;
@@ -589,6 +593,34 @@ function removeStoredSession() {
   }, false);
 }
 
+function readStoredMascotTucked() {
+  return accessBrowserStorage(
+    (storage) => storage.getItem(DISPLAY_PREFERENCE_KEY) === DISPLAY_PREFERENCE_TUCKED,
+    false,
+  );
+}
+
+function storeMascotTucked(tucked: boolean) {
+  accessBrowserStorage((storage) => {
+    if (tucked) storage.setItem(DISPLAY_PREFERENCE_KEY, DISPLAY_PREFERENCE_TUCKED);
+    else storage.removeItem(DISPLAY_PREFERENCE_KEY);
+    return true;
+  }, false);
+}
+
+async function readStoredPlanContext() {
+  try {
+    const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+    if (!storedAssessment) return null;
+    const { buildSurgePlanContextFromStoredAssessment } = await import(
+      "@/lib/energy-assistant-plan-context"
+    );
+    return buildSurgePlanContextFromStoredAssessment(storedAssessment);
+  } catch {
+    return null;
+  }
+}
+
 export function EnergyAssistantWidget() {
   const pathname = usePathname() || "/";
   const [mode, setMode] = useState<Audience>("public");
@@ -718,6 +750,7 @@ export function EnergyAssistantWidget() {
       if (cancelled) return;
       hydrationStartedRef.current = true;
       try {
+        setMascotTucked(readStoredMascotTucked());
         const stored = readStoredSession();
         if (stored) {
           const saved = savedConversation(JSON.parse(stored));
@@ -742,6 +775,30 @@ export function EnergyAssistantWidget() {
     });
     return () => { cancelled = true; };
   }, [pathname]);
+
+  useEffect(() => {
+    const syncDisplayPreference = (event: StorageEvent) => {
+      if (event.key !== DISPLAY_PREFERENCE_KEY) return;
+      setMascotTucked(event.newValue === DISPLAY_PREFERENCE_TUCKED);
+    };
+    window.addEventListener("storage", syncDisplayPreference);
+    return () => window.removeEventListener("storage", syncDisplayPreference);
+  }, []);
+
+  useEffect(() => {
+    const openFromCustomerPage = (event: Event) => {
+      if (hidden || context.audience === "trade") return;
+      const detail = event instanceof CustomEvent ? asRecord(event.detail) : null;
+      const nextDraft = asString(detail?.draft, MAX_MESSAGE_LENGTH);
+      setMascotTucked(false);
+      storeMascotTucked(false);
+      setOpenPathname(pathname);
+      setOpen(true);
+      if (nextDraft) setDraft(nextDraft);
+    };
+    window.addEventListener(OPEN_SURGE_EVENT, openFromCustomerPage);
+    return () => window.removeEventListener(OPEN_SURGE_EVENT, openFromCustomerPage);
+  }, [context.audience, hidden, pathname]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -888,6 +945,7 @@ export function EnergyAssistantWidget() {
     setError("");
     setStatus("");
     try {
+      const planContext = context.audience === "trade" ? null : await readStoredPlanContext();
       const response = await fetch("/api/energy-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -897,6 +955,7 @@ export function EnergyAssistantWidget() {
           message,
           recentTurns,
           continuation: continuationRef.current,
+          planContext,
           pageContext: context.apiPath,
           audience: context.audience,
         }),
@@ -1150,6 +1209,7 @@ export function EnergyAssistantWidget() {
               aria-expanded="false"
               onClick={() => {
                 setMascotTucked(false);
+                storeMascotTucked(false);
                 setOpenPathname(pathname);
                 setOpen(true);
               }}
@@ -1178,7 +1238,10 @@ export function EnergyAssistantWidget() {
                 type="button"
                 aria-label="Hide Surge mascot"
                 title="Hide Surge"
-                onClick={() => setMascotTucked(true)}
+                onClick={() => {
+                  setMascotTucked(true);
+                  storeMascotTucked(true);
+                }}
               >
                 <span aria-hidden="true">×</span>
               </button>

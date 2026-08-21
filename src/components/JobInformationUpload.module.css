@@ -5,7 +5,7 @@
 .hero, .appointment, .privacy, .review, .requirements, .status, .footer, .state { margin-left: auto; margin-right: auto; max-width: 920px; }
 .hero { padding: 22px 0 12px; }
 .hero > span, .review > div > span, .state > span { color: #0b8b68; font-size: .76rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-.hero h1, .state h1 { font-family: Georgia, serif; font-size: clamp(2rem, 6vw, 4.6rem); font-weight: 500; letter-spacing: -.045em; line-height: 1; margin: 10px 0 12px; }
+.hero h1, .state h1 { font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-size: clamp(2rem, 6vw, 4.6rem); font-weight: 500; letter-spacing: -.045em; line-height: 1; margin: 10px 0 12px; }
 .hero > p { color: #547071; font-size: 1.08rem; }
 .hero > div { align-items: baseline; display: flex; gap: 10px; margin-top: 22px; }
 .hero > div strong { font-size: 1.5rem; }
@@ -13,14 +13,14 @@
 .appointment, .privacy, .review, .requirement, .completion, .state { background: #fff; border: 1px solid #cfe0da; border-radius: 18px; box-shadow: 0 12px 32px rgba(9, 62, 55, .06); }
 .appointment { align-items: center; display: flex; gap: 18px; justify-content: space-between; margin-top: 18px; padding: 20px 22px; }
 .appointment span { color: #0b8b68; font-size: .72rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-.appointment h2 { font-family: Georgia, serif; font-size: 1.25rem; font-weight: 500; margin: 4px 0; }
+.appointment h2 { font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-size: 1.25rem; font-weight: 500; margin: 4px 0; }
 .appointment p { color: #597171; font-size: .84rem; margin: 0; }
 .appointment a { background: #10ad7c; border-radius: 10px; color: #fff; flex: 0 0 auto; font-weight: 850; padding: 12px 14px; text-decoration: none; }
 .privacy { margin-top: 18px; padding: 20px 22px; }
 .privacy strong { display: block; font-size: 1.02rem; }
 .privacy p, .review p, .requirement > p, .state p { color: #597171; line-height: 1.55; margin: 7px 0 0; }
 .review { display: grid; gap: 12px; margin-top: 18px; padding: 22px; }
-.review h2, .requirement h2 { font-family: Georgia, serif; font-weight: 500; margin: 4px 0 0; }
+.review h2, .requirement h2 { font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-weight: 500; margin: 4px 0 0; }
 .review label { align-items: flex-start; background: #f5faf8; border: 1px solid #d5e5df; border-radius: 12px; cursor: pointer; display: flex; gap: 12px; padding: 14px; }
 .review input { height: 20px; margin-top: 2px; width: 20px; }
 .review label span { color: #506969; display: grid; font-size: .9rem; gap: 3px; line-height: 1.4; }
@@ -52,7 +52,7 @@
 .limit { background: #edf7f3; border-radius: 10px; color: #087d60; padding: 12px 14px; }
 .completion { display: grid; gap: 14px; margin-left: auto; margin-right: auto; margin-top: 18px; max-width: 920px; padding: 22px; }
 .completion > div > span { color: #0b8b68; font-size: .72rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-.completion h2 { font-family: Georgia, serif; font-weight: 500; margin: 5px 0; }
+.completion h2 { font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-weight: 500; margin: 5px 0; }
 .completion p { color: #597171; line-height: 1.5; margin: 0; }
 .completion label { align-items: flex-start; background: #f5faf8; border-radius: 10px; display: flex; gap: 9px; line-height: 1.45; padding: 12px; }
 .completion label input { margin-top: 3px; }

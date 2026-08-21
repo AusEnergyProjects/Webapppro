@@ -32,6 +32,21 @@ const planPdfClient = read("../src/lib/customer-plan-pdf-client.ts");
 const newProjectRoute = read("../src/app/account/projects/new/page.tsx");
 const gettingStartedRoute = read("../src/app/getting-started/page.tsx");
 const layout = read("../src/app/layout.tsx");
+const legacyComparator = read("../public/electricity-comparator.html");
+const customerAndToolTypography = [
+  "CustomerDraftDeleteDialog.module.css",
+  "CustomerInstallerRequestDialog.module.css",
+  "CustomerPlanHistoryProgress.module.css",
+  "CustomerPlanReportPreviewDialog.module.css",
+  "CustomerProjectPhotoCapture.module.css",
+  "EnergyAssistantWidget.module.css",
+  "HomeFeatureIntake.module.css",
+  "JobInformationUpload.module.css",
+  "TradeJobPacketWorkspace.module.css",
+  "TradePhotoRequestPanel.module.css",
+  "TradePhotoTemplateLibrary.module.css",
+  "TradePriceBookWorkspace.module.css",
+].map((file) => read(`../src/components/${file}`)).join("\n");
 const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
@@ -70,8 +85,9 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(chrome, /href: "\/compare", label: "Electricity compare"/);
   assert.match(chrome, /href: "\/gas-compare", label: "Gas compare"/);
   assert.match(chrome, /href: "\/guides", label: "Guides and rebates"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the trade workspace"/);
-  assert.match(chrome, /className="site-tlink-mark"[\s\S]*AEA_BRANDMARK_PNG_DATA_URI/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the TLink trade workspace"/);
+  assert.match(chrome, /className="site-tlink-mark" src="\/tlink-icon-192\.png"/);
+  assert.match(chrome, /className="site-tlink-copy"[\s\S]*<strong>TLink<\/strong>[\s\S]*<small>Trade workspace<\/small>/);
   assert.match(guide, /href="\/calculator"[\s\S]*estimate a rebate/);
   assert.match(chrome, /href: "\/assessments", label: "Assessments"/);
   assert.match(assessments, /SiteHeader active="assessments"/);
@@ -85,10 +101,10 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("public navigation keeps the trade workspace available without exposing an internal product name", () => {
+test("public navigation keeps the TLink trade workspace clearly branded", () => {
   assert.match(chrome, /active === "account" \? <a className="site-account-link active" href="\/account"/);
-  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the trade workspace"/);
-  assert.doesNotMatch(chrome, /Open TLink|TLink trade login|title="TLink/);
+  assert.match(chrome, /href="\/direct-trade\/dashboard" aria-label="Open the TLink trade workspace"/);
+  assert.match(chrome, /title="TLink trade workspace"/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
   assert.match(guide, /No account is needed to build a plan or send an enquiry to matching trades/);
   assert.match(guide, /Ask matching trades/);
@@ -179,11 +195,14 @@ test("customer-facing pages use the shared powered-by footer", () => {
 });
 
 test("shared visual foundation uses the polished responsive system", () => {
-  assert.match(layout, /family=Manrope/);
-  assert.match(layout, /family=Source\+Serif\+4/);
-  assert.match(layout, /display=swap/);
-  assert.match(layout, /fonts\.gstatic\.com/);
+  assert.doesNotMatch(layout, /fonts\.(?:googleapis|gstatic)\.com/);
+  assert.match(styles, /--font-aea-body: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
+  assert.match(styles, /--font-aea-heading: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
+  assert.doesNotMatch(`${styles}\n${customerAndToolTypography}\n${legacyComparator}`, /Source Serif|Georgia, serif|font-family:'Lato'/);
   assert.match(styles, /\.site-header \{/);
+  assert.match(styles, /@keyframes site-header-atmosphere/);
+  assert.match(styles, /@keyframes site-header-sheen/);
+  assert.match(styles, /prefers-reduced-motion: reduce[\s\S]*\.site-header::after \{ display: none; \}/);
   assert.match(styles, /radial-gradient\(circle at 8% -4%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
   assert.match(styles, /a:focus-visible/);
@@ -363,8 +382,8 @@ test("integrated planner is private, ordered and responsive", () => {
   assert.match(planner, /Draughts and ventilation/);
   assert.match(planner, /Electricity supply and other loads/);
   assert.doesNotMatch(planner, /Optional advanced home details/);
-  assert.match(planner, /window\.sessionStorage\.getItem\(STORAGE_KEY\)/);
-  assert.match(planner, /window\.sessionStorage\.setItem\(STORAGE_KEY/);
+  assert.match(planner, /window\.sessionStorage\.getItem\(HOME_ENERGY_ASSESSMENT_STORAGE_KEY\)/);
+  assert.match(planner, /window\.sessionStorage\.setItem\(HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
   assert.match(planner, /role="progressbar"/);
   assert.doesNotMatch(planner, /<PlannerHomeJourney/);
   assert.match(plannerStyles, /@media \(max-width: 720px\)/);

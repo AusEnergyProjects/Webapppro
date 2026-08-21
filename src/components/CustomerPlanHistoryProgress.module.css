@@ -50,7 +50,7 @@
 .restore h4,
 .progressDivider h4 {
   color: var(--history-ink);
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   line-height: 1.16;
   margin: 0;
 }

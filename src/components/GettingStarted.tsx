@@ -1,5 +1,6 @@
 import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { CustomerJourneyScene } from "./CustomerJourneyScene";
+import { SurgeOpenButton } from "./SurgeOpenButton";
 
 const preparation = [
   { number: "1", title: "Bring a recent bill", text: "Your postcode, plan and energy use establish the starting point." },
@@ -25,7 +26,7 @@ export function GettingStarted() {
         <span className="start-eyebrow">Independent home energy planning</span>
         <h1>One clear plan for a more comfortable, lower-cost home</h1>
         <p>Not sure what comes first? Start here. We will guide you through one clear step at a time, then give you an ordered plan before you need an account or speak to anyone.</p>
-        <div className="start-actions"><a className="btn start-primary-action" href="/plan">Build my home energy plan</a></div>
+        <div className="start-actions"><a className="btn start-primary-action" href="/plan">Build my home energy plan</a><SurgeOpenButton label="Ask Surge first" description="Talk through the first decision in plain English." draft="I am not sure where to start with my home energy upgrades. Help me work out the first decision." /></div>
         <p className="start-hero-secondary">Already know what you need? <a href="#compare-energy-plans">Compare an electricity or gas plan</a> or <a href="/calculator">estimate a rebate</a>. No account is needed to build a plan or send an enquiry to matching trades.</p>
         <aside aria-label="What the guided plan includes"><strong>About three minutes</strong><ul><li>No account to begin</li><li>Skip anything you do not know</li><li>See your roadmap first</li><li>Decide what happens next</li></ul></aside>
       </div>

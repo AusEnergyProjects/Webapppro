@@ -47,7 +47,7 @@
 }
 
 .toolbar h2 {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: clamp(1.25rem, 2.4vw, 1.8rem);
   line-height: 1.1;
   margin: 0.18rem 0;

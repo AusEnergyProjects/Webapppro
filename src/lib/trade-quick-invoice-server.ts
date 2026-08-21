@@ -677,7 +677,7 @@ function deliveryHtml(snapshot: QuickInvoiceDocumentSnapshot) {
       Reference ${escapeHtml(snapshot.payment.reference)}
     </div>`
     : "";
-  return `<!doctype html><html><body style="margin:0;background:#eef5f3;font-family:Arial,sans-serif;color:#08343b">
+  return `<!doctype html><html><body style="margin:0;background:#eef5f3;font-family:Arial,Helvetica,sans-serif;color:#08343b">
     <div style="max-width:640px;margin:0 auto;padding:28px 16px">
       <div style="background:#06313d;color:white;padding:24px;border-radius:14px 14px 0 0">
         <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase">Invoice from</div>

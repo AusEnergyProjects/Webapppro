@@ -1,6 +1,6 @@
 .root {
   bottom: max(18px, env(safe-area-inset-bottom));
-  font-family: "Manrope", Arial, sans-serif;
+  font-family: var(--font-aea-body, Arial, Helvetica, sans-serif);
   pointer-events: none;
   position: fixed;
   right: max(18px, env(safe-area-inset-right));
@@ -176,7 +176,7 @@
 
 .header h2 {
   color: #ffffff;
-  font-family: "Source Serif 4", Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: 1.16rem;
   line-height: 1.15;
   margin: 0;
@@ -235,7 +235,7 @@
 
 .welcome h3 {
   color: #103f39;
-  font-family: "Source Serif 4", Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: 1rem;
   line-height: 1.25;
   margin: 0;

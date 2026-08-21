@@ -22,7 +22,7 @@
 
 .intro h4 {
   color: #032c3b;
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: clamp(1.25rem, 2vw, 1.65rem);
   line-height: 1.15;
   margin: 0.22rem 0 0.4rem;
@@ -136,7 +136,7 @@
 
 .card h5 {
   color: #062f3c;
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: 1.06rem;
   line-height: 1.25;
   margin: 0.45rem 0 0.35rem;
@@ -376,7 +376,7 @@
 
 .earlierSelectionHeader h5 {
   color: #062f3c;
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif);
   font-size: 1rem;
   line-height: 1.25;
   margin: 0.18rem 0 0;

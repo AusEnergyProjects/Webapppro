@@ -219,7 +219,11 @@ test("the result follows four grouped stages and keeps visible answer-specific q
   assert.match(planner, /Current systems/);
   assert.match(planner, /Timing and review/);
   assert.doesNotMatch(planner, /<PlannerHomeJourney/);
-  assert.match(planner, /window\.sessionStorage\.setItem\(STORAGE_KEY/);
+  assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
+  assert.match(
+    planner,
+    /window\.sessionStorage\.setItem\(HOME_ENERGY_ASSESSMENT_STORAGE_KEY/,
+  );
   assert.match(planner, /<section className="planner-quick-wins"/);
   assert.match(planner, /Quick wins for your home/);
   assert.match(planner, /plan\.everydayActions\.map/);

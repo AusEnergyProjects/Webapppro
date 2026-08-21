@@ -8,6 +8,11 @@ const widget = read("../src/components/EnergyAssistantWidget.tsx");
 const styles = read("../src/components/EnergyAssistantWidget.module.css");
 const layout = read("../src/app/layout.tsx");
 const leadClient = read("../src/lib/energy-assistant-lead-client.mjs");
+const planner = read("../src/components/HomeEnergyPlanner.tsx");
+const privacy = read("../src/app/privacy/page.tsx");
+const gettingStarted = read("../src/components/GettingStarted.tsx");
+const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
+const surgeEvents = read("../src/lib/energy-assistant-events.ts");
 const mascotImage = readFileSync(new URL("../public/surge-mascot.png", import.meta.url));
 
 function functionSource(source, name) {
@@ -73,7 +78,7 @@ test("Surge opens with a clean grouped roadmap and keeps answers conversational"
 });
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
-  assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
+  assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*planContext,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
   assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current\)/);
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
@@ -81,6 +86,55 @@ test("the widget uses the canonical stateless assistant contract and never sends
   assert.match(widget, /I do not read private account, project or quote records/);
   assert.match(widget, /I do not read customer, job or certificate records/);
   assert.doesNotMatch(widget, /document\.querySelector|innerHTML|textContent/);
+});
+
+test("Surge receives only bounded completed planner answers and excludes them from trade mode", () => {
+  assert.match(widget, /buildSurgePlanContextFromStoredAssessment/);
+  assert.match(widget, /await import\(\s*"@\/lib\/energy-assistant-plan-context"\s*\)/);
+  assert.match(widget, /window\.sessionStorage\.getItem\(HOME_ENERGY_ASSESSMENT_STORAGE_KEY\)/);
+  assert.match(widget, /const planContext = context\.audience === "trade" \? null : await readStoredPlanContext\(\)/);
+  assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*planContext,[\s\S]*pageContext:/);
+  assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
+  assert.match(planner, /If you ask Surge, completed plan answers are sent as bounded context/);
+  assert.match(planner, /photos and contact details are not included/);
+  assert.match(privacy, /completed steps in the home energy planner in the same browser tab/);
+  assert.match(privacy, /Planner photos, uploads and contact details are not included/);
+  assert.match(privacy, /Newer details you tell Surge override a conflicting saved-plan answer/);
+  assert.match(privacy, /Trade mode does not read a locally saved household plan/);
+});
+
+test("the tucked mascot preference survives customer-page navigation until explicit unhide", () => {
+  assert.match(widget, /const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1"/);
+  assert.match(widget, /function readStoredMascotTucked/);
+  assert.match(widget, /function storeMascotTucked\(tucked: boolean\)/);
+  assert.match(widget, /setMascotTucked\(readStoredMascotTucked\(\)\)/);
+  assert.match(widget, /setMascotTucked\(true\);\s*storeMascotTucked\(true\)/);
+  assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\)/);
+  assert.match(widget, /window\.addEventListener\("storage", syncDisplayPreference\)/);
+  assert.match(widget, /event\.key !== DISPLAY_PREFERENCE_KEY/);
+  assert.match(widget, /aria-label="Bring Surge back and open chat"/);
+
+  const resetStart = widget.indexOf("const clearLocalSession = useCallback");
+  const resetEnd = widget.indexOf("useEffect(() =>", resetStart);
+  const resetSource = widget.slice(resetStart, resetEnd);
+  assert.doesNotMatch(resetSource, /DISPLAY_PREFERENCE_KEY|storeMascotTucked|setMascotTucked/);
+});
+
+test("customer pages open the single shared Surge widget through one reusable event", () => {
+  assert.match(surgeEvents, /OPEN_SURGE_EVENT = "aea:open-surge"/);
+  assert.match(surgeEvents, /window\.dispatchEvent\(new CustomEvent/);
+  assert.match(surgeEvents, /draft\.trim\(\)\.slice\(0, 1_200\)/);
+  assert.match(surgeOpenButton, /requestSurgeOpen\(draft\)/);
+  assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget|fetch\(/);
+  assert.match(widget, /window\.addEventListener\(OPEN_SURGE_EVENT, openFromCustomerPage\)/);
+  assert.match(widget, /if \(hidden \|\| context\.audience === "trade"\) return/);
+  assert.match(widget, /setMascotTucked\(false\);[\s\S]*storeMascotTucked\(false\);[\s\S]*setOpenPathname\(pathname\);[\s\S]*setOpen\(true\)/);
+  assert.match(widget, /if \(nextDraft\) setDraft\(nextDraft\)/);
+  assert.equal((planner.match(/<SurgeOpenButton/g) || []).length, 2);
+  assert.match(planner, /Ask Surge about the planner/);
+  assert.match(planner, /Ask Surge about this roadmap/);
+  assert.equal((gettingStarted.match(/<SurgeOpenButton/g) || []).length, 1);
+  assert.match(gettingStarted, /Ask Surge first/);
 });
 
 test("only bounded local transcript, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
@@ -548,7 +602,7 @@ test("the guide has modal keyboard behavior and a single responsive scroll regio
   assert.match(widget, /aria-label="Close Ask Surge"/);
   assert.match(widget, /aria-label="Bring Surge back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
-  assert.match(widget, /setMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
+  assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);
   assert.match(styles, /\.launcherPeek\s*\{[\s\S]*background:\s*transparent[\s\S]*border:\s*0[\s\S]*height:\s*70px[\s\S]*width:\s*55px/);
   assert.match(styles, /\.rootTucked\s*\{[\s\S]*right:\s*calc\(100% - 100vw\)/);

@@ -2,7 +2,7 @@
 .heading { align-items: start; display: flex; gap: 18px; justify-content: space-between; }
 .heading > div:first-child { max-width: 720px; }
 .heading > div > span, .linkCard > div > span { color: var(--color-aea-green); font-size: .68rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
-.heading h4 { color: var(--color-aea-ink); font-family: Georgia, serif; font-size: 1.18rem; margin: 4px 0 6px; }
+.heading h4 { color: var(--color-aea-ink); font-family: var(--font-aea-heading, Arial, Helvetica, sans-serif); font-size: 1.18rem; margin: 4px 0 6px; }
 .heading p { color: var(--color-aea-muted); font-size: .82rem; line-height: 1.5; margin: 0; }
 .heading > div:last-child { align-items: end; display: grid; flex: 0 0 auto; }
 .heading > div:last-child strong { color: var(--color-aea-ink); font-size: 1.6rem; }

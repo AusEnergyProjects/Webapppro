@@ -993,7 +993,10 @@ function wholeHomeConversationFrame(query: string, priorUserMessages: readonly s
   const bounded = [...priorUserMessages].slice(-8);
   let anchor = -1;
   for (let index = bounded.length - 1; index >= 0; index -= 1) {
-    if (/\b(?:whole[- ]home|whole of home|healthier.*cheaper|cheaper.*comfortable|where (?:do I |to )?start|staged plan|(?:house|home|place).*(?:uncomfortable|gross|hot|cold|boiling|cooks?|hard to heat).*(?:bills?|expensive|costs?|money|savage)|(?:bills?|expensive|costs?|money|savage).*(?:house|home|place).*(?:uncomfortable|gross|hot|cold|cooks?))\b/i.test(bounded[index])) {
+    if (
+      /^Saved home energy plan baseline\b/i.test(bounded[index])
+      || /\b(?:whole[- ]home|whole of home|healthier.*cheaper|cheaper.*comfortable|where (?:do I |to )?start|staged plan|(?:house|home|place).*(?:uncomfortable|gross|hot|cold|boiling|cooks?|hard to heat).*(?:bills?|expensive|costs?|money|savage)|(?:bills?|expensive|costs?|money|savage).*(?:house|home|place).*(?:uncomfortable|gross|hot|cold|cooks?))\b/i.test(bounded[index])
+    ) {
       anchor = index;
       break;
     }
@@ -1391,9 +1394,9 @@ const PROGRAM_CITY_JURISDICTION_SIGNALS: ReadonlyArray<readonly [
 ];
 
 function queryAustralianPostcode(query: string) {
-  const explicitMatch = query.match(/\b(?:postcode|post code)\s*(?:is|:|=)?\s*(\d{4})\b/i);
-  const bareMatch = query.match(/(?<![$\d])\b(?!20\d{2}\b)(\d{4})\b(?!\d)/);
-  return explicitMatch?.[1] || bareMatch?.[1] || null;
+  const explicitMatches = [...query.matchAll(/\b(?:postcode|post code)\s*(?:is|:|=)?\s*(\d{4})\b/gi)];
+  const bareMatches = [...query.matchAll(/(?<![$\d])\b(?!20\d{2}\b)(\d{4})\b(?!\s*(?:kWh|MJ)\b)(?!\d)/gi)];
+  return explicitMatches.at(-1)?.[1] || bareMatches.at(-1)?.[1] || null;
 }
 
 function postcodeProgramJurisdiction(query: string): readonly [
@@ -1430,6 +1433,23 @@ function explicitProgramJurisdiction(query: string) {
   }
   const explicit = PROGRAM_JURISDICTION_SIGNALS.find(([, , signal]) => signal.test(query));
   return explicit || null;
+}
+
+function latestExplicitProgramJurisdiction(query: string) {
+  const messages = query.split(/\n+/).map((message) => message.trim()).filter(Boolean);
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const jurisdiction = explicitProgramJurisdiction(messages[index]);
+    if (jurisdiction) return jurisdiction;
+  }
+  return null;
+}
+
+function latestResidentialTenure(query: string): "renter" | "owner" | null {
+  const matches = [...query.matchAll(/\b(rent(?:er|ing|al)?|tenant|owner|homeowner|owner[- ]occupier|I own|we own)\b/gi)];
+  const latest = matches.at(-1)?.[1] || "";
+  if (/^(?:rent(?:er|ing|al)?|tenant)$/i.test(latest)) return "renter";
+  if (latest) return "owner";
+  return null;
 }
 
 function programMatchesApplicant(program: GovernmentProgramTemplate, query: string) {
@@ -1749,12 +1769,8 @@ export function composeEnergyAssistantAnswer(
     if (!triageIntent || !/\b(?:energy|comfort|comfortable|uncomfortable|gross|healthier|cheaper|bill|money|cost|savage|electrif|upgrade|retrofit|solar|battery|insulation|glazing|heating|cooling|hot|cold|summer|winter|hot[- ]?water|gas|house|home|place|owner|renter|tenant|SA|South Australia)\b/i.test(wholeHomeConversation)) {
       return null;
     }
-    const jurisdiction = explicitProgramJurisdiction(wholeHomeConversation)?.[1];
-    const tenure = /\b(?:renter|tenant|rental)\b/i.test(wholeHomeConversation)
-      ? "renter"
-      : /\b(?:owner|homeowner|owner[- ]occupier|I own|we own)\b/i.test(wholeHomeConversation)
-        ? "owner"
-        : null;
+    const jurisdiction = latestExplicitProgramJurisdiction(wholeHomeConversation)?.[1];
+    const tenure = latestResidentialTenure(wholeHomeConversation);
     const knownContext = [jurisdiction, tenure].filter(Boolean).join(" ");
     const focus = [
       /\b(?:roasting|overheat|too hot|hot upstairs|cooks? upstairs|gross in summer|summer heat)\b/i.test(wholeHomeConversation) ? "overheating" : null,

@@ -14,6 +14,10 @@ import {
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
 import {
+  parseSurgePlanContext,
+  surgePlanContextSummary,
+} from "./energy-assistant-plan-context.ts";
+import {
   estimateSurgeModelReservationMicroUsd,
   generateSurgeModelAnswer,
   type SurgeModelRequest,
@@ -250,6 +254,19 @@ function continuationFrom(value: unknown) {
   return continuation;
 }
 
+function planContextFrom(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const context = parseSurgePlanContext(value);
+  if (!context) {
+    throw new EnergyAssistantServerError(
+      400,
+      "INVALID_PLAN_CONTEXT",
+      "Saved plan context was not accepted. Continue without it and retry.",
+    );
+  }
+  return context;
+}
+
 function dateFrom(dependencies: ServerDependencies) {
   const value = dependencies.now ? dependencies.now() : new Date();
   if (!Number.isFinite(value.getTime())) throw new Error("Invalid server clock.");
@@ -378,9 +395,11 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
   const modelRecentTurns = recentTurns;
   const continuation = continuationFrom(requestBody.continuation);
+  const planContext = audience === "trade" ? null : planContextFrom(requestBody.planContext);
   const priorUserMessages = recentTurns
     .filter((turn) => turn.role === "user")
     .map((turn) => turn.content);
+  if (planContext) priorUserMessages.unshift(surgePlanContextSummary(planContext));
   const now = dateFrom(dependencies);
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const deterministicAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
@@ -394,6 +413,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       asOf: now,
       recentTurns: modelRecentTurns,
       continuation,
+      planContext,
       deterministicAnswer,
     };
     const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
