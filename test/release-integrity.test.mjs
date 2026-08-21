@@ -84,10 +84,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Last reconciled: 21 August 2026/);
   assert.match(roadmap, /## Released milestone: SURGE-AI-CONTEXTUAL-EXPERIENCE-70/);
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,220}Prepared: 21 August 2026/);
-  assert.match(handover, /Current production: Sites version 369/);
+  assert.match(handover, /Current production: Sites version 370/);
   assert.match(releaseTruth, /Last reconciled locally: 21 August 2026/);
   assert.match(releaseTruth, /Deployment evidence last verified: 21 August 2026/);
-  assert.match(releaseTruth, /## Current production release: canonical Surge AI planner and optional enquiry workflow/);
+  assert.match(releaseTruth, /## Current production release: public customer-path performance recovery/);
+  assert.match(releaseTruth, /bc71dda1fa5e79f4529c4ba408bd481a87a066ba/);
+  assert.match(releaseTruth, /## Previous production release: canonical Surge AI planner and optional enquiry workflow/);
   assert.match(releaseTruth, /731b4fad33169d6ed952f4f521f39d7a35b669e6/);
   assert.match(releaseTruth, /## Advisor context and admin stability release/);
   assert.match(releaseTruth, /## Independent customer plan release/);
@@ -1017,7 +1019,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: public-site performance recovery is locally complete and validated from the current version-369 application baseline/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: public-site performance recovery is released as Sites version 370/);
   assert.match(currentHandover, /## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-68/);
   assert.match(currentHandover, /Milestone ID: `AEA-PUBLIC-PERFORMANCE-RECOVERY-69`/);
   assert.match(handover, /Working branch: `codex\/job-schedule-week-calendar`/);
@@ -1036,9 +1038,9 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`/);
   assert.match(handover, /Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`/);
   assert.match(handover, /Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`/);
-  assert.match(currentHandover, /Current production: Sites version 369 at `https:\/\/compare\.ausenergyassessments\.com`/);
-  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_7a79dd6eef688191af31bf26f4bed226`/);
-  assert.match(currentHandover, /Current deployment: `appgdep_6a882210191481918f4cc973cc5f249e`/);
+  assert.match(currentHandover, /Current production: Sites version 370 at `https:\/\/compare\.ausenergyassessments\.com`/);
+  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d648a0683fac8191b4557857b047cf83`/);
+  assert.match(currentHandover, /Current deployment: `appgdep_6a8836cc0e288191b11a31849c948d9c`/);
   assert.match(currentHandover, /Migration inventory: 152 migrations through `0153_surge_model_usage_guard\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);

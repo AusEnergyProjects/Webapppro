@@ -10,11 +10,48 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Pending candidate: public customer-path performance recovery
+## Current production release: public customer-path performance recovery
 
-Milestone `AEA-PUBLIC-PERFORMANCE-RECOVERY-69` is implemented and completely validated locally at application commit `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4` from the current Sites version 369 baseline but is not yet recorded here as released. It removes the permanent homepage, planner and shared-header compositor loops, replaces 2,517,735 bytes of PNG visuals with 142,312 bytes of WebP assets, defers the full Surge workspace and enquiry locality corpus, converts the main customer handoffs to client navigation and adds production-build performance budgets. Local desktop and 390-pixel phone browser QA passed, including sustained homepage stability and explicit lazy-Surge activation. GitHub publication, the Sites package identity, deployment identity and live desktop and phone evidence must still be reconciled before this section can replace version 369 as current production.
+Deployment source `bc71dda1fa5e79f4529c4ba408bd481a87a066ba` on branch `codex/job-schedule-week-calendar`, containing performance implementation commit `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, is the exact source deployed as public Sites version 370 at `https://compare.ausenergyassessments.com`.
 
-## Current production release: canonical Surge AI planner and optional enquiry workflow
+| Release evidence | Exact identity |
+| --- | --- |
+| Deployment source | `bc71dda1fa5e79f4529c4ba408bd481a87a066ba` |
+| Performance implementation | `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_d648a0683fac8191b4557857b047cf83` |
+| Public version | Sites version 370 |
+| Deployment | `appgdep_6a8836cc0e288191b11a31849c948d9c` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:b479c50096dc9def83591a5d4db0752bb80efaaeb76f907133e4c7a221f1f5a6` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Released outcome
+
+- The homepage and planner no longer mount a permanent canvas, pointer parallax, scan sweep, blur tile, orbit, particle field, floating room label or decorative telemetry layer.
+- The always-running shared-header compositor effects are removed. The public homepage has zero infinite animations while preserving the approved static navy and teal treatment.
+- The 1,650,041-byte whole-home PNG and 867,694-byte Surge mascot PNG are replaced by 71,206-byte and 71,106-byte WebP assets.
+- Ordinary routes mount a 5,194-byte Surge launcher and load the 69,687-byte assistant only after an explicit open action. The 568,820-byte postcode-backed enquiry adapter loads only for optional enquiry submission.
+- Main household header, planner, comparison, rebate and enquiry handoffs use client navigation, while dense secondary link groups avoid eager prefetch storms.
+- The production build now fails closed when the launcher, deferred assistant, shared stylesheet or optimised public images exceed their explicit budgets or when deferred modules return to initial loading.
+
+### Validation and runtime evidence
+
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- Sites stored 44,410,880 bytes across 477 files with the package content hash above. The local release archive was 12,132,250 bytes with SHA-256 `6B7B7FD0D5FEE265ACE4CB0EE26A636BB57349EBF599BBAE7A67A6D4419736A8`.
+- Live desktop QA confirmed the home heading and optimised image remain visible after 20 seconds with opacity 1, zero canvases, zero obsolete overlay nodes and zero infinite animations.
+- Live 390 by 844 phone QA confirmed no horizontal overflow on the homepage, planner, electricity comparison, gas comparison, rebate calculator and dedicated Surge route.
+- Live ordinary-route QA confirmed the full Surge panel is absent before an explicit action and then opens as the accessible `Ask Surge AI` dialog.
+- The custom domain and Sites deployment both report version 370 with hosted environment revision 24.
+
+### Boundaries
+
+- No planner answer, assistant knowledge, API, authentication, database, migration, calculation, trade workflow or customer-data contract changed.
+- The global stylesheet remains a shared 727,763-byte built asset and is the next structural performance opportunity; this release removed the measured public-path effects without attempting a risky repository-wide stylesheet split.
+- No real lead, email, trade record or customer record was created during live verification.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: canonical Surge AI planner and optional enquiry workflow
 
 Application source `731b4fad33169d6ed952f4f521f39d7a35b669e6` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 369 at `https://compare.ausenergyassessments.com`.
 

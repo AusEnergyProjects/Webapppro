@@ -3270,11 +3270,11 @@ without weakening privacy, calculation authority or the static trade workspace.
   then TLink with no separator dot and no horizontal overflow. `/api/health`
   returned HTTP 200 and the recent Sites Worker errors-only query was empty.
 
-## Active milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
+## Released milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
 
 Remove continuous decorative rendering and oversized public assets from the home and planner, defer the full Surge workspace and postcode corpus until explicitly needed, use client navigation across the main household paths, enforce build-time performance budgets and close the work with desktop, phone and sustained-homepage release QA. This recovery stays within the existing visual, planner, assistant, API, privacy and data contracts.
 
-Local application commit `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, complete validation and desktop and phone browser QA are complete. GitHub publication, exact-source packaging, deployment and live browser verification remain the release gate.
+Deployment source `bc71dda1fa5e79f4529c4ba408bd481a87a066ba`, containing performance implementation `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`, passed complete validation and live desktop and phone QA and is deployed as public Sites version 370. Exact package and deployment evidence is recorded in release truth.
 
 ## Next five logical product steps
 

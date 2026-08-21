@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: public-site performance recovery is locally complete and validated from the current version-369 application baseline. Exact-source release and live QA remain pending explicit release authorisation.
+Status: public-site performance recovery is released as Sites version 370. The next executable milestone is governed Surge knowledge.
 
 Prepared: 21 August 2026
 
@@ -8,21 +8,21 @@ Milestone ID: `AEA-PUBLIC-PERFORMANCE-RECOVERY-69`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `731b4fad33169d6ed952f4f521f39d7a35b669e6`
+Current production application source: `bc71dda1fa5e79f4529c4ba408bd481a87a066ba`
 
-Locally validated performance candidate: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
+Performance implementation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 369 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 370 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_7a79dd6eef688191af31bf26f4bed226`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d648a0683fac8191b4557857b047cf83`
 
-Current deployment: `appgdep_6a882210191481918f4cc973cc5f249e`
+Current deployment: `appgdep_6a8836cc0e288191b11a31849c948d9c`
 
 Current environment revision: 24
 
 Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
-## Active milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
+## Released milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
 
 ### User outcome
 
@@ -67,6 +67,8 @@ Every customer click should feel immediate, the home page must remain visually s
 - The shared header, home start paths and primary planner, electricity, gas, rebate and completed-enquiry handoffs use Next client navigation. Dense navigation and secondary card groups suppress eager prefetch so the homepage does not start downloading every destination.
 - `npm.cmd run validate` passes end to end: typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, the customer-plan PDF audit, Vinext production build, Sites bundle audit and the new public-performance budget audit.
 - Local in-app browser QA passes at desktop and 390 by 844 phone sizes across `/`, `/plan`, `/compare`, `/gas-compare`, `/calculator` and `/surge`. The home page remained visible after the reported idle interval with zero canvases, zero decorative overlay nodes and zero infinite animations; phone routes had no horizontal overflow. The ordinary-route Surge workspace stayed absent until the explicit open action, then opened as the accessible `Ask Surge AI` dialog.
+- GitHub and the Sites managed `main` branch both received exact release source `bc71dda1fa5e79f4529c4ba408bd481a87a066ba`. Sites stored 44,410,880 bytes across 477 files with content hash `sha256:b479c50096dc9def83591a5d4db0752bb80efaaeb76f907133e4c7a221f1f5a6` and deployed version 370 successfully with hosted environment revision 24.
+- Live desktop and 390 by 844 phone QA passed on the custom domain. The homepage remained fully visible after 20 seconds with image and copy opacity at 1, zero canvases, zero obsolete overlay nodes and zero infinite animations. Planner, electricity, gas, calculator and dedicated Surge routes loaded without horizontal overflow, and the ordinary-page Surge dialog appeared only after an explicit open action.
 
 ### Stop conditions
 
