@@ -3,7 +3,7 @@
 export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
   return (
     <a
-      aria-label="Ask Surge about an energy upgrade"
+      aria-label="Open Surge AI energy guide"
       aria-current={active ? "page" : undefined}
       className={`site-surge-link${active ? " active" : ""}`}
       href="/surge"
@@ -12,10 +12,10 @@ export function SurgeHeaderButton({ active = false }: { active?: boolean }) {
         <img src="/surge-mascot.png" alt="" width="28" height="35" decoding="async" />
       </span>
       <span className="site-surge-copy">
-        <strong>Ask Surge</strong>
+        <strong>Surge AI</strong>
         <small>Energy upgrade guide</small>
       </span>
-      <span className="site-surge-status" aria-hidden="true">Energy guide</span>
+      <span className="site-surge-status" aria-hidden="true">AI guide</span>
     </a>
   );
 }

@@ -38,7 +38,7 @@ test("the energy guide is mounted once at the root and excluded from print or PD
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
 
-test("the dedicated Surge route keeps chat present without a launcher, close control or modal behaviour", () => {
+test("the dedicated Surge AI route keeps chat present without a launcher, close control or modal behaviour", () => {
   assert.match(surgeRoute, /SiteHeader active="surge"/);
   assert.match(surgeRoute, /className=\{styles\.chrome\}/);
   assert.match(surgeRouteStyles, /max-width: var\(--layout-max\)/);
@@ -48,16 +48,16 @@ test("the dedicated Surge route keeps chat present without a launcher, close con
   assert.match(widget, /\{!dedicated && <div className=\{styles\.launcherWrap\}>/);
   assert.match(widget, /role=\{dedicated \? "region" : "dialog"\}/);
   assert.match(widget, /aria-modal=\{dedicated \? undefined : "true"\}/);
-  assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge"/);
-  assert.match(styles, /\.rootDedicated \{[^}]*position: relative;[^}]*width: 100%;/);
-  assert.match(styles, /\.rootDedicated \.panel \{[^}]*width: 100%;/);
+  assert.match(widget, /\{!dedicated && <button type="button" aria-label="Close Surge AI"/);
+  assert.match(styles, /\.rootDedicated \{[\s\S]*?position: relative;[\s\S]*?width: 100%;/);
+  assert.match(styles, /\.rootDedicated \.panel \{[\s\S]*?width: min\(1040px, 70vw\);/);
   assert.match(styles, /\.rootDedicated \.starters \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);
   assert.match(widget, /if \(!effectiveOpen \|\| dedicated\) return;/);
 });
 
-test("Surge opens with a clean grouped roadmap and keeps answers conversational", () => {
+test("Surge AI starts with a home profile, then a clean grouped roadmap and conversational answers", () => {
   for (const label of [
     "Improve my home",
     "Costs and support",
@@ -71,18 +71,27 @@ test("Surge opens with a clean grouped roadmap and keeps answers conversational"
   ]) {
     assert.match(widget, new RegExp(label.replace(/[?]/g, "\\?")));
   }
-  assert.match(widget, /Ask Surge/);
+  assert.match(widget, /Ask Surge AI/);
   assert.match(widget, /All things energy upgrades/);
-  assert.match(widget, /Hi, I am Surge/);
+  assert.match(widget, /Hi, I am Surge AI/);
   assert.match(widget, /I will explain it clearly and ask one useful question at a time/);
   assert.match(widget, /START_ROADMAP\.map\(\(group\) =>/);
-  assert.match(widget, /messages\.length === 0 && \([\s\S]*styles\.welcome/);
-  assert.match(widget, /messages\.length === 0 && \([\s\S]*styles\.starters/);
+  assert.match(widget, /messages\.length === 0 && !needsStarterProfile[\s\S]*styles\.welcome/);
+  assert.match(widget, /messages\.length === 0 && !needsStarterProfile[\s\S]*styles\.starters/);
   assert.doesNotMatch(widget, /Quick tools|context\.tools\.map|styles\.pageTools/);
   assert.doesNotMatch(styles, /\.pageTools|\.contextCard/);
   assert.doesNotMatch(widget, /\bAEA\b/);
   assert.doesNotMatch(widget, />AI chat</i);
-  assert.match(widget, />Surge</);
+  assert.match(widget, />Surge AI</);
+  assert.match(widget, /Tell Surge AI about the home/);
+  assert.match(widget, /needsStarterProfile/);
+  assert.match(widget, /Property postcode/);
+  assert.match(widget, /Your relationship to the home/);
+  assert.match(widget, /People usually living here/);
+  assert.match(widget, /What matters most right now\?/);
+  assert.match(widget, /Start with my home/);
+  assert.match(widget, /className=\{styles\.assistantAvatar\}/);
+  assert.match(widget, /src="\/surge-mascot\.png"/);
   assert.doesNotMatch(widget, />What to do next</);
   assert.doesNotMatch(widget, /practicalSteps\.slice\(0, 3\)/);
   assert.doesNotMatch(widget, />Best next action</);
@@ -94,13 +103,12 @@ test("Surge opens with a clean grouped roadmap and keeps answers conversational"
   assert.match(widget, /function naturalFollowUpFor/);
   assert.match(widget, /styles\.clarifyingQuestion/);
   assert.doesNotMatch(widget, /styles\.answerTools/);
-  assert.match(widget, /\.slice\(0, 3\)/);
   assert.match(widget, /answerStatus === "source_review_required"/);
 });
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
   assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*planContext,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
-  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current\)/);
+  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current, profile\)/);
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
@@ -116,11 +124,11 @@ test("Surge receives only bounded completed planner answers and excludes them fr
   assert.match(widget, /const planContext = context\.audience === "trade" \? null : await readStoredPlanContext\(\)/);
   assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*planContext,[\s\S]*pageContext:/);
   assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
-  assert.match(planner, /If you ask Surge, completed plan answers are sent as bounded context/);
+  assert.match(planner, /If you ask Surge AI, completed plan answers are sent as bounded context/);
   assert.match(planner, /photos and contact details are not included/);
   assert.match(privacy, /completed steps in the home energy planner in the same browser tab/);
-  assert.match(privacy, /Planner photos, uploads and contact details are not included/);
-  assert.match(privacy, /Newer details you tell Surge override a conflicting saved-plan answer/);
+  assert.match(privacy, /Planner photos and contact details are not included/);
+  assert.match(privacy, /Newer details you tell Surge AI override a conflicting saved-plan answer/);
   assert.match(privacy, /Trade mode does not read a locally saved household plan/);
 });
 
@@ -133,7 +141,7 @@ test("the tucked mascot preference survives customer-page navigation until expli
   assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\)/);
   assert.match(widget, /window\.addEventListener\("storage", syncDisplayPreference\)/);
   assert.match(widget, /event\.key !== DISPLAY_PREFERENCE_KEY/);
-  assert.match(widget, /aria-label="Bring Surge back and open chat"/);
+  assert.match(widget, /aria-label="Bring Surge AI back and open chat"/);
 
   const resetStart = widget.indexOf("const clearLocalSession = useCallback");
   const resetEnd = widget.indexOf("useEffect(() =>", resetStart);
@@ -152,13 +160,13 @@ test("customer pages open the single shared Surge widget through one reusable ev
   assert.match(widget, /setMascotTucked\(false\);[\s\S]*storeMascotTucked\(false\);[\s\S]*setOpenPathname\(pathname\);[\s\S]*setOpen\(true\)/);
   assert.match(widget, /if \(nextDraft\) setDraft\(nextDraft\)/);
   assert.equal((planner.match(/<SurgeOpenButton/g) || []).length, 2);
-  assert.match(planner, /Ask Surge about the planner/);
-  assert.match(planner, /Ask Surge about this roadmap/);
+  assert.match(planner, /Ask Surge AI about the planner/);
+  assert.match(planner, /Ask Surge AI about this roadmap/);
   assert.equal((gettingStarted.match(/<SurgeOpenButton/g) || []).length, 1);
-  assert.match(gettingStarted, /Ask Surge first/);
+  assert.match(gettingStarted, /Ask Surge AI first/);
 });
 
-test("only bounded local transcript, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
+test("only bounded local transcript, home profile, continuation, last activity and guide mode are persisted while the panel starts closed", () => {
   const persisted = [...widget.matchAll(/storeSession\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/g)];
   assert.ok(persisted.length > 0);
   const persistedSource = persisted.map((match) => match[1]).join("\n");
@@ -166,11 +174,12 @@ test("only bounded local transcript, continuation, last activity and guide mode 
   assert.match(persistedSource, /mode/);
   assert.match(persistedSource, /messages:\s*boundedLocalMessages\(messages\)/);
   assert.match(persistedSource, /continuation:\s*continuationRef\.current/);
+  assert.match(persistedSource, /profile/);
   assert.match(persistedSource, /lastActive/);
   assert.match(widget, /const MAX_LOCAL_MESSAGES = 40/);
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
-  assert.doesNotMatch(persistedSource, /lead|draft|postcode|email|phone|serviceConsent|marketingConsent/);
+  assert.doesNotMatch(persistedSource, /lead|draft|email|phone|serviceConsent|marketingConsent/);
   assert.match(widget, /Chat history stays on this device for 30 days\. Your question and recent context are securely processed to answer you\./);
   assert.match(widget, />\s*Clear conversation/);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
@@ -336,6 +345,8 @@ test("browser storage failures cannot break widget hydration, persistence or res
 test("local continuation caps messages and recent API context and expires after 30 days", () => {
   const helperSource = [
     functionSource(widget, "boundedLocalMessages"),
+    functionSource(widget, "starterProfile"),
+    functionSource(widget, "starterProfileContext"),
     functionSource(widget, "recentTurnsForRequest"),
     functionSource(widget, "savedConversation"),
   ].join("\n");
@@ -353,6 +364,11 @@ test("local continuation caps messages and recent API context and expires after 
     "asString",
     "parseMessage",
     "parseSurgeConversationState",
+    "EMPTY_STARTER_PROFILE",
+    "PROFILE_RELATIONSHIPS",
+    "PROFILE_HOME_TYPES",
+    "PROFILE_HOUSEHOLD_SIZES",
+    "PROFILE_PRIORITIES",
     `${compiled}; return { boundedLocalMessages, recentTurnsForRequest, savedConversation };`,
   )(
     40,
@@ -365,6 +381,18 @@ test("local continuation caps messages and recent API context and expires after 
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
     (value, role) => ({ ...value, role }),
     (value) => value && typeof value === "object" && value.version === 1 ? value : null,
+    {
+      postcode: "",
+      relationship: "owner-occupier",
+      homeType: "detached-house",
+      householdSize: "three-four",
+      priority: "lower-bills",
+      completed: false,
+    },
+    new Set(["owner-occupier", "renter", "landlord", "strata", "not-sure"]),
+    new Set(["detached-house", "townhouse", "apartment-unit", "rural-home", "not-sure"]),
+    new Set(["one", "two", "three-four", "five-plus", "not-sure"]),
+    new Set(["lower-bills", "comfort", "healthy-home", "electrify", "solar-storage", "not-sure"]),
   );
   const now = Date.parse("2026-08-20T02:00:00.000Z");
   const messages = Array.from({ length: 42 }, (_, index) => ({
@@ -386,6 +414,14 @@ test("local continuation caps messages and recent API context and expires after 
       pendingQuestion: "How much electricity do you use?",
       lastAnswerSummary: "The roof and electricity use still need checking.",
     },
+    profile: {
+      postcode: "3006",
+      relationship: "owner-occupier",
+      homeType: "detached-house",
+      householdSize: "three-four",
+      priority: "lower-bills",
+      completed: true,
+    },
   }, now);
   assert.equal(active.expired, false);
   assert.equal(active.messages.length, 40);
@@ -393,6 +429,8 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(active.mode, "trade");
   assert.equal(active.continuation.activeTopic, "solar");
   assert.deepEqual(active.continuation.facts, [{ key: "postcode", value: "3006" }]);
+  assert.equal(active.profile.postcode, "3006");
+  assert.equal(active.profile.completed, true);
   assert.equal("open" in active, false);
 
   const recent = helpers.recentTurnsForRequest(active.messages);
@@ -404,6 +442,17 @@ test("local continuation caps messages and recent API context and expires after 
   assert.ok(recent.every((turn) =>
     turn.role === (Number.parseInt(turn.content, 10) % 2 === 0 ? "user" : "assistant")));
   assert.ok(recent.reduce((total, turn) => total + turn.content.length, 0) <= 6_000);
+
+  const profiled = helpers.recentTurnsForRequest([
+    { role: "user", content: "What should I upgrade first?" },
+  ], active.profile);
+  assert.equal(profiled[0].role, "user");
+  assert.match(profiled[0].content, /postcode 3006/);
+  assert.match(profiled[0].content, /owner-occupier/);
+  assert.match(profiled[0].content, /detached house/);
+  assert.match(profiled[0].content, /three or four people/);
+  assert.match(profiled[0].content, /lower energy bills/);
+  assert.match(profiled[0].content, /What should I upgrade first\?/);
 
   const compactConversation = Array.from({ length: 12 }, (_, index) => ({
     role: index % 2 === 0 ? "user" : "assistant",
@@ -434,92 +483,13 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(expired.expired, true);
   assert.deepEqual(expired.messages, []);
   assert.equal(expired.continuation, null);
+  assert.equal(expired.profile.completed, false);
 });
 
-test("PDF and CSV analysis is dynamically local, failure-safe and never uploads the file", () => {
-  const analyserStart = widget.indexOf("const analyseDocument = async");
-  const analyserEnd = widget.indexOf("const clearDocument", analyserStart);
-  assert.notEqual(analyserStart, -1);
-  assert.notEqual(analyserEnd, -1);
-  const analyser = widget.slice(analyserStart, analyserEnd);
-  assert.match(analyser, /await import\("@\/lib\/energy-assistant-document"\)/);
-  assert.match(analyser, /analyseLocalEnergyDocument\(file\)/);
-  assert.match(analyser, /setShareDocumentSummary\(false\)/);
-  assert.match(analyser, /code:\s*"ANALYSER_LOAD_FAILED"/);
-  assert.match(analyser, /The file was not uploaded/);
-  assert.match(analyser, /input\.value = ""/);
-  assert.doesNotMatch(analyser, /fetch\(|FormData|XMLHttpRequest|sendBeacon/);
-
-  assert.match(widget, /accept="\.pdf,\.csv,application\/pdf,text\/csv,application\/csv"/);
-  assert.match(widget, /The file and extracted text are never uploaded or stored by the guide/);
-  assert.match(widget, /documentResult && !documentResult\.ok[\s\S]*role="alert"/);
-  assert.match(widget, /setDocumentResult\(null\)[\s\S]*setShareDocumentSummary\(false\)/);
-  assert.match(widget, /checked=\{shareDocumentSummary\}/);
-  assert.match(widget, /Include only this structured findings summary if I later send the optional Australian Energy Assessments service form/);
-
-  const leadSubmitStart = widget.indexOf("const submitLead = async");
-  const leadSubmitEnd = widget.indexOf("if (!hydrated", leadSubmitStart);
-  const leadSubmit = widget.slice(leadSubmitStart, leadSubmitEnd);
-  assert.match(leadSubmit, /documentSummary:\s*shareDocumentSummary \? structuredDocumentSummary : ""/);
-  assert.doesNotMatch(leadSubmit, /\bfile\b|arrayBuffer|documentResult|rawText|rawBytes|FormData/);
-});
-
-test("the optional quote lead summary never copies free-text quote lines", () => {
-  const compiled = ts.transpileModule(functionSource(widget, "documentLeadSummary"), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const summarise = Function(`${compiled}; return documentLeadSummary;`)();
-  const summary = summarise({
-    ok: true,
-    kind: "quote-pdf",
-    summary: {
-      pageCount: 2,
-      topics: ["solar-pv"],
-      scope: ["Supply and install 6.6 kW solar for John James at 42 Example Street"],
-      quotedItems: ["Panels for John James"],
-      metrics: [{ metric: "power-or-capacity", value: "6.6", unit: "kW", context: "for John James" }],
-      amounts: [{ label: "total", amount: "$8,500", context: "John James total" }],
-      missingEvidence: ["Exact products, quantities, datasheets and applicable registrations or approvals"],
-      questions: ["What site inspection and measured design inputs support the proposed scope and sizes?"],
-    },
-  });
-
-  assert.match(summary, /solar-pv/);
-  assert.match(summary, /power-or-capacity: 6\.6 kW/);
-  assert.match(summary, /total: \$8,500/);
-  assert.doesNotMatch(summary, /John James|42 Example Street|Panels for/i);
-});
-
-test("the local GVG result shows exact derived fields and only copies a reviewed summary into the question box", () => {
-  assert.match(widget, /documentResult\.kind === "vehicle-comparison-csv"/);
-  assert.match(widget, />Local Green Vehicle Guide comparison</);
-  for (const field of [
-    "energyConsumptionWhPerKm",
-    "electricRangeKm",
-    "currentModelInFile",
-    "testCycle",
-    "annualFuelCostAud",
-    "sameTestCycle",
-    "excludedRowCount",
-  ]) {
-    assert.ok(widget.includes(field), `missing local GVG field: ${field}`);
-  }
-  assert.match(widget, /Current-model flag in file/);
-  assert.match(widget, /Annual fuel cost in file/);
-  assert.match(widget, /Only the concise fields shown here are copied into the question box/);
-  assert.match(widget, />\s*Put this derived comparison in my question\s*</);
-
-  const copierStart = widget.indexOf("const useVehicleComparisonInQuestion =");
-  const copierEnd = widget.indexOf("const resetConversation", copierStart);
-  assert.notEqual(copierStart, -1);
-  assert.notEqual(copierEnd, -1);
-  const copier = widget.slice(copierStart, copierEnd);
-  assert.match(copier, /kind !== "vehicle-comparison-csv"/);
-  assert.match(copier, /setDraft\(`\$\{structuredDocumentSummary\}/);
-  assert.match(copier, /slice\(0, MAX_MESSAGE_LENGTH\)/);
-  assert.doesNotMatch(copier, /file|arrayBuffer|rawText|rawBytes|fetch\(|FormData/);
-  assert.match(styles, /\.documentVehicles/);
-  assert.match(styles, /\.documentUse/);
+test("Surge AI has no customer file-upload or local-document feature", () => {
+  assert.doesNotMatch(widget, /type="file"|accept="\.pdf|Choose PDF|documentResult|analyseDocument|documentLeadSummary|structuredDocumentSummary|shareDocumentSummary/);
+  assert.doesNotMatch(styles, /\.documentTool|\.documentPicker|\.documentResult|\.documentVehicles|\.documentUse/);
+  assert.doesNotMatch(privacy, /PDF quote|electricity interval file|bytes and extracted text/);
 });
 
 test("lead capture is optional, consent separated and retry safe", () => {
@@ -536,7 +506,7 @@ test("lead capture is optional, consent separated and retry safe", () => {
   assert.equal(signalsInterest("Help me find a service provider"), true);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
   assert.match(widget, /Your advice is not gated/);
-  assert.match(widget, /Surge never sends the raw conversation to trades/);
+  assert.match(widget, /Surge AI never sends the raw conversation to trades/);
   assert.match(widget, /Keep exploring or change subject/);
   assert.match(widget, /Continue asking or change subject/);
   assert.match(widget, /fetch\("\/api\/energy-assistant\/leads"/);
@@ -619,10 +589,10 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*70px[\s\S]*width:\s*60px/);
   assert.equal(mascotImage.subarray(1, 4).toString("ascii"), "PNG");
   assert.ok(mascotImage.byteLength > 100_000);
-  assert.match(widget, /aria-label="Hide Surge mascot"/);
-  assert.match(widget, /aria-label="Open Ask Surge"/);
-  assert.match(widget, /aria-label="Close Ask Surge"/);
-  assert.match(widget, /aria-label="Bring Surge back and open chat"/);
+  assert.match(widget, /aria-label="Hide Surge AI mascot"/);
+  assert.match(widget, /aria-label="Open Surge AI"/);
+  assert.match(widget, /aria-label="Close Surge AI"/);
+  assert.match(widget, /aria-label="Bring Surge AI back and open chat"/);
   assert.match(widget, /mascotTucked \? \(/);
   assert.match(widget, /setMascotTucked\(false\);\s*storeMascotTucked\(false\);\s*setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.match(styles, /\.launcherPeek\s*\{/);

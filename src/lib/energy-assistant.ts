@@ -3877,7 +3877,7 @@ export function composeEnergyAssistantAnswer(
       : "";
     return structured("bills_tariffs", {
       directAnswer:
-        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. Surge can calculate supplied terms but does not give personal financial advice.`,
+        `Compare the loan against the same installed cash scope and price, not against projected savings alone.${arithmetic} Add the lender's comparison rate, every fee, balloon, early-repayment terms and total repayment because the disclosure can change that simplified result. Keep rebates and energy savings as separate, independently verified lines. Surge AI can calculate supplied terms but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById(["asic-moneysmart-personal-loans", "energy-gov-reduce-energy-bills"]),
       confidence: arithmetic ? "medium" : "low",
@@ -3969,7 +3969,7 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out") {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Surge is here for Australian home energy and upgrades. It only covers Australian home energy and upgrade questions, including comfort, bills, appliances, solar, batteries, EVs, rebates, quotes and authorised trade workspace tasks.",
+        "Surge AI is here for Australian home energy and upgrades. It only covers Australian home energy and upgrade questions, including comfort, bills, appliances, solar, batteries, EVs, rebates, quotes and authorised trade workspace tasks.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -4931,7 +4931,7 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:best|most|rank|recommend|trust|trustworth(?:y|iness)|choose|compare|buy|purchase|select|shortlist|claims?|reputable|good)\b/i.test(query)) {
     return structured("products_ratings", {
       directAnswer:
-        "Surge does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
+        "Surge AI does not rank or endorse suppliers, installers, event exhibitors, brands or models. An event listing or marketing badge is not proof of suitability: compare the required licences, official product and recall records, site-specific scope, commissioning, warranty and local remedy process for the same job.",
       status: "needs_context",
       citations: officialCitationsById([
         "energy-rating-product-register",
@@ -6281,7 +6281,7 @@ export function composeEnergyAssistantAnswer(
               };
     return structured(comparedQuoteTopic, {
       directAnswer:
-        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. Surge does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
+        `Compare the ${comparison.label} proposals against one written job and the same evidence before comparing price. Surge AI does not rank or endorse a brand, supplier or model. Put ${comparison.criteria} side by side. Registration or programme listing proves only the stated official fact; it does not prove site suitability, complete installation or a savings claim. Any unknown remains a quote question or site-visit requirement, not a default.`,
       status: "needs_context",
       citations: officialCitationsById(comparison.citations),
       confidence: "medium",
@@ -6338,7 +6338,7 @@ export function composeEnergyAssistantAnswer(
       : ` At ${annualKm.toLocaleString("en-AU")} km a year, that Wh/km difference equals about ${annualDifferenceKwh.toLocaleString("en-AU", { maximumFractionDigits: 1 })} kWh of vehicle energy a year before charging losses.`;
     return structured("ev_charging", {
       directAnswer:
-        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and Surge does not endorse either model.`,
+        `${energyComparison}${rangeComparison}${annualComparison} This compares only the supplied same-cycle energy and certified-range facts. It does not prove real-world range, charging cost, reliability, safety, value or which vehicle a household should choose, and Surge AI does not endorse either model.`,
       status: "answered",
       citations: officialCitationsById(["green-vehicle-guide-compare"]),
       confidence: "medium",
@@ -6362,7 +6362,7 @@ export function composeEnergyAssistantAnswer(
   if (comparedVehicles) {
     return structured("ev_charging", {
       directAnswer:
-        `Surge will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
+        `Surge AI will not recommend either brand or model from the name alone. “${comparedVehicles.left}” and “${comparedVehicles.right}” may each cover multiple model years and variants, so first compare the exact variants on the same official Green Vehicle Guide test basis: certified electric range and energy use in Wh/km or kWh/100 km. Those laboratory figures are useful for like-for-like comparison, not a promise of usable real-world range; temperature, speed, load, tyres, battery state and charging losses change actual results. The local guide does not hold current variant rows and will not scrape or reverse-engineer the government service, so use the exact current GVG or windscreen-label values supplied for the two variants.`,
       status: "needs_context",
       citations: officialCitationsById(["green-vehicle-guide-compare", "energy-gov-ev-home-strata-charging"]),
       confidence: "medium",
@@ -6517,7 +6517,7 @@ export function composeEnergyAssistantAnswer(
       : ` If $${financeAmount.toLocaleString("en-AU")} is both the cash price and amount borrowed, ${financeAnnualRate}% is a nominal annual rate charged monthly, the term is ${financeTermYears} years and there are no fees or balloon, the standard repayment is about $${calculatedMonthlyRepayment.toLocaleString("en-AU", { maximumFractionDigits: 2 })} a month and total repayments are about $${calculatedTotalRepayment.toLocaleString("en-AU", { maximumFractionDigits: 0 })}, about $${(calculatedTotalRepayment - financeAmount).toLocaleString("en-AU", { maximumFractionDigits: 0 })} above cash. The lender's comparison rate and disclosure can change that result.`;
     return structured("rebates_certificates", {
       directAnswer:
-        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. Surge can structure the comparison but does not give personal financial advice.`,
+        `Finance is not a rebate and does not prove that the energy upgrade will save money.${mortgageBoundary}${suppliedFinanceArithmetic} Compare the cash installed price with the added loan amount, term, comparison rate and every fee, and calculate the extra total repayments. Model bill savings separately under low and high cases, and subtract only independently confirmed support. Surge AI can structure the comparison but does not give personal financial advice.`,
       status: "needs_context",
       citations: officialCitationsById([
         "energy-gov-household-energy-upgrades-fund",
@@ -6670,7 +6670,7 @@ export function composeEnergyAssistantAnswer(
       "rebates_certificates",
     ]);
     const independence =
-      "Surge does not recommend, rank or endorse brands. I will help you compare the right things without pushing a brand.";
+      "Surge AI does not recommend, rank or endorse brands. I will help you compare the right things without pushing a brand.";
     const hotWaterPurpose = /\b(?:hot[- ]?water|HWS|HPHW|HPWH|water heater)\b/i.test(playbookConversation);
     const spaceHeatingPurpose = /\b(?:reverse[ -]cycle|RCAC|heater|heating system|air conditioner|air conditioning|space heating|heating and cooling)\b/i.test(playbookConversation);
     const immediateCategoryAnswer = hotWaterPurpose

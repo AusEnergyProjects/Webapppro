@@ -105,22 +105,22 @@ test("shared navigation prioritises the planner, electricity and gas journeys", 
   assert.match(gettingStartedRoute, /redirect\("\/plan"\)/);
 });
 
-test("the futuristic header links to one dedicated always-present Surge page", () => {
+test("the futuristic header links to one dedicated always-present Surge AI page", () => {
   assert.equal(chrome.match(/<SurgeHeaderButton active=\{active === "surge"\} \/>/g)?.length, 1);
   assert.doesNotMatch(chrome, /EnergyAssistantWidget|requestSurgeOpen/);
   assert.match(surgeHeaderButton, /href="\/surge"/);
   assert.match(surgeHeaderButton, /active = false/);
   assert.match(surgeHeaderButton, /aria-current=\{active \? "page" : undefined\}/);
   assert.doesNotMatch(surgeHeaderButton, /requestSurgeOpen|onClick|aria-haspopup|aria-controls|type="button"/);
-  assert.match(surgeHeaderButton, /aria-label="Ask Surge about an energy upgrade"/);
+  assert.match(surgeHeaderButton, /aria-label="Open Surge AI energy guide"/);
   assert.match(surgeHeaderButton, /className=\{`site-surge-link\$\{active \? " active" : ""\}`\}/);
   assert.match(surgeHeaderButton, /className="site-surge-core"/);
   assert.match(surgeHeaderButton, /src="\/surge-mascot\.png"[\s\S]*?width="28" height="35"/);
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
-  assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Ask Surge<\/strong>/);
-  assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>Energy guide<\/span>/);
+  assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Surge AI<\/strong>/);
+  assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>AI guide<\/span>/);
   assert.match(surgeRoute, /SiteHeader active="surge"/);
-  assert.match(surgeRoute, /Ask Surge \| Australian Energy Assessments/);
+  assert.match(surgeRoute, /Surge AI \| Australian Energy Assessments/);
   assert.match(styles, /\.site-surge-link \{[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);
   assert.match(styles, /\.site-surge-core \{[^}]*animation: site-surge-pulse/);
@@ -141,18 +141,10 @@ test("public navigation keeps the TLink trade workspace clearly branded", () => 
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
-test("shared navigation only advertises options that remain offscreen", () => {
+test("desktop navigation shows every option while mobile keeps a compact scrollable row", () => {
   assert.match(chrome, /<ResponsiveSiteNav>/);
-  assert.match(responsiveNav, /nav\.scrollWidth - nav\.clientWidth - nav\.scrollLeft/);
-  assert.match(responsiveNav, /remainingOverflow > OVERFLOW_TOLERANCE_PX/);
-  assert.match(responsiveNav, /hasHiddenOptions \? \(/);
-  assert.match(responsiveNav, /className="site-nav-discovery" id="site-nav-discovery"/);
-  assert.match(responsiveNav, /aria-describedby=\{hasHiddenOptions \? "site-nav-discovery" : undefined\}/);
-  assert.match(responsiveNav, /Scroll for more options/);
-  assert.match(responsiveNav, /new ResizeObserver\(updateOverflowState\)/);
-  assert.match(responsiveNav, /new MutationObserver/);
-  assert.match(responsiveNav, /nav\.addEventListener\("scroll", updateOverflowState/);
-  assert.match(responsiveNav, /window\.addEventListener\("resize", updateOverflowState\)/);
+  assert.match(responsiveNav, /aria-label="Primary navigation"/);
+  assert.doesNotMatch(responsiveNav, /Energy services|Scroll for more options|ResizeObserver|MutationObserver|hasHiddenOptions/);
   assert.match(
     styles,
     /\.comparator-nav \{[^}]*justify-content: flex-start;[^}]*overflow-x: auto;/,
@@ -161,15 +153,8 @@ test("shared navigation only advertises options that remain offscreen", () => {
     styles,
     /\.comparator-nav \{[^}]*justify-content: flex-end;/,
   );
-  assert.match(
-    styles,
-    /\.site-nav-shell\.has-hidden-options \.site-nav-discovery \{[^}]*display: flex;/,
-  );
-  assert.doesNotMatch(styles, /@media \(max-width: 1320px\) \{[\s\S]*?\.site-nav-discovery \{[^}]*display: flex;/);
-  assert.match(styles, /\.site-nav-shell\.has-hidden-options::after \{[^}]*linear-gradient/);
-  assert.match(styles, /\.comparator-nav \{[^}]*padding: 2px 34px 5px 2px;/);
-  assert.match(styles, /scroll-snap-type: x proximity/);
-  assert.match(styles, /\.comparator-nav a \{ scroll-snap-align: start; \}/);
+  assert.doesNotMatch(styles, /site-nav-discovery|has-hidden-options/);
+  assert.match(styles, /@media \(min-width: 721px\) \{[\s\S]*?\.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(8, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
   assert.match(
     styles,
     /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; \}/,
@@ -235,9 +220,9 @@ test("shared visual foundation uses the polished responsive system", () => {
   assert.doesNotMatch(styles, /\.electricity-comparison-page \.brandname/);
   assert.doesNotMatch(`${styles}\n${customerAndToolTypography}\n${legacyComparator}`, /Source Serif|Georgia, serif|font-family:'Lato'/);
   assert.match(styles, /\.site-header \{/);
-  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(styles, /\.site-header \{ display: grid;[^}]*overflow: hidden;/);
-  assert.match(styles, /\.site-header \.site-nav-shell \{[^}]*grid-column: 2; grid-row: 1;/);
+  assert.match(styles, /\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 2;/);
   assert.match(styles, /@keyframes site-header-atmosphere/);
   assert.match(styles, /@keyframes site-header-sheen/);
   assert.match(styles, /@keyframes site-surge-pulse/);

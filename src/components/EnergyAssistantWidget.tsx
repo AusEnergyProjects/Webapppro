@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
   useCallback,
@@ -10,8 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import type { EnergyDocumentAnalysis } from "@/lib/energy-assistant-document";
 import {
   parseSurgeConversationState,
   type SurgeConversationState,
@@ -97,14 +96,18 @@ type SavedConversation = {
   mode: Audience;
   messages: AssistantMessage[];
   continuation: SurgeConversationState | null;
+  profile: SurgeStarterProfile;
   lastActive: string;
   expired: boolean;
 };
 
-type LocalDocumentState = EnergyDocumentAnalysis | {
-  ok: false;
-  code: "ANALYSER_LOAD_FAILED";
-  message: string;
+type SurgeStarterProfile = {
+  postcode: string;
+  relationship: "owner-occupier" | "renter" | "landlord" | "strata" | "not-sure";
+  homeType: "detached-house" | "townhouse" | "apartment-unit" | "rural-home" | "not-sure";
+  householdSize: "one" | "two" | "three-four" | "five-plus" | "not-sure";
+  priority: "lower-bills" | "comfort" | "healthy-home" | "electrify" | "solar-storage" | "not-sure";
+  completed: boolean;
 };
 
 const STORAGE_KEY = "aea-energy-guide-v1";
@@ -116,6 +119,28 @@ const MAX_LOCAL_STORAGE_CHARACTERS = 160_000;
 const MAX_RECENT_TURNS = 8;
 const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
 const LOCAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+const EMPTY_STARTER_PROFILE: SurgeStarterProfile = {
+  postcode: "",
+  relationship: "owner-occupier",
+  homeType: "detached-house",
+  householdSize: "three-four",
+  priority: "lower-bills",
+  completed: false,
+};
+
+const PROFILE_RELATIONSHIPS = new Set<SurgeStarterProfile["relationship"]>([
+  "owner-occupier", "renter", "landlord", "strata", "not-sure",
+]);
+const PROFILE_HOME_TYPES = new Set<SurgeStarterProfile["homeType"]>([
+  "detached-house", "townhouse", "apartment-unit", "rural-home", "not-sure",
+]);
+const PROFILE_HOUSEHOLD_SIZES = new Set<SurgeStarterProfile["householdSize"]>([
+  "one", "two", "three-four", "five-plus", "not-sure",
+]);
+const PROFILE_PRIORITIES = new Set<SurgeStarterProfile["priority"]>([
+  "lower-bills", "comfort", "healthy-home", "electrify", "solar-storage", "not-sure",
+]);
 
 const START_ROADMAP = [
   {
@@ -455,7 +480,7 @@ function pageContext(pathname: string, rememberedAudience: Audience = "public"):
     audience: "public",
     apiPath: safePublicPath,
     modeLabel: "Household guide",
-    intro: "Hi, I am Surge. Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
+    intro: "Hi, I am Surge AI. Tell me what you want to improve, compare or understand. I will explain it clearly and ask one useful question at a time. No contact details needed.",
   };
 }
 
@@ -472,7 +497,69 @@ function boundedLocalMessages(value: unknown): AssistantMessage[] {
   return parsed;
 }
 
-function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
+function starterProfile(value: unknown): SurgeStarterProfile {
+  const record = asRecord(value);
+  const postcode = asString(record?.postcode, 4);
+  const relationship = PROFILE_RELATIONSHIPS.has(record?.relationship as SurgeStarterProfile["relationship"])
+    ? record?.relationship as SurgeStarterProfile["relationship"]
+    : EMPTY_STARTER_PROFILE.relationship;
+  const homeType = PROFILE_HOME_TYPES.has(record?.homeType as SurgeStarterProfile["homeType"])
+    ? record?.homeType as SurgeStarterProfile["homeType"]
+    : EMPTY_STARTER_PROFILE.homeType;
+  const householdSize = PROFILE_HOUSEHOLD_SIZES.has(record?.householdSize as SurgeStarterProfile["householdSize"])
+    ? record?.householdSize as SurgeStarterProfile["householdSize"]
+    : EMPTY_STARTER_PROFILE.householdSize;
+  const priority = PROFILE_PRIORITIES.has(record?.priority as SurgeStarterProfile["priority"])
+    ? record?.priority as SurgeStarterProfile["priority"]
+    : EMPTY_STARTER_PROFILE.priority;
+  return {
+    postcode: /^\d{4}$/.test(postcode) ? postcode : "",
+    relationship,
+    homeType,
+    householdSize,
+    priority,
+    completed: record?.completed === true && /^\d{4}$/.test(postcode),
+  };
+}
+
+function starterProfileContext(profile: SurgeStarterProfile) {
+  if (!profile.completed) return "";
+  const relationship = {
+    "owner-occupier": "owner-occupier",
+    renter: "renter",
+    landlord: "landlord",
+    strata: "strata or owners corporation member",
+    "not-sure": "relationship to the property not yet confirmed",
+  }[profile.relationship];
+  const homeType = {
+    "detached-house": "detached house",
+    townhouse: "townhouse, terrace, villa or duplex",
+    "apartment-unit": "apartment or unit",
+    "rural-home": "rural home",
+    "not-sure": "home type not yet confirmed",
+  }[profile.homeType];
+  const householdSize = {
+    one: "one person",
+    two: "two people",
+    "three-four": "three or four people",
+    "five-plus": "five or more people",
+    "not-sure": "household size not yet confirmed",
+  }[profile.householdSize];
+  const priority = {
+    "lower-bills": "lower energy bills",
+    comfort: "a warmer winter home and cooler summer home",
+    "healthy-home": "healthier air and moisture control",
+    electrify: "moving away from gas",
+    "solar-storage": "solar or battery options",
+    "not-sure": "the best first upgrade",
+  }[profile.priority];
+  return `Household starting point: postcode ${profile.postcode}; ${relationship}; ${homeType}; ${householdSize}; main goal is ${priority}. Treat newer details in the chat as corrections.`;
+}
+
+function recentTurnsForRequest(
+  messages: readonly AssistantMessage[],
+  profile: SurgeStarterProfile = EMPTY_STARTER_PROFILE,
+) {
   const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const message of messages) {
     const content = message.content.trim().slice(0, MAX_MESSAGE_LENGTH);
@@ -480,6 +567,17 @@ function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
     const turn = { role: message.role, content };
     if (turns.at(-1)?.role === turn.role) turns[turns.length - 1] = turn;
     else turns.push(turn);
+  }
+  const profileContext = starterProfileContext(profile);
+  if (profileContext) {
+    if (turns[0]?.role === "user") {
+      turns[0] = {
+        role: "user",
+        content: `${profileContext}\n${turns[0].content}`.slice(0, MAX_MESSAGE_LENGTH),
+      };
+    } else {
+      turns.unshift({ role: "user", content: profileContext });
+    }
   }
   if (turns.length > MAX_RECENT_TURNS) {
     turns.splice(0, turns.length - MAX_RECENT_TURNS);
@@ -492,68 +590,6 @@ function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
   return turns;
 }
 
-function documentLeadSummary(result: LocalDocumentState | null) {
-  if (!result?.ok) return "";
-  if (result.kind === "quote-pdf") {
-    const metrics = result.summary.metrics.slice(0, 4).map((metric) =>
-      `${metric.metric}: ${metric.value} ${metric.unit}`,
-    );
-    const amounts = result.summary.amounts.slice(0, 4).map((amount) =>
-      `${amount.label}: ${amount.amount}`,
-    );
-    return [
-      `Local quote review. Topics: ${result.summary.topics.join(", ") || "not classified"}.`,
-      `Pages reviewed locally: ${result.summary.pageCount}.`,
-      metrics.length ? `Detected values: ${metrics.join("; ")}.` : "",
-      amounts.length ? `Detected amounts: ${amounts.join("; ")}.` : "",
-      result.summary.missingEvidence.length
-        ? `Missing evidence to confirm: ${result.summary.missingEvidence.slice(0, 4).join("; ")}.`
-        : "",
-      result.summary.questions.length ? `Priority question: ${result.summary.questions[0]}` : "",
-    ].filter(Boolean).join(" ").slice(0, 800);
-  }
-  if (result.kind === "vehicle-comparison-csv") {
-    const vehicles = result.summary.vehicles.slice(0, 3).map((vehicle) => [
-      `${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.variant}`,
-      `${vehicle.energyConsumptionWhPerKm} Wh/km`,
-      `${vehicle.electricRangeKm} km laboratory range`,
-      `current-model flag in file: ${vehicle.currentModelInFile ? "yes" : "no"}`,
-      `test cycle: ${vehicle.testCycle}`,
-      typeof vehicle.annualFuelCostAud === "number"
-        ? `annual fuel cost in file: $${vehicle.annualFuelCostAud.toLocaleString("en-AU")}`
-        : "",
-    ].filter(Boolean).join(", "));
-    return [
-      `Local Green Vehicle Guide CSV comparison: ${vehicles.join("; ")}.`,
-      result.summary.vehicles.length > vehicles.length
-        ? `${result.summary.vehicles.length - vehicles.length} more validated vehicle row${result.summary.vehicles.length - vehicles.length === 1 ? "" : "s"} remain in the local result.`
-        : "",
-      result.summary.sameTestCycle
-        ? `All shown vehicles use ${result.summary.testCycles[0]}.`
-        : `Mixed test cycles: ${result.summary.testCycles.join(", ")}; do not rank the laboratory figures as directly comparable.`,
-      "Real-world energy use and range depend on conditions and use.",
-    ].filter(Boolean).join(" ").slice(0, 800);
-  }
-  const totals = [
-    typeof result.summary.totals.importKwh === "number"
-      ? `${result.summary.totals.importKwh} kWh grid import`
-      : "",
-    typeof result.summary.totals.exportKwh === "number"
-      ? `${result.summary.totals.exportKwh} kWh grid export`
-      : "",
-  ].filter(Boolean).join(" and ");
-  return [
-    `Local interval-data review for ${result.summary.period.startDate} to ${result.summary.period.endDate}.`,
-    totals ? `Proven totals: ${totals}.` : "No direction-and-unit-proven total was calculated.",
-    result.summary.loadShape.busiestAverageInterval
-      ? `Highest average import interval starts at ${result.summary.loadShape.busiestAverageInterval}.`
-      : "",
-    result.summary.ambiguities.length
-      ? `Check before use: ${result.summary.ambiguities.slice(0, 3).join("; ")}.`
-      : "",
-  ].filter(Boolean).join(" ").slice(0, 800);
-}
-
 function savedConversation(value: unknown, now = Date.now()): SavedConversation {
   const record = asRecord(value);
   const lastActive = asString(record?.lastActive, 80);
@@ -563,6 +599,7 @@ function savedConversation(value: unknown, now = Date.now()): SavedConversation 
     mode: record?.mode === "trade" || record?.mode === "customer" ? record.mode : "public",
     messages: expired ? [] : boundedLocalMessages(record?.messages),
     continuation: expired ? null : parseSurgeConversationState(record?.continuation),
+    profile: expired ? EMPTY_STARTER_PROFILE : starterProfile(record?.profile),
     lastActive: expired ? "" : lastActive,
     expired,
   };
@@ -647,6 +684,7 @@ export function EnergyAssistantWidget() {
   const [mascotTucked, setMascotTucked] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
+  const [profile, setProfile] = useState<SurgeStarterProfile>(EMPTY_STARTER_PROFILE);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -666,12 +704,8 @@ export function EnergyAssistantWidget() {
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [localityLookupStatus, setLocalityLookupStatus] = useState<LocalityLookupStatus>("idle");
   const [localityLookupError, setLocalityLookupError] = useState("");
-  const [documentResult, setDocumentResult] = useState<LocalDocumentState | null>(null);
-  const [documentBusy, setDocumentBusy] = useState(false);
-  const [shareDocumentSummary, setShareDocumentSummary] = useState(false);
-
   const effectiveOpen = dedicated || (open && openPathname === pathname && !hidden);
-  const structuredDocumentSummary = documentLeadSummary(documentResult);
+  const needsStarterProfile = context.audience !== "trade" && messages.length === 0 && !profile.completed;
   const quoteQuestions = useMemo(
     () => energyAssistantQuoteQuestionsForServices(lead.services),
     [lead.services],
@@ -700,6 +734,7 @@ export function EnergyAssistantWidget() {
       mode: context.audience,
       messages: boundedMessages,
       continuation: continuationRef.current,
+      profile,
       lastActive: [...boundedMessages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
   };
@@ -718,6 +753,7 @@ export function EnergyAssistantWidget() {
     continuationRef.current = null;
     setMessages(nextMessages);
     setContinuation(null);
+    setProfile(EMPTY_STARTER_PROFILE);
     setHasUsefulAnswer(false);
     setServiceInterest(false);
     setLeadOpen(false);
@@ -732,9 +768,6 @@ export function EnergyAssistantWidget() {
     setLocalities([]);
     setLocalityLookupStatus("idle");
     setLocalityLookupError("");
-    setDocumentResult(null);
-    setDocumentBusy(false);
-    setShareDocumentSummary(false);
     setError("");
     setStatus(nextStatus);
     setBusy(false);
@@ -760,6 +793,7 @@ export function EnergyAssistantWidget() {
           continuationRef.current = saved.continuation;
           setMessages(saved.messages);
           setContinuation(saved.continuation);
+          setProfile(saved.profile);
           setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
           setServiceInterest(saved.messages.some((message) =>
             message.role === "user" && signalsServiceInterest(message.content)));
@@ -808,9 +842,10 @@ export function EnergyAssistantWidget() {
       mode: context.audience,
       messages: boundedLocalMessages(messages),
       continuation,
+      profile,
       lastActive: [...messages].reverse().find((message) => message.createdAt)?.createdAt || "",
     }));
-  }, [context.audience, continuation, hydrated, messages]);
+  }, [context.audience, continuation, hydrated, messages, profile]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -922,7 +957,7 @@ export function EnergyAssistantWidget() {
   const ask = async (question: string) => {
     const message = question.trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message || busy) return;
-    const recentTurns = recentTurnsForRequest(messagesRef.current);
+    const recentTurns = recentTurnsForRequest(messagesRef.current, profile);
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
       id: requestId,
@@ -987,39 +1022,11 @@ export function EnergyAssistantWidget() {
     void ask(draft);
   };
 
-  const analyseDocument = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file || documentBusy) return;
-    setDocumentBusy(true);
-    setDocumentResult(null);
-    setShareDocumentSummary(false);
-    resetLeadAttempt();
-    try {
-      const { analyseLocalEnergyDocument } = await import("@/lib/energy-assistant-document");
-      setDocumentResult(await analyseLocalEnergyDocument(file));
-    } catch {
-      setDocumentResult({
-        ok: false,
-        code: "ANALYSER_LOAD_FAILED",
-        message: "The local document checker could not start. The file was not uploaded. Please try again.",
-      });
-    } finally {
-      input.value = "";
-      setDocumentBusy(false);
-    }
-  };
-
-  const clearDocument = () => {
-    setDocumentResult(null);
-    setShareDocumentSummary(false);
-    resetLeadAttempt();
-  };
-
-  const useVehicleComparisonInQuestion = () => {
-    if (!documentResult?.ok || documentResult.kind !== "vehicle-comparison-csv" || !structuredDocumentSummary) return;
-    setDraft(`${structuredDocumentSummary}\n\nMy question: `.slice(0, MAX_MESSAGE_LENGTH));
-    window.requestAnimationFrame(() => composerRef.current?.focus());
+  const completeStarterProfile = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!/^\d{4}$/.test(profile.postcode)) return;
+    setProfile((current) => ({ ...current, completed: true }));
+    setStatus("");
   };
 
   const resetConversation = () => {
@@ -1153,7 +1160,6 @@ export function EnergyAssistantWidget() {
         requestId,
         submissionKey,
         grantedAt,
-        documentSummary: shareDocumentSummary ? structuredDocumentSummary : "",
       });
       const response = await fetch("/api/energy-assistant/leads", {
         method: "POST",
@@ -1195,7 +1201,7 @@ export function EnergyAssistantWidget() {
             className={styles.launcher}
             type="button"
             data-mascot-state={messages.length > 0 ? "returning" : "idle"}
-            aria-label="Close Ask Surge"
+            aria-label="Close Surge AI"
             aria-controls="aea-energy-guide"
             aria-expanded="true"
             onClick={close}
@@ -1207,7 +1213,7 @@ export function EnergyAssistantWidget() {
               ref={launcherRef}
               className={styles.launcherPeek}
               type="button"
-              aria-label="Bring Surge back and open chat"
+              aria-label="Bring Surge AI back and open chat"
               aria-controls="aea-energy-guide"
               aria-expanded="false"
               onClick={() => {
@@ -1226,7 +1232,7 @@ export function EnergyAssistantWidget() {
                 className={styles.launcher}
                 type="button"
                 data-mascot-state={messages.length > 0 ? "returning" : "idle"}
-                aria-label="Open Ask Surge"
+                aria-label="Open Surge AI"
                 aria-controls="aea-energy-guide"
                 aria-expanded="false"
                 onClick={() => {
@@ -1239,8 +1245,8 @@ export function EnergyAssistantWidget() {
               <button
                 className={styles.launcherDismiss}
                 type="button"
-                aria-label="Hide Surge mascot"
-                title="Hide Surge"
+                aria-label="Hide Surge AI mascot"
+                title="Hide Surge AI"
                 onClick={() => {
                   setMascotTucked(true);
                   storeMascotTucked(true);
@@ -1260,31 +1266,127 @@ export function EnergyAssistantWidget() {
           role={dedicated ? "region" : "dialog"}
           aria-modal={dedicated ? undefined : "true"}
           aria-labelledby="aea-energy-guide-title"
-          aria-describedby={messages.length === 0 ? "aea-energy-guide-description" : undefined}
+          aria-describedby={messages.length === 0 && !needsStarterProfile ? "aea-energy-guide-description" : undefined}
           tabIndex={dedicated ? undefined : -1}
           onKeyDown={dedicated ? undefined : trapFocus}
         >
           <header className={styles.header}>
             <div>
               <span className={styles.mode}>All things energy upgrades</span>
-              <h2 id="aea-energy-guide-title">Ask Surge</h2>
+              <h2 id="aea-energy-guide-title">Ask Surge AI</h2>
             </div>
-            {!dedicated && <button type="button" aria-label="Close Surge" onClick={close}>
+            {!dedicated && <button type="button" aria-label="Close Surge AI" onClick={close}>
               <span aria-hidden="true">×</span>
             </button>}
           </header>
 
           <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>
-            {messages.length === 0 && (
+            {needsStarterProfile && (
+              <form className={styles.intake} onSubmit={completeStarterProfile}>
+                <header>
+                  <span>Set the scene</span>
+                  <h3>Tell Surge AI about the home</h3>
+                  <p>Five quick answers give you a useful first response instead of generic advice. No name, email or phone number is needed.</p>
+                </header>
+                <div className={styles.intakeGrid}>
+                  <label>
+                    <span>Property postcode</span>
+                    <input
+                      required
+                      pattern="[0-9]{4}"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      maxLength={4}
+                      placeholder="For example 3000"
+                      value={profile.postcode}
+                      onChange={(event) => setProfile((current) => ({
+                        ...current,
+                        postcode: event.target.value.replace(/\D/g, "").slice(0, 4),
+                        completed: false,
+                      }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Your relationship to the home</span>
+                    <select value={profile.relationship} onChange={(event) => setProfile((current) => ({
+                      ...current,
+                      relationship: event.target.value as SurgeStarterProfile["relationship"],
+                      completed: false,
+                    }))}>
+                      <option value="owner-occupier">I own and live here</option>
+                      <option value="renter">I rent the home</option>
+                      <option value="landlord">I am the landlord</option>
+                      <option value="strata">Strata or owners corporation</option>
+                      <option value="not-sure">Not sure</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Home type</span>
+                    <select value={profile.homeType} onChange={(event) => setProfile((current) => ({
+                      ...current,
+                      homeType: event.target.value as SurgeStarterProfile["homeType"],
+                      completed: false,
+                    }))}>
+                      <option value="detached-house">Detached house</option>
+                      <option value="townhouse">Townhouse, terrace, villa or duplex</option>
+                      <option value="apartment-unit">Apartment or unit</option>
+                      <option value="rural-home">Rural home</option>
+                      <option value="not-sure">Not sure</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>People usually living here</span>
+                    <select value={profile.householdSize} onChange={(event) => setProfile((current) => ({
+                      ...current,
+                      householdSize: event.target.value as SurgeStarterProfile["householdSize"],
+                      completed: false,
+                    }))}>
+                      <option value="one">One person</option>
+                      <option value="two">Two people</option>
+                      <option value="three-four">Three or four people</option>
+                      <option value="five-plus">Five or more people</option>
+                      <option value="not-sure">Not sure</option>
+                    </select>
+                  </label>
+                  <label className={styles.intakePriority}>
+                    <span>What matters most right now?</span>
+                    <select value={profile.priority} onChange={(event) => setProfile((current) => ({
+                      ...current,
+                      priority: event.target.value as SurgeStarterProfile["priority"],
+                      completed: false,
+                    }))}>
+                      <option value="lower-bills">Lower energy bills</option>
+                      <option value="comfort">Feel warmer in winter and cooler in summer</option>
+                      <option value="healthy-home">Healthier air and moisture control</option>
+                      <option value="electrify">Move away from gas</option>
+                      <option value="solar-storage">Solar or battery options</option>
+                      <option value="not-sure">Help me work out the first priority</option>
+                    </select>
+                  </label>
+                </div>
+                <button className={styles.intakeContinue} type="submit">Start with my home</button>
+                <small>These answers stay in this browser with the conversation and can be changed at any time.</small>
+              </form>
+            )}
+
+            {messages.length === 0 && !needsStarterProfile && (
               <section className={styles.welcome} aria-labelledby="aea-start-heading">
                 <span>Start here</span>
                 <h3 id="aea-start-heading">What would you like help with?</h3>
                 <p id="aea-energy-guide-description">{context.intro}</p>
+                {context.audience !== "trade" && profile.completed && (
+                  <div className={styles.profileSummary}>
+                    <span>Using your postcode and home starting point</span>
+                    <button type="button" onClick={() => setProfile((current) => ({ ...current, completed: false }))}>
+                      Change details
+                    </button>
+                  </div>
+                )}
               </section>
             )}
 
-            {messages.length === 0 && (
-              <section className={styles.starters} aria-label="Ways Surge can help">
+            {messages.length === 0 && !needsStarterProfile && (
+              <section className={styles.starters} aria-label="Ways Surge AI can help">
                 {START_ROADMAP.map((group) => (
                   <div className={styles.starterGroup} key={group.label}>
                     <h4>{group.label}</h4>
@@ -1300,130 +1402,6 @@ export function EnergyAssistantWidget() {
               </section>
             )}
 
-            <details className={styles.documentTool}>
-              <summary>Check a quote, interval or vehicle CSV locally</summary>
-              <div>
-                <p id="aea-local-document-boundary">
-                  Choose a text-based PDF quote, electricity interval CSV or Green Vehicle Guide CSV. Analysis runs in this browser. The file and extracted text are never uploaded or stored by the guide.
-                </p>
-                <label className={styles.documentPicker}>
-                  <span>{documentBusy ? "Checking locally..." : "Choose PDF or CSV"}</span>
-                  <input
-                    type="file"
-                    accept=".pdf,.csv,application/pdf,text/csv,application/csv"
-                    aria-describedby="aea-local-document-boundary"
-                    disabled={documentBusy}
-                    onChange={(event) => void analyseDocument(event)}
-                  />
-                </label>
-                {documentBusy && <p className={styles.thinking} role="status">Reading and redacting the file in this browser...</p>}
-                {documentResult && !documentResult.ok && (
-                  <div className={styles.error} role="alert">
-                    <strong>{documentResult.code.replaceAll("_", " ")}</strong>
-                    <p>{documentResult.message}</p>
-                  </div>
-                )}
-                {documentResult?.ok && documentResult.kind === "quote-pdf" && (
-                  <section className={styles.documentResult} aria-labelledby="aea-local-quote-title">
-                    <h3 id="aea-local-quote-title">Local quote check</h3>
-                    <p>{documentResult.summary.reviewBoundary}</p>
-                    <dl>
-                      <div><dt>Topics found</dt><dd>{documentResult.summary.topics.join(", ")}</dd></div>
-                      <div><dt>Pages read</dt><dd>{documentResult.summary.pageCount}</dd></div>
-                    </dl>
-                    {documentResult.summary.missingEvidence.length > 0 && (
-                      <>
-                        <h4>Evidence to confirm</h4>
-                        <ul>{documentResult.summary.missingEvidence.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul>
-                      </>
-                    )}
-                    {documentResult.summary.questions.length > 0 && (
-                      <>
-                        <h4>Questions for the quote</h4>
-                        <ul>{documentResult.summary.questions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>
-                      </>
-                    )}
-                  </section>
-                )}
-                {documentResult?.ok && documentResult.kind === "interval-csv" && (
-                  <section className={styles.documentResult} aria-labelledby="aea-local-interval-title">
-                    <h3 id="aea-local-interval-title">Local interval-data check</h3>
-                    <p>{documentResult.summary.loadShape.tariffBoundary}</p>
-                    <dl>
-                      <div><dt>Period</dt><dd>{documentResult.summary.period.startDate} to {documentResult.summary.period.endDate}</dd></div>
-                      <div><dt>Coverage</dt><dd>{documentResult.summary.period.coveragePercent}%</dd></div>
-                      <div><dt>Intervals</dt><dd>{documentResult.summary.granularity}</dd></div>
-                      <div><dt>Grid import</dt><dd>{typeof documentResult.summary.totals.importKwh === "number" ? `${documentResult.summary.totals.importKwh} kWh` : "Not proven from the column labels and units"}</dd></div>
-                    </dl>
-                    {documentResult.summary.observations.length > 0 && (
-                      <>
-                        <h4>Load-shape observations</h4>
-                        <ul>{documentResult.summary.observations.slice(0, 5).map((item) => <li key={item}>{item}</li>)}</ul>
-                      </>
-                    )}
-                    {documentResult.summary.ambiguities.length > 0 && (
-                      <>
-                        <h4>Check before relying on totals</h4>
-                        <ul>{documentResult.summary.ambiguities.slice(0, 5).map((item) => <li key={item}>{item}</li>)}</ul>
-                      </>
-                    )}
-                  </section>
-                )}
-                {documentResult?.ok && documentResult.kind === "vehicle-comparison-csv" && (
-                  <section className={styles.documentResult} aria-labelledby="aea-local-vehicle-title">
-                    <h3 id="aea-local-vehicle-title">Local Green Vehicle Guide comparison</h3>
-                    <p>{documentResult.summary.comparisonBoundary}</p>
-                    <dl>
-                      <div><dt>Vehicles</dt><dd>{documentResult.summary.vehicleCount}</dd></div>
-                      <div><dt>Test cycle</dt><dd>{documentResult.summary.sameTestCycle ? documentResult.summary.testCycles[0] : `Mixed: ${documentResult.summary.testCycles.join(", ")}`}</dd></div>
-                      <div><dt>Excluded rows</dt><dd>{documentResult.summary.excludedRowCount}</dd></div>
-                    </dl>
-                    <ul className={styles.documentVehicles} aria-label="Vehicles in the local GVG comparison">
-                      {documentResult.summary.vehicles.map((vehicle) => (
-                        <li key={`${vehicle.year}-${vehicle.make}-${vehicle.model}-${vehicle.variant}`}>
-                          <strong>{vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant}</strong>
-                          <span>{vehicle.energyConsumptionWhPerKm} Wh/km</span>
-                          <span>{vehicle.electricRangeKm} km laboratory range</span>
-                          <span>Current-model flag in file: {vehicle.currentModelInFile ? "Yes" : "No"}</span>
-                          <span>Test cycle: {vehicle.testCycle}</span>
-                          {typeof vehicle.annualFuelCostAud === "number" && (
-                            <span>Annual fuel cost in file: ${vehicle.annualFuelCostAud.toLocaleString("en-AU")}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <p>{documentResult.summary.annualFuelCostBoundary}</p>
-                    {documentResult.summary.ambiguities.length > 0 && (
-                      <>
-                        <h4>Comparison limits</h4>
-                        <ul>{documentResult.summary.ambiguities.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul>
-                      </>
-                    )}
-                    <button className={styles.documentUse} type="button" onClick={useVehicleComparisonInQuestion}>
-                      Put this derived comparison in my question
-                    </button>
-                    <small>Only the concise fields shown here are copied into the question box. Review them before sending. The CSV stays local.</small>
-                  </section>
-                )}
-                {documentResult?.ok && structuredDocumentSummary && (
-                  <label className={styles.documentShare}>
-                    <input
-                      type="checkbox"
-                      checked={shareDocumentSummary}
-                      onChange={(event) => {
-                        setShareDocumentSummary(event.target.checked);
-                        resetLeadAttempt();
-                      }}
-                    />
-                    <span>Include only this structured findings summary if I later send the optional Australian Energy Assessments service form. Quote lines, file bytes and raw text stay local.</span>
-                  </label>
-                )}
-                {documentResult && (
-                  <button className={styles.documentClear} type="button" onClick={clearDocument}>Clear local document result</button>
-                )}
-              </div>
-            </details>
-
             {messages.length > 0 && (
                   <ol className={styles.messages} aria-label="Energy guide conversation" aria-live="polite" aria-relevant="additions text">
                 {messages.map((message) => (
@@ -1431,9 +1409,13 @@ export function EnergyAssistantWidget() {
                     {message.role === "user" ? (
                       <p>{message.content}</p>
                     ) : (
-                      <article className={styles.answerCard}>
+                      <>
+                        <span className={styles.assistantAvatar} aria-hidden="true">
+                          <Image src="/surge-mascot.png" alt="" width={56} height={70} />
+                        </span>
+                        <article className={styles.answerCard}>
                         <header>
-                          <span>Surge</span>
+                          <span>Surge AI</span>
                         </header>
                         {message.answerStatus === "source_review_required" && (
                           <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
@@ -1442,21 +1424,22 @@ export function EnergyAssistantWidget() {
                         {naturalFollowUpFor(message, context.audience) && (
                           <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
                         )}
-                      </article>
+                        </article>
+                      </>
                     )}
                   </li>
                 ))}
               </ol>
             )}
 
-            {busy && <p className={styles.thinking} role="status">Surge is checking that...</p>}
+            {busy && <p className={styles.thinking} role="status">Surge AI is checking that...</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
             {status && <p className={styles.status} role="status">{status}</p>}
 
             {hasUsefulAnswer && serviceInterest && !leadOpen && (
               <section className={styles.leadOffer}>
                 <strong>Explore quote or service options, if you want to</strong>
-                <p>Only details you choose in the optional form go to Australian Energy Assessments. Your advice is not gated, and Surge never sends the raw conversation to trades.</p>
+                <p>Only details you choose in the optional form go to Australian Energy Assessments. Your advice is not gated, and Surge AI never sends the raw conversation to trades.</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -1481,9 +1464,6 @@ export function EnergyAssistantWidget() {
                   <button type="button" aria-label="Close service request" onClick={() => setLeadOpen(false)}>×</button>
                 </header>
                 <p>Only the details you enter here go to Australian Energy Assessments so its team can respond using your contact details. The raw guide conversation is not sent to trades, and all advice above remains available whether or not you submit.</p>
-                {shareDocumentSummary && structuredDocumentSummary && (
-                  <p><strong>Structured local document findings selected for this request:</strong> {structuredDocumentSummary}</p>
-                )}
                 <button type="button" onClick={() => {
                   setLeadOpen(false);
                   window.requestAnimationFrame(() => composerRef.current?.focus());
@@ -1625,8 +1605,8 @@ export function EnergyAssistantWidget() {
             </footer>
           </div>
 
-          <form className={styles.composer} onSubmit={submitQuestion}>
-            <label htmlFor="aea-energy-guide-question">Ask Surge</label>
+          {(context.audience === "trade" || profile.completed || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
+            <label htmlFor="aea-energy-guide-question">Ask Surge AI</label>
             <div>
               <textarea
                 ref={composerRef}
@@ -1644,12 +1624,12 @@ export function EnergyAssistantWidget() {
                   }
                 }}
               />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge">
+              <button type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge AI">
                 <span aria-hidden="true">Send</span>
               </button>
             </div>
             <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
-          </form>
+          </form>}
         </section>
       )}
     </div>

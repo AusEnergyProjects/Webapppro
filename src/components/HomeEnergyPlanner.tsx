@@ -686,7 +686,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
                   <p>Enter the postcode, then review the common starting answers already selected below. Change anything that is different.</p>
                 </div>
                 <SurgeOpenButton
-                  label="Ask Surge about the planner"
+                  label="Ask Surge AI about the planner"
                   description="Get a plain-English answer before you choose."
                   draft="Help me understand how to answer this home energy planner. What should I check first?"
                 />
@@ -823,7 +823,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
               {stage > 0 ? <button type="button" className={styles.secondaryButton} onClick={() => { setAttemptedStage(null); setStage((current) => current - 1); }}>Back</button> : <button type="button" className={styles.textButton} onClick={resetPlan}>Reset</button>}
               <button type="submit" className={styles.primaryButton}>{stage === 3 ? "Build my roadmap" : "Next"}</button>
             </footer>
-            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. If you ask Surge, completed plan answers are sent as bounded context so you do not need to repeat them; photos and contact details are not included. Your plan is otherwise sent to Australian Energy Assessments only if you open the printable plan or request contact.</p>
+            <p className={styles.saveNote}>Progress is kept in this browser tab when storage is available. If you ask Surge AI, completed plan answers are sent as bounded context so you do not need to repeat them; photos and contact details are not included. Your plan is otherwise sent to Australian Energy Assessments only if you open the printable plan or request contact.</p>
           </section>
         </form>
       ) : (
@@ -837,8 +837,8 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Init
             </p>
           </div>
           <SurgeOpenButton
-            label="Ask Surge about this roadmap"
-            description="Surge can use the completed answers saved in this tab."
+            label="Ask Surge AI about this roadmap"
+            description="Surge AI can use the completed answers saved in this tab."
             draft="Use my saved home energy plan to explain what I should do first and why."
           />
           {firstActionItem ? (

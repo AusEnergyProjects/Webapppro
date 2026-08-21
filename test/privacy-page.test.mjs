@@ -15,11 +15,11 @@ const sitemap = read("../src/app/sitemap.ts");
 test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Privacy notice/);
   assert.match(privacy, /Protected leads and direct customers/);
-  assert.match(privacy, /Surge conversations/);
+  assert.match(privacy, /Surge AI conversations/);
   assert.match(privacy, /Up to 40 recent messages and a small conversation summary/);
   assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.match(privacy, /stateless guide endpoint/);
-  assert.match(privacy, /bounded set of recent user turns/);
+  assert.match(privacy, /bounded set of recent conversation turns/);
   assert.match(privacy, /relevant maintained energy guidance to OpenAI/);
   assert.match(privacy, /provider-side response storage disabled/);
   assert.match(privacy, /does not create or read a server-side conversation record/);
@@ -32,7 +32,7 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /Marketing consent is separate and off/);
   assert.match(privacy, /does not attach the raw conversation/);
   assert.match(privacy, /separately chooses trade sharing/);
-  assert.match(privacy, /bytes and extracted text are not uploaded or stored/);
+  assert.match(privacy, /Customer evidence must relate directly to the requested work/);
   assert.match(privacy, /Google Calendar, Outlook, Xero, MYOB or QuickBooks/);
   assert.match(privacy, /does not offer payment-provider connections or initiate customer payments/);
   assert.match(privacy, /do not sell personal information/i);
