@@ -1,18 +1,18 @@
 # Next task handover
 
-Status: the contextual Surge AI customer experience is released as public Sites version 368. The next executable milestone is governed knowledge depth and programme freshness.
+Status: the canonical Surge AI planner and optional enquiry workflow is released as public Sites version 369. The next executable milestone is governed knowledge depth and programme freshness.
 
 Prepared: 21 August 2026
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f`
+Current production application source: `731b4fad33169d6ed952f4f521f39d7a35b669e6`
 
-Current production: Sites version 368 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 369 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_760b37993258819193cda8672819443f`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_7a79dd6eef688191af31bf26f4bed226`
 
-Current deployment: `appgdep_6a87fa6d87888191a7e08239fdc0f8ef`
+Current deployment: `appgdep_6a882210191481918f4cc973cc5f249e`
 
 Current environment revision: 24
 
@@ -25,8 +25,11 @@ Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 - Desktop exposes all eight customer destinations without clipping. Phone navigation scrolls inside the header without widening the page.
 - `/surge` is the dedicated assistant destination. It reuses the one root-mounted widget and never mounts a duplicate assistant.
 - Surge AI uses a 3840 by 2160 command-centre background, translucent surfaces and a visible mascot avatar beside each assistant response.
-- A fresh public or customer chat collects postcode, relationship to the home, home type, household size and primary goal before the composer appears. Common answers are preselected but editable.
-- The profile is locally retained, exact-field and exact-option allowlisted and bounded. It excludes contact details, photos and arbitrary properties.
+- A fresh public or customer chat reviews the same 38 canonical questions as the Home Energy Planner across 13 staged sections, plus bounded practical routine and constraint details. Fresh material answers are unknown rather than guessed.
+- Surge AI and the planner share one question, option, draft, storage and plan-generation contract. `Open my energy plan` hands the exact same versioned session to `/plan`.
+- The profile is locally retained, exact-field and exact-option allowlisted and bounded. It excludes contact details, photos, uploads and arbitrary properties.
+- Advice and the private plan require no contact details. Australian Energy Assessments follow-up and matched-trade sharing are explicit, separate, mutually exclusive choices with sharing controls off by default.
+- Matched-trade sharing reuses the established public-plan customer email, internal relay, opportunity matching, trade notification, contact release and Interested-to-CRM workflow. The private plan and chat are not put in the trade envelope.
 - The quote, interval and vehicle upload analyser and its PDF parsing dependency have been removed from customer chat.
 - On other customer routes, the floating mascot and tuck preference continue to persist across same-origin routes, reloads and tabs until explicit unhide.
 - Completed planner answers may inform a later Surge AI question in the same browser tab. Only maintained fields and option values cross the API boundary.
@@ -65,8 +68,8 @@ Increase Surge's practical Australian household-energy knowledge without copying
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
 2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
-4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
 5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
 
 ## Historical release handovers

@@ -10,46 +10,50 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: contextual Surge AI customer experience
+## Current production release: canonical Surge AI planner and optional enquiry workflow
 
-Application source `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 368 at `https://compare.ausenergyassessments.com`.
+Application source `731b4fad33169d6ed952f4f521f39d7a35b669e6` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 369 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application commit | `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f` |
+| Application commit | `731b4fad33169d6ed952f4f521f39d7a35b669e6` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_760b37993258819193cda8672819443f` |
-| Public version | Sites version 368 |
-| Deployment | `appgdep_6a87fa6d87888191a7e08239fdc0f8ef` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_7a79dd6eef688191af31bf26f4bed226` |
+| Public version | Sites version 369 |
+| Deployment | `appgdep_6a882210191481918f4cc973cc5f249e` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:0e6065038b8a013baa00d2fbf2e0a78223f7370786e66d98c33a0b52a2de87d5` |
+| Package content hash | `sha256:0318528df5e975c0e1958cb12649fd5df44eb5e718c46fd07a8fa16c5ef9df19` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- The desktop cockpit header now exposes all eight customer destinations without clipping. Phone navigation remains internally scrollable without creating page-width overflow. The redundant header labels were removed.
-- Surge is now presented as Surge AI across customer pages, the dedicated destination and the header, while the deliberate TLink logo and trade-workspace bridge remain visible.
-- A fresh public or customer conversation begins with a compact home profile covering postcode, relationship to the home, home type, household size and primary goal. Safe common answers are preselected and can be changed before chat begins.
-- The home profile is locally retained, exact-field and exact-option allowlisted, bounded before transport and inserted into recent customer context. It contains no contact details, photos or uploaded files.
-- Each Surge AI response has a visible mascot avatar. The dedicated page uses a true 3840 by 2160 command-centre background, glass surfaces, restrained animation and reduced-motion fallbacks.
-- The quote, interval and vehicle-file analyser has been removed from the customer chat together with its PDF parsing dependency and obsolete tests.
-- Existing conversation correction precedence, plan context, public output filtering, model cost controls and TLink customer-boundary protections remain intact.
+- Surge AI and the Home Energy Planner now consume one canonical question, option, draft, storage and plan-generation contract. The 38 planner questions are presented exactly once through 13 staged Surge sections.
+- A fresh Surge profile contains no asserted material household facts. `Not sure` remains valid, and each of the 45 planner plus practical-context details is explicitly reviewed before it can influence guidance.
+- The dedicated Surge workspace keeps the editable home context visible beside the conversation. It retains the existing 4K command-centre treatment, assistant mascot, responsive mobile stack and reduced-motion boundary.
+- `Open my energy plan` writes the same versioned planner session envelope used by the planner and opens `/plan`; the resulting canonical plan and normalized public snapshot are identical to a planner-built result.
+- Guidance and the private plan remain usable without contact details. Service help is a separate optional path with all sharing controls off until the customer actively selects and confirms them.
+- Australian Energy Assessments follow-up submits only to `/api/energy-assistant/leads`. Matched-trade sharing submits only to the existing `/api/leads` public-plan workflow. The adapter fails closed rather than calling both paths.
+- The matched-trade path reuses the existing customer plan email, internal relay, opportunity matching, trade notification, contact-release and Interested-to-CRM workflow. It sends no chat transcript, uploaded file, photo, NMI, bill data or customer-only private plan to a trade.
+- Public copy states that Surge AI is provider-neutral and does not recommend a brand, product, supplier or installer. It describes one structured enquiry and direct dealings with an approved matched trade without claiming absolute impartiality or removing the routing service.
+- Existing conversation correction precedence, safety routing, model cost controls, public output filtering and trade-only platform boundaries remain intact.
 
 ### Validation and runtime evidence
 
 - `npm.cmd run validate` passed on the exact application source, including typecheck, lint, integration tests, the complete repository suite, fresh D1 migration through `0153`, the customer-plan PDF audit, the production build and the Sites server bundle audit.
-- Focused navigation, widget, model and privacy checks passed 71 of 71 tests. The broader assistant suite passed 181 of 181 tests. Integration passed 36 of 36 tests.
-- The release package contains all 152 migrations. Sites stored 45,230,080 bytes with the package content hash recorded above.
-- The local release archive is 14,238,389 bytes with SHA-256 `2C2A9D0C06E570F88D859A534CBE1EB1C409239432AD54D1F8B04B463B7C43C9`.
-- Customer plan PDF audit passed at 405,219 bytes and 24 pages, with tags, `en-AU`, embedded fonts and no active content.
-- Live desktop QA at 1440 by 1000 confirmed all eight navigation links are visible, the nav has no hidden horizontal overflow, the intake and 4K background render, and assistant replies carry the mascot avatar.
-- Live 390 by 844 phone QA confirmed the page has no horizontal overflow, navigation scroll is contained inside the header, the first-time intake appears before the composer and the removed upload feature is absent.
-- The custom domain and Sites deployment both report exact version 368 with hosted environment revision 24.
+- Focused canonical planner and downstream workflow checks passed 176 of 176. Core model, API, breadth and privacy checks passed 139 of 139. The final UI integration set passed 101 of 101, the workflow acceptance set passed 5 of 5 and the independent adversarial release set passed 133 of 133.
+- The release package contains all 152 migrations. Sites stored 46,837,760 bytes across 470 files with the package content hash recorded above.
+- The local release archive is 14,499,847 bytes with SHA-256 `843D55F9E8357BD034A64409500F820AB9E74CFE8A756318E360E6590110DE1C`.
+- Live desktop QA at 1280 by 720 confirmed the canonical 13-step intake, 45-detail context rail, full header, 4K background and absence of upload controls.
+- Live 390 by 844 phone QA confirmed no horizontal overflow, no composer or keyboard autofocus, the context rail stacks above the intake, and the removed compare and upload paths remain absent.
+- A fresh isolated browser-origin run reviewed all 45 details across all 13 stages, retained zero guessed facts, completed the intake and opened the identical planner session.
+- Optional-service QA confirmed two mutually exclusive destinations, unchecked sharing controls, disabled submission before consent, canonical quote preparation and no live lead submission.
+- The custom domain and Sites deployment both report exact version 369 with hosted environment revision 24.
 
 ### Boundaries
 
-- The home profile is customer-reported guidance context, not verified property evidence. Existing conversations are not blocked by the fresh-conversation intake.
+- The home profile is customer-reported guidance context, not verified property evidence or a formal rating. Existing conversations are not blocked by the fresh-conversation intake.
 - Planner context uses same-tab session storage by design. It is sent only when the customer asks Surge and is treated as untrusted customer-reported baseline data.
+- Downstream email, matching, trade notification and CRM behavior is verified by tests in this release. Production QA deliberately did not create a lead, send an email or mutate CRM data.
 - No migration was added by this release. Production remains pre-launch until the product owner explicitly declares it live.
 
 ## Identity
