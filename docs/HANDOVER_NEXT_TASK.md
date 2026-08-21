@@ -1,18 +1,18 @@
 # Next task handover
 
-Status: the dedicated Surge page and futuristic shared header are released as public Sites version 367. The next executable milestone is governed knowledge depth and programme freshness.
+Status: the contextual Surge AI customer experience is released as public Sites version 368. The next executable milestone is governed knowledge depth and programme freshness.
 
 Prepared: 21 August 2026
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397`
+Current production application source: `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f`
 
-Current production: Sites version 367 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 368 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_6c1e7b63885c8191af7240e9bc9a19f7`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_760b37993258819193cda8672819443f`
 
-Current deployment: `appgdep_6a87eb0dd5708191a24295797d540d58`
+Current deployment: `appgdep_6a87fa6d87888191a7e08239fdc0f8ef`
 
 Current environment revision: 24
 
@@ -21,11 +21,15 @@ Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 ## Released state to preserve
 
 - Australian Energy Assessments remains the primary public household brand. Its header wordmark is the sole serif exception; controls and customer content remain sans-serif.
-- The shared header uses a compact navy and teal HUD treatment, restrained motion, an active Surge tab and the deliberate TLink logo and trade-workspace bridge.
+- The shared header uses a compact navy and teal HUD treatment, restrained motion, an active Surge AI tab and the deliberate TLink logo and trade-workspace bridge.
+- Desktop exposes all eight customer destinations without clipping. Phone navigation scrolls inside the header without widening the page.
 - `/surge` is the dedicated assistant destination. It reuses the one root-mounted widget and never mounts a duplicate assistant.
-- On `/surge`, chat is always present as an in-page region with no launcher, tuck or show control, close button, modal focus trap, body lock or automatic keyboard focus.
-- On other customer routes, Surge's floating mascot and tuck preference continue to persist across same-origin routes, reloads and tabs until explicit unhide.
-- Completed planner answers may inform a later Surge question in the same browser tab. Only maintained fields and option values cross the API boundary.
+- Surge AI uses a 3840 by 2160 command-centre background, translucent surfaces and a visible mascot avatar beside each assistant response.
+- A fresh public or customer chat collects postcode, relationship to the home, home type, household size and primary goal before the composer appears. Common answers are preselected but editable.
+- The profile is locally retained, exact-field and exact-option allowlisted and bounded. It excludes contact details, photos and arbitrary properties.
+- The quote, interval and vehicle upload analyser and its PDF parsing dependency have been removed from customer chat.
+- On other customer routes, the floating mascot and tuck preference continue to persist across same-origin routes, reloads and tabs until explicit unhide.
+- Completed planner answers may inform a later Surge AI question in the same browser tab. Only maintained fields and option values cross the API boundary.
 - Photos, uploaded bytes, contact details and arbitrary planner properties never enter plan context.
 - Household planner context is ignored in trade mode at the server and model boundaries.
 - Current question and newer chat corrections outrank saved plan context in model and deterministic fallback paths.

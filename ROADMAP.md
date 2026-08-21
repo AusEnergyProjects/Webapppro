@@ -30,7 +30,27 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: SURGE-DEDICATED-GUIDE-69
+## Released milestone: SURGE-AI-CONTEXTUAL-EXPERIENCE-70
+
+Release status: application commit `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 368 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+
+### Outcome
+
+Turn the dedicated assistant into a contextual Surge AI customer experience with a complete desktop header, a short home intake, visible mascot-led replies, no costly file analyser and a distinctive full-screen command-centre design.
+
+### Acceptance result
+
+- All eight desktop header destinations are visible and functional without hidden overflow. Mobile navigation remains contained and scrollable.
+- Redundant header labels are removed and the customer-facing assistant is consistently named Surge AI.
+- Fresh public and customer conversations collect five bounded home facts before chat, with safe common answers preselected and editable.
+- The customer profile is locally retained, allowlisted, capped and excluded from trade mode, contact details, photos and uploaded files.
+- Assistant responses show the Surge AI mascot and the dedicated page uses an original 3840 by 2160 command-centre background with responsive glass UI and reduced-motion handling.
+- The quote, interval and vehicle upload analyser, PDF parsing dependency and obsolete tests are removed.
+- Complete validation, exact-source packaging, public deployment and desktop and phone QA passed.
+
+All acceptance gates above are met for Sites version 368.
+
+## Previous released milestone: SURGE-DEDICATED-GUIDE-69
 
 Release status: application commit `ac5fbc4e5ec6b9bb454a8d7f7bf1f4c66cb0e397` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 367 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
@@ -50,7 +70,7 @@ Give Surge a deliberate header destination that behaves as a normal page rather 
 
 All acceptance gates above are met for Sites version 367.
 
-## Previous released milestone: SURGE-BRAND-PLAN-CONTEXT-67
+## Earlier released milestone: SURGE-BRAND-PLAN-CONTEXT-67
 
 Release status: application commit `6a8f2db6a3b8e762b734016771b1629996e7abe5` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 366 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
