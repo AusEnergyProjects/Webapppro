@@ -46,7 +46,7 @@ test("the public privacy route covers the operational data boundary", () => {
 
 test("customer evidence and shared navigation resolve to the public privacy route", () => {
   assert.match(upload, /href="\/privacy"/);
-  assert.match(chrome, /href="\/privacy">Privacy/);
+  assert.match(chrome, /href="\/privacy"[^>]*>Privacy/);
   assert.match(sitemap, /"\/privacy"/);
 });
 

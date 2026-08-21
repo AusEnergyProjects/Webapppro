@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { updateHomeFeatureSelection } from "@/lib/customer-projects.mjs";
 import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
@@ -595,7 +596,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
                 <h3 id="planner-next-move-title">{firstActionItem.title}</h3>
                 <p>{firstActionItem.text}</p>
               </div>
-              <a href={firstActionItem.href}>{firstActionItem.action}</a>
+              <Link href={firstActionItem.href}>{firstActionItem.action}</Link>
             </section>
           ) : null}
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
@@ -616,7 +617,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
             />
           </section>
           <div className="planner-result-actions">
-            <a className="planner-primary-result" href={printablePlanHref}>Open my printable plan</a>
+            <Link className="planner-primary-result" href={printablePlanHref}>Open my printable plan</Link>
             <button type="button" className="planner-reset" onClick={() => setStage(0)}>Edit my answers</button>
             <button type="button" className="planner-reset" onClick={resetPlan}>Start over</button>
           </div>
@@ -649,7 +650,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
                   <small>{item.stage}</small>
                   <h3>{item.title}</h3>
                   <p>{item.text}</p>
-                  {item.href ? <a href={item.href}>{item.action}</a> : null}
+                  {item.href ? <Link href={item.href} prefetch={false}>{item.action}</Link> : null}
                   {item.guidance ? (
                     <details className="planner-item-rationale">
                       <summary>Why this is in the plan</summary>
@@ -680,10 +681,10 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
               <p>Compare current plans, calculate source-verified rebates, or review assistance without mixing electricity and gas pricing.</p>
             </div>
             <div className="planner-quick-wins-grid">
-              <article><small>Recommended next</small><h4>Compare electricity plans</h4><p>Use a bill or interval data when available.</p><a href="/compare?from=home-plan">Start electricity comparison</a></article>
-              <article><small>If the home uses gas</small><h4>Compare gas plans</h4><p>Keep gas and electricity pricing separate.</p><a href="/gas-compare?from=home-plan">Start gas comparison</a></article>
-              <article><small>Estimate an upgrade</small><h4>Use the rebate calculator</h4><p>Choose an activity and current approved product.</p><a href="/calculator">Open rebate calculator</a></article>
-              <article><small>Understand assistance</small><h4>Review rebates and support</h4><p>Check current pathways before accepting a quote.</p><a href="/rebates">View rebates and assistance</a></article>
+              <article><small>Recommended next</small><h4>Compare electricity plans</h4><p>Use a bill or interval data when available.</p><Link href="/compare?from=home-plan">Start electricity comparison</Link></article>
+              <article><small>If the home uses gas</small><h4>Compare gas plans</h4><p>Keep gas and electricity pricing separate.</p><Link href="/gas-compare?from=home-plan" prefetch={false}>Start gas comparison</Link></article>
+              <article><small>Estimate an upgrade</small><h4>Use the rebate calculator</h4><p>Choose an activity and current approved product.</p><Link href="/calculator" prefetch={false}>Open rebate calculator</Link></article>
+              <article><small>Understand assistance</small><h4>Review rebates and support</h4><p>Check current pathways before accepting a quote.</p><Link href="/rebates" prefetch={false}>View rebates and assistance</Link></article>
             </div>
           </section>
         </section>

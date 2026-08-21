@@ -11,6 +11,8 @@ import {
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const widget = read("../src/components/EnergyAssistantWidget.tsx");
 const styles = read("../src/components/EnergyAssistantWidget.module.css");
+const lazyWidget = read("../src/components/LazyEnergyAssistantWidget.tsx");
+const lazyStyles = read("../src/components/LazyEnergyAssistantWidget.module.css");
 const profileSource = read("../src/lib/surge-assessor-profile.ts");
 const plannerSchemaSource = read("../src/lib/home-energy-planner-schema.ts");
 const layout = read("../src/app/layout.tsx");
@@ -22,7 +24,7 @@ const surgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeEvents = read("../src/lib/energy-assistant-events.ts");
-const mascotImage = readFileSync(new URL("../public/surge-mascot.png", import.meta.url));
+const mascotImage = readFileSync(new URL("../public/surge-mascot.webp", import.meta.url));
 
 function functionSource(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -37,12 +39,17 @@ function functionSource(source, name) {
   throw new Error(`unterminated ${name}`);
 }
 
-test("the energy guide is mounted once at the root and excluded from print or PDF output", () => {
-  assert.match(layout, /import \{ EnergyAssistantWidget \}/);
-  assert.equal((layout.match(/<EnergyAssistantWidget\s*\/>/g) || []).length, 1);
-  assert.match(widget, /pathname === "\/plan\/print"/);
-  assert.match(widget, /pathname\.includes\("\/pdf\/"\)/);
+test("the energy guide is deferred at the root and excluded from print or PDF output", () => {
+  assert.match(layout, /import \{ LazyEnergyAssistantWidget \}/);
+  assert.equal((layout.match(/<LazyEnergyAssistantWidget\s*\/>/g) || []).length, 1);
+  assert.doesNotMatch(layout, /import \{ EnergyAssistantWidget \}/);
+  assert.match(lazyWidget, /lazy\(loadEnergyAssistant\)/);
+  assert.match(lazyWidget, /return import\("\.\/EnergyAssistantWidget"\)/);
+  assert.match(lazyWidget, /if \(hiddenRoute\(pathname\)\) return null/);
+  assert.match(lazyWidget, /pathname === "\/plan\/print"/);
+  assert.match(lazyWidget, /pathname\.includes\("\/pdf\/"\)/);
   assert.match(styles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
+  assert.match(lazyStyles, /@media print[\s\S]*\.root[\s\S]*display:\s*none/);
 });
 
 test("the dedicated Surge AI route keeps chat present without a launcher, close control or modal behaviour", () => {
@@ -112,7 +119,7 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /profileUpdatedAt/);
   assert.doesNotMatch(widget, /autoFocus/);
   assert.match(widget, /className=\{styles\.assistantAvatar\}/);
-  assert.match(widget, /src="\/surge-mascot\.png"/);
+  assert.match(widget, /src="\/surge-mascot\.webp"/);
   assert.doesNotMatch(widget, />What to do next</);
   assert.doesNotMatch(widget, /practicalSteps\.slice\(0, 3\)/);
   assert.doesNotMatch(widget, />Best next action</);
@@ -177,6 +184,10 @@ test("customer pages open the single shared Surge widget through one reusable ev
   assert.match(surgeOpenButton, /requestSurgeOpen\(draft\)/);
   assert.doesNotMatch(surgeOpenButton, /EnergyAssistantWidget|fetch\(/);
   assert.match(widget, /window\.addEventListener\(OPEN_SURGE_EVENT, openFromCustomerPage\)/);
+  assert.match(lazyWidget, /window\.addEventListener\(OPEN_SURGE_EVENT, openSurge\)/);
+  assert.match(lazyWidget, /setRequested\(true\)/);
+  assert.match(lazyWidget, /initialDraft=\{initialDraft\}/);
+  assert.match(lazyWidget, /initialOpen=\{!dedicated\}/);
   assert.match(widget, /if \(hidden \|\| context\.audience === "trade"\) return/);
   assert.match(widget, /setMascotTucked\(false\);[\s\S]*storeMascotTucked\(false\);[\s\S]*setOpenPathname\(pathname\);[\s\S]*setOpen\(true\)/);
   assert.match(widget, /if \(nextDraft\) setDraft\(nextDraft\)/);
@@ -209,7 +220,7 @@ test("only bounded local transcript, home profile, continuation, last activity a
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
   assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
-  assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(""\)/);
+  assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(initialOpen \? pathname : ""\)/);
   assert.match(widget, /const effectiveOpen = dedicated \|\| \(open && openPathname === pathname && !hidden\)/);
   assert.match(widget, /setOpenPathname\(pathname\);\s*setOpen\(true\)/);
   assert.doesNotMatch(widget, /const rememberModeForNavigation|setOpen\(saved\.open\)/);
@@ -614,6 +625,8 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /Matched trades \+ my private plan by email/);
   assert.match(widget, /Nothing is shared by default/);
   assert.equal((widget.match(/buildEnergyAssistantEnquirySubmission\(/g) || []).length, 1);
+  assert.match(widget, /await import\([\s\S]*energy-assistant-enquiry-adapter\.mjs/);
+  assert.doesNotMatch(widget, /^import[\s\S]{0,200}energy-assistant-enquiry-adapter\.mjs/m);
   assert.equal((widget.match(/fetch\(submission\.endpoint,/g) || []).length, 1);
   assert.doesNotMatch(widget, /fetch\("\/api\/(?:leads|energy-assistant\/leads)"/);
   for (const field of [
@@ -699,10 +712,12 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.match(widget, /<SurgeMascot \/>/);
   assert.match(widget, /<SurgeMascot peeking \/>/);
   assert.match(styles, /\.launcher\s*\{[\s\S]*height:\s*70px[\s\S]*width:\s*60px/);
-  assert.match(styles, /\.mascot\s*\{[\s\S]*background:\s*url\("\/surge-mascot\.png"\)[\s\S]*height:\s*65px[\s\S]*width:\s*53px/);
+  assert.match(styles, /\.mascot\s*\{[\s\S]*background:\s*url\("\/surge-mascot\.webp"\)[\s\S]*height:\s*65px[\s\S]*width:\s*53px/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.launcher\s*\{[\s\S]*height:\s*70px[\s\S]*width:\s*60px/);
-  assert.equal(mascotImage.subarray(1, 4).toString("ascii"), "PNG");
-  assert.ok(mascotImage.byteLength > 100_000);
+  assert.equal(mascotImage.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(mascotImage.subarray(8, 12).toString("ascii"), "WEBP");
+  assert.ok(mascotImage.byteLength > 50_000);
+  assert.ok(mascotImage.byteLength < 100_000);
   assert.match(widget, /aria-label="Hide Surge AI mascot"/);
   assert.match(widget, /aria-label="Open Surge AI"/);
   assert.match(widget, /aria-label="Close Surge AI"/);

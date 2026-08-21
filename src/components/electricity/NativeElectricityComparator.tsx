@@ -3,6 +3,7 @@
 /* Retailer logos come from arbitrary CDR-hosted URLs. */
 /* eslint-disable @next/next/no-img-element */
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ComparisonJourney, Field, StepCard } from "@/components/ComparatorChrome";
 import { Nem12UsageChart } from "@/components/electricity/Nem12UsageChart";
 import {
@@ -644,7 +645,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   }
 
   return <>
-    {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <a href="/compare">/compare</a>.</span></div>}
+    {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <Link href="/compare">/compare</Link>.</span></div>}
     <ComparisonJourney title="Your electricity comparison" current={journeyStep} steps={ELECTRICITY_JOURNEY_STEPS} />
     {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
     <form onSubmit={compare} aria-label="Electricity plan comparison">
@@ -797,7 +798,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         <section className="native-followup-card"><h2>Save this comparison privately</h2><p>The link contains only comparison assumptions. It never contains an NMI, meter intervals, filename, annual-adjustment reason or contact details.</p><button type="button" className="btn ghost" onClick={() => void copyPrivateLink()}>Copy private-safe link</button>{shareStatus && <p className="native-action-status" role="status">{shareStatus}</p>}{sharedUrl && <Field label="Private-safe link"><input readOnly value={sharedUrl} onFocus={(event) => event.currentTarget.select()} /></Field>}</section>
         <form className="native-followup-card" onSubmit={sendTopPlans}><h2>Email my top three</h2><p>Receive the three cheapest currently visible plans and a reminder to compare again every six months.</p><div className="grid c2"><Field label="Name"><input required autoComplete="name" value={leadName} onChange={(event) => setLeadName(event.target.value)} /></Field><Field label="Email"><input required type="email" autoComplete="email" value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={leadWebsite} onChange={(event) => setLeadWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={leadConsent} onChange={(event) => setLeadConsent(event.target.checked)} /> I agree that Australian Energy Assessments may email these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label><button className="btn" disabled={leadSending}>{leadSending ? "Sending..." : "Send my top three"}</button>{leadStatus && <p className="native-action-status" role="status">{leadStatus}</p>}<details className="native-privacy-details"><summary>How my details are used</summary><p>Your name and email are sent only when you submit this form, and only for results and comparison reminders. No phone number is collected. Meter files, NMI values and interval data stay in your browser and are not included. Use your free account for upgrade projects.</p></details></form>
       </div>
-      <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><a className="btn" href="/gas-compare">Compare gas plans</a><a className="comparison-secondary-link" href="/plan">Return to my home energy plan</a></section>
+      <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><Link className="btn" href="/gas-compare">Compare gas plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
     </section>}
     {auditPlan && <NativeAuditDialog plan={auditPlan} bundle={bundle} onClose={closeAudit} />}
     {enquiryScenario && <NativeUpgradeDialog scenario={enquiryScenario} postcode={postcode} onClose={() => setEnquiryScenario(null)} />}

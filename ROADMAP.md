@@ -3270,12 +3270,18 @@ without weakening privacy, calculation authority or the static trade workspace.
   then TLink with no separator dot and no horizontal overflow. `/api/health`
   returned HTTP 200 and the recent Sites Worker errors-only query was empty.
 
+## Active milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
+
+Remove continuous decorative rendering and oversized public assets from the home and planner, defer the full Surge workspace and postcode corpus until explicitly needed, use client navigation across the main household paths, enforce build-time performance budgets and close the work with desktop, phone and sustained-homepage release QA. This recovery stays within the existing visual, planner, assistant, API, privacy and data contracts.
+
+Local implementation, complete validation and desktop and phone browser QA are complete. Exact-source packaging, deployment and live browser verification remain the release gate.
+
 ## Next five logical product steps
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
 2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
-4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
 5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
 
 ## Global stop conditions

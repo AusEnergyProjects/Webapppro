@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { EnergyAssistantWidget } from "@/components/EnergyAssistantWidget";
+import { LazyEnergyAssistantWidget } from "@/components/LazyEnergyAssistantWidget";
 import { SiteDatePicker } from "@/components/SiteDatePicker";
 import "./globals.css";
 
@@ -34,5 +34,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><EnergyAssistantWidget /></body></html>;
+  return <html lang="en"><body><a className="skip-link" href="#site-content">Skip to main content</a>{children}<SiteDatePicker /><LazyEnergyAssistantWidget /></body></html>;
 }

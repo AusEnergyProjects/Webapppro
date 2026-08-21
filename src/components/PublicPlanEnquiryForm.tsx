@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -1130,18 +1131,18 @@ export function PublicPlanEnquiryForm({
             Your enquiry is complete. Continue with another useful tool or open the printable version of your plan.
           </p>
           <nav aria-label="Continue in the portal" className={styles.gatewayActions}>
-            <a href="/compare?from=home-plan" ref={gatewayFirstActionRef}>
+            <Link href="/compare?from=home-plan" ref={gatewayFirstActionRef}>
               <strong>Compare electricity plans</strong>
               <span>Check current electricity offers</span>
-            </a>
-            <a href="/gas-compare?from=home-plan">
+            </Link>
+            <Link href="/gas-compare?from=home-plan" prefetch={false}>
               <strong>Compare gas plans</strong>
               <span>Check gas offers separately</span>
-            </a>
-            <a href="/calculator">
+            </Link>
+            <Link href="/calculator" prefetch={false}>
               <strong>Use the rebate calculator</strong>
               <span>Estimate relevant rebates and certificates</span>
-            </a>
+            </Link>
             <a
               aria-disabled={gatewayPlanDownloadBusy}
               href={planHref}

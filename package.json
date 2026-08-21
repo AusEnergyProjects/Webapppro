@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build && npm run audit:sites-server-bundle",
+    "build": "vinext build && npm run audit:sites-server-bundle && npm run audit:public-performance",
     "audit:links": "node scripts/audit-links.mjs",
     "audit:customer-plan-pdf": "node scripts/audit-customer-plan-pdf.mjs",
+    "audit:public-performance": "node scripts/audit-public-performance-budgets.mjs",
     "audit:sites-server-bundle": "node scripts/audit-sites-server-bundle.mjs",
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "validate:creditex-certificate-activation": "node --experimental-strip-types scripts/validate-creditex-certificate-activation.mjs",

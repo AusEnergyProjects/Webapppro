@@ -87,7 +87,7 @@
 
 .mascot {
   animation: surgeIdle 3.2s ease-in-out infinite;
-  background: url("/surge-mascot.png") center / contain no-repeat;
+  background: url("/surge-mascot.webp") center / contain no-repeat;
   display: block;
   filter: drop-shadow(0 5px 5px rgba(3, 31, 38, 0.24));
   height: 65px;

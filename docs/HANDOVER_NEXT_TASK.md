@@ -1,8 +1,10 @@
 # Next task handover
 
-Status: the canonical Surge AI planner and optional enquiry workflow is released as public Sites version 369. The next executable milestone is governed knowledge depth and programme freshness.
+Status: public-site performance recovery is locally complete and validated from the current version-369 application baseline. Exact-source release and live QA remain pending explicit release authorisation.
 
 Prepared: 21 August 2026
+
+Milestone ID: `AEA-PUBLIC-PERFORMANCE-RECOVERY-69`
 
 Working branch: `codex/job-schedule-week-calendar`
 
@@ -18,10 +20,62 @@ Current environment revision: 24
 
 Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
-## Released state to preserve
+## Active milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
+
+### User outcome
+
+Every customer click should feel immediate, the home page must remain visually stable during a long visit, and decorative effects must not consume continuous rendering work or expose stray labels over the hero image.
+
+### Owning workflow and expected files
+
+- Public route shell and customer navigation: `src/app/layout.tsx`, `src/components/ComparatorChrome.tsx` and a lightweight Surge loader.
+- Home and planner visual shell: `src/components/CustomerJourneyScene.tsx`, `src/components/PlannerHomeJourney.tsx`, their feature-local styles in `src/app/globals.css` and the shared home asset.
+- Regression coverage: focused navigation, hero and lazy-Surge tests.
+
+### In scope
+
+- Remove the home hero's continuous canvas, parallax, scan, blur, orbit, particle and floating-label work while retaining the approved home image and journey summary.
+- Remove the same continuous canvas, parallax and decorative overlay work from the planner while retaining its answer-driven static crop, stage summary and progress.
+- Replace the oversized home PNG with a materially smaller web-optimised asset.
+- Keep the full Surge workspace off ordinary-route startup and load it only when the customer opens Surge or visits `/surge`.
+- Use client-side Next navigation for the shared customer header, account, TLink and internal footer links.
+- Remove only code and styles made obsolete by these changes.
+
+### Out of scope
+
+- No changes to planner answers, assistant knowledge, APIs, authentication, database migrations, trade workflows, calculations or customer data contracts.
+- No repository-wide stylesheet rewrite or speculative dependency churn.
+- No change to the public brand direction beyond removing the reported decorative tiles and unstable effects.
+
+### Acceptance criteria
+
+- The home hero contains no continuously animated canvas, pointer parallax, scan sweep, blur tile or floating `Comfort`, `Energy`, `Action`, `Live home model` or `Private by design` label.
+- The hero remains readable and correctly cropped at desktop and 390-pixel phone widths with reduced motion respected by construction.
+- Ordinary routes do not fetch or evaluate the full Surge workspace chunk until an explicit open action; `/surge` still loads the full workspace.
+- Shared internal header and footer destinations use client navigation without changing route identity or accessibility state.
+- Focused regression tests, typecheck, lint, production build and the full repository validation gate pass before release.
+- Desktop and phone QA cover `/`, representative customer click-through routes and `/surge`, including a sustained home-page stability check.
+
+### Local implementation and validation evidence
+
+- The home and planner now render the approved whole-home illustration as a static Next image. The permanent canvas frame loop, pointer parallax, scan and blur passes, orbit and particle layers, floating room labels and decorative telemetry tiles are removed together with their dead component and CSS paths.
+- The whole-home image fell from 1,650,041-byte PNG to 71,206-byte WebP. The Surge mascot fell from 867,694-byte PNG to 71,106-byte WebP. The two visual assets are 2,375,423 bytes smaller in total.
+- Ordinary routes now mount a 5,194-byte built Surge launcher instead of the full assistant workspace. The deferred assistant JavaScript fell from the 644,974-byte baseline chunk to 69,687 bytes because the 568,820-byte postcode-backed enquiry adapter is now loaded only when a customer submits the optional enquiry.
+- The shared built stylesheet fell from 746,804 bytes to 727,763 bytes after removal of obsolete home, planner and continuously composited header effects. A production-build audit now fails when the launcher, deferred assistant, shared CSS or optimised images exceed their explicit budgets or when the full assistant or locality adapter returns to initial loading.
+- The shared header, home start paths and primary planner, electricity, gas, rebate and completed-enquiry handoffs use Next client navigation. Dense navigation and secondary card groups suppress eager prefetch so the homepage does not start downloading every destination.
+- `npm.cmd run validate` passes end to end: typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, the customer-plan PDF audit, Vinext production build, Sites bundle audit and the new public-performance budget audit.
+- Local in-app browser QA passes at desktop and 390 by 844 phone sizes across `/`, `/plan`, `/compare`, `/gas-compare`, `/calculator` and `/surge`. The home page remained visible after the reported idle interval with zero canvases, zero decorative overlay nodes and zero infinite animations; phone routes had no horizontal overflow. The ordinary-route Surge workspace stayed absent until the explicit open action, then opened as the accessible `Ask Surge AI` dialog.
+
+### Stop conditions
+
+- Stop if the fix would change an API, data, identity, billing or migration contract.
+- Stop if build output proves Vinext cannot safely lazy-load the existing Surge workspace without altering its customer contract.
+- Preserve the existing untracked `.sites-release/` material and do not publish if release provenance cannot be reconciled to the exact validated commit.
+
+## Previous released state to preserve
 
 - Australian Energy Assessments remains the primary public household brand. Its header wordmark is the sole serif exception; controls and customer content remain sans-serif.
-- The shared header uses a compact navy and teal HUD treatment, restrained motion, an active Surge AI tab and the deliberate TLink logo and trade-workspace bridge.
+- The shared header uses a compact static navy and teal HUD treatment, an active Surge AI tab and the deliberate TLink logo and trade-workspace bridge without permanent compositor animation.
 - Desktop exposes all eight customer destinations without clipping. Phone navigation scrolls inside the header without widening the page.
 - `/surge` is the dedicated assistant destination. It reuses the one root-mounted widget and never mounts a duplicate assistant.
 - Surge AI uses a 3840 by 2160 command-centre background, translucent surfaces and a visible mascot avatar beside each assistant response.

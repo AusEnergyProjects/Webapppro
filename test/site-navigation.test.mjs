@@ -10,7 +10,6 @@ const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
 const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
-const holographicField = read("../src/components/HolographicEnergyField.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
 const surgeHeaderButton = read("../src/components/SurgeHeaderButton.tsx");
@@ -54,7 +53,7 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
-const immersiveHomeAsset = path.resolve(directory, "../public/aea-immersive-home-journey.png");
+const immersiveHomeAsset = path.resolve(directory, "../public/aea-immersive-home-journey.webp");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
   assert.match(
@@ -116,7 +115,8 @@ test("the futuristic header links to one dedicated always-present Surge AI page"
   assert.match(surgeHeaderButton, /aria-label="Open Surge AI energy guide"/);
   assert.match(surgeHeaderButton, /className=\{`site-surge-link\$\{active \? " active" : ""\}`\}/);
   assert.match(surgeHeaderButton, /className="site-surge-core"/);
-  assert.match(surgeHeaderButton, /src="\/surge-mascot\.png"[\s\S]*?width="28" height="35"/);
+  assert.match(surgeHeaderButton, /src="\/surge-mascot\.webp"[\s\S]*?width="28" height="35"/);
+  assert.match(surgeHeaderButton, /prefetch=\{false\}/);
   assert.match(surgeHeaderButton, /eslint-disable @next\/next\/no-img-element/);
   assert.match(surgeHeaderButton, /className="site-surge-copy"[\s\S]*?<strong>Surge AI<\/strong>/);
   assert.match(surgeHeaderButton, /className="site-surge-status"[\s\S]*?>AI guide<\/span>/);
@@ -124,16 +124,17 @@ test("the futuristic header links to one dedicated always-present Surge AI page"
   assert.match(surgeRoute, /Surge AI \| Australian Energy Assessments/);
   assert.match(styles, /\.site-surge-link \{[^}]*min-height: 44px;/);
   assert.match(styles, /\.site-surge-link\.active \{/);
-  assert.match(styles, /\.site-surge-core \{[^}]*animation: site-surge-pulse/);
-  assert.match(styles, /\.site-surge-core::before \{[^}]*animation: site-surge-spin/);
+  assert.match(styles, /\.site-surge-core \{[^}]*box-shadow:/);
+  assert.doesNotMatch(styles, /animation: site-surge-(?:pulse|spin)/);
+  assert.doesNotMatch(styles, /\.site-surge-core::before \{/);
   assert.match(styles, /\.site-surge-core img \{[^}]*filter: drop-shadow/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-surge-link \{ min-height: 40px;/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-header::after, \.site-surge-core, \.site-surge-core::before \{ animation: none !important; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.site-header::before, \.site-surge-core \{ animation: none !important; \}/);
   assert.match(styles, /@media \(forced-colors: active\) \{[\s\S]*?\.site-surge-link, \.site-tlink-link \{ border: 1px solid ButtonText;/);
 });
 
 test("public navigation keeps the TLink trade workspace clearly branded", () => {
-  assert.match(chrome, /active === "account" \? \([\s\S]*?<a className="site-account-link active" href="\/account"/);
+  assert.match(chrome, /active === "account" \? \([\s\S]*?<Link className="site-account-link active" href="\/account"/);
   assert.match(chrome, /href="\/direct-trade\/dashboard"[\s\S]*?aria-label="Open the TLink trade workspace"/);
   assert.match(chrome, /title="TLink trade workspace"/);
   assert.equal(chrome.match(/href="\/account"/g)?.length, 1);
@@ -211,7 +212,7 @@ test("customer-facing pages use the shared powered-by footer", () => {
   assert.doesNotMatch(`${chrome}${guide}${electricity}${gas}${rebates}${guideShell}${caseStudies}${assessments}${planner}`, /Provided by/);
 });
 
-test("shared visual foundation uses the polished responsive system", () => {
+test("shared visual foundation uses the polished responsive system without persistent compositor effects", () => {
   assert.doesNotMatch(layout, /fonts\.(?:googleapis|gstatic)\.com/);
   assert.match(styles, /--font-aea-body: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
   assert.match(styles, /--font-aea-heading: Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif/);
@@ -224,11 +225,10 @@ test("shared visual foundation uses the polished responsive system", () => {
   assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(styles, /\.site-header \{ display: grid;[^}]*overflow: hidden;/);
   assert.match(styles, /\.site-header \.site-nav-shell \{[^}]*grid-column: 1 \/ -1; grid-row: 2;/);
-  assert.match(styles, /@keyframes site-header-atmosphere/);
-  assert.match(styles, /@keyframes site-header-sheen/);
-  assert.match(styles, /@keyframes site-surge-pulse/);
-  assert.match(styles, /@keyframes site-surge-spin/);
-  assert.match(styles, /prefers-reduced-motion: reduce[\s\S]*\.site-header::after \{ display: none; \}/);
+  assert.doesNotMatch(styles, /@keyframes site-header-(?:atmosphere|sheen)/);
+  assert.doesNotMatch(styles, /@keyframes site-surge-(?:pulse|spin)/);
+  assert.doesNotMatch(styles, /\.site-header \{[^}]*backdrop-filter: blur/);
+  assert.doesNotMatch(styles, /\.site-header::after \{/);
   assert.match(styles, /radial-gradient\(circle at 8% -4%/);
   assert.match(styles, /\.comparator-nav::-webkit-scrollbar \{ display: none; \}/);
   assert.match(styles, /a:focus-visible/);
@@ -262,31 +262,21 @@ test("number fields avoid browser-specific black stepper controls", () => {
   assert.match(styles, /body input\[type="number"\]::\-webkit-inner-spin-button,[\s\S]*\-webkit-appearance: none/);
 });
 
-test("homepage uses an accessible progressive holographic journey with a reduced-motion boundary", () => {
+test("homepage uses an accessible static journey without persistent rendering work", () => {
   assert.match(guide, /CustomerJourneyScene/);
   assert.match(customerScene, /aria-labelledby="customer-journey-title"/);
   assert.match(customerScene, /Understand/);
   assert.match(customerScene, /Prioritise/);
   assert.match(customerScene, /Take action/);
-  assert.match(customerScene, /prefers-reduced-motion: reduce/);
-  assert.match(customerScene, /HolographicEnergyField/);
-  assert.match(holographicField, /<canvas/);
-  assert.match(holographicField, /prefers-reduced-motion: reduce/);
-  assert.match(holographicField, /ResizeObserver/);
-  assert.match(holographicField, /devicePixelRatio/);
-  assert.match(holographicField, /seededRandom\(0xa3e2026\)/);
-  assert.match(holographicField, /data-spatial-scene/);
-  assert.match(holographicField, /pointermove/);
-  assert.match(holographicField, /addEventListener\("scroll"/);
-  assert.match(customerScene, /density="rich"/);
-  assert.match(customerScene, /mode="landing"/);
-  assert.doesNotMatch(holographicField, /WebGL|from ["']three["']|video/i);
-  assert.match(styles, /@supports \(animation-timeline: view\(\)\)/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.customer-scene-home/);
+  assert.match(customerScene, /priority/);
+  assert.match(customerScene, /width="1731"/);
+  assert.match(customerScene, /height="909"/);
+  assert.doesNotMatch(customerScene, /use client|HolographicEnergyField|<canvas|pointermove|onPointerMove|Comfort<|Energy<|Action</);
+  assert.doesNotMatch(styles, /\.customer-scene-home::before|customer-hologram-sweep/);
 });
 
-test("the generated whole-home scene is visible and drives the planner room journey", () => {
-  assert.match(customerScene, /src="\/aea-immersive-home-journey\.png"/);
+test("the optimised whole-home scene is visible and drives the planner room journey", () => {
+  assert.match(customerScene, /src="\/aea-immersive-home-journey\.webp"/);
   assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, 55vw"/);
   assert.match(plannerJourney, /export function PlannerHomeJourney/);
   assert.match(plannerJourney, /stage: PlannerJourneyStage/);
@@ -298,30 +288,25 @@ test("the generated whole-home scene is visible and drives the planner room jour
   assert.match(plannerJourney, /hot-water/);
   assert.match(plannerJourney, /battery/);
   assert.match(plannerJourney, /aria-label="Home planning journey"/);
-  assert.match(plannerJourney, /HolographicEnergyField/);
   assert.match(plannerJourney, /focusPositions/);
   assert.match(plannerJourney, /data-entry=\{safeProgress <= 5/);
-  assert.match(plannerJourney, /density="rich"/);
-  assert.match(plannerJourney, /mode=\{stage\}/);
   assert.match(plannerJourney, /Start with the question below/);
-  assert.doesNotMatch(plannerJourney, /WebGL|from ["']three["']/);
+  assert.doesNotMatch(plannerJourney, /WebGL|from ["']three["']|HolographicEnergyField|<canvas|pointermove|planner-home-telemetry/);
   assert.match(styles, /\.planner-home-journey\[data-focus="insulation"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="windows"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="ventilation"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="heating-cooling"\]/);
   assert.match(styles, /\.planner-home-journey\[data-focus="solar"\]/);
-  assert.match(styles, /prefers-reduced-motion: reduce\)[\s\S]*\.planner-home-journey-depth/);
   assert.match(styles, /\.planner-home-journey\[data-entry="true"\] \{ min-height: clamp\(570px, 70svh, 780px\); \}/);
   assert.match(styles, /\.planner-home-journey\[data-stage="plan"\] \{ min-height: clamp\(540px, 62svh, 700px\); \}/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ min-height: 330px; \}/);
   assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey\[data-entry="true"\] \{ min-height: 570px; \}/);
   assert.equal(fs.existsSync(immersiveHomeAsset), true);
-  assert.ok(fs.statSync(immersiveHomeAsset).size > 100_000);
-  assert.ok(fs.statSync(immersiveHomeAsset).size < 3_000_000);
+  assert.ok(fs.statSync(immersiveHomeAsset).size > 50_000);
+  assert.ok(fs.statSync(immersiveHomeAsset).size < 150_000);
   const immersiveImage = fs.readFileSync(immersiveHomeAsset);
-  assert.equal(immersiveImage.toString("ascii", 1, 4), "PNG");
-  assert.ok(immersiveImage.readUInt32BE(16) >= 1600);
-  assert.ok(immersiveImage.readUInt32BE(20) >= 900);
+  assert.equal(immersiveImage.toString("ascii", 0, 4), "RIFF");
+  assert.equal(immersiveImage.toString("ascii", 8, 12), "WEBP");
 });
 
 test("social sharing metadata uses one launch-ready AEA energy card", () => {
@@ -372,7 +357,7 @@ test("rebates hub contains no prohibited dash characters", () => {
 
 test("homepage makes the guided plan the only dominant hero action", () => {
   const heroActions = guide.match(/<div className="start-actions">([\s\S]*?)<\/div>/)?.[1] || "";
-  assert.equal(heroActions.match(/<a\b/g)?.length, 1);
+  assert.equal(heroActions.match(/<Link\b/g)?.length, 1);
   assert.match(heroActions, /start-primary-action[\s\S]*Build my home energy plan/);
   assert.doesNotMatch(heroActions, /ghost|Compare energy plans/);
   assert.match(guide, /className="start-hero-secondary"/);

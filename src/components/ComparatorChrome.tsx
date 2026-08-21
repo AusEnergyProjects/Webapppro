@@ -1,19 +1,20 @@
 /* The electricity tab uses this exact brandmark asset. Keep the gas tab on the same source. */
-/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
+/* eslint-disable @next/next/no-img-element */
 import { ReactNode } from "react";
+import Link from "next/link";
 import { AEA_BRANDMARK_PNG_DATA_URI } from "@/lib/aea-brand-assets.mjs";
 import { ResponsiveSiteNav } from "@/components/ResponsiveSiteNav";
 import { SurgeHeaderButton } from "@/components/SurgeHeaderButton";
 
 export function BrandBar() {
   return (
-    <a href="/" className="brandbar" aria-label="Australian Energy Assessments home">
+    <Link href="/" prefetch={false} className="brandbar" aria-label="Australian Energy Assessments home">
       <span className="brandmark" aria-hidden="true"><img src={AEA_BRANDMARK_PNG_DATA_URI} alt="" width="30" height="30" decoding="async" /></span>
       <span className="brandtext">
         <strong className="brandname">Australian Energy Assessments</strong>
         <span className="brandtag">Independent energy assessments</span>
       </span>
-    </a>
+    </Link>
   );
 }
 
@@ -33,14 +34,15 @@ export function SiteNav({ active }: { active: SiteActive }) {
   return (
     <ResponsiveSiteNav>
       {links.map((link) => (
-        <a
+        <Link
           className={active === link.key ? "active" : "inactive"}
           href={link.href}
+          prefetch={false}
           key={link.key}
           aria-current={active === link.key ? "page" : undefined}
         >
           {link.label}
-        </a>
+        </Link>
       ))}
     </ResponsiveSiteNav>
   );
@@ -54,20 +56,21 @@ export function SiteHeader({ active }: { active: SiteActive }) {
         <SiteNav active={active} />
         <div className="site-header-actions">
           {active === "account" ? (
-            <a className="site-account-link active" href="/account" aria-current="page">
+            <Link className="site-account-link active" href="/account" prefetch={false} aria-current="page">
               <span aria-hidden="true">&#9679;</span> Account
-            </a>
+            </Link>
           ) : null}
           <SurgeHeaderButton active={active === "surge"} />
-          <a
+          <Link
             className="site-tlink-link"
             href="/direct-trade/dashboard"
+            prefetch={false}
             aria-label="Open the TLink trade workspace"
             title="TLink trade workspace"
           >
             <img className="site-tlink-mark" src="/tlink-icon-192.png" width="38" height="38" alt="" aria-hidden="true" decoding="async" />
             <span className="site-tlink-copy"><strong>TLink</strong><small>Trade workspace</small></span>
-          </a>
+          </Link>
         </div>
       </header>
       <span className="site-content-anchor" id="site-content" tabIndex={-1} />
@@ -76,7 +79,7 @@ export function SiteHeader({ active }: { active: SiteActive }) {
 }
 
 export function SiteFooter({ children }: { children: ReactNode }) {
-  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | <a href="/privacy">Privacy</a> | Independent energy assessments | 1300 241 149</p></footer>;
+  return <footer className="site-footer"><p>{children}</p><p>Powered by <a href="https://www.ausenergyassessments.com/" target="_blank" rel="noreferrer">Australian Energy Assessments</a> | <Link href="/privacy" prefetch={false}>Privacy</Link> | Independent energy assessments | 1300 241 149</p></footer>;
 }
 
 export function ComparatorHero({ title, children }: { title: string; children: ReactNode }) {

@@ -10,6 +10,10 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
+## Pending candidate: public customer-path performance recovery
+
+Milestone `AEA-PUBLIC-PERFORMANCE-RECOVERY-69` is implemented and completely validated locally from the current Sites version 369 baseline but is not yet recorded here as released. It removes the permanent homepage, planner and shared-header compositor loops, replaces 2,517,735 bytes of PNG visuals with 142,312 bytes of WebP assets, defers the full Surge workspace and enquiry locality corpus, converts the main customer handoffs to client navigation and adds production-build performance budgets. Local desktop and 390-pixel phone browser QA passed, including sustained homepage stability and explicit lazy-Surge activation. The exact candidate commit, Sites package identity, deployment identity and live desktop and phone evidence must still be reconciled before this section can replace version 369 as current production.
+
 ## Current production release: canonical Surge AI planner and optional enquiry workflow
 
 Application source `731b4fad33169d6ed952f4f521f39d7a35b669e6` on branch `codex/job-schedule-week-calendar` is the exact executable source deployed as public Sites version 369 at `https://compare.ausenergyassessments.com`.
@@ -769,8 +773,8 @@ sent or received and no provider callback was reconciled.
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
 2. Add production-shaped Surge conversation evaluations, correction and topic-switch scoring, and privacy-safe quality telemetry within the existing cost guard.
-3. Add signed-in customer project context with explicit consent, field allowlists, correction precedence and deletion behaviour.
-4. Add governed decision tools for bills, payback, solar self-consumption, EV running cost and complete rebate or certificate pathways.
+3. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+4. Add signed-in project association and deletion controls so a customer can deliberately retain or remove the canonical Surge and planner context across devices.
 5. Complete the accessibility, mobile usability, performance, support and failure-recovery pilot before launch declaration.
 
 ## Previous quote, job and invoice usability release

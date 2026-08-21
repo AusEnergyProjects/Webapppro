@@ -38,10 +38,9 @@ import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment
 import { createHomeEnergyPlannerPublicPlanSnapshot } from "@/lib/home-energy-planner-schema";
 import { OPEN_SURGE_EVENT } from "@/lib/energy-assistant-events";
 import {
-  buildEnergyAssistantEnquirySubmission,
   ENERGY_ASSISTANT_MATCHING_EXPLANATION,
   ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION,
-} from "@/lib/energy-assistant-enquiry-adapter.mjs";
+} from "@/lib/energy-assistant-enquiry-copy.mjs";
 import {
   buildEnergyAssistantLeadPayload,
   createEnergyAssistantSubmissionKey,
@@ -767,7 +766,13 @@ async function readStoredPlanContext() {
   }
 }
 
-export function EnergyAssistantWidget() {
+export function EnergyAssistantWidget({
+  initialDraft = "",
+  initialOpen = false,
+}: {
+  initialDraft?: string;
+  initialOpen?: boolean;
+} = {}) {
   const pathname = usePathname() || "/";
   const router = useRouter();
   const dedicated = pathname === "/surge";
@@ -788,8 +793,8 @@ export function EnergyAssistantWidget() {
   const hydrationStartedRef = useRef(false);
 
   const [hydrated, setHydrated] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [openPathname, setOpenPathname] = useState("");
+  const [open, setOpen] = useState(initialOpen);
+  const [openPathname, setOpenPathname] = useState(initialOpen ? pathname : "");
   const [mascotTucked, setMascotTucked] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
@@ -799,7 +804,7 @@ export function EnergyAssistantWidget() {
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileDeferred, setProfileDeferred] = useState(false);
   const [profileError, setProfileError] = useState("");
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft.trim().slice(0, MAX_MESSAGE_LENGTH));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -1367,6 +1372,9 @@ export function EnergyAssistantWidget() {
       setLeadSubmissionKey(submissionKey);
       setLeadPublicPlanSubmissionId(publicPlanSubmissionId);
       setLeadGrantedAt(grantedAt);
+      const { buildEnergyAssistantEnquirySubmission } = await import(
+        "@/lib/energy-assistant-enquiry-adapter.mjs"
+      );
       const submission = buildEnergyAssistantEnquirySubmission(
         lead.destination === "matched-trades"
           ? {
@@ -1519,7 +1527,7 @@ export function EnergyAssistantWidget() {
           {dedicated && (
             <aside className={styles.contextRail} aria-label="Your home context">
               <header className={styles.contextRailHeader}>
-                <Image src="/surge-mascot.png" alt="" width={54} height={68} />
+                <Image src="/surge-mascot.webp" alt="" width={54} height={68} />
                 <div>
                   <span>Surge AI knows</span>
                   <h2>Your home context</h2>
@@ -1750,7 +1758,7 @@ export function EnergyAssistantWidget() {
                     ) : (
                       <>
                         <span className={styles.assistantAvatar} aria-hidden="true">
-                          <Image src="/surge-mascot.png" alt="" width={56} height={70} />
+                          <Image src="/surge-mascot.webp" alt="" width={56} height={70} />
                         </span>
                         <article className={styles.answerCard}>
                         <header>
