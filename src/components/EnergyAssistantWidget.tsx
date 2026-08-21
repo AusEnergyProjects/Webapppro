@@ -1612,14 +1612,17 @@ export function EnergyAssistantWidget({
                         </button>
                       </header>
                       {knownFields.length ? (
-                        <dl>
-                          {knownFields.map((field) => (
-                            <div key={field.id}>
-                              <dt>{field.shortLabel}</dt>
-                              <dd>{surgeProfileAnswerLabel(profile, field)}</dd>
-                            </div>
-                          ))}
-                        </dl>
+                        <>
+                          <p className={styles.contextMobileSummary}>{knownFields.length} {knownFields.length === 1 ? "detail" : "details"} recorded</p>
+                          <dl>
+                            {knownFields.map((field) => (
+                              <div key={field.id}>
+                                <dt>{field.shortLabel}</dt>
+                                <dd>{surgeProfileAnswerLabel(profile, field)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </>
                       ) : <p>Not answered yet</p>}
                     </section>
                   );

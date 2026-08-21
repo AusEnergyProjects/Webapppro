@@ -393,12 +393,20 @@ test("Surge keeps the newest completed home context synchronized across browser 
 });
 
 test("Surge inherits the platform typography roles instead of inventing tiny variants", () => {
-  assert.match(styles, /--surge-type-title: clamp\(1\.25rem, 2vw, 1\.375rem\)/);
-  assert.match(styles, /--surge-type-heading: var\(--type-card-title, 1\.125rem\)/);
-  assert.match(styles, /--surge-type-body: var\(--type-action, \.9375rem\)/);
-  assert.match(styles, /--surge-type-label: var\(--type-label, \.875rem\)/);
+  assert.match(styles, /--surge-type-title: clamp\(1\.125rem, 1\.8vw, 1\.25rem\)/);
+  assert.match(styles, /--surge-type-heading: var\(--type-card-title, 1rem\)/);
+  assert.match(styles, /--surge-type-body: var\(--type-body, \.9375rem\)/);
+  assert.match(styles, /--surge-type-label: var\(--type-label, \.75rem\)/);
   assert.match(styles, /\.panel button,[\s\S]{0,120}\.panel summary/);
   assert.match(styles, /\.panel small,[\s\S]{0,120}\.panel fieldset > legend/);
+});
+
+test("mobile Surge context shows every planner section without a nested scroller", () => {
+  assert.match(widget, /contextMobileSummary/);
+  assert.match(styles, /\.contextMobileSummary \{\s*display: none;/);
+  assert.match(styles, /\.rootDedicated \.contextRail \{[^}]*max-height: none;[^}]*overflow: visible;/);
+  assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*display: grid;[^}]*overflow: visible;/);
+  assert.match(styles, /\.rootDedicated \.contextGroups dl \{\s*display: none;/);
 });
 
 test("local continuation caps messages and recent API context and expires after 30 days", () => {

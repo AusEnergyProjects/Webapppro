@@ -428,7 +428,7 @@
 .conversationFacts button {
   background: rgba(70, 230, 197, 0.08);
   border: 1px solid rgba(117, 237, 211, 0.34);
-  border-radius: 999px;
+  border-radius: 8px;
   color: #7cf1d7;
   cursor: pointer;
   font: inherit;
@@ -470,6 +470,10 @@
   color: #8fb8af;
   font-size: 0.57rem;
   margin: 8px 0 0;
+}
+
+.contextMobileSummary {
+  display: none;
 }
 
 .conversationFacts {
@@ -1610,7 +1614,7 @@
   .rootDedicated .panel {
     gap: 12px;
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(500px, 1fr);
+    grid-template-rows: auto auto;
     height: auto;
     max-height: none;
     min-height: 0;
@@ -1618,9 +1622,9 @@
   }
 
   .rootDedicated .contextRail {
-    border-radius: 18px;
-    max-height: 220px;
-    overflow: auto;
+    border-radius: 12px;
+    max-height: none;
+    overflow: visible;
     padding: 12px;
   }
 
@@ -1638,17 +1642,26 @@
   }
 
   .rootDedicated .contextGroups {
-    display: flex;
+    display: grid;
     gap: 8px;
-    padding-bottom: 3px;
+    overflow: visible;
+    padding: 0;
   }
 
   .rootDedicated .contextGroups > section {
-    flex: 0 0 190px;
+    flex: none;
+  }
+
+  .rootDedicated .contextGroups dl {
+    display: none;
+  }
+
+  .rootDedicated .contextMobileSummary {
+    display: block;
   }
 
   .rootDedicated .workspace {
-    border-radius: 18px;
+    border-radius: 12px;
     height: min(690px, calc(100dvh - 116px));
     min-height: 500px;
   }
@@ -1727,18 +1740,18 @@
 
 /* Surge uses the same compact platform typography roles at every breakpoint. */
 .panel {
-  --surge-type-title: clamp(1.25rem, 2vw, 1.375rem);
-  --surge-type-heading: var(--type-card-title, 1.125rem);
-  --surge-type-body: var(--type-action, .9375rem);
-  --surge-type-label: var(--type-label, .875rem);
-  --surge-type-action: var(--type-action, .9375rem);
+  --surge-type-title: clamp(1.125rem, 1.8vw, 1.25rem);
+  --surge-type-heading: var(--type-card-title, 1rem);
+  --surge-type-body: var(--type-body, .9375rem);
+  --surge-type-label: var(--type-label, .75rem);
+  --surge-type-action: var(--type-action, .875rem);
   font-size: var(--surge-type-body);
-  line-height: 1.6;
+  line-height: 1.52;
 }
 
 .panel h2 {
   font-size: var(--surge-type-title);
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: -.02em;
   line-height: 1.18;
   text-wrap: balance;
@@ -1747,7 +1760,7 @@
 .panel h3,
 .panel h4 {
   font-size: var(--surge-type-heading);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -.012em;
   line-height: 1.24;
   text-wrap: balance;
@@ -1757,7 +1770,7 @@
 .panel li,
 .panel dd {
   font-size: var(--surge-type-body);
-  line-height: 1.6;
+  line-height: 1.52;
   text-wrap: pretty;
 }
 
@@ -1790,13 +1803,92 @@
 .plannerProgress span,
 .plannerProgress small,
 .privacy p {
-  font-size: .8125rem;
+  font-size: .75rem;
+}
+
+.contextRail {
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.contextRailHeader h2 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.contextProgress strong {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+
+.plannerProgress {
+  border-radius: 10px;
+}
+
+.plannerProgress button,
+.intakeNav > button,
+.starters button,
+.destinationChoices button,
+.leadReturn,
+.leadSecondary,
+.leadTertiary,
+.leadPrimary,
+.leadOffer button,
+.leadSubmit,
+.composer button {
+  border-radius: 8px;
+}
+
+.contextGroups > section,
+.conversationFacts {
+  border-radius: 10px;
+}
+
+.contextGroups h3,
+.conversationFacts h3 {
+  font-size: .875rem;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+.contextGroups button,
+.conversationFacts button {
+  font-size: .75rem;
+  font-weight: 700;
+  min-height: 44px;
+  padding-inline: 11px;
 }
 
 @media (max-width: 640px) {
   .panel {
-    --surge-type-title: 1.25rem;
-    --surge-type-heading: 1.0625rem;
-    --surge-type-body: .9375rem;
+    --surge-type-title: 1.125rem;
+    --surge-type-heading: .9375rem;
+    --surge-type-body: .875rem;
+    --surge-type-label: .6875rem;
+    --surge-type-action: .8125rem;
+  }
+
+  .rootDedicated .contextRail {
+    border-radius: 12px;
+    max-height: none;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  .rootDedicated .contextGroups {
+    display: grid;
+    overflow: visible;
+  }
+
+  .rootDedicated .contextGroups > section {
+    padding: 9px 10px;
+  }
+
+  .rootDedicated .contextGroups h3 {
+    font-size: .875rem;
+  }
+
+  .rootDedicated .contextGroups button {
+    min-height: 44px;
   }
 }

@@ -145,7 +145,7 @@ test("public navigation keeps the TLink trade workspace clearly branded", () => 
   assert.doesNotMatch(guide, /account is optional|Save or ask trades|Create an account after seeing your roadmap/);
 });
 
-test("desktop navigation shows every option while mobile keeps a compact scrollable row", () => {
+test("desktop and mobile navigation show every option without hidden scrolling", () => {
   assert.match(chrome, /<ResponsiveSiteNav>/);
   assert.match(responsiveNav, /aria-label="Primary navigation"/);
   assert.doesNotMatch(responsiveNav, /Energy services|Scroll for more options|ResizeObserver|MutationObserver|hasHiddenOptions/);
@@ -159,6 +159,8 @@ test("desktop navigation shows every option while mobile keeps a compact scrolla
   );
   assert.doesNotMatch(styles, /site-nav-discovery|has-hidden-options/);
   assert.match(styles, /@media \(min-width: 721px\) \{[\s\S]*?\.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(8, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
+  assert.match(styles, /@media screen and \(max-width: 720px\) \{[\s\S]*?body\.aea-platform \.site-header \.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[^}]*overflow: visible;/);
+  assert.match(styles, /body\.aea-platform \.site-header \.comparator-nav a \{[^}]*white-space: normal;/);
   assert.match(
     styles,
     /\.site-header \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; \}/,
@@ -256,8 +258,8 @@ test("shared layout and component tokens prevent page-level visual drift", () =>
   assert.match(styles, /--layout-max: 1760px/);
   assert.match(styles, /\.wrap \{[^}]*max-width: var\(--layout-max\)/);
   assert.doesNotMatch(styles, /\.(?:start-page|guide-page) \{[^}]*max-width:/);
-  assert.match(styles, /--radius-control: 11px/);
-  assert.match(styles, /--radius-card: 18px/);
+  assert.match(styles, /--radius-control: 8px/);
+  assert.match(styles, /--radius-card: 14px/);
   assert.match(styles, /--action-primary: linear-gradient/);
   assert.match(styles, /\.btn \{[^}]*background: var\(--action-primary\)/);
   assert.match(styles, /\.guide-callout > a \{[^}]*background: var\(--action-primary\)/);
