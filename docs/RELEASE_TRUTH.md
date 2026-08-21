@@ -10,44 +10,51 @@ Deployment evidence last verified: 21 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: public Surge UX optimisation and shared wide layout
+## Current production release: Surge continuity and platform typography
 
-Application source `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 371 at `https://compare.ausenergyassessments.com`.
+Application source `9dc33106b51cb708837cbefa911ff1eaa3fa778d` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 372 at `https://compare.ausenergyassessments.com`.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` |
+| Application source | `9dc33106b51cb708837cbefa911ff1eaa3fa778d` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e` |
-| Public version | Sites version 371 |
-| Deployment | `appgdep_6a883f07c4108191a8f1fcc7db68dba1` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3` |
+| Public version | Sites version 372 |
+| Deployment | `appgdep_6a884b8fb4008191a62cea5d73058669` with status `succeeded` |
 | Hosted environment | Revision 24 |
-| Package content hash | `sha256:9c6e002b41303ac3b3874c4cc9bc65b2dd004ac611af13596f4ffa16b6c055db` |
+| Package content hash | `sha256:0eb7abd65b80091a1d29f35200ae503742a43ab91ab1ccc0cb1d1c17a827b2c1` |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Released outcome
 
-- The shared route shell now uses a 1760-pixel maximum across the public and customer platform while retaining responsive gutters and phone overflow protection.
-- The homepage uses a 70,632-byte WebP derivative of the existing Surge command-centre art, plus one subtle CSS scan that is disabled for reduced motion. It does not restore canvas, pointer, particle, blur-sweep or floating-tile work.
-- Every customer-facing Surge card and mascot launcher is a client link to the complete `/surge` page. The ordinary route no longer imports or opens the assistant popup; contextual planner prompts use a bounded one-use session draft.
-- The reported two-column Surge intake stretch is corrected by top-aligning grid items and giving each field max-content rows. Step 11 now renders four equal 46-pixel selects on desktop and phone.
-- Obsolete popup-event code and non-dedicated assistant loading styles were removed.
+- Public pages now share seven explicit typography roles: display, page, section, card, body, label and action. The AEA wordmark remains the only serif exception.
+- Home, plan and calculator use readable 16-pixel body copy, 14-pixel labels and supporting copy, and 15-pixel controls. Surge consumes the same card, label and action roles.
+- Optional service-request steps now expose a clear primary action, bounded secondary and tertiary actions, and an explicit `Back to Surge AI` return.
+- Asking a question closes any open optional-service form before appending the newest question and answer, preserving chronological conversation order at the bottom.
+- Same-browser tabs synchronise the newest bounded Surge conversation and home profile. Fully reviewed profiles and complete four-stage planner imports remain complete after route or tab changes.
+- The redundant `Energy upgrade guide` subtitle was removed from the compact Surge header control.
 
 ### Validation and runtime evidence
 
-- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
-- The focused Surge, navigation and public-scene suite passed 48 of 48 tests. `git diff --check` passed.
-- The public-performance audit reports a 4,587-byte root launcher, 69,544-byte deferred assistant and 728,155-byte global stylesheet.
-- Sites stored 44,482,560 bytes across 476 files with the package content hash above. The local release archive was 12,199,869 bytes with SHA-256 `5DE26CE8509A0270A839E0754572BDEC27ABCEDE39AA7D15745EF0D00F4FCE6F`.
-- Live desktop and 390 by 844 phone QA confirmed no horizontal overflow, equal Step 11 controls, the wide home and plan shell, the optimised homepage scene and full-page `/surge` navigation with no popup dialog.
-- GitHub, Sites managed source, saved version 371 and deployment provenance all resolve to the exact application source above.
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, the complete integration set, 2,806 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- The focused Surge, profile and navigation regression set passed 54 of 54 tests. `git diff --check` passed.
+- The public-performance audit reports a 4,587-byte root launcher, 70,897-byte deferred assistant and 730,818-byte global stylesheet.
+- Sites stored 44,492,800 bytes across 476 files with the package content hash above. The local release archive was 12,202,013 bytes with SHA-256 `FF5FDEEAFECA265F958074EBB2F5CF127F582C2FC303E8A7DD8B938D5F1D8B25`.
+- Live desktop QA confirmed 16-pixel public body copy, 15-pixel controls, a 22-pixel Surge title and no horizontal overflow across home, plan, calculator and Surge.
+- Live 390 by 844 phone QA confirmed 15-pixel Surge copy and controls, 48-pixel main actions, a 355-pixel Surge workspace and no horizontal overflow on all four routes.
+- GitHub source, saved version 372 and deployment provenance all resolve to the exact application source above.
 
 ### Boundaries
 
 - No assistant answer, API, authentication, database, migration, calculation, trade workflow or customer-data contract changed.
-- The shared stylesheet remains a 728,155-byte raw build asset. It passed the release budget but remains the next structural performance opportunity.
+- Persistence remains bounded to the same browser, expires after 30 days and does not create cross-device identity.
+- The shared stylesheet remains a 730,818-byte raw build asset. It passed the release budget but remains the next structural performance opportunity.
 - No real lead, email, trade record or customer record was created during live verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: public Surge UX optimisation and shared wide layout
+
+Application source `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` was deployed as public Sites version 371 under saved version `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e` and deployment `appgdep_6a883f07c4108191a8f1fcc7db68dba1`. It introduced the 1760-pixel shared shell, optimised homepage mascot treatment, full-page Surge navigation and aligned Step 11 controls.
 
 ## Previous production release: public customer-path performance recovery
 

@@ -1,62 +1,66 @@
 # Next task handover
 
-Status: public Surge navigation, responsive formatting and shared wide layout are released as Sites version 371. The next executable milestone is governed Surge knowledge.
+Status: Surge continuity, readable actions and the shared seven-role typography system are released as Sites version 372. The next executable milestone is governed Surge knowledge.
 
 Prepared: 21 August 2026
 
-Milestone ID: `AEA-PUBLIC-SURGE-UX-OPTIMISATION-71`
+Milestone ID: `AEA-SURGE-CONTINUITY-TYPOGRAPHY-72`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6`
+Current production application source: `9dc33106b51cb708837cbefa911ff1eaa3fa778d`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 371 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 372 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3`
 
-Current deployment: `appgdep_6a883f07c4108191a8f1fcc7db68dba1`
+Current deployment: `appgdep_6a884b8fb4008191a62cea5d73058669`
 
 Current environment revision: 24
 
 Migration inventory: 152 migrations through `0153_surge_model_usage_guard.sql`
 
-## Released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71
+## Released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72
 
 ### User outcome
 
-Customer pages now use one consistent wide shell, Surge is visibly represented on the homepage without restoring the former expensive visual stack, the reported Step 11 controls align correctly, and every customer-facing Surge entry opens the complete `/surge` workspace instead of a popup.
+Customers now see one clean type hierarchy across the public platform, clear primary and secondary actions in Surge, chronological conversation flow, and home context that remains completed when they switch routes or browser tabs.
 
 ### Released scope
 
-- Increase the shared public and customer shell from 1180 to 1760 pixels while preserving responsive gutters and phone overflow protection.
-- Reuse the existing Surge command-centre art on the homepage through a 70,632-byte 1920 by 1080 WebP derivative and one compositor-friendly scan line that is removed under reduced motion.
-- Keep the homepage free of canvas, pointer tracking, particles, blur sweeps, floating telemetry labels and the old white compositing failure.
-- Replace popup dispatch with client navigation to `/surge`; retain only a bounded, one-use session draft for contextual planner prompts.
-- Keep the full assistant absent from ordinary-route startup and prefetch `/surge` only on hover or keyboard focus.
-- Align the two-column Surge intake at the start of each grid row so help text cannot stretch the neighbouring select.
-- Remove the obsolete shared popup-event implementation and its dead loading styles.
+- Establish seven reusable platform roles for display, page, section, card, body, label and action text while preserving the AEA wordmark as the only serif exception.
+- Enforce readable 16-pixel public body copy, 14-pixel labels and supporting copy, and 15-pixel controls across home, plan and calculator routes; Surge uses the same shared card, label and action tokens.
+- Give optional service-request steps a visible primary action, bounded secondary and tertiary actions and a clear `Back to Surge AI` return.
+- Close an open optional service form before appending a new question so the newest question and answer remain at the logical bottom of the conversation.
+- Synchronise the newest bounded local Surge conversation and completed home profile between same-browser tabs without creating an account or tracking identity.
+- Canonicalise fully reviewed Surge profiles and completed four-stage planner imports as complete so route and tab changes do not reopen the intake.
+- Remove the redundant `Energy upgrade guide` subtitle from the compact shared Surge header control.
 
 ### Validation and release evidence
 
-- The focused navigation, spatial-journey and Surge regression set passed 48 of 48 tests.
-- `npm.cmd run validate` passed typecheck, warning-free lint, 36 of 36 integration tests, 2,802 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
-- The production performance gate reports a 4,587-byte root launcher, 69,544-byte deferred assistant and 728,155-byte shared stylesheet.
-- Local and live checks confirmed the shared 1760-pixel shell on home, plan, calculator, electricity, gas, guides, assessments and Surge routes without horizontal overflow at 1280 by 720 or 390 by 844.
-- Live homepage QA confirmed the optimised Surge image, ten-second subtle scan and `/surge` CTA. Live planner QA found only `/surge` links for the header, contextual card and mascot launcher, plus the separate hide-mascot control.
-- Live Step 11 QA confirmed all four selects are 46 pixels high and aligned in paired rows on desktop, then 46 pixels high and 274 pixels wide on phone.
-- GitHub and Sites managed `main` both identify exact source `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6`.
-- Sites saved version 371 as `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e`, storing 476 files and 44,482,560 bytes with content hash `sha256:9c6e002b41303ac3b3874c4cc9bc65b2dd004ac611af13596f4ffa16b6c055db`.
-- The matching local archive is 12,199,869 bytes with SHA-256 `5DE26CE8509A0270A839E0754572BDEC27ABCEDE39AA7D15745EF0D00F4FCE6F`.
-- Deployment `appgdep_6a883f07c4108191a8f1fcc7db68dba1` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- The focused Surge, profile and navigation regression set passed 54 of 54 tests.
+- `npm.cmd run validate` passed typecheck, warning-free lint, the complete integration set, 2,806 passing repository tests with 11 intentional skips and zero failures, all 152 migrations, the customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
+- The production performance gate reports a 4,587-byte root launcher, 70,897-byte deferred assistant and 730,818-byte shared stylesheet.
+- Local and live desktop checks confirmed 16-pixel public body copy, 15-pixel controls, a 22-pixel Surge title and no horizontal overflow across home, plan, calculator and Surge.
+- Live 390 by 844 checks confirmed 15-pixel Surge body and control text, 48-pixel main actions, a 355-pixel Surge workspace and no horizontal overflow on all four routes.
+- Exact source `9dc33106b51cb708837cbefa911ff1eaa3fa778d` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
+- Sites saved version 372 as `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3`, storing 476 files and 44,492,800 bytes with content hash `sha256:0eb7abd65b80091a1d29f35200ae503742a43ab91ab1ccc0cb1d1c17a827b2c1`.
+- The matching local archive is 12,202,013 bytes with SHA-256 `FF5FDEEAFECA265F958074EBB2F5CF127F582C2FC303E8A7DD8B938D5F1D8B25`.
+- Deployment `appgdep_6a884b8fb4008191a62cea5d73058669` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
 
 ### Boundaries and remaining optimisation work
 
 - No assistant answer, API, authentication, database, migration, calculator, trade workflow or customer-data contract changed.
-- The shared stylesheet remains approximately 728 KB raw and is the next structural performance opportunity. It passed the current performance budget, but splitting it safely by public, customer, trade and Creditex surfaces remains separate work.
+- Persistence remains bounded to the same browser, expires after 30 days and does not provide cross-device identity; signed-in association remains a separate milestone.
+- The shared stylesheet remains approximately 731 KB raw and is the next structural performance opportunity. It passed the current performance budget, but splitting it safely by public, customer, trade and Creditex surfaces remains separate work.
 - No real lead, message, trade record or customer record was created during verification.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71
+
+Sites version 371 introduced the shared 1760-pixel shell, optimised homepage mascot treatment, full-page `/surge` navigation and aligned Step 11 controls from exact source `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6`.
 
 ## Previous released milestone: AEA-PUBLIC-PERFORMANCE-RECOVERY-69
 

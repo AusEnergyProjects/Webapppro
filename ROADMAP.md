@@ -3282,6 +3282,12 @@ Carry the preferred wide format through the public and customer platform, correc
 
 Exact application commit `9c5e7199f3f9c521cf47510dafcf39cbe74d81f6` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 371 under `appgprj_6a550c378000819185caf094173422bb~appgver_4ce93839857c819180106e9800440d9e` and deployed publicly through `appgdep_6a883f07c4108191a8f1fcc7db68dba1` with environment revision 24. Desktop and 390 by 844 live QA confirmed the 1760-pixel shared shell, optimised 70,632-byte Surge homepage asset, full-page navigation, equal 46-pixel Step 11 fields and no horizontal overflow. Release truth contains exact archive and runtime evidence.
 
+## Released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72
+
+Replace fragmented page-level typography with seven shared platform roles, make Surge service-request actions visually meaningful, keep question-and-answer turns chronological, retain completed home context across same-browser routes and tabs, and remove the redundant compact-header subtitle.
+
+Exact application commit `9dc33106b51cb708837cbefa911ff1eaa3fa778d` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 372 under `appgprj_6a550c378000819185caf094173422bb~appgver_4a303cbf5afc8191bba9ec89b793fcd3` and deployed publicly through `appgdep_6a884b8fb4008191a62cea5d73058669` with environment revision 24. Desktop and 390 by 844 live QA confirmed the shared type scale, clear 48-pixel actions, correct conversation ordering, retained completion state and no horizontal overflow. Release truth contains exact archive and runtime evidence.
+
 ## Next five logical product steps
 
 1. Build the reviewed official Surge knowledge registry, freshness controls and deterministic programme facts.
