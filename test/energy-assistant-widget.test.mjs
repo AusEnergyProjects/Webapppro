@@ -461,8 +461,8 @@ test("context edit actions reveal and move focus to the selected intake step", (
 });
 
 test("desktop context answers have an independently usable scroll region", () => {
-  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRail \{[^}]*display: block;[^}]*height: 100%;[^}]*max-height: 100%;[^}]*overflow: hidden;/);
-  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailBody \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*height: calc\(100% - 83px\);[^}]*max-height: calc\(100% - 83px\);[^}]*min-height: 0;[^}]*overflow: hidden;/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRail \{[^}]*display: block;[^}]*height: 100%;[^}]*max-height: 100%;[^}]*overflow: hidden;[^}]*position: relative;/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailBody \{[^}]*bottom: 0;[^}]*display: flex;[^}]*flex-direction: column;[^}]*left: 0;[^}]*max-height: none;[^}]*min-height: 0;[^}]*overflow: hidden;[^}]*position: absolute;[^}]*right: 0;[^}]*top: 83px;/);
   assert.match(styles, /\.contextGroups \{[^}]*flex: 1 1 0;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
   assert.match(styles, /\.contextGroups \{[^}]*scrollbar-gutter: stable;[^}]*touch-action: pan-y;/);
   assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*flex: none;[^}]*overflow: visible;/);
