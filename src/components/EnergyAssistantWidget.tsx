@@ -803,6 +803,9 @@ function savedConversationActivity(session: SavedConversation) {
 }
 
 function savedConversationIsPreferred(candidate: SavedConversation, current: SavedConversation) {
+  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
+  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
+  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
   const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
   if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
@@ -811,6 +814,9 @@ function savedConversationIsPreferred(candidate: SavedConversation, current: Sav
 }
 
 function savedProfileIsPreferred(candidate: SavedConversation, current: SavedConversation) {
+  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
+  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
+  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
   const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
   if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;

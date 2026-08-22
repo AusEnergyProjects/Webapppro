@@ -374,8 +374,12 @@ test("browser storage failures cannot break widget hydration, persistence or res
       lastActive: value?.lastActive || "",
       expired: false,
     }),
-    (candidate, current) => candidate.profile.reviewed.length > current.profile.reviewed.length,
-    (candidate, current) => candidate.profile.reviewed.length > current.profile.reviewed.length,
+    (candidate, current) => (candidate.profile.knownAnswers?.length || 0) !== (current.profile.knownAnswers?.length || 0)
+      ? (candidate.profile.knownAnswers?.length || 0) > (current.profile.knownAnswers?.length || 0)
+      : candidate.profile.reviewed.length > current.profile.reviewed.length,
+    (candidate, current) => (candidate.profile.knownAnswers?.length || 0) !== (current.profile.knownAnswers?.length || 0)
+      ? (candidate.profile.knownAnswers?.length || 0) > (current.profile.knownAnswers?.length || 0)
+      : candidate.profile.reviewed.length > current.profile.reviewed.length,
     (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
     (_messages, _profile, profileUpdatedAt) => profileUpdatedAt,
   );
@@ -413,16 +417,25 @@ test("browser storage failures cannot break widget hydration, persistence or res
     assert.equal(helpers.readStoredSession(), validValue);
 
     const completeProfile = JSON.stringify({
-      profile: { reviewed: Array.from({ length: 45 }, (_, index) => `field-${index}`), completed: true },
+      profile: {
+        reviewed: Array.from({ length: 45 }, (_, index) => `field-${index}`),
+        knownAnswers: [],
+        completed: true,
+      },
       profileUpdatedAt: "2026-08-22T01:00:00.000Z",
     });
     const staleProfile = JSON.stringify({
-      profile: { reviewed: Array.from({ length: 38 }, (_, index) => `field-${index}`), completed: false },
+      profile: {
+        reviewed: Array.from({ length: 38 }, (_, index) => `field-${index}`),
+        knownAnswers: Array.from({ length: 30 }, (_, index) => `answer-${index}`),
+        completed: false,
+      },
       profileUpdatedAt: "2026-08-22T02:00:00.000Z",
     });
     helpers.storeSession(completeProfile);
     helpers.storeSession(staleProfile);
-    assert.equal(JSON.parse(helpers.readStoredSession()).profile.reviewed.length, 45);
+    assert.equal(JSON.parse(helpers.readStoredSession()).profile.reviewed.length, 38);
+    assert.equal(JSON.parse(helpers.readStoredSession()).profile.knownAnswers.length, 30);
 
     helpers.removeStoredSession();
     assert.equal(helpers.readStoredSession(), null);
@@ -443,6 +456,11 @@ test("Surge keeps the most complete, newest home context synchronized across bro
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
   assert.match(widget, /function savedConversationIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
   assert.match(widget, /function savedProfileIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
+  assert.match(widget, /candidateKnown !== currentKnown[\s\S]*candidateKnown > currentKnown/);
+  assert.ok(
+    widget.indexOf("candidateKnown !== currentKnown") < widget.indexOf("candidateReviewed !== currentReviewed"),
+    "real saved answers must be preferred before review flags",
+  );
   assert.match(widget, /candidateReviewed !== currentReviewed[\s\S]*candidateReviewed > currentReviewed/);
   assert.match(widget, /candidate\.profile\.completed !== current\.profile\.completed/);
   assert.match(widget, /savedConversationActivity\(candidate\) > savedConversationActivity\(current\)/);
