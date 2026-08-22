@@ -3324,11 +3324,11 @@ Keep the complete home context permanently visible on desktop while retaining th
 
 Exact application commit `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 378 under `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4` and deployed publicly through `appgdep_6a8871da825c8191926a9d71cca8f4df` with environment revision 24. Live desktop QA confirmed the rail is open and non-collapsible; sequential QA completed steps 1 through 13 and reached 45 of 45 reviewed; 390 by 844 QA confirmed the same rail remains a collapsed, tappable phone drawer. All 109 official sources carry volatility and reuse metadata, programme facts fail closed past the governed review date, and migration `0154_surge_conversation_quality_daily.sql` stores aggregate outcome counters only.
 
-## Validated release candidate: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81
+## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81
 
 Remove the unsolicited account-copy card, API, server helper, component and persistence table. Keep home context private to the same browser. Expand deterministic early guidance with practical provider-neutral measures selected from the latest saved context, and make Surge qualify complex questions like an energy assessor by asking one highest-value question at a time until it has enough context for a reliable answer. Retain governed official-source and fail-closed controls for rebates, certificates, tariffs and eligibility. Prohibit em dashes and en dashes in generated customer conversation copy.
 
-Focused assistant, guidance, widget, migration and release checks pass 110 of 110 tests. Full validation, exact Git identities, Sites packaging, deployment and live desktop and phone QA remain the release gates.
+Exact application source `1b2509768bbca7947e3a01438da4c8814d20fe90` passed focused checks 110 of 110 and the full repository validation gate, including 36 integration tests, 2,851 repository tests with zero failures and 11 intentional skips, all 157 migrations, production build, Sites bundle audit and performance audit. It was pushed to GitHub and Sites managed `main`, saved as Sites version 390 under `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065` and deployed publicly through `appgdep_6a89b86b8c048191bb5d187f9e972407` at environment revision 24. Fresh desktop QA confirmed the account controls are absent, current assets load without console errors and the workspace has no horizontal overflow.
 
 ## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80
 

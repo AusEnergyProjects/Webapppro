@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: Practical assessor guidance and removal of the unwanted Surge account-copy controls are validated for release. Current public production remains Sites version 389 until the replacement is deployed. Priority 1 is governed official-change operations; Priority 2 is continuous conversation-quality enforcement.
+Status: Practical assessor guidance and removal of the unwanted Surge account-copy controls are released as public Sites version 390. Priority 1 is governed official-change operations; Priority 2 is continuous conversation-quality enforcement.
 
 Prepared: 23 August 2026
 
@@ -8,43 +8,49 @@ Milestone ID: `AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `8d887f867269a157d84928fb553eac4951ed517b`
+Current production application source: `1b2509768bbca7947e3a01438da4c8814d20fe90`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 389 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 390 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065`
 
-Current deployment: `appgdep_6a898f2b620c81918109cac63f954590`
+Current deployment: `appgdep_6a89b86b8c048191bb5d187f9e972407`
 
 Current environment revision: 24
 
-Candidate migration inventory: 157 migrations through `0158_remove_surge_account_context.sql`
+Current migration inventory: 157 migrations through `0158_remove_surge_account_context.sql`
 
-## Validated release candidate: practical assessor guidance and account-copy removal
+## Released milestone: practical assessor guidance and account-copy removal
 
-This candidate removes the unsolicited account-copy card, its API, server helper, component, tests and database table. Surge keeps the private same-browser home context only, without presenting account controls or suggesting that an account is required.
+This release removes the unsolicited account-copy card, its API, server helper, component, tests and database table. Surge keeps the private same-browser home context only, without presenting account controls or suggesting that an account is required.
 
 The early guidance rail now prioritises practical, provider-neutral actions supported by the saved home context. The bounded rules cover safe gap sealing, door and window seals, door snakes, suitable removable window films, cellular coverings, insulation top-ups, efficient reverse-cycle heating, electric throws, filter cleaning, solar and tariff load shifting, evaporative outlet checks, humidity control, heat-pump drying and seasonal deciduous shade. Safety-critical ventilation, flues, exhausts and regulated work remain explicit boundaries.
 
 Surge's answer policy now behaves like an energy assessor and educator. It gives the useful part of an answer immediately, then asks exactly one highest-value qualifying question when location, existing equipment, tenure, eligibility, proposed replacement or another material fact is missing. Rebate and certificate answers remain fail-closed against the governed official-source registry and never guess values or eligibility. Conversation copy continues to prohibit em dashes and en dashes.
 
-### Candidate validation evidence
+### Validation and release evidence
 
 - Focused assistant, guidance, widget, migration and release tests pass 110 of 110 checks.
 - Regression coverage prevents the removed account component, route and server helper from returning.
 - Contextual guidance tests cover moisture removal, low-cost draught actions, window measures, solar load shifting and tariff timing.
 - Hot-water rebate tests prove one-question-at-a-time qualification, beginning with the current hot-water system before a proposed replacement.
-- Full repository validation and exact deployment identities are recorded after the candidate passes the release gate.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,851 repository tests with 11 intentional skips and zero failures, a fresh 157-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and performance audit.
+- The production performance gate reports a 4,758-byte root launcher, 84,713-byte deferred assistant, 732,292-byte stylesheet, 293,048-byte public graph, 920,379-byte customer graph, 956,257-byte trade graph and 1,792,764-byte Creditex graph.
+- Exact application source `1b2509768bbca7947e3a01438da4c8814d20fe90` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
+- The matching local archive is 12,202,751 bytes with SHA-256 `2777CD1CC0D1565671CD4C0F872CC8707562CC2979E40888B18CF8E655C521A7`.
+- Sites saved version 390 as `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065`, storing 484 files and 44,584,960 bytes with content hash `sha256:441010807c5563b7e3890f2358dc6bdc4bb194d532959ba58cb337ff0f6f63aa`.
+- Deployment `appgdep_6a89b86b8c048191bb5d187f9e972407` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Fresh desktop live QA confirmed that account controls are absent, the three-column workspace has no horizontal overflow and current release assets load without console errors. An older running tab retained a superseded hashed asset reference, but that failure was not reproduced in a clean current-release tab.
 
-### Candidate boundaries
+### Boundaries
 
 - Saved home context stays in the same browser. No account-copy control, automatic account association or replacement account mechanism is included.
 - Product and brand names in customer-supplied references are treated as examples only. Published guidance remains provider-neutral.
 - Current rebates, certificates, tariffs and programme eligibility require current governed official facts. Surge asks for missing context and fails closed when those facts are unavailable or overdue.
 
-## Current production release: context-aware guidance and five priority controls
+## Previous production release: context-aware guidance and five priority controls
 
 This release removes stale moisture guidance as soon as the saved context no longer reports moisture or damp issues. The guidance rail is derived again from the complete allowlisted profile on every profile change, so each tip must be supported by the customer's currently saved answers.
 

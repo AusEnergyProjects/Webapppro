@@ -6,21 +6,50 @@ Truth owners: product owner and technical lead
 
 Last reconciled locally: 23 August 2026
 
-Deployment evidence last verified: 22 August 2026
+Deployment evidence last verified: 23 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Validated release candidate: practical Surge assessor guidance and account-copy removal
+## Current production release: practical Surge assessor guidance and account-copy removal
 
-The current candidate removes the unsolicited account-context save and delete feature in full. It removes the customer card, lazy client import, API route, server helper, component styles, feature tests and persisted `surge_account_context` table. Same-browser private context remains the only home-context persistence path.
+Application source `1b2509768bbca7947e3a01438da4c8814d20fe90` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 390 at `https://compare.ausenergyassessments.com`.
+
+The release removes the unsolicited account-context save and delete feature in full. It removes the customer card, lazy client import, API route, server helper, component styles, feature tests and persisted `surge_account_context` table. Same-browser private context remains the only home-context persistence path.
 
 Early deterministic guidance now uses the saved context to select practical provider-neutral actions such as safe gap sealing, door and window seals, door snakes, removable glazing films, cellular coverings, insulation top-ups, reverse-cycle heating, electric throws, filter cleaning, solar and tariff load shifting, evaporative outlet checks, humidity control, heat-pump drying and deciduous shade. Advice that conflicts with the latest saved context is excluded.
 
 The assistant prompt and deterministic fallback now follow an assessor-style progressive qualification contract. Surge answers what can be answered, asks exactly one highest-value question when a material fact is missing, and continues until there is enough context for a reliable answer. Hot-water rebate qualification starts with the current system and then gathers location, proposed replacement and other eligibility facts as needed. Current programmes and values still require governed official sources and fail closed when evidence is missing or overdue. Generated conversation copy prohibits em dashes and en dashes.
 
-Focused assistant, guidance, widget, migration and release checks pass 110 of 110 tests. Full repository validation and exact Sites release evidence remain pending for this candidate. Public production remains the exact version 389 release recorded below until the replacement is deployed.
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `1b2509768bbca7947e3a01438da4c8814d20fe90` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065` |
+| Public version | Sites version 390 |
+| Deployment | `appgdep_6a89b86b8c048191bb5d187f9e972407` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:441010807c5563b7e3890f2358dc6bdc4bb194d532959ba58cb337ff0f6f63aa` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
 
-## Current production release: context-aware Surge guidance and five priority controls
+### Validation and runtime evidence
+
+- Focused assistant, guidance, widget, migration and release checks passed 110 of 110 tests.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,851 repository tests with 11 intentional skips and zero failures, a fresh 157-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and performance audit.
+- The production performance gate reports a 4,758-byte root launcher, 84,713-byte deferred assistant, 732,292-byte stylesheet, 293,048-byte public graph, 920,379-byte customer graph, 956,257-byte trade graph and 1,792,764-byte Creditex graph.
+- The matching local archive is 12,202,751 bytes with SHA-256 `2777CD1CC0D1565671CD4C0F872CC8707562CC2979E40888B18CF8E655C521A7`.
+- Sites stored 44,584,960 bytes across 484 files with package content hash `sha256:441010807c5563b7e3890f2358dc6bdc4bb194d532959ba58cb337ff0f6f63aa` and deployed the saved version through deployment `appgdep_6a89b86b8c048191bb5d187f9e972407` at environment revision 24.
+- Exact application source was present on GitHub `main`, the working branch and Sites managed `main` before packaging.
+- Fresh desktop live QA confirmed that account controls are absent, the three-column workspace has no horizontal overflow and current assets load without console errors. An old retained tab referenced a superseded hashed asset, but the failure did not reproduce in a clean version 390 tab.
+
+### Boundaries
+
+- Saved home context remains same-browser for 30 days. It is not an account, verified property record or cross-device identity.
+- Product names supplied in references remain examples only. Published guidance is provider-neutral.
+- Current rebates, certificates, tariffs and programme eligibility require current governed official facts and fail closed when evidence is missing or overdue.
+- Live QA did not send a chat turn, create a lead or alter home context.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: context-aware Surge guidance and five priority controls
 
 Application source `8d887f867269a157d84928fb553eac4951ed517b` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 389 at `https://compare.ausenergyassessments.com`.
 
