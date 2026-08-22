@@ -6,7 +6,7 @@ import {
   ENERGY_ASSISTANT_VOLATILITY_CLASSES,
 } from "../src/data/energy-assistant-knowledge.ts";
 
-const REVIEWED_AT = "2026-08-20";
+const REVIEW_DAY = "2026-08-22";
 const PROHIBITED_RUNTIME_HOSTS = [
   "choice.com.au",
   "drkarl.com",
@@ -57,8 +57,8 @@ const OFFICIAL_RUNTIME_HOSTS = new Set([
   "moneysmart.gov.au",
 ]);
 
-test("runtime knowledge is a 109-source official Australian corpus", () => {
-  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 109);
+test("runtime knowledge is a 111-source official Australian corpus", () => {
+  assert.equal(ENERGY_ASSISTANT_KNOWLEDGE.length, 111);
   assert.deepEqual(
     [...new Set(ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.topic))].sort(),
     [...ENERGY_ASSISTANT_TOPICS].sort(),
@@ -67,10 +67,11 @@ test("runtime knowledge is a 109-source official Australian corpus", () => {
   for (const source of ENERGY_ASSISTANT_KNOWLEDGE) {
     assert.equal(source.official, true, source.id);
     assert.equal(source.storagePolicy, "local_factual_summary", source.id);
-    assert.equal(source.reviewedAt, REVIEWED_AT, source.id);
+    assert.match(source.reviewedAt, /^\d{4}-\d{2}-\d{2}$/, source.id);
+    assert.ok(source.reviewedAt <= REVIEW_DAY, source.id);
     assert.match(source.reviewDue, /^\d{4}-\d{2}-\d{2}$/, source.id);
     assert.ok(source.reviewDue > source.reviewedAt, source.id);
-    assert.ok(source.reviewDue <= "2027-08-20", source.id);
+    assert.ok(source.reviewDue <= "2027-08-22", source.id);
     assert.ok(ENERGY_ASSISTANT_VOLATILITY_CLASSES.includes(source.volatilityClass), source.id);
     assert.equal(source.reuseBasis, source.licence, source.id);
     assert.ok(source.jurisdiction.trim().length > 0, source.id);

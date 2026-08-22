@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   parseSurgeConversationState,
@@ -40,6 +41,8 @@ import {
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
 import { createHomeEnergyPlannerPublicPlanSnapshot } from "@/lib/home-energy-planner-schema";
 import { takePendingSurgeDraft } from "@/lib/surge-page-navigation";
+import { homeContextTips } from "@/lib/surge-home-context-tips";
+import { recordSurgeProfileStorageHealth } from "@/lib/surge-profile-storage-health";
 import {
   ENERGY_ASSISTANT_MATCHING_EXPLANATION,
   ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION,
@@ -51,6 +54,11 @@ import {
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./EnergyAssistantWidget.module.css";
+
+const SurgeAccountContextControls = dynamic(
+  () => import("./SurgeAccountContextControls").then((module) => module.SurgeAccountContextControls),
+  { ssr: false },
+);
 
 type Audience = "public" | "customer" | "trade";
 
@@ -143,11 +151,6 @@ type PersistedSessionOverrides = {
   nextProfileUpdatedAt?: string;
 };
 
-type HomeContextTip = {
-  title: string;
-  detail: string;
-};
-
 const STORAGE_KEY = "aea-energy-guide-v1";
 const PROFILE_BACKUP_KEY = "aea-energy-guide-profile-backup-v1";
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
@@ -177,57 +180,6 @@ const START_ROADMAP = [
     ],
   },
 ] as const;
-
-function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] {
-  const tips: HomeContextTip[] = [];
-  const reviewed = new Set(profile.reviewed);
-  if (surgeProfileKnownAnswerCount(profile) < SURGE_PROFILE_FIELDS.length) {
-    tips.push({
-      title: "Finish the missing context",
-      detail: "Resume at the next unanswered section so Surge AI can use the complete home picture.",
-    });
-  }
-  if (
-    reviewed.has("feature:ceiling-insulation")
-    && (profile.features.includes("ceiling-insulation-none") || profile.features.includes("ceiling-insulation-limited"))
-  ) {
-    tips.push({
-      title: "Check the ceiling first",
-      detail: "Confirm moisture, safety clearances and continuous insulation coverage before sizing new equipment.",
-    });
-  }
-  if (
-    reviewed.has("feature:comfort-concerns")
-    && (profile.features.includes("draughty") || profile.features.includes("condensation-moisture"))
-  ) {
-    tips.push({
-      title: "Control moisture and unwanted leaks",
-      detail: "Prioritise the largest draught and moisture sources while keeping required ventilation working.",
-    });
-  }
-  if (
-    reviewed.has("feature:glazing")
-    && (profile.features.includes("single-glazing") || profile.features.includes("mixed-glazing"))
-  ) {
-    tips.push({
-      title: "Improve windows in stages",
-      detail: "Start with seals, coverings and external shade before deciding whether full replacement is worthwhile.",
-    });
-  }
-  if (reviewed.has("supplemental:gasConnection") && profile.gasConnection === "connected") {
-    tips.push({
-      title: "Sequence electrification carefully",
-      detail: "Reduce demand first, then confirm electrical capacity before replacing major gas appliances.",
-    });
-  }
-  if (tips.length === 0) {
-    tips.push({
-      title: "Your context is ready",
-      detail: "Ask Surge AI what to prioritise and it will use the confirmed details saved in this browser.",
-    });
-  }
-  return tips.slice(0, 3);
-}
 
 const SAFE_CONVERSATION_FACT_LABELS: Readonly<Record<string, string>> = {
   approval: "Approval constraint",
@@ -807,23 +759,23 @@ function savedConversationActivity(session: SavedConversation) {
 }
 
 function savedConversationIsPreferred(candidate: SavedConversation, current: SavedConversation) {
-  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
-  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
-  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
   const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
   if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
+  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
+  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
+  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
   return savedConversationActivity(candidate) > savedConversationActivity(current);
 }
 
 function savedProfileIsPreferred(candidate: SavedConversation, current: SavedConversation) {
-  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
-  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
-  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
   const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
   if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
+  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
+  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
+  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
   if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
   return new Date(candidate.profileUpdatedAt || "").getTime()
     > new Date(current.profileUpdatedAt || "").getTime();
@@ -867,7 +819,7 @@ function readStoredSession() {
           preferred = { raw, session };
         }
       } catch {
-        // Ignore one malformed or inaccessible copy and continue to the next mirror.
+        recordSurgeProfileStorageHealth("load_failed");
       }
     }
   }
@@ -882,6 +834,7 @@ function storeSession(value: string) {
     const storedValue = readStoredSession();
     const stored = storedValue ? savedConversation(JSON.parse(storedValue)) : null;
     if (candidateRecord && stored && savedProfileIsPreferred(stored, candidate)) {
+      recordSurgeProfileStorageHealth("merge_recovered");
       nextValue = JSON.stringify({
         ...candidateRecord,
         profile: stored.profile,
@@ -896,7 +849,7 @@ function storeSession(value: string) {
     try {
       storage.setItem(STORAGE_KEY, nextValue);
     } catch {
-      // Keep writing the remaining mirrors when one storage surface is unavailable.
+      recordSurgeProfileStorageHealth("save_failed");
     }
     try {
       const next = savedConversation(JSON.parse(nextValue));
@@ -906,7 +859,7 @@ function storeSession(value: string) {
         storage.setItem(PROFILE_BACKUP_KEY, nextValue);
       }
     } catch {
-      // A malformed or inaccessible backup must not block the primary session write.
+      recordSurgeProfileStorageHealth("save_failed");
     }
   }
 }
@@ -929,7 +882,7 @@ function readStoredPlannerAssessment() {
       const stored = storage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
       if (stored) return stored;
     } catch {
-      // Continue to the remaining storage mirror.
+      recordSurgeProfileStorageHealth("load_failed");
     }
   }
   return null;
@@ -940,7 +893,7 @@ function storePlannerAssessment(value: string) {
     try {
       storage.setItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY, value);
     } catch {
-      // The planner still opens when one browser storage surface is unavailable.
+      recordSurgeProfileStorageHealth("save_failed");
     }
   }
 }
@@ -1993,6 +1946,7 @@ export function EnergyAssistantWidget({
                 <button type="button" onClick={openHomeEnergyPlanner}>Open my energy plan</button>
                 <small>Only the confirmed answers shown here are copied into your private plan.</small>
               </section>
+              <SurgeAccountContextControls profile={profile} />
               <div className={styles.contextGroups}>
                 {SURGE_PROFILE_STEPS.map((step, stepIndex) => {
                   const knownFields = step.fields.filter((field) => !surgeProfileFieldIsUnknown(profile, field));

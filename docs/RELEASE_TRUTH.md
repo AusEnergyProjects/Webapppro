@@ -10,6 +10,14 @@ Deployment evidence last verified: 22 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
+## Validated release candidate: context-aware Surge guidance and five priority controls
+
+The current worktree contains a bounded candidate that recalculates the desktop guidance rail from the complete allowlisted home profile whenever an answer changes. Moisture and damp guidance is now conditional on a current saved moisture answer, and regression coverage proves that the guidance appears when selected and disappears when the answer is removed.
+
+The candidate also adds a bounded official-change review queue, a reviewed conversation-quality corpus and release thresholds, aggregate-only profile-storage health reporting, measured surface-specific JavaScript graph budgets, and explicit signed-in save and delete controls for an account copy of home context. It does not automatically associate same-browser context with an account and does not store profile or conversation content in health or quality telemetry.
+
+Focused behaviour and account-context tests pass 43 of 43, typecheck passes, and the measured production asset-boundary audit passes. It is not recorded as production until full validation, exact-source packaging, Sites deployment and live desktop and phone QA are complete.
+
 ## Current production release: durable Surge context and chronological workspace
 
 Application source `365101733253f2ff39532343bcef81303e96e1e2` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 379 at `https://compare.ausenergyassessments.com`.
@@ -917,11 +925,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
-2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
-3. Add an isolated end-to-end 45-field persistence rehearsal covering route changes, reload, browser-tab switching, unknown answers and next-incomplete resumption, plus aggregate-only detection of save failures.
-4. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
-5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
+1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
+2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, blocking releases below each threshold without retaining customer content.
+3. Run controlled browser continuity rehearsals across reload, route and tab changes with injected storage faults, and alert only on aggregate health counts.
+4. Extract the remaining shared stylesheet into route-owned public, customer, trade and Creditex chunks while keeping the measured graph budgets green.
+5. Pilot explicit signed-in account context save and deletion with accessibility, mobile, support and failure-recovery checks before any launch declaration.
 
 ## Previous quote, job and invoice usability release
 

@@ -20,7 +20,21 @@ Current deployment: `appgdep_6a88e70dfe908191b90ea491455ef531`
 
 Current environment revision: 24
 
-Migration inventory: 153 migrations through `0154_surge_conversation_quality_daily.sql`
+Migration inventory: 156 migrations through `0157_surge_account_context.sql`
+
+## Validated release candidate: context-aware guidance and five priority controls
+
+This candidate removes stale moisture guidance as soon as the saved context no longer reports moisture or damp issues. The guidance rail is derived again from the complete allowlisted profile on every profile change, so each tip must be supported by the customer's currently saved answers.
+
+The same bounded change completes the five requested follow-on controls:
+
+- a 25-record official-source review queue with changed and overdue volatile facts remaining fail-closed;
+- a reviewed conversation evaluation corpus with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds;
+- immediate same-browser profile writes, cross-tab merge recovery and aggregate-only storage-health counters with no profile or conversation content;
+- measured public, customer, trade and Creditex JavaScript graph budgets that prevent protected entry chunks from returning to the public launcher;
+- explicit signed-in `Save context to my account` and `Delete account copy` controls, with no automatic account association.
+
+Focused behaviour and account-context tests pass 43 of 43, typecheck passes, and the measured production asset-boundary audit passes. Full repository validation, exact-source release packaging, Sites deployment and live desktop and phone QA remain the release gate.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
@@ -179,16 +193,16 @@ Every customer click should feel immediate, the home page must remain visually s
 - Public replies do not expose citations, source URLs, internal platform names or model internals.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
 
-## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-78
+## Next executable milestone: SURGE-OFFICIAL-REVIEW-OPERATIONS-81
 
 ### Objective
 
-Expand the reviewed official Surge registry beyond the current 109-source foundation and add an operator-owned official-change review workflow without copying commercial authors, inventing rebate values or turning unreviewed web pages into answer authority.
+Connect the bounded official-change queue to scheduled official hash checks and reviewer approval without copying commercial authors, inventing rebate values or turning unreviewed web pages into answer authority.
 
 ### Acceptance gate
 
 - Every new answer-influencing record has an official canonical URL, publisher, jurisdiction, reviewed summary, observed date, volatility class, reuse basis and next-review date before it can become active.
-- A bounded official-change queue identifies due, stale and changed high-volatility records without automatically promoting newly discovered content.
+- Scheduled checks feed the bounded official-change queue with due, stale and changed high-volatility records without automatically promoting newly discovered content.
 - Stable educational guidance remains separate from volatile programme, certificate, product-list, price and eligibility facts.
 - Volatile records fail closed after their review date.
 - Programme answers state the matching jurisdiction and date basis, answer the posed rule before asking for more input and never invent a dollar amount.
@@ -206,11 +220,11 @@ Expand the reviewed official Surge registry beyond the current 109-source founda
 
 ## Next five logical product steps
 
-1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
-2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
-3. Add an isolated end-to-end 45-field persistence rehearsal covering route changes, reload, browser-tab switching, unknown answers and next-incomplete resumption, plus aggregate-only detection of save failures.
-4. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
-5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
+1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
+2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, blocking releases below each threshold without retaining customer content.
+3. Run controlled browser continuity rehearsals across reload, route and tab changes with injected storage faults, and alert only on aggregate health counts.
+4. Extract the remaining shared stylesheet into route-owned public, customer, trade and Creditex chunks while keeping the measured graph budgets green.
+5. Pilot explicit signed-in account context save and deletion with accessibility, mobile, support and failure-recovery checks before any launch declaration.
 
 ## Historical release handovers
 

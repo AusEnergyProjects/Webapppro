@@ -1027,7 +1027,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
   assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: Durable Surge home-context continuity, chronological chat and the persistent guidance rail are released as Sites version 379/);
-  assert.match(currentHandover, /## Next executable milestone: SURGE-GOVERNED-KNOWLEDGE-78/);
+  assert.match(currentHandover, /## Next executable milestone: SURGE-OFFICIAL-REVIEW-OPERATIONS-81/);
   assert.match(currentHandover, /Milestone ID: `AEA-SURGE-CONTEXT-CONTINUITY-79`/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
   assert.match(roadmap, /365101733253f2ff39532343bcef81303e96e1e2[\s\S]{0,360}Sites version 379/);
@@ -1054,7 +1054,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /Current production: Sites version 379 at `https:\/\/compare\.ausenergyassessments\.com`/);
   assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4928e91cf1688191b282c32650d17325`/);
   assert.match(currentHandover, /Current deployment: `appgdep_6a88e70dfe908191b90ea491455ef531`/);
-  assert.match(currentHandover, /Migration inventory: 153 migrations through `0154_surge_conversation_quality_daily\.sql`/);
+  assert.match(currentHandover, /Migration inventory: 156 migrations through `0157_surge_account_context\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
   assert.match(handover, /Historical version 334 application source: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
@@ -1832,11 +1832,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(releaseTruthStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.equal(normalisedReleaseTruthNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Priority 1:\*\* expand the reviewed official Surge registry beyond 109 maintained sources/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Priority 2:\*\* build a reviewed conversation evaluation corpus and quality view/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. Add an isolated end-to-end 45-field persistence rehearsal/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. Add deliberate signed-in context association and deletion controls/);
+  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Priority 1:\*\* connect the bounded official-change queue to scheduled official hash checks and reviewer approvals/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Priority 2:\*\* run the reviewed conversation corpus in CI and an aggregate operator quality view/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. Run controlled browser continuity rehearsals/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. Extract the remaining shared stylesheet into route-owned public, customer, trade and Creditex chunks/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. Pilot explicit signed-in account context save and deletion/);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

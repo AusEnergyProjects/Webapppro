@@ -24,6 +24,7 @@ const surgeRoute = read("../src/app/surge/page.tsx");
 const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
+const homeContextTipsSource = read("../src/lib/surge-home-context-tips.ts");
 const mascotImage = readFileSync(new URL("../public/surge-mascot.webp", import.meta.url));
 
 function functionSource(source, name) {
@@ -123,7 +124,8 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /markSurgeProfileStepReviewed\(profileRef\.current, currentProfileStep\)/);
   assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
   assert.match(widget, /\? "Continue setup"/);
-  assert.match(widget, /function homeContextTips\(profile: SurgeStarterProfile\)/);
+  assert.match(widget, /import \{ homeContextTips \} from "@\/lib\/surge-home-context-tips"/);
+  assert.match(homeContextTipsSource, /export function homeContextTips\(profile: SurgeStarterProfile\)/);
   assert.match(widget, /profileUpdatedAt/);
   assert.doesNotMatch(widget, /autoFocus/);
   assert.match(widget, /className=\{styles\.assistantAvatar\}/);
@@ -368,6 +370,7 @@ test("browser storage failures cannot break widget hydration, persistence or res
     "savedProfileIsPreferred",
     "asRecord",
     "localSessionLastActive",
+    "recordSurgeProfileStorageHealth",
     `${compiled}; return { readStoredSession, storeSession, removeStoredSession };`,
   )(
     "test-session",
@@ -389,6 +392,7 @@ test("browser storage failures cannot break widget hydration, persistence or res
       : candidate.profile.reviewed.length > current.profile.reviewed.length,
     (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
     (_messages, _profile, profileUpdatedAt) => profileUpdatedAt,
+    () => undefined,
   );
   const existingWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   try {
@@ -464,12 +468,12 @@ test("Surge keeps the most complete, newest home context synchronized across bro
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
   assert.match(widget, /function savedConversationIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
   assert.match(widget, /function savedProfileIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
+  assert.match(widget, /candidateReviewed !== currentReviewed[\s\S]*candidateReviewed > currentReviewed/);
   assert.match(widget, /candidateKnown !== currentKnown[\s\S]*candidateKnown > currentKnown/);
   assert.ok(
-    widget.indexOf("candidateKnown !== currentKnown") < widget.indexOf("candidateReviewed !== currentReviewed"),
-    "real saved answers must be preferred before review flags",
+    widget.indexOf("candidateReviewed !== currentReviewed") < widget.indexOf("candidateKnown !== currentKnown"),
+    "all reviewed answers, including explicit Not sure answers, must be preserved before known-answer count",
   );
-  assert.match(widget, /candidateReviewed !== currentReviewed[\s\S]*candidateReviewed > currentReviewed/);
   assert.match(widget, /candidate\.profile\.completed !== current\.profile\.completed/);
   assert.match(widget, /savedConversationActivity\(candidate\) > savedConversationActivity\(current\)/);
   assert.match(widget, /if \(!savedConversationIsPreferred\(saved, current\)\) return/);
