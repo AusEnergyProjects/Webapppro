@@ -810,6 +810,15 @@ function savedConversationIsPreferred(candidate: SavedConversation, current: Sav
   return savedConversationActivity(candidate) > savedConversationActivity(current);
 }
 
+function savedProfileIsPreferred(candidate: SavedConversation, current: SavedConversation) {
+  const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
+  const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
+  if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
+  if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
+  return new Date(candidate.profileUpdatedAt || "").getTime()
+    > new Date(current.profileUpdatedAt || "").getTime();
+}
+
 function accessBrowserStorage<T>(operation: (storage: Storage) => T, fallback: T): T {
   try {
     return operation(window.localStorage);
@@ -818,22 +827,76 @@ function accessBrowserStorage<T>(operation: (storage: Storage) => T, fallback: T
   }
 }
 
+function availableSessionStorages() {
+  const storages: Storage[] = [];
+  try {
+    if (window.localStorage) storages.push(window.localStorage);
+  } catch {
+    // Continue with the per-tab mirror when persistent browser storage is unavailable.
+  }
+  try {
+    if (window.sessionStorage && !storages.includes(window.sessionStorage)) {
+      storages.push(window.sessionStorage);
+    }
+  } catch {
+    // Saving is best effort and must not block the guide when storage is unavailable.
+  }
+  return storages;
+}
+
 function readStoredSession() {
-  return accessBrowserStorage((storage) => storage.getItem(STORAGE_KEY), null);
+  let preferred: { raw: string; session: SavedConversation } | null = null;
+  for (const storage of availableSessionStorages()) {
+    try {
+      const raw = storage.getItem(STORAGE_KEY);
+      if (!raw) continue;
+      const session = savedConversation(JSON.parse(raw));
+      if (session.expired) continue;
+      if (!preferred || savedConversationIsPreferred(session, preferred.session)) {
+        preferred = { raw, session };
+      }
+    } catch {
+      // Ignore one malformed or inaccessible copy and continue to the mirror.
+    }
+  }
+  return preferred?.raw ?? null;
 }
 
 function storeSession(value: string) {
-  accessBrowserStorage((storage) => {
-    storage.setItem(STORAGE_KEY, value);
-    return true;
-  }, false);
+  let nextValue = value;
+  try {
+    const candidateRecord = asRecord(JSON.parse(value));
+    const candidate = savedConversation(candidateRecord);
+    const storedValue = readStoredSession();
+    const stored = storedValue ? savedConversation(JSON.parse(storedValue)) : null;
+    if (candidateRecord && stored && savedProfileIsPreferred(stored, candidate)) {
+      nextValue = JSON.stringify({
+        ...candidateRecord,
+        profile: stored.profile,
+        profileUpdatedAt: stored.profileUpdatedAt,
+        lastActive: localSessionLastActive(candidate.messages, stored.profile, stored.profileUpdatedAt),
+      });
+    }
+  } catch {
+    // Preserve the caller's bounded value if an existing copy cannot be compared.
+  }
+  for (const storage of availableSessionStorages()) {
+    try {
+      storage.setItem(STORAGE_KEY, nextValue);
+    } catch {
+      // Keep writing the remaining mirrors when one storage surface is unavailable.
+    }
+  }
 }
 
 function removeStoredSession() {
-  accessBrowserStorage((storage) => {
-    storage.removeItem(STORAGE_KEY);
-    return true;
-  }, false);
+  for (const storage of availableSessionStorages()) {
+    try {
+      storage.removeItem(STORAGE_KEY);
+    } catch {
+      // Explicit reset is best effort across every available browser store.
+    }
+  }
 }
 
 function readStoredMascotTucked() {
@@ -1330,11 +1393,14 @@ export function EnergyAssistantWidget({
     if (!leadOpen || !leadFormScrollPendingRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       const form = leadFormRef.current;
-      if (!form) return;
+      const container = conversationRef.current;
+      if (!form || !container) return;
       leadFormScrollPendingRef.current = false;
-      form.scrollIntoView({
+      const containerTop = container.getBoundingClientRect().top;
+      const formTop = form.getBoundingClientRect().top;
+      container.scrollTo({
+        top: Math.max(0, container.scrollTop + formTop - containerTop - 16),
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
       });
       form.focus({ preventScroll: true });
     });
