@@ -156,7 +156,8 @@ test("the widget uses the canonical stateless assistant contract and never sends
 test("Surge receives only bounded completed planner answers and excludes them from trade mode", () => {
   assert.match(widget, /buildSurgePlanContextFromStoredAssessment/);
   assert.match(widget, /await import\(\s*"@\/lib\/energy-assistant-plan-context"\s*\)/);
-  assert.match(widget, /window\.sessionStorage\.getItem\(HOME_ENERGY_ASSESSMENT_STORAGE_KEY\)/);
+  assert.match(widget, /const storedAssessment = readStoredPlannerAssessment\(\)/);
+  assert.match(widget, /availableSessionStorages\(\)/);
   assert.match(widget, /const planContext = context\.audience === "trade" \? null : await readStoredPlanContext\(\)/);
   assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*planContext,[\s\S]*pageContext:/);
   assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
@@ -357,6 +358,7 @@ test("browser storage failures cannot break widget hydration, persistence or res
   }).outputText;
   const helpers = Function(
     "STORAGE_KEY",
+    "PROFILE_BACKUP_KEY",
     "savedConversation",
     "savedConversationIsPreferred",
     "savedProfileIsPreferred",
@@ -365,6 +367,7 @@ test("browser storage failures cannot break widget hydration, persistence or res
     `${compiled}; return { readStoredSession, storeSession, removeStoredSession };`,
   )(
     "test-session",
+    "test-profile-backup",
     (value) => ({
       mode: "public",
       messages: value?.messages || [],
@@ -453,6 +456,7 @@ test("browser storage failures cannot break widget hydration, persistence or res
 test("Surge keeps the most complete, newest home context synchronized across browser tabs", () => {
   assert.match(widget, /profileUpdatedAtRef = useRef\(""\)/);
   assert.match(widget, /event\.key !== STORAGE_KEY/);
+  assert.match(widget, /event\.key !== PROFILE_BACKUP_KEY/);
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
   assert.match(widget, /function savedConversationIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
   assert.match(widget, /function savedProfileIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
@@ -472,6 +476,11 @@ test("Surge keeps the most complete, newest home context synchronized across bro
   assert.match(widget, /stored && savedProfileIsPreferred\(stored, candidate\)/);
   assert.match(widget, /profile: stored\.profile/);
   assert.match(widget, /storage\.setItem\(STORAGE_KEY, nextValue\)/);
+  assert.match(widget, /storage\.setItem\(PROFILE_BACKUP_KEY, nextValue\)/);
+  assert.match(widget, /readStoredPlannerAssessment\(\)/);
+  assert.match(widget, /storePlannerAssessment\(JSON\.stringify\(plannerProfile\.session\)\)/);
+  assert.match(widget, /responses saved · \$\{profileKnownAnswerCount\} confirmed details/);
+  assert.match(widget, /Not sure or skipped/);
   assert.match(widget, /applySavedSession\(saved\)/);
 });
 

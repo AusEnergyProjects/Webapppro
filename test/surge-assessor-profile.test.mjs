@@ -204,6 +204,29 @@ test("planner restoration fills gaps without replacing reviewed Surge answers", 
   assert.ok(surgeProfileReviewedAnswerCount(restored) > reviewedBefore);
 });
 
+test("planner restoration replaces reviewed placeholders when a real planner answer survives", () => {
+  let reviewedEmpty = EMPTY_SURGE_STARTER_PROFILE;
+  for (const step of SURGE_PROFILE_STEPS) reviewedEmpty = markSurgeProfileStepReviewed(reviewedEmpty, step);
+  reviewedEmpty = { ...reviewedEmpty, completed: true };
+  const plannerDraft = surgeHomeEnergyPlannerSession(EMPTY_SURGE_STARTER_PROFILE).draft;
+  const plannerSession = createHomeEnergyPlannerSession({
+    ...plannerDraft,
+    postcode: "3000",
+    situation: "owner",
+    propertyType: "house",
+    occupants: "three_four",
+    switchboard: "older_fuses",
+  }, 1);
+
+  const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(reviewedEmpty, plannerSession);
+  assert.equal(restored.postcode, "3000");
+  assert.equal(restored.situation, "owner");
+  assert.equal(restored.propertyType, "house");
+  assert.equal(restored.occupants, "three_four");
+  assert.equal(restored.switchboard, "older_fuses");
+  assert.equal(restored.completed, true);
+});
+
 test("completed Surge context stays complete and a finished planner import is not reopened", () => {
   let completed = EMPTY_SURGE_STARTER_PROFILE;
   for (const step of SURGE_PROFILE_STEPS) completed = markSurgeProfileStepReviewed(completed, step);

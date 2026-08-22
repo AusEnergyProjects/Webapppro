@@ -554,7 +554,6 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
   const session = parseHomeEnergyPlannerSession(sessionValue);
   if (!session || session.stage === 0) return profile;
   let next = profile;
-  const reviewedFieldIds = new Set(profile.reviewed);
   const directStageOne = new Set([
     "postcode", "situation", "propertyType", "approvalContext", "occupants", "goals",
     ...HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS.map((question) => question.key),
@@ -562,9 +561,10 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
     ...HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS.map((question) => question.key),
   ]);
   for (const field of SURGE_PROFILE_FIELDS) {
-    if (field.plannerQuestionId || !directStageOne.has(field.id) || reviewedFieldIds.has(field.id)) continue;
+    if (field.plannerQuestionId || !directStageOne.has(field.id) || !surgeProfileFieldIsUnknown(next, field)) continue;
     const value = session.draft[field.key as keyof HomeEnergyPlannerDraft];
     if ((Array.isArray(value) && value.length) || (typeof value === "string" && value)) {
+      if (Array.isArray(value)) next = { ...next, [field.key]: [] };
       next = Array.isArray(value)
         ? value.reduce((current, item) => updateSurgeProfileField(current, field, item, true), next)
         : updateSurgeProfileField(next, field, value, true);
@@ -574,7 +574,7 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
     for (const id of ["pace", "budgetRange"]) {
       const field = fieldById.get(id);
       const value = session.draft[id as "pace" | "budgetRange"];
-      if (field && value && !reviewedFieldIds.has(field.id)) {
+      if (field && value && surgeProfileFieldIsUnknown(next, field)) {
         next = updateSurgeProfileField(next, field, value, true);
       }
     }
@@ -587,7 +587,7 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
       : [];
   for (const question of allowedFeatureSections.flatMap((section) => section.questions)) {
     const field = fieldById.get(`feature:${question.id}`);
-    if (!field || reviewedFieldIds.has(field.id)) continue;
+    if (!field || !surgeProfileFieldIsUnknown(next, field)) continue;
     for (const [value] of question.options) {
       if (session.draft.features.includes(value)) next = updateSurgeProfileField(next, field, value, true);
     }

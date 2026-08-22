@@ -342,9 +342,10 @@ test("the widget routes one finalized enquiry through the adapter and one endpoi
   assert.match(widgetSource, /surgePlannerProfileAdapter\(profile\)/);
   assert.match(
     widgetSource,
-    /sessionStorage\.setItem\(\s*HOME_ENERGY_ASSESSMENT_STORAGE_KEY,\s*JSON\.stringify\(plannerProfile\.session\),?\s*\)/,
+    /storePlannerAssessment\(JSON\.stringify\(plannerProfile\.session\)\)/,
     "the planner handoff must persist the shared versioned session envelope",
   );
+  assert.match(widgetSource, /availableSessionStorages\(\)/);
   assert.match(widgetSource, /router\.push\("\/plan"\)/);
   assert.equal(
     widgetSource.match(/buildEnergyAssistantEnquirySubmission\(/g)?.length,

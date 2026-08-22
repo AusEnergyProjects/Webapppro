@@ -26,6 +26,7 @@ import {
   SURGE_PROFILE_VERSION,
   surgeProfileAnswerLabel,
   surgeProfileFieldIsUnknown,
+  surgeProfileFieldWasReviewed,
   surgeProfileFieldValue,
   surgeProfileKnownAnswerCount,
   surgeProfileReviewedAnswerCount,
@@ -147,6 +148,7 @@ type HomeContextTip = {
 };
 
 const STORAGE_KEY = "aea-energy-guide-v1";
+const PROFILE_BACKUP_KEY = "aea-energy-guide-profile-backup-v1";
 const DISPLAY_PREFERENCE_KEY = "aea-surge-display-v1";
 const DISPLAY_PREFERENCE_TUCKED = "tucked";
 const MAX_MESSAGE_LENGTH = 1200;
@@ -853,16 +855,18 @@ function availableSessionStorages() {
 function readStoredSession() {
   let preferred: { raw: string; session: SavedConversation } | null = null;
   for (const storage of availableSessionStorages()) {
-    try {
-      const raw = storage.getItem(STORAGE_KEY);
-      if (!raw) continue;
-      const session = savedConversation(JSON.parse(raw));
-      if (session.expired) continue;
-      if (!preferred || savedConversationIsPreferred(session, preferred.session)) {
-        preferred = { raw, session };
+    for (const key of [STORAGE_KEY, PROFILE_BACKUP_KEY]) {
+      try {
+        const raw = storage.getItem(key);
+        if (!raw) continue;
+        const session = savedConversation(JSON.parse(raw));
+        if (session.expired) continue;
+        if (!preferred || savedConversationIsPreferred(session, preferred.session)) {
+          preferred = { raw, session };
+        }
+      } catch {
+        // Ignore one malformed or inaccessible copy and continue to the next mirror.
       }
-    } catch {
-      // Ignore one malformed or inaccessible copy and continue to the mirror.
     }
   }
   return preferred?.raw ?? null;
@@ -892,15 +896,49 @@ function storeSession(value: string) {
     } catch {
       // Keep writing the remaining mirrors when one storage surface is unavailable.
     }
+    try {
+      const next = savedConversation(JSON.parse(nextValue));
+      const backupValue = storage.getItem(PROFILE_BACKUP_KEY);
+      const backup = backupValue ? savedConversation(JSON.parse(backupValue)) : null;
+      if (!backup || backup.expired || !savedProfileIsPreferred(backup, next)) {
+        storage.setItem(PROFILE_BACKUP_KEY, nextValue);
+      }
+    } catch {
+      // A malformed or inaccessible backup must not block the primary session write.
+    }
   }
 }
 
 function removeStoredSession() {
   for (const storage of availableSessionStorages()) {
+    for (const key of [STORAGE_KEY, PROFILE_BACKUP_KEY]) {
+      try {
+        storage.removeItem(key);
+      } catch {
+        // Explicit reset is best effort across every available browser store.
+      }
+    }
+  }
+}
+
+function readStoredPlannerAssessment() {
+  for (const storage of availableSessionStorages()) {
     try {
-      storage.removeItem(STORAGE_KEY);
+      const stored = storage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+      if (stored) return stored;
     } catch {
-      // Explicit reset is best effort across every available browser store.
+      // Continue to the remaining storage mirror.
+    }
+  }
+  return null;
+}
+
+function storePlannerAssessment(value: string) {
+  for (const storage of availableSessionStorages()) {
+    try {
+      storage.setItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY, value);
+    } catch {
+      // The planner still opens when one browser storage surface is unavailable.
     }
   }
 }
@@ -922,7 +960,7 @@ function storeMascotTucked(tucked: boolean) {
 
 async function readStoredPlanContext() {
   try {
-    const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+    const storedAssessment = readStoredPlannerAssessment();
     if (!storedAssessment) return null;
     const { buildSurgePlanContextFromStoredAssessment } = await import(
       "@/lib/energy-assistant-plan-context"
@@ -1186,7 +1224,7 @@ export function EnergyAssistantWidget({
       }
       let mergedProfile = restoredProfile;
       try {
-        const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+        const storedAssessment = readStoredPlannerAssessment();
         mergedProfile = mergeHomeEnergyPlannerSessionIntoSurgeProfile(restoredProfile, storedAssessment);
       } catch {
         // Session planner data is supplementary; it must never erase a valid local Surge profile.
@@ -1216,9 +1254,9 @@ export function EnergyAssistantWidget({
 
   useEffect(() => {
     const syncStoredConversation = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) return;
+      if (event.key !== STORAGE_KEY && event.key !== PROFILE_BACKUP_KEY) return;
       if (!event.newValue) {
-        clearLocalSession();
+        if (event.key === STORAGE_KEY) clearLocalSession();
         return;
       }
       try {
@@ -1586,14 +1624,7 @@ export function EnergyAssistantWidget({
   };
 
   const openHomeEnergyPlanner = () => {
-    try {
-      window.sessionStorage.setItem(
-        HOME_ENERGY_ASSESSMENT_STORAGE_KEY,
-        JSON.stringify(plannerProfile.session),
-      );
-    } catch {
-      // The planner still opens when browser session storage is unavailable.
-    }
+    storePlannerAssessment(JSON.stringify(plannerProfile.session));
     router.push("/plan");
   };
 
@@ -1901,7 +1932,9 @@ export function EnergyAssistantWidget({
                   <span>of {SURGE_PROFILE_FIELDS.length} details reviewed</span>
                 </div>
                 <progress max={SURGE_PROFILE_FIELDS.length} value={profileReviewedAnswerCount} aria-label={`${profileReviewedAnswerCount} of ${SURGE_PROFILE_FIELDS.length} home details reviewed`} />
-                <p>{profileUnknownAnswerCount > 0 ? `${profileUnknownAnswerCount} remain to review` : `${profileKnownAnswerCount} useful details recorded`}</p>
+                <p>{profileUnknownAnswerCount > 0
+                  ? `${profileUnknownAnswerCount} remain to review`
+                  : `${profileReviewedAnswerCount} responses saved · ${profileKnownAnswerCount} confirmed details`}</p>
                 {nextIncompleteProfileStep >= 0 && (
                   <button className={styles.contextContinue} type="button" onClick={continueStarterProfile}>
                     Continue setup
@@ -1924,6 +1957,7 @@ export function EnergyAssistantWidget({
               <div className={styles.contextGroups}>
                 {SURGE_PROFILE_STEPS.map((step, stepIndex) => {
                   const knownFields = step.fields.filter((field) => !surgeProfileFieldIsUnknown(profile, field));
+                  const reviewedFields = step.fields.filter((field) => surgeProfileFieldWasReviewed(profile, field));
                   return (
                     <section key={step.id}>
                       <header>
@@ -1947,7 +1981,7 @@ export function EnergyAssistantWidget({
                             ))}
                           </dl>
                         </>
-                      ) : <p>Not answered yet</p>}
+                      ) : <p>{reviewedFields.length === step.fields.length ? "Not sure or skipped" : "Not answered yet"}</p>}
                     </section>
                   );
                 })}

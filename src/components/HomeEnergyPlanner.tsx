@@ -107,6 +107,13 @@ function suggestedPlanInterests(items: CustomerPlanItem[]) {
 
 
 function readStoredAssessment() {
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+  } catch {
+    // Continue with the per-tab copy when persistent storage is unavailable.
+  }
+  if (stored) return stored;
   try {
     return window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
   } catch {
@@ -116,6 +123,11 @@ function readStoredAssessment() {
 
 function storeAssessment(value: string) {
   try {
+    window.localStorage.setItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY, value);
+  } catch {
+    // Continue with the per-tab mirror when persistent storage is unavailable.
+  }
+  try {
     window.sessionStorage.setItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY, value);
   } catch {
     // The assessment remains fully usable when browser storage is unavailable.
@@ -123,6 +135,11 @@ function storeAssessment(value: string) {
 }
 
 function removeStoredAssessment() {
+  try {
+    window.localStorage.removeItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
+  } catch {
+    // Continue resetting the per-tab mirror when persistent storage is unavailable.
+  }
   try {
     window.sessionStorage.removeItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
   } catch {
