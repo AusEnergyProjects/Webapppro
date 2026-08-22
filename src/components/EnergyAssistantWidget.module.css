@@ -334,6 +334,11 @@
 }
 
 @media (min-width: 641px) {
+  .rootDedicated .contextRailBody {
+    height: calc(100% - 84px);
+    overflow: hidden;
+  }
+
   .rootDedicated .contextRailSummary {
     cursor: default;
     pointer-events: none;

@@ -461,6 +461,7 @@ test("context edit actions reveal and move focus to the selected intake step", (
 });
 
 test("desktop context answers have an independently usable scroll region", () => {
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailBody \{[^}]*height: calc\(100% - 84px\);[^}]*overflow: hidden;/);
   assert.match(styles, /\.contextGroups \{[^}]*flex: 1 1 0;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
   assert.match(styles, /\.contextGroups \{[^}]*scrollbar-gutter: stable;[^}]*touch-action: pan-y;/);
   assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*flex: none;[^}]*overflow: visible;/);
