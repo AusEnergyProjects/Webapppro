@@ -444,7 +444,7 @@ test("desktop Surge keeps the full context rail open and saves through every unr
   assert.match(widget, /open=\{contextRailOpen\}/);
   assert.match(widget, /!event\.currentTarget\.open[\s\S]{0,120}event\.currentTarget\.open = true/);
   assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailSummary \{[^}]*pointer-events: none/);
-  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]{0,520}\.rootDedicated \.contextRail:not\(\[open\]\) > \.contextRailBody \{\s*display: grid;/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]{0,640}\.rootDedicated \.contextRail:not\(\[open\]\) > \.contextRailBody \{\s*display: flex;/);
   assert.match(widget, /nextUnreviewedSurgeProfileStepIndex\(reviewedProfile, profileStep\)/);
   assert.match(widget, /nextUnreviewedStep >= 0[\s\S]{0,240}setProfileStep\(nextUnreviewedStep\)/);
   assert.match(widget, /\? "Save and continue"[\s\S]{0,80}: "Finish home context"/);
@@ -461,8 +461,8 @@ test("context edit actions reveal and move focus to the selected intake step", (
 });
 
 test("desktop context answers have an independently usable scroll region", () => {
-  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRail \{[^}]*display: grid;[^}]*grid-template-rows: auto minmax\(0, 1fr\);[^}]*height: 100%;[^}]*max-height: 100%;/);
-  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailBody \{[^}]*display: grid;[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);[^}]*min-height: 0;[^}]*overflow: hidden;/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRail \{[^}]*display: block;[^}]*height: 100%;[^}]*max-height: 100%;[^}]*overflow: hidden;/);
+  assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailBody \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*height: calc\(100% - 83px\);[^}]*max-height: calc\(100% - 83px\);[^}]*min-height: 0;[^}]*overflow: hidden;/);
   assert.match(styles, /\.contextGroups \{[^}]*flex: 1 1 0;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
   assert.match(styles, /\.contextGroups \{[^}]*scrollbar-gutter: stable;[^}]*touch-action: pan-y;/);
   assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*flex: none;[^}]*overflow: visible;/);
