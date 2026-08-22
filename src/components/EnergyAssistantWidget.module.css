@@ -392,6 +392,13 @@
   margin: 0;
 }
 
+.contextProgress .contextProgressMissing {
+  color: #e9fff9;
+  font-size: var(--surge-type-label);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .contextProgress progress,
 .plannerProgress progress,
 .intake progress {
@@ -474,7 +481,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
   padding-right: 4px;
   scrollbar-gutter: stable;
   scrollbar-color: rgba(102, 236, 210, 0.58) transparent;
@@ -488,6 +495,13 @@
   border: 1px solid rgba(142, 228, 211, 0.18);
   border-radius: 13px;
   padding: 10px;
+}
+
+.contextMissing {
+  color: #91f4dc;
+  font-size: var(--surge-type-label);
+  font-weight: 700;
+  margin: 7px 0 0;
 }
 
 .contextGroups section > header {
@@ -646,9 +660,21 @@
   gap: 13px;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   padding: 14px;
   scroll-behavior: smooth;
+  touch-action: pan-y;
+}
+
+.intakeMissing {
+  background: #fff8dd;
+  border: 1px solid #e0b83e;
+  border-radius: 8px;
+  color: #5b4610;
+  font-size: var(--surge-type-body);
+  font-weight: 700;
+  margin: 0;
+  padding: 9px 11px;
 }
 
 .welcome {

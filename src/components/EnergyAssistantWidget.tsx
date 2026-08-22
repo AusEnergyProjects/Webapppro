@@ -3,6 +3,7 @@
 import {
   type FormEvent,
   type KeyboardEvent,
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -19,7 +20,7 @@ import {
   EMPTY_SURGE_STARTER_PROFILE,
   markSurgeProfileStepReviewed,
   mergeHomeEnergyPlannerSessionIntoSurgeProfile,
-  nextUnreviewedSurgeProfileStepIndex,
+  nextUnknownSurgeProfileStepIndex,
   parseSurgeStarterProfile,
   SURGE_PROFILE_FIELDS,
   SURGE_PROFILE_STEPS,
@@ -180,7 +181,7 @@ const START_ROADMAP = [
 function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] {
   const tips: HomeContextTip[] = [];
   const reviewed = new Set(profile.reviewed);
-  if (reviewed.size < SURGE_PROFILE_FIELDS.length) {
+  if (surgeProfileKnownAnswerCount(profile) < SURGE_PROFILE_FIELDS.length) {
     tips.push({
       title: "Finish the missing context",
       detail: "Resume at the next unanswered section so Surge AI can use the complete home picture.",
@@ -500,8 +501,9 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
 }
 
 function customerVisibleText(value: string, audience: Audience): string {
-  if (audience === "trade") return value;
-  const safePlatformNames = value.replace(
+  const conversationalPunctuation = value.replace(/\s*[\u2013\u2014]\s*/gu, ", ");
+  if (audience === "trade") return conversationalPunctuation;
+  const safePlatformNames = conversationalPunctuation.replace(
     /\b(?:TLink|Creditex)(?:\s+or\s+(?:TLink|Creditex))?\b/gi,
     "the trade platform",
   );
@@ -1045,8 +1047,13 @@ export function EnergyAssistantWidget({
   const currentProfileStep = SURGE_PROFILE_STEPS[profileStep] || SURGE_PROFILE_STEPS[0];
   const profileKnownAnswerCount = surgeProfileKnownAnswerCount(profile);
   const profileReviewedAnswerCount = surgeProfileReviewedAnswerCount(profile);
-  const profileUnknownAnswerCount = SURGE_PROFILE_FIELDS.length - profileReviewedAnswerCount;
-  const nextIncompleteProfileStep = nextUnreviewedSurgeProfileStepIndex(profile, -1);
+  const profileUnreviewedAnswerCount = SURGE_PROFILE_FIELDS.length - profileReviewedAnswerCount;
+  const profileUnconfirmedAnswerCount = SURGE_PROFILE_FIELDS.length - profileKnownAnswerCount;
+  const unconfirmedProfileFields = SURGE_PROFILE_FIELDS.filter((field) =>
+    surgeProfileFieldIsUnknown(profile, field));
+  const nextIncompleteProfileStep = nextUnknownSurgeProfileStepIndex(profile, -1);
+  const currentUnknownProfileFields = currentProfileStep.fields.filter((field) =>
+    surgeProfileFieldIsUnknown(profile, field));
   const plannerProfile = useMemo(() => surgePlannerProfileAdapter(profile), [profile]);
   const contextTips = useMemo(() => homeContextTips(profile), [profile]);
   const conversationFacts = useMemo(
@@ -1573,7 +1580,11 @@ export function EnergyAssistantWidget({
   };
 
   const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
-    const nextProfile = updateSurgeProfileField(profileRef.current, field, value, checked);
+    const updatedProfile = updateSurgeProfileField(profileRef.current, field, value, checked);
+    const nextProfile: SurgeStarterProfile = {
+      ...updatedProfile,
+      completed: surgeProfileKnownAnswerCount(updatedProfile) === SURGE_PROFILE_FIELDS.length,
+    };
     const nextProfileUpdatedAt = new Date().toISOString();
     profileRef.current = nextProfile;
     profileUpdatedAtRef.current = nextProfileUpdatedAt;
@@ -1590,7 +1601,7 @@ export function EnergyAssistantWidget({
   };
 
   const continueStarterProfile = () => {
-    const nextStep = nextUnreviewedSurgeProfileStepIndex(profileRef.current, -1);
+    const nextStep = nextUnknownSurgeProfileStepIndex(profileRef.current, -1);
     if (nextStep >= 0) editStarterProfileStep(nextStep);
   };
 
@@ -1598,29 +1609,47 @@ export function EnergyAssistantWidget({
     event.preventDefault();
     const reviewedProfile = markSurgeProfileStepReviewed(profileRef.current, currentProfileStep);
     const nextProfileUpdatedAt = new Date().toISOString();
-    const nextUnreviewedStep = nextUnreviewedSurgeProfileStepIndex(reviewedProfile, profileStep);
-    profileRef.current = reviewedProfile;
-    profileUpdatedAtRef.current = nextProfileUpdatedAt;
-    if (nextUnreviewedStep >= 0) {
-      setProfile(reviewedProfile);
-      setProfileStep(nextUnreviewedStep);
-      persistLocalSession({ nextProfile: reviewedProfile, nextProfileUpdatedAt });
-      setProfileError("");
-      return;
-    }
+    const nextUnknownStep = nextUnknownSurgeProfileStepIndex(reviewedProfile, profileStep);
     const nextProfile: SurgeStarterProfile = {
       ...reviewedProfile,
       version: SURGE_PROFILE_VERSION,
-      completed: true,
+      completed: nextUnknownStep < 0,
     };
     profileRef.current = nextProfile;
+    profileUpdatedAtRef.current = nextProfileUpdatedAt;
     setProfile(nextProfile);
+    persistLocalSession({ nextProfile, nextProfileUpdatedAt });
+    if (nextUnknownStep >= 0) {
+      const unknownFields = SURGE_PROFILE_STEPS[nextUnknownStep].fields.filter((field) =>
+        surgeProfileFieldIsUnknown(nextProfile, field));
+      setProfileStep(nextUnknownStep);
+      profileEditScrollPendingRef.current = true;
+      setProfileError(nextUnknownStep === profileStep
+        ? `To reach 45 of 45 confirmed details, choose a confirmed answer for ${unknownFields.map((field) => field.label).join(", ")}.`
+        : "");
+      return;
+    }
     setProfileEditing(false);
     setProfileDeferred(false);
     setProfileStep(0);
     persistLocalSession({ nextProfile, nextProfileUpdatedAt });
     setStatus("");
     setProfileError("");
+  };
+
+  const handOffConversationScroll = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!dedicated || event.deltaY === 0) return;
+    const scroller = event.currentTarget;
+    const atTop = scroller.scrollTop <= 1;
+    const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+    if ((event.deltaY < 0 && !atTop) || (event.deltaY > 0 && !atBottom)) return;
+    const pageScrollBefore = window.scrollY;
+    const deltaY = event.deltaY;
+    window.requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - pageScrollBefore) < 1) {
+        window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
+      }
+    });
   };
 
   const openHomeEnergyPlanner = () => {
@@ -1921,23 +1950,33 @@ export function EnergyAssistantWidget({
                 <span className={styles.contextRailTitle}>
                   <span>Surge AI knows</span>
                   <strong>Your home context</strong>
-                  <small>{profileReviewedAnswerCount} of {SURGE_PROFILE_FIELDS.length} details reviewed</small>
+                  <small>{profileKnownAnswerCount} of {SURGE_PROFILE_FIELDS.length} details confirmed</small>
                 </span>
                 <span className={styles.contextRailToggle} aria-hidden="true">⌄</span>
               </summary>
               <div className={styles.contextRailBody}>
               <div className={styles.contextProgress}>
                 <div>
-                  <strong>{profileReviewedAnswerCount}</strong>
-                  <span>of {SURGE_PROFILE_FIELDS.length} details reviewed</span>
+                  <strong>{profileKnownAnswerCount}</strong>
+                  <span>of {SURGE_PROFILE_FIELDS.length} details confirmed</span>
                 </div>
-                <progress max={SURGE_PROFILE_FIELDS.length} value={profileReviewedAnswerCount} aria-label={`${profileReviewedAnswerCount} of ${SURGE_PROFILE_FIELDS.length} home details reviewed`} />
-                <p>{profileUnknownAnswerCount > 0
-                  ? `${profileUnknownAnswerCount} remain to review`
-                  : `${profileReviewedAnswerCount} responses saved · ${profileKnownAnswerCount} confirmed details`}</p>
+                <progress max={SURGE_PROFILE_FIELDS.length} value={profileKnownAnswerCount} aria-label={`${profileKnownAnswerCount} of ${SURGE_PROFILE_FIELDS.length} home details confirmed`} />
+                <p>{profileUnreviewedAnswerCount > 0
+                  ? `${profileReviewedAnswerCount} responses saved · ${profileUnreviewedAnswerCount} unanswered`
+                  : profileUnconfirmedAnswerCount > 0
+                    ? `${profileReviewedAnswerCount} responses saved · ${profileUnconfirmedAnswerCount} not sure or skipped`
+                    : `${profileReviewedAnswerCount} responses saved · all details confirmed`}</p>
+                {unconfirmedProfileFields.length > 0 && (
+                  <p className={styles.contextProgressMissing}>
+                    Next to confirm: {unconfirmedProfileFields[0].shortLabel}
+                    {unconfirmedProfileFields.length > 1 ? `, plus ${unconfirmedProfileFields.length - 1} more` : ""}
+                  </p>
+                )}
                 {nextIncompleteProfileStep >= 0 && (
                   <button className={styles.contextContinue} type="button" onClick={continueStarterProfile}>
-                    Continue setup
+                    {profileUnreviewedAnswerCount > 0
+                      ? "Continue setup"
+                      : `Review ${profileUnconfirmedAnswerCount} not sure ${profileUnconfirmedAnswerCount === 1 ? "answer" : "answers"}`}
                   </button>
                 )}
               </div>
@@ -1958,6 +1997,7 @@ export function EnergyAssistantWidget({
                 {SURGE_PROFILE_STEPS.map((step, stepIndex) => {
                   const knownFields = step.fields.filter((field) => !surgeProfileFieldIsUnknown(profile, field));
                   const reviewedFields = step.fields.filter((field) => surgeProfileFieldWasReviewed(profile, field));
+                  const unknownFields = step.fields.filter((field) => surgeProfileFieldIsUnknown(profile, field));
                   return (
                     <section key={step.id}>
                       <header>
@@ -1982,6 +2022,11 @@ export function EnergyAssistantWidget({
                           </dl>
                         </>
                       ) : <p>{reviewedFields.length === step.fields.length ? "Not sure or skipped" : "Not answered yet"}</p>}
+                      {unknownFields.length > 0 && (
+                        <p className={styles.contextMissing}>
+                          Needs confirmation: {unknownFields.map((field) => field.shortLabel).join(", ")}
+                        </p>
+                      )}
                     </section>
                   );
                 })}
@@ -2023,7 +2068,7 @@ export function EnergyAssistantWidget({
             </button>}
           </header>
 
-          <div ref={conversationRef} className={styles.conversation} tabIndex={-1}>
+          <div ref={conversationRef} className={styles.conversation} tabIndex={-1} onWheel={handOffConversationScroll}>
             {needsStarterProfile && (
               <form ref={intakeRef} className={styles.intake} onSubmit={completeStarterProfile} tabIndex={-1}>
                 <header>
@@ -2089,6 +2134,11 @@ export function EnergyAssistantWidget({
                     );
                   })}
                 </div>
+                {currentUnknownProfileFields.length > 0 && (
+                  <p className={styles.intakeMissing}>
+                    Still missing or marked not sure: {currentUnknownProfileFields.map((field) => field.label).join(", ")}.
+                  </p>
+                )}
                 {profileError && <p className={styles.error} role="alert">{profileError}</p>}
                 <div className={styles.intakeNav}>
                   {profileStep > 0 && <button type="button" onClick={() => { setProfileStep((current) => current - 1); setProfileError(""); }}>Back</button>}
@@ -2106,10 +2156,11 @@ export function EnergyAssistantWidget({
                     </button>
                   )}
                   <button className={styles.intakeContinue} type="submit">
-                    {profileReviewedAnswerCount + currentProfileStep.fields.filter((field) => !profile.reviewed.includes(field.id)).length
-                      < SURGE_PROFILE_FIELDS.length
-                      ? "Save and continue"
-                      : "Finish home context"}
+                    {profileKnownAnswerCount === SURGE_PROFILE_FIELDS.length
+                      ? "Finish home context"
+                      : profileStep === SURGE_PROFILE_STEPS.length - 1
+                        ? "Review next missing answer"
+                        : "Save and continue"}
                   </button>
                 </div>
                 <small>These answers stay in this browser with the conversation. Use the context rail to update any answer later.</small>

@@ -7,8 +7,16 @@ import {
 import {
   composeEnergyAssistantAnswer,
   energyAssistantKnowledgeHealth,
+  sanitizeSurgeReferenceText,
   searchEnergyAssistantKnowledge,
 } from "../src/lib/energy-assistant.ts";
+
+test("Surge reference answers never expose en or em dashes", () => {
+  assert.equal(
+    sanitizeSurgeReferenceText("Seal gaps — keep ventilation – then recheck."),
+    "Seal gaps, keep ventilation, then recheck.",
+  );
+});
 
 test("local assistant corpus covers every declared decision topic with governed source metadata", () => {
   assert.equal(ENERGY_ASSISTANT_TOPICS.length, 17);

@@ -44,7 +44,7 @@ export type SurgeStarterProfile = {
   occupancyPattern: "mostly-home" | "mostly-away" | "mixed" | "weekends" | "not-sure";
   energyUsePattern: "morning" | "evening" | "all-day" | "overnight" | "varies" | "not-sure";
   billPressure: "comfortable" | "higher-than-expected" | "hard-to-manage" | "not-sure";
-  gasConnection: "connected" | "not-connected" | "disconnecting" | "not-sure";
+  gasConnection: "connected" | "bottled-lpg" | "not-connected" | "disconnecting" | "not-sure";
   disruption: "minimal" | "some-work" | "major-work" | "staged" | "not-sure";
   plannedWorks: "none" | "maintenance" | "renovation" | "equipment-replacement" | "solar-battery" | "new-build" | "not-sure";
   reviewed: string[];
@@ -204,9 +204,10 @@ export const SURGE_PROFILE_STEPS: ReadonlyArray<SurgeProfileStep> = [
         NOT_SURE,
       ]),
       supplementalField("gasConnection", "Gas connection", "Gas", [
-        { value: "connected", label: "Connected to gas" },
-        { value: "not-connected", label: "No gas connection" },
-        { value: "disconnecting", label: "Planning to disconnect gas" },
+        { value: "connected", label: "Mains gas connection" },
+        { value: "bottled-lpg", label: "Bottled gas or LPG" },
+        { value: "not-connected", label: "No gas supply" },
+        { value: "disconnecting", label: "Planning to disconnect mains gas" },
         NOT_SURE,
       ]),
       supplementalField("disruption", "How much installation disruption is acceptable?", "Disruption", [
@@ -403,8 +404,11 @@ function migrateLegacyProfile(source: Record<string, unknown>): SurgeStarterProf
     if ((Array.isArray(value) && value.length) || (typeof value === "string" && value && value !== "not-sure")) reviewed.add(field.id);
   }
   next.reviewed = [...reviewed];
-  next.completed = true;
-  return next;
+  const inferred = withInferredGasConnection(next);
+  return {
+    ...inferred,
+    completed: surgeProfileKnownAnswerCount(inferred) === SURGE_PROFILE_FIELDS.length,
+  };
 }
 
 export function parseSurgeStarterProfile(value: unknown): SurgeStarterProfile {
@@ -432,8 +436,11 @@ export function parseSurgeStarterProfile(value: unknown): SurgeStarterProfile {
     if (selected) (next as Record<string, unknown>)[key] = selected;
   }
   next.reviewed = uniqueStrings(source.reviewed, allowedFieldIds).slice(0, SURGE_PROFILE_FIELDS.length);
-  next.completed = source.completed === true || next.reviewed.length === SURGE_PROFILE_FIELDS.length;
-  return next;
+  const inferred = withInferredGasConnection(next);
+  return {
+    ...inferred,
+    completed: surgeProfileKnownAnswerCount(inferred) === SURGE_PROFILE_FIELDS.length,
+  };
 }
 
 export function surgeProfileFieldValue(profile: SurgeStarterProfile, field: SurgeProfileField) {
@@ -448,6 +455,24 @@ export function surgeProfileFieldWasReviewed(profile: SurgeStarterProfile, field
   return profile.reviewed.includes(id);
 }
 
+const GAS_APPLIANCE_FEATURES = new Set([
+  "gas-heating",
+  "gas-storage-hot-water",
+  "gas-continuous-flow-hot-water",
+  "gas-hot-water-type-unknown",
+  "electric-gas-boosted-hot-water",
+  "gas-cooking",
+  "mixed-cooking",
+]);
+
+export function withInferredGasConnection(profile: SurgeStarterProfile) {
+  if (
+    surgeProfileFieldWasReviewed(profile, "supplemental:gasConnection")
+    || !profile.features.some((feature) => GAS_APPLIANCE_FEATURES.has(feature))
+  ) return profile;
+  return { ...profile, gasConnection: "connected" as const };
+}
+
 export function updateSurgeProfileField(
   profile: SurgeStarterProfile,
   fieldOrId: SurgeProfileField | string,
@@ -459,7 +484,11 @@ export function updateSurgeProfileField(
   const reviewed = profile.reviewed.includes(field.id) ? profile.reviewed : [...profile.reviewed, field.id];
   if (field.kind === "postcode") return { ...profile, postcode: value.replace(/\D/g, "").slice(0, 4), reviewed };
   if (field.plannerQuestionId) {
-    return { ...profile, features: updateHomeFeatureSelection(profile.features, field.plannerQuestionId, value, checked), reviewed };
+    return withInferredGasConnection({
+      ...profile,
+      features: updateHomeFeatureSelection(profile.features, field.plannerQuestionId, value, checked),
+      reviewed,
+    });
   }
   if (field.kind === "multiselect") {
     const current = Array.isArray(profile[field.key]) ? profile[field.key] as string[] : [];
@@ -493,6 +522,18 @@ export function nextUnreviewedSurgeProfileStepIndex(
   ];
   return orderedIndexes.find((index) =>
     SURGE_PROFILE_STEPS[index].fields.some((field) => !surgeProfileFieldWasReviewed(profile, field))) ?? -1;
+}
+
+export function nextUnknownSurgeProfileStepIndex(
+  profile: SurgeStarterProfile,
+  currentStepIndex: number,
+) {
+  const orderedIndexes = [
+    ...SURGE_PROFILE_STEPS.map((_, index) => index).filter((index) => index > currentStepIndex),
+    ...SURGE_PROFILE_STEPS.map((_, index) => index).filter((index) => index <= currentStepIndex),
+  ];
+  return orderedIndexes.find((index) =>
+    SURGE_PROFILE_STEPS[index].fields.some((field) => surgeProfileFieldIsUnknown(profile, field))) ?? -1;
 }
 
 export function surgeProfileAnswerLabel(profile: SurgeStarterProfile, fieldOrId: SurgeProfileField | string) {
@@ -592,11 +633,11 @@ export function mergeHomeEnergyPlannerSessionIntoSurgeProfile(profile: SurgeStar
       if (session.draft.features.includes(value)) next = updateSurgeProfileField(next, field, value, true);
     }
   }
-  const plannerCompletion = homeEnergyPlannerCompletion(session.draft);
-  if (session.stage >= 4 && plannerCompletion.completed === plannerCompletion.total && !next.completed) {
-    next = { ...next, completed: true };
-  }
-  return next;
+  const inferred = withInferredGasConnection(next);
+  return {
+    ...inferred,
+    completed: surgeProfileKnownAnswerCount(inferred) === SURGE_PROFILE_FIELDS.length,
+  };
 }
 
 const PROFILE_CONTEXT_FIELD_ORDER = [

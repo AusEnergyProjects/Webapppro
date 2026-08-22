@@ -188,6 +188,7 @@ export function stripSurgePublicLinksAndCitationLines(value: string) {
 
 export function sanitizeSurgeReferenceText(value: string) {
   return stripSurgePublicLinksAndCitationLines(value)
+    .replace(/\s*[\u2013\u2014]\s*/gu, ", ")
     .replace(/\b(?:Electric\s+Saul|Saul\s+Griffith|Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Rewiring\s+Australia|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/gi, "maintained Australian energy evidence")
     .replace(/\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?)\b/g, "maintained Australian energy evidence")
     .replace(/maintained Australian energy evidence(?:\s*(?:,|and)\s*maintained Australian energy evidence)+/gi, "maintained Australian energy evidence")

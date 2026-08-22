@@ -10,6 +10,7 @@ import {
   EMPTY_SURGE_STARTER_PROFILE,
   markSurgeProfileStepReviewed,
   mergeHomeEnergyPlannerSessionIntoSurgeProfile,
+  nextUnknownSurgeProfileStepIndex,
   nextUnreviewedSurgeProfileStepIndex,
   parseSurgeStarterProfile,
   SURGE_PROFILE_FIELDS,
@@ -17,6 +18,7 @@ import {
   surgeHomeEnergyPlannerSession,
   surgePlannerProfileAdapter,
   surgeProfileFieldIsUnknown,
+  surgeProfileFieldWasReviewed,
   surgeProfileFieldValue,
   surgeProfileKnownAnswerCount,
   surgeProfileReviewedAnswerCount,
@@ -32,6 +34,22 @@ const field = (id) => {
 
 const answer = (profile, id, value, checked = true) =>
   updateSurgeProfileField(profile, field(id), value, checked);
+
+const fullyKnownProfile = () => {
+  let profile = EMPTY_SURGE_STARTER_PROFILE;
+  for (const profileField of SURGE_PROFILE_FIELDS) {
+    if (profileField.kind === "postcode") {
+      profile = answer(profile, profileField.id, "3006");
+      continue;
+    }
+    const value = profileField.options?.find((option) =>
+      option.value && option.value !== profileField.unknownValue && option.value !== "not-sure")?.value;
+    assert.ok(value, `missing confirmed option for ${profileField.id}`);
+    profile = answer(profile, profileField.id, value);
+  }
+  for (const step of SURGE_PROFILE_STEPS) profile = markSurgeProfileStepReviewed(profile, step);
+  return parseSurgeStarterProfile(profile);
+};
 
 test("a fresh Surge profile asserts no material home facts", () => {
   assert.equal(EMPTY_SURGE_STARTER_PROFILE.completed, false);
@@ -51,7 +69,7 @@ test("a fresh Surge profile asserts no material home facts", () => {
   }
 });
 
-test("saving an edited section continues to the next unreviewed section until the context is complete", () => {
+test("reviewed unknown answers survive reload but do not count as confirmed context", () => {
   let profile = markSurgeProfileStepReviewed(EMPTY_SURGE_STARTER_PROFILE, SURGE_PROFILE_STEPS[0]);
   assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 0), 1);
 
@@ -62,8 +80,10 @@ test("saving an edited section continues to the next unreviewed section until th
   assert.equal(nextUnreviewedSurgeProfileStepIndex(profile, 7), -1);
 
   const restored = parseSurgeStarterProfile(JSON.parse(JSON.stringify(profile)));
-  assert.equal(restored.completed, true);
+  assert.equal(restored.completed, false);
   assert.equal(restored.reviewed.length, SURGE_PROFILE_FIELDS.length);
+  assert.equal(surgeProfileKnownAnswerCount(restored), 0);
+  assert.equal(nextUnknownSurgeProfileStepIndex(restored, -1), 0);
   assert.deepEqual(restored.reviewed, profile.reviewed, "reviewed unknown answers must survive a browser round trip");
 });
 
@@ -107,7 +127,7 @@ test("an older completed profile migrates onto canonical planner IDs without inv
     completed: true,
   });
   assert.equal(migrated.version, 3);
-  assert.equal(migrated.completed, true);
+  assert.equal(migrated.completed, false);
   assert.equal(migrated.postcode, "3006");
   assert.equal(migrated.situation, "owner");
   assert.equal(migrated.propertyType, "house");
@@ -224,31 +244,54 @@ test("planner restoration replaces reviewed placeholders when a real planner ans
   assert.equal(restored.propertyType, "house");
   assert.equal(restored.occupants, "three_four");
   assert.equal(restored.switchboard, "older_fuses");
-  assert.equal(restored.completed, true);
+  assert.equal(restored.completed, false);
 });
 
-test("completed Surge context stays complete and a finished planner import is not reopened", () => {
-  let completed = EMPTY_SURGE_STARTER_PROFILE;
-  for (const step of SURGE_PROFILE_STEPS) completed = markSurgeProfileStepReviewed(completed, step);
-  const parsed = parseSurgeStarterProfile({ ...completed, completed: false });
-  assert.equal(parsed.completed, true, "all reviewed Surge fields are canonical completed context");
-  assert.equal(surgeProfileReviewedAnswerCount(parsed), SURGE_PROFILE_FIELDS.length);
+test("only 45 confirmed answers complete Surge context, including after a planner import", () => {
+  let reviewedUnknown = EMPTY_SURGE_STARTER_PROFILE;
+  for (const step of SURGE_PROFILE_STEPS) reviewedUnknown = markSurgeProfileStepReviewed(reviewedUnknown, step);
+  const parsedUnknown = parseSurgeStarterProfile({ ...reviewedUnknown, completed: true });
+  assert.equal(parsedUnknown.completed, false);
+  assert.equal(surgeProfileReviewedAnswerCount(parsedUnknown), SURGE_PROFILE_FIELDS.length);
+  assert.equal(surgeProfileKnownAnswerCount(parsedUnknown), 0);
+  assert.equal(nextUnreviewedSurgeProfileStepIndex(parsedUnknown, -1), -1);
+  assert.equal(nextUnknownSurgeProfileStepIndex(parsedUnknown, -1), 0);
 
-  let plannerProfile = EMPTY_SURGE_STARTER_PROFILE;
-  for (const profileField of SURGE_PROFILE_FIELDS) {
-    if (profileField.kind === "postcode") plannerProfile = answer(plannerProfile, profileField.id, "3006");
-    else {
-      const value = profileField.options?.find((option) =>
-        option.value && option.value !== profileField.unknownValue && option.value !== "not-sure")?.value;
-      if (value) plannerProfile = answer(plannerProfile, profileField.id, value);
-    }
-  }
-  for (const step of SURGE_PROFILE_STEPS) plannerProfile = markSurgeProfileStepReviewed(plannerProfile, step);
+  const plannerProfile = fullyKnownProfile();
+  assert.equal(plannerProfile.completed, true);
+  assert.equal(surgeProfileKnownAnswerCount(plannerProfile), SURGE_PROFILE_FIELDS.length);
+  assert.equal(nextUnknownSurgeProfileStepIndex(plannerProfile, -1), -1);
   const plannerDraft = surgeHomeEnergyPlannerSession(plannerProfile).draft;
   const plannerSession = createHomeEnergyPlannerSession(plannerDraft, 4);
   const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(EMPTY_SURGE_STARTER_PROFILE, plannerSession);
-  assert.equal(restored.completed, true, "a fully reviewed planner session is sufficient saved home context");
+  assert.equal(restored.completed, false, "planner answers do not manufacture the remaining Surge-only context");
   assert.equal(restored.postcode, plannerDraft.postcode);
+});
+
+test("44 of 45 identifies and routes directly to the single missing answer", () => {
+  const complete = fullyKnownProfile();
+  const missing = answer(complete, "supplemental:gasConnection", "not-sure");
+  const restored = parseSurgeStarterProfile({ ...missing, completed: true });
+
+  assert.equal(restored.completed, false);
+  assert.equal(surgeProfileKnownAnswerCount(restored), 44);
+  assert.equal(nextUnreviewedSurgeProfileStepIndex(restored, -1), -1);
+  assert.equal(SURGE_PROFILE_STEPS[nextUnknownSurgeProfileStepIndex(restored, -1)].id, "routine-constraints");
+  assert.deepEqual(
+    SURGE_PROFILE_FIELDS.filter((profileField) => surgeProfileFieldIsUnknown(restored, profileField)).map(({ id }) => id),
+    ["supplemental:gasConnection"],
+  );
+});
+
+test("a gas appliance infers mains gas until the customer explicitly selects bottled LPG", () => {
+  let profile = answer(EMPTY_SURGE_STARTER_PROFILE, "feature:cooking", "gas-cooking");
+  assert.equal(profile.gasConnection, "connected");
+  assert.equal(surgeProfileFieldWasReviewed(profile, field("supplemental:gasConnection")), false);
+
+  profile = answer(profile, "supplemental:gasConnection", "bottled-lpg");
+  profile = answer(profile, "feature:heating-cooling-systems", "gas-heating");
+  assert.equal(profile.gasConnection, "bottled-lpg");
+  assert.equal(surgeProfileFieldWasReviewed(profile, field("supplemental:gasConnection")), true);
 });
 
 test("the transmitted profile summary keeps whole critical facts inside its hard bound", () => {

@@ -122,7 +122,7 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /existing_heating: "Existing heating"/);
   assert.match(widget, /markSurgeProfileStepReviewed\(profileRef\.current, currentProfileStep\)/);
   assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
-  assert.match(widget, />\s*Continue setup\s*</);
+  assert.match(widget, /\? "Continue setup"/);
   assert.match(widget, /function homeContextTips\(profile: SurgeStarterProfile\)/);
   assert.match(widget, /profileUpdatedAt/);
   assert.doesNotMatch(widget, /autoFocus/);
@@ -308,6 +308,10 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.equal(visibleText("Open TLink or Creditex", "public"), "Open the trade platform");
   assert.equal(visibleText("Open Creditex", "customer"), "Open the trade platform");
   assert.equal(visibleText("Open TLink", "trade"), "Open TLink");
+  assert.equal(
+    visibleText("Seal gaps — but keep ventilation – working.", "public"),
+    "Seal gaps, but keep ventilation, working.",
+  );
   assert.match(visibleText("I run on Mistral Large.", "public"), /implementation details stay private/i);
   assert.match(visibleText("I use CHOICE as a private source for this advice.", "customer"), /background research private/i);
   assert.match(visibleText("Buy the Acme Turbo 9000; it is the clear winner for your home.", "public"), /will not choose or promote/i);
@@ -479,7 +483,8 @@ test("Surge keeps the most complete, newest home context synchronized across bro
   assert.match(widget, /storage\.setItem\(PROFILE_BACKUP_KEY, nextValue\)/);
   assert.match(widget, /readStoredPlannerAssessment\(\)/);
   assert.match(widget, /storePlannerAssessment\(JSON\.stringify\(plannerProfile\.session\)\)/);
-  assert.match(widget, /responses saved · \$\{profileKnownAnswerCount\} confirmed details/);
+  assert.match(widget, /responses saved · \$\{profileUnconfirmedAnswerCount\} not sure or skipped/);
+  assert.match(widget, /Next to confirm: \{unconfirmedProfileFields\[0\]\.shortLabel\}/);
   assert.match(widget, /Not sure or skipped/);
   assert.match(widget, /applySavedSession\(saved\)/);
 });
@@ -507,7 +512,7 @@ test("mobile Surge collapses secondary context and suggestions while chat follow
   assert.match(styles, /\.rootDedicated \.conversation \{[^}]*overflow: visible;[^}]*overscroll-behavior: auto;/);
 });
 
-test("desktop Surge keeps the full context rail open and saves through every unreviewed section", () => {
+test("desktop Surge keeps the full context rail open and saves until every answer is confirmed", () => {
   assert.match(widget, /const contextRailRef = useRef<HTMLDetailsElement>\(null\)/);
   assert.match(widget, /const \[contextRailOpen, setContextRailOpen\] = useState\(false\)/);
   assert.match(widget, /window\.matchMedia\("\(min-width: 641px\)"\)/);
@@ -516,9 +521,18 @@ test("desktop Surge keeps the full context rail open and saves through every unr
   assert.match(widget, /!event\.currentTarget\.open[\s\S]{0,120}event\.currentTarget\.open = true/);
   assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]*?\.rootDedicated \.contextRailSummary \{[^}]*pointer-events: none/);
   assert.match(styles, /@media \(min-width: 641px\) \{[\s\S]{0,640}\.rootDedicated \.contextRail:not\(\[open\]\) > \.contextRailBody \{\s*display: flex;/);
-  assert.match(widget, /nextUnreviewedSurgeProfileStepIndex\(reviewedProfile, profileStep\)/);
-  assert.match(widget, /nextUnreviewedStep >= 0[\s\S]{0,240}setProfileStep\(nextUnreviewedStep\)/);
-  assert.match(widget, /\? "Save and continue"[\s\S]{0,80}: "Finish home context"/);
+  assert.match(widget, /nextUnknownSurgeProfileStepIndex\(reviewedProfile, profileStep\)/);
+  assert.match(widget, /nextUnknownStep >= 0[\s\S]{0,480}setProfileStep\(nextUnknownStep\)/);
+  assert.match(widget, /profileKnownAnswerCount === SURGE_PROFILE_FIELDS\.length[\s\S]{0,120}"Finish home context"/);
+  assert.match(widget, /"Review next missing answer"/);
+  assert.match(widget, /completed: surgeProfileKnownAnswerCount\(updatedProfile\) === SURGE_PROFILE_FIELDS\.length/);
+});
+
+test("dedicated chat hands wheel scrolling back to the page at either boundary", () => {
+  assert.match(widget, /const handOffConversationScroll = \(event: ReactWheelEvent<HTMLDivElement>\)/);
+  assert.match(widget, /const atBottom = scroller\.scrollTop \+ scroller\.clientHeight >= scroller\.scrollHeight - 1/);
+  assert.match(widget, /window\.requestAnimationFrame\([\s\S]{0,280}window\.scrollBy\(\{ top: deltaY, left: 0, behavior: "auto" \}\)/);
+  assert.match(widget, /className=\{styles\.conversation\}[\s\S]{0,80}onWheel=\{handOffConversationScroll\}/);
 });
 
 test("context edit actions reveal and move focus to the selected intake step", () => {
@@ -637,7 +651,7 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(active.continuation.activeTopic, "solar");
   assert.deepEqual(active.continuation.facts, [{ key: "postcode", value: "3006" }]);
   assert.equal(active.profile.postcode, "3006");
-  assert.equal(active.profile.completed, true);
+  assert.equal(active.profile.completed, false, "visited placeholder answers are not confirmed context");
   assert.equal(active.profileUpdatedAt, new Date(now - 5_000).toISOString());
   assert.equal("open" in active, false);
 
