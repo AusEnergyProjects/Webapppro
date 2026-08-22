@@ -1,28 +1,61 @@
 # Next task handover
 
-Status: Surge context flow and quality foundations are released as Sites version 378. Priority 1 is governed knowledge; Priority 2 is reviewed conversation quality.
+Status: Durable Surge home-context continuity, chronological chat and the persistent guidance rail are released as Sites version 379. Priority 1 is governed knowledge; Priority 2 is reviewed conversation quality.
 
-Prepared: 21 August 2026
+Prepared: 22 August 2026
 
-Milestone ID: `AEA-SURGE-CONTEXT-QUALITY-77`
+Milestone ID: `AEA-SURGE-CONTEXT-CONTINUITY-79`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03`
+Current production application source: `365101733253f2ff39532343bcef81303e96e1e2`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 378 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 379 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4928e91cf1688191b282c32650d17325`
 
-Current deployment: `appgdep_6a8871da825c8191926a9d71cca8f4df`
+Current deployment: `appgdep_6a88e70dfe908191b90ea491455ef531`
 
 Current environment revision: 24
 
 Migration inventory: 153 migrations through `0154_surge_conversation_quality_daily.sql`
 
-## Released milestone: AEA-SURGE-CONTEXT-QUALITY-77
+## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
+
+### User outcome
+
+Customers do not lose reviewed home details when they change routes, switch tabs or return later in the same browser. One progress action resumes the next incomplete stage, conversation turns stay together at the bottom above the composer, and desktop uses the otherwise empty right side for useful context guidance and optional help.
+
+### Released scope
+
+- Persist every allowlisted profile mutation immediately and flush the latest refs on page hide or tab visibility changes; hydrate the same canonical session after route, reload and cross-tab storage changes.
+- Treat reviewed unknown or `Not sure` as reviewed through serialisation and rehydration so the 45-detail counter cannot fall merely because a customer chose the safe unknown response.
+- Add `Continue setup` to the progress summary and move section saves forward until the next incomplete section or final completion.
+- Render transcript turns at the conversation end immediately above the composer; keep forms, service help and saved context outside the transcript.
+- Add a desktop-only persistent `Home guidance` rail with at most three deterministic saved-context tips and optional human help; use compact collapsed drawers for the same secondary content on phone.
+- Preserve natural page scrolling and the mobile swipeable header while keeping desktop context permanently visible.
+
+### Validation and release evidence
+
+- The focused persistence, chronological-layout and responsive-rail regression set passed 33 of 33 tests.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 153 migrations, customer-plan PDF audit, Vinext build, Sites bundle audit and public-performance audit.
+- The performance gate reports a 4,758-byte root launcher, 76,956-byte deferred assistant and 732,292-byte shared stylesheet.
+- Exact source `365101733253f2ff39532343bcef81303e96e1e2` was pushed to GitHub and Sites managed `main` before the matching release package was saved.
+- Sites saved version 379 as `appgprj_6a550c378000819185caf094173422bb~appgver_4928e91cf1688191b282c32650d17325`, storing 479 files and 44,544,000 bytes with content hash `sha256:03137190ae5446ae2f176c52f9cfbfee5bb105db5ec4f1fdb58e625c57a2c541`.
+- Deployment `appgdep_6a88e70dfe908191b90ea491455ef531` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Live 1440 by 900 and 390 by 844 QA confirmed the desktop three-column workspace, collapsed mobile secondary drawers, visible composer and natural page scroll.
+
+### Boundaries and remaining optimisation work
+
+- Persistence is same-browser for 30 days, not an account, verified property record or cross-device identity.
+- Live QA did not send a chat turn or create a lead; chronological turn order and state restoration are covered by automated tests.
+- Tips use only deterministic allowlisted context and do not infer missing property facts.
+- The stylesheet remains approximately 732 KB raw and large-chunk warnings remain within the enforced budgets.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous released milestone: AEA-SURGE-CONTEXT-QUALITY-77
 
 ### User outcome
 
@@ -175,8 +208,8 @@ Expand the reviewed official Surge registry beyond the current 109-source founda
 
 1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
 2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
-3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
-4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+3. Add an isolated end-to-end 45-field persistence rehearsal covering route changes, reload, browser-tab switching, unknown answers and next-incomplete resumption, plus aggregate-only detection of save failures.
+4. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
 5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Historical release handovers

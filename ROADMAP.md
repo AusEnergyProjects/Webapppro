@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 21 August 2026
+Last reconciled: 22 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -30,7 +30,25 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: SURGE-AI-CONTEXTUAL-EXPERIENCE-70
+## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
+
+Release status: application commit `365101733253f2ff39532343bcef81303e96e1e2` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 379 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+
+### Outcome
+
+Make the complete 45-detail home context durable across same-browser navigation, give customers one obvious resume action, keep the conversation chronological at the bottom, and use desktop space for deterministic home tips and optional help without crowding phone chat.
+
+### Acceptance result
+
+- Every allowlisted profile change persists immediately, including reviewed unknown answers, and rehydrates after route, reload and cross-tab changes.
+- `Continue setup` resumes the next incomplete section and saves continue through final completion.
+- Conversation turns remain ordered at the bottom immediately above the composer.
+- Desktop keeps context and guidance visible; phone starts context, suggestions and guidance collapsed and retains natural page scrolling.
+- Full validation, exact-source packaging, public deployment and responsive live QA passed.
+
+All acceptance gates above are met for Sites version 379.
+
+## Previous released milestone: SURGE-AI-CONTEXTUAL-EXPERIENCE-70
 
 Release status: application commit `4f5dde6cfa47ddbfb52925ecaf11a36310485a7f` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 368 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
@@ -3310,8 +3328,8 @@ Exact application commit `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` passed the f
 
 1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
 2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
-3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
-4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+3. Add an isolated end-to-end 45-field persistence rehearsal covering route changes, reload, browser-tab switching, unknown answers and next-incomplete resumption, plus aggregate-only detection of save failures.
+4. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
 5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Global stop conditions

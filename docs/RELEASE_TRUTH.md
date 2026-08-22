@@ -4,13 +4,53 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 21 August 2026
+Last reconciled locally: 22 August 2026
 
-Deployment evidence last verified: 21 August 2026
+Deployment evidence last verified: 22 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: complete Surge context flow and quality controls
+## Current production release: durable Surge context and chronological workspace
+
+Application source `365101733253f2ff39532343bcef81303e96e1e2` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 379 at `https://compare.ausenergyassessments.com`.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `365101733253f2ff39532343bcef81303e96e1e2` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_4928e91cf1688191b282c32650d17325` |
+| Public version | Sites version 379 |
+| Deployment | `appgdep_6a88e70dfe908191b90ea491455ef531` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:03137190ae5446ae2f176c52f9cfbfee5bb105db5ec4f1fdb58e625c57a2c541` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Released outcome
+
+- Every maintained home-context field update is written immediately to the canonical same-browser session. Page hide, tab visibility changes, route changes and storage events flush or rehydrate the same allowlisted profile so reviewed `Not sure` answers are not silently lost.
+- `Continue setup` appears beside incomplete progress and opens the next unreviewed section. Section saves continue forward until all 45 details have been reviewed; a reviewed unknown remains reviewed after serialisation and reload.
+- Conversation turns render chronologically at the end of the workspace immediately above the composer. New replies target the conversation end rather than appearing above context forms or optional service controls.
+- Desktop now has a persistent three-column workspace: home context, conversation and `Home guidance`. The guidance rail holds no transcript content; it provides at most three deterministic tips derived only from saved context plus the optional human-help path.
+- Phone keeps context, starter prompts and guidance in compact closed drawers while the composer and normal document scroll remain immediately usable. There is no nested mobile scroll container.
+
+### Validation and runtime evidence
+
+- `npm.cmd run validate` passed on the exact application state: typecheck, warning-free lint, all 36 integration tests, the complete repository suite, all 153 migrations, customer-plan PDF audit, Vinext production build, Sites bundle audit and public-performance audit.
+- The focused persistence, chronology, rail and responsive regression set passed 33 of 33 tests; `npm.cmd run typecheck`, `npm.cmd run lint` and `git diff --check` also passed independently.
+- The public-performance audit reports a 4,758-byte root launcher, 76,956-byte deferred assistant and 732,292-byte global stylesheet.
+- Sites stored 44,544,000 bytes across 479 files with the package content hash above. The matching local release archive was 12,209,964 bytes.
+- Live 1440 by 900 desktop QA confirmed the complete context rail, chronological conversation area and persistent right-side guidance. Live 390 by 844 phone QA confirmed all three secondary areas start collapsed, the composer remains visible through normal page scrolling and no inner panel traps the gesture.
+- GitHub `main`, the working branch and Sites managed `main` contained the exact application source above before packaging; saved version 379 and its deployment provenance remain pinned to that source even when later documentation-only checkpoints advance those branches.
+
+### Boundaries
+
+- Persistence remains same-browser, expires after 30 days and does not create a customer identity or cross-device sync.
+- Guidance tips are deterministic presentation of saved customer-reported context, not new facts, professional verification, a formal rating or a product recommendation.
+- Live QA did not send an assistant question or create a lead, email, trade record or customer record. Chronological turn ordering and persistence transitions are covered by automated regressions.
+- The shared stylesheet remains a 732,292-byte raw build asset and the production build still reports large-chunk warnings. Both pass the current performance budgets but remain structural optimisation work.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: complete Surge context flow and quality controls
 
 Application source `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 378 at `https://compare.ausenergyassessments.com`.
 
@@ -879,8 +919,8 @@ sent or received and no provider callback was reconciled.
 
 1. **Priority 1:** expand the reviewed official Surge registry beyond 109 maintained sources and add a bounded official-change review queue, with volatile facts staying fail-closed until independently reviewed.
 2. **Priority 2:** build a reviewed conversation evaluation corpus and quality view over the new aggregate-only counters, with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds.
-3. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
-4. Run a controlled pre-launch end-to-end delivery rehearsal with test-only contacts: customer plan email, internal relay, matched-trade notification, contact release and Interested-to-CRM conversion.
+3. Add an isolated end-to-end 45-field persistence rehearsal covering route changes, reload, browser-tab switching, unknown answers and next-incomplete resumption, plus aggregate-only detection of save failures.
+4. Split and measure the public, customer, trade and Creditex stylesheet and JavaScript boundaries without weakening the current click-through performance budgets.
 5. Add deliberate signed-in context association and deletion controls, then complete the accessibility, mobile usability, support and failure-recovery pilot before any launch declaration.
 
 ## Previous quote, job and invoice usability release
