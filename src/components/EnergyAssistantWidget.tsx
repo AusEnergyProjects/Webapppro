@@ -776,6 +776,40 @@ function savedConversation(value: unknown, now = Date.now()): SavedConversation 
   };
 }
 
+function liveConversationSnapshot(
+  mode: Audience,
+  messages: readonly AssistantMessage[],
+  continuation: SurgeConversationState | null,
+  profile: SurgeStarterProfile,
+  profileUpdatedAt: string,
+): SavedConversation {
+  const boundedMessages = boundedLocalMessages(messages);
+  return {
+    mode,
+    messages: boundedMessages,
+    continuation,
+    profile,
+    profileUpdatedAt,
+    lastActive: localSessionLastActive(boundedMessages, profile, profileUpdatedAt),
+    expired: false,
+  };
+}
+
+function savedConversationActivity(session: SavedConversation) {
+  const timestamps = [session.lastActive, session.profileUpdatedAt, ...session.messages.map((message) => message.createdAt)]
+    .map((value) => new Date(value || "").getTime())
+    .filter(Number.isFinite);
+  return timestamps.length ? Math.max(...timestamps) : Number.NEGATIVE_INFINITY;
+}
+
+function savedConversationIsPreferred(candidate: SavedConversation, current: SavedConversation) {
+  const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
+  const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
+  if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
+  if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
+  return savedConversationActivity(candidate) > savedConversationActivity(current);
+}
+
 function accessBrowserStorage<T>(operation: (storage: Storage) => T, fallback: T): T {
   try {
     return operation(window.localStorage);
@@ -855,6 +889,8 @@ export function EnergyAssistantWidget({
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const conversationScrollPendingRef = useRef(false);
   const intakeRef = useRef<HTMLFormElement>(null);
+  const leadFormRef = useRef<HTMLFormElement>(null);
+  const leadFormScrollPendingRef = useRef(false);
   const contextRailRef = useRef<HTMLDetailsElement>(null);
   const profileEditScrollPendingRef = useRef(false);
   const messagesRef = useRef<AssistantMessage[]>([]);
@@ -870,7 +906,6 @@ export function EnergyAssistantWidget({
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
   const [profile, setProfile] = useState<SurgeStarterProfile>(EMPTY_STARTER_PROFILE);
-  const [profileUpdatedAt, setProfileUpdatedAt] = useState("");
   const [profileStep, setProfileStep] = useState(0);
   const [profileEditing, setProfileEditing] = useState(false);
   const [contextRailOpen, setContextRailOpen] = useState(false);
@@ -943,6 +978,24 @@ export function EnergyAssistantWidget({
     }));
   }, [context.audience]);
 
+  const applySavedSession = useCallback((saved: SavedConversation) => {
+    messagesRef.current = saved.messages;
+    continuationRef.current = saved.continuation;
+    profileRef.current = saved.profile;
+    profileUpdatedAtRef.current = saved.profileUpdatedAt;
+    setMessages(saved.messages);
+    setContinuation(saved.continuation);
+    setProfile(saved.profile);
+    setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
+    setServiceInterest(saved.messages.some((message) =>
+      message.role === "user" && signalsServiceInterest(message.content)));
+    if (saved.profile.completed) {
+      setProfileEditing(false);
+      setProfileDeferred(false);
+      setProfileStep(0);
+    }
+  }, []);
+
   const resetLeadAttempt = () => {
     setLeadRequestId("");
     setLeadSubmissionKey("");
@@ -964,6 +1017,7 @@ export function EnergyAssistantWidget({
     }));
     setLeadStage("destination");
     setLeadStartedAt(Date.now());
+    leadFormScrollPendingRef.current = true;
     setLeadOpen(true);
   };
 
@@ -1005,7 +1059,6 @@ export function EnergyAssistantWidget({
     setMessages(nextMessages);
     setContinuation(null);
     setProfile(EMPTY_STARTER_PROFILE);
-    setProfileUpdatedAt("");
     setProfileStep(0);
     setProfileEditing(false);
     setProfileDeferred(false);
@@ -1042,48 +1095,46 @@ export function EnergyAssistantWidget({
     window.queueMicrotask(() => {
       if (cancelled) return;
       hydrationStartedRef.current = true;
-      try {
-        setMascotTucked(readStoredMascotTucked());
-        let restoredProfile = EMPTY_STARTER_PROFILE;
-        const stored = readStoredSession();
-        if (stored) {
+      setMascotTucked(readStoredMascotTucked());
+      let restoredProfile = EMPTY_STARTER_PROFILE;
+      let restoredSession: SavedConversation | null = null;
+      const stored = readStoredSession();
+      if (stored) {
+        try {
           const saved = savedConversation(JSON.parse(stored));
-          messagesRef.current = saved.messages;
-          continuationRef.current = saved.continuation;
-          profileRef.current = saved.profile;
-          profileUpdatedAtRef.current = saved.profileUpdatedAt;
-          setMessages(saved.messages);
-          setContinuation(saved.continuation);
-          restoredProfile = saved.profile;
-          setProfileUpdatedAt(saved.profileUpdatedAt);
-          setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
-          setServiceInterest(saved.messages.some((message) =>
-            message.role === "user" && signalsServiceInterest(message.content)));
-          const restoredMode = explicitRouteAudience(pathname) || saved.mode;
-          setMode(restoredMode);
           if (saved.expired) {
             removeStoredSession();
             setStatus("Your locally saved conversation expired after 30 days of inactivity.");
+          } else {
+            restoredSession = saved;
+            restoredProfile = saved.profile;
+            applySavedSession(saved);
+            setMode(explicitRouteAudience(pathname) || saved.mode);
           }
+        } catch {
+          removeStoredSession();
         }
+      }
+      let mergedProfile = restoredProfile;
+      try {
         const storedAssessment = window.sessionStorage.getItem(HOME_ENERGY_ASSESSMENT_STORAGE_KEY);
-        const mergedProfile = mergeHomeEnergyPlannerSessionIntoSurgeProfile(restoredProfile, storedAssessment);
-        const mergedProfileUpdatedAt = mergedProfile !== restoredProfile
-          ? new Date().toISOString()
-          : profileUpdatedAtRef.current;
-        profileRef.current = mergedProfile;
-        profileUpdatedAtRef.current = mergedProfileUpdatedAt;
-        setProfile(mergedProfile);
-        setProfileUpdatedAt(mergedProfileUpdatedAt);
+        mergedProfile = mergeHomeEnergyPlannerSessionIntoSurgeProfile(restoredProfile, storedAssessment);
       } catch {
-        removeStoredSession();
-        profileRef.current = EMPTY_STARTER_PROFILE;
-        profileUpdatedAtRef.current = "";
+        // Session planner data is supplementary; it must never erase a valid local Surge profile.
+      }
+      const mergedProfileUpdatedAt = mergedProfile !== restoredProfile
+        ? new Date().toISOString()
+        : profileUpdatedAtRef.current;
+      profileRef.current = mergedProfile;
+      profileUpdatedAtRef.current = mergedProfileUpdatedAt;
+      setProfile(mergedProfile);
+      if (restoredSession || mergedProfile !== restoredProfile) {
+        persistLocalSession({ nextProfile: mergedProfile, nextProfileUpdatedAt: mergedProfileUpdatedAt });
       }
       setHydrated(true);
     });
     return () => { cancelled = true; };
-  }, [pathname]);
+  }, [applySavedSession, pathname, persistLocalSession]);
 
   useEffect(() => {
     const syncDisplayPreference = (event: StorageEvent) => {
@@ -1104,32 +1155,22 @@ export function EnergyAssistantWidget({
       try {
         const saved = savedConversation(JSON.parse(event.newValue));
         if (saved.expired) return;
-        const incomingActivity = new Date(saved.profileUpdatedAt || saved.lastActive).getTime();
-        const currentActivity = new Date(profileUpdatedAtRef.current).getTime();
-        if (Number.isFinite(currentActivity) && Number.isFinite(incomingActivity) && incomingActivity <= currentActivity) return;
-        messagesRef.current = saved.messages;
-        continuationRef.current = saved.continuation;
-        profileRef.current = saved.profile;
-        profileUpdatedAtRef.current = saved.profileUpdatedAt;
-        setMessages(saved.messages);
-        setContinuation(saved.continuation);
-        setProfile(saved.profile);
-        setProfileUpdatedAt(saved.profileUpdatedAt);
-        setHasUsefulAnswer(saved.messages.some((message) => message.role === "assistant"));
-        setServiceInterest(saved.messages.some((message) =>
-          message.role === "user" && signalsServiceInterest(message.content)));
-        if (saved.profile.completed) {
-          setProfileEditing(false);
-          setProfileDeferred(false);
-          setProfileStep(0);
-        }
+        const current = liveConversationSnapshot(
+          context.audience,
+          messagesRef.current,
+          continuationRef.current,
+          profileRef.current,
+          profileUpdatedAtRef.current,
+        );
+        if (!savedConversationIsPreferred(saved, current)) return;
+        applySavedSession(saved);
       } catch {
         // Ignore malformed writes from another tab; the current valid session remains authoritative.
       }
     };
     window.addEventListener("storage", syncStoredConversation);
     return () => window.removeEventListener("storage", syncStoredConversation);
-  }, [clearLocalSession]);
+  }, [applySavedSession, clearLocalSession, context.audience]);
 
   useEffect(() => {
     if (!dedicated || initialDraft.trim()) return;
@@ -1153,29 +1194,47 @@ export function EnergyAssistantWidget({
 
   useEffect(() => {
     if (!hydrated) return;
-    profileRef.current = profile;
-    profileUpdatedAtRef.current = profileUpdatedAt;
-    persistLocalSession({
-      nextMessages: messages,
-      nextContinuation: continuation,
-      nextProfile: profile,
-      nextProfileUpdatedAt: profileUpdatedAt,
-    });
-  }, [continuation, hydrated, messages, persistLocalSession, profile, profileUpdatedAt]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    const flushLocalSession = () => persistLocalSession();
-    const flushHiddenSession = () => {
+    const currentSession = () => liveConversationSnapshot(
+      context.audience,
+      messagesRef.current,
+      continuationRef.current,
+      profileRef.current,
+      profileUpdatedAtRef.current,
+    );
+    const storedSession = () => {
+      const storedValue = readStoredSession();
+      if (!storedValue) return null;
+      try {
+        const saved = savedConversation(JSON.parse(storedValue));
+        return saved.expired ? null : saved;
+      } catch {
+        return null;
+      }
+    };
+    const reconcileStoredSession = () => {
+      const saved = storedSession();
+      if (saved && savedConversationIsPreferred(saved, currentSession())) applySavedSession(saved);
+    };
+    const flushLocalSession = () => {
+      const saved = storedSession();
+      if (saved && savedConversationIsPreferred(saved, currentSession())) return;
+      persistLocalSession();
+    };
+    const syncVisibility = () => {
       if (window.document.visibilityState === "hidden") flushLocalSession();
+      else reconcileStoredSession();
     };
     window.addEventListener("pagehide", flushLocalSession);
-    window.document.addEventListener("visibilitychange", flushHiddenSession);
+    window.addEventListener("pageshow", reconcileStoredSession);
+    window.addEventListener("focus", reconcileStoredSession);
+    window.document.addEventListener("visibilitychange", syncVisibility);
     return () => {
       window.removeEventListener("pagehide", flushLocalSession);
-      window.document.removeEventListener("visibilitychange", flushHiddenSession);
+      window.removeEventListener("pageshow", reconcileStoredSession);
+      window.removeEventListener("focus", reconcileStoredSession);
+      window.document.removeEventListener("visibilitychange", syncVisibility);
     };
-  }, [hydrated, persistLocalSession]);
+  }, [applySavedSession, context.audience, hydrated, persistLocalSession]);
 
   useEffect(() => {
     const postcode = lead.postcode;
@@ -1265,7 +1324,22 @@ export function EnergyAssistantWidget({
       behavior: hasConversation ? "smooth" : "auto",
     });
     conversationScrollPendingRef.current = false;
-  }, [dedicated, effectiveOpen, leadOpen, messages]);
+  }, [dedicated, effectiveOpen, messages]);
+
+  useEffect(() => {
+    if (!leadOpen || !leadFormScrollPendingRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const form = leadFormRef.current;
+      if (!form) return;
+      leadFormScrollPendingRef.current = false;
+      form.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+      form.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [leadOpen]);
 
   useEffect(() => {
     if (!profileEditing || !profileEditScrollPendingRef.current) return;
@@ -1394,7 +1468,6 @@ export function EnergyAssistantWidget({
     profileRef.current = nextProfile;
     profileUpdatedAtRef.current = nextProfileUpdatedAt;
     setProfile(nextProfile);
-    setProfileUpdatedAt(nextProfileUpdatedAt);
     persistLocalSession({ nextProfile, nextProfileUpdatedAt });
     setProfileError("");
   };
@@ -1420,7 +1493,6 @@ export function EnergyAssistantWidget({
     profileUpdatedAtRef.current = nextProfileUpdatedAt;
     if (nextUnreviewedStep >= 0) {
       setProfile(reviewedProfile);
-      setProfileUpdatedAt(nextProfileUpdatedAt);
       setProfileStep(nextUnreviewedStep);
       persistLocalSession({ nextProfile: reviewedProfile, nextProfileUpdatedAt });
       setProfileError("");
@@ -1433,7 +1505,6 @@ export function EnergyAssistantWidget({
     };
     profileRef.current = nextProfile;
     setProfile(nextProfile);
-    setProfileUpdatedAt(nextProfileUpdatedAt);
     setProfileEditing(false);
     setProfileDeferred(false);
     setProfileStep(0);
@@ -1997,7 +2068,7 @@ export function EnergyAssistantWidget({
             )}
 
             {leadOpen && (
-              <form className={styles.leadForm} onSubmit={(event) => void submitLead(event)}>
+              <form ref={leadFormRef} className={styles.leadForm} tabIndex={-1} onSubmit={(event) => void submitLead(event)}>
                 <header>
                   <div>
                     <span>Optional service request</span>

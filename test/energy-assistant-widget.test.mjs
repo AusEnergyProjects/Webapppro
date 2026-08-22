@@ -232,7 +232,10 @@ test("only bounded local transcript, home profile, continuation, last activity a
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
   assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*persistLocalSession\(\{ nextMessages: boundedMessages \}\)/);
   assert.match(widget, /window\.addEventListener\("pagehide", flushLocalSession\)/);
-  assert.match(widget, /window\.document\.addEventListener\("visibilitychange", flushHiddenSession\)/);
+  assert.match(widget, /window\.addEventListener\("pageshow", reconcileStoredSession\)/);
+  assert.match(widget, /window\.addEventListener\("focus", reconcileStoredSession\)/);
+  assert.match(widget, /window\.document\.addEventListener\("visibilitychange", syncVisibility\)/);
+  assert.match(widget, /saved && savedConversationIsPreferred\(saved, currentSession\(\)\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
   assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
@@ -333,7 +336,7 @@ test("trade and customer guide modes survive navigation into shared utility rout
   }
   assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "trade"/);
   assert.match(widget, /isSharedUtilityRoute\(pathname\) && rememberedAudience === "customer"/);
-  assert.match(widget, /const restoredMode = explicitRouteAudience\(pathname\) \|\| saved\.mode/);
+  assert.match(widget, /setMode\(explicitRouteAudience\(pathname\) \|\| saved\.mode\)/);
   assert.match(widget, /mode:\s*context\.audience/);
   assert.match(widget, /mode:\s*record\?\.mode === "trade" \|\| record\?\.mode === "customer"/);
   assert.match(widget, /const nextMode = explicitRouteAudience\(pathname\) \|\| "public"/);
@@ -395,15 +398,19 @@ test("browser storage failures cannot break widget hydration, persistence or res
   }
 });
 
-test("Surge keeps the newest completed home context synchronized across browser tabs", () => {
+test("Surge keeps the most complete, newest home context synchronized across browser tabs", () => {
   assert.match(widget, /profileUpdatedAtRef = useRef\(""\)/);
   assert.match(widget, /event\.key !== STORAGE_KEY/);
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
-  assert.match(widget, /incomingActivity <= currentActivity/);
+  assert.match(widget, /function savedConversationIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
+  assert.match(widget, /candidateReviewed !== currentReviewed[\s\S]*candidateReviewed > currentReviewed/);
+  assert.match(widget, /candidate\.profile\.completed !== current\.profile\.completed/);
+  assert.match(widget, /savedConversationActivity\(candidate\) > savedConversationActivity\(current\)/);
+  assert.match(widget, /if \(!savedConversationIsPreferred\(saved, current\)\) return/);
   assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
   assert.match(widget, /profileUpdatedAtRef\.current = nextProfileUpdatedAt/);
   assert.match(widget, /persistLocalSession\(\{ nextProfile, nextProfileUpdatedAt \}\)/);
-  assert.match(widget, /profileRef\.current = saved\.profile/);
+  assert.match(widget, /applySavedSession\(saved\)/);
 });
 
 test("Surge inherits the platform typography roles instead of inventing tiny variants", () => {
@@ -451,6 +458,22 @@ test("context edit actions reveal and move focus to the selected intake step", (
   assert.match(widget, /onClick=\{\(\) => editStarterProfileStep\(stepIndex\)\}/);
   assert.match(widget, /<form ref=\{intakeRef\} className=\{styles\.intake\}[^>]*tabIndex=\{-1\}>/);
   assert.match(styles, /\.intake \{[^}]*scroll-margin-top: 16px;/);
+});
+
+test("desktop context answers have an independently usable scroll region", () => {
+  assert.match(styles, /\.contextGroups \{[^}]*flex: 1 1 0;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
+  assert.match(styles, /\.contextGroups \{[^}]*scrollbar-gutter: stable;[^}]*touch-action: pan-y;/);
+  assert.match(styles, /\.rootDedicated \.contextGroups \{[^}]*flex: none;[^}]*overflow: visible;/);
+});
+
+test("optional help navigation targets and focuses the newly opened service form", () => {
+  assert.match(widget, /const leadFormRef = useRef<HTMLFormElement>\(null\)/);
+  assert.match(widget, /const leadFormScrollPendingRef = useRef\(false\)/);
+  assert.match(widget, /leadFormScrollPendingRef\.current = true;\s*setLeadOpen\(true\)/);
+  assert.match(widget, /form\.scrollIntoView\(\{[\s\S]{0,220}block: "start"/);
+  assert.match(widget, /form\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(widget, /<form ref=\{leadFormRef\} className=\{styles\.leadForm\} tabIndex=\{-1\}/);
+  assert.match(styles, /\.leadForm \{[^}]*scroll-margin-top: 16px;/);
 });
 
 test("local continuation caps messages and recent API context and expires after 30 days", () => {
@@ -782,7 +805,8 @@ test("the matched-trade brief is progressive, phone-safe and privacy explicit", 
   assert.doesNotMatch(widget, /lead\.tradeSharingConsent/);
   assert.doesNotMatch(widget, /photoPromptIds|expectedPhotoCount|uploadKeyHash/);
   assert.doesNotMatch(widget, /quickQuestionsFor\(message\)/);
-  assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
+  assert.match(styles, /\.conversation\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.contextGroups\s*\{[^}]*overflow-y:\s*auto/);
 });
 
 test("the floating guide remains modal while the dedicated page is non-modal", () => {
@@ -839,7 +863,8 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.match(styles, /\.rootOpen \.panel\s*\{[\s\S]*calc\(100dvh - 98px\)/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);
   assert.match(styles, /\.privacy a,[\s\S]*\.privacy button\s*\{[\s\S]*align-items:\s*center[\s\S]*display:\s*inline-flex/);
-  assert.equal((styles.match(/overflow-y:\s*auto/g) || []).length, 1);
+  assert.match(styles, /\.conversation\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.contextGroups\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.rootOpen\s*\{[\s\S]*bottom:\s*max\(12px,[\s\S]*top:\s*auto/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.rootOpen \.panel\s*\{[\s\S]*height:\s*min\(72dvh, 620px\)[\s\S]*max-height:\s*calc\(100dvh - 104px - env\(safe-area-inset-bottom\)\)[\s\S]*width:\s*100%/);
   assert.match(styles, /safe-area-inset-bottom/);

@@ -184,6 +184,26 @@ test("planner restoration only imports answers from reviewed stages including sw
   assert.equal(surgeProfileFieldIsUnknown(imported, field("switchboard")), false);
 });
 
+test("planner restoration fills gaps without replacing reviewed Surge answers", () => {
+  let surgeProfile = answer(EMPTY_SURGE_STARTER_PROFILE, "postcode", "3000");
+  surgeProfile = answer(surgeProfile, "situation", "owner");
+  const reviewedBefore = surgeProfileReviewedAnswerCount(surgeProfile);
+  const plannerDraft = surgeHomeEnergyPlannerSession(EMPTY_SURGE_STARTER_PROFILE).draft;
+  const plannerSession = createHomeEnergyPlannerSession({
+    ...plannerDraft,
+    postcode: "3006",
+    situation: "renter",
+    propertyType: "house",
+    switchboard: "older_fuses",
+  }, 1);
+
+  const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(surgeProfile, plannerSession);
+  assert.equal(restored.postcode, "3000", "a reviewed Surge postcode remains authoritative");
+  assert.equal(restored.situation, "owner", "a reviewed Surge tenure remains authoritative");
+  assert.equal(restored.switchboard, "older_fuses", "an unanswered field can still be imported");
+  assert.ok(surgeProfileReviewedAnswerCount(restored) > reviewedBefore);
+});
+
 test("completed Surge context stays complete and a finished planner import is not reopened", () => {
   let completed = EMPTY_SURGE_STARTER_PROFILE;
   for (const step of SURGE_PROFILE_STEPS) completed = markSurgeProfileStepReviewed(completed, step);

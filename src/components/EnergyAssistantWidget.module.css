@@ -448,12 +448,17 @@
 
 .contextGroups {
   display: grid;
+  flex: 1 1 0;
   gap: 10px;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding-right: 4px;
+  scrollbar-gutter: stable;
   scrollbar-color: rgba(102, 236, 210, 0.58) transparent;
   scrollbar-width: thin;
+  touch-action: pan-y;
 }
 
 .contextGroups > section,
@@ -1235,6 +1240,7 @@
   display: grid;
   gap: 12px;
   padding: 13px;
+  scroll-margin-top: 16px;
 }
 
 .leadForm > header {
@@ -1822,6 +1828,7 @@
 
   .rootDedicated .contextGroups {
     display: grid;
+    flex: none;
     gap: 8px;
     overflow: visible;
     padding: 0;
@@ -2124,6 +2131,7 @@
 
   .rootDedicated .contextGroups {
     display: grid;
+    flex: none;
     overflow: visible;
   }
 
