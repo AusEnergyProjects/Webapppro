@@ -10,15 +10,43 @@ Deployment evidence last verified: 22 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Validated release candidate: context-aware Surge guidance and five priority controls
+## Current production release: context-aware Surge guidance and five priority controls
 
-The current worktree contains a bounded candidate that recalculates the desktop guidance rail from the complete allowlisted home profile whenever an answer changes. Moisture and damp guidance is now conditional on a current saved moisture answer, and regression coverage proves that the guidance appears when selected and disappears when the answer is removed.
+Application source `8d887f867269a157d84928fb553eac4951ed517b` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 389 at `https://compare.ausenergyassessments.com`.
 
-The candidate also adds a bounded official-change review queue, a reviewed conversation-quality corpus and release thresholds, aggregate-only profile-storage health reporting, measured surface-specific JavaScript graph budgets, and explicit signed-in save and delete controls for an account copy of home context. It does not automatically associate same-browser context with an account and does not store profile or conversation content in health or quality telemetry.
+The release recalculates the guidance rail from the complete allowlisted home profile whenever an answer changes. Moisture and damp guidance is conditional on the current saved moisture answer, and regression coverage proves that the guidance appears when selected and disappears when the answer is removed.
 
-Focused behaviour and account-context tests pass 43 of 43, typecheck passes, and the measured production asset-boundary audit passes. It is not recorded as production until full validation, exact-source packaging, Sites deployment and live desktop and phone QA are complete.
+It also adds a bounded official-change review queue, a reviewed conversation-quality corpus and release thresholds, aggregate-only profile-storage health reporting, measured surface-specific JavaScript graph budgets, and explicit signed-in save and delete controls for an account copy of home context. It does not automatically associate same-browser context with an account and does not store profile or conversation content in health or quality telemetry.
 
-## Current production release: durable Surge context and chronological workspace
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `8d887f867269a157d84928fb553eac4951ed517b` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b` |
+| Public version | Sites version 389 |
+| Deployment | `appgdep_6a898f2b620c81918109cac63f954590` with status `succeeded` |
+| Hosted environment | Revision 24 |
+| Package content hash | `sha256:a8ed0fe75ff54df21cc0ca4e5d1dcc84acbad9e446af7abf3f2ac47595f35184` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Validation and runtime evidence
+
+- The focused behaviour and account-context suite passed 43 of 43 tests; the focused release set passed 58 of 58 tests and migration validation passed 33 of 33 across all 156 migrations.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,839 repository tests with 11 intentional skips and zero failures, a fresh 156-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and performance audit.
+- The production performance gate reports a 4,790-byte root launcher, 83,840-byte deferred assistant, 732,292-byte stylesheet, 293,115-byte public graph, 920,414-byte customer graph, 956,479-byte trade graph and 1,792,764-byte Creditex graph.
+- The matching release archive is 12,206,992 bytes with 502 entries and SHA-256 `18E1C7ED733455D0B189D98AD56100A642F0A436C7249A1E07E6CB2D8F5B2E1C`.
+- Sites stored 44,625,920 bytes across 488 files with the package content hash above and deployed the saved version through deployment `appgdep_6a898f2b620c81918109cac63f954590` at environment revision 24.
+- GitHub `main`, the working branch and Sites managed `main` contained the exact application source before packaging.
+- Live desktop QA confirmed 45 of 45 saved responses and guidance that changed with the saved context: after moisture was removed, the live tips contained no moisture advice and covered ceiling insulation, draughts and shell-first improvements. Live phone QA confirmed compact secondary drawers, a visible composer and no horizontal overflow.
+
+### Boundaries
+
+- The account copy remains an explicit signed-in action and is never created from browser context automatically.
+- Storage-health and quality telemetry are aggregate-only and retain no customer content or identity.
+- Live QA did not send a chat turn, create a lead or mutate an account copy.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: durable Surge context and chronological workspace
 
 Application source `365101733253f2ff39532343bcef81303e96e1e2` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 379 at `https://compare.ausenergyassessments.com`.
 

@@ -1,32 +1,32 @@
 # Next task handover
 
-Status: Durable Surge home-context continuity, chronological chat and the persistent guidance rail are released as Sites version 379. Priority 1 is governed knowledge; Priority 2 is reviewed conversation quality.
+Status: Context-aware Surge guidance and the five requested priority controls are released as Sites version 389. Priority 1 is governed official-change operations; Priority 2 is continuous conversation-quality enforcement.
 
 Prepared: 22 August 2026
 
-Milestone ID: `AEA-SURGE-CONTEXT-CONTINUITY-79`
+Milestone ID: `AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `365101733253f2ff39532343bcef81303e96e1e2`
+Current production application source: `8d887f867269a157d84928fb553eac4951ed517b`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 379 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 389 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_4928e91cf1688191b282c32650d17325`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b`
 
-Current deployment: `appgdep_6a88e70dfe908191b90ea491455ef531`
+Current deployment: `appgdep_6a898f2b620c81918109cac63f954590`
 
 Current environment revision: 24
 
 Migration inventory: 156 migrations through `0157_surge_account_context.sql`
 
-## Validated release candidate: context-aware guidance and five priority controls
+## Released milestone: context-aware guidance and five priority controls
 
-This candidate removes stale moisture guidance as soon as the saved context no longer reports moisture or damp issues. The guidance rail is derived again from the complete allowlisted profile on every profile change, so each tip must be supported by the customer's currently saved answers.
+This release removes stale moisture guidance as soon as the saved context no longer reports moisture or damp issues. The guidance rail is derived again from the complete allowlisted profile on every profile change, so each tip must be supported by the customer's currently saved answers.
 
-The same bounded change completes the five requested follow-on controls:
+The same bounded release completes the five requested follow-on controls:
 
 - a 25-record official-source review queue with changed and overdue volatile facts remaining fail-closed;
 - a reviewed conversation evaluation corpus with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds;
@@ -34,7 +34,23 @@ The same bounded change completes the five requested follow-on controls:
 - measured public, customer, trade and Creditex JavaScript graph budgets that prevent protected entry chunks from returning to the public launcher;
 - explicit signed-in `Save context to my account` and `Delete account copy` controls, with no automatic account association.
 
-Focused behaviour and account-context tests pass 43 of 43, typecheck passes, and the measured production asset-boundary audit passes. Full repository validation, exact-source release packaging, Sites deployment and live desktop and phone QA remain the release gate.
+### Validation and release evidence
+
+- The focused behaviour and account-context suite passed 43 of 43 tests; the focused release set passed 58 of 58 tests and migration validation passed 33 of 33 across all 156 migrations.
+- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,839 repository tests with 11 intentional skips and zero failures, a fresh 156-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and the measured performance gate.
+- The production graph audit reports a 4,790-byte root launcher, 83,840-byte deferred assistant, 732,292-byte stylesheet, 293,115-byte public graph, 920,414-byte customer graph, 956,479-byte trade graph and 1,792,764-byte Creditex graph.
+- Exact application source `8d887f867269a157d84928fb553eac4951ed517b` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
+- The matching release archive is 12,206,992 bytes with 502 entries and SHA-256 `18E1C7ED733455D0B189D98AD56100A642F0A436C7249A1E07E6CB2D8F5B2E1C`.
+- Sites saved version 389 as `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b`, storing 488 files and 44,625,920 bytes with content hash `sha256:a8ed0fe75ff54df21cc0ca4e5d1dcc84acbad9e446af7abf3f2ac47595f35184`.
+- Deployment `appgdep_6a898f2b620c81918109cac63f954590` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
+- Live desktop QA confirmed 45 of 45 saved responses, the complete context rail and moisture-free advice after moisture was removed. The three current tips cover ceiling insulation, the largest draughts and shell-first work. Live phone QA confirmed compact context, suggested-question and home-tip drawers, a visible composer and no horizontal overflow.
+
+### Boundaries
+
+- The optional account copy is created or deleted only by an explicit signed-in action. Browser context is not automatically associated with an account.
+- Storage-health and conversation-quality records are daily aggregates and contain no profile, prompt, answer, transcript, contact detail or customer identifier.
+- Live QA did not send a chat turn, save an account copy or create a lead. Those mutations remain covered by automated tests rather than production data creation.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 

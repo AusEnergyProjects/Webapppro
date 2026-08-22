@@ -3324,11 +3324,11 @@ Keep the complete home context permanently visible on desktop while retaining th
 
 Exact application commit `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 378 under `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4` and deployed publicly through `appgdep_6a8871da825c8191926a9d71cca8f4df` with environment revision 24. Live desktop QA confirmed the rail is open and non-collapsible; sequential QA completed steps 1 through 13 and reached 45 of 45 reviewed; 390 by 844 QA confirmed the same rail remains a collapsed, tappable phone drawer. All 109 official sources carry volatility and reuse metadata, programme facts fail closed past the governed review date, and migration `0154_surge_conversation_quality_daily.sql` stores aggregate outcome counters only.
 
-## Validated candidate: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80
+## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80
 
 Recalculate saved-context guidance whenever the allowlisted profile changes so removed moisture or damp answers immediately remove moisture guidance. Complete the requested five follow-on controls with a bounded official review queue, a reviewed conversation-quality corpus and thresholds, aggregate-only continuity failure detection, measured surface-specific JavaScript graph budgets, and explicit signed-in save and deletion of an account context copy.
 
-The focused behaviour and account-context suite passes 43 of 43 tests, typecheck passes and the measured production asset-boundary audit passes. Full validation, exact-source packaging, Sites deployment and live desktop and phone QA remain mandatory before this candidate becomes a released milestone.
+Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the full validation gate and was pushed to GitHub and Sites managed `main`. Sites saved it as version 389 under `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b` and deployed it publicly through `appgdep_6a898f2b620c81918109cac63f954590` at environment revision 24. Live desktop QA confirmed 45 of 45 saved responses and no moisture advice after moisture was removed. Live phone QA confirmed compact secondary drawers, a visible composer and no horizontal overflow.
 
 ## Next five logical product steps
 
