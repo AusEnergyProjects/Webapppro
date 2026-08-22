@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import {
@@ -142,6 +142,13 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /styles\.clarifyingQuestion/);
   assert.doesNotMatch(widget, /styles\.answerTools/);
   assert.match(widget, /answerStatus === "source_review_required"/);
+});
+
+test("Surge stays private and low-friction without account-copy controls", () => {
+  assert.equal(existsSync(new URL("../src/components/SurgeAccountContextControls.tsx", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../src/lib/surge-account-context-server.ts", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../src/app/api/energy-assistant/account-context/route.ts", import.meta.url)), false);
+  assert.doesNotMatch(widget, /SurgeAccountContextControls|Save context to my account|Delete account copy|account-context/);
 });
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {

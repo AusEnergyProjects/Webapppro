@@ -4,11 +4,21 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 22 August 2026
+Last reconciled locally: 23 August 2026
 
 Deployment evidence last verified: 22 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
+
+## Validated release candidate: practical Surge assessor guidance and account-copy removal
+
+The current candidate removes the unsolicited account-context save and delete feature in full. It removes the customer card, lazy client import, API route, server helper, component styles, feature tests and persisted `surge_account_context` table. Same-browser private context remains the only home-context persistence path.
+
+Early deterministic guidance now uses the saved context to select practical provider-neutral actions such as safe gap sealing, door and window seals, door snakes, removable glazing films, cellular coverings, insulation top-ups, reverse-cycle heating, electric throws, filter cleaning, solar and tariff load shifting, evaporative outlet checks, humidity control, heat-pump drying and deciduous shade. Advice that conflicts with the latest saved context is excluded.
+
+The assistant prompt and deterministic fallback now follow an assessor-style progressive qualification contract. Surge answers what can be answered, asks exactly one highest-value question when a material fact is missing, and continues until there is enough context for a reliable answer. Hot-water rebate qualification starts with the current system and then gathers location, proposed replacement and other eligibility facts as needed. Current programmes and values still require governed official sources and fail closed when evidence is missing or overdue. Generated conversation copy prohibits em dashes and en dashes.
+
+Focused assistant, guidance, widget, migration and release checks pass 110 of 110 tests. Full repository validation and exact Sites release evidence remain pending for this candidate. Public production remains the exact version 389 release recorded below until the replacement is deployed.
 
 ## Current production release: context-aware Surge guidance and five priority controls
 
@@ -954,10 +964,10 @@ sent or received and no provider callback was reconciled.
 ## Next five logical product steps
 
 1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
-2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, blocking releases below each threshold without retaining customer content.
-3. Run controlled browser continuity rehearsals across reload, route and tab changes with injected storage faults, and alert only on aggregate health counts.
-4. Extract the remaining shared stylesheet into route-owned public, customer, trade and Creditex chunks while keeping the measured graph budgets green.
-5. Pilot explicit signed-in account context save and deletion with accessibility, mobile, support and failure-recovery checks before any launch declaration.
+2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
+3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
+4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
+5. Expand the reviewed practical-tip coverage and context-mutation regression matrix across climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Previous quote, job and invoice usability release
 

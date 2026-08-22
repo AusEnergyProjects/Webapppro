@@ -7193,7 +7193,7 @@ export function composeEnergyAssistantAnswer(
     if (!programmeAnswer.programs.length) {
       return structured("rebates_certificates", {
         directAnswer:
-          `Potentially relevant pathways for ${programmeAnswer.jurisdictionLabel} cannot yet be identified from the maintained current and limited catalogue because there is no programme matching all supplied filters. I will not fill the list with unrelated zero-relevance programmes. That is not proof no assistance exists: confirm the postcode, applicant or tenure, exact upgrade and application date, then check the current administering-government directory and any technology-specific federal certificate pathway separately.`,
+          `I could not match the supplied details to a current programme for ${programmeAnswer.jurisdictionLabel}. That does not prove no assistance exists. The property postcode, applicant or tenure, exact upgrade and application date need to be confirmed before checking the current government directory and any separate federal certificate pathway.`,
         status: "needs_context",
         citations: officialCitationsById(["energy-gov-rebates"]),
         confidence: "medium",
@@ -7233,7 +7233,11 @@ export function composeEnergyAssistantAnswer(
         ? "For NSW Home Energy Saver, zero-interest loan applications are open as reviewed on 20 August 2026, while the separate household discounts are still coming soon."
         : "",
     ].filter(Boolean).join(" ");
-    const missingFacts = [
+    const hotWaterIntent = /\b(?:hot water|water heater|HWS)\b/i.test(userConversation);
+    const currentHotWaterSystemKnown = /\b(?:current|existing|currently|have|using|replace|replacing)\b[\s\S]{0,90}\b(?:gas|electric|heat pump|solar|storage|continuous flow|instantaneous|resistance)\b/i.test(userConversation)
+      || /\b(?:gas|electric|heat pump|solar|storage|continuous flow|instantaneous|resistance)\b[\s\S]{0,55}\b(?:hot water|water heater|HWS)\b/i.test(userConversation);
+    const proposedHotWaterSystemKnown = /\b(?:proposed|planning|quoted|considering|replace with|replacing with|install|installing)\b[\s\S]{0,100}\b(?:heat pump|solar|electric|gas|storage|continuous flow|instantaneous|model|capacity|litres?)\b/i.test(userConversation);
+    const generalMissingFacts = [
       !/\b\d{4}\b/.test(userConversation) ? "What is the property postcode?" : "",
       !/\b(?:owner|owner-occupier|rent|renter|tenant|landlord|strata|owners corporation|business|community housing)\b/i.test(userConversation)
         ? "Is the applicant an owner-occupier, renter, landlord, strata body or business?"
@@ -7242,17 +7246,35 @@ export function composeEnergyAssistantAnswer(
         ? "What exact upgrade is proposed?"
         : "",
       !/\b(?:[0-3]?\d[\/-][01]?\d[\/-]20\d{2}|20\d{2}-[01]\d-[0-3]\d|20\d{2})\b/.test(userConversation)
-        ? "What is the proposed installation or application date?"
+        ? "When do you expect to apply or install it?"
         : "",
       !/\b(?:brand|model|approved product|exact product)\b/i.test(userConversation)
         ? "What exact product or model is proposed, if the programme is product-based?"
         : "",
-    ].filter(Boolean).slice(0, 1);
+    ];
+    const hotWaterMissingFacts = [
+      !/\b\d{4}\b/.test(userConversation) ? "What is the property postcode?" : "",
+      !currentHotWaterSystemKnown
+        ? "What type of hot-water system do you have now, what fuel does it use, and roughly how old is it?"
+        : "",
+      !/\b(?:owner|owner-occupier|rent|renter|tenant|landlord|strata|owners corporation|business|community housing)\b/i.test(userConversation)
+        ? "Is the applicant an owner-occupier, renter, landlord, strata body or business?"
+        : "",
+      !proposedHotWaterSystemKnown
+        ? "What replacement hot-water type, model or capacity are you considering?"
+        : "",
+      !/\b(?:[0-3]?\d[\/-][01]?\d[\/-]20\d{2}|20\d{2}-[01]\d-[0-3]\d|20\d{2})\b/.test(userConversation)
+        ? "When do you expect to apply or install it?"
+        : "",
+    ];
+    const missingFacts = (hotWaterIntent ? hotWaterMissingFacts : generalMissingFacts)
+      .filter(Boolean)
+      .slice(0, 1);
     const destination = programmeAnswer.certificateIntent ? "/calculator" : "/rebates";
     const secondaryDestination = programmeAnswer.certificateIntent ? "/rebates" : "/calculator";
     return structured("rebates_certificates", {
       directAnswer:
-        `Potentially relevant pathways for ${programmeAnswer.jurisdictionLabel}, reviewed ${GOVERNMENT_CATALOGUE_REVIEWED_ON}: ${programmeSummary}. ${availabilitySummary}${solarSharerSummary} This is not an eligibility decision.${missingFacts.length ? ` Next I need: ${missingFacts[0]}` : " The collected facts are ready for Australian Energy Assessments' eligibility and calculation tools."}`,
+        `For ${programmeAnswer.jurisdictionLabel}, the current official programmes I found include: ${programmeSummary}. ${availabilitySummary}${solarSharerSummary}${missingFacts.length ? ` To narrow this to your home, ${missingFacts[0]}` : " The saved facts are enough to continue in the rebate and calculator tools."}`,
       status: missingFacts.length ? "needs_context" : "answered",
       citations: uniqueById([
         ...catalogueProgramCitations(programmeAnswer.programs, options.asOf || new Date()),
@@ -7262,7 +7284,7 @@ export function composeEnergyAssistantAnswer(
       confidence: missingFacts.length ? "low" : "medium",
       assumptions: [
         `The jurisdiction was taken from the question as ${programmeAnswer.jurisdictionLabel}.`,
-        "No postcode, applicant, property, product, installer or installation-date eligibility check was completed.",
+        "Programme eligibility and any support amount still depend on the supplied property, applicant, product and installation facts.",
       ],
       practicalSteps: [
         "Add the missing property, applicant, upgrade, product and date facts to the Australian Energy Assessments check.",

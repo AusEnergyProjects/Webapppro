@@ -542,15 +542,38 @@ test("jurisdiction programme synthesis explains outcomes and asks only missing e
     asOf: "2026-08-20T00:00:00.000Z",
   });
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /potentially relevant pathways for Victoria/i);
+  assert.match(answer.directAnswer, /current official programmes I found include/i);
   assert.match(answer.directAnswer, /may reduce an eligible upfront cost/i);
   assert.match(answer.directAnswer, /property postcode/i);
-  assert.doesNotMatch(answer.directAnswer, /source directory|Open each cited/i);
+  assert.doesNotMatch(
+    answer.directAnswer,
+    /source directory|Open each cited|potentially relevant pathways|reviewed as at|not an eligibility decision/i,
+  );
   assert.equal(answer.toolActions[0].href, "/rebates");
   assert.ok(answer.citations.length > 0 && answer.citations.length <= 4);
   assert.ok(answer.citations.every((citation) => citation.lastChecked === "2026-08-08"));
   assert.ok(answer.citations.every((citation) => citation.reviewDue === "2026-09-08"));
   assert.ok(answer.citations.every((citation) => citation.stale === false));
+});
+
+test("hot-water rebate guidance asks one highest-value eligibility question at a time", () => {
+  const postcodeKnown = composeEnergyAssistantAnswer(
+    "What hot water rebates are current in Victoria? The property postcode is 3000.",
+    { asOf: "2026-08-20T00:00:00.000Z" },
+  );
+  assert.equal(postcodeKnown.status, "needs_context");
+  assert.equal(postcodeKnown.suggestedQuestions.length, 1);
+  assert.match(postcodeKnown.suggestedQuestions[0], /current hot-water system|fuel|how old/i);
+  assert.doesNotMatch(postcodeKnown.suggestedQuestions[0], /owner|renter|model|capacity/i);
+
+  const systemKnown = composeEnergyAssistantAnswer(
+    "What hot water rebates are current in Victoria? The property postcode is 3000. My current hot-water system is a 12-year-old gas storage unit.",
+    { asOf: "2026-08-20T00:00:00.000Z" },
+  );
+  assert.equal(systemKnown.status, "needs_context");
+  assert.equal(systemKnown.suggestedQuestions.length, 1);
+  assert.match(systemKnown.suggestedQuestions[0], /own|rent|relationship to the property/i);
+  assert.doesNotMatch(systemKnown.suggestedQuestions[0], /model|capacity/i);
 });
 
 test("answer contract gives direct, bounded, source-backed action instead of generic chat prose", () => {
@@ -669,7 +692,7 @@ test("generic decision families handle unseen vehicles, quotes, comfort, program
     ["I have two heat-pump hot-water quotes. What facts should I use to choose between them?", /usable tank volume.*recovery.*condensate/i],
     ["Since weatherstripping the house, the bathroom ceiling stays damp. What is happening?", /dew point.*reopening random gaps is not the safe fix/i],
     ["I am a tenant in Hobart with $80 and an icy bedroom. What can I safely do this weekend?", /safe reversible measures/i],
-    ["Which assistance schemes can a Queenslander use for insulation and a heat-pump water heater?", /pathways for Queensland/i],
+    ["Which assistance schemes can a Queenslander use for insulation and a heat-pump water heater?", /could not match the supplied details to a current programme for Queensland/i],
     ["Write a defensible TLink note proving the inverter installed on site matches the approved job record.", /reviewable evidence note.*required fact/i],
     ["I have competing solar proposals. How do I compare their scope and claims without picking a brand?", /same evidence.*does not rank or endorse/i],
     ["Why is an uninsulated brick wall cold to sit beside even when the air thermometer says 21 degrees?", /radiant heat.*21/i],

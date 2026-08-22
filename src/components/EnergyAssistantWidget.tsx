@@ -11,7 +11,6 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   parseSurgeConversationState,
@@ -54,11 +53,6 @@ import {
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
 import styles from "./EnergyAssistantWidget.module.css";
-
-const SurgeAccountContextControls = dynamic(
-  () => import("./SurgeAccountContextControls").then((module) => module.SurgeAccountContextControls),
-  { ssr: false },
-);
 
 type Audience = "public" | "customer" | "trade";
 
@@ -1946,7 +1940,6 @@ export function EnergyAssistantWidget({
                 <button type="button" onClick={openHomeEnergyPlanner}>Open my energy plan</button>
                 <small>Only the confirmed answers shown here are copied into your private plan.</small>
               </section>
-              <SurgeAccountContextControls profile={profile} />
               <div className={styles.contextGroups}>
                 {SURGE_PROFILE_STEPS.map((step, stepIndex) => {
                   const knownFields = step.fields.filter((field) => !surgeProfileFieldIsUnknown(profile, field));

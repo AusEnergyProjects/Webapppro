@@ -117,7 +117,7 @@ test("remaining whole-market P1 decisions reach a specific bounded answer", () =
     ["The battery is on the approved list. Does that guarantee it is good and suitable?", /^No\..*does not prove reliability.*site suitability.*warranty/i, "household"],
     ["Can I claim battery STCs for an off-grid shed that nobody lives in?", /^No, not on those facts.*dwelling that is lived in.*not eligible/i, "household"],
     ["Should I finance solar over my 15-year mortgage?", /15-year mortgage.*increasing total interest.*extra total repayments/i, "household"],
-    ["I am in postcode 5067. What energy rebates and programs can I get?", /pathways for South Australia.*applicant/i, "household"],
+    ["I am in postcode 5067. What energy rebates and programs can I get?", /For South Australia, the current official programmes.*applicant/i, "household"],
     ["How do I invite an apprentice to help me in TLink?", /open Team.*Add team member.*private link.*seven days/i, "trade"],
     ["What evidence photos do I need for a NSW air conditioner job?", /no single safe NSW air-conditioner photo list.*ESS or PDRS.*work pack/i, "trade"],
     ["Can the local checker analyse my NEM12 file?", /^Yes\..*runs in this browser.*not uploaded.*without returning the NMI/i, "household"],
@@ -149,7 +149,7 @@ test("P1 decision families generalise to unseen wording and values", () => {
     ["Does CER-listed storage mean quality and backup are guaranteed?", /^No\..*not a quality ranking.*reliability.*site suitability.*warranty/i, "household"],
     ["Is a battery certificate allowed for a standalone unoccupied pump shed?", /^No, not on those facts.*not lived in.*not eligible/i, "household"],
     ["Would putting PV into the remaining 12-year home loan hide its real cost?", /12-year mortgage.*total interest.*bill savings separately/i, "household"],
-    ["Postcode 7250: which current energy schemes should a renter check?", /pathways for Tasmania.*What exact upgrade is proposed/i, "household"],
+    ["Postcode 7250: which current energy schemes should a renter check?", /For Tasmania, the current official programmes.*What exact upgrade is proposed/i, "household"],
     ["Where in TLink do I add a junior technician and create their private login?", /dashboard, open Team.*Create login link.*owner or delegated access manager/i, "trade"],
     ["For a NSW PDRS reverse-cycle replacement, which before-and-after images prove the job?", /no single safe NSW air-conditioner photo list.*exact current activity or method/i, "trade"],
     ["Will this browser inspect a NEM12 export channel without sending the raw file?", /^Yes\..*local CSV checker.*raw rows are not uploaded/i, "household"],
@@ -316,7 +316,7 @@ test("programme discovery filters by jurisdiction, applicant and upgrade without
   assertBounded(actBusiness, "ACT business programmes");
 
   const noMatch = ask("Tasmanian renter in postcode 7000 wants a glazing grant. Which rebates apply?");
-  assert.match(noMatch.directAnswer, /no programme matching all supplied filters.*not fill the list with unrelated/i);
+  assert.match(noMatch.directAnswer, /could not match the supplied details to a current programme.*does not prove no assistance exists/i);
   assert.deepEqual(noMatch.citations.map((citation) => citation.id), ["energy-gov-rebates"]);
   assertBounded(noMatch, "no irrelevant programme filler");
 });

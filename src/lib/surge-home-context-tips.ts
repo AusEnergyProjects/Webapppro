@@ -51,40 +51,56 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
       94,
       "Check the ceiling first",
       moistureReported
-        ? "Check the cause of damp, confirm safe clearances and verify continuous insulation coverage before sizing new equipment."
-        : "Confirm safe clearances and continuous insulation coverage before sizing new heating or cooling equipment.",
+        ? "Find the moisture source first, then have insulation coverage, gaps and safe clearances checked before topping it up."
+        : "Have insulation coverage, gaps and safe clearances checked, then top it up before paying for larger heating or cooling equipment.",
     );
   }
 
   if (moistureReported) {
     add(
       92,
-      "Investigate moisture before sealing",
-      "Find the condensation, damp or mould source first, then improve air sealing while keeping required ventilation working.",
+      "Control moisture before sealing",
+      "Use exhaust fans, short purposeful airing or a dehumidifier when needed, and find any leak before sealing draughts. Keep required ventilation working.",
     );
   } else if (draughtsReported) {
     add(
-      89,
-      "Target the largest draughts",
-      "Start with obvious gaps around doors, windows and floor edges, while leaving required vents and exhaust paths working.",
+      91,
+      "Stop the easy draughts first",
+      "Try a door snake and removable door or window seals first. Use suitable sealant only on confirmed fixed gaps, never required vents, exhausts, chimneys or flues.",
     );
   }
 
   if (
-    reviewed(profile, "feature:comfort-concerns")
-    && hasAny(profile, ["comfort-too-hot", "comfort-too-cold"])
+    reviewed(profile, "feature:heating-cooling-systems")
+    && profile.features.includes("electric-resistance-heating")
   ) {
-    const seasonalProblem = hasAny(profile, ["comfort-too-hot", "comfort-too-cold"])
-      ? hasAny(profile, ["comfort-too-hot"]) && hasAny(profile, ["comfort-too-cold"])
-        ? "summer heat and winter cold"
-        : profile.features.includes("comfort-too-hot")
-          ? "summer heat"
-          : "winter cold"
-      : "comfort";
     add(
-      85,
-      "Fix the shell before upsizing equipment",
-      `Reduce ${seasonalProblem} through insulation, shade and air leakage checks before choosing larger heating or cooling systems.`,
+      90,
+      "Avoid portable heaters for whole rooms",
+      "For occupied rooms, an efficient reverse-cycle air conditioner usually uses less electricity than portable resistance heating. An electric throw can warm a person with much less energy.",
+    );
+  }
+
+  if (
+    reviewed(profile, "feature:heating-cooling-systems")
+    && profile.features.includes("reverse-cycle")
+    && profile.features.includes("gas-heating")
+  ) {
+    add(
+      89,
+      "Use reverse-cycle heating first",
+      "When it can comfortably heat the occupied area, try the reverse-cycle air conditioner before gas heating and keep its filters clean.",
+    );
+  }
+
+  if (
+    reviewed(profile, "feature:ventilation-features")
+    && profile.features.includes("evaporative-ducts")
+  ) {
+    add(
+      88,
+      "Check unused evaporative outlets",
+      "If the evaporative system is safely shut down for the season, suitable removable outlet covers can reduce winter heat loss. Do not block an operating or required ventilation path.",
     );
   }
 
@@ -97,11 +113,35 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
     const weakShade = reviewed(profile, "feature:external-shading")
       && profile.features.includes("external-shading-none");
     add(
-      81,
-      "Improve windows in stages",
+      87,
+      "Improve windows without replacing them",
       weakCoverings || weakShade
-        ? "Start with seals, close-fitting coverings and external shade before deciding whether full glazing replacement is worthwhile."
-        : "Check seals and room-by-room comfort before deciding whether full glazing replacement is worthwhile.",
+        ? "Start with seals, close-fitting honeycomb or thermal coverings and external summer shade. Removable low-emissivity or reflective film may help where it suits the glass and sunlight."
+        : "Check seals and room-by-room comfort first. Removable low-emissivity or reflective film may help where it suits the glass and sunlight.",
+    );
+  }
+
+  if (
+    reviewed(profile, "feature:external-shading")
+    && profile.features.includes("external-shading-none")
+    && reviewed(profile, "feature:comfort-concerns")
+    && profile.features.includes("comfort-too-hot")
+  ) {
+    add(
+      86,
+      "Shade hot windows before upgrading cooling",
+      "Use external shade where practical. A correctly placed deciduous tree can block summer sun while allowing winter sun after its leaves fall.",
+    );
+  }
+
+  if (
+    reviewed(profile, "feature:solar")
+    && profile.features.includes("solar")
+  ) {
+    add(
+      85,
+      "Use more of your solar directly",
+      "Run flexible loads such as the dishwasher, washing machine or heat-pump dryer during strong solar hours when it is safe and practical.",
     );
   }
 
@@ -111,8 +151,8 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
   ) {
     add(
       78,
-      "Use bills to verify the first move",
-      "Compare seasonal usage before and after low-cost shell improvements so the next upgrade targets the largest remaining load.",
+      "Shift flexible loads to cheaper hours",
+      "Check the complete tariff, then move suitable loads to cheaper or free-use windows. A free three-hour period is only useful if the rest of the plan still suits the home.",
     );
   }
 

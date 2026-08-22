@@ -36,8 +36,8 @@ test("moisture guidance only appears for the reviewed moisture selection", () =>
   const tips = text(reviewedProfile({
     features: ["condensation-moisture", "ceiling-insulation-well", "double-glazing"],
   }));
-  assert.match(tips, /Investigate moisture before sealing/);
-  assert.match(tips, /condensation, damp or mould source/);
+  assert.match(tips, /Control moisture before sealing/);
+  assert.match(tips, /exhaust fans|dehumidifier/i);
 });
 
 test("tips are ranked and limited to the three most relevant current signals", () => {
@@ -57,7 +57,44 @@ test("tips are ranked and limited to the three most relevant current signals", (
   assert.equal(tips.length, 3);
   assert.deepEqual(tips.map((tip) => tip.title), [
     "Check the ceiling first",
-    "Target the largest draughts",
-    "Fix the shell before upsizing equipment",
+    "Stop the easy draughts first",
+    "Improve windows without replacing them",
   ]);
+});
+
+test("early tips prefer practical low-cost actions supported by the saved home context", () => {
+  const tips = homeContextTips(reviewedProfile({
+    features: [
+      "draughty",
+      "electric-resistance-heating",
+      "evaporative-ducts",
+      "single-glazing",
+      "window-coverings-basic",
+      "external-shading-none",
+    ],
+  }));
+
+  assert.deepEqual(tips.map((tip) => tip.title), [
+    "Stop the easy draughts first",
+    "Avoid portable heaters for whole rooms",
+    "Check unused evaporative outlets",
+  ]);
+  const guidance = tips.map((tip) => tip.detail).join(" ");
+  assert.match(guidance, /door snake/i);
+  assert.match(guidance, /reverse-cycle/i);
+  assert.match(guidance, /removable outlet covers/i);
+  assert.doesNotMatch(guidance, /Duck|Renshade/i);
+});
+
+test("solar and tariff tips explain load shifting without promoting a plan", () => {
+  const tips = homeContextTips(reviewedProfile({
+    features: ["solar"],
+    billPressure: "hard-to-manage",
+  }));
+  const guidance = tips.map((tip) => `${tip.title} ${tip.detail}`).join(" ");
+
+  assert.match(guidance, /Use more of your solar directly/i);
+  assert.match(guidance, /heat-pump dryer/i);
+  assert.match(guidance, /free-use windows/i);
+  assert.match(guidance, /complete tariff/i);
 });

@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 22 August 2026
+Last reconciled: 23 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -3324,6 +3324,12 @@ Keep the complete home context permanently visible on desktop while retaining th
 
 Exact application commit `62b8f947731f8f9f313d3c6a2b8c4e4972d98c03` passed the full validation gate, was pushed to GitHub and Sites managed `main`, saved as Sites version 378 under `appgprj_6a550c378000819185caf094173422bb~appgver_37bca6308e5481918c3a2be69a2048c4` and deployed publicly through `appgdep_6a8871da825c8191926a9d71cca8f4df` with environment revision 24. Live desktop QA confirmed the rail is open and non-collapsible; sequential QA completed steps 1 through 13 and reached 45 of 45 reviewed; 390 by 844 QA confirmed the same rail remains a collapsed, tappable phone drawer. All 109 official sources carry volatility and reuse metadata, programme facts fail closed past the governed review date, and migration `0154_surge_conversation_quality_daily.sql` stores aggregate outcome counters only.
 
+## Validated release candidate: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81
+
+Remove the unsolicited account-copy card, API, server helper, component and persistence table. Keep home context private to the same browser. Expand deterministic early guidance with practical provider-neutral measures selected from the latest saved context, and make Surge qualify complex questions like an energy assessor by asking one highest-value question at a time until it has enough context for a reliable answer. Retain governed official-source and fail-closed controls for rebates, certificates, tariffs and eligibility. Prohibit em dashes and en dashes in generated customer conversation copy.
+
+Focused assistant, guidance, widget, migration and release checks pass 110 of 110 tests. Full validation, exact Git identities, Sites packaging, deployment and live desktop and phone QA remain the release gates.
+
 ## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80
 
 Recalculate saved-context guidance whenever the allowlisted profile changes so removed moisture or damp answers immediately remove moisture guidance. Complete the requested five follow-on controls with a bounded official review queue, a reviewed conversation-quality corpus and thresholds, aggregate-only continuity failure detection, measured surface-specific JavaScript graph budgets, and explicit signed-in save and deletion of an account context copy.
@@ -3333,10 +3339,10 @@ Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the f
 ## Next five logical product steps
 
 1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
-2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, blocking releases below each threshold without retaining customer content.
-3. Run controlled browser continuity rehearsals across reload, route and tab changes with injected storage faults, and alert only on aggregate health counts.
-4. Extract the remaining shared stylesheet into route-owned public, customer, trade and Creditex chunks while keeping the measured graph budgets green.
-5. Pilot explicit signed-in account context save and deletion with accessibility, mobile, support and failure-recovery checks before any launch declaration.
+2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
+3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
+4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
+5. Expand the reviewed practical-tip coverage and context-mutation regression matrix across climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Global stop conditions
 
