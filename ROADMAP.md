@@ -6,7 +6,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 23 August 2026
+Last reconciled: 24 August 2026
 
 Baseline: [Complete current-state audit](./docs/audit/2026-07-21-complete-current-state/README.md)
 
@@ -3330,6 +3330,8 @@ Remove the unsolicited account-copy card, API, server helper, component and pers
 
 Exact application source `1b2509768bbca7947e3a01438da4c8814d20fe90` passed focused checks 110 of 110 and the full repository validation gate, including 36 integration tests, 2,851 repository tests with zero failures and 11 intentional skips, all 157 migrations, production build, Sites bundle audit and performance audit. It was pushed to GitHub and Sites managed `main`, saved as Sites version 390 under `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065` and deployed publicly through `appgdep_6a89b86b8c048191bb5d187f9e972407` at environment revision 24. Fresh desktop QA confirmed the account controls are absent, current assets load without console errors and the workspace has no horizontal overflow.
 
+Follow-on application source `0944c9b91765535b873b30029f545bde8f744831` adds generic grounded product and certificate guidance across the supported official registries. Exact STC quantities require an exact registered model and postcode; VEEC quantities require a governed scenario; current certificate market references fail closed when stale and explain why the customer discount is lower than the last trade value. Neutral product comparisons require exact verified specifications. The source passed 41 of 41 focused checks and the full repository validation gate, was pushed to GitHub and Sites managed `main`, and was deployed as Sites version 391 through `appgdep_6a8af0d5ca1081919f3c86b55f68a163`. Live desktop and phone QA passed with zero browser errors.
+
 ## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80
 
 Recalculate saved-context guidance whenever the allowlisted profile changes so removed moisture or damp answers immediately remove moisture guidance. Complete the requested five follow-on controls with a bounded official review queue, a reviewed conversation-quality corpus and thresholds, aggregate-only continuity failure detection, measured surface-specific JavaScript graph budgets, and explicit signed-in save and deletion of an account context copy.
@@ -3342,7 +3344,7 @@ Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the f
 2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
 3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
 4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
-5. Expand the reviewed practical-tip coverage and context-mutation regression matrix across climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
+5. Expand the reviewed practical-tip, product-specification and certificate-answer coverage across supported categories and brands, together with the context-mutation regression matrix for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Global stop conditions
 

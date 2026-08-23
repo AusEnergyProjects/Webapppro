@@ -4,13 +4,50 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 23 August 2026
+Last reconciled locally: 24 August 2026
 
-Deployment evidence last verified: 23 August 2026
+Deployment evidence last verified: 24 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: practical Surge assessor guidance and account-copy removal
+## Current production release: grounded product and certificate guidance
+
+Application source `0944c9b91765535b873b30029f545bde8f744831` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 391 at `https://compare.ausenergyassessments.com`.
+
+Surge now resolves supported product, brand, model, rebate and certificate questions through the maintained official product registry and governed calculation paths before any model-generated answer is considered. The resolver is category and registry driven rather than hardcoded to named brands. It can identify likely registered candidates from a brand and capacity, then asks exactly one highest-value question when an exact model, postcode, existing system or another required input is missing.
+
+Exact STC quantities require an exact registered model and postcode and are calculated by the deterministic estimator. VEEC quantities require a governed scenario and current rule inputs. Current certificate market references are shown only when the official feed is current, with the last reported trade date and value. Customer copy explains that certificate trading values move like a share price and that the real installer discount is usually lower after registration, compliance, administration and aggregator costs. Those costs are never guessed.
+
+Current Solar Victoria support can be stated from the governed official programme facts with its date basis. Neutral product comparisons require exact verified specification sheets, so Surge does not invent noise, recovery, efficiency or warranty differences from brand reputation. Generated conversation copy continues to prohibit em dashes and en dashes.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `0944c9b91765535b873b30029f545bde8f744831` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc` |
+| Public version | Sites version 391 |
+| Deployment | `appgdep_6a8af0d5ca1081919f3c86b55f68a163` with status `succeeded` |
+| Provider deployment | `info294029--aea-energy-comparison` |
+| Local release archive | 12,224,610 bytes, SHA-256 `ffaeed5a983d077e0e0b2035bf0df9aa11517d27a2354bccb616d7a6400eb20d` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Validation and runtime evidence
+
+- Focused assistant API, grounded product guidance and client route checks passed 41 of 41 tests.
+- `npm.cmd run validate` completed with exit code 0 against exact application source `0944c9b91765535b873b30029f545bde8f744831`. It passed typecheck, warning-free lint, all 36 integration tests, the complete repository suite, fresh D1 migrations through `0158_remove_surge_account_context.sql`, customer-plan PDF accessibility audit, production build, Sites server bundle audit and public performance budgets.
+- The production performance gate reports a 4,758-byte root launcher, 84,713-byte deferred assistant, 732,292-byte stylesheet, 293,048-byte public graph, 920,379-byte customer graph, 956,257-byte trade graph and 1,792,764-byte Creditex graph.
+- GitHub `main`, the working branch and Sites managed `main` contained exact application source `0944c9b91765535b873b30029f545bde8f744831` before packaging.
+- Live desktop QA confirmed the three-column workspace, non-collapsible desktop context rail and absence of the removed account-copy controls. Live 390 by 844 phone QA confirmed the compact horizontal header, collapsed context drawer and readable form. The clean release tab reported zero browser errors.
+
+### Boundaries
+
+- Registry-backed product coverage is limited to the supported public categories and brands available in maintained official registries. It is not a claim to cover every product sold anywhere.
+- Surge does not guess certificate quantities, cash discounts, model eligibility or product performance facts. Missing or stale governing evidence fails closed.
+- Current certificate market values depend on the maintained official feed. Stale values are not presented as current.
+- Live QA did not send a chat turn, create a lead or alter saved customer context.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Previous production release: practical Surge assessor guidance and account-copy removal
 
 Application source `1b2509768bbca7947e3a01438da4c8814d20fe90` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 390 at `https://compare.ausenergyassessments.com`.
 
@@ -996,7 +1033,7 @@ sent or received and no provider callback was reconciled.
 2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
 3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
 4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
-5. Expand the reviewed practical-tip coverage and context-mutation regression matrix across climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
+5. Expand the reviewed practical-tip, product-specification and certificate-answer coverage across supported categories and brands, together with the context-mutation regression matrix for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Previous quote, job and invoice usability release
 
