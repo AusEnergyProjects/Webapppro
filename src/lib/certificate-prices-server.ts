@@ -3,8 +3,8 @@ import {
   collapseCertificateTradesByDay,
   isoDateMonthsBefore,
   parseDemandManagerCertificateHtml,
-} from "@/lib/certificate-prices";
-import type { CertificateCode, CertificatePriceDataset, CertificatePricePoint } from "@/lib/certificate-prices";
+} from "./certificate-prices.ts";
+import type { CertificateCode, CertificatePriceDataset, CertificatePricePoint } from "./certificate-prices.ts";
 
 export const CERTIFICATE_PRICE_SOURCE_URL = "https://www.demandmanager.com.au/certificate-prices/";
 const CERTIFICATE_PRICE_DATA_URL = "https://www.demandmanager.com.au/graphs/new_prices.php";

@@ -5,7 +5,7 @@ import {
   type SurgeConversationTurnIntent,
 } from "./energy-assistant-conversation.ts";
 
-export type SurgeConversationAnswerSource = "deterministic" | "model";
+export type SurgeConversationAnswerSource = "deterministic" | "grounded" | "model";
 export type SurgeConversationAnswerStatus = "answered" | "needs_context" | "source_review_required";
 
 export type SurgeConversationQualityEvent = {

@@ -71,11 +71,12 @@ export type SurgeModelCallReservation =
   | { allowed: false }
   | { allowed: true; release: () => Promise<void> };
 
-type ServerDependencies = {
+export type ServerDependencies = {
   now?: () => Date;
   randomUUID?: () => string;
   composeAnswer?: typeof composeEnergyAssistantAnswer;
   generateAnswer?: (request: SurgeModelRequest) => Promise<SurgeModelResult | null>;
+  resolveGroundedAnswer?: (request: SurgeModelRequest) => Promise<EnergyAssistantAnswer | null>;
   reserveModelCall?: (
     request: SurgeModelAdmissionRequest,
   ) => Promise<SurgeModelCallReservation>;
@@ -529,7 +530,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const protectedAnswer = requiresDeterministicSafety ? null : publicPolicyAnswer(message);
   const deterministicAnswer = protectedAnswer || composedAnswer;
   let answer = deterministicAnswer;
-  let answerSource: "deterministic" | "model" = "deterministic";
+  let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
   if (!requiresDeterministicSafety && !protectedAnswer) {
     const modelRequest: SurgeModelRequest = {
@@ -542,8 +543,15 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       planContext,
       deterministicAnswer,
     };
+    const groundedAnswer = dependencies.resolveGroundedAnswer
+      ? await dependencies.resolveGroundedAnswer(modelRequest).catch(() => null)
+      : null;
+    if (groundedAnswer) {
+      answer = groundedAnswer;
+      answerSource = "grounded";
+    }
     const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
-    if (estimatedMicroUsd !== null && dependencies.reserveModelCall) {
+    if (!groundedAnswer && estimatedMicroUsd !== null && dependencies.reserveModelCall) {
       let reservation: SurgeModelCallReservation = { allowed: false };
       try {
         reservation = await dependencies.reserveModelCall({

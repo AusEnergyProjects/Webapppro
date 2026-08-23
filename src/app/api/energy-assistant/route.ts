@@ -2,6 +2,7 @@ import { env, waitUntil } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import {
   handleEnergyAssistantRequest as handleEnergyAssistantServerRequest,
+  type ServerDependencies,
   type SurgeModelAdmissionRequest,
   type SurgeModelCallReservation,
 } from "@/lib/energy-assistant-server";
@@ -16,6 +17,7 @@ import {
   createSharedSurgeUsageGuard,
   SURGE_USAGE_GUARD_ENV,
 } from "@/lib/energy-assistant-usage-guard";
+import { createSurgeGroundedProductGuidanceResolver } from "@/lib/energy-assistant-product-guidance-server";
 
 const securityHeaders = {
   "Cache-Control": "no-store",
@@ -120,6 +122,7 @@ function handleEnergyAssistantRequest(
       request: SurgeModelAdmissionRequest,
     ) => Promise<SurgeModelCallReservation>;
     recordQuality: (event: SurgeConversationQualityEvent) => Promise<void>;
+    resolveGroundedAnswer?: ServerDependencies["resolveGroundedAnswer"];
   },
 ) {
   return handleEnergyAssistantServerRequest(request, {
@@ -143,6 +146,9 @@ async function handle(request: Request) {
     const recorder = createSurgeConversationQualityRecorder(database);
     waitUntil(recorder(event).catch(() => undefined));
   };
+  const resolveGroundedAnswer = database
+    ? createSurgeGroundedProductGuidanceResolver(database)
+    : undefined;
   let reserveModelCall: (
     request: SurgeModelAdmissionRequest,
   ) => Promise<SurgeModelCallReservation> = async () => deniedReservation();
@@ -183,7 +189,11 @@ async function handle(request: Request) {
 
   try {
     return withSetCookie(
-      await handleEnergyAssistantRequest(request, { reserveModelCall, recordQuality }),
+      await handleEnergyAssistantRequest(request, {
+        reserveModelCall,
+        recordQuality,
+        resolveGroundedAnswer,
+      }),
       setCookie,
     );
   } catch {

@@ -166,6 +166,45 @@ test("ask API emits one privacy-safe categorical quality event after a successfu
   assert.doesNotMatch(JSON.stringify(qualityEvents[0]), /Private Street|insulation at|message|content|request|client|identity|answerText/i);
 });
 
+test("registry-grounded product guidance bypasses the general model and records its source", async () => {
+  const qualityEvents = [];
+  let modelCalls = 0;
+  let reservations = 0;
+  const groundedAnswer = fixedAnswer(
+    "FutureCo HP-300 is present in the current official product register. The governed calculator estimates 31 STCs for postcode 3000.",
+  );
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "grounded-product-0001",
+    message: "What support applies to a FutureCo HP-300 at postcode 3000?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => groundedAnswer,
+    reserveModelCall: async () => {
+      reservations += 1;
+      return allowModelCall();
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return { answer: fixedAnswer("unwanted model answer"), continuation: continuation() };
+    },
+    recordQuality: async (event) => {
+      qualityEvents.push(event);
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.reply.directAnswer, groundedAnswer.directAnswer);
+  assert.equal(reservations, 0);
+  assert.equal(modelCalls, 0);
+  assert.equal(qualityEvents.length, 1);
+  assert.equal(qualityEvents[0].answerSource, "grounded");
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),
