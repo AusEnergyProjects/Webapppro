@@ -113,6 +113,15 @@ function loadRoute(db) {
     "@/lib/trade-photo-requests": {
       normalisePhotoRequirements: (requirements) => requirements,
     },
+    "@/lib/trade-crm-job-media-cleanup": {
+      drainTradeCrmJobMediaCleanup: async () => ({ completed: 0, pending: 0 }),
+    },
+    "@/lib/trade-rental-image-dimensions.mjs": {
+      rentalImageWithinReportLimit: () => true,
+    },
+    "@/lib/trade-rental-evidence.mjs": {
+      rentalEvidencePhotoCapture: () => ({}),
+    },
     "@/lib/bounded-json-request": {
       BoundedJsonRequestError: class BoundedJsonRequestError extends Error {},
       readBoundedJsonRequest: async (request) => request.json(),
@@ -147,6 +156,12 @@ function fixture() {
       revision integer NOT NULL,
       assignee_member_id text NOT NULL,
       updated_at text NOT NULL
+    );
+    CREATE TABLE trade_rental_inspections (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'draft'
     );
     CREATE TABLE trade_crm_job_details (
       id text PRIMARY KEY NOT NULL,

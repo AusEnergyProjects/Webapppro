@@ -10,6 +10,7 @@ import { verifyJpegExif } from "../src/lib/jpeg-exif-verifier.ts";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const mediaRouteSource = read("../src/app/api/trade-team/media/route.ts");
 const devicesRouteSource = read("../src/app/api/trade-team/devices/route.ts");
+const deviceRevocationSource = read("../src/lib/trade-mobile-device-revocation.ts");
 const governanceMigration = read(
   "../drizzle/0098_creditex_rule_governance.sql",
 );
@@ -86,10 +87,20 @@ function loadTypescriptModule(source, mocks) {
     }
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };
-  new Function("require", "module", "exports", output)(
+  class FixedDate extends Date {
+    constructor(...args) {
+      super(...(args.length > 0 ? args : ["2026-08-01T02:35:00.000Z"]));
+    }
+
+    static now() {
+      return Date.parse("2026-08-01T02:35:00.000Z");
+    }
+  }
+  new Function("require", "module", "exports", "Date", output)(
     require,
     moduleRecord,
     moduleRecord.exports,
+    FixedDate,
   );
   return moduleRecord.exports;
 }
@@ -256,8 +267,11 @@ function evidenceDatabase() {
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,
+      member_uid text NOT NULL,
       display_name text NOT NULL,
-      email text NOT NULL
+      email text NOT NULL,
+      status text NOT NULL,
+      can_manage_team integer NOT NULL
     );
 
     CREATE TABLE compliance_activity_versions (
@@ -476,6 +490,8 @@ function routeHarness(database, storage, options = {}) {
     actorUid: "installer-actor",
     memberId: "member-1",
     role: "technician",
+    canViewFieldEvidence: true,
+    canManageFieldEvidence: true,
   };
   const route = loadTypescriptModule(mediaRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
@@ -537,6 +553,10 @@ function deviceRouteHarness(database, storage, options = {}) {
     memberId: "member-1",
     role: "owner",
   };
+  const deviceRevocation = loadTypescriptModule(deviceRevocationSource, {
+    "cloudflare:workers": { env: { EVIDENCE: storage } },
+    "../../db": { getD1: () => d1 },
+  });
   const route = loadTypescriptModule(devicesRouteSource, {
     "cloudflare:workers": { env: { EVIDENCE: storage } },
     "../../../../../db": { getD1: () => d1 },
@@ -556,6 +576,16 @@ function deviceRouteHarness(database, storage, options = {}) {
         }
         return access;
       },
+    },
+    "@/lib/trade-mobile-device-revocation": deviceRevocation,
+    "@/lib/trade-mobile-device-list-policy.mjs": {
+      normaliseDeviceListQuery: () => ({
+        status: "",
+        memberId: "",
+        searchLike: "",
+        pageSize: 25,
+        offset: 0,
+      }),
     },
     "@/lib/trade-mobile-server": {
       appVersionAccepted: () => true,
@@ -761,9 +791,9 @@ function seedJobsAndCompliance(database) {
       'device-001', 'ios', 'Field phone', '1.0.0', 'apns', 'push-token', ?,
       'active', ?, ?, '', '', ?)`).run(now, now, now, now);
   database.prepare(`INSERT INTO trade_team_members
-    (id, owner_uid, display_name, email)
-    VALUES ('member-1', 'installer-owner', 'Field installer',
-      'field@example.test')`).run();
+    (id, owner_uid, member_uid, display_name, email, status, can_manage_team)
+    VALUES ('member-1', 'installer-owner', 'installer-actor', 'Field installer',
+      'field@example.test', 'active', 1)`).run();
 }
 
 function seedUpload(database, storage, {
@@ -866,9 +896,10 @@ test("field evidence source enforces guarded finalisation and pinned custody rul
     /SET status = 'aborted'[\s\S]*status IN \('initiated', 'uploading', 'completing'\)[\s\S]*const aborted = Number\(claim\.meta\.changes/,
   );
   assert.match(
-    devicesRouteSource,
+    deviceRevocationSource,
     /SET status = 'aborted'[\s\S]*status IN \('initiated', 'uploading', 'completing'\)[\s\S]*claim\.meta\.changes/,
   );
+  assert.match(devicesRouteSource, /abortDeviceUploads\(access\.ownerUid/);
   assert.match(mediaRouteSource, /exactText\(original\.exifState, 40\) !== "available"/);
   assert.match(mediaRouteSource, /bucket\(\)\.get\(session\.object_key\)/);
   assert.match(mediaRouteSource, /assembledSha256 !== session\.original_sha256/);
@@ -1681,7 +1712,7 @@ test("governed capture time accepts bounded offline work and rejects a forged fu
   seedJobsAndCompliance(database);
   const { route } = routeHarness(database, storage);
 
-  const offlineCapture = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const offlineCapture = new Date("2026-07-31T02:35:00.000Z");
   const offlineObservedAt = offlineCapture.toISOString();
   const offlineComputedAt = new Date(
     offlineCapture.getTime() + 2_000,

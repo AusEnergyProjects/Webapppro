@@ -67,6 +67,9 @@ function loadRoute(database, aborted) {
       if (target.memberUid === access.ownerUid) return { allowed: false, reason: "owner_protected" };
       return { allowed: true };
     } },
+    "@/lib/trade-rental-schema-guards": {
+      ensureTradeRentalSchemaGuards: async () => {},
+    },
   };
   const require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];

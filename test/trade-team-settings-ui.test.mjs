@@ -95,14 +95,23 @@ test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /application\/pdf/);
   assert.match(settings, /URL\.createObjectURL/);
   assert.match(settings, /Delete .* This cannot be undone/);
-  assert.match(settings, /Upload a document or photo/);
+  assert.match(settings, /Upload a document or credential/);
+  assert.match(settings, /name="rentalGate"/);
+  assert.match(settings, /licensed_electrician/);
+  assert.match(settings, /licensed_gasfitter/);
+  assert.match(settings, /suitably_qualified_smoke_alarm_worker/);
   assert.match(settings, /Title<input name="title" required maxLength=\{180\}/);
-  assert.match(settings, /Expiry, optional<input type="date" name="expiresAt"/);
-  assert.match(settings, /Document or photo<input name="file" type="file" required/);
+  assert.match(settings, /credentialType/);
+  assert.match(settings, /credentialName/);
+  assert.match(settings, /credentialNumber/);
+  assert.match(settings, /credentialIssuer/);
+  assert.match(settings, /credentialJurisdiction/);
+  assert.match(settings, /required=\{Boolean\(uploadRentalGate\)\}/);
+  assert.match(settings, /Supporting document or photo<input name="file" type="file" required/);
   assert.match(settings, /notified 30 days before a saved expiry/);
   assert.match(settings, /Maximum 12 MB/);
+  assert.match(settings, /blocks optional module sign-off after this credential or supporting file expires/);
   assert.match(settings, /fetch\("\/api\/trade-team\/member-files"/);
-  assert.doesNotMatch(settings, /credentialType|credential_number|jurisdiction|Add credential|Licences and compliance/);
 });
 
 test("member profiles use a dense contact roster, schedule colour and validated phone input", () => {

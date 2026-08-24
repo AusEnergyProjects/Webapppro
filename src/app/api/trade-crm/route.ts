@@ -55,6 +55,16 @@ import {
   ENERGY_SERVICE_LABELS,
 } from "@/lib/energy-service-catalogue.mjs";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
+import {
+  RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+  RENTAL_ASSESSMENT_TEMPLATE_KEY,
+  RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+  RENTAL_INSPECTION_SERVICE_CATEGORY,
+  normalizeRentalAssessmentModules,
+  rentalInspectionServiceAddressAccepted,
+  rentalAssessmentTemplateSnapshot,
+} from "@/lib/trade-rental-assessment.mjs";
+import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
 export const runtime = "edge";
 
@@ -1829,6 +1839,9 @@ export async function POST(request: Request) {
       const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
+      if (!rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
+        return adminJson({ ok: false, error: "Rental inspections require a Victorian service address." }, 400);
+      }
       const displayName = createCustomer
         ? (businessName || `${firstName} ${lastName}`.trim())
         : existingCustomer ? customerDisplayName(existingCustomer) : "";
@@ -1846,6 +1859,7 @@ export async function POST(request: Request) {
       const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId || (guided ? identity.memberId : "");
       let assignee = "";
+      let assigneeUid = "";
       if (assigneeMemberId) {
         if (!identity.access.isOwner && identity.access.jobScope === "own" && assigneeMemberId !== identity.memberId) {
           throw new Error("JOB_ASSIGN_REQUIRED");
@@ -1857,6 +1871,7 @@ export async function POST(request: Request) {
         const member = await assertMemberCapability(db, identity, assigneeMemberId, serviceCategory);
         if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
         assignee = String(member.display_name || "");
+        assigneeUid = String(member.member_uid || "");
       }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       let appointmentId = "";
@@ -1904,6 +1919,40 @@ export async function POST(request: Request) {
       );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
+      const rentalModuleKeys = serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
+        ? normalizeRentalAssessmentModules(body.rentalInspectionModulesJson)
+        : [];
+      const rentalTemplate = rentalModuleKeys.length
+        ? rentalAssessmentTemplateSnapshot(rentalModuleKeys)
+        : null;
+      const rentalInspectionId = rentalTemplate ? crypto.randomUUID() : "";
+      const rentalInspectionNumber = rentalTemplate ? `RMS-${workNumber.replace(/^TLJ-/, "")}` : "";
+      if (rentalTemplate) await ensureTradeRentalSchemaGuards(db);
+      const rentalPropertySnapshot = rentalTemplate ? JSON.stringify({
+        schemaVersion: "tlink-rental-property-v1",
+        customer: {
+          id: customerId,
+          displayName,
+          email: createCustomer ? email : String(existingCustomer?.email || ""),
+          phone: createCustomer ? phone : String(existingCustomer?.phone || ""),
+        },
+        property: {
+          serviceSiteId,
+          buildingType,
+          addressLine1: String(serviceSite?.address_line_1 || ""),
+          addressLine2: String(serviceSite?.address_line_2 || ""),
+          suburb: String(serviceSite?.suburb || ""),
+          state: String(serviceSite?.address_state || ""),
+          postcode: String(serviceSite?.postcode || ""),
+        },
+        appointment: {
+          id: appointmentId,
+          startsAt: scheduledStart,
+          endsAt: scheduledEnd,
+          assessorMemberId: assigneeMemberId,
+          assessorLabel: assignee,
+        },
+      }) : "{}";
       const batchStatements: D1PreparedStatement[] = [
         ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
@@ -1935,6 +1984,68 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, 1, ?, ?)`)
             .bind(appointmentId, workOrderId, identity.uid, appointmentType, appointmentTitle, scheduledStart, scheduledEnd,
               assigneeMemberId, assignee, cleanAdminText(body.appointmentNotes, 1000), now, now),
+        ] : []),
+        ...(rentalTemplate ? [
+          db.prepare(`INSERT INTO trade_rental_inspections
+            (id, work_order_id, firebase_uid, service_site_id, inspection_number, jurisdiction, status,
+             template_key, template_version, rules_effective_from, module_selection_snapshot, property_snapshot,
+             assessor_uid, assessor_member_id, assessor_snapshot, revision, creation_request_id, issued_report_id,
+             submitted_at, issued_at, superseded_at, created_by_uid, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
+            .bind(
+              rentalInspectionId,
+              workOrderId,
+              identity.uid,
+              serviceSiteId,
+              rentalInspectionNumber,
+              guided ? "scheduled" : "draft",
+              RENTAL_ASSESSMENT_TEMPLATE_KEY,
+              RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+              RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+              JSON.stringify(rentalModuleKeys),
+              rentalPropertySnapshot,
+              assigneeUid,
+              assigneeMemberId,
+              JSON.stringify({ memberId: assigneeMemberId, uid: assigneeUid, displayName: assignee }),
+              workOrderId,
+              identity.access.actorUid,
+              now,
+              now,
+            ),
+          ...rentalModuleKeys.map((moduleKey) => {
+            const moduleTemplate = rentalTemplate.modules[moduleKey];
+            return db.prepare(`INSERT INTO trade_rental_inspection_modules
+              (id, inspection_id, firebase_uid, module_key, required, status, template_version, template_name,
+               required_capability, template_snapshot, answers, revision, completed_by_uid, completed_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, '{}', 1, '', '', ?, ?)`)
+              .bind(
+                crypto.randomUUID(),
+                rentalInspectionId,
+                identity.uid,
+                moduleKey,
+                moduleKey === "minimum_standards" ? 1 : 0,
+                RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+                String(moduleTemplate.title || moduleKey),
+                String(moduleTemplate.credentialGate || "qualified_assessor"),
+                JSON.stringify(moduleTemplate),
+                now,
+                now,
+              );
+          }),
+          db.prepare(`INSERT INTO trade_rental_inspection_events
+            (id, inspection_id, report_id, report_link_id, firebase_uid, actor_type, actor_uid,
+             event_type, request_id, summary, metadata, source_ip_sha256, user_agent_sha256, created_at)
+            VALUES (?, ?, '', '', ?, 'owner', ?, 'inspection_attached', ?, ?, ?, '', '', ?)`)
+            .bind(
+              crypto.randomUUID(),
+              rentalInspectionId,
+              identity.uid,
+              identity.access.actorUid,
+              workOrderId,
+              `Rental inspection attached with ${rentalModuleKeys.length} module${rentalModuleKeys.length === 1 ? "" : "s"}.`,
+              JSON.stringify({ moduleKeys: rentalModuleKeys }),
+              now,
+            ),
         ] : []),
         ...preparedComplianceIntents.flatMap((preparedIntent) => [
           db.prepare(`INSERT INTO trade_work_order_compliance_intents
@@ -1992,6 +2103,8 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
         appointmentId, complianceIntentPlanned: complianceIntents.length > 0,
         complianceIntentCount: complianceIntents.length,
+        rentalInspectionAttached: Boolean(rentalTemplate),
+        rentalInspectionModuleCount: rentalModuleKeys.length,
         calendarSynced, calendarFailed }, 201);
     }
 

@@ -20,6 +20,7 @@ function stageLabel(value: string) { return value.replaceAll('_', ' ').replace(/
 
 function JobCard({ job }: { job: FieldJob }) {
   const done = job.tasks.filter((task) => task.status === 'done').length;
+  const rental = job.rentalInspection;
   return (
     <Pressable accessibilityRole="button" onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardTop}>
@@ -29,7 +30,11 @@ function JobCard({ job }: { job: FieldJob }) {
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
       <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(job.scheduledStart)}</Text></View>
       <View style={styles.fact}><MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-outline'} color={job.protectedJob ? colours.green : colours.muted} size={19} /><Text numberOfLines={2} style={styles.factText}>{job.protectedJob ? `${job.siteArea || 'Service region'} | Australian Energy Assessments protected` : job.serviceAddress || job.siteArea || 'Address available when assigned'}</Text></View>
-      <View style={styles.progressRow}><Text>{done} of {job.tasks.length} checklist items complete</Text><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></View>
+      <View style={styles.progressRow}><Text>{rental
+        ? rental.status === 'issued'
+          ? `Rental report issued | ${rental.progress.evidenceFiles} evidence files`
+          : `${rental.progress.completeModules} of ${rental.progress.moduleTotal} assessment modules complete`
+        : `${done} of ${job.tasks.length} checklist items complete`}</Text><MaterialCommunityIcons name="chevron-right" color={colours.green} size={24} /></View>
     </Pressable>
   );
 }

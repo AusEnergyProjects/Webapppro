@@ -8,6 +8,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
+import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { Screen } from '@/components/screen';
 import {
   complianceCasesForJob,
@@ -126,7 +127,7 @@ function pendingPhoto(value: string) {
 
 export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { findJob, saveAction, saveUpload, sync } = useApp();
+  const { findJob, saveAction, saveUpload, sync, syncNow } = useApp();
   const [job, setJob] = useState<FieldJob | null>(null);
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
@@ -249,6 +250,7 @@ export default function JobScreen() {
       job.tasks.some((item) => item.status !== 'done') ? 'assigned tasks' : '',
       job.forms.some((item) => item.status !== 'complete') ? 'required forms' : '',
       governedEvidenceIncomplete ? 'governed evidence' : '',
+      job.rentalInspection && job.rentalInspection.status !== 'issued' ? 'the issued rental assessment report' : '',
       job.openIssues ? 'open issues' : '',
     ].filter(Boolean);
     if (action.transition === 'finish' && !sync.online) return Alert.alert('Reconnect before finishing', 'Finish must check current forms, evidence, issues and unsynchronised changes. Other field updates remain safely queued offline.');
@@ -473,9 +475,12 @@ export default function JobScreen() {
         {job.tasks.length ? job.tasks.map((task) => <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.status === 'done' }} key={task.id} disabled={busy !== ''} onPress={() => void toggleTask(task.id)} style={({ pressed }) => [styles.task, pressed && styles.pressed]}><MaterialCommunityIcons name={task.status === 'done' ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={28} color={task.status === 'done' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={[styles.taskTitle, task.status === 'done' && styles.taskDone]}>{task.title}</Text>{task.dueAt ? <Text style={styles.meta}>Due {new Date(task.dueAt).toLocaleDateString('en-AU')}</Text> : null}</View></Pressable>) : <Text style={styles.body}>No checklist has been added by the office.</Text>}
         <View style={styles.todayItem}><MaterialCommunityIcons name={fieldForms.every((form) => form.status === 'complete') ? 'check-circle-outline' : 'file-document-edit-outline'} size={25} color={fieldForms.every((form) => form.status === 'complete') ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required forms</Text><Text style={styles.meta}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length} complete</Text></View></View>
         {complianceCases.length ? <View style={styles.todayItem}><MaterialCommunityIcons name={submittedComplianceRequirements === complianceRequirements.length ? 'check-circle-outline' : 'certificate-outline'} size={25} color={submittedComplianceRequirements === complianceRequirements.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Government program evidence</Text><Text style={styles.meta}>{submittedComplianceRequirements}/{complianceRequirements.length} requirements submitted, {acceptedComplianceRequirements} accepted, across {complianceCases.length} activit{complianceCases.length === 1 ? 'y' : 'ies'}</Text></View></View> : null}
+        {job.rentalInspection ? <View style={styles.todayItem}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-decagram-outline' : 'home-search-outline'} size={25} color={job.rentalInspection.status === 'issued' ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental assessment report</Text><Text style={styles.meta}>{job.rentalInspection.status === 'issued' ? `Issued ${new Date(job.rentalInspection.issuedAt).toLocaleDateString('en-AU')}` : `${job.rentalInspection.progress.completeModules}/${job.rentalInspection.progress.moduleTotal} modules complete`}</Text></View></View> : null}
         <View style={styles.todayItem}><MaterialCommunityIcons name={job.media.length ? 'check-circle-outline' : 'camera-outline'} size={25} color={job.media.length ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Required photo proof</Text><Text style={styles.meta}>{job.media.length} field file{job.media.length === 1 ? '' : 's'} synced</Text></View></View>
         <View style={styles.todayItem}><MaterialCommunityIcons name={!job.openIssues ? 'check-circle-outline' : 'alert-circle-outline'} size={25} color={!job.openIssues ? colours.green : colours.muted} /><View style={styles.flex}><Text style={styles.taskTitle}>Open issues or blockers</Text><Text style={styles.meta}>{job.openIssues ? `${job.openIssues} need attention in TLink Notes` : 'None open'}</Text></View></View>
       </View>
+
+      {job.rentalInspection ? <RentalInspectionWorkflow workOrderId={job.id} summary={job.rentalInspection} online={sync.online} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       <View style={styles.card}>
         <View style={styles.cardHeading}><View><Text style={styles.label}>FIELD FORMS</Text><Text style={styles.cardTitle}>Technical records</Text></View><Text style={styles.progress}>{fieldForms.filter((form) => form.status === 'complete').length}/{fieldForms.length}</Text></View>

@@ -344,6 +344,39 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       original_sha256 text NOT NULL,
       supersedes_evidence_id text NOT NULL DEFAULT ''
     );
+    CREATE TABLE trade_rental_inspections (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      inspection_number text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'draft',
+      template_key text NOT NULL DEFAULT 'vic-rental-minimum-standards',
+      template_version integer NOT NULL DEFAULT 1,
+      rules_effective_from text NOT NULL DEFAULT '2026-06-30',
+      module_selection_snapshot text NOT NULL DEFAULT '["minimum_standards"]',
+      assessor_member_id text NOT NULL DEFAULT '',
+      revision integer NOT NULL DEFAULT 1,
+      issued_report_id text NOT NULL DEFAULT '',
+      issued_at text NOT NULL DEFAULT '',
+      updated_at text NOT NULL DEFAULT ''
+    );
+    CREATE TABLE trade_rental_inspection_modules (
+      id text PRIMARY KEY NOT NULL,
+      inspection_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'not_started'
+    );
+    CREATE TABLE trade_rental_inspection_items (
+      id text PRIMARY KEY NOT NULL,
+      inspection_id text NOT NULL,
+      firebase_uid text NOT NULL
+    );
+    CREATE TABLE trade_rental_evidence_links (
+      id text PRIMARY KEY NOT NULL,
+      inspection_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'active'
+    );
     CREATE TABLE trade_offline_actions (
       id text PRIMARY KEY NOT NULL,
       owner_uid text NOT NULL,

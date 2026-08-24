@@ -81,6 +81,9 @@ function fieldRoute(accessRecord, jobs) {
     "@/lib/trade-team-sync-server": { jobSyncChangeStatements: () => [], nextJobRevision: (value) => Number(value) + 1 },
     "@/lib/photo-request-review-server": { photoRequestProofOverview: async () => ({ proofReady: true }) },
     "@/lib/trade-photo-requests": { normalisePhotoRequirements: (value) => value },
+    "@/lib/trade-crm-job-media-cleanup": { drainTradeCrmJobMediaCleanup: async () => ({ processed: 0 }) },
+    "@/lib/trade-rental-image-dimensions.mjs": { rentalImageWithinReportLimit: () => true },
+    "@/lib/trade-rental-evidence.mjs": { rentalEvidencePhotoCapture: () => ({}) },
     "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: async (request) => request.json() },
   });
 }

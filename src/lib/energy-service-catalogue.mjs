@@ -1,5 +1,6 @@
 export const ENERGY_SERVICE_CATALOGUE = Object.freeze([
   Object.freeze({ id: "assessment", label: "Energy assessment" }),
+  Object.freeze({ id: "rental-inspection", label: "Rental inspection" }),
   Object.freeze({ id: "solar", label: "Rooftop solar" }),
   Object.freeze({ id: "battery", label: "Home battery" }),
   Object.freeze({ id: "heating-cooling", label: "Heating and cooling" }),

@@ -10,6 +10,7 @@ import {
 } from "@/lib/trade-team-sync-server";
 import { abortMemberDeviceUploads } from "@/lib/trade-mobile-device-revocation";
 import { memberLifecycleDecision } from "@/lib/trade-team-lifecycle-policy.mjs";
+import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 
 export const runtime = "edge";
 
@@ -929,6 +930,7 @@ export async function PATCH(request: Request) {
       const job = await mutableAssignableJobState(db, access, workOrderId);
       if (!canAssignJob(access, String(job.assignee_member_id || ""), memberId)) throw new Error("ASSIGN_REQUIRED");
       let label = "";
+      let memberUid = "";
       if (memberId) {
         const member = await db.prepare(`SELECT display_name, member_uid, capabilities FROM trade_team_members
           WHERE id = ? AND owner_uid = ? AND status = 'active'`).bind(memberId, access.ownerUid).first<Record<string, unknown>>();
@@ -939,9 +941,14 @@ export async function PATCH(request: Request) {
           throw new Error("MEMBER_CAPABILITY_REQUIRED");
         }
         label = String(member.display_name);
+        memberUid = String(member.member_uid || "");
       }
       const revision = nextJobRevision(job.revision);
       const jobStage = String(job.stage);
+      const rentalInspection = await db.prepare(`SELECT id FROM trade_rental_inspections
+        WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
+        .bind(workOrderId, access.ownerUid).first();
+      if (rentalInspection) await ensureTradeRentalSchemaGuards(db);
       await guardedOnlineJobMutationBatch(db, [
         db.prepare(`UPDATE trade_work_orders
           SET assignee_member_id = ?, assignee_label = ?, revision = ?, updated_at = ?
@@ -950,6 +957,28 @@ export async function PATCH(request: Request) {
             AND assignee_member_id = ?`)
           .bind(memberId, label, revision, now, workOrderId, access.ownerUid,
             jobStage, Number(job.revision), String(job.assignee_member_id || "")),
+        db.prepare(`UPDATE trade_rental_inspections
+          SET assessor_uid = ?, assessor_member_id = ?, assessor_snapshot = ?,
+            revision = revision + 1, updated_at = ?
+          WHERE work_order_id = ? AND firebase_uid = ?
+            AND status NOT IN ('issuing', 'issued', 'superseded', 'withdrawn')
+            AND EXISTS (SELECT 1 FROM trade_work_orders assigned_job
+              WHERE assigned_job.id = trade_rental_inspections.work_order_id
+                AND assigned_job.firebase_uid = trade_rental_inspections.firebase_uid
+                AND assigned_job.assignee_member_id = ? AND assigned_job.assignee_label = ?
+                AND assigned_job.revision = ? AND assigned_job.updated_at = ?)`)
+          .bind(memberUid, memberId, JSON.stringify({ memberId, uid: memberUid, displayName: label }),
+            now, workOrderId, access.ownerUid, memberId, label, revision, now),
+        db.prepare(`UPDATE trade_rental_inspection_modules
+          SET status = CASE WHEN status = 'complete' THEN 'draft' ELSE status END,
+            credential_snapshot = '{}', completed_by_uid = '', completed_at = '',
+            revision = revision + 1, updated_at = ?
+          WHERE inspection_id IN (SELECT inspection.id FROM trade_rental_inspections inspection
+            WHERE inspection.work_order_id = ? AND inspection.firebase_uid = ?
+              AND inspection.status NOT IN ('issuing', 'issued', 'superseded', 'withdrawn')
+              AND inspection.assessor_member_id = ? AND inspection.updated_at = ?)
+            AND firebase_uid = ? AND status <> 'superseded'`)
+          .bind(now, workOrderId, access.ownerUid, memberId, now, access.ownerUid),
         db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
           VALUES (?, ?, ?, 'team_assignment', ?, ?)`)
           .bind(crypto.randomUUID(), workOrderId, access.ownerUid, memberId

@@ -81,7 +81,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(readme, /immutable evidence baseline/);
   assert.match(releaseTruth, /only current implementation and release-status document/);
   assert.match(roadmap, /Last reconciled: 13 August 2026/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,180}Prepared: 13 August 2026/);
+  assert.match(
+    handover,
+    /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`[\s\S]{0,180}Prepared: 24 August 2026/,
+  );
   assert.match(releaseTruth, /Last reconciled locally: 13 August 2026/);
   assert.match(releaseTruth, /Deployment evidence last verified: 13 August 2026/);
   assert.match(releaseTruth, /## Advisor context and admin stability release/);
@@ -931,10 +934,13 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64` released as current Sites version 327/);
-  assert.match(handover, /Milestone ID: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64`/);
-  assert.match(handover, /Working branch: `codex\/sites-custom-domain-migration`/);
-  assert.match(handover, /Milestone source baseline: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65` active in an isolated local worktree/);
+  assert.match(handover, /Milestone ID: `TLINK-RENTAL-INSPECTION-65`/);
+  assert.match(handover, /Working branch: `codex\/rental-inspection-workflow`/);
+  assert.match(
+    handover,
+    /Milestone source baseline: released application `9624507b9f4ed274169b67076a40ddb34cd26acb` plus documentation checkpoint `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`/,
+  );
   assert.match(handover, /Current quote-acceptance, accepted-invoice and accounting application commit: `9624507b9f4ed274169b67076a40ddb34cd26acb`/);
   assert.match(handover, /Historical versioned quote-delivery application commit: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`/);
   assert.match(handover, /Historical quote editor and delivery correction application commit: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`/);

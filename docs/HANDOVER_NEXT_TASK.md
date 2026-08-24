@@ -1,14 +1,74 @@
 # Next task handover
 
-Status: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64` released as current Sites version 327; connected-provider draft export QA remains unverified
+Status: `TLINK-RENTAL-INSPECTION-65` active in an isolated local worktree; contract-specific question wording remains pending
 
-Prepared: 13 August 2026
+Prepared: 24 August 2026
 
-Milestone ID: `TLINK-QUOTE-ACCEPTANCE-INVOICE-ACCOUNTING-64`
+Milestone ID: `TLINK-RENTAL-INSPECTION-65`
 
-Working branch: `codex/sites-custom-domain-migration`
+Working branch: `codex/rental-inspection-workflow`
 
-Milestone source baseline: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`
+Milestone source baseline: released application `9624507b9f4ed274169b67076a40ddb34cd26acb` plus documentation checkpoint `44e6f14ea5e99a1a027dd12dbcb5b7f679cd7d64`
+
+## Active milestone: TLINK-RENTAL-INSPECTION-65
+
+### Outcome
+
+Let an agent or rental provider request a Victorian rental minimum standards assessment without an account, let TLink attach and schedule the correct governed workflow, let an assigned qualified assessor complete and issue it on phone or web, and provide one immutable full-detail report through a revocable 60-day link. Electrical safety, gas safety and smoke alarm checks remain separate optional modules.
+
+### Confirmed product decisions
+
+- Rental minimum standards assessment is the default job activity.
+- Electrical safety check, gas safety check and smoke alarm check are independent optional modules.
+- Selecting an optional module adds its questions, evidence requirements, completion gates and report section without changing the meaning of the default assessment.
+- The assigned qualified assessor is the final issuer. No supervisor approval is required.
+- The report link requires no viewer account, expires 60 days after issue and can be revoked earlier.
+- The quick view and downloadable PDF contain all issued report details except internal notes.
+- Contract pricing and commercial terms are not required, but the service schedule or specification must be reviewed before the final questionnaire and report wording can be called contract-complete.
+
+### In scope
+
+- Effective-dated Victorian minimum standards template with source provenance and frozen job snapshots.
+- Current 15-category assessment with repeatable locations and assets, conditional questions, measurements, photo guidance, access limitations and claimed-exemption evidence.
+- Separate-screen section workflow where Save section and continue persists every changed answer before advancing, while Back returns to the Jazz-style section overview.
+- Structured findings with severity, responsible trade, urgent make-safe handling, quote-ready scope and evidence links.
+- Atomic workflow attachment when the rental inspection activity is selected during job creation.
+- Existing TLink scheduling, assignment, field progress and completion-blocker integration.
+- Phone-first web workflow and the existing AEA Field application. Already-synced job details remain visible offline; rental assessment answers and evidence require reconnection before they can be opened or saved.
+- Assessor authentication, issue and supersede lifecycle.
+- Immutable report snapshot and PDF with property summary, limitations, standards matrix, findings, trade scopes and evidence appendix.
+- Crash-safe issue ordering stages every immutable evidence key and the planned PDF reference before its R2 write. A failed issue retains its cleanup manifest, retries failed deletions before another issue and marks cleanup complete only after every private staged object is removed.
+- Assessment photos require a fresh device-reported time, non-mocked GPS record, no more than 100 metres reported accuracy and bounded capture/location/upload timing; the report labels this metadata as device-reported.
+- Dedicated report capability grants with hashed tokens, 60-day expiry, revocation, no-store/noindex responses and access events.
+- Account-free public inspection request intake with bounded contact and property details.
+- Focused tenant-isolation, idempotency, template-freezing, evidence, issue, PDF and link-expiry tests.
+
+### Out of scope
+
+- Copying Homes Victoria, Johns Lyng, Jazz or Detector Inspector branding, wording, personal data or proprietary implementation.
+- Treating the default assessment as the separate statutory electrical, gas or smoke alarm record.
+- Allowing an unqualified worker to certify a credential-gated optional module.
+- Approving legal exemptions solely from an assessor selection.
+- Publishing or deploying before explicit authorization under the current task instructions.
+- Final contract acceptance until the client service specification has been reviewed.
+
+### Acceptance gate
+
+- A new Rental inspection job always receives exactly one frozen minimum-standards workflow and only the optional modules selected by the creator.
+- Completion fails closed when required checks, evidence, urgent actions, access limitations or selected optional modules remain unresolved.
+- Not applicable remains available for genuinely absent features, but requires a public reason and the check's governed evidence before it can pass completion.
+- Every issued finding has a controlled outcome, exact location, public description, responsible trade and quote-ready scope; internal notes never enter the issued projection.
+- Only the assigned qualified assessor can issue or supersede the report.
+- Issued report snapshots and PDFs are immutable, hash verified and tenant scoped.
+- A report link reveals the issued projection without an account, expires exactly 60 days after issue, is revocable, is not indexed or cached, and exposes no internal notes.
+- The same issued report identity drives quick view and PDF download.
+- Focused tests, migration replay, typecheck, lint, production build and desktop, 390 px web and physical Android/iOS checks pass before release.
+
+### Stop conditions
+
+- Do not represent the questionnaire or PDF wording as contract-complete until the service schedule or specification is reviewed.
+- Do not enable statutory optional-module certification without the required credential and licensed-practitioner review of its declarations and test logic.
+- Do not push, deploy or mutate production data without explicit authorization in the current task.
 
 Current quote-acceptance, accepted-invoice and accounting application commit: `9624507b9f4ed274169b67076a40ddb34cd26acb`
 

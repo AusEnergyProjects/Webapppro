@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 
 export const metadata = {
@@ -51,7 +52,9 @@ export default function AssessmentsPage() {
 
     <section className="assessment-two-column"><article><span>NatHERS boundary</span><h2>Assessment expertise does not replace the approval authority</h2><p>NatHERS assessments are delivered using accredited software and the relevant assessor pathway. The certifier, council, consent authority and current building rules determine what evidence the project must submit and accept.</p><a href="https://www.homeenergyrating.gov.au/about/about-us/nationwide-house-energy-rating-scheme-nathers" target="_blank" rel="noreferrer">Read the official NatHERS scheme overview</a></article><article><span>BASIX thermal methods</span><h2>Choose the method that fits the NSW project</h2><p>NSW guidance provides DIY, NatHERS simulation and Passive House methods for eligible project types. Complex and multi-dwelling projects may require simulation using NatHERS accredited software.</p><a href="https://www.planningportal.nsw.gov.au/basix-thermal-performance-section" target="_blank" rel="noreferrer">Confirm the official thermal performance methods</a></article></section>
 
-    <section className="assessment-upload-boundary"><div><span>Future capability, not live today</span><h2>Secure online document review is not available yet</h2><p>Do not upload or place house plans, NatHERS certificates, BASIX files, addresses or identity documents into the public project brief. A future review tool would need controlled storage, access, retention and audit safeguards before document feedback could be offered safely.</p></div><a href="/direct-trade">Start a privacy-safe assessment brief</a></section>
+    <section className="assessment-upload-boundary"><div><span>Victorian rental properties</span><h2>Request a minimum standards assessment without an account</h2><p>Rental minimum standards are included. Electrical, gas and smoke alarm checks are separate and remain off unless you request them. Sending the form starts a review, not a booking.</p></div><Link href="/rental-assessment/request">Request a rental assessment</Link></section>
+
+    <section className="assessment-upload-boundary"><div><span>Future capability, not live today</span><h2>Secure online document review is not available yet</h2><p>Do not upload or place house plans, NatHERS certificates, BASIX files, addresses or identity documents into the public project brief. A future review tool would need controlled storage, access, retention and audit safeguards before document feedback could be offered safely.</p></div><Link href="/direct-trade">Start a privacy-safe assessment brief</Link></section>
 
     <SiteFooter>Assessment information is general until the project location, scope, evidence and approval pathway are confirmed. Requirements can change, and the relevant authority remains the source of truth.</SiteFooter>
   </main>;

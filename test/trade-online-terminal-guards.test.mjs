@@ -149,6 +149,28 @@ function fixture(stage = "in_progress", revision = 5) {
       updated_at text NOT NULL,
       UNIQUE (work_order_id, template_key, template_version)
     );
+    CREATE TABLE trade_rental_inspections (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'draft',
+      assessor_uid text NOT NULL DEFAULT '',
+      assessor_member_id text NOT NULL DEFAULT '',
+      assessor_snapshot text NOT NULL DEFAULT '{}',
+      revision integer NOT NULL DEFAULT 1,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE trade_rental_inspection_modules (
+      id text PRIMARY KEY NOT NULL,
+      inspection_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'not_started',
+      credential_snapshot text NOT NULL DEFAULT '{}',
+      completed_by_uid text NOT NULL DEFAULT '',
+      completed_at text NOT NULL DEFAULT '',
+      revision integer NOT NULL DEFAULT 1,
+      updated_at text NOT NULL
+    );
     CREATE TABLE trade_work_order_events (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
@@ -264,6 +286,9 @@ function teamRoute(db) {
     "@/lib/trade-mobile-device-revocation": { abortMemberDeviceUploads: async () => {} },
     "@/lib/trade-team-lifecycle-policy.mjs": {
       memberLifecycleDecision: () => ({ allowed: true, reason: "allowed" }),
+    },
+    "@/lib/trade-rental-schema-guards": {
+      ensureTradeRentalSchemaGuards: async () => {},
     },
   });
 }

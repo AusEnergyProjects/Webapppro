@@ -90,7 +90,9 @@ test("invoice due dates use the Australia Sydney calendar day at UTC boundaries"
 });
 
 test("saved direct-customer jobs can create and recover a quick invoice without cluttering New Job", () => {
-  assert.match(form, /const steps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(form, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(form, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
+  assert.match(form, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
   assert.doesNotMatch(form, /TradeQuickInvoiceStep|invoiceMode|quickInvoiceLines/);
   assert.doesNotMatch(crmRoute, /INSERT INTO trade_crm_quick_invoices|sendQuickInvoiceDelivery/);
   assert.match(invoiceRoute, /action === "create_draft"/);
