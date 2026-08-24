@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `TLINK-RENTAL-INSPECTION-65` is integrated onto current main; Google Apps Script relay version 16 is live and full validation plus the matching Sites release are in progress.
+Status: `TLINK-RENTAL-INSPECTION-65` is validated, pushed and deployed publicly as Sites version 393; Google Apps Script relay version 16 is live.
 
 Prepared: 24 August 2026
 
@@ -12,11 +12,13 @@ Current-main integration baseline: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`
 
 Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
-Current production: Sites version 391 at `https://compare.ausenergyassessments.com`
+Released application source: `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc`
+Current production: Sites version 393 at `https://compare.ausenergyassessments.com`
 
-Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b`
+
+Current deployment: `appgdep_6a8bffe9f218819184b74651b64ff385`, status `succeeded`, environment revision 24
 
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
@@ -59,13 +61,16 @@ The default activity is the Victorian rental minimum-standards assessment. Elect
 - Google Apps Script relay version 16 was updated in place before the Sites release so requester role, agency, optional modules, authority and replay-safe fingerprints are retained without changing the public relay URL.
 - The relay root returned HTTP 200 with the active-service page after deployment.
 
-## Remaining release gates
+## Release evidence
 
-- Complete the integrated repository validation, fresh 159-migration replay, production build and Sites bundle audit.
-- Complete mobile tests, typecheck, lint and Android/iOS export verification against the integrated tree.
-- Push the integrated commit to GitHub and the Sites managed source branch.
-- Save and deploy the matching Sites archive, then record its exact version, deployment and archive identity here and in `docs/RELEASE_TRUTH.md` and `ROADMAP.md`.
-- Verify the public request page and signed-in workflow at desktop and 390-pixel phone widths without submitting production customer data.
+- `npm.cmd run validate` exited 0 on the exact released source. Typecheck, warning-free lint, all integration tests, 2,898 repository tests with 2,887 passed, 11 intentionally skipped and zero failures, fresh Cloudflare D1 migration replay through `0160_trade_rental_inspections.sql`, customer-plan PDF audit, production build, Sites bundle audit and performance budgets passed.
+- The focused rental and assignment-integrity set passed 136 of 136 tests. Real SQLite transaction tests cover initial schedule synchronisation, time-only updates, stale-assessor repair and atomic rejection of mismatched appointments, second active appointments, terminal inspections and missing or inactive members.
+- Mobile validation passed 38 of 38 tests plus typecheck, lint and Android and iOS export verification. Physical-device field behaviour remains a separate gate.
+- GitHub `main`, branch `codex/rental-inspection-release` and Sites managed `main` all resolved to `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` before the saved version was created.
+- The matching local archive is 12,340,875 bytes with 511 entries and SHA-256 `6DEEB0DDC3896898351A9ABB9004BB93C59049E56C850929457B58661EA86295`.
+- Sites stored 45,168,640 bytes across 497 files with content hash `sha256:0774fbec6599f057fae97538ad7819a0546ab09f04c0d7a4c256d68592ac8399` and deployed version 393 successfully through `appgdep_6a8bffe9f218819184b74651b64ff385` at environment revision 24.
+- Fresh live desktop QA confirmed `/rental-assessment/request`, the account-free request wording, the minimum-standards default, all three optional checks off and the `/assessments` entry point. No production form was submitted and no hosted record was changed.
+- The available browser session was signed out of TLink, Chrome control was unavailable and the browser exposed no phone-viewport override. Signed-in production dashboard visual QA and live 390-pixel public-page QA therefore remain unverified rather than inferred from automated coverage.
 
 ## Boundaries
 

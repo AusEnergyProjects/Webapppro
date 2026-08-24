@@ -30,7 +30,27 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
+## Released milestone: TLINK-RENTAL-INSPECTION-65
+
+Release status: application commit `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` is validated, pushed to GitHub `main` and the Sites managed source branch, and deployed as public Sites version 393 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b` and deployment `appgdep_6a8bffe9f218819184b74651b64ff385` report the exact application commit and environment revision 24. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+
+### Outcome
+
+Give TLink one governed Victorian rental minimum-standards assessment that an agent or rental provider can request without an account, a qualified assigned assessor can complete section by section on web or mobile, and the assessor can issue as a quote-ready report through a revocable 60-day link and full PDF.
+
+### Acceptance result
+
+- Rental inspection is available as a TLink job activity and attaches a frozen workflow when the job is created.
+- The Jazz-style overview opens each section as a separate screen, saves before continuing and returns Back to the overview.
+- Victorian rental minimum standards are the default scope. Electrical, gas and smoke-alarm checks are independent optional modules and are off by default.
+- Evidence retains device-reported capture time, upload time and governed location metadata; unacceptable or mocked location data fails closed.
+- The currently assigned qualified assessor is the only final issuer, including after schedule or team reassignment.
+- The public capability link requires no account, expires after 60 days unless revoked sooner, and exposes the complete issued report and PDF except internal notes.
+- Complete repository validation, all 159 migrations through `0160_trade_rental_inspections.sql`, native mobile validation, exact-source packaging, public deployment and public desktop QA passed.
+
+The executable and public deployment gates are met for Sites version 393. Signed-in production dashboard visual QA, physical-device field QA, a supervised test-property rehearsal, the client service schedule and licensed-practitioner review of optional-module declarations remain explicit bounded follow-up work.
+
+## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
 Release status: application commit `365101733253f2ff39532343bcef81303e96e1e2` is validated, pushed to GitHub and the Sites managed source branch, and deployed as public Sites version 379 at `https://compare.ausenergyassessments.com`. Exact source, package, deployment, test and live-browser evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
@@ -3338,11 +3358,11 @@ Recalculate saved-context guidance whenever the allowlisted profile changes so r
 
 Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the full validation gate and was pushed to GitHub and Sites managed `main`. Sites saved it as version 389 under `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b` and deployed it publicly through `appgdep_6a898f2b620c81918109cac63f954590` at environment revision 24. Live desktop QA confirmed 45 of 45 saved responses and no moisture advice after moisture was removed. Live phone QA confirmed compact secondary drawers, a visible composer and no horizontal overflow.
 
-## Locally validated milestone: AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82
+## Incorporated milestone: AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82
 
 Complete the requested five priorities with a fail-closed source-approval hash registry, a reviewed 20-case conversation corpus and aggregate quality gate, deterministic session continuity rehearsal, separate home, Surge, plan and calculator JavaScript and stylesheet graph budgets, and expanded practical-tip, product, certificate, brand-comparison and context-clarification regressions.
 
-The candidate passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact deployment identity and live browser acceptance remain pending release reconciliation in [release truth](./docs/RELEASE_TRUTH.md).
+The foundation passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` was saved as Sites version 392 and then incorporated into the exact version 393 rental release source recorded above.
 
 ## Next five logical product steps
 

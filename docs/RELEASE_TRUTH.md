@@ -10,9 +10,48 @@ Deployment evidence last verified: 24 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Validated release candidate: governed sources, conversation quality, continuity and route budgets
+## Current production release: TLink Victorian rental assessment workflow
 
-Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated. Production remains Sites version 391 until the exact application commit, saved version, deployment and live acceptance evidence are added here.
+Application source `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` on branch `codex/rental-inspection-release` is the exact source deployed publicly as Sites version 393 at `https://compare.ausenergyassessments.com`.
+
+The release adds a governed Victorian rental minimum-standards assessment to TLink job creation, assignment, scheduling, field completion, issue and report sharing. The web and native mobile workflow uses a Jazz-style section overview, opens each section as a separate screen, saves before continuing and returns Back to the overview. The minimum-standards assessment is always included; electrical, gas and smoke-alarm checks are separate optional modules and are off by default.
+
+The current assigned qualified assessor is the final issuer. Shared assignment invariants keep the work order, active appointment, inspection assessor and credential snapshots aligned across CRM, Schedule and Team mutation routes, reopen stale declarations after reassignment and reject conflicting or terminal mutations atomically. Evidence records retain device-reported capture time, upload time and governed location metadata. Public report capabilities are hashed, revocable and bounded to 60 days, require no viewer account, and expose the complete issued report plus PDF except internal notes.
+
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` |
+| Git branch | `codex/rental-inspection-release` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b` |
+| Public version | Sites version 393 |
+| Deployment | `appgdep_6a8bffe9f218819184b74651b64ff385` with status `succeeded` |
+| Provider deployment | `info294029--aea-energy-comparison` |
+| Hosted environment | Revision 24 |
+| Local release archive | 12,340,875 bytes, 511 entries, SHA-256 `6DEEB0DDC3896898351A9ABB9004BB93C59049E56C850929457B58661EA86295` |
+| Stored archive | 45,168,640 bytes, 497 files, `sha256:0774fbec6599f057fae97538ad7819a0546ab09f04c0d7a4c256d68592ac8399` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+### Validation and runtime evidence
+
+- The final `npm.cmd run validate` completed with exit code 0 on the exact released application source. It passed typecheck, warning-free lint, all integration tests, 2,898 repository tests with 2,887 passed, 11 intentionally skipped and zero failures, fresh Cloudflare D1 migration replay across all 159 migrations through `0160_trade_rental_inspections.sql`, the customer-plan PDF accessibility audit, Vinext production build, Sites server-bundle audit and public-performance budgets.
+- The focused rental, report, request, field, scheduling and assignment-integrity suite passed 136 of 136 tests. Real SQLite coverage proves successful synchronisation and atomic rollback for mismatched, duplicate, inactive and terminal assignment states.
+- Native mobile validation passed 38 of 38 tests plus typecheck, lint and Android and iOS export verification.
+- GitHub `main`, the release branch and Sites managed `main` contained the exact application SHA before packaging. Sites saved version 393 from that commit and deployment `appgdep_6a8bffe9f218819184b74651b64ff385` succeeded with environment revision 24.
+- Fresh live desktop QA confirmed the public request form, no-account wording, minimum-standards default, all three optional modules unchecked, privacy warnings and the `/assessments` request entry. No request was submitted and no hosted customer, property, job or report record was changed.
+
+### Boundaries
+
+- The available live browser session was signed out of TLink, Chrome control was unavailable and the browser exposed no phone-viewport override. Signed-in production dashboard visual QA and live 390-pixel public-page QA remain unverified; authenticated routing and responsive behavior are covered by automated tests and native export validation, not represented as live visual evidence.
+- Contract-specific service wording remains provisional until the client service schedule is supplied and reviewed.
+- Optional electrical, gas and smoke-alarm modules remain pre-launch/test-data capability until their declaration wording and test logic receive licensed-practitioner review.
+- A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
+- Physical Android and iOS device testing and a supervised real-property rehearsal remain separate acceptance work.
+- The hosted product remains pre-launch until the product owner explicitly declares it live.
+
+## Incorporated release foundation: governed sources, conversation quality, continuity and route budgets
+
+Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` was validated in application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`, saved as Sites version 392 and incorporated into the current version 393 application. It was not separately promoted over version 391 before the rental release.
 
 The candidate completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
 
@@ -20,7 +59,7 @@ The candidate completes the requested five controls. Thirty-two volatile officia
 
 This does not claim scheduled remote-byte retrieval, human approval of future upstream changes, deployed-model corpus execution, real-browser cross-session continuity, or completed stylesheet splitting. Those remain in the next five.
 
-## Current production release: grounded product and certificate guidance
+## Previous production release: grounded product and certificate guidance
 
 Application source `0944c9b91765535b873b30029f545bde8f744831` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 391 at `https://compare.ausenergyassessments.com`.
 

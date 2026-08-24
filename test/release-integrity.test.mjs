@@ -84,16 +84,22 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Last reconciled: 24 August 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
-  assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
+  assert.match(roadmap, /## Released milestone: TLINK-RENTAL-INSPECTION-65/);
+  assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 24 August 2026/);
   assert.match(
     handover,
     /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`[\s\S]{0,360}Prepared: 24 August 2026/,
   );
-  assert.match(handover, /Current production: Sites version 391/);
+  assert.match(handover, /Current production: Sites version 393/);
   assert.match(releaseTruth, /Last reconciled locally: 24 August 2026/);
-  assert.match(releaseTruth, /## Current production release: grounded product and certificate guidance/);
+  assert.match(releaseTruth, /## Current production release: TLink Victorian rental assessment workflow/);
   assert.match(releaseTruth, /Deployment evidence last verified: 24 August 2026/);
+  assert.match(releaseTruth, /dd4484efa7dd7edfc3db2eaa49df4d6a7668888a/);
+  assert.match(releaseTruth, /Sites version 393/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b/);
+  assert.match(releaseTruth, /appgdep_6a8bffe9f218819184b74651b64ff385/);
+  assert.match(releaseTruth, /## Previous production release: grounded product and certificate guidance/);
   assert.match(releaseTruth, /## Previous production release: practical Surge assessor guidance and account-copy removal/);
   assert.match(releaseTruth, /0944c9b91765535b873b30029f545bde8f744831/);
   assert.match(releaseTruth, /Sites version 391/);
@@ -1044,7 +1050,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Follow-on application source `0944c9b91765535b873b30029f545bde8f744831`[\s\S]{0,900}deployed as Sites version 391 through `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /8d887f867269a157d84928fb553eac4951ed517b[\s\S]{0,420}Sites saved it as version 389/);
-  assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
+  assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
   assert.match(roadmap, /365101733253f2ff39532343bcef81303e96e1e2[\s\S]{0,360}Sites version 379/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTINUITY-TYPOGRAPHY-72/);
   assert.match(roadmap, /9dc33106b51cb708837cbefa911ff1eaa3fa778d[\s\S]{0,360}Sites version 372/);
@@ -1064,9 +1070,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`/);
   assert.match(handover, /Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`/);
   assert.match(handover, /Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`/);
-  assert.match(currentHandover, /Current production: Sites version 391 at `https:\/\/compare\.ausenergyassessments\.com`/);
-  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc`/);
-  assert.match(currentHandover, /Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
+  assert.match(currentHandover, /Released application source: `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a`/);
+  assert.match(currentHandover, /Current production: Sites version 393 at `https:\/\/compare\.ausenergyassessments\.com`/);
+  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b`/);
+  assert.match(currentHandover, /Current deployment: `appgdep_6a8bffe9f218819184b74651b64ff385`, status `succeeded`, environment revision 24/);
   assert.match(currentHandover, /Current migration inventory: 159 migrations through `0160_trade_rental_inspections\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
