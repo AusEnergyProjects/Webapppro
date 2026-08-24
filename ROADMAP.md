@@ -30,7 +30,24 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-FIELD-APP-70
+## Released milestone: TLINK-FIELD-APP-71
+
+Release status: application and mobile update commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 403, and published as Android preview update `01a03475-deab-7cce-93b2-6f9afa26b287` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9` and deployment `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
+
+### Outcome
+
+The schedule no longer restarts synchronisation forever after a successful identity refresh. An unchanged office-controlled username now leaves the stored principal and React state untouched, and the connectivity listener depends only on whether a worker is signed in rather than on a newly allocated user object. The field-created job form now uses explicit dark input surfaces, light entered text, readable placeholders and visible selection colour throughout.
+
+### Acceptance result
+
+- A completed sync remains settled and displays `All field work is safely synced` rather than continually returning to the loading state.
+- Refreshing an unchanged TLink username does not resubscribe the network listener or recursively restart sync.
+- New-job entered text, placeholders and selection remain visible against the rich TLink dark theme.
+- Mobile typecheck, warning-free lint, all 38 mobile tests, Android and iOS exports, full repository validation, exact-source GitHub and Sites publication, compatible Android update publication, custom-domain HTTP checks and the production error-log check passed.
+
+Applying preview update `01a03475-deab-7cce-93b2-6f9afa26b287` and confirming both corrected behaviours on Samsung are the remaining physical-device acceptance gate.
+
+## Previous released milestone: TLINK-FIELD-APP-70
 
 Release status: application and mobile update commit `740433354bc689bd3199e2ccf28612dac22856ab` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 402, and published as Android preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_7273c4aa4b748191b309ba2cc4d85d21` and deployment `appgdep_6a8c61b940248191bbaa0d6ecf980495` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
 
@@ -3398,7 +3415,7 @@ The foundation passed `npm.cmd run validate`, including all 36 integration tests
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c`, and confirm the existing `test` session opens the schedule and shows the assigned test job without generating another PIN.
+1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
