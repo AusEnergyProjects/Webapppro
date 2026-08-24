@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-66` is validated, pushed and deployed publicly as Sites version 398; signed TLink Android test build 1.0.1 build 2 and Google Apps Script relay version 16 are live.
+Status: `TLINK-FIELD-APP-67` is validated, pushed and deployed publicly as Sites version 399; signed TLink Android test build 1.0.1 build 2 and Google Apps Script relay version 16 remain live.
 
-Prepared: 24 August 2026
+Prepared: 25 August 2026
 
-Milestone ID: `TLINK-FIELD-APP-66`
+Milestone ID: `TLINK-FIELD-APP-67`
 
 Working branch: `codex/tlink-field-app`
 
@@ -12,15 +12,15 @@ Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`
 
 Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
-Released application source: `f325d924242be20429edc7806b968b72d8a5d26c`
+Released application source: `e215f0f7c6df720f253a221e598d4f32dfd511a9`
 
 Released mobile source: `f325d924242be20429edc7806b968b72d8a5d26c`
 
-Current production: Sites version 398 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 399 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d5b2a5a3761c8191805a516837f13cee`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_afbcca236bbc819194dd677a7b7c74bc`
 
-Current deployment: `appgdep_6a8c424b93488191a3a067b2caeff2ba`, status `succeeded`, environment revision 27
+Current deployment: `appgdep_6a8c4e0aee3c81918f51e52547c558d2`, status `succeeded`, environment revision 28
 
 Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@ausenergy/aea-field`, version 1.0.1, build 2, runtime 1.0.1, signed internal APK `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, APK SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026
 
@@ -31,6 +31,8 @@ Current migration inventory: 161 migrations through `0162_trade_field_username.s
 ## Outcome
 
 TLink now has one mobile-first field app for technicians, field trades and assessors. The native application is named TLink and uses the TLink launcher icon and rich navy and green identity. A worker signs in with an office-controlled TLink username and one-time six-digit PIN, opens a simple week calendar, sees assigned jobs, creates a permitted job from the plus control and completes each attached workflow one section at a time.
+
+The reported PIN-generation failure is fixed. PIN hashing is fast enough for the Worker runtime, remains salted and secret-backed, and never stores the plaintext PIN. TLink emails the exact username, one-time PIN, expiry and app link to the saved member email. If the provider rejects delivery, the new PIN is revoked. The account owner now has a `Set up my app` action so sole traders can create field access for their own main account.
 
 Victorian rental minimum standards are selected by default but can be unticked. Minimum standards, electrical safety, gas safety and smoke alarm are four independent choices, and at least one is required. The existing account-free request, qualified-assessor issue and revocable 60-day report remain part of the same governed path.
 
@@ -43,8 +45,9 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - The viewer needs no account. Anyone holding the capability link may view the issued report for 60 days unless it is revoked earlier.
 - Quick view and PDF expose the complete issued report except internal notes.
 - Evidence records retain device-reported capture time, upload time and location metadata. Location acceptance fails closed when the device reports mocked location, excessive accuracy uncertainty or timing outside the governed limits.
-- TLink Team presents add person, open details and generate PIN as one visible three-step flow. The office controls the unique TLink username, field-only workers do not need an email, and a username change revokes any unused PIN.
-- A TLink administrator can issue one active setup PIN per worker, copy it once, revoke a device or sign the worker out everywhere. PIN attempts are rate limited and stored credentials are hashed.
+- TLink Team presents add person, open details and generate and email PIN as one visible three-step flow. The office controls the unique TLink username, a saved email is required for PIN delivery, and a username change revokes any unused PIN.
+- The account owner has a `Set up my app` action and can create their own field username and PIN without adding a duplicate team member.
+- A TLink administrator can issue one active setup PIN per person, see it once, revoke a device or sign the person out everywhere. PIN attempts are rate limited and stored credentials are salted, peppered hashes.
 - Get the app is always visible in the TLink dashboard header with a compact TLink icon. The dedicated install page and live release API return signed Android version 1.0.1 build 2.
 - Internal notes, private staging keys and tenant identifiers do not enter the public report projection.
 
@@ -68,19 +71,19 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - The original rental branch was not deployed over newer work. Field access and scope changes were integrated in a separate release worktree and retained the current Surge, schedule, work-pack and performance foundations.
 - The rental migration was renumbered from the colliding `0142` identifier to `0160`; existing Creditex migration history remains unchanged.
 - Migration `0162_trade_field_username.sql` is additive. It adds the office-controlled username and normalised lookup value plus a per-owner uniqueness index without dropping or renaming a production table.
-- Deployment versions 394 and 395 failed inside migration transactions and committed no release mutation. Version 396 proved the additive rental migration, version 397 added its presentation correction, and version 398 released the TLink identity and team setup flow.
+- Deployment versions 394 and 395 failed inside migration transactions and committed no release mutation. Version 396 proved the additive rental migration, version 397 added its presentation correction, version 398 released the TLink identity and team setup flow, and version 399 fixed PIN creation and added owner setup plus credential email delivery.
 - Google Apps Script relay version 16 was updated in place before the Sites release so requester role, agency, optional modules, authority and replay-safe fingerprints are retained without changing the public relay URL.
 - The relay root returned HTTP 200 with the active-service page after deployment.
 
 ## Release evidence
 
-- On exact released source `f325d924242be20429edc7806b968b72d8a5d26c`, root typecheck, warning-free lint, the complete repository suite, fresh Cloudflare D1 replay through `0162_trade_field_username.sql`, production build, Sites bundle audit and performance budgets passed.
-- Focused team route tests passed field-only member creation with username and no email, duplicate protection and unused-PIN revocation after username change.
+- On exact released application source `e215f0f7c6df720f253a221e598d4f32dfd511a9`, root typecheck, warning-free lint, the complete repository suite, fresh Cloudflare D1 replay through `0162_trade_field_username.sql`, production build, Sites bundle audit and performance budgets passed.
+- Focused field-access checks passed 77 of 77, covering owner setup protections, secret-backed hashing without plaintext, missing configuration, exact email recipient and content, provider acceptance, provider-failure revocation and missing-email handling.
 - Mobile typecheck, lint and Android Expo export passed. The export bundled 1,511 modules and the TLink icon. The signed Android EAS build finished from exact source. Physical-device field behaviour remains a separate gate.
-- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to `f325d924242be20429edc7806b968b72d8a5d26c` before version 398 was saved.
-- The matching local archive is 12,356,666 bytes with SHA-256 `4FF4DA0398CD7FE9B56913CA4A64703B7637490B81E16278D02583C8F8BEBD21`.
-- Sites stored 45,271,040 bytes across 501 files with content hash `sha256:f4cae5f0e4c719b4cb3a4d0a41d2cf0ae7f13087411182afe49f000fe8de5dd3` and deployed version 398 successfully through `appgdep_6a8c424b93488191a3a067b2caeff2ba` at environment revision 27.
-- Live signed-in desktop QA confirmed the TLink icon and Get the app formatting plus the complete add, details, username and PIN controls. Live 412-pixel QA confirmed the dark TLink install page and Android 1.0.1 link. `/api/field/app-release` returned minimum and latest version 1.0.1 with the signed APK URL, and `/api/health` returned HTTP 200. No PIN was generated, no form was submitted and no hosted team or job record was changed.
+- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to `e215f0f7c6df720f253a221e598d4f32dfd511a9` before version 399 was saved.
+- The matching local archive is 12,357,534 bytes with SHA-256 `7B6E36D6D00EEBD3ED7631934EEFA63981727108ACFA65A58A35F2289E3DFFE3`.
+- Sites stored 45,281,280 bytes across 501 files with content hash `sha256:e578ffac7e827ca4cbf81ef9973f3994c0dcaa0dd54997374159214bfb15539e` and deployed version 399 successfully through `appgdep_6a8c4e0aee3c81918f51e52547c558d2` at environment revision 28.
+- The custom-domain health endpoint, Team route and field-app route returned HTTP 200 after deployment. The following 10-minute production error-log query returned zero events. Release verification did not generate a live PIN or send an unsolicited credential email.
 
 ## Boundaries
 
@@ -88,12 +91,14 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - Optional statutory-module certification still requires the correct practitioner credential and final licensed-practitioner review of declarations and test logic.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
 - Physical Samsung installation of version 1.0.1 build 2 remains unverified. Native export does not replace the planned real-device test, and no installable iOS build was produced.
+- The first deliberate owner or worker setup must verify real Resend mailbox delivery. Provider acceptance and rollback are automated, but a live credential email was not sent during release QA.
+- Regenerate any unused PIN created before version 399 because the new secret-backed hash intentionally replaces the failed legacy representation.
 - The internal Android APK expires on 7 September 2026 and must be refreshed or replaced by the permanent distribution path before then.
 - Hosted records remain pre-launch test data until the product owner explicitly declares the platform live.
 
 ## Next five logical product steps
 
-1. Install TLink 1.0.1 build 2 over the existing Samsung test app, set John Smith's TLink username, generate the one-time PIN, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+1. Use `Set up my app` on the owner row and then a worker's `Open details` flow to generate and email deliberate test PINs, confirm both emails arrive with the exact username and PIN, sign in on Samsung, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.

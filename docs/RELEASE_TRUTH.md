@@ -4,35 +4,37 @@ Status: current repository snapshot
 
 Truth owners: product owner and technical lead
 
-Last reconciled locally: 24 August 2026
+Last reconciled locally: 25 August 2026
 
-Deployment evidence last verified: 24 August 2026
+Deployment evidence last verified: 25 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: TLink identity, simple team setup and selectable rental assessments
+## Current production release: secure TLink PIN delivery, owner setup and selectable rental assessments
 
-Application and mobile source `f325d924242be20429edc7806b968b72d8a5d26c` on branch `codex/tlink-field-app` is the exact source deployed publicly as Sites version 398 at `https://compare.ausenergyassessments.com` and used by signed Android build `233c6924-48ca-4417-abd8-9447135ad74f`.
+Application source `e215f0f7c6df720f253a221e598d4f32dfd511a9` on branch `codex/tlink-field-app` is the exact source deployed publicly as Sites version 399 at `https://compare.ausenergyassessments.com`. Mobile source remains `f325d924242be20429edc7806b968b72d8a5d26c`, which is the exact source used by signed Android build `233c6924-48ca-4417-abd8-9447135ad74f`.
 
 The release keeps Victorian rental minimum standards selected by default while allowing it to be unticked. Minimum standards, electrical safety, gas safety and smoke alarm are four independent choices, and at least one is required. The same scope contract is enforced in public request intake, TLink job creation and TLink Field job creation. The web and mobile workflows use a section overview, open one section per screen, save before continuing and return Back to the overview.
 
-The Android application is named TLink and uses the TLink icon in native launcher, splash and in-app identity. Its interface uses the rich navy and green TLink theme. TLink Team now gives the office a visible three-step path: add the person, open details, set or change their unique TLink username, then generate a one-time six-digit PIN. Email is optional for a field-only worker. Changing the username revokes any unused PIN, and the existing device revocation and sign-out controls remain available.
+The Android application is named TLink and uses the TLink icon in native launcher, splash and in-app identity. Its interface uses the rich navy and green TLink theme. TLink Team gives the office a visible three-step path: add the person, open details, set or change their unique TLink username, then generate and email a one-time six-digit PIN. A saved member email is required for PIN delivery. The main account owner has a `Set up my app` action, so a sole trader can assign their own TLink username and receive their own PIN. Changing the username revokes any unused PIN, and the existing device revocation and sign-out controls remain available.
+
+PIN creation now uses a per-code salt and a server-held HMAC-SHA256 pepper instead of the slow Worker PBKDF2 path that caused the reported HTTP 500 timeout. Only the hash is stored. The email contains the exact saved username, one-time PIN, expiry and TLink app link. If Resend does not accept the email, the exact newly issued PIN is revoked and the dashboard reports that delivery failed rather than presenting false success.
 
 TLink gives each technician, trade and assessor a device-bound session, a week calendar, assigned jobs, mobile job creation, workflow forms, pull-to-refresh and an explicit update check. The dashboard keeps a compact TLink-logo Get the app control at the top right, and the install page serves signed Android version 1.0.1 build 2. The assigned qualified assessor remains the final issuer. Evidence retains capture time, upload time and governed location metadata. Public report capabilities remain hashed, revocable and bounded to 60 days, require no viewer account, and expose the issued report plus PDF except internal notes.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `f325d924242be20429edc7806b968b72d8a5d26c` |
+| Application source | `e215f0f7c6df720f253a221e598d4f32dfd511a9` |
 | Mobile application source | `f325d924242be20429edc7806b968b72d8a5d26c` |
 | Git branch | `codex/tlink-field-app` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_d5b2a5a3761c8191805a516837f13cee` |
-| Public version | Sites version 398 |
-| Deployment | `appgdep_6a8c424b93488191a3a067b2caeff2ba` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_afbcca236bbc819194dd677a7b7c74bc` |
+| Public version | Sites version 399 |
+| Deployment | `appgdep_6a8c4e0aee3c81918f51e52547c558d2` with status `succeeded` |
 | Provider deployment | `info294029--aea-energy-comparison` |
-| Hosted environment | Revision 27 |
-| Local release archive | 12,356,666 bytes, SHA-256 `4FF4DA0398CD7FE9B56913CA4A64703B7637490B81E16278D02583C8F8BEBD21` |
-| Stored archive | 45,271,040 bytes, 501 files, `sha256:f4cae5f0e4c719b4cb3a4d0a41d2cf0ae7f13087411182afe49f000fe8de5dd3` |
+| Hosted environment | Revision 28 |
+| Local release archive | 12,357,534 bytes, SHA-256 `7B6E36D6D00EEBD3ED7631934EEFA63981727108ACFA65A58A35F2289E3DFFE3` |
+| Stored archive | 45,281,280 bytes, 501 files, `sha256:e578ffac7e827ca4cbf81ef9973f3994c0dcaa0dd54997374159214bfb15539e` |
 | Expo project | `@ausenergy/aea-field`, project `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9` |
 | Signed Android build | `233c6924-48ca-4417-abd8-9447135ad74f`, version 1.0.1, build 2, runtime 1.0.1, preview channel |
 | Android APK | `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026 |
@@ -40,17 +42,19 @@ TLink gives each technician, trade and assessor a device-bound session, a week c
 
 ### Validation and runtime evidence
 
-- On exact released source `f325d924242be20429edc7806b968b72d8a5d26c`, root typecheck, warning-free lint, the complete repository test suite, fresh D1 replay across 161 exact migrations through `0162_trade_field_username.sql`, the production build, Sites bundle audit and public-performance budgets passed. The final CSS payload met its 735,000-byte budget exactly.
-- Focused team route tests passed creation of a field-only member with a username and no email, duplicate protection and revocation of an unused PIN after a username change. The fresh migration replay proved the per-owner normalised username uniqueness rule.
+- On exact released application source `e215f0f7c6df720f253a221e598d4f32dfd511a9`, root typecheck, warning-free lint, the complete repository test suite, fresh D1 replay across 161 exact migrations through `0162_trade_field_username.sql`, the production build, Sites bundle audit and public-performance budgets passed. The final CSS payload met its 735,000-byte budget exactly.
+- Focused field-access tests passed 77 of 77. They cover owner username setup, owner lifecycle and permission protections, HMAC-pepper PIN storage without plaintext, missing-secret fail-closed behaviour, recipient selection, escaped TLink email content, successful provider acceptance, provider-failure PIN revocation and missing-email handling.
 - Native mobile typecheck, lint and Android Expo export passed. The export bundled 1,511 modules and the TLink icon. Expo public config reported TLink version 1.0.1, runtime policy `appVersion` and the TLink icon paths. EAS produced the signed Android build from exact source `f325d924242be20429edc7806b968b72d8a5d26c`.
 - The native TLink 512-pixel icon hash matches the public TLink icon, foreground and splash assets; the 192-pixel public icon matches the mobile favicon.
 - Migration `0162_trade_field_username.sql` is additive. It adds the office-controlled username and normalised lookup value plus a per-owner uniqueness index. It performs no production table drop or rename.
-- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to exact source `f325d924242be20429edc7806b968b72d8a5d26c` before version 398 was saved.
-- Live signed-in desktop QA confirmed the compact TLink-logo Get the app control, the three-step Team setup strip, the add-member dialog, editable TLink username, PIN control and field-device controls. Live 412-pixel QA confirmed the dark TLink install page and exact Android 1.0.1 URL. `/api/field/app-release` returned minimum and latest version 1.0.1 with the signed APK URL, and `/api/health` returned HTTP 200. No PIN was generated, no form was submitted and no hosted team, request, customer, property, job or report record was changed.
+- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to exact application source `e215f0f7c6df720f253a221e598d4f32dfd511a9` before version 399 was saved.
+- Sites version 399 deployed successfully with environment revision 28 and the new secret `TLINK_FIELD_PIN_PEPPER` configured. The custom-domain health endpoint, Team workspace route and TLink field-app route returned HTTP 200 after deployment. The subsequent 10-minute production error-log query returned zero events. No live PIN was generated and no credential email was sent during release verification.
 
 ### Boundaries
 
 - Physical Samsung installation and end-to-end field behaviour for version 1.0.1 build 2 remain unverified. Automated authenticated-route coverage, native export and responsive checks do not replace the planned real-device test.
+- Real Resend mailbox delivery of a TLink PIN remains to be verified by the first deliberate owner or worker setup. Provider acceptance and failure rollback are covered by automated tests, but release verification did not create a live credential or send an unsolicited email.
+- Any unused PIN issued before version 399 must be regenerated because the new server-secret-backed hash deliberately does not accept the former PBKDF2 representation.
 - Contract-specific service wording remains provisional until the client service schedule is supplied and reviewed.
 - Optional electrical, gas and smoke-alarm modules remain pre-launch/test-data capability until their declaration wording and test logic receive licensed-practitioner review.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
@@ -60,7 +64,7 @@ TLink gives each technician, trade and assessor a device-bound session, a week c
 
 ## Incorporated release foundation: governed sources, conversation quality, continuity and route budgets
 
-Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` was validated in application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`, saved and deployed as Sites version 392 through deployment `appgdep_6a8bee30af108191b5d8db124c788fc0`, and then incorporated into the current version 398 application. Version 392 passed live desktop and phone acceptance before the later TLink releases superseded it.
+Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` was validated in application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`, saved and deployed as Sites version 392 through deployment `appgdep_6a8bee30af108191b5d8db124c788fc0`, and then incorporated into the current version 399 application. Version 392 passed live desktop and phone acceptance before the later TLink releases superseded it.
 
 The release completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
 
