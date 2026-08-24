@@ -84,21 +84,21 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /Last reconciled: 24 August 2026/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
-  assert.match(roadmap, /## Released milestone: TLINK-RENTAL-INSPECTION-65/);
+  assert.match(roadmap, /## Released milestone: TLINK-FIELD-APP-66/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 24 August 2026/);
   assert.match(
     handover,
-    /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`[\s\S]{0,360}Prepared: 24 August 2026/,
+    /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-66`[\s\S]{0,360}Prepared: 24 August 2026/,
   );
-  assert.match(handover, /Current production: Sites version 393/);
+  assert.match(handover, /Current production: Sites version 397/);
   assert.match(releaseTruth, /Last reconciled locally: 24 August 2026/);
-  assert.match(releaseTruth, /## Current production release: TLink Victorian rental assessment workflow/);
+  assert.match(releaseTruth, /## Current production release: TLink Field and selectable rental assessment scopes/);
   assert.match(releaseTruth, /Deployment evidence last verified: 24 August 2026/);
-  assert.match(releaseTruth, /dd4484efa7dd7edfc3db2eaa49df4d6a7668888a/);
-  assert.match(releaseTruth, /Sites version 393/);
-  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b/);
-  assert.match(releaseTruth, /appgdep_6a8bffe9f218819184b74651b64ff385/);
+  assert.match(releaseTruth, /cde1d312711b1cdc48720d17dafe4dd4a58c9807/);
+  assert.match(releaseTruth, /Sites version 397/);
+  assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_ca77494e88608191a5f335d10ca248c7/);
+  assert.match(releaseTruth, /appgdep_6a8c28eef40c819186b031d9a607ffb3/);
   assert.match(releaseTruth, /## Previous production release: grounded product and certificate guidance/);
   assert.match(releaseTruth, /## Previous production release: practical Surge assessor guidance and account-copy removal/);
   assert.match(releaseTruth, /0944c9b91765535b873b30029f545bde8f744831/);
@@ -1040,12 +1040,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`/);
-  assert.match(currentHandover, /Milestone ID: `TLINK-RENTAL-INSPECTION-65`/);
-  assert.match(currentHandover, /Working branch: `codex\/rental-inspection-release`/);
-  assert.match(currentHandover, /Current-main integration baseline: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-66`/);
+  assert.match(currentHandover, /Milestone ID: `TLINK-FIELD-APP-66`/);
+  assert.match(currentHandover, /Working branch: `codex\/tlink-field-app`/);
+  assert.match(currentHandover, /Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`/);
   assert.match(currentHandover, /Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`/);
-  assert.match(currentHandover, /Current migration inventory: 159 migrations through `0160_trade_rental_inspections\.sql`/);
+  assert.match(currentHandover, /Current migration inventory: 160 migrations through `0161_trade_field_access_and_rental_scope\.sql`/);
   assert.match(currentHandover, /Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`/);
   assert.match(roadmap, /Follow-on application source `0944c9b91765535b873b30029f545bde8f744831`[\s\S]{0,900}deployed as Sites version 391 through `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
@@ -1070,11 +1070,12 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /Historical Team full implementation commit: `9bc981227e258dffb036a1ddf9acd6ad9117b72a`/);
   assert.match(handover, /Historical Sites compatibility repair commit: `732f096ca5a8d606cf616ae7ec323ae9d2ce66b7`/);
   assert.match(handover, /Historical Team simplification and Interested workflow correction: `523b517c4027ef72f2b267c95ae8c36fd26af92d`/);
-  assert.match(currentHandover, /Released application source: `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a`/);
-  assert.match(currentHandover, /Current production: Sites version 393 at `https:\/\/compare\.ausenergyassessments\.com`/);
-  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b`/);
-  assert.match(currentHandover, /Current deployment: `appgdep_6a8bffe9f218819184b74651b64ff385`, status `succeeded`, environment revision 24/);
-  assert.match(currentHandover, /Current migration inventory: 159 migrations through `0160_trade_rental_inspections\.sql`/);
+  assert.match(currentHandover, /Released application source: `cde1d312711b1cdc48720d17dafe4dd4a58c9807`/);
+  assert.match(currentHandover, /Released mobile source: `5a35d2efebe7664cbb951928115a04303752c882`/);
+  assert.match(currentHandover, /Current production: Sites version 397 at `https:\/\/compare\.ausenergyassessments\.com`/);
+  assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_ca77494e88608191a5f335d10ca248c7`/);
+  assert.match(currentHandover, /Current deployment: `appgdep_6a8c28eef40c819186b031d9a607ffb3`, status `succeeded`, environment revision 25/);
+  assert.match(currentHandover, /Current migration inventory: 160 migrations through `0161_trade_field_access_and_rental_scope\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
   assert.match(handover, /Historical version 334 application source: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
@@ -1852,11 +1853,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(releaseTruthStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.equal(normalisedReleaseTruthNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. Run a supervised end-to-end assessor rehearsal on a test property/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. Add operational review screens for public rental requests/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch\/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic\./);
-  assert.match(normalisedRoadmapNextFive, /\n5\. Run physical Android and iOS field QA for offline job visibility/);
+  assert.match(normalisedRoadmapNextFive, /^1\. Install the signed build on the Samsung, issue a John Smith field PIN from TLink Team/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. Add an operations review queue for public rental requests/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. Reconcile the client service schedule and obtain licensed-practitioner review/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. Run a supervised test-property issue and share rehearsal/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. Replace the expiring internal APK with the approved permanent distribution lifecycle/);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

@@ -30,25 +30,28 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-RENTAL-INSPECTION-65
+## Released milestone: TLINK-FIELD-APP-66
 
-Release status: application commit `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` is validated, pushed to GitHub `main` and the Sites managed source branch, and deployed as public Sites version 393 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b` and deployment `appgdep_6a8bffe9f218819184b74651b64ff385` report the exact application commit and environment revision 24. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+Release status: application commit `cde1d312711b1cdc48720d17dafe4dd4a58c9807` is validated, pushed to GitHub `main` and the Sites managed source branch, and deployed as public Sites version 397 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_ca77494e88608191a5f335d10ca248c7` and deployment `appgdep_6a8c28eef40c819186b031d9a607ffb3` report the exact application commit and environment revision 25. Signed Android build `0d0e969c-d791-4d57-b8d7-39902e5ad199` was built from exact mobile source `5a35d2efebe7664cbb951928115a04303752c882`. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
 ### Outcome
 
-Give TLink one governed Victorian rental minimum-standards assessment that an agent or rental provider can request without an account, a qualified assigned assessor can complete section by section on web or mobile, and the assessor can issue as a quote-ready report through a revocable 60-day link and full PDF.
+Give technicians, field trades and assessors one simple TLink Field app for their calendar, assigned jobs and workflow forms, while allowing minimum standards, electrical, gas and smoke alarm work to be selected independently on every job.
 
 ### Acceptance result
 
 - Rental inspection is available as a TLink job activity and attaches a frozen workflow when the job is created.
 - The Jazz-style overview opens each section as a separate screen, saves before continuing and returns Back to the overview.
-- Victorian rental minimum standards are the default scope. Electrical, gas and smoke-alarm checks are independent optional modules and are off by default.
+- Victorian rental minimum standards are selected by default but can be unticked. Minimum standards, electrical, gas and smoke alarm are four independent choices, and at least one is required.
+- TLink Team issues a one-time six-digit field PIN, stores only its hash and can revoke a device or sign the worker out everywhere.
+- TLink Field opens to a simple week calendar, shows only the worker's assigned jobs, supports mobile job creation and opens the selected job workflow.
+- Get the app remains at the top right of the TLink dashboard. The install page and in-app update check resolve the current signed Android build.
 - Evidence retains device-reported capture time, upload time and governed location metadata; unacceptable or mocked location data fails closed.
 - The currently assigned qualified assessor is the only final issuer, including after schedule or team reassignment.
 - The public capability link requires no account, expires after 60 days unless revoked sooner, and exposes the complete issued report and PDF except internal notes.
-- Complete repository validation, all 159 migrations through `0160_trade_rental_inspections.sql`, native mobile validation, exact-source packaging, public deployment and public desktop QA passed.
+- Complete repository validation, all 160 exact migrations through `0161_trade_field_access_and_rental_scope.sql`, native mobile validation, signed Android build, exact-source packaging, public deployment and public desktop and 412-pixel QA passed.
 
-The executable and public deployment gates are met for Sites version 393. Signed-in production dashboard visual QA, physical-device field QA, a supervised test-property rehearsal, the client service schedule and licensed-practitioner review of optional-module declarations remain explicit bounded follow-up work.
+The executable and public deployment gates are met for Sites version 397. Physical Samsung installation, the John Smith PIN and assigned-job rehearsal, signed-in dashboard visual QA, public-request operational triage, the client service schedule and licensed-practitioner review remain explicit bounded follow-up work.
 
 ## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
@@ -3362,15 +3365,15 @@ Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the f
 
 Complete the requested five priorities with a fail-closed source-approval hash registry, a reviewed 20-case conversation corpus and aggregate quality gate, deterministic session continuity rehearsal, separate home, Surge, plan and calculator JavaScript and stylesheet graph budgets, and expanded practical-tip, product, certificate, brand-comparison and context-clarification regressions.
 
-The foundation passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` was saved as Sites version 392 and then incorporated into the exact version 393 rental release source recorded above.
+The foundation passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` was saved as Sites version 392 and then incorporated into the exact version 397 TLink release source recorded above.
 
 ## Next five logical product steps
 
-1. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules without importing third-party branding or proprietary text.
-2. Run a supervised end-to-end assessor rehearsal on a test property, including optional-module toggles, section recovery, evidence capture, issue, supersede and 60-day report access.
-3. Add operational review screens for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-4. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic.
-5. Run physical Android and iOS field QA for offline job visibility, reconnection, large-photo upload, interrupted save recovery and issued-report viewing.
+1. Install the signed build on the Samsung, issue a John Smith field PIN from TLink Team, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
+4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
+5. Replace the expiring internal APK with the approved permanent distribution lifecycle, or refresh the internal build before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
 
 ## Global stop conditions
 

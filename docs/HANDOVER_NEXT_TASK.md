@@ -1,43 +1,50 @@
 # Next task handover
 
-Status: `TLINK-RENTAL-INSPECTION-65` is validated, pushed and deployed publicly as Sites version 393; Google Apps Script relay version 16 is live.
+Status: `TLINK-FIELD-APP-66` is validated, pushed and deployed publicly as Sites version 397; signed Android test build 1.0.0 and Google Apps Script relay version 16 are live.
 
 Prepared: 24 August 2026
 
-Milestone ID: `TLINK-RENTAL-INSPECTION-65`
+Milestone ID: `TLINK-FIELD-APP-66`
 
-Working branch: `codex/rental-inspection-release`
+Working branch: `codex/tlink-field-app`
 
-Current-main integration baseline: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`
+Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`
 
 Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
-Released application source: `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a`
+Released application source: `cde1d312711b1cdc48720d17dafe4dd4a58c9807`
 
-Current production: Sites version 393 at `https://compare.ausenergyassessments.com`
+Released mobile source: `5a35d2efebe7664cbb951928115a04303752c882`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_0cbb95a708b08191866d924a18d8a59b`
+Current production: Sites version 397 at `https://compare.ausenergyassessments.com`
 
-Current deployment: `appgdep_6a8bffe9f218819184b74651b64ff385`, status `succeeded`, environment revision 24
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_ca77494e88608191a5f335d10ca248c7`
+
+Current deployment: `appgdep_6a8c28eef40c819186b031d9a607ffb3`, status `succeeded`, environment revision 25
+
+Current Android build: `0d0e969c-d791-4d57-b8d7-39902e5ad199`, Expo project `@ausenergy/aea-field`, version 1.0.0, build 1, signed internal APK `https://expo.dev/artifacts/eas/H0OHV6eS3Jb4irYljvVGaFd4ZuVOf9ZPebJjJ9vesNE.apk`, expires 7 September 2026
 
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
-Current migration inventory: 159 migrations through `0160_trade_rental_inspections.sql`
+Current migration inventory: 160 migrations through `0161_trade_field_access_and_rental_scope.sql`
 
 ## Outcome
 
-TLink now has one governed rental minimum-standards assessment workflow that can be requested without an account, attached to a trade job, scheduled to a qualified assessor, completed section by section on web or mobile, issued by that assessor, and shared through a revocable 60-day report link with a full PDF download.
+TLink now has one mobile-first field app for technicians, field trades and assessors. A worker signs in with their TLink name and one-time six-digit PIN, opens a simple week calendar, sees assigned jobs, creates a permitted job from the plus control and completes each attached workflow one section at a time.
 
-The default activity is the Victorian rental minimum-standards assessment. Electrical safety, gas safety and smoke alarm checks are independent optional modules and are off by default.
+Victorian rental minimum standards are selected by default but can be unticked. Minimum standards, electrical safety, gas safety and smoke alarm are four independent choices, and at least one is required. The existing account-free request, qualified-assessor issue and revocable 60-day report remain part of the same governed path.
 
 ## Confirmed product decisions
 
 - Rental inspection is available from the TLink new-job activity flow and attaches its frozen workflow atomically when the job is created.
+- Scope selection is identical in the public request, TLink new job and TLink Field new job surfaces. The server rejects empty or unknown combinations.
 - Save section and continue persists the current section before opening the next separate screen. Back returns to the section overview rather than silently losing work.
 - The assigned qualified assessor is the final issuer. There is no additional supervisor approval step.
 - The viewer needs no account. Anyone holding the capability link may view the issued report for 60 days unless it is revoked earlier.
 - Quick view and PDF expose the complete issued report except internal notes.
 - Evidence records retain device-reported capture time, upload time and location metadata. Location acceptance fails closed when the device reports mocked location, excessive accuracy uncertainty or timing outside the governed limits.
+- A TLink administrator can issue one active setup PIN per worker, copy it once, revoke a device or sign the worker out everywhere. PIN attempts are rate limited and stored credentials are hashed.
+- Get the app is always visible in the TLink dashboard header. The dedicated install page and live release API return the current signed Android build.
 - Internal notes, private staging keys and tenant identifiers do not enter the public report projection.
 
 ## Integrated scope
@@ -48,45 +55,47 @@ The default activity is the Victorian rental minimum-standards assessment. Elect
 - Quote-ready findings with location, outcome, severity, responsible trade, public description and scope.
 - Optional electrical, gas and smoke-alarm modules with separate completion gates.
 - Existing TLink job assignment, weekly scheduling, field progress and completion blockers.
-- Existing AEA Field job list and job detail integration with a dedicated rental workflow surface.
+- TLink Field week calendar, daily assigned jobs, pull-to-refresh, plus-job flow, secure field session and dedicated rental workflow surface.
+- In-app update check with Expo update support and signed-APK fallback through `/api/field/app-release`.
 - Assessor issue and supersede lifecycle, immutable report snapshots and hash-verified PDF artifacts.
 - Account-free public request intake with bounded agent, landlord, contact and property details.
 - Hashed report capabilities, 60-day expiry, revocation, no-store and noindex responses, and access-event records.
 
 ## Release integrity
 
-- The original rental branch was not deployed over newer work. It was integrated onto current GitHub main `7627d3e` in a separate release worktree.
+- The original rental branch was not deployed over newer work. Field access and scope changes were integrated in a separate release worktree and retained the current Surge, schedule, work-pack and performance foundations.
 - The rental migration was renumbered from the colliding `0142` identifier to `0160`; existing Creditex migration history remains unchanged.
-- Current-main work-pack, scheduling, Surge governance and performance behaviour is retained while rental rows, report blockers and workflow fields are added.
+- Migration `0161_trade_field_access_and_rental_scope.sql` is additive. It adds authoritative nullable fields, preserves legacy columns and foreign keys, and lets new rows represent any non-empty scope combination exactly while existing rows retain the legacy fallback.
+- Deployment versions 394 and 395 failed inside migration transactions and committed no release mutation. Version 396 proved the additive migration, and version 397 added the final live presentation correction.
 - Google Apps Script relay version 16 was updated in place before the Sites release so requester role, agency, optional modules, authority and replay-safe fingerprints are retained without changing the public relay URL.
 - The relay root returned HTTP 200 with the active-service page after deployment.
 
 ## Release evidence
 
-- `npm.cmd run validate` exited 0 on the exact released source. Typecheck, warning-free lint, all integration tests, 2,898 repository tests with 2,887 passed, 11 intentionally skipped and zero failures, fresh Cloudflare D1 migration replay through `0160_trade_rental_inspections.sql`, customer-plan PDF audit, production build, Sites bundle audit and performance budgets passed.
-- The focused rental and assignment-integrity set passed 136 of 136 tests. Real SQLite transaction tests cover initial schedule synchronisation, time-only updates, stale-assessor repair and atomic rejection of mismatched appointments, second active appointments, terminal inspections and missing or inactive members.
-- Mobile validation passed 38 of 38 tests plus typecheck, lint and Android and iOS export verification. Physical-device field behaviour remains a separate gate.
-- GitHub `main`, branch `codex/rental-inspection-release` and Sites managed `main` all resolved to `dd4484efa7dd7edfc3db2eaa49df4d6a7668888a` before the saved version was created.
-- The matching local archive is 12,340,875 bytes with 511 entries and SHA-256 `6DEEB0DDC3896898351A9ABB9004BB93C59049E56C850929457B58661EA86295`.
-- Sites stored 45,168,640 bytes across 497 files with content hash `sha256:0774fbec6599f057fae97538ad7819a0546ab09f04c0d7a4c256d68592ac8399` and deployed version 393 successfully through `appgdep_6a8bffe9f218819184b74651b64ff385` at environment revision 24.
-- Fresh live desktop QA confirmed `/rental-assessment/request`, the account-free request wording, the minimum-standards default, all three optional checks off and the `/assessments` entry point. No production form was submitted and no hosted record was changed.
-- The available browser session was signed out of TLink, Chrome control was unavailable and the browser exposed no phone-viewport override. Signed-in production dashboard visual QA and live 390-pixel public-page QA therefore remain unverified rather than inferred from automated coverage.
+- `npm.cmd run validate` exited 0 on exact released source `cde1d312711b1cdc48720d17dafe4dd4a58c9807`. Typecheck, warning-free lint, source approvals, conversation checks, all 36 integration tests, the complete repository suite, fresh Cloudflare D1 replay through `0161_trade_field_access_and_rental_scope.sql`, customer-plan PDF audit, production build, Sites bundle audit and performance budgets passed.
+- The new field access and scope set passed 12 of 12 tests; the affected rental sync, schema guard and field tests passed 33 of 33; the foreign-key-enabled migration rehearsal passed.
+- Mobile validation passed 38 of 38 tests plus typecheck, lint, Expo Doctor 21 of 21 checks and Android and iOS exports. The signed Android EAS build finished successfully. Physical-device field behaviour remains a separate gate.
+- GitHub `main`, branch `codex/tlink-field-app` and Sites managed `main` all resolved to `cde1d312711b1cdc48720d17dafe4dd4a58c9807` before version 397 was saved.
+- The matching local archive is 12,351,339 bytes with SHA-256 `A6A08B7CE19F5F31C859726287FB334B990A53859A7FA58FFEAAA0725497E932`.
+- Sites stored 45,260,800 bytes across 500 files with content hash `sha256:83cc3a4899911b413e3d409bcb9292e50bc8516f0a462574630c288588daef8c` and deployed version 397 successfully through `appgdep_6a8c28eef40c819186b031d9a607ffb3` at environment revision 25.
+- Fresh live 412-pixel QA confirmed the request defaults, independent electrical-only selection, readable TLink Field install page and exact APK link. `/api/field/app-release` returned minimum and latest version 1.0.0 with the signed APK URL, and `/api/health` returned HTTP 200. No production form was submitted and no hosted record was changed.
 
 ## Boundaries
 
 - Contract-specific service wording remains provisional until the client service schedule or specification is supplied and reviewed.
 - Optional statutory-module certification still requires the correct practitioner credential and final licensed-practitioner review of declarations and test logic.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
-- Physical Android and iOS device testing remains separate from successful exported bundles unless real devices are available.
+- Signed-in dashboard visual QA and physical Samsung installation remain unverified. Android and iOS exports do not replace the planned real-device test, and no installable iOS build was produced.
+- The internal Android APK expires on 7 September 2026 and must be refreshed or replaced by the permanent distribution path before then.
 - Hosted records remain pre-launch test data until the product owner explicitly declares the platform live.
 
 ## Next five logical product steps
 
-1. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules without importing third-party branding or proprietary text.
-2. Run a supervised end-to-end assessor rehearsal on a test property, including optional-module toggles, section recovery, evidence capture, issue, supersede and 60-day report access.
-3. Add operational review screens for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-4. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic.
-5. Run physical Android and iOS field QA for offline job visibility, reconnection, large-photo upload, interrupted save recovery and issued-report viewing.
+1. Install the signed build on the Samsung, issue a John Smith field PIN from TLink Team, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
+4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
+5. Replace the expiring internal APK with the approved permanent distribution lifecycle, or refresh the internal build before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
