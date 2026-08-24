@@ -86,6 +86,10 @@ test("migration 0161 removes the minimum-only database assumption and retains no
   assert.match(migration, /json_extract\(`module_selection_snapshot`, '\$\[0\]'\) IN \('minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check'\)/);
   assert.doesNotMatch(migration, /json_extract\(`module_selection_snapshot`, '\$\[0\]'\) = 'minimum_standards'/);
   assert.match(migration, /json_array_length\(`module_selection_snapshot`\) BETWEEN 1 AND 4/);
+  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 2 OR json_extract\(`module_selection_snapshot`, '\$\[1\]'\) <>/);
+  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 3 OR json_extract\(`module_selection_snapshot`, '\$\[2\]'\) NOT IN/);
+  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 4 OR json_extract\(`module_selection_snapshot`, '\$\[3\]'\) NOT IN/);
+  assert.doesNotMatch(migration, /coalesce\(json_extract\(`module_selection_snapshot`, '\$\[2\]'\), ''\) NOT IN/);
   assert.match(migration, /CONSTRAINT `trade_rental_modules_required_check` CHECK \(`required` = 1\)/);
   assert.match(migration, /CREATE TABLE `trade_field_sessions`/);
   assert.match(migration, /CREATE UNIQUE INDEX `trade_field_sessions_token_idx`/);
