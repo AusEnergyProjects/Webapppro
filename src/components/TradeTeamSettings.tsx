@@ -128,7 +128,7 @@ type DeviceResult = {
 
 type FieldSetupResult = {
   ok?: boolean;
-  setup?: { memberId?: string; displayName: string; username?: string; pin: string; expiresAt: string };
+  setup?: { memberId?: string; displayName: string; username?: string; pin: string; expiresAt: string; deliveredTo?: string };
   revoked?: boolean;
   error?: string;
 };
@@ -474,16 +474,18 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
       const body: Record<string, unknown> = {
         action: isNew ? "add_member" : "update_member",
         memberId: !isNew && editing ? editing.id : undefined,
+        fieldUsername: fieldUsernameDraft.trim(),
+        expectedUpdatedAt: editedMember?.updatedAt,
+      };
+      if (isNew || !editedMember?.isOwner) Object.assign(body, {
         firstName: String(data.get("firstName") || "").trim(),
         lastName: String(data.get("lastName") || "").trim(),
         email: String(data.get("email") || "").trim(),
         phone: String(data.get("phone") || "").trim(),
-        fieldUsername: fieldUsernameDraft.trim(),
         scheduleColour: String(data.get("scheduleColour") || "emerald"),
         status: isNew ? "active" : editedMember?.status || "active",
         capabilities: memberServices,
-        expectedUpdatedAt: editedMember?.updatedAt,
-      };
+      });
       if (mayChangeAccess) Object.assign(body, {
         permissions: formPermissions,
         ...formPermissions,
@@ -566,7 +568,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
       const result = await response.json().catch(() => ({})) as FieldSetupResult;
       if (!response.ok || !result.ok || !result.setup) throw new Error(result.error || "The field app PIN could not be created.");
       setFieldSetup({ ...result.setup, memberId: member.id });
-      setMessage("TLink PIN created. It is shown once in this member's details.");
+      setMessage(`TLink username and PIN emailed to ${result.setup.deliveredTo || member.email}. They are also shown once here.`);
     } catch (caught) {
       setMessage(""); setError(caught instanceof Error ? caught.message : "The field app PIN could not be created.");
     } finally { setBusy(""); }
@@ -697,6 +699,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
     ? member.hasLogin ? "Login active" : member.invitePending ? "Invitation pending" : "Roster only"
     : "Former or inactive";
   const editingOwnAccess = editing !== null && editing !== "new" && isCurrentMember(editing);
+  const editingOwner = editing !== null && editing !== "new" && editing.isOwner;
   const showAccessEditor = Boolean(editing && canEditPermissions && !editingOwnAccess);
 
   return <div className={styles.workspace}>
@@ -704,7 +707,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
     <section className={styles.setupGuide} aria-label="Set up TLink for a team member">
       <div><span>1</span><strong>Add the person</strong><small>Name and services only take a minute.</small></div>
       <div><span>2</span><strong>Open details</strong><small>Check or change their TLink username.</small></div>
-      <div><span>3</span><strong>Generate PIN</strong><small>Send the username and one-time PIN privately.</small></div>
+      <div><span>3</span><strong>Generate PIN</strong><small>TLink emails the username and PIN to them.</small></div>
     </section>
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
@@ -718,30 +721,30 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             <caption className={styles.srOnly}>Team member contact details, status and schedule colour</caption>
             <thead><tr><th>First name</th><th>Last name</th><th>Phone</th><th>Email</th><th>Status</th><th>Colour</th><th>Actions</th></tr></thead>
             <tbody>{visibleMembers.map((member) => <tr key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-              <td><strong>{member.firstName || "Not added"}{member.isOwner ? <small>Owner</small> : <small>TLink: {member.fieldUsername || "Not set"}</small>}</strong></td>
+              <td><strong>{member.firstName || "Not added"}{member.isOwner && <small>Owner</small>}<small>TLink: {member.fieldUsername || "Not set"}</small></strong></td>
               <td><strong>{member.lastName || "Not added"}</strong></td>
               <td>{member.phone ? <a href={`tel:${member.phone}`}>{member.phone}</a> : <span>Not added</span>}</td>
               <td>{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : <span>Not added</span>}</td>
               <td><span className={`${styles.state} ${member.status === "active" ? styles.current : styles.expired}`}>{statusName(member)}</span></td>
               <td><span className={styles.colourName}><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span></td>
-              <td>{!member.isOwner && <button type="button" className={styles.memberMenuButton} aria-label={`Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>Open details</button>}</td>
+              <td><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></td>
             </tr>)}</tbody>
           </table>
         </div>
         <div className={styles.mobileCards}>{visibleMembers.map((member) => <article className={styles.memberCard} key={member.id} tabIndex={0} onContextMenu={(event) => { if (!member.isOwner || isOwner) showMenu(event, member); }}>
-        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span>{!member.isOwner && <small>TLink username: {member.fieldUsername || "Not set"}</small>}<small>{statusName(member)}</small></div>{!member.isOwner && <button type="button" className={styles.memberMenuButton} aria-label={`Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>Open details</button>}</header>
+        <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>TLink username: {member.fieldUsername || "Not set"}</small><small>{statusName(member)}</small></div><button type="button" className={styles.memberMenuButton} aria-label={member.isOwner ? "Set up TLink for my account" : `Open details for ${memberLabel(member)}`} onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button></header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        {!member.isOwner && <div className={styles.actions}><button type="button" onClick={() => openEdit(member)}>Open details</button><button type="button" onClick={() => void openFiles(member)}>Documents</button></div>}
+        <div className={styles.actions}><button type="button" onClick={() => openEdit(member)}>{member.isOwner ? "Set up my app" : "Open details"}</button><button type="button" onClick={() => void openFiles(member)}>Documents</button></div>
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
 
-    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}>{!menu.member.isOwner && <button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>Open member details</button>}<button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
+    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}><button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{menu.member.isOwner ? "Set up my TLink app" : "Open member details"}</button><button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
 
     {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
       <form className={styles.form} onSubmit={saveMember}>
-        <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Add email only if this person also needs office or browser login.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>
+        {editingOwner ? <p className={styles.status}>This is your main business account. TLink will email the app username and one-time PIN to <strong>{editing.email}</strong>.</p> : <div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional until app setup<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>An email is required when you generate a TLink app PIN. Office login remains optional.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>}
         <section className={styles.fieldAccessPanel} aria-label="TLink app access">
           <img src="/tlink-icon-192.png" alt="" />
           <div className={styles.fieldAccessBody}>
@@ -749,8 +752,9 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             <label>TLink username<input name="fieldUsername" autoCapitalize="none" autoComplete="off" maxLength={60} placeholder="Uses first and last name if left blank" value={fieldUsernameDraft} onChange={(event) => { setFieldUsernameDraft(event.target.value); setFieldUsernameDirty(true); setFieldSetup(undefined); }} /><small className={styles.hint}>You control this username. It must be unique inside your team.</small></label>
             {editing === "new" ? <p className={styles.fieldPrompt}>Save the team member first, then their PIN button appears here.</p> : <>
               <div className={styles.actions}>
-                <button type="button" className={styles.primary} disabled={editing.status !== "active" || fieldUsernameDirty || busy === `field-pin:${editing.id}`} onClick={() => void createFieldPin(editing)}>{busy === `field-pin:${editing.id}` ? "Generating..." : "Generate 6-digit PIN"}</button>
+                <button type="button" className={styles.primary} disabled={editing.status !== "active" || !editing.email || fieldUsernameDirty || busy === `field-pin:${editing.id}`} onClick={() => void createFieldPin(editing)}>{busy === `field-pin:${editing.id}` ? "Generating..." : "Generate and email PIN"}</button>
                 {fieldUsernameDirty && <small>Save the username before generating a PIN.</small>}
+                {!editing.email && <small>Add and save an email address before generating a PIN.</small>}
               </div>
               {fieldSetup?.memberId === editing.id && <div className={styles.pinResult}><div><span>USERNAME</span><strong>{fieldSetup.username || fieldSetup.displayName}</strong></div><div><span>ONE-TIME PIN</span><strong>{fieldSetup.pin}</strong></div><p>Expires {new Date(fieldSetup.expiresAt).toLocaleString("en-AU")}. Creating another PIN cancels this one.</p><button type="button" className={styles.secondary} onClick={() => void copyFieldSetup()}>Copy username and PIN</button></div>}
               <div className={styles.memberControls}>
@@ -762,15 +766,15 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
             </>}
           </div>
         </section>
-        {editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
+        {!editingOwner && <>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
         <fieldset className={styles.colourPicker}><legend>Schedule colour</legend><p className={styles.hint}>This colour identifies the team member throughout the schedule.</p><div>{scheduleColours.map((colour) => <label key={colour.id} className={`${styles.colourChoice} ${styles[colour.id]}`}><input type="radio" name="scheduleColour" value={colour.id} defaultChecked={(editing === "new" ? "emerald" : editing.scheduleColour || "emerald") === colour.id} /><span aria-hidden="true" /><strong>{colour.label}</strong></label>)}</div></fieldset>
         <fieldset className={styles.permissionGroup}><legend>Services</legend><p className={styles.hint}>Choose the work this person performs. This does not change the services your business offers.</p><div className={styles.grid}>{ENERGY_SERVICE_CATALOGUE.map((service) => <label className={styles.check} key={service.id}><input type="checkbox" checked={memberServices.includes(service.id)} onChange={(event) => setMemberServices((current) => event.target.checked ? [...new Set([...current, service.id])] : current.filter((id) => id !== service.id))} /><span>{service.label}</span></label>)}</div></fieldset>
         {showAccessEditor ? <>
           <label>Quick access preset<select value={formPreset} onChange={(event) => applyPreset(event.target.value as AccessPreset)}><option value="custom" disabled>Custom access</option>{accessPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small className={styles.hint}>{editing === "new" ? accessPresets.find((item) => item.id === formPreset)?.description : "This person&apos;s saved switches are shown below."} Applying a preset only fills the switches below. You can then change any permission for this person.</small></label>
           <fieldset className={styles.permissionGroup}><legend>Work visibility</legend><div className={styles.grid}><label>Jobs<select value={formPermissions.jobScope} onChange={(event) => setPermission("jobScope", event.target.value as Scope)}><option value="own">Assigned jobs only</option><option value="team" disabled={!isOwner && actorPermissions.jobScope !== "team"}>All team jobs</option></select><small className={styles.hint}>Own scope means this person cannot view, edit, assign or reassign another person&apos;s work.</small></label><label>Schedule<select value={formPermissions.scheduleScope} onChange={(event) => setPermission("scheduleScope", event.target.value as Scope)}><option value="own">Own schedule only</option><option value="team" disabled={!isOwner && actorPermissions.scheduleScope !== "team"}>Whole team schedule</option></select><small className={styles.hint}>Own scope means this person cannot view, schedule or reschedule another person&apos;s work.</small></label></div></fieldset>
           {permissionGroups.map((group) => <fieldset className={styles.permissionGroup} key={group.label}><legend>{group.label}</legend>{group.items.map((item) => <label className={styles.check} key={item.key}><input type="checkbox" disabled={!isOwner && !actorPermissions[item.key]} checked={Boolean(formPermissions[item.key])} onChange={(event) => setPermission(item.key, event.target.checked)} /><span>{item.label}<small>{!isOwner && !actorPermissions[item.key] ? "You cannot grant access you do not have." : item.detail}</small></span></label>)}</fieldset>)}
-        </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person&apos;s contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}
-        <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>
+        </> : <p className={styles.status}>{editingOwnAccess ? "You cannot edit your own access permissions." : "You can update this person&apos;s contact details and status. Only the owner or a delegated access manager can change permissions."}</p>}</>}
+        <div className={styles.actions}><button type="submit" className={styles.primary} disabled={busy === "member"}>{busy === "member" ? "Saving..." : editing === "new" ? "Add team member" : editingOwner ? "Save app username" : "Save changes"}</button><button type="button" className={styles.secondary} disabled={Boolean(busy)} onClick={closeMemberDialog}>{editing === "new" ? "Cancel" : "Done"}</button></div>
       </form></div></div>}
 
     <section className={styles.devices} aria-label="Field devices"><header className={styles.listHeader}><div><strong>Field devices</strong><p className={styles.hint}>Find and revoke any lost or replaced phone or tablet. Authorising again lets its active user register securely.</p></div><span>{deviceRoster.total} devices | {pendingPushEvents} alerts queued</span></header>

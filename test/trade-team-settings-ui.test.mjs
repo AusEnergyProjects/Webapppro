@@ -89,7 +89,7 @@ test("large field device inventories remain searchable and revokable beyond the 
 
 test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /onContextMenu/);
-  assert.match(settings, />Open details<\/button>/);
+  assert.match(settings, /member\.isOwner \? "Set up my app" : "Open details"/);
   assert.match(settings, /role="menu"/);
   assert.match(settings, /Open documents/);
   assert.match(settings, /application\/pdf/);
@@ -126,7 +126,9 @@ test("member profiles use a dense contact roster, schedule colour and validated 
   assert.match(settings, /capabilities: memberServices/);
   assert.match(settings, /fieldUsername: fieldUsernameDraft\.trim\(\)/);
   assert.match(settings, /TLink username/);
-  assert.match(settings, /Generate 6-digit PIN/);
+  assert.match(settings, /Generate and email PIN/);
+  assert.match(settings, /Set up my app/);
+  assert.match(settings, /TLink emails the username and PIN/);
 });
 
 test("staff portal renders only permission-backed operations", () => {

@@ -886,7 +886,6 @@ export async function PATCH(request: Request) {
       }
       const status = body.status === undefined ? String(current.status) : cleanAdminText(body.status, 20);
       if (!MEMBER_LIFECYCLE_STATUSES.has(status)) return adminJson({ ok: false, error: "Choose a valid account status." }, 400);
-      if (String(current.member_uid) === access.ownerUid) return adminJson({ ok: false, error: "The business owner remains active." }, 409);
       const lifecycleChanged = status !== String(current.status);
       if (lifecycleChanged) {
         const decision = memberLifecycleDecision(access, { memberId, memberUid: String(current.member_uid || "") });

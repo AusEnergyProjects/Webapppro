@@ -38,7 +38,7 @@ test("field PIN attempts reset by window and lock at the bounded threshold", () 
   });
 });
 
-test("field sessions are one-time, device-bound, hashed and routed through team scope", async () => {
+test("field sessions are one-time, device-bound, server-secret hashed and routed through team scope", async () => {
   const [server, team, sessionRoute, nativeSession, nativeApi] = await Promise.all([
     read("src/lib/trade-field-session-server.ts"),
     read("src/lib/trade-team-server.ts"),
@@ -46,8 +46,9 @@ test("field sessions are one-time, device-bound, hashed and routed through team 
     read("mobile/src/lib/field-session.ts"),
     read("mobile/src/lib/api.ts"),
   ]);
-  assert.match(server, /PBKDF2/);
-  assert.match(server, /210_000/);
+  assert.match(server, /TLINK_FIELD_PIN_PEPPER/);
+  assert.match(server, /name: "HMAC", hash: "SHA-256"/);
+  assert.match(server, /FIELD_ACCESS_NOT_CONFIGURED/);
   assert.match(server, /status = 'consumed'/);
   assert.match(server, /token_hash/);
   assert.match(server, /s\.device_id = \?/);
@@ -95,10 +96,11 @@ test("team members have an office-controlled unique TLink username for PIN setup
   assert.match(schema, /fieldUsername: text\("field_username"\)/);
   assert.match(route, /fieldUsername: row\.field_username/);
   assert.match(route, /field_username_normalized = \?/);
-  assert.match(server, /SELECT id, field_username, field_username_normalized, status/);
+  assert.match(server, /SELECT id, email, display_name, field_username, field_username_normalized, status/);
   assert.match(settings, /TLink username/);
-  assert.match(settings, /Generate 6-digit PIN/);
+  assert.match(settings, /Generate and email PIN/);
   assert.match(settings, /Copy username and PIN/);
+  assert.match(settings, /Set up my app/);
 });
 
 test("migration 0162 enforces a unique normalized TLink username inside each business", async () => {

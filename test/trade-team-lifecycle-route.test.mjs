@@ -45,7 +45,7 @@ const managerAccess = {
   canViewFieldEvidence: false, canManageFieldEvidence: false, canRunReports: false, canSearchCustomers: false,
 };
 
-function loadRoute(database, aborted) {
+function loadRoute(database, aborted, currentAccess = managerAccess) {
   const output = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
     fileName: "src/app/api/trade-team/route.ts",
@@ -56,15 +56,15 @@ function loadRoute(database, aborted) {
     "@/lib/admin-server": { adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum), sameOrigin: () => true },
     "@/lib/firebase-server": { requireFirebaseIdentity: async () => ({ uid: "manager-uid" }) },
-    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => managerAccess,
+    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => currentAccess,
       canManageTeam: (value) => value.isOwner || value.canManageTeam,
       canAssignJob: () => false, assignedJob: async () => { throw new Error("not used"); } },
     "@/lib/trade-team-sync-server": { guardedOnlineChildMutationBatch: async () => {}, guardedOnlineJobMutationBatch: async () => {},
       jobSyncChangeStatements: () => [], nextJobRevision: (value) => Number(value) + 1 },
     "@/lib/trade-mobile-device-revocation": { abortMemberDeviceUploads: async (ownerUid, memberId) => aborted.push({ ownerUid, memberId }) },
     "@/lib/trade-team-lifecycle-policy.mjs": { memberLifecycleDecision: (access, target) => {
-      if (target.memberId === access.memberId || target.memberUid === access.actorUid) return { allowed: false, reason: "self_protected" };
       if (target.memberUid === access.ownerUid) return { allowed: false, reason: "owner_protected" };
+      if (target.memberId === access.memberId || target.memberUid === access.actorUid) return { allowed: false, reason: "self_protected" };
       return { allowed: true };
     } },
     "@/lib/trade-field-access-policy.mjs": {
@@ -237,4 +237,48 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(username.field_username, "John Smith");
   assert.equal(username.field_username_normalized, "john smith");
   assert.equal(database.prepare("SELECT status FROM trade_field_access_codes WHERE id='field-code-1'").get().status, "revoked");
+});
+
+test("the owner can set their own TLink username while owner lifecycle and permissions stay protected", async () => {
+  const database = fixture();
+  const ownerAccess = {
+    ...managerAccess,
+    actorUid: "owner-1",
+    memberId: "owner-member",
+    displayName: "Owner",
+    isOwner: true,
+    canEditTeamPermissions: true,
+  };
+  const route = loadRoute(database, [], ownerAccess);
+  const saved = await patch(route, {
+    action: "update_member",
+    memberId: "owner-member",
+    fieldUsername: "James",
+    expectedUpdatedAt: "2026-08-12T00:00:00.000Z",
+  });
+  const savedPayload = await saved.json();
+  assert.equal(saved.status, 200, savedPayload.error);
+  const owner = database.prepare(`SELECT field_username, field_username_normalized, status, updated_at
+    FROM trade_team_members WHERE id = 'owner-member'`).get();
+  assert.equal(owner.field_username, "James");
+  assert.equal(owner.field_username_normalized, "james");
+  assert.equal(owner.status, "active");
+
+  const suspended = await patch(route, {
+    action: "update_member",
+    memberId: "owner-member",
+    status: "suspended",
+    expectedUpdatedAt: owner.updated_at,
+  });
+  assert.equal(suspended.status, 409);
+  assert.equal(database.prepare("SELECT status FROM trade_team_members WHERE id='owner-member'").get().status, "active");
+
+  const permissions = await patch(route, {
+    action: "update_member",
+    memberId: "owner-member",
+    canManageTeam: false,
+    expectedUpdatedAt: owner.updated_at,
+  });
+  assert.equal(permissions.status, 403);
+  assert.equal(database.prepare("SELECT can_manage_team FROM trade_team_members WHERE id='owner-member'").get().can_manage_team, 1);
 });

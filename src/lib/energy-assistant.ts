@@ -4503,13 +4503,13 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:apprentice|worker|employee|staff|team member|technician|teammate)\b/i.test(query)) {
     return structured("trades", {
       directAnswer:
-        "In the signed-in TLink dashboard, open Team and choose Add team member. Enter the apprentice's details and services, then save them. Open their details, set the TLink username and choose Generate 6-digit PIN. Copy the username and PIN to the worker so they can authorise the TLink app on their phone. Add an email only if they also need an office or browser login. Only the owner or a member with team-management access can add them, and only an owner or delegated access manager can grant permissions.",
+        "In the signed-in TLink dashboard, open Team and choose Add team member. Enter the apprentice's details, services and email, then save them. Open their details, set the TLink username and choose Generate and email PIN. TLink emails the username and one-time PIN to the worker so they can authorise the TLink app on their phone. The email is required for PIN delivery, while office or browser login remains optional. A sole trader can use Set up my app on the owner row. Only the owner or a member with team-management access can add people, and only an owner or delegated access manager can grant permissions.",
       status: "answered",
       citations: [],
       confidence: "high",
       assumptions: ["No private team record was opened or changed, and the requester is not assumed to have team-management permission."],
       practicalSteps: [
-        "Open TLink dashboard, then Team, and add the apprentice with their real name, services and email only if a login is required.",
+        "Open TLink dashboard, then Team, and add the apprentice with their real name, services and email. The email receives their one-time app PIN.",
         "Apply assigned-job and least-privilege access, save the member, then copy the displayed private login link.",
         "Send the link only to that person and verify their access before assigning work or evidence tasks.",
       ],
