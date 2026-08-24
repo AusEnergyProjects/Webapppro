@@ -15,6 +15,7 @@ import {
   isPublicRentalAssessmentRequest,
   isPublicRentalAssessmentRequesterRole,
   isPublicRentalAssessmentSubmissionId,
+  normalizePublicRentalAssessmentModules,
   normalizePublicRentalAssessmentOptionalModules,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
@@ -217,9 +218,13 @@ export function validateLeadPayload(raw) {
     if (!isPublicRentalAssessmentSubmissionId(submissionId)) {
       return { ok: false, error: "Start a new rental assessment request and try again." };
     }
-    const requestedOptionalModules = normalizePublicRentalAssessmentOptionalModules(raw.requestedOptionalModules);
-    if (!requestedOptionalModules) {
-      return { ok: false, error: "The optional assessment selection was not recognised." };
+    const legacyOptionalModules = normalizePublicRentalAssessmentOptionalModules(raw.requestedOptionalModules);
+    const requestedAssessmentModules = raw.requestedAssessmentModules === undefined
+      && legacyOptionalModules
+      ? ["minimum_standards", ...legacyOptionalModules]
+      : normalizePublicRentalAssessmentModules(raw.requestedAssessmentModules);
+    if (!requestedAssessmentModules) {
+      return { ok: false, error: "Choose at least one recognised assessment or safety-check service." };
     }
     const phoneDigits = phone.replace(/\D/g, "");
     if (phone && (!PUBLIC_PLAN_PHONE_RE.test(phone) || phoneDigits.length < 8 || phoneDigits.length > 15)) {
@@ -242,7 +247,8 @@ export function validateLeadPayload(raw) {
         state: "VIC",
         requesterRole,
         agencyName: requesterRole === "agent-property-manager" ? agencyName : "",
-        requestedOptionalModules,
+        requestedAssessmentModules,
+        requestedOptionalModules: requestedAssessmentModules.filter((moduleKey) => moduleKey !== "minimum_standards"),
         authorityConfirmed: true,
         website: cleanText(raw.website, 200),
         clientStartedAt: cleanNumber(raw.clientStartedAt, 0, Number.MAX_SAFE_INTEGER),

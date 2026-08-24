@@ -4,6 +4,7 @@ import { CryptoDigestAlgorithm, digest } from 'expo-crypto';
 import { API_BASE_URL, APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { getDeviceId } from '@/lib/device';
 import { firebaseAuth } from '@/lib/auth';
+import { getFieldSessionToken } from '@/lib/field-session';
 
 export class ApiError extends Error {
   constructor(
@@ -25,8 +26,19 @@ async function bearer(user?: User | null) {
 async function authenticatedHeaders(init: RequestInit, user?: User | null) {
   const deviceId = await getDeviceId();
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${await bearer(user)}`);
+  const fieldToken = await getFieldSessionToken();
+  headers.set('Authorization', fieldToken
+    ? `TLinkField ${fieldToken}`
+    : `Bearer ${await bearer(user)}`);
   headers.set('x-aea-device-id', deviceId);
+  headers.set('x-aea-platform', MOBILE_PLATFORM);
+  headers.set('x-aea-app-version', APP_VERSION);
+  return headers;
+}
+
+async function deviceHeaders(init: RequestInit) {
+  const headers = new Headers(init.headers);
+  headers.set('x-aea-device-id', await getDeviceId());
   headers.set('x-aea-platform', MOBILE_PLATFORM);
   headers.set('x-aea-app-version', APP_VERSION);
   return headers;
@@ -63,6 +75,20 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
     );
     throw error;
   }
+  return body as T;
+}
+
+export async function publicApiRequest<T>(path: string, init: RequestInit = {}) {
+  const headers = await deviceHeaders(init);
+  if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
+  if (!response.ok) throw new ApiError(
+    String(body.error || 'The request could not be completed.'),
+    response.status,
+    String(body.code || ''),
+    String(body.minimumVersion || ''),
+  );
   return body as T;
 }
 

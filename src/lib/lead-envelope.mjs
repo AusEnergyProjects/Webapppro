@@ -87,6 +87,7 @@ export function publicPlanSubmissionFingerprint(payload) {
     projectNotes: payload?.projectNotes || "",
     requesterRole: payload?.requesterRole || "",
     agencyName: payload?.agencyName || "",
+    requestedAssessmentModules: payload?.requestedAssessmentModules || [],
     requestedOptionalModules: payload?.requestedOptionalModules || [],
     authorityConfirmed: payload?.authorityConfirmed === true,
     tradeSharing: payload?.tradeSharing || null,

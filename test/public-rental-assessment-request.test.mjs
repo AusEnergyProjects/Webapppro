@@ -11,9 +11,12 @@ import {
 import { validateLeadPayload } from "../src/lib/lead-validation.mjs";
 import {
   isPublicRentalAssessmentRequest,
+  normalizePublicRentalAssessmentModules,
   normalizePublicRentalAssessmentOptionalModules,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
+  PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES,
+  PUBLIC_RENTAL_ASSESSMENT_MODULES,
   PUBLIC_RENTAL_ASSESSMENT_OPTIONAL_MODULES,
   PUBLIC_RENTAL_ASSESSMENT_REQUEST_KIND,
   PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY,
@@ -60,6 +63,7 @@ test("rental assessment requests default to minimum standards and retain only al
     state: "NSW",
   }));
   assert.equal(result.ok, true);
+  assert.deepEqual(result.value.requestedAssessmentModules, ["minimum_standards"]);
   assert.deepEqual(result.value.requestedOptionalModules, []);
   assert.deepEqual(result.value.projectCategories, ["rental-inspection"]);
   assert.deepEqual(result.value.projectPriorities, ["assessment-compliance"]);
@@ -74,7 +78,7 @@ test("rental assessment requests default to minimum standards and retain only al
     "customerState", "customerStreetAddress", "customerSuburb", "customerUnitNumber",
     "email", "enquiry", "name", "phone", "postcode", "preferredContact",
     "projectCategories", "projectNotes", "projectPriorities", "projectStage",
-    "propertyRelationship", "requestedOptionalModules", "requesterRole", "state",
+    "propertyRelationship", "requestedAssessmentModules", "requestedOptionalModules", "requesterRole", "state",
     "submissionId", "submissionType", "submittedAt", "upgrades", "website",
   ].sort());
 });
@@ -100,7 +104,7 @@ test("rental assessment validation requires exact Victorian authority, role, sco
   })).error, /Victorian suburb/i);
   assert.match(validateLeadPayload(validRentalRequest({
     requestedOptionalModules: ["two_year_electrical_check"],
-  })).error, /optional assessment selection/i);
+  })).error, /at least one recognised assessment/i);
   assert.match(validateLeadPayload(validRentalRequest({
     consent: {
       accepted: true,
@@ -114,6 +118,10 @@ test("rental assessment validation requires exact Victorian authority, role, sco
     "electrical_safety_check",
     "smoke_alarm_check",
   ]), ["electrical_safety_check", "smoke_alarm_check"]);
+  assert.deepEqual(PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES, ["minimum_standards"]);
+  assert.deepEqual(normalizePublicRentalAssessmentModules(["electrical_safety_check"]), ["electrical_safety_check"]);
+  assert.deepEqual(normalizePublicRentalAssessmentModules(PUBLIC_RENTAL_ASSESSMENT_MODULES), PUBLIC_RENTAL_ASSESSMENT_MODULES);
+  assert.equal(normalizePublicRentalAssessmentModules([]), null);
   assert.deepEqual(normalizePublicRentalAssessmentOptionalModules([
     "smoke_alarm_check",
     "electrical_safety_check",
@@ -162,18 +170,18 @@ test("rental assessment envelopes are stable, manual-review only and bind materi
   );
 });
 
-test("the public rental form keeps every separate safety check controlled and off by default", () => {
+test("the public rental form defaults minimum standards on and keeps every scope independently controlled", () => {
   const component = fs.readFileSync("src/components/PublicRentalAssessmentRequestForm.tsx", "utf8");
   const fieldWorkflow = fs.readFileSync("src/components/TradeRentalInspectionPanel.tsx", "utf8");
   const page = fs.readFileSync("src/app/rental-assessment/request/page.tsx", "utf8");
   const assessments = fs.readFileSync("src/app/assessments/page.tsx", "utf8");
-  assert.match(component, /useState<string\[\]>\(\[\]\)/);
-  assert.match(component, /checked=\{requestedOptionalModules\.includes\(moduleKey\)\}/);
+  assert.match(component, /useState<string\[\]>\(\[\.\.\.PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES\]\)/);
+  assert.match(component, /checked=\{requestedAssessmentModules\.includes\(moduleKey\)\}/);
   assert.doesNotMatch(component, /defaultChecked/);
   for (const moduleKey of PUBLIC_RENTAL_ASSESSMENT_OPTIONAL_MODULES) {
     assert.match(component, new RegExp(moduleKey));
   }
-  assert.match(component, /separate and off by default/i);
+  assert.match(component, /selected by default.*selected or unselected/i);
   assert.match(component, /function changeConsent\(accepted: boolean\)/);
   assert.match(component, /consentGrantedAt\.current = new Date\(\)\.toISOString\(\)/);
   assert.match(component, /onChange=\{\(event\) => changeConsent\(event\.target\.checked\)\}/);

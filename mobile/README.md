@@ -1,11 +1,16 @@
-# AEA Field
+# TLink Field
 
-AEA Field is the native iOS and Android technician app for the Australian Energy Assessments installer CRM. It is intentionally narrower than the office workspace: technicians see assigned work, complete checklists, record time and add field evidence without receiving protected customer contact information.
+TLink Field is the native iOS and Android app for technicians, trades and assessors using TLink. It is intentionally narrower than the office workspace: field workers see assigned work, complete workflows, record time and add field evidence without receiving protected customer contact information.
 
 ## What is implemented
 
-- Firebase email and password authentication, password reset and a configuration-ready Google sign-in path.
+- TLink-issued one-time setup PIN sign-in using the worker's exact name, with a device-bound 90-day field session stored in the secure store.
+- Optional Firebase email and password sign-in for office users who need the broader web account path.
 - Registered installation-specific devices with app-version enforcement, native push tokens and owner-controlled revocation.
+- A worker-specific week calendar, day schedule, assigned-job cards and one-tap workflow launch.
+- A simple plus flow for workers who are allowed to create a new self-assigned rental or safety job.
+- Independent rental minimum standards, electrical safety, gas safety and smoke alarm scopes. Minimum standards is selected by default, every scope can be cleared and at least one scope is required.
+- A permanent Check for update control backed by EAS Update and the TLink full-build release endpoint.
 - Assigned-job bootstrap and delta sync through contract version 3.
 - SQLCipher-encrypted job, action, conflict and upload metadata.
 - AES-256-GCM encrypted 5 MB photo and document chunks, with the key held in the device secure store.
@@ -35,20 +40,21 @@ npm run doctor
 npm run export:verify
 ```
 
-## Native service credentials still required for distribution
+## Distribution configuration
 
-Before an internal store build, create and add:
+The Android EAS project is `@ausenergy/aea-field` with project ID `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9`. Preview builds use internal distribution and the `preview` update channel. The Android Firebase client file is supplied to EAS locally and remains excluded from Git.
+
+Before iOS or public app-store distribution, create and add:
 
 - Android and iOS Google OAuth client IDs for the existing Firebase project.
-- Android Firebase `google-services.json` for FCM.
 - iOS Firebase `GoogleService-Info.plist` and APNs credentials.
-- The EAS project ID, Apple Developer team and Google Play application record.
+- The Apple Developer team and Google Play application record.
 
-These credentials are not source code and must not be committed. Email and password sign-in, offline operation and secure API sync do not depend on Google OAuth being configured.
+These credentials are not source code and must not be committed. TLink name and PIN sign-in, offline operation and secure API sync do not depend on Google OAuth being configured.
 
 ## Evidence capture boundary
 
-Camera capture disables editing, requests the highest picker quality and available EXIF, then preserves and encrypts the exact file returned by the platform picker. The picker or operating system may still determine the camera output format. On iOS, Expo ImagePicker does not return GPS tags in EXIF for camera captures, so AEA Field records a separate foreground location observation with its timestamp, permission state, accuracy, altitude and heading when available.
+Camera capture disables editing, requests the highest picker quality and available EXIF, then preserves and encrypts the exact file returned by the platform picker. The picker or operating system may still determine the camera output format. On iOS, Expo ImagePicker does not return GPS tags in EXIF for camera captures, so TLink Field records a separate foreground location observation with its timestamp, permission state, accuracy, altitude and heading when available.
 
 `expo-location` is configured for foreground use only. The app never requests background location. A new native development or distribution build is required after adding this module. If location permission is denied, location services are off or no fix is available, the envelope records that state. A governed requirement marked as GPS-required is blocked until a current location is available.
 

@@ -38,7 +38,7 @@ test("the Victorian minimum standards template is current, source backed and com
   assert.doesNotMatch(JSON.stringify(VIC_RENTAL_ASSESSMENT_TEMPLATE), /homes victoria|johns lyng|detector inspector/i);
 });
 
-test("minimum standards are mandatory and optional safety modules are explicit", () => {
+test("every rental scope is independently selectable and minimum standards are the default", () => {
   assert.deepEqual(RENTAL_ASSESSMENT_MODULE_KEYS, [
     "minimum_standards",
     "electrical_safety_check",
@@ -46,23 +46,25 @@ test("minimum standards are mandatory and optional safety modules are explicit",
     "smoke_alarm_check",
   ]);
   assert.deepEqual(RENTAL_ASSESSMENT_OPTIONAL_MODULE_KEYS, [
+    "minimum_standards",
     "electrical_safety_check",
     "gas_safety_check",
     "smoke_alarm_check",
   ]);
-  assert.deepEqual(normalizeRentalAssessmentModules([]), ["minimum_standards"]);
+  assert.deepEqual(normalizeRentalAssessmentModules(undefined), ["minimum_standards"]);
+  assert.deepEqual(normalizeRentalAssessmentModules([]), []);
   assert.equal(rentalInspectionServiceAddressAccepted("rental-inspection", "VIC"), true);
   assert.equal(rentalInspectionServiceAddressAccepted("rental-inspection", "NSW"), false);
   assert.equal(rentalInspectionServiceAddressAccepted("rental-inspection", ""), false);
   assert.equal(rentalInspectionServiceAddressAccepted("electrical", "NSW"), true);
   assert.deepEqual(normalizeRentalAssessmentModules(JSON.stringify([
     "gas_safety_check",
-    "unknown",
     "gas_safety_check",
     "electrical_safety_check",
-  ])), ["minimum_standards", "electrical_safety_check", "gas_safety_check"]);
+  ])), ["electrical_safety_check", "gas_safety_check"]);
+  assert.deepEqual(normalizeRentalAssessmentModules(["unknown"]), []);
   const snapshot = rentalAssessmentTemplateSnapshot(["smoke_alarm_check"]);
-  assert.deepEqual(snapshot.selectedModules, ["minimum_standards", "smoke_alarm_check"]);
+  assert.deepEqual(snapshot.selectedModules, ["smoke_alarm_check"]);
   assert.deepEqual(Object.keys(snapshot.modules), snapshot.selectedModules);
   for (const key of RENTAL_ASSESSMENT_OPTIONAL_MODULE_KEYS) {
     const assessmentModule = VIC_RENTAL_ASSESSMENT_TEMPLATE.modules[key];

@@ -124,6 +124,13 @@ type DeviceResult = {
   error?: string;
 };
 
+type FieldSetupResult = {
+  ok?: boolean;
+  setup?: { displayName: string; pin: string; expiresAt: string };
+  revoked?: boolean;
+  error?: string;
+};
+
 const fullPermissions: TradeTeamPermissions = {
   jobScope: "team", canCreateJobs: true, canManageJobs: true, canAssignJobs: true,
   canViewCustomers: true, canManageCustomers: true,
@@ -145,7 +152,7 @@ const officePermissions: TradeTeamPermissions = {
 };
 
 const fieldPermissions: TradeTeamPermissions = {
-  jobScope: "own", canCreateJobs: false, canManageJobs: true, canAssignJobs: false,
+  jobScope: "own", canCreateJobs: true, canManageJobs: true, canAssignJobs: false,
   canViewCustomers: false, canManageCustomers: false,
   canSearchCustomers: false,
   canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canApplyDiscounts: false,
@@ -159,7 +166,7 @@ const fieldPermissions: TradeTeamPermissions = {
 const accessPresets: Array<{ id: AccessPreset; name: string; description: string; permissions: TradeTeamPermissions }> = [
   { id: "manager", name: "Manager access", description: "Starts with full business access, including reports and customer search.", permissions: fullPermissions },
   { id: "office", name: "Office access", description: "Starts with jobs, customers, quoting, accounts, reports and the team schedule.", permissions: officePermissions },
-  { id: "field", name: "Field access", description: "Starts with assigned jobs, own schedule and field evidence only.", permissions: fieldPermissions },
+  { id: "field", name: "Field access", description: "Starts with assigned jobs, simple self-assigned job intake, own schedule and field evidence.", permissions: fieldPermissions },
 ];
 
 const scheduleColours: Array<{ id: ScheduleColour; label: string }> = [
@@ -269,6 +276,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   const [page, setPage] = useState(1);
   const [roster, setRoster] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [inviteUrl, setInviteUrl] = useState("");
+  const [fieldSetup, setFieldSetup] = useState<FieldSetupResult["setup"]>(undefined);
   const [devices, setDevices] = useState<TeamDevice[]>([]);
   const [deviceQuery, setDeviceQuery] = useState("");
   const [appliedDeviceQuery, setAppliedDeviceQuery] = useState("");
@@ -532,6 +540,49 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
     catch { setError("Copy was blocked. Select the login link and copy it manually."); }
   }
 
+  async function createFieldPin(member: TradeTeamMember) {
+    setMenu(null); setBusy(`field-pin:${member.id}`); setError(""); setMessage("Creating a one-time field app PIN...");
+    try {
+      const response = await fetch("/api/trade-team/field-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
+        body: JSON.stringify({ action: "issue_pin", memberId: member.id }),
+      });
+      const result = await response.json().catch(() => ({})) as FieldSetupResult;
+      if (!response.ok || !result.ok || !result.setup) throw new Error(result.error || "The field app PIN could not be created.");
+      setFieldSetup(result.setup);
+      setMessage("Field app PIN created. It is shown once below.");
+    } catch (caught) {
+      setMessage(""); setError(caught instanceof Error ? caught.message : "The field app PIN could not be created.");
+    } finally { setBusy(""); }
+  }
+
+  async function copyFieldSetup() {
+    if (!fieldSetup) return;
+    const text = `AEA Field\nName: ${fieldSetup.displayName}\nPIN: ${fieldSetup.pin}\nExpires: ${new Date(fieldSetup.expiresAt).toLocaleString("en-AU")}`;
+    try { await navigator.clipboard.writeText(text); setMessage("Field app sign-in details copied."); }
+    catch { setError("Copy was blocked. Select the name and PIN and copy them manually."); }
+  }
+
+  async function revokeFieldAccess(member: TradeTeamMember) {
+    setMenu(null);
+    if (!window.confirm(`Sign ${memberLabel(member)} out of every field device and cancel unused PINs?`)) return;
+    setBusy(`field-revoke:${member.id}`); setError(""); setMessage("Revoking field app access...");
+    try {
+      const response = await fetch("/api/trade-team/field-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await tokenHeaders()) },
+        body: JSON.stringify({ action: "revoke", memberId: member.id }),
+      });
+      const result = await response.json().catch(() => ({})) as FieldSetupResult;
+      if (!response.ok || !result.ok) throw new Error(result.error || "Field app access could not be revoked.");
+      setFieldSetup(undefined); await loadDevices();
+      setMessage("Field app access revoked on every registered device.");
+    } catch (caught) {
+      setMessage(""); setError(caught instanceof Error ? caught.message : "Field app access could not be revoked.");
+    } finally { setBusy(""); }
+  }
+
   async function updateDevice(device: TeamDevice, action: "revoke_device" | "authorise_device") {
     if (action === "revoke_device" && !window.confirm(`Revoke field access for ${device.deviceName}?`)) return;
     setBusy(`device:${device.id}`); setError("");
@@ -638,6 +689,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
     {message && <p className={styles.status} role="status">{message}</p>}
     {error && <p className={styles.error} role="alert">{error}</p>}
     {inviteUrl && <section className={styles.invitePanel} aria-label="Private team login link"><div><strong>Private login link</strong><p>Send this link only to the person it was created for. It expires after 7 days.</p></div><input aria-label="Private login link" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /><button type="button" className={styles.secondary} onClick={() => void copyInvite()}>Copy login link</button></section>}
+    {fieldSetup && <section className={styles.invitePanel} aria-label="One-time field app PIN"><div><strong>Field app sign-in</strong><p>Send these details privately. The PIN works once, expires after 7 days, and is replaced if you create another.</p></div><label>Name<input aria-label="Field app name" value={fieldSetup.displayName} readOnly onFocus={(event) => event.currentTarget.select()} /></label><label>PIN<input aria-label="Field app PIN" value={fieldSetup.pin} readOnly inputMode="numeric" onFocus={(event) => event.currentTarget.select()} /></label><button type="button" className={styles.secondary} onClick={() => void copyFieldSetup()}>Copy sign-in details</button></section>}
     <section className={styles.list} aria-label="Team members"><header className={styles.listHeader}><strong>People</strong><span>{roster.total} team members</span></header>
       <form className={styles.filters} onSubmit={searchMembers}><label>Search<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email or service" /></label><label>Status<select value={statusFilter} onChange={(event) => { setPage(1); setStatusFilter(event.target.value as RosterStatus); }}><option value="all">All statuses</option><option value="active">Active</option><option value="invited">Invited</option><option value="suspended">Former or inactive</option></select></label><label>Service<select value={capabilityFilter} onChange={(event) => { setPage(1); setCapabilityFilter(event.target.value); }}><option value="">All services</option>{ENERGY_SERVICE_CATALOGUE.map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}</select></label><button className={styles.secondary}>Search</button></form>
       <p className={styles.hint}>Deactivating access stops future sign-in and assignment. Job history and member documents remain saved. Reactivation restores login eligibility, but revoked devices and old invitation links remain inactive.</p>
@@ -661,15 +713,15 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
         <header className={styles.memberHeader}><div><strong>{member.isOwner ? `${memberLabel(member)} (owner)` : memberLabel(member)}</strong><span>{[member.phone, member.email].filter(Boolean).join(" | ") || "Contact details not added"}</span><small>{statusName(member)}</small></div>{(!member.isOwner || isOwner) && <button type="button" className={styles.memberMenuButton} aria-label={`Open actions for ${memberLabel(member)}`} onClick={(event) => showMenu(event, member)}>Open</button>}</header>
         <div className={styles.chips}><span><i className={`${styles.colourDot} ${styles[member.scheduleColour || "emerald"]}`} />{scheduleColours.find((colour) => colour.id === member.scheduleColour)?.label || "Emerald"}</span><span>{member.permissions.jobScope === "own" ? "Assigned jobs only" : "All team jobs"}</span><span>{member.fileCount || 0} documents</span>{member.capabilities?.length ? <span>{member.capabilities.length} services</span> : null}</div>
         <small>Last active: {member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleString("en-AU") : "Not signed in yet"}</small>
-        {(!member.isOwner || isOwner) && <div className={styles.actions}>{!member.isOwner && <button type="button" onClick={() => openEdit(member)}>{canEditPermissions && !isCurrentMember(member) ? "Edit member and access" : "Edit member"}</button>}{!member.isOwner && member.status === "active" && !member.hasLogin && <button type="button" disabled={busy === `invite:${member.id}`} onClick={() => void createLogin(member)}>{member.email ? member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "suspended")}>Deactivate access</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "active")}>Reactivate access</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>}
+        {(!member.isOwner || isOwner) && <div className={styles.actions}>{!member.isOwner && <button type="button" onClick={() => openEdit(member)}>{canEditPermissions && !isCurrentMember(member) ? "Edit member and access" : "Edit member"}</button>}{!member.isOwner && member.status === "active" && <button type="button" disabled={busy === `field-pin:${member.id}`} onClick={() => void createFieldPin(member)}>Create field app PIN</button>}{!member.isOwner && member.status === "active" && <button type="button" className={styles.danger} disabled={busy === `field-revoke:${member.id}`} onClick={() => void revokeFieldAccess(member)}>Sign out field devices</button>}{!member.isOwner && member.status === "active" && !member.hasLogin && <button type="button" disabled={busy === `invite:${member.id}`} onClick={() => void createLogin(member)}>{member.email ? member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "active" && <button type="button" className={styles.danger} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "suspended")}>Deactivate access</button>}{!member.isOwner && !isCurrentMember(member) && member.status === "suspended" && <button type="button" className={styles.secondary} disabled={busy === `status:${member.id}`} onClick={() => void updateMemberStatus(member, "active")}>Reactivate access</button>}<button type="button" onClick={() => void openFiles(member)}>Documents</button></div>}
       </article>)}</div></> : <p className={styles.empty}>No team members match these filters.</p>}
       {roster.totalPages > 1 && <nav className={styles.pagination} aria-label="Team member pages"><button type="button" className={styles.secondary} disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {roster.page} of {roster.totalPages}</span><button type="button" className={styles.secondary} disabled={page >= roster.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next</button></nav>}
     </section>
 
-    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}>{!menu.member.isOwner && <button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{canEditPermissions && !isCurrentMember(menu.member) ? "Edit member and access" : "Edit member"}</button>}{!menu.member.isOwner && menu.member.status === "active" && !menu.member.hasLogin && <button type="button" role="menuitem" disabled={busy === `invite:${menu.member.id}`} onClick={() => { const member = menu.member; setMenu(null); void createLogin(member); }}>{menu.member.email ? menu.member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "suspended")}>Deactivate access</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "suspended" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "active")}>Reactivate access</button>}<button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
+    {menu && <><button aria-label="Close team member menu" style={{ background: "transparent", border: 0, inset: 0, padding: 0, position: "fixed", zIndex: 1299 }} onClick={closeMenu} /><div ref={menuRef} className={styles.contextMenu} role="menu" style={{ left: menu.x, top: menu.y }} onKeyDown={handleMenuKey}>{!menu.member.isOwner && <button type="button" role="menuitem" onClick={() => openEdit(menu.member)}>{canEditPermissions && !isCurrentMember(menu.member) ? "Edit member and access" : "Edit member"}</button>}{!menu.member.isOwner && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `field-pin:${menu.member.id}`} onClick={() => void createFieldPin(menu.member)}>Create field app PIN</button>}{!menu.member.isOwner && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `field-revoke:${menu.member.id}`} onClick={() => void revokeFieldAccess(menu.member)}>Sign out field devices</button>}{!menu.member.isOwner && menu.member.status === "active" && !menu.member.hasLogin && <button type="button" role="menuitem" disabled={busy === `invite:${menu.member.id}`} onClick={() => { const member = menu.member; setMenu(null); void createLogin(member); }}>{menu.member.email ? menu.member.invitePending ? "Refresh login link" : "Create login link" : "Add email for login"}</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "active" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "suspended")}>Deactivate access</button>}{!menu.member.isOwner && !isCurrentMember(menu.member) && menu.member.status === "suspended" && <button type="button" role="menuitem" disabled={busy === `status:${menu.member.id}`} onClick={() => void updateMemberStatus(menu.member, "active")}>Reactivate access</button>}<button type="button" role="menuitem" onClick={() => void openFiles(menu.member)}>Open documents</button></div></>}
 
     {editing && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeMemberDialog(); }}><div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="team-member-dialog-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeMemberDialog)}><header className={styles.dialogHeader}><div><span>{editing === "new" ? "Add team member" : "Edit team member"}</span><h4 id="team-member-dialog-title">Person and access</h4></div><button type="button" className={styles.iconButton} aria-label="Close" disabled={Boolean(busy)} onClick={closeMemberDialog}>X</button></header>
-      <form className={styles.form} onSubmit={saveMember}><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>Add an email only when this person needs their own login.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
+      <form className={styles.form} onSubmit={saveMember}><div className={`${styles.grid} ${styles.contactGrid}`}><label>First name<input name="firstName" autoComplete="given-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.firstName} /></label><label>Last name<input name="lastName" autoComplete="family-name" required maxLength={60} defaultValue={editing === "new" ? "" : editing.lastName} /></label><label>Email, optional<input name="email" type="email" autoComplete="email" maxLength={180} defaultValue={editing === "new" ? "" : editing.email} /><small className={styles.hint}>The field app uses name and PIN. Add email only for office or web login.</small></label><label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" defaultValue={editing === "new" ? "" : editing.phone} onInput={(event) => { event.currentTarget.value = filterPhoneInput(event.currentTarget.value); }} /></label></div>{editing !== "new" && editing.status === "suspended" && <p className={styles.status}>This person is inactive. Their job history and documents remain saved. Reactivation does not restore revoked devices or old invitation links.</p>}
         <fieldset className={styles.colourPicker}><legend>Schedule colour</legend><p className={styles.hint}>This colour identifies the team member throughout the schedule.</p><div>{scheduleColours.map((colour) => <label key={colour.id} className={`${styles.colourChoice} ${styles[colour.id]}`}><input type="radio" name="scheduleColour" value={colour.id} defaultChecked={(editing === "new" ? "emerald" : editing.scheduleColour || "emerald") === colour.id} /><span aria-hidden="true" /><strong>{colour.label}</strong></label>)}</div></fieldset>
         <fieldset className={styles.permissionGroup}><legend>Services</legend><p className={styles.hint}>Choose the work this person performs. This does not change the services your business offers.</p><div className={styles.grid}>{ENERGY_SERVICE_CATALOGUE.map((service) => <label className={styles.check} key={service.id}><input type="checkbox" checked={memberServices.includes(service.id)} onChange={(event) => setMemberServices((current) => event.target.checked ? [...new Set([...current, service.id])] : current.filter((id) => id !== service.id))} /><span>{service.label}</span></label>)}</div></fieldset>
         {showAccessEditor ? <>

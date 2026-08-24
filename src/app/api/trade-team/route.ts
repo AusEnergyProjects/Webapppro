@@ -927,6 +927,20 @@ export async function PATCH(request: Request) {
                   AND member.owner_uid = trade_team_invites.owner_uid
                   AND member.status = 'suspended' AND member.updated_at = ?)`)
             .bind(now, access.ownerUid, memberId, now),
+          db.prepare(`UPDATE trade_field_access_codes SET status = 'revoked', updated_at = ?
+            WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
+              AND EXISTS (SELECT 1 FROM trade_team_members member
+                WHERE member.id = trade_field_access_codes.team_member_id
+                  AND member.owner_uid = trade_field_access_codes.owner_uid
+                  AND member.status = 'suspended' AND member.updated_at = ?)`)
+            .bind(now, access.ownerUid, memberId, now),
+          db.prepare(`UPDATE trade_field_sessions SET status = 'revoked', revoked_at = ?, updated_at = ?
+            WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
+              AND EXISTS (SELECT 1 FROM trade_team_members member
+                WHERE member.id = trade_field_sessions.team_member_id
+                  AND member.owner_uid = trade_field_sessions.owner_uid
+                  AND member.status = 'suspended' AND member.updated_at = ?)`)
+            .bind(now, now, access.ownerUid, memberId, now),
         ] : []),
       ]);
       if (!results[0]?.meta.changes) throw new Error("MEMBER_CONFLICT");

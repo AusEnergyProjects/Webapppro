@@ -17,7 +17,7 @@ const syncScreen = read("../mobile/src/app/(tabs)/sync.tsx");
 const readme = read("../mobile/README.md");
 
 test("native field app requires encrypted custom iOS and Android builds", () => {
-  assert.match(appConfig, /"name": "AEA Field"/);
+  assert.match(appConfig, /"name": "TLink Field"/);
   assert.match(appConfig, /"bundleIdentifier": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"package": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"useSQLCipher": true/);
@@ -73,7 +73,9 @@ test("sync registers the device, safely replays work and handles revocation", ()
 });
 
 test("technician UI stays focused while retaining full field capability", () => {
-  assert.match(work, /Assigned work/);
+  assert.match(work, /MY SCHEDULE/);
+  assert.match(work, /router\.push\('\/new-job'\)/);
+  assert.match(work, /setSelectedDate/);
   assert.match(work, /Australian Energy Assessments protected/);
   assert.match(job, /job\.workNumber/);
   assert.doesNotMatch(job, /setWorkNumber|changeWorkNumber|editWorkNumber/);

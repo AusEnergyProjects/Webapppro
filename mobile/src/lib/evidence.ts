@@ -331,7 +331,7 @@ export async function buildEvidenceEnvelope(input: {
     provenance: {
       installationId: await getDeviceId(),
       appId: Application.applicationId || '',
-      appName: Application.applicationName || 'AEA Field',
+      appName: Application.applicationName || 'TLink Field',
       appVersion: APP_VERSION,
       nativeVersion: Application.nativeApplicationVersion || '',
       nativeBuildVersion: Application.nativeBuildVersion || '',

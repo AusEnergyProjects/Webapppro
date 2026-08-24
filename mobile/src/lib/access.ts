@@ -12,7 +12,7 @@ export const signedOutAccess: FieldAccessState = {
   status: 'signed_out',
   code: '',
   title: 'Sign in required',
-  message: 'Sign in with an authorised installer team account.',
+  message: 'Enter the name and PIN created for you in TLink.',
   guidance: '',
 };
 
@@ -36,7 +36,7 @@ export const networkVerificationRequired: FieldAccessState = {
   status: 'pending',
   code: 'NETWORK_VERIFICATION_REQUIRED',
   title: 'Connect to verify access',
-  message: 'AEA Field must confirm this account with TLink before protected work can open.',
+  message: 'TLink Field must confirm this account with TLink before protected work can open.',
   guidance: 'Reconnect, then choose Check access again.',
 };
 

@@ -39,7 +39,7 @@ type PlannedComplianceActivity = {
   programTemplateId: string;
   activityTemplateId: string;
 };
-type RentalInspectionOptionalModule = "electrical_safety_check" | "gas_safety_check" | "smoke_alarm_check";
+type RentalInspectionModule = "minimum_standards" | "electrical_safety_check" | "gas_safety_check" | "smoke_alarm_check";
 type AddressValue = {
   addressLine1: string;
   addressLine2: string;
@@ -80,7 +80,8 @@ const appointmentLabels: Record<string, string> = { phone_call: "Phone call", si
 const buildingTypes = [["house_townhouse", "House or townhouse"], ["apartment_unit", "Apartment or unit"], ["commercial_office", "Commercial or office"], ["retail_hospitality", "Retail or hospitality"], ["industrial_warehouse", "Industrial or warehouse"], ["institutional_community_health", "Institutional, community or health"], ["other", "Other"], ["not_sure", "Not sure"]];
 const ordinarySteps = ["Work", "Customer", "Program", "Appointment", "Review"];
 const rentalInspectionSteps = ["Work", "Customer", "Inspection", "Appointment", "Review"];
-const rentalInspectionOptionalModules: ReadonlyArray<{ key: RentalInspectionOptionalModule; label: string; help: string }> = [
+const rentalInspectionModules: ReadonlyArray<{ key: RentalInspectionModule; label: string; help: string }> = [
+  { key: "minimum_standards", label: "Rental minimum standards assessment", help: "Selected by default. Untick it when this job is only for separate safety checks." },
   { key: "electrical_safety_check", label: "Electrical safety check", help: "Adds the separate licensed electrical safety workflow." },
   { key: "gas_safety_check", label: "Gas safety check", help: "Adds the separate licensed gas safety workflow." },
   { key: "smoke_alarm_check", label: "Smoke alarm service and check", help: "Adds a separate optional smoke alarm assessment workflow." },
@@ -271,7 +272,7 @@ export function TradeNewJobForm({
     conflict: false,
   });
   const [plannedActivities, setPlannedActivities] = useState<PlannedComplianceActivity[]>([]);
-  const [rentalInspectionModules, setRentalInspectionModules] = useState<RentalInspectionOptionalModule[]>([]);
+  const [selectedRentalInspectionModules, setSelectedRentalInspectionModules] = useState<RentalInspectionModule[]>(["minimum_standards"]);
   const [activityDraftOpen, setActivityDraftOpen] = useState(false);
   const [draftClaimOutputCode, setDraftClaimOutputCode] = useState<ComplianceClaimOutputCode | "">("");
   const [draftProgramTemplateId, setDraftProgramTemplateId] = useState("");
@@ -334,7 +335,7 @@ export function TradeNewJobForm({
     setAssigneeSearch("");
     setAssigneeRoster(null);
     clearCompliancePlan();
-    if (value !== "rental-inspection") setRentalInspectionModules([]);
+    setSelectedRentalInspectionModules(value === "rental-inspection" ? ["minimum_standards"] : []);
   }
 
   const loadAssignees = useCallback(async (search = "", page = 1, append = false) => {
@@ -604,11 +605,11 @@ export function TradeNewJobForm({
   const complianceMode = plannedActivities.length > 0 ? "planned" : "none";
   const legacyComplianceActivity = plannedActivities[0];
   const complianceActivitiesJson = JSON.stringify(plannedActivities);
-  const rentalInspectionModulesJson = JSON.stringify(["minimum_standards", ...rentalInspectionModules]);
+  const rentalInspectionModulesJson = JSON.stringify(selectedRentalInspectionModules);
   const steps = serviceCategory === "rental-inspection" ? rentalInspectionSteps : ordinarySteps;
 
-  function toggleRentalInspectionModule(module: RentalInspectionOptionalModule) {
-    setRentalInspectionModules((current) => current.includes(module)
+  function toggleRentalInspectionModule(module: RentalInspectionModule) {
+    setSelectedRentalInspectionModules((current) => current.includes(module)
       ? current.filter((item) => item !== module)
       : [...current, module]);
     setHighestStep((current) => Math.min(current, 3));
@@ -668,6 +669,10 @@ export function TradeNewJobForm({
 
   function next(nextStep: number) {
     setMessage("");
+    if (serviceCategory === "rental-inspection" && step === 3 && !selectedRentalInspectionModules.length) {
+      setMessage("Choose at least one inspection or safety-check service.");
+      return;
+    }
     if (validateVisibleStep()) {
       if (nextStep === 4) {
         if (activityDraftOpen) {
@@ -704,6 +709,9 @@ export function TradeNewJobForm({
 
   return <form ref={formRef} noValidate className={`crm-form crm-new-job crm-job-wizard${step === 4 ? " crm-job-wizard-scheduling" : ""}`} onSubmit={(event) => {
     if (!validateVisibleStep()) { event.preventDefault(); return; }
+    if (serviceCategory === "rental-inspection" && !selectedRentalInspectionModules.length) {
+      event.preventDefault(); setMessage("Choose at least one inspection or safety-check service."); setStep(3); return;
+    }
     if (!appointmentCalendarReady) {
       event.preventDefault();
       setMessage(appointmentCalendarMessage());
@@ -786,14 +794,14 @@ export function TradeNewJobForm({
       <div className="crm-wizard-actions"><button type="button" onClick={() => setStep(1)}>Back</button><button type="button" className="btn" disabled={checkingDuplicates || loadingSites} onClick={() => void continueFromCustomer()}>{checkingDuplicates ? "Checking customer..." : loadingSites ? "Loading customer..." : serviceCategory === "rental-inspection" ? "Choose inspection modules" : "Choose program"}</button></div>
     </section>
 
-    <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{serviceCategory === "rental-inspection" ? "Choose the inspection modules" : "Choose the program, if relevant"}</h3><p>{serviceCategory === "rental-inspection" ? "Minimum standards are included. Add a separate safety module only when it is part of this visit." : "Add every government certificate, rebate or support activity planned for this job. The exact published rules remain authoritative."}</p></header>
+    <section data-step="3" hidden={step !== 3} className="crm-wizard-panel"><header><span>3 of 5</span><h3 tabIndex={-1}>{serviceCategory === "rental-inspection" ? "Choose the inspection modules" : "Choose the program, if relevant"}</h3><p>{serviceCategory === "rental-inspection" ? "Minimum standards are selected by default. Select or unselect any module, with at least one service required for the job." : "Add every government certificate, rebate or support activity planned for this job. The exact published rules remain authoritative."}</p></header>
       {serviceCategory === "rental-inspection" ? <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
-        <article className="crm-compliance-notice crm-planned-activity-card"><div className="crm-inline-heading"><strong>Rental minimum standards assessment</strong><span>Included</span></div><p>The current Victorian minimum standards workflow, property evidence, findings and quote-ready trade scopes.</p></article>
-        {rentalInspectionOptionalModules.map((module) => <label className="crm-compliance-notice crm-planned-activity-card" key={module.key}>
-          <span className="crm-inline-heading"><strong>{module.label}</strong><input type="checkbox" checked={rentalInspectionModules.includes(module.key)} onChange={() => toggleRentalInspectionModule(module.key)} /></span>
+        {rentalInspectionModules.map((module) => <label className="crm-compliance-notice crm-planned-activity-card" key={module.key}>
+          <span className="crm-inline-heading"><strong>{module.label}</strong><input type="checkbox" checked={selectedRentalInspectionModules.includes(module.key)} onChange={() => toggleRentalInspectionModule(module.key)} /></span>
           <small>{module.help}</small>
         </label>)}
-        <p className="crm-form-note">Optional modules remain separate records and require the appropriate qualified worker. Leaving them unticked does not remove the minimum standards assessment.</p>
+        {!selectedRentalInspectionModules.length && <p className="crm-wizard-message" role="alert">Choose at least one inspection or safety-check service.</p>}
+        <p className="crm-form-note">Every selected module remains a separate record and requires the appropriate qualified worker.</p>
       </div> : <>
       {plannedActivityDetails.length > 0 && <div className="crm-planned-activity-list" aria-label="Planned government activities">
         {plannedActivityDetails.map(({ selection, program, activity, calculation }, index) => <article className="crm-compliance-notice crm-planned-activity-card" key={`${selection.programTemplateId}:${selection.activityTemplateId}`}>
@@ -888,7 +896,7 @@ export function TradeNewJobForm({
     </section>
 
     <section data-step="5" hidden={step !== 5} className="crm-wizard-panel"><header><span>5 of 5</span><h3 tabIndex={-1}>Review and create</h3><p>Confirm the complete work record. Saving creates the TLink job, field appointment and attached workflow together.</p></header>
-      <div className="crm-review-header"><div><span>New TLink job</span><strong>{customerName} | {serviceLabels[serviceCategory]}</strong><small>{reviewAddress}</small></div><div><span>{serviceCategory === "rental-inspection" ? "Inspection workflow" : "Compliance review"}</span><strong>{serviceCategory === "rental-inspection" ? `${1 + rentalInspectionModules.length} ${1 + rentalInspectionModules.length === 1 ? "module" : "modules"} attach immediately` : plannedActivities.length > 0 ? `${plannedActivities.length} ${plannedActivities.length === 1 ? "activity" : "activities"} start immediately` : "Not required"}</strong><small>{serviceCategory === "rental-inspection" ? "Minimum standards plus the selected optional checks" : plannedActivities.length > 0 ? "Private job data available to the assigned compliance team" : "Ordinary trade job"}</small></div></div>
+      <div className="crm-review-header"><div><span>New TLink job</span><strong>{customerName} | {serviceLabels[serviceCategory]}</strong><small>{reviewAddress}</small></div><div><span>{serviceCategory === "rental-inspection" ? "Inspection workflow" : "Compliance review"}</span><strong>{serviceCategory === "rental-inspection" ? `${selectedRentalInspectionModules.length} ${selectedRentalInspectionModules.length === 1 ? "module" : "modules"} attach immediately` : plannedActivities.length > 0 ? `${plannedActivities.length} ${plannedActivities.length === 1 ? "activity" : "activities"} start immediately` : "Not required"}</strong><small>{serviceCategory === "rental-inspection" ? "Only the selected assessment and safety-check modules" : plannedActivities.length > 0 ? "Private job data available to the assigned compliance team" : "Ordinary trade job"}</small></div></div>
       <div className="crm-audit-review">
         <section><header><span>Customer and site</span><button type="button" onClick={() => setStep(2)}>Edit</button></header><dl>
           <div><dt>Customer</dt><dd>{customerName}</dd></div>
@@ -906,7 +914,7 @@ export function TradeNewJobForm({
         </dl></section>
         <section className="crm-review-activities"><header><span>{serviceCategory === "rental-inspection" ? "Inspection modules" : "Programs and activities"}</span><button type="button" onClick={() => setStep(3)}>Edit</button></header>
           {serviceCategory === "rental-inspection"
-            ? <dl><div className="wide"><dt>Included</dt><dd>{["Rental minimum standards assessment", ...rentalInspectionModules.map((key) => rentalInspectionOptionalModules.find((module) => module.key === key)?.label || key)].join(" | ")}</dd></div></dl>
+            ? <dl><div className="wide"><dt>Selected</dt><dd>{selectedRentalInspectionModules.map((key) => rentalInspectionModules.find((module) => module.key === key)?.label || key).join(" | ")}</dd></div></dl>
             : plannedActivityDetails.length === 0
             ? <dl><div className="wide"><dt>Government activity</dt><dd>No government certificate, rebate or support activity added</dd></div></dl>
             : <div className="crm-review-activity-list">{plannedActivityDetails.map(({ selection, program, activity, calculation }, index) => <article className="crm-review-activity-card" key={`${selection.programTemplateId}:${selection.activityTemplateId}`}>

@@ -104,6 +104,10 @@ function fixture() {
     CREATE TABLE trade_mobile_devices (id text PRIMARY KEY, owner_uid text NOT NULL, member_id text NOT NULL,
       status text NOT NULL, push_token text NOT NULL, push_token_updated_at text NOT NULL, revoked_at text NOT NULL,
       revoked_by_uid text NOT NULL, updated_at text NOT NULL);
+    CREATE TABLE trade_field_access_codes (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
+      status text NOT NULL, updated_at text NOT NULL);
+    CREATE TABLE trade_field_sessions (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
+      status text NOT NULL, revoked_at text NOT NULL, updated_at text NOT NULL);
     CREATE TABLE trade_team_member_files (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       status text NOT NULL, created_at text NOT NULL);
     CREATE TABLE trade_team_member_credentials (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
@@ -130,6 +134,8 @@ function fixture() {
   insertMember("target-1", "target-uid", "active", "2026-08-12T00:00:00.000Z");
   database.exec(`
     INSERT INTO trade_mobile_devices VALUES ('device-1', 'owner-1', 'target-1', 'active', 'push-secret', '', '', '', '2026-08-12T00:00:00.000Z');
+    INSERT INTO trade_field_access_codes VALUES ('field-code-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
+    INSERT INTO trade_field_sessions VALUES ('field-session-1', 'owner-1', 'target-1', 'active', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_team_invites VALUES ('invite-1', 'target-1', 'owner-1', 'hash', '2026-09-12T00:00:00.000Z', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_team_member_files VALUES ('file-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_team_member_credentials VALUES ('credential-1', 'owner-1', 'target-1', 'licence', 'Licence', 'L1', 'Issuer', 'VIC', '', 'active', 'file-1', '2026-08-12T00:00:00.000Z', '2026-08-12T00:00:00.000Z');
@@ -167,6 +173,9 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(database.prepare("SELECT status FROM trade_team_members WHERE id='target-1'").get().status, "suspended");
   assert.equal(database.prepare("SELECT status FROM trade_mobile_devices").get().status, "revoked");
   assert.equal(database.prepare("SELECT push_token FROM trade_mobile_devices").get().push_token, "");
+  assert.equal(database.prepare("SELECT status FROM trade_field_access_codes").get().status, "revoked");
+  assert.equal(database.prepare("SELECT status FROM trade_field_sessions").get().status, "revoked");
+  assert.notEqual(database.prepare("SELECT revoked_at FROM trade_field_sessions").get().revoked_at, "");
   assert.notEqual(database.prepare("SELECT consumed_at FROM trade_team_invites").get().consumed_at, "");
   assert.deepEqual(aborted, [{ ownerUid: "owner-1", memberId: "target-1" }]);
 
@@ -175,6 +184,8 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(database.prepare("SELECT status FROM trade_team_members WHERE id='target-1'").get().status, "active");
   assert.equal(database.prepare("SELECT status FROM trade_mobile_devices").get().status, "revoked");
   assert.equal(database.prepare("SELECT push_token FROM trade_mobile_devices").get().push_token, "");
+  assert.equal(database.prepare("SELECT status FROM trade_field_access_codes").get().status, "revoked");
+  assert.equal(database.prepare("SELECT status FROM trade_field_sessions").get().status, "revoked");
   assert.notEqual(database.prepare("SELECT consumed_at FROM trade_team_invites").get().consumed_at, "");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_orders WHERE id='job-1'").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_member_files WHERE id='file-1'").get().count, 1);

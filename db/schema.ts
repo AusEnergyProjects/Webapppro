@@ -593,6 +593,65 @@ export const tradeTeamInvites = sqliteTable("trade_team_invites", {
   index("trade_team_invites_owner_idx").on(table.ownerUid, table.expiresAt),
 ]);
 
+export const tradeFieldAccessCodes = sqliteTable("trade_field_access_codes", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  teamMemberId: text("team_member_id").notNull().references(() => tradeTeamMembers.id, { onDelete: "restrict" }),
+  normalizedName: text("normalized_name").notNull(),
+  pinSalt: text("pin_salt").notNull(),
+  pinHash: text("pin_hash").notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at").notNull().default(""),
+  createdByUid: text("created_by_uid").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_field_access_codes_name_status_idx").on(table.normalizedName, table.status, table.expiresAt),
+  index("trade_field_access_codes_member_status_idx").on(table.ownerUid, table.teamMemberId, table.status, table.expiresAt),
+  check("trade_field_access_codes_status_check", sql`${table.status} IN ('active', 'consumed', 'revoked', 'expired')`),
+  check("trade_field_access_codes_hash_check", sql`length(${table.pinSalt}) BETWEEN 16 AND 128 AND length(${table.pinHash}) = 64 AND lower(${table.pinHash}) = ${table.pinHash} AND ${table.pinHash} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_field_access_codes_time_check", sql`datetime(${table.expiresAt}) IS NOT NULL AND datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL AND (${table.consumedAt} = '' OR datetime(${table.consumedAt}) IS NOT NULL)`),
+]);
+
+export const tradeFieldAccessAttempts = sqliteTable("trade_field_access_attempts", {
+  keyHash: text("key_hash").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  windowStartedAt: text("window_started_at").notNull(),
+  lockedUntil: text("locked_until").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("trade_field_access_attempts_updated_idx").on(table.updatedAt),
+  check("trade_field_access_attempts_hash_check", sql`length(${table.keyHash}) = 64 AND lower(${table.keyHash}) = ${table.keyHash} AND ${table.keyHash} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_field_access_attempts_bounds_check", sql`${table.attempts} BETWEEN 0 AND 100`),
+  check("trade_field_access_attempts_time_check", sql`datetime(${table.windowStartedAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL AND (${table.lockedUntil} = '' OR datetime(${table.lockedUntil}) IS NOT NULL)`),
+]);
+
+export const tradeFieldSessions = sqliteTable("trade_field_sessions", {
+  id: text("id").primaryKey(),
+  ownerUid: text("owner_uid").notNull(),
+  teamMemberId: text("team_member_id").notNull().references(() => tradeTeamMembers.id, { onDelete: "restrict" }),
+  tokenHash: text("token_hash").notNull(),
+  deviceId: text("device_id").notNull(),
+  platform: text("platform").notNull(),
+  appVersion: text("app_version").notNull(),
+  deviceName: text("device_name").notNull().default("Field device"),
+  status: text("status").notNull().default("active"),
+  expiresAt: text("expires_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  revokedAt: text("revoked_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("trade_field_sessions_token_idx").on(table.tokenHash),
+  index("trade_field_sessions_member_status_idx").on(table.ownerUid, table.teamMemberId, table.status, table.expiresAt),
+  index("trade_field_sessions_device_status_idx").on(table.ownerUid, table.deviceId, table.status, table.expiresAt),
+  check("trade_field_sessions_status_check", sql`${table.status} IN ('active', 'revoked', 'expired')`),
+  check("trade_field_sessions_platform_check", sql`${table.platform} IN ('ios', 'android')`),
+  check("trade_field_sessions_hash_check", sql`length(${table.tokenHash}) = 64 AND lower(${table.tokenHash}) = ${table.tokenHash} AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`),
+  check("trade_field_sessions_time_check", sql`datetime(${table.expiresAt}) IS NOT NULL AND datetime(${table.lastSeenAt}) IS NOT NULL AND datetime(${table.createdAt}) IS NOT NULL AND datetime(${table.updatedAt}) IS NOT NULL AND (${table.revokedAt} = '' OR datetime(${table.revokedAt}) IS NOT NULL)`),
+]);
+
 export const tradeTeamSyncChanges = sqliteTable("trade_team_sync_changes", {
   sequence: integer("sequence").primaryKey({ autoIncrement: true }),
   ownerUid: text("owner_uid").notNull(),
@@ -6084,7 +6143,7 @@ export const tradeRentalInspections = sqliteTable("trade_rental_inspections", {
   check("trade_rental_inspections_identity_check", sql`trim(${table.id}) <> '' AND trim(${table.workOrderId}) <> '' AND trim(${table.firebaseUid}) <> '' AND trim(${table.inspectionNumber}) <> '' AND ${table.jurisdiction} = 'VIC'`),
   check("trade_rental_inspections_status_check", sql`${table.status} IN ('draft', 'scheduled', 'in_progress', 'submitted', 'issuing', 'issued', 'superseded', 'withdrawn')`),
   check("trade_rental_inspections_template_check", sql`${table.templateKey} = 'vic-rental-minimum-standards' AND ${table.templateVersion} > 0 AND date(${table.rulesEffectiveFrom}) = ${table.rulesEffectiveFrom}`),
-  check("trade_rental_inspections_modules_check", sql`json_valid(${table.moduleSelectionSnapshot}) AND json_type(${table.moduleSelectionSnapshot}) = 'array' AND json_array_length(${table.moduleSelectionSnapshot}) BETWEEN 1 AND 4 AND json_extract(${table.moduleSelectionSnapshot}, '$[0]') = 'minimum_standards' AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[1]'), '') IN ('', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[2]'), '') IN ('', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[3]'), '') IN ('', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check')`),
+  check("trade_rental_inspections_modules_check", sql`json_valid(${table.moduleSelectionSnapshot}) AND json_type(${table.moduleSelectionSnapshot}) = 'array' AND json_array_length(${table.moduleSelectionSnapshot}) BETWEEN 1 AND 4 AND json_extract(${table.moduleSelectionSnapshot}, '$[0]') IN ('minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[1]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[2]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[3]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[1]'), '') <> json_extract(${table.moduleSelectionSnapshot}, '$[0]') AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[2]'), '') NOT IN (json_extract(${table.moduleSelectionSnapshot}, '$[0]'), coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[1]'), '')) AND coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[3]'), '') NOT IN (json_extract(${table.moduleSelectionSnapshot}, '$[0]'), coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[1]'), ''), coalesce(json_extract(${table.moduleSelectionSnapshot}, '$[2]'), ''))`),
   check("trade_rental_inspections_snapshots_check", sql`json_valid(${table.propertySnapshot}) AND json_type(${table.propertySnapshot}) = 'object' AND json_valid(${table.assessorSnapshot}) AND json_type(${table.assessorSnapshot}) = 'object'`),
   check("trade_rental_inspections_revision_check", sql`${table.revision} > 0`),
   check("trade_rental_inspections_lifecycle_check", sql`(${table.status} = 'issued' AND datetime(${table.issuedAt}) IS NOT NULL AND trim(${table.issuedReportId}) <> '') OR (${table.status} <> 'issued')`),
@@ -6114,7 +6173,7 @@ export const tradeRentalInspectionModules = sqliteTable("trade_rental_inspection
   index("trade_rental_modules_owner_status_idx").on(table.firebaseUid, table.status, table.updatedAt),
   index("trade_rental_modules_inspection_idx").on(table.inspectionId, table.updatedAt),
   check("trade_rental_modules_key_check", sql`${table.moduleKey} IN ('minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check')`),
-  check("trade_rental_modules_required_check", sql`(${table.moduleKey} = 'minimum_standards' AND ${table.required} = 1) OR (${table.moduleKey} <> 'minimum_standards' AND ${table.required} = 0)`),
+  check("trade_rental_modules_required_check", sql`${table.required} = 1`),
   check("trade_rental_modules_status_check", sql`${table.status} IN ('not_started', 'draft', 'complete', 'superseded')`),
   check("trade_rental_modules_snapshot_check", sql`json_valid(${table.templateSnapshot}) AND json_type(${table.templateSnapshot}) = 'object' AND json_extract(${table.templateSnapshot}, '$.key') = ${table.moduleKey} AND json_valid(${table.answers}) AND json_type(${table.answers}) = 'object' AND json_valid(${table.credentialSnapshot}) AND json_type(${table.credentialSnapshot}) = 'object'`),
   check("trade_rental_modules_revision_check", sql`${table.templateVersion} > 0 AND ${table.revision} > 0`),

@@ -17,7 +17,7 @@ export default function FieldTabs() {
       tabBarStyle: { height: 66, paddingBottom: 8, paddingTop: 6 },
       tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
     }}>
-      <Tabs.Screen name="work" options={{ title: 'My work', tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="briefcase-check-outline" color={color} size={size} /> }} />
+      <Tabs.Screen name="work" options={{ title: 'Schedule', tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="sync" options={{ title: 'Sync', tabBarBadge: sync.conflicts || undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="sync" color={color} size={size} /> }} />
       <Tabs.Screen name="settings" options={{ title: 'Account', tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={color} size={size} /> }} />
     </Tabs>

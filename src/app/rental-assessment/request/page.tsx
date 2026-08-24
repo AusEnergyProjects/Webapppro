@@ -15,7 +15,7 @@ export default function RentalAssessmentRequestPage() {
       <TLinkBrand context="Rental assessment request" />
       <span>Victorian rental properties</span>
       <h1>Request the assessment. We will confirm the booking.</h1>
-      <p>Rental providers and authorised agents can send the property and scope without creating an account. Victorian rental minimum standards are included by default. Electrical, gas and smoke alarm checks remain separate and optional.</p>
+      <p>Rental providers and authorised agents can send the property and scope without creating an account. Victorian rental minimum standards are selected by default, but can be unticked. Electrical, gas and smoke alarm checks can be requested separately or together.</p>
       <div className="assessment-asat"><strong>This form does not book a job</strong><span>We first confirm authority, scope, price, property access and appointment details. A TLink job is created and assigned only after that review.</span></div>
     </header>
     <PublicRentalAssessmentRequestForm />

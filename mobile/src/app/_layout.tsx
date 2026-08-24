@@ -22,6 +22,7 @@ function AppNavigation() {
         <Stack.Protected guard={access.status === 'approved'}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="job/[id]" options={{ title: 'Job details', headerBackTitle: 'Work' }} />
+          <Stack.Screen name="new-job" options={{ title: 'New field job', headerBackTitle: 'Schedule' }} />
         </Stack.Protected>
       </Stack>
     </>

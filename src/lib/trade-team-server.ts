@@ -7,6 +7,7 @@ import {
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
 import { ensureTlinkSchemaGuards } from "./tlink-schema-guards";
 import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
+import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-session-server";
 
 export type TeamScope = "own" | "team";
 export type TeamAccess = {
@@ -39,6 +40,7 @@ export type TeamAccess = {
   canManageFieldEvidence: boolean;
   canRunReports: boolean;
   canSearchCustomers: boolean;
+  fieldSessionId?: string;
 };
 
 export async function ensureOwnerTeamMember(ownerUid: string, email: string, displayName: string) {
@@ -79,6 +81,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
 }
 
 export async function requireInstallerTeamAccess(request: Request): Promise<TeamAccess> {
+  if (isFieldSessionRequest(request)) return requireFieldSessionAccess(request);
   const identity = await requireFirebaseIdentity(request);
   const db = getD1();
   await ensureCreditexSchemaGuards(db);

@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 export const APP_VERSION = '1.0.0';
-export const SYNC_CONTRACT_VERSION = 2;
+export const SYNC_CONTRACT_VERSION = 3;
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://compare.ausenergyassessments.com').replace(/\/$/, '');
 
 export const firebaseConfig = {

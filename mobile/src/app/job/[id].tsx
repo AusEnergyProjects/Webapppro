@@ -1047,7 +1047,7 @@ export default function JobScreen() {
     const appVersion = Application.nativeApplicationVersion?.trim() || APP_VERSION;
     const appBuild = Application.nativeBuildVersion?.trim() || '';
     if (!capturedByUid || !appId || !appBuild) {
-      throw new Error('Install and sign in to the current AEA Field app before signing.');
+      throw new Error('Install and sign in to the current TLink Field app before signing.');
     }
     const deviceContext = {
       appName: Application.applicationName || '',
@@ -1523,7 +1523,7 @@ function JobFieldForm({ form, busy, onSave }: { form: FieldForm; busy: boolean; 
       <Text style={styles.inputLabel}>{field.label}{field.required ? ' *' : ''}</Text>
       {field.type === 'checkbox' ? <Pressable disabled={form.status === 'complete'} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === true }} onPress={() => change(field.key, answers[field.key] !== true)} style={[styles.checkbox, answers[field.key] === true && styles.checkboxSelected]}><MaterialCommunityIcons name={answers[field.key] === true ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={colours.green} /><Text style={styles.body}>{answers[field.key] === true ? 'Confirmed' : 'Tap to confirm'}</Text></Pressable>
         : field.type === 'select' ? <View style={styles.optionList}>{(field.options || []).map((option) => <Pressable key={option} disabled={form.status === 'complete'} onPress={() => change(field.key, option)} style={[styles.option, answers[field.key] === option && styles.optionSelected]}><Text style={styles.optionText}>{option}</Text></Pressable>)}</View>
-        : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested AEA Field build. This required item remains blocked and cannot be marked complete.</Text></View>
+        : field.type === 'signature' ? <View style={styles.signatureBlocked}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={colours.amber} /><Text style={styles.body}>Signature capture is not available in this tested TLink Field build. This required item remains blocked and cannot be marked complete.</Text></View>
         : <TextInput editable={form.status !== 'complete'} style={[styles.input, field.type === 'textarea' && styles.notes]} multiline={field.type === 'textarea'} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} value={String(answers[field.key] || '')} onChangeText={(value) => change(field.key, value)} maxLength={field.maxLength || 240} placeholder={field.type === 'date' ? 'YYYY-MM-DD' : field.type === 'number' ? 'Enter a number' : 'Enter technical job information'} />}
     </View>)}{form.status !== 'complete' && <View style={styles.formActions}><FieldButton variant="secondary" loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, false)}>Save draft</FieldButton><FieldButton loading={busy} style={styles.flex} onPress={() => void onSave(form, answers, true)}>Complete</FieldButton></View>}</View>}
   </View>;

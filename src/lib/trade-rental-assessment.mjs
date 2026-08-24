@@ -41,7 +41,8 @@ export const RENTAL_ASSESSMENT_MODULES = Object.freeze([
     key: "minimum_standards",
     label: "Rental minimum standards assessment",
     shortLabel: "Minimum standards",
-    optional: false,
+    optional: true,
+    selectedByDefault: true,
     credentialGate: "qualified_assessor",
     reportBoundary: "This is the default assessment. It does not by itself certify the separate electrical, gas or smoke alarm safety checks.",
   }),
@@ -50,6 +51,7 @@ export const RENTAL_ASSESSMENT_MODULES = Object.freeze([
     label: "Electrical safety check",
     shortLabel: "Electrical safety",
     optional: true,
+    selectedByDefault: false,
     credentialGate: "licensed_electrician",
     reportBoundary: "This module can be issued only by an appropriately licensed electrician using the current statutory test and authentication requirements.",
   }),
@@ -58,6 +60,7 @@ export const RENTAL_ASSESSMENT_MODULES = Object.freeze([
     label: "Gas safety check",
     shortLabel: "Gas safety",
     optional: true,
+    selectedByDefault: false,
     credentialGate: "licensed_gasfitter",
     reportBoundary: "This module can be issued only by an appropriately licensed or supervised gasfitter using the current gas servicing record requirements.",
   }),
@@ -66,6 +69,7 @@ export const RENTAL_ASSESSMENT_MODULES = Object.freeze([
     label: "Smoke alarm service and check",
     shortLabel: "Smoke alarms",
     optional: true,
+    selectedByDefault: false,
     credentialGate: "suitably_qualified_smoke_alarm_worker",
     reportBoundary: "This separate optional smoke alarm assessment workflow is not part of the default minimum standards assessment.",
   }),
@@ -77,6 +81,10 @@ export const RENTAL_ASSESSMENT_MODULE_KEYS = Object.freeze(
 
 export const RENTAL_ASSESSMENT_OPTIONAL_MODULE_KEYS = Object.freeze(
   RENTAL_ASSESSMENT_MODULES.filter((module) => module.optional).map((module) => module.key),
+);
+
+export const RENTAL_ASSESSMENT_DEFAULT_MODULE_KEYS = Object.freeze(
+  RENTAL_ASSESSMENT_MODULES.filter((module) => module.selectedByDefault).map((module) => module.key),
 );
 
 const currentSources = Object.freeze([
@@ -461,9 +469,14 @@ function parseMaybeJson(value) {
 
 export function normalizeRentalAssessmentModules(value) {
   const source = parseMaybeJson(value);
-  const requested = Array.isArray(source) ? source.map(String) : [];
-  const optional = RENTAL_ASSESSMENT_OPTIONAL_MODULE_KEYS.filter((key) => requested.includes(key));
-  return ["minimum_standards", ...optional];
+  if (source === undefined || source === null || source === "") {
+    return [...RENTAL_ASSESSMENT_DEFAULT_MODULE_KEYS];
+  }
+  if (!Array.isArray(source) || source.length === 0
+    || source.some((entry) => typeof entry !== "string" || !RENTAL_ASSESSMENT_MODULE_KEYS.includes(entry))) {
+    return [];
+  }
+  return RENTAL_ASSESSMENT_MODULE_KEYS.filter((key) => source.includes(key));
 }
 
 export function rentalAssessmentTemplateSnapshot(value) {

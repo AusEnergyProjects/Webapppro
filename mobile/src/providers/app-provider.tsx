@@ -2,10 +2,10 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { ApiError, apiRequest } from '@/lib/api';
+import { ApiError, apiRequest, publicApiRequest } from '@/lib/api';
 import {
   accessStateForServerError,
   approvedAccess,
@@ -28,6 +28,13 @@ import {
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import { forgetPushToken, getDeviceId, getDeviceName, rememberPushToken } from '@/lib/device';
 import type { EvidenceCaptureEnvelope } from '@/lib/evidence';
+import {
+  clearFieldSession,
+  getFieldPrincipal,
+  getFieldSessionToken,
+  saveFieldSession,
+  type FieldPrincipal,
+} from '@/lib/field-session';
 import { localSyncOutcome, resolveFieldAccessModes, runSync, type SyncOutcome } from '@/lib/sync';
 import type { FieldAccessMode, FieldJob, OfflineAction } from '@/lib/types';
 
@@ -44,7 +51,7 @@ type UploadInput = {
 };
 
 type AppValue = {
-  user: User | null;
+  user: FieldPrincipal | null;
   loading: boolean;
   access: FieldAccessState;
   jobs: FieldJob[];
@@ -54,6 +61,7 @@ type AppValue = {
   findJob: (id: string) => Promise<FieldJob | null>;
   saveAction: (action: Omit<OfflineAction, 'clientActionId'>) => Promise<void>;
   saveUpload: (input: UploadInput) => Promise<void>;
+  pinSignIn: (displayName: string, pin: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -81,8 +89,25 @@ function isConfirmedFieldAccessLoss(error: unknown): error is ApiError {
   );
 }
 
+function firebasePrincipal(user: FirebaseUser): FieldPrincipal {
+  return {
+    ownerId: user.uid,
+    memberId: user.uid,
+    displayName: user.displayName || user.email || 'Installer team member',
+    email: user.email || '',
+    businessName: '',
+    permissions: {
+      canCreateJobs: false,
+      canManageCustomers: false,
+      canViewCustomers: false,
+    },
+    authMode: 'firebase',
+    localOwnerKey: `firebase:${user.uid}`,
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FieldPrincipal | null>(null);
   const [loading, setLoading] = useState(true);
   const [access, setAccess] = useState<FieldAccessState>(signedOutAccess);
   const [jobs, setJobs] = useState<FieldJob[]>([]);
@@ -106,6 +131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     await purgeLocalData();
     await forgetPushToken().catch(() => undefined);
+    await clearFieldSession();
+    await firebaseSignOut().catch(() => undefined);
     const nextAccess = accessStateForServerError(
       confirmedLoss.status,
       confirmedLoss.code,
@@ -126,9 +153,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncNow = useCallback(async () => {
+    const fieldPrincipal = await getFieldPrincipal();
     const currentUser = firebaseAuth.currentUser;
-    if (!currentUser) return;
-    await prepareLocalDataOwner(currentUser.uid);
+    if (!fieldPrincipal && !currentUser) return;
+    await prepareLocalDataOwner(fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`);
     const network = await NetInfo.fetch();
     const online = network.isConnected !== false && network.isInternetReachable !== false;
     if (!online) {
@@ -161,8 +189,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [handleAccessError]);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, async (nextUser) => {
-    setUser(nextUser);
-    if (!nextUser) {
+    const fieldPrincipal = await getFieldPrincipal();
+    const nextPrincipal = fieldPrincipal || (nextUser ? firebasePrincipal(nextUser) : null);
+    setUser(nextPrincipal);
+    if (!nextPrincipal) {
       setJobs([]);
       setSync(emptySync);
       setAccess(signedOutAccess);
@@ -184,11 +214,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const network = NetInfo.addEventListener((state) => {
       const online = state.isConnected !== false && state.isInternetReachable !== false;
       setSync((value) => ({ ...value, online }));
-      if (online && firebaseAuth.currentUser) void syncNow();
+      if (online && user) void syncNow();
     });
     const response = Notifications.addNotificationResponseReceivedListener(() => { void syncNow(); });
     const token = Notifications.addPushTokenListener(async (nextToken) => {
-      if (!firebaseAuth.currentUser) return;
+      if (!user) return;
       await rememberPushToken(String(nextToken.data));
       const modes = await resolveFieldAccessModes().catch(() => []);
       const deviceId = await getDeviceId();
@@ -210,7 +240,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ));
     });
     return () => { network(); response.remove(); token.remove(); };
-  }, [handleAccessError, syncNow]);
+  }, [handleAccessError, syncNow, user]);
 
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
     await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });
@@ -235,35 +265,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (sync.online) void syncNow();
   }, [refreshLocal, sync.online, syncNow]);
 
+  const pinSignIn = useCallback(async (displayName: string, pin: string) => {
+    const response = await publicApiRequest<{
+      token: string;
+      principal: Omit<FieldPrincipal, 'authMode' | 'localOwnerKey'>;
+    }>('/api/field/session', {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName,
+        pin,
+        deviceId: await getDeviceId(),
+        platform: MOBILE_PLATFORM,
+        appVersion: APP_VERSION,
+        deviceName: getDeviceName(),
+      }),
+    });
+    const principal = await saveFieldSession(response.token, response.principal);
+    setUser(principal);
+    setAccess(checkingAccess);
+    setLoading(true);
+    try {
+      await registerBackgroundSync().catch(() => undefined);
+      await syncNow();
+    } finally {
+      setLoading(false);
+    }
+  }, [syncNow]);
+
   const signOut = useCallback(async () => {
     await unregisterBackgroundSync().catch(() => undefined);
-    const modes = await resolveFieldAccessModes().catch(() => (
-      ['trade_team', 'creditex_manual'] satisfies FieldAccessMode[]
-    ));
-    const deviceId = await getDeviceId();
-    await Promise.allSettled(modes.map((mode) =>
-      mode === 'creditex_manual'
-        ? apiRequest('/api/creditex/manual-field/devices', {
-          method: 'DELETE',
-          body: JSON.stringify({ deviceId }),
-        })
-        : apiRequest('/api/trade-team/devices', {
-          method: 'POST',
-          body: JSON.stringify({
-            deviceId,
-            platform: MOBILE_PLATFORM,
-            appVersion: APP_VERSION,
-            deviceName: getDeviceName(),
-            pushToken: '',
-            pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
-          }),
-        })
-    ));
+    const fieldToken = await getFieldSessionToken();
+    if (fieldToken) {
+      await apiRequest('/api/field/session', { method: 'DELETE' }).catch(() => undefined);
+    } else {
+      const modes = await resolveFieldAccessModes().catch(() => (
+        ['trade_team', 'creditex_manual'] satisfies FieldAccessMode[]
+      ));
+      const deviceId = await getDeviceId();
+      await Promise.allSettled(modes.map((mode) =>
+        mode === 'creditex_manual'
+          ? apiRequest('/api/creditex/manual-field/devices', {
+            method: 'DELETE',
+            body: JSON.stringify({ deviceId }),
+          })
+          : apiRequest('/api/trade-team/devices', {
+            method: 'POST',
+            body: JSON.stringify({
+              deviceId,
+              platform: MOBILE_PLATFORM,
+              appVersion: APP_VERSION,
+              deviceName: getDeviceName(),
+              pushToken: '',
+              pushProvider: MOBILE_PLATFORM === 'ios' ? 'apns' : 'fcm',
+            }),
+          })
+      ));
+    }
     await Notifications.unregisterForNotificationsAsync()
       .catch(() => undefined);
     await purgeLocalData();
     await forgetPushToken();
+    await clearFieldSession();
     await firebaseSignOut();
+    setUser(null);
+    setAccess(signedOutAccess);
   }, []);
 
   const value = useMemo<AppValue>(() => ({
@@ -277,8 +342,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     findJob: getJob,
     saveAction,
     saveUpload,
+    pinSignIn,
     signOut,
-  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveUpload, signOut]);
+  }), [user, loading, access, jobs, sync, refreshLocal, syncNow, saveAction, saveUpload, pinSignIn, signOut]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

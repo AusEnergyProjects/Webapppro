@@ -1,36 +1,18 @@
-import * as Google from 'expo-auth-session/providers/google';
 import { Redirect } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { FieldButton } from '@/components/field-button';
 import { Screen } from '@/components/screen';
-import { GOOGLE_CLIENT_ID } from '@/lib/config';
-import { emailSignIn, googleSignIn, resetPassword } from '@/lib/auth';
+import { emailSignIn, resetPassword } from '@/lib/auth';
 import { colours, radius, spacing } from '@/lib/theme';
 import { readableAuthError, useApp } from '@/providers/app-provider';
 
-WebBrowser.maybeCompleteAuthSession();
-
-function GoogleButton({ onError }: { onError: (message: string) => void }) {
-  const [request, response, prompt] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const token = response.params.id_token;
-    if (!token) return onError('Google did not return a secure sign in token.');
-    void googleSignIn(token).catch((error) => onError(readableAuthError(error)));
-  }, [onError, response]);
-  return <FieldButton variant="secondary" disabled={!request} onPress={() => void prompt()}>Continue with Google</FieldButton>;
-}
-
 export default function SignInScreen() {
-  const { user, loading, access, sync, syncNow, signOut } = useApp();
+  const { user, loading, access, sync, syncNow, pinSignIn, signOut } = useApp();
+  const [displayName, setDisplayName] = useState('');
+  const [pin, setPin] = useState('');
+  const [officeMode, setOfficeMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,7 +31,7 @@ export default function SignInScreen() {
         </View>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Signed in as</Text>
-          <Text style={styles.account}>{user.email || 'Work account'}</Text>
+          <Text style={styles.account}>{user.displayName || user.email || 'Work account'}</Text>
           <Text style={styles.guidance}>{access.guidance}</Text>
           <FieldButton loading={sync.running || access.status === 'checking'} onPress={() => void syncNow()}>
             Check access again
@@ -64,6 +46,13 @@ export default function SignInScreen() {
   async function signIn() {
     setBusy(true); setMessage('');
     try { await emailSignIn(email, password); }
+    catch (error) { setMessage(readableAuthError(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function signInWithPin() {
+    setBusy(true); setMessage('');
+    try { await pinSignIn(displayName, pin); }
     catch (error) { setMessage(readableAuthError(error)); }
     finally { setBusy(false); }
   }
@@ -86,17 +75,29 @@ export default function SignInScreen() {
           <Text style={styles.intro}>See assigned jobs, complete field records and keep working when reception drops.</Text>
         </View>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sign in to AEA Field</Text>
-          <Text style={styles.label}>Work email</Text>
-          <TextInput style={styles.input} autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="name@business.com.au" />
-          <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Password" />
+          <Text style={styles.cardTitle}>{officeMode ? 'Office account sign-in' : 'Open your field schedule'}</Text>
+          {officeMode ? <>
+            <Text style={styles.label}>Work email</Text>
+            <TextInput style={styles.input} autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="name@business.com.au" />
+            <Text style={styles.label}>Password</Text>
+            <TextInput style={styles.input} autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Password" />
+          </> : <>
+            <Text style={styles.help}>Enter the name and six-digit PIN your TLink administrator sent you.</Text>
+            <Text style={styles.label}>Your name</Text>
+            <TextInput style={styles.input} autoCapitalize="words" autoComplete="name" value={displayName} onChangeText={setDisplayName} placeholder="For example, John Smith" />
+            <Text style={styles.label}>Six-digit PIN</Text>
+            <TextInput style={[styles.input, styles.pin]} keyboardType="number-pad" secureTextEntry maxLength={6} value={pin} onChangeText={(value) => setPin(value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" />
+          </>}
           {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
-          <FieldButton loading={busy} disabled={!email.trim() || !password} onPress={() => void signIn()}>Sign in</FieldButton>
-          {GOOGLE_CLIENT_ID ? <GoogleButton onError={setMessage} /> : null}
-          <FieldButton variant="quiet" disabled={busy} onPress={() => void reset()}>Forgot password</FieldButton>
+          {officeMode ? <>
+            <FieldButton loading={busy} disabled={!email.trim() || !password} onPress={() => void signIn()}>Sign in</FieldButton>
+            <FieldButton variant="quiet" disabled={busy} onPress={() => void reset()}>Forgot password</FieldButton>
+          </> : <FieldButton loading={busy} disabled={!displayName.trim() || pin.length !== 6} onPress={() => void signInWithPin()}>Open my schedule</FieldButton>}
+          <FieldButton variant="quiet" disabled={busy} onPress={() => { setOfficeMode((value) => !value); setMessage(''); }}>
+            {officeMode ? 'Use name and PIN' : 'Use an office account instead'}
+          </FieldButton>
         </View>
-        <Text style={styles.privacy}>Only authorised installer team members can sign in. Australian Energy Assessments protected customer contact details never enter this app.</Text>
+        <Text style={styles.privacy}>Your PIN works once on this phone. Only jobs assigned to your TLink access are downloaded.</Text>
       </Screen>
     </KeyboardAvoidingView>
   );
@@ -113,10 +114,12 @@ const styles = StyleSheet.create({
   intro: { color: colours.muted, fontSize: 17, lineHeight: 25 },
   card: { backgroundColor: colours.white, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm, borderWidth: 1, borderColor: colours.line },
   cardTitle: { color: colours.ink, fontSize: 21, fontWeight: '800', marginBottom: spacing.sm },
+  help: { color: colours.muted, fontSize: 15, lineHeight: 22, marginBottom: spacing.xs },
   account: { color: colours.ink, fontSize: 16, fontWeight: '700' },
   guidance: { color: colours.muted, lineHeight: 21, marginBottom: spacing.sm },
   label: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },
   input: { minHeight: 52, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontSize: 16, color: colours.ink, backgroundColor: '#fbfdfc' },
+  pin: { fontSize: 22, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
   message: { color: colours.red, lineHeight: 20, paddingVertical: spacing.xs },
   privacy: { color: colours.muted, textAlign: 'center', fontSize: 13, lineHeight: 19, paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
 });

@@ -2094,6 +2094,7 @@ export function DirectTradeDashboard() {
               setWorkspace(target.workspace);
             }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
             <div className="dashboard-account-actions">
+              {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app">Get the app</a>}
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
                 <small>Business account</small>

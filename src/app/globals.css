@@ -4943,7 +4943,36 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-shell .dashboard-account-actions button { background: color-mix(in srgb, var(--trade-header-control) 72%, transparent); border: 1px solid var(--trade-header-control-border); border-radius: 9px; color: #fff; font-size: .61rem; font-weight: 800; margin: 0; min-height: 35px; padding: 8px 11px; text-decoration: none; }
 .trade-portal-shell .dashboard-account-actions a:hover,
 .trade-portal-shell .dashboard-account-actions button:hover { background: var(--trade-header-control-hover); border-color: #ffffff99; }
+.trade-portal-shell .dashboard-account-actions .tlink-get-app { background: #0aa879; border-color: #43d7ae; box-shadow: 0 5px 18px rgba(0, 0, 0, .14); font-weight: 900; white-space: nowrap; }
+.trade-portal-shell .dashboard-account-actions .tlink-get-app:hover { background: #0cc08a; }
 .trade-portal-role { background: var(--trade-header-control); border: 1px solid var(--trade-header-control-border); border-radius: 999px; color: #fff; font-size: .52rem; font-weight: 900; padding: 5px 8px; text-transform: uppercase; }
+
+.tlink-field-app-page { background: #f3f8f6; color: #0b3432; min-height: 100vh; padding: clamp(24px, 5vw, 72px); }
+.tlink-field-app-hero { background: linear-gradient(140deg, #041f27, #063a31); border-radius: 28px; color: #fff; display: grid; gap: clamp(32px, 7vw, 90px); grid-template-columns: minmax(0, 1.15fr) minmax(280px, .55fr); padding: clamp(30px, 6vw, 76px); }
+.tlink-field-app-hero > div:first-child > span, .tlink-field-app-grid span { color: #61e2bd; font-size: .62rem; font-weight: 900; text-transform: uppercase; }
+.tlink-field-app-hero h1 { color: #fff; font-size: clamp(2.4rem, 6vw, 5rem); }
+.tlink-field-app-hero p { color: #c9dfda; margin-top: 20px; }
+.tlink-field-app-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.tlink-field-app-actions > a, .tlink-field-app-actions > span { border: 1px solid #ffffff4d; border-radius: 11px; color: #e8f6f2; padding: 13px 17px; text-decoration: none; }
+.tlink-field-app-actions > a.btn { background: #09a878; border-color: #09a878; color: #fff; }
+.tlink-field-phone { background: #f8f7f1; border: 8px solid #001a22; border-radius: 32px; color: #0b3432; min-height: 500px; padding: 18px; position: relative; }
+.tlink-field-phone header { display: flex; gap: 12px; }
+.tlink-field-phone header b { background: #063a31; border-radius: 13px; color: #fff; padding: 14px; }
+.tlink-field-days { display: grid; grid-template-columns: repeat(5, 1fr); margin: 22px 0 17px; }
+.tlink-field-days i { border-radius: 10px; display: grid; font-style: normal; text-align: center; }
+.tlink-field-days i.active { background: #063a31; color: #fff; }
+.tlink-field-days em { font-style: normal; font-weight: 900; }
+.tlink-field-phone article { background: #fff; border: 1px solid #d4e3dd; border-radius: 15px; display: grid; margin-top: 10px; padding: 15px; }
+.tlink-field-phone > button { background: #07966f; border: 0; border-radius: 18px; bottom: 20px; color: #fff; font-size: 1.6rem; height: 56px; position: absolute; right: 20px; width: 56px; }
+.tlink-field-app-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 24px; }
+.tlink-field-app-grid article, .tlink-field-app-note { background: #fff; border: 1px solid #d3e3dc; border-radius: 18px; padding: 24px; }
+.tlink-field-app-grid strong, .tlink-field-app-note strong, .tlink-field-app-grid p, .tlink-field-app-note p { display: block; margin-top: 8px; }
+@media (max-width: 820px) {
+  .tlink-field-app-page { padding: 14px; }
+  .tlink-field-app-hero { grid-template-columns: 1fr; padding: 30px 22px 38px; }
+  .tlink-field-phone { margin: 0 auto; max-width: 360px; min-height: 480px; transform: none; width: 100%; }
+  .tlink-field-app-grid { grid-template-columns: 1fr; }
+}
 .trade-portal-intro { grid-column: 2; padding: 42px 38px 22px; }
 .trade-portal-intro > span { color: var(--trade-accent); display: block; font-size: .64rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .trade-portal-intro h1 { color: var(--trade-ink); font-size: clamp(2rem, 3.7vw, 3.15rem); font-weight: 500; letter-spacing: -.045em; line-height: 1.02; margin-top: 8px; }

@@ -42,10 +42,18 @@ export function mobileAppPolicy(platform: string) {
   const minimumVersion = normalised === "android"
     ? configured("AEA_MOBILE_MIN_ANDROID_VERSION", "1.0.0")
     : configured("AEA_MOBILE_MIN_IOS_VERSION", "1.0.0");
+  const latestVersion = normalised === "android"
+    ? configured("AEA_MOBILE_LATEST_ANDROID_VERSION", minimumVersion)
+    : configured("AEA_MOBILE_LATEST_IOS_VERSION", minimumVersion);
+  const updateUrl = normalised === "android"
+    ? configured("AEA_MOBILE_ANDROID_UPDATE_URL", "https://compare.ausenergyassessments.com/direct-trade/field-app")
+    : configured("AEA_MOBILE_IOS_UPDATE_URL", "https://compare.ausenergyassessments.com/direct-trade/field-app");
   return {
     contractVersion: MOBILE_CONTRACT_VERSION,
     platform: normalised,
     minimumVersion,
+    latestVersion,
+    updateUrl,
     encryptedStorageRequired: true,
     purgeOnSignOut: true,
     protectedCustomerContactDataAllowed: false,

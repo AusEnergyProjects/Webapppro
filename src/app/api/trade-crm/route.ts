@@ -1510,8 +1510,12 @@ export async function POST(request: Request) {
     if (createActions.has(action) && !canCreateJobs(identity.access)) throw new Error("JOB_CREATE_REQUIRED");
     const manageActions = new Set(["create_note", "add_task"]);
     if (manageActions.has(action) && !canManageJobs(identity.access)) throw new Error("JOB_MANAGEMENT_REQUIRED");
+    const selfScheduledCreate = action === "create_scheduled_job"
+      && identity.access.jobScope === "own"
+      && ["", identity.memberId].includes(cleanAdminText(body.assigneeMemberId, 180));
     if (["create_scheduled_job", "create_appointment"].includes(action)
-      && !identity.access.isOwner && !identity.access.canRescheduleJobs) throw new Error("JOB_RESCHEDULE_REQUIRED");
+      && !identity.access.isOwner && !identity.access.canRescheduleJobs
+      && !selfScheduledCreate) throw new Error("JOB_RESCHEDULE_REQUIRED");
     const actionJobId = cleanAdminText(body.workOrderId, 180);
     if (!identity.access.isOwner && actionJobId && manageActions.has(action)) {
       await assignedJob(identity.access, actionJobId);
@@ -2000,6 +2004,9 @@ export async function POST(request: Request) {
       const rentalModuleKeys = serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
         ? normalizeRentalAssessmentModules(body.rentalInspectionModulesJson)
         : [];
+      if (serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
+        return adminJson({ ok: false, error: "Choose at least one rental assessment or safety-check module." }, 400);
+      }
       const rentalTemplate = rentalModuleKeys.length
         ? rentalAssessmentTemplateSnapshot(rentalModuleKeys)
         : null;
@@ -2120,7 +2127,7 @@ export async function POST(request: Request) {
                 rentalInspectionId,
                 identity.uid,
                 moduleKey,
-                moduleKey === "minimum_standards" ? 1 : 0,
+                1,
                 RENTAL_ASSESSMENT_TEMPLATE_VERSION,
                 String(moduleTemplate.title || moduleKey),
                 String(moduleTemplate.credentialGate || "qualified_assessor"),

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
   PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
-  PUBLIC_RENTAL_ASSESSMENT_OPTIONAL_MODULES,
+  PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES,
+  PUBLIC_RENTAL_ASSESSMENT_MODULES,
   PUBLIC_RENTAL_ASSESSMENT_REQUEST_KIND,
 } from "@/lib/public-rental-assessment-request.mjs";
 import styles from "./PublicRentalAssessmentRequestForm.module.css";
@@ -13,7 +14,11 @@ type AddressLocality = { suburb: string; state: string };
 type LookupState = "idle" | "loading" | "ready" | "error";
 type SubmitState = { kind: "idle" | "sending" | "error" | "success"; message: string; reference?: string };
 
-const optionalLabels: Record<string, { title: string; detail: string }> = {
+const moduleLabels: Record<string, { title: string; detail: string }> = {
+  minimum_standards: {
+    title: "Victorian rental minimum standards assessment",
+    detail: "Selected by default. Untick it when the visit is only for one or more separate safety checks.",
+  },
   electrical_safety_check: {
     title: "Electrical safety check",
     detail: "Adds the separate electrical safety workflow and credential requirements.",
@@ -49,7 +54,7 @@ export function PublicRentalAssessmentRequestForm() {
   const [localities, setLocalities] = useState<AddressLocality[]>([]);
   const [lookupState, setLookupState] = useState<LookupState>("idle");
   const [lookupError, setLookupError] = useState("");
-  const [requestedOptionalModules, setRequestedOptionalModules] = useState<string[]>([]);
+  const [requestedAssessmentModules, setRequestedAssessmentModules] = useState<string[]>([...PUBLIC_RENTAL_ASSESSMENT_DEFAULT_MODULES]);
   const [notes, setNotes] = useState("");
   const [authorityConfirmed, setAuthorityConfirmed] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -98,8 +103,8 @@ export function PublicRentalAssessmentRequestForm() {
     return () => controller.abort();
   }, [postcode]);
 
-  function toggleOptionalModule(moduleKey: string) {
-    setRequestedOptionalModules((current) => current.includes(moduleKey)
+  function toggleAssessmentModule(moduleKey: string) {
+    setRequestedAssessmentModules((current) => current.includes(moduleKey)
       ? current.filter((entry) => entry !== moduleKey)
       : [...current, moduleKey]);
   }
@@ -132,7 +137,11 @@ export function PublicRentalAssessmentRequestForm() {
       setSubmitState({ kind: "error", message: "Choose the Victorian suburb listed for the property postcode." });
       return;
     }
-    const core = JSON.stringify({ requesterRole, agencyName: requesterRole === "agent-property-manager" ? agencyName.trim() : "", name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), unitNumber: unitNumber.trim(), streetAddress: streetAddress.trim(), postcode, suburb, requestedOptionalModules: [...requestedOptionalModules].sort(), notes: notes.trim(), authorityConfirmed, consentAccepted });
+    if (!requestedAssessmentModules.length) {
+      setSubmitState({ kind: "error", message: "Choose at least one assessment or safety-check service." });
+      return;
+    }
+    const core = JSON.stringify({ requesterRole, agencyName: requesterRole === "agent-property-manager" ? agencyName.trim() : "", name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), unitNumber: unitNumber.trim(), streetAddress: streetAddress.trim(), postcode, suburb, requestedAssessmentModules: [...requestedAssessmentModules].sort(), notes: notes.trim(), authorityConfirmed, consentAccepted });
     if (!submissionId.current || (lastAttemptCore.current && lastAttemptCore.current !== core)) {
       submissionId.current = createSubmissionId();
       consentGrantedAt.current = "";
@@ -158,7 +167,7 @@ export function PublicRentalAssessmentRequestForm() {
           customerSuburb: suburb,
           customerState: "VIC",
           postcode,
-          requestedOptionalModules,
+          requestedAssessmentModules,
           projectNotes: notes.trim(),
           authorityConfirmed,
           website,
@@ -210,12 +219,12 @@ export function PublicRentalAssessmentRequestForm() {
     </section>
 
     <section className={styles.section}>
-      <div className={styles.sectionHeading}><span>3</span><div><h2>Choose the assessment scope</h2><p>Rental minimum standards are always included. The three safety checks below are separate and off by default.</p></div></div>
-      <div className={styles.includedCard}><span>Included</span><div><strong>Victorian rental minimum standards assessment</strong><small>The assessor works through every required section and issues the final report.</small></div></div>
+      <div className={styles.sectionHeading}><span>3</span><div><h2>Choose the assessment scope</h2><p>Minimum standards are selected by default, but every service can be selected or unselected. Choose one service or combine several for the same visit.</p></div></div>
       <fieldset className={styles.optionalGrid}>
-        <legend>Optional separate checks</legend>
-        {PUBLIC_RENTAL_ASSESSMENT_OPTIONAL_MODULES.map((moduleKey) => <label className={requestedOptionalModules.includes(moduleKey) ? styles.selectedCard : styles.choiceCard} key={moduleKey}><input type="checkbox" checked={requestedOptionalModules.includes(moduleKey)} onChange={() => toggleOptionalModule(moduleKey)} /><span><strong>{optionalLabels[moduleKey].title}</strong><small>{optionalLabels[moduleKey].detail}</small></span></label>)}
+        <legend>Select one or more services *</legend>
+        {PUBLIC_RENTAL_ASSESSMENT_MODULES.map((moduleKey) => <label className={requestedAssessmentModules.includes(moduleKey) ? styles.selectedCard : styles.choiceCard} key={moduleKey}><input type="checkbox" checked={requestedAssessmentModules.includes(moduleKey)} onChange={() => toggleAssessmentModule(moduleKey)} /><span><strong>{moduleLabels[moduleKey].title}</strong><small>{moduleLabels[moduleKey].detail}</small></span></label>)}
       </fieldset>
+      {!requestedAssessmentModules.length && <p className={styles.errorText} role="alert">Choose at least one service before sending the request.</p>}
       <label className={styles.notesField}><span>Anything useful for our review?</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} maxLength={1200} placeholder="For example: vacant property, preferred timing, known access limitation or the reason the assessment is needed." /><small>Do not include keysafe codes, tenant identity details, payment information or documents.</small></label>
     </section>
 

@@ -1,5 +1,6 @@
 import { ApiError, apiRequest } from '@/lib/api';
 import { firebaseAuth, firebaseSignOut } from '@/lib/auth';
+import { clearFieldSession, getFieldPrincipal } from '@/lib/field-session';
 import { APP_VERSION, MOBILE_PLATFORM } from '@/lib/config';
 import {
   applyChanges,
@@ -119,13 +120,15 @@ async function fetchChanges(mode: FieldAccessMode) {
 
 async function revokedSignOut() {
   await forgetPushToken();
+  await clearFieldSession();
   await firebaseSignOut();
 }
 
 async function performSync(): Promise<SyncOutcome> {
   const currentUser = firebaseAuth.currentUser;
-  if (!currentUser) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
-  await prepareLocalDataOwner(currentUser.uid);
+  const fieldPrincipal = await getFieldPrincipal();
+  if (!currentUser && !fieldPrincipal) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
+  await prepareLocalDataOwner(fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`);
   try {
     const modes = await resolveFieldAccessModes();
     await purgeExpiredAddresses();
@@ -162,7 +165,7 @@ async function performSync(): Promise<SyncOutcome> {
         queuedUploads: counts.uploads,
         conflicts: counts.conflicts,
         updateRequired: error.minimumVersion || 'current',
-        message: 'Update AEA Field before syncing. Your saved work is still secure on this device.',
+        message: 'Update TLink Field before syncing. Your saved work is still secure on this device.',
       };
     }
     throw error;
