@@ -58,7 +58,9 @@ test("guided setup attaches duplicates and creates one appointment plus planned 
   assert.match(enquiryInbox, /Create job from enquiry/);
   assert.match(enquiryInbox, /sourceEnquiryId: detail\.id/);
   assert.match(workspace, /setNewJobSeed\(seed\)[\s\S]*setCreating\("job"\)/);
-  assert.match(form, /const steps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(form, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(form, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
+  assert.match(form, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
   assert.doesNotMatch(form, /name="title"|datalist/);
   assert.doesNotMatch(workspace, /placeholder="Appointment title"/);
   assert.match(crm, /INSERT INTO trade_crm_appointments/);
@@ -152,7 +154,7 @@ test("certificate planning cascades from output type to jurisdiction program and
   assert.match(form, /setDraftProgramTemplateId\(""\);[\s\S]*setDraftActivityTemplateId\(""\)/);
   assert.match(form, /aria-current=\{step === target \? "step" : undefined\}/);
   assert.match(form, /querySelector<HTMLHeadingElement>\(`\[data-step="\$\{step\}"\] h3`\)/);
-  assert.match(form, /Saving creates the TLink job, field appointment and planned activity review records together/);
+  assert.match(form, /Saving creates the TLink job, field appointment and attached workflow together/);
 });
 
 test("blank guided jobs open mandatory new-customer fields while seeded jobs keep existing-customer mode", () => {

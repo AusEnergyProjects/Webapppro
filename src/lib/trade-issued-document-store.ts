@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
-const MAX_ISSUED_PDF_BYTES = 12 * 1024 * 1024;
+const MAX_STANDARD_ISSUED_PDF_BYTES = 12 * 1024 * 1024;
+const MAX_RENTAL_REPORT_PDF_BYTES = 50 * 1024 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 type IssuedDocumentObject = {
@@ -27,7 +28,7 @@ export type ImmutableIssuedPdfReference = {
 };
 
 export type ImmutableIssuedPdfIdentity = {
-  kind: "quote" | "invoice";
+  kind: "quote" | "invoice" | "rental-report";
   documentId: string;
   revision: number;
 };
@@ -54,10 +55,14 @@ function exactArrayBuffer(bytes: Uint8Array) {
   return copy.buffer;
 }
 
-function assertPdfBytes(bytes: Uint8Array) {
+function issuedPdfLimit(kind: ImmutableIssuedPdfIdentity["kind"]) {
+  return kind === "rental-report" ? MAX_RENTAL_REPORT_PDF_BYTES : MAX_STANDARD_ISSUED_PDF_BYTES;
+}
+
+function assertPdfBytes(bytes: Uint8Array, kind: ImmutableIssuedPdfIdentity["kind"]) {
   if (
     bytes.byteLength < 5 ||
-    bytes.byteLength > MAX_ISSUED_PDF_BYTES ||
+    bytes.byteLength > issuedPdfLimit(kind) ||
     String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-"
   ) {
     throw new Error("ISSUED_PDF_INVALID");
@@ -88,13 +93,13 @@ export async function immutableIssuedPdfSha256(bytes: Uint8Array) {
 }
 
 export async function prepareImmutableIssuedPdfReference(input: {
-  kind: "quote" | "invoice";
+  kind: "quote" | "invoice" | "rental-report";
   documentId: string;
   revision: number;
   bytes: Uint8Array;
   expectedSha256?: string;
 }): Promise<ImmutableIssuedPdfReference> {
-  assertPdfBytes(input.bytes);
+  assertPdfBytes(input.bytes, input.kind);
   const sha256 = await immutableIssuedPdfSha256(input.bytes);
   if (input.expectedSha256 && input.expectedSha256.toLowerCase() !== sha256) {
     throw new Error("ISSUED_PDF_INTEGRITY");
@@ -111,7 +116,7 @@ export async function prepareImmutableIssuedPdfReference(input: {
 }
 
 export async function storeImmutableIssuedPdf(input: {
-  kind: "quote" | "invoice";
+  kind: "quote" | "invoice" | "rental-report";
   documentId: string;
   revision: number;
   bytes: Uint8Array;
@@ -149,7 +154,7 @@ export async function readImmutableIssuedPdf(
   if (
     !SHA256_PATTERN.test(expectedSha256) ||
     expectedSize < 5 ||
-    expectedSize > MAX_ISSUED_PDF_BYTES
+    expectedSize > issuedPdfLimit(identity.kind)
   ) {
     throw new Error("ISSUED_PDF_REFERENCE_INVALID");
   }
@@ -159,7 +164,7 @@ export async function readImmutableIssuedPdf(
   const object = await issuedDocumentBucket().get(objectKey);
   if (!object) throw new Error("ISSUED_PDF_UNAVAILABLE");
   const bytes = new Uint8Array(await object.arrayBuffer());
-  assertPdfBytes(bytes);
+  assertPdfBytes(bytes, identity.kind);
   if (
     bytes.byteLength !== expectedSize ||
     (await immutableIssuedPdfSha256(bytes)) !== expectedSha256

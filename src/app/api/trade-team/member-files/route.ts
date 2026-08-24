@@ -45,7 +45,22 @@ type MemberFileRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string;
+  credential_id?: string;
+  credential_type?: string;
+  credential_name?: string;
+  credential_number?: string;
+  credential_issuer?: string;
+  credential_jurisdiction?: string;
+  credential_rental_gate?: string;
+  credential_status?: string;
 };
+
+const RENTAL_CREDENTIAL_GATES = new Set([
+  "licensed_electrician",
+  "licensed_gasfitter",
+  "suitably_qualified_smoke_alarm_worker",
+]);
+const CREDENTIAL_TYPES = new Set(["licence", "registration", "training"]);
 
 function memberFileBucket() {
   const bucket = (env as unknown as { EVIDENCE?: MemberFileBucket }).EVIDENCE;
@@ -144,6 +159,16 @@ function filePayload(row: MemberFileRow) {
     createdAt: row.created_at,
     uploadedAt: row.created_at,
     updatedAt: row.updated_at,
+    credential: row.credential_id ? {
+      id: row.credential_id,
+      type: row.credential_type || "",
+      name: row.credential_name || "",
+      number: row.credential_number || "",
+      issuer: row.credential_issuer || "",
+      jurisdiction: row.credential_jurisdiction || "",
+      rentalGate: row.credential_rental_gate || "",
+      status: row.credential_status || "",
+    } : null,
     viewPath: `/api/trade-team/member-files?memberId=${encodeURIComponent(row.team_member_id)}&fileId=${encodeURIComponent(row.id)}`,
     downloadPath: `/api/trade-team/member-files?memberId=${encodeURIComponent(row.team_member_id)}&fileId=${encodeURIComponent(row.id)}&download=1`,
   };
@@ -166,15 +191,23 @@ export async function GET(request: Request) {
     await ownedMember(access, memberId);
     const fileId = cleanAdminText(search.get("fileId"), 180);
     if (!fileId) {
-      const rows = await getD1().prepare(`SELECT * FROM trade_team_member_files
-        WHERE owner_uid = ? AND team_member_id = ? AND status = 'active'
-        ORDER BY created_at DESC, id DESC`)
+      const rows = await getD1().prepare(`SELECT file.*,
+          credential.id credential_id, credential.credential_type, credential.name credential_name,
+          credential.credential_number, credential.issuer credential_issuer,
+          credential.jurisdiction credential_jurisdiction, credential.rental_gate credential_rental_gate,
+          credential.status credential_status
+        FROM trade_team_member_files file
+        LEFT JOIN trade_team_member_credentials credential ON credential.file_id = file.id
+          AND credential.owner_uid = file.owner_uid AND credential.team_member_id = file.team_member_id
+          AND credential.status = 'active'
+        WHERE file.owner_uid = ? AND file.team_member_id = ? AND file.status = 'active'
+        ORDER BY file.created_at DESC, file.id DESC`)
         .bind(access.ownerUid, memberId).all<MemberFileRow>();
       await auditStatement(access, memberId, memberId, "vault.viewed", { fileCount: rows.results.length }).run();
       return adminJson({ ok: true, memberId, files: rows.results.map(filePayload) });
     }
-    const row = await getD1().prepare(`SELECT * FROM trade_team_member_files
-      WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
+    const row = await getD1().prepare(`SELECT file.* FROM trade_team_member_files file
+      WHERE file.id = ? AND file.owner_uid = ? AND file.team_member_id = ? AND file.status = 'active'`)
       .bind(fileId, access.ownerUid, memberId).first<MemberFileRow>();
     if (!row) throw new Error("FILE_NOT_FOUND");
     const object = await memberFileBucket().get(row.object_key);
@@ -222,11 +255,32 @@ export async function POST(request: Request) {
       return adminJson({ ok: true, cleanup: result });
     }
     if (action !== "upload") return adminJson({ ok: false, error: "Unsupported team member file action." }, 400);
-    const category = "other";
+    const rentalGate = cleanAdminText(form.get("rentalGate"), 80);
+    if (rentalGate && !RENTAL_CREDENTIAL_GATES.has(rentalGate)) {
+      return adminJson({ ok: false, error: "Choose a valid rental-assessment credential type." }, 400);
+    }
+    const credentialType = cleanAdminText(form.get("credentialType"), 30);
+    const credentialName = cleanAdminText(form.get("credentialName"), 180);
+    const credentialNumber = cleanAdminText(form.get("credentialNumber"), 120);
+    const credentialIssuer = cleanAdminText(form.get("credentialIssuer"), 180);
+    const credentialJurisdiction = cleanAdminText(form.get("credentialJurisdiction"), 20).toUpperCase();
+    if (rentalGate && (!CREDENTIAL_TYPES.has(credentialType) || !credentialName || !credentialNumber
+      || !credentialIssuer || !["VIC", "NATIONAL"].includes(credentialJurisdiction))) {
+      return adminJson({ ok: false, error: "Add the credential name, number, issuer, type and VIC or national jurisdiction." }, 400);
+    }
+    if (rentalGate === "licensed_electrician" && !["licence", "registration"].includes(credentialType)) {
+      return adminJson({ ok: false, error: "An electrical safety-check credential must be a licence or registration." }, 400);
+    }
+    if (rentalGate === "licensed_gasfitter" && !["licence", "registration"].includes(credentialType)) {
+      return adminJson({ ok: false, error: "A gas safety-check credential must be a licence or registration." }, 400);
+    }
+    const category = rentalGate === "suitably_qualified_smoke_alarm_worker" ? "training"
+      : rentalGate ? "licence" : "other";
     const title = cleanAdminText(form.get("title"), 180);
     const expiresAt = cleanAdminText(form.get("expiresAt"), 10);
     if (!title) return adminJson({ ok: false, error: "Add a title for this document or photo." }, 400);
     if (!validDocumentExpiry(expiresAt)) return adminJson({ ok: false, error: "Choose a valid expiry date or leave it blank." }, 400);
+    if (rentalGate && !expiresAt) return adminJson({ ok: false, error: "Add the credential expiry date so TLink can prevent expired sign-off." }, 400);
     const description = "";
     const file = form.get("file");
     if (!(file instanceof File)) return adminJson({ ok: false, error: "Choose a team member file." }, 400);
@@ -236,6 +290,7 @@ export async function POST(request: Request) {
     if (Number(activeCount?.count || 0) >= TEAM_MEMBER_FILE_LIMIT) throw new Error("FILE_LIMIT_REACHED");
     const inspected = await inspectTeamMemberFile(file);
     const id = crypto.randomUUID();
+    const credentialId = rentalGate ? crypto.randomUUID() : "";
     const objectKey = `trade-team-members/${access.ownerUid}/${memberId}/${id}`;
     const now = new Date().toISOString();
     await getD1().batch([
@@ -260,17 +315,34 @@ export async function POST(request: Request) {
         getD1().prepare(`UPDATE trade_team_member_files SET status = 'active', updated_at = ?
           WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'uploading'`)
           .bind(now, id, access.ownerUid, memberId),
+        ...(rentalGate ? [getD1().prepare(`INSERT INTO trade_team_member_credentials
+          (id, owner_uid, team_member_id, credential_type, rental_gate, name, credential_number,
+           issuer, jurisdiction, expires_at, status, file_id, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM trade_team_member_files file
+            WHERE file.id = ? AND file.owner_uid = ? AND file.team_member_id = ?
+              AND file.status = 'active' AND file.updated_at = ?)`)
+          .bind(credentialId, access.ownerUid, memberId, credentialType, rentalGate, credentialName,
+            credentialNumber, credentialIssuer, credentialJurisdiction, expiresAt, id, now, now,
+            id, access.ownerUid, memberId, now)] : []),
         conditionalFileAuditStatement(access, memberId, id, "file.uploaded", {
           title, expiresAt, contentType: inspected.contentType, sizeBytes: inspected.sizeBytes,
+          rentalGate: rentalGate || undefined,
         }, "active", now),
       ]);
       if (Number(results[0]?.meta.changes || 0) !== 1) throw new Error("FILE_UPLOAD_STATE_CHANGED");
+      if (rentalGate && Number(results[1]?.meta.changes || 0) !== 1) throw new Error("FILE_UPLOAD_STATE_CHANGED");
     } catch (error) {
       try {
-        await getD1().prepare(`UPDATE trade_team_member_files SET status = 'cleanup_pending',
-          next_cleanup_at = ?, last_cleanup_error = 'upload_finalisation_failed', updated_at = ?
-          WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status IN ('uploading', 'active')`)
-          .bind(now, now, id, access.ownerUid, memberId).run();
+        await getD1().batch([
+          getD1().prepare(`UPDATE trade_team_member_credentials SET status = 'archived', file_id = '', updated_at = ?
+            WHERE owner_uid = ? AND team_member_id = ? AND file_id = ? AND status = 'active'`)
+            .bind(now, access.ownerUid, memberId, id),
+          getD1().prepare(`UPDATE trade_team_member_files SET status = 'cleanup_pending',
+            next_cleanup_at = ?, last_cleanup_error = 'upload_finalisation_failed', updated_at = ?
+            WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status IN ('uploading', 'active')`)
+            .bind(now, now, id, access.ownerUid, memberId),
+        ]);
         await sweepCleanup(access, id);
       } catch (cleanupError) {
         console.error("Team member file cleanup intent could not be persisted", {
@@ -279,8 +351,16 @@ export async function POST(request: Request) {
       }
       throw error;
     }
-    const row = await getD1().prepare(`SELECT * FROM trade_team_member_files
-      WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
+    const row = await getD1().prepare(`SELECT file.*,
+        credential.id credential_id, credential.credential_type, credential.name credential_name,
+        credential.credential_number, credential.issuer credential_issuer,
+        credential.jurisdiction credential_jurisdiction, credential.rental_gate credential_rental_gate,
+        credential.status credential_status
+      FROM trade_team_member_files file
+      LEFT JOIN trade_team_member_credentials credential ON credential.file_id = file.id
+        AND credential.owner_uid = file.owner_uid AND credential.team_member_id = file.team_member_id
+        AND credential.status = 'active'
+      WHERE file.id = ? AND file.owner_uid = ? AND file.team_member_id = ? AND file.status = 'active'`)
       .bind(id, access.ownerUid, memberId).first<MemberFileRow>();
     if (!row) throw new Error("FILE_UPLOAD_STATE_CHANGED");
     return adminJson({ ok: true, file: filePayload(row) }, 201);
@@ -308,7 +388,7 @@ export async function DELETE(request: Request) {
         next_cleanup_at = ?, last_cleanup_error = 'delete_requested', updated_at = ?
         WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
         .bind(now, now, fileId, access.ownerUid, memberId),
-      getD1().prepare(`UPDATE trade_team_member_credentials SET file_id = '', updated_at = ?
+      getD1().prepare(`UPDATE trade_team_member_credentials SET status = 'archived', file_id = '', updated_at = ?
         WHERE owner_uid = ? AND team_member_id = ? AND file_id = ?
           AND EXISTS (SELECT 1 FROM trade_team_member_files file
             WHERE file.id = ? AND file.owner_uid = trade_team_member_credentials.owner_uid

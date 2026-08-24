@@ -20,6 +20,10 @@ import {
   tradeJobScheduleEligibilitySql,
   tradeScheduleAvailabilityGuardStatement,
 } from "@/lib/trade-schedule-server";
+import {
+  isRentalInspectionAssignmentConflict,
+  rentalInspectionAssignmentStatements,
+} from "@/lib/trade-rental-assignment-server";
 
 export const runtime = "edge";
 
@@ -30,6 +34,9 @@ function errorResponse(error: unknown) {
   }
   if (isTradeComplianceIntentScheduleConflict(error)) {
     return adminJson({ ok: false, error: "This job, its selected time or its compliance plan changed after you opened it. Refresh the schedule before saving again." }, 409);
+  }
+  if (isRentalInspectionAssignmentConflict(error)) {
+    return adminJson({ ok: false, error: "This rental assessment assignment changed after you opened it. Refresh the schedule before saving again." }, 409);
   }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
@@ -46,6 +53,7 @@ function errorResponse(error: unknown) {
   if (code === "RESCHEDULE_REQUEST_NOT_FOUND") return adminJson({ ok: false, error: "Appointment change request not found." }, 404);
   if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Job not found." }, 404);
   if (code === "REVISION_CONFLICT") return adminJson({ ok: false, error: "This schedule item changed after you opened it. Refresh the week before saving again." }, 409);
+  if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment already has an active appointment. Move or cancel that appointment instead of creating another one." }, 409);
   if (code === "INVALID_SCHEDULE_CHANGES") return adminJson({ ok: false, error: "Choose between one and five different appointments to save." }, 400);
   if (code === "DUPLICATE_SCHEDULE_JOB") return adminJson({ ok: false, error: "Save one appointment per job at a time." }, 400);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be rescheduled." }, 409);
@@ -419,6 +427,22 @@ export async function PATCH(request: Request) {
               changedAt: now,
               ownerUid: access.ownerUid,
             }),
+            ...rentalInspectionAssignmentStatements(db, {
+              actorType: access.isOwner ? "owner" : "assessor",
+              actorUid: access.actorUid,
+              appointment: {
+                id: String(current.appointment_id),
+                startsAt,
+                endsAt,
+              },
+              assigneeLabel: String(member.display_name || ""),
+              assigneeMemberId: memberId,
+              changedAt: now,
+              jobRevision,
+              ownerUid: access.ownerUid,
+              previousAssigneeMemberId: String(current.current_assignee_member_id || ""),
+              workOrderId: String(current.work_order_id),
+            }),
             tradeJobScheduleEligibilityGuardStatement(db, {
               ownerUid: access.ownerUid,
               workOrderId: String(current.work_order_id),
@@ -613,6 +637,22 @@ export async function PATCH(request: Request) {
             changedAt: now,
             ownerUid: access.ownerUid,
           }),
+          ...rentalInspectionAssignmentStatements(db, {
+            actorType: access.isOwner ? "owner" : "assessor",
+            actorUid: access.actorUid,
+            appointment: {
+              id: item.appointmentId,
+              startsAt: item.startsAt,
+              endsAt: item.endsAt,
+            },
+            assigneeLabel: String(item.member.display_name || ""),
+            assigneeMemberId: item.memberId,
+            changedAt: now,
+            jobRevision: item.jobRevision,
+            ownerUid: access.ownerUid,
+            previousAssigneeMemberId: String(item.current.job_assignee_member_id || ""),
+            workOrderId: String(item.current.work_order_id),
+          }),
         );
       }
       for (const item of prepared) {
@@ -716,6 +756,18 @@ export async function PATCH(request: Request) {
           changedAt: now,
           ownerUid: access.ownerUid,
         }),
+        ...rentalInspectionAssignmentStatements(db, {
+          actorType: access.isOwner ? "owner" : "assessor",
+          actorUid: access.actorUid,
+          appointment: { id: appointmentId, startsAt, endsAt },
+          assigneeLabel: String(member.display_name || ""),
+          assigneeMemberId: memberId,
+          changedAt: now,
+          jobRevision,
+          ownerUid: access.ownerUid,
+          previousAssigneeMemberId: String(current.assignee_member_id || ""),
+          workOrderId: String(current.work_order_id),
+        }),
         tradeJobScheduleEligibilityGuardStatement(db, {
           ownerUid: access.ownerUid,
           workOrderId: String(current.work_order_id),
@@ -754,6 +806,13 @@ export async function PATCH(request: Request) {
       if (!job) throw new Error("JOB_NOT_FOUND");
       if (["completed", "cancelled"].includes(String(job.stage))) throw new Error("TERMINAL_JOB_LOCKED");
       if (Number(body.expectedRevision) !== Number(job.revision)) throw new Error("REVISION_CONFLICT");
+      if (String(job.service_category || "") === "rental-inspection") {
+        const activeAppointment = await db.prepare(`SELECT id FROM trade_crm_appointments
+          WHERE work_order_id = ? AND firebase_uid = ?
+            AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
+          .bind(workOrderId, access.ownerUid).first();
+        if (activeAppointment) throw new Error("RENTAL_ACTIVE_APPOINTMENT");
+      }
       await assertTradeJobReadyForScheduling(access.ownerUid, workOrderId);
       assertCurrentScheduleAssignment(access, String(job.assignee_member_id || ""));
       assertAssignmentChange(access, String(job.assignee_member_id || ""), memberId);
@@ -780,6 +839,18 @@ export async function PATCH(request: Request) {
         previousTradeScheduleMutationGuardStatement(db, {
           changedAt: now,
           ownerUid: access.ownerUid,
+        }),
+        ...rentalInspectionAssignmentStatements(db, {
+          actorType: access.isOwner ? "owner" : "assessor",
+          actorUid: access.actorUid,
+          appointment: { id: appointmentId, startsAt, endsAt },
+          assigneeLabel: String(member.display_name || ""),
+          assigneeMemberId: memberId,
+          changedAt: now,
+          jobRevision: revision,
+          ownerUid: access.ownerUid,
+          previousAssigneeMemberId: String(job.assignee_member_id || ""),
+          workOrderId,
         }),
         tradeJobScheduleEligibilityGuardStatement(db, {
           ownerUid: access.ownerUid,

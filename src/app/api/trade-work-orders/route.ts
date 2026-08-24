@@ -161,6 +161,7 @@ function errorResponse(error: unknown) {
   if (code === "TASK_LIMIT_REACHED") return adminJson({ ok: false, error: "This work record has reached its checklist limit." }, 409);
   if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed and cancelled jobs are locked." }, 409);
+  if (code === "RENTAL_SCHEDULE_WORKFLOW_REQUIRED") return adminJson({ ok: false, error: "Use TLink Schedule to change a rental assessment appointment or assessor." }, 409);
   if (code === "ONLINE_MUTATION_CONFLICT") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This work record changed elsewhere. Refresh it before saving." }, 409);
   if (code === "SOURCE_NOT_FOUND") return adminJson({ ok: false, error: "That platform work item is no longer available to convert." }, 404);
   if (code === "SOURCE_ALREADY_USED") return adminJson({ ok: false, error: "That platform work item already has a Business Hub record." }, 409);
@@ -608,7 +609,7 @@ export async function PATCH(request: Request) {
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);
-    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label, revision
+    const current = await db.prepare(`SELECT id, stage, priority, scheduled_start, scheduled_end, assignee_member_id, assignee_label, service_category, revision
       FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
       .bind(workOrderId, identity.uid).first<Record<string, unknown>>();
     if (!current) throw new Error("WORK_NOT_FOUND");
@@ -631,6 +632,10 @@ export async function PATCH(request: Request) {
     }
     if (action !== "update_work_order") return adminJson({ ok: false, error: "Unsupported Business Hub update." }, 400);
     if (["completed", "cancelled"].includes(String(current.stage))) throw new Error("TERMINAL_JOB_LOCKED");
+    if (String(current.service_category || "") === "rental-inspection"
+      && (body.assigneeLabel !== undefined || body.scheduledStart !== undefined || body.scheduledEnd !== undefined)) {
+      throw new Error("RENTAL_SCHEDULE_WORKFLOW_REQUIRED");
+    }
 
     const requestedStage = body.stage === undefined ? String(current.stage) : cleanAdminText(body.stage, 30);
     const requestedPriority = body.priority === undefined ? String(current.priority) : cleanAdminText(body.priority, 20);

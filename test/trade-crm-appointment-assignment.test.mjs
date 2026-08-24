@@ -424,6 +424,10 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
         (id, firebase_uid, operation_id, step_number, verified, created_at) VALUES (?, ?, ?, 1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END, ?)`)
         .bind(crypto.randomUUID(), input.ownerUid, `schedule-mutation:${crypto.randomUUID()}`, input.changedAt),
     },
+    "@/lib/trade-rental-assignment-server": {
+      isRentalInspectionAssignmentConflict: () => false,
+      rentalInspectionAssignmentStatements: () => [],
+    },
     "@/lib/trade-address-verification": {
       TradeAddressVerificationError: DomainError,
     },

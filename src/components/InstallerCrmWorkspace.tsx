@@ -30,6 +30,7 @@ const TradeIntegrationCentre = dynamic(() => import("./TradeIntegrationCentre").
 const TradeCommercialHandoffPanel = dynamic(() => import("./TradeCommercialHandoffPanel").then((module) => module.TradeCommercialHandoffPanel));
 const TradeComplianceIntake = dynamic(() => import("./TradeComplianceIntake").then((module) => module.TradeComplianceIntake));
 const TradeFieldWorkPanel = dynamic(() => import("./TradeFieldWorkPanel").then((module) => module.TradeFieldWorkPanel));
+const TradeRentalInspectionPanel = dynamic(() => import("./TradeRentalInspectionPanel").then((module) => module.TradeRentalInspectionPanel));
 const TradeJobFormsPanel = dynamic(() => import("./TradeJobFormsPanel").then((module) => module.TradeJobFormsPanel));
 const TradeDataImportWorkspace = dynamic(() => import("./TradeDataImportWorkspace").then((module) => module.TradeDataImportWorkspace));
 const TradeEnquiryInbox = dynamic(() => import("./TradeEnquiryInbox").then((module) => module.TradeEnquiryInbox));
@@ -102,6 +103,7 @@ type CreateJobResult = {
   ok?: boolean; id?: string; workNumber?: string; customerId?: string; serviceSiteId?: string;
   complianceIntentPlanned?: boolean; complianceIntentCount?: number; workPackReady?: boolean;
   workPackBlockers?: Array<{ code: string; message: string }>;
+  rentalInspectionAttached?: boolean; rentalInspectionModuleCount?: number;
   calendarSynced?: number; calendarFailed?: number; duplicateCandidates?: DuplicateCandidate[]; error?: string;
 };
 type IndexPagination = { page: number; pageSize: number; total: number; pageCount: number; hasNext?: boolean; nextCursor?: string };
@@ -125,11 +127,13 @@ type JobReturnTarget = { kind: "jobs" } | { kind: "customer"; customerId: string
 
 const serviceOptions = [
   ...ENERGY_SERVICE_OPTIONS,
+  ["rental-inspection", "Rental inspection"],
   ["electrical", "Electrical services"], ["plumbing", "Plumbing services"],
   ["mounting-hardware", "Mounting and hardware"], ["controls", "Energy controls"],
 ] as const;
 const serviceLabels: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
+  "rental-inspection": "Rental inspection",
   electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls",
   "insulation-draughts": "Insulation and draught control",
@@ -1043,6 +1047,7 @@ export function InstallerCrmWorkspace({ user, teamAccess, staffPermissions, navi
       ));
       const creationResults = [
         `${result.workNumber || "Job"} created and scheduled in TLink.`,
+        result.rentalInspectionAttached ? `${result.rentalInspectionModuleCount || 1} rental inspection workflow ${(result.rentalInspectionModuleCount || 1) === 1 ? "module was" : "modules were"} attached.` : "",
         result.complianceIntentPlanned && result.workPackReady
           ? "The governed activity form was attached to its draft compliance case and is ready for the assigned technician. No certificate was created."
           : result.complianceIntentPlanned
@@ -1378,10 +1383,10 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
   const mainTabs: Array<readonly [JobDetailTab, string]> = [["summary", "Overview"]];
   if (canOpenJobSchedule) mainTabs.push(["schedule", `Schedule (${visibleJobAppointments.length})`]);
   if (canViewQuotes) mainTabs.push(["quote", "Quote"]);
-  if (canViewFieldEvidence) mainTabs.push(["field", "Field work"]);
+  if (canViewFieldEvidence) mainTabs.push(["field", job.serviceCategory === "rental-inspection" ? "Assessment" : "Field work"]);
   if (canViewInvoices) mainTabs.push(["invoice", "Invoice"]);
   const moreTabs: Array<readonly [JobDetailTab, string]> = [["tasks", `Tasks (${job.tasks.filter((task) => task.status === "pending").length})`], ["notes", `Notes${openIssues ? ` (${openIssues})` : ""}`]];
-  if (canViewFieldEvidence) moreTabs.unshift(["forms", "Forms"]);
+  if (canViewFieldEvidence) moreTabs.unshift(["forms", job.serviceCategory === "rental-inspection" ? "Other forms" : "Forms"]);
   if (!permissions && canManageFieldEvidence) moreTabs.push(["handover", "Handover"]);
   const allowedTabs = [...mainTabs, ...moreTabs].map(([value]) => value);
   const activeTab = allowedTabs.includes(tab) ? tab : "summary";
@@ -1430,7 +1435,7 @@ function JobDetail({ job, customer, sites, user, busy, refreshing = false, teamM
       {canOpenDirectCustomerCompliance && customer && complianceIntents.length === 0 && complianceCases.length === 0 && <TradeComplianceIntake user={user} workOrderId={job.id} onChanged={onReload} />}
       {complianceCases.length > 0 && <section className="crm-job-compliance"><header><div><span>Compliance intake</span><h4>{complianceCases.length} linked case{complianceCases.length === 1 ? "" : "s"}</h4></div><strong>Compliance review required</strong></header><div>{complianceCases.map((item) => <article key={item.id}><div><span>{item.caseNumber} | activity date {item.activityDate}</span><strong>{item.programCode} | {item.registryActivityCode || item.activityKey} | {item.title} | v{item.version}</strong><p>{[item.productCategory, item.scenarioCode ? `scenario ${item.scenarioCode}` : "", item.scenario].filter(Boolean).join(" | ")}</p></div><dl><div><dt>Case</dt><dd>{item.status.replaceAll("_", " ")}</dd></div><div><dt>Evidence</dt><dd>{item.evidenceStatus.replaceAll("_", " ")}</dd></div></dl>{item.officialSourceUrl && <a href={item.officialSourceUrl} target="_blank" rel="noreferrer">Open official {item.officialSourceVersion || item.officialSourceTitle || "activity"} source</a>}</article>)}</div><p>TLink has preserved the selected rule version for intake. This is not an eligibility decision, certificate calculation, evidence acceptance or rebate promise.</p></section>}
     </section>}
-    {activeTab === "field" && canViewFieldEvidence && <section className="crm-job-section"><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} />{!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary"><summary>Customer photo request</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}{!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}</section>}
+    {activeTab === "field" && canViewFieldEvidence && <section className="crm-job-section">{job.serviceCategory === "rental-inspection" && <TradeRentalInspectionPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} onChanged={onReload} />}{job.serviceCategory === "rental-inspection" ? <details className="crm-field-secondary"><summary>Travel, time, signatures and general job files</summary><TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} /></details> : <TradeFieldWorkPanel user={user} workOrderId={job.id} isProtected={isProtected} readOnly={!canManageFieldEvidence} canOpenHandover={!permissions} onNavigate={(next) => setTab(next)} onChanged={onReload} />}{!permissions && canManageFieldEvidence && !isProtected && customer && <details className="crm-field-secondary"><summary>Customer photo request</summary><TradePhotoRequestPanel user={user} workOrderId={job.id} /></details>}{!permissions && canManageFieldEvidence && <details className="crm-field-secondary" id="field-work-plan"><summary>Work plan and actuals</summary><TradeJobReadinessPanel user={user} workOrderId={job.id} completionAction={false} onChanged={onReload} onOpenTeam={() => { const teamButton = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Team"); teamButton?.click(); }} /></details>}</section>}
     {activeTab === "forms" && canViewFieldEvidence && <section className="crm-job-section"><TradeJobFormsPanel user={user} workOrderId={job.id} readOnly={!canManageFieldEvidence} /></section>}
     {activeTab === "schedule" && canOpenJobSchedule && <section className="crm-job-section crm-job-schedule-workspace">
       <div className="crm-job-schedule-layout">

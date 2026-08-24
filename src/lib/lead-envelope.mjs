@@ -3,6 +3,10 @@ import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import { buildDirectTradeTriage } from "./direct-trade-matching.mjs";
 import { buildParticipantApplicationReview } from "./direct-trade-participants.mjs";
 import { isPublicPlanEnquiry } from "./public-plan-enquiry.mjs";
+import {
+  isPublicRentalAssessmentRequest,
+  PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY,
+} from "./public-rental-assessment-request.mjs";
 
 const EVENT_TYPES = new Set([
   "comparison.results",
@@ -26,6 +30,7 @@ const GAS_ENQUIRIES = new Set(["gas-heating", "gas-hot-water"]);
 export function leadEventType(payload) {
   if (payload?.submissionType === "comparison") return "comparison.results";
   if (isPublicPlanEnquiry(payload?.enquiry)) return "direct_trade.project";
+  if (isPublicRentalAssessmentRequest(payload?.enquiry)) return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-project")
     return "direct_trade.project";
   if (payload?.enquiry === "direct-trade-partner")
@@ -68,6 +73,7 @@ export function publicPlanSubmissionFingerprint(payload) {
   const core = canonicalFingerprintValue({
     submissionType: payload?.submissionType || "",
     enquiry: payload?.enquiry || "",
+    name: payload?.name || "",
     customerFirstName: payload?.customerFirstName || "",
     customerLastName: payload?.customerLastName || "",
     email: payload?.email || "",
@@ -79,6 +85,10 @@ export function publicPlanSubmissionFingerprint(payload) {
     postcode: payload?.postcode || "",
     projectCategories: payload?.projectCategories || [],
     projectNotes: payload?.projectNotes || "",
+    requesterRole: payload?.requesterRole || "",
+    agencyName: payload?.agencyName || "",
+    requestedOptionalModules: payload?.requestedOptionalModules || [],
+    authorityConfirmed: payload?.authorityConfirmed === true,
     tradeSharing: payload?.tradeSharing || null,
     quotePreparation: payload?.quotePreparation || null,
     planSnapshot: payload?.planSnapshot || null,
@@ -94,7 +104,9 @@ export function publicPlanSubmissionFingerprint(payload) {
 export function createLeadEnvelope(payload, options = {}) {
   const leadPayload = { ...(payload || {}) };
   const publicPlanEnquiry = isPublicPlanEnquiry(leadPayload.enquiry);
-  const submissionFingerprint = publicPlanEnquiry
+  const rentalAssessmentRequest = isPublicRentalAssessmentRequest(leadPayload.enquiry);
+  const publicRequest = publicPlanEnquiry || rentalAssessmentRequest;
+  const submissionFingerprint = publicRequest
     ? publicPlanSubmissionFingerprint(leadPayload)
     : "";
   delete leadPayload.planSnapshot;
@@ -109,19 +121,42 @@ export function createLeadEnvelope(payload, options = {}) {
     .replaceAll("-", "")
     .slice(0, 10)
     .toUpperCase();
-  const inferredPublicReference = isPublicPlanEnquiry(leadPayload.enquiry)
+  const inferredPublicReference = publicRequest
     ? publicPlanReference(leadPayload.submissionId)
     : "";
   const reference = inferredPublicReference
     || `AEA-${referenceDate(submittedAt)}-${suffix}`;
-  const inferredState = publicPlanEnquiry
+  const inferredState = publicRequest
     ? ""
     : residentialStateFromPostcode(leadPayload.postcode);
-  const resolvedState = publicPlanEnquiry
+  const resolvedState = publicRequest
     ? leadPayload.customerState || ""
     : leadPayload.state || inferredState || "";
   const directTradeTriage =
-    publicPlanEnquiry
+    rentalAssessmentRequest
+      ? {
+          version: "public-rental-assessment-request-1",
+          status: "manual_review_required",
+          priority: "standard_review",
+          autoSend: false,
+          reviewFlags: ["booking_not_created"],
+          contactConsentReceipt: {
+            accepted: true,
+            purpose: leadPayload.consent?.purpose || "",
+            noticeVersion: leadPayload.consent?.noticeVersion || "",
+            grantedAt: leadPayload.consent?.grantedAt || "",
+            disclosedFields: [
+              "customer_name",
+              "customer_email",
+              ...(leadPayload.phone ? ["customer_phone"] : []),
+              "customer_address",
+              "requester_authority",
+              "requested_assessment_modules",
+              ...(leadPayload.projectNotes ? ["customer_message"] : []),
+            ],
+          },
+        }
+      : publicPlanEnquiry
       ? {
           version: "public-home-plan-open-matching-2",
           status: "automatic_verified_area_allocation",
@@ -172,7 +207,8 @@ export function createLeadEnvelope(payload, options = {}) {
     state: resolvedState,
     source: "aea-energy-web",
     ...(publicPlanEnquiry ? { sourceJourney: "public-home-energy-plan" } : {}),
-    ...(publicPlanEnquiry ? { submissionFingerprint } : {}),
+    ...(rentalAssessmentRequest ? { sourceJourney: PUBLIC_RENTAL_ASSESSMENT_SOURCE_JOURNEY } : {}),
+    ...(publicRequest ? { submissionFingerprint } : {}),
     ...(directTradeTriage ? { directTradeTriage } : {}),
     ...(participantReview ? { participantReview } : {}),
   };

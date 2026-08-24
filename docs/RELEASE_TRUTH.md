@@ -1039,11 +1039,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Schedule retained-byte retrieval for all 32 volatile official sources and require named human review before a changed hash can become answer authority.
-2. Run the reviewed conversation corpus against the deployed assistant in CI and publish a privacy-safe aggregate operator trend with no customer transcript or identity.
-3. Add real-browser continuity rehearsals across route changes, duplicate tabs, close and reopen, storage failure and recovery.
-4. Split the remaining shared stylesheet and JavaScript graphs by public, customer, trade and Creditex ownership, then reduce the enforced route budgets from measured evidence.
-5. Expand independently reviewed official product, certificate and practical-guidance vectors across supported jurisdictions and categories, including context-mutation tests for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
+1. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules without importing third-party branding or proprietary text.
+2. Run a supervised end-to-end assessor rehearsal on a test property, including optional-module toggles, section recovery, evidence capture, issue, supersede and 60-day report access.
+3. Add operational review screens for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+4. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic.
+5. Run physical Android and iOS field QA for offline job visibility, reconnection, large-photo upload, interrupted save recovery and issued-report viewing.
 
 ## Previous quote, job and invoice usability release
 

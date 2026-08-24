@@ -51,13 +51,15 @@ test("CRM appointment creation atomically authorises the requested assignment an
   const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders", statements);
   const mutationGuard = createAppointment.indexOf("previousTradeScheduleMutationGuardStatement", jobUpdate);
   const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", mutationGuard);
-  const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", appointmentInsert);
+  const rentalAssignment = createAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
+  const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", rentalAssignment);
   const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
-  const batch = createAppointment.indexOf("await db.batch(statements)", availabilityGuard);
+  const batch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
   assert.ok(statements >= 0 && statements < jobUpdate && jobUpdate < mutationGuard
-    && mutationGuard < appointmentInsert && appointmentInsert < eligibilityGuard
+    && mutationGuard < appointmentInsert && appointmentInsert < rentalAssignment
+    && rentalAssignment < eligibilityGuard
     && eligibilityGuard < availabilityGuard && availabilityGuard < batch,
-  "assignment, booking and authoritative guards must share one ordered mutation batch");
+  "assignment, booking, rental assessment sync and authoritative guards must share one ordered mutation batch");
   assert.match(createAppointment, /WHERE id = \? AND firebase_uid = \?[\s\S]*?AND revision = \? AND stage = \?[\s\S]*?AND assignee_member_id = \?/);
   assert.match(createAppointment, /return adminJson\(\{ ok: true, id: appointmentId, revision: jobRevision, calendarSync \}, 201\)/);
   const actor = { isOwner: false, canAssignJobs: false, jobScope: "team", memberId: "member-a" };

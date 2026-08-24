@@ -1,16 +1,16 @@
 # Next task handover
 
-Status: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated and ready for an exact Sites release. Current production remains public Sites version 391 until the release identity below is reconciled.
+Status: `TLINK-RENTAL-INSPECTION-65` is integrated onto current main; Google Apps Script relay version 16 is live and full validation plus the matching Sites release are in progress.
 
 Prepared: 24 August 2026
 
-Milestone ID: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82`
+Milestone ID: `TLINK-RENTAL-INSPECTION-65`
 
-Working branch: `codex/job-schedule-week-calendar`
+Working branch: `codex/rental-inspection-release`
 
-Current production application source: `0944c9b91765535b873b30029f545bde8f744831`
+Current-main integration baseline: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`
 
-Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
+Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
 Current production: Sites version 391 at `https://compare.ausenergyassessments.com`
 
@@ -18,119 +18,70 @@ Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa0
 
 Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`
 
-Current environment revision: 24
+Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
-Release-candidate migration inventory: 158 migrations through `0159_surge_conversation_quality_dimensions.sql`
+Current migration inventory: 159 migrations through `0160_trade_rental_inspections.sql`
 
-## Locally validated milestone: governed sources, conversation quality, continuity and route budgets
+## Outcome
 
-This milestone completes the requested five priorities without storing customer conversation content or weakening any current-fact boundary.
+TLink now has one governed rental minimum-standards assessment workflow that can be requested without an account, attached to a trade job, scheduled to a qualified assessor, completed section by section on web or mobile, issued by that assessor, and shared through a revocable 60-day report link with a full PDF download.
 
-- All 32 volatile official sources now require an identified, current review-role approval whose SHA-256 matches the canonical maintained evidence record. A missing, overdue or changed approval fails closed.
-- The reviewed conversation corpus now contains 20 approved cases across 10 dimensions, including practical guidance, product specifications, certificate coverage, neutral brand comparison and context clarification. The aggregate release report requires one reviewed result for every corpus case and stores no transcript.
-- Deterministic session-selection rehearsal covers persistent same-browser context, newer incomplete duplicate tabs and newer conversation state. It exercises the pure merge boundary used by the Surge client.
-- Home, Surge, plan and calculator routes now have separate JavaScript and stylesheet graph budgets measured from the production build.
-- The practical-tip and conversation regression set covers low-cost draught measures, reverse-cycle heating, evaporative-cooling vent covers, solar and tariff load shifting, heat-pump clothes dryers, exact-product questions and governed certificate answers.
+The default activity is the Victorian rental minimum-standards assessment. Electrical safety, gas safety and smoke alarm checks are independent optional modules and are off by default.
 
-### Local validation evidence
+## Confirmed product decisions
 
-- `npm.cmd run validate` completed with exit code 0 on the release candidate.
-- All 36 integration tests and the complete repository test suite passed.
-- Fresh D1 migration verification passed through `0159_surge_conversation_quality_dimensions.sql`.
-- Official-source approval audit passed for 32 of 32 volatile sources.
-- Conversation-quality reporting passed 20 of 20 reviewed cases across all 10 required dimensions with no coverage errors.
-- Session continuity rehearsal passed.
-- Production build, Sites server-bundle audit, customer-plan PDF audit and public performance budgets passed.
-- Route graphs were measured at home 291,663 bytes JavaScript and 1,385 bytes CSS, Surge 561,624 and 37,285, plan 508,969 and 27,524, and calculator 458,978 and 43,470.
+- Rental inspection is available from the TLink new-job activity flow and attaches its frozen workflow atomically when the job is created.
+- Save section and continue persists the current section before opening the next separate screen. Back returns to the section overview rather than silently losing work.
+- The assigned qualified assessor is the final issuer. There is no additional supervisor approval step.
+- The viewer needs no account. Anyone holding the capability link may view the issued report for 60 days unless it is revoked earlier.
+- Quick view and PDF expose the complete issued report except internal notes.
+- Evidence records retain device-reported capture time, upload time and location metadata. Location acceptance fails closed when the device reports mocked location, excessive accuracy uncertainty or timing outside the governed limits.
+- Internal notes, private staging keys and tenant identifiers do not enter the public report projection.
 
-### Boundaries
+## Integrated scope
 
-- The approval hash covers the canonical maintained evidence record. Scheduled retrieval of retained remote bytes and human approval of future upstream changes remains the next governed-source step.
-- The continuity rehearsal is deterministic source-level coverage. A real-browser duplicate-tab, close, reopen and storage-failure matrix remains next.
-- Route budgets now fail the release when a graph grows beyond its allowance. Further stylesheet and graph splitting remains separate optimisation work.
-- Product and certificate responses remain limited to maintained official registries and deterministic calculators. Missing, stale or unsupported facts still fail closed.
+- Effective-dated minimum-standards template and frozen per-job snapshot.
+- Jazz-style section overview with completion counts, separate section screens, save-and-continue navigation and overview back navigation.
+- Mobile-first answer controls, contextual photo instructions, repeatable rooms and assets, access limitations, claimed exemptions and structured findings.
+- Quote-ready findings with location, outcome, severity, responsible trade, public description and scope.
+- Optional electrical, gas and smoke-alarm modules with separate completion gates.
+- Existing TLink job assignment, weekly scheduling, field progress and completion blockers.
+- Existing AEA Field job list and job detail integration with a dedicated rental workflow surface.
+- Assessor issue and supersede lifecycle, immutable report snapshots and hash-verified PDF artifacts.
+- Account-free public request intake with bounded agent, landlord, contact and property details.
+- Hashed report capabilities, 60-day expiry, revocation, no-store and noindex responses, and access-event records.
 
-## Released milestone: grounded product and certificate guidance
+## Release integrity
 
-This follow-on release grounds supported product, brand, model, rebate and certificate questions in the maintained official registry and governed calculation paths. The resolver is generic across supported public product categories and brands and does not hardcode Reclaim, iStore or another vendor as a special case.
+- The original rental branch was not deployed over newer work. It was integrated onto current GitHub main `7627d3e` in a separate release worktree.
+- The rental migration was renumbered from the colliding `0142` identifier to `0160`; existing Creditex migration history remains unchanged.
+- Current-main work-pack, scheduling, Surge governance and performance behaviour is retained while rental rows, report blockers and workflow fields are added.
+- Google Apps Script relay version 16 was updated in place before the Sites release so requester role, agency, optional modules, authority and replay-safe fingerprints are retained without changing the public relay URL.
+- The relay root returned HTTP 200 with the active-service page after deployment.
 
-Exact STC quantities require an exact registered model and postcode. VEEC quantities require a governed scenario and current rules. Current certificate market references include the last reported trade date and value only while the official feed remains current, then explain that trading values move like a share price and that registration, compliance, administration and aggregator costs usually reduce the customer discount. The resolver never invents those deductions.
+## Remaining release gates
 
-Likely product candidates can be narrowed from a brand and capacity, but model-neutral performance comparisons remain blocked until exact verified specification sheets are available. Surge asks exactly one highest-value question when an exact model, location, existing system or eligibility fact is missing, and it does not invoke the general model for a grounded answer.
+- Complete the integrated repository validation, fresh 159-migration replay, production build and Sites bundle audit.
+- Complete mobile tests, typecheck, lint and Android/iOS export verification against the integrated tree.
+- Push the integrated commit to GitHub and the Sites managed source branch.
+- Save and deploy the matching Sites archive, then record its exact version, deployment and archive identity here and in `docs/RELEASE_TRUTH.md` and `ROADMAP.md`.
+- Verify the public request page and signed-in workflow at desktop and 390-pixel phone widths without submitting production customer data.
 
-### Validation and release evidence
+## Boundaries
 
-- Focused assistant API, grounded guidance and client route checks passed 41 of 41 tests.
-- `npm.cmd run validate` completed with exit code 0 against exact application source `0944c9b91765535b873b30029f545bde8f744831`, including all 36 integration tests, the complete repository suite, migrations through `0158_remove_surge_account_context.sql`, production build, bundle audit and public performance budgets.
-- Exact application source `0944c9b91765535b873b30029f545bde8f744831` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
-- The matching local archive is 12,224,610 bytes with SHA-256 `ffaeed5a983d077e0e0b2035bf0df9aa11517d27a2354bccb616d7a6400eb20d`.
-- Sites saved version 391 as `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc` and deployed it through `appgdep_6a8af0d5ca1081919f3c86b55f68a163` to provider deployment `info294029--aea-energy-comparison`.
-- Live desktop and 390 by 844 phone QA passed with zero browser errors. Account-copy controls remain absent.
+- Contract-specific service wording remains provisional until the client service schedule or specification is supplied and reviewed.
+- Optional statutory-module certification still requires the correct practitioner credential and final licensed-practitioner review of declarations and test logic.
+- A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
+- Physical Android and iOS device testing remains separate from successful exported bundles unless real devices are available.
+- Hosted records remain pre-launch test data until the product owner explicitly declares the platform live.
 
-### Boundaries
+## Next five logical product steps
 
-- Product coverage is limited to maintained official registries and supported public categories, not every product sold globally.
-- Stale market references fail closed and are not presented as current.
-- Certificate counts, cash discounts and performance differences are not guessed.
-- Live QA did not mutate customer context, submit a lead or send a production chat turn.
-
-## Previous released milestone: practical assessor guidance and account-copy removal
-
-This release removes the unsolicited account-copy card, its API, server helper, component, tests and database table. Surge keeps the private same-browser home context only, without presenting account controls or suggesting that an account is required.
-
-The early guidance rail now prioritises practical, provider-neutral actions supported by the saved home context. The bounded rules cover safe gap sealing, door and window seals, door snakes, suitable removable window films, cellular coverings, insulation top-ups, efficient reverse-cycle heating, electric throws, filter cleaning, solar and tariff load shifting, evaporative outlet checks, humidity control, heat-pump drying and seasonal deciduous shade. Safety-critical ventilation, flues, exhausts and regulated work remain explicit boundaries.
-
-Surge's answer policy now behaves like an energy assessor and educator. It gives the useful part of an answer immediately, then asks exactly one highest-value qualifying question when location, existing equipment, tenure, eligibility, proposed replacement or another material fact is missing. Rebate and certificate answers remain fail-closed against the governed official-source registry and never guess values or eligibility. Conversation copy continues to prohibit em dashes and en dashes.
-
-### Validation and release evidence
-
-- Focused assistant, guidance, widget, migration and release tests pass 110 of 110 checks.
-- Regression coverage prevents the removed account component, route and server helper from returning.
-- Contextual guidance tests cover moisture removal, low-cost draught actions, window measures, solar load shifting and tariff timing.
-- Hot-water rebate tests prove one-question-at-a-time qualification, beginning with the current hot-water system before a proposed replacement.
-- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,851 repository tests with 11 intentional skips and zero failures, a fresh 157-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and performance audit.
-- The production performance gate reports a 4,758-byte root launcher, 84,713-byte deferred assistant, 732,292-byte stylesheet, 293,048-byte public graph, 920,379-byte customer graph, 956,257-byte trade graph and 1,792,764-byte Creditex graph.
-- Exact application source `1b2509768bbca7947e3a01438da4c8814d20fe90` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
-- The matching local archive is 12,202,751 bytes with SHA-256 `2777CD1CC0D1565671CD4C0F872CC8707562CC2979E40888B18CF8E655C521A7`.
-- Sites saved version 390 as `appgprj_6a550c378000819185caf094173422bb~appgver_9c189c6e240c8191b5e3d98d97606065`, storing 484 files and 44,584,960 bytes with content hash `sha256:441010807c5563b7e3890f2358dc6bdc4bb194d532959ba58cb337ff0f6f63aa`.
-- Deployment `appgdep_6a89b86b8c048191bb5d187f9e972407` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
-- Fresh desktop live QA confirmed that account controls are absent, the three-column workspace has no horizontal overflow and current release assets load without console errors. An older running tab retained a superseded hashed asset reference, but that failure was not reproduced in a clean current-release tab.
-
-### Boundaries
-
-- Saved home context stays in the same browser. No account-copy control, automatic account association or replacement account mechanism is included.
-- Product and brand names in customer-supplied references are treated as examples only. Published guidance remains provider-neutral.
-- Current rebates, certificates, tariffs and programme eligibility require current governed official facts. Surge asks for missing context and fails closed when those facts are unavailable or overdue.
-
-## Previous production release: context-aware guidance and five priority controls
-
-This release removes stale moisture guidance as soon as the saved context no longer reports moisture or damp issues. The guidance rail is derived again from the complete allowlisted profile on every profile change, so each tip must be supported by the customer's currently saved answers.
-
-The same bounded release completes the five requested follow-on controls:
-
-- a 25-record official-source review queue with changed and overdue volatile facts remaining fail-closed;
-- a reviewed conversation evaluation corpus with explicit correction, topic-switch, privacy, follow-up and source-status release thresholds;
-- immediate same-browser profile writes, cross-tab merge recovery and aggregate-only storage-health counters with no profile or conversation content;
-- measured public, customer, trade and Creditex JavaScript graph budgets that prevent protected entry chunks from returning to the public launcher;
-- explicit signed-in `Save context to my account` and `Delete account copy` controls, with no automatic account association.
-
-### Validation and release evidence
-
-- The focused behaviour and account-context suite passed 43 of 43 tests; the focused release set passed 58 of 58 tests and migration validation passed 33 of 33 across all 156 migrations.
-- `npm.cmd run validate` passed typecheck, warning-free lint, all 36 integration tests, 2,839 repository tests with 11 intentional skips and zero failures, a fresh 156-migration D1 database, customer-plan PDF audit, production build, Sites bundle audit and the measured performance gate.
-- The production graph audit reports a 4,790-byte root launcher, 83,840-byte deferred assistant, 732,292-byte stylesheet, 293,115-byte public graph, 920,414-byte customer graph, 956,479-byte trade graph and 1,792,764-byte Creditex graph.
-- Exact application source `8d887f867269a157d84928fb553eac4951ed517b` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
-- The matching release archive is 12,206,992 bytes with 502 entries and SHA-256 `18E1C7ED733455D0B189D98AD56100A642F0A436C7249A1E07E6CB2D8F5B2E1C`.
-- Sites saved version 389 as `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b`, storing 488 files and 44,625,920 bytes with content hash `sha256:a8ed0fe75ff54df21cc0ca4e5d1dcc84acbad9e446af7abf3f2ac47595f35184`.
-- Deployment `appgdep_6a898f2b620c81918109cac63f954590` succeeded with environment revision 24 at the custom domain and provider URL `https://aea-energy-comparison.info294029.chatgpt.site`.
-- Live desktop QA confirmed 45 of 45 saved responses, the complete context rail and moisture-free advice after moisture was removed. The three current tips cover ceiling insulation, the largest draughts and shell-first work. Live phone QA confirmed compact context, suggested-question and home-tip drawers, a visible composer and no horizontal overflow.
-
-### Boundaries
-
-- The optional account copy is created or deleted only by an explicit signed-in action. Browser context is not automatically associated with an account.
-- Storage-health and conversation-quality records are daily aggregates and contain no profile, prompt, answer, transcript, contact detail or customer identifier.
-- Live QA did not send a chat turn, save an account copy or create a lead. Those mutations remain covered by automated tests rather than production data creation.
-- The hosted product remains pre-launch until the product owner explicitly declares it live.
+1. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules without importing third-party branding or proprietary text.
+2. Run a supervised end-to-end assessor rehearsal on a test property, including optional-module toggles, section recovery, evidence capture, issue, supersede and 60-day report access.
+3. Add operational review screens for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+4. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic.
+5. Run physical Android and iOS field QA for offline job visibility, reconnection, large-photo upload, interrupted save recovery and issued-report viewing.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
@@ -313,14 +264,6 @@ Connect the bounded official-change queue to scheduled official hash checks and 
 - Stop rather than guess when an official rule, effective date, formula, product list or jurisdiction cannot be verified.
 - Do not activate bulk-discovered pages merely to increase a source count.
 - Do not copy proprietary commercial content or claim an author, book or website has been ingested without an explicit licence.
-
-## Next five logical product steps
-
-1. Schedule retained-byte retrieval for all 32 volatile official sources and require named human review before a changed hash can become answer authority.
-2. Run the reviewed conversation corpus against the deployed assistant in CI and publish a privacy-safe aggregate operator trend with no customer transcript or identity.
-3. Add real-browser continuity rehearsals across route changes, duplicate tabs, close and reopen, storage failure and recovery.
-4. Split the remaining shared stylesheet and JavaScript graphs by public, customer, trade and Creditex ownership, then reduce the enforced route budgets from measured evidence.
-5. Expand independently reviewed official product, certificate and practical-guidance vectors across supported jurisdictions and categories, including context-mutation tests for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Historical release handovers
 

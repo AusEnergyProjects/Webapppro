@@ -179,6 +179,28 @@ function fixture(stage = "in_progress", revision = 5) {
       updated_at text NOT NULL,
       UNIQUE (work_order_id, template_key, template_version)
     );
+    CREATE TABLE trade_rental_inspections (
+      id text PRIMARY KEY NOT NULL,
+      work_order_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'draft',
+      assessor_uid text NOT NULL DEFAULT '',
+      assessor_member_id text NOT NULL DEFAULT '',
+      assessor_snapshot text NOT NULL DEFAULT '{}',
+      revision integer NOT NULL DEFAULT 1,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE trade_rental_inspection_modules (
+      id text PRIMARY KEY NOT NULL,
+      inspection_id text NOT NULL,
+      firebase_uid text NOT NULL,
+      status text NOT NULL DEFAULT 'not_started',
+      credential_snapshot text NOT NULL DEFAULT '{}',
+      completed_by_uid text NOT NULL DEFAULT '',
+      completed_at text NOT NULL DEFAULT '',
+      revision integer NOT NULL DEFAULT 1,
+      updated_at text NOT NULL
+    );
     CREATE TABLE trade_work_order_events (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
@@ -294,6 +316,13 @@ function teamRoute(db) {
     "@/lib/trade-mobile-device-revocation": { abortMemberDeviceUploads: async () => {} },
     "@/lib/trade-team-lifecycle-policy.mjs": {
       memberLifecycleDecision: () => ({ allowed: true, reason: "allowed" }),
+    },
+    "@/lib/trade-rental-schema-guards": {
+      ensureTradeRentalSchemaGuards: async () => {},
+    },
+    "@/lib/trade-rental-assignment-server": {
+      isRentalInspectionAssignmentConflict: () => false,
+      rentalInspectionAssignmentStatements: () => [],
     },
   });
 }
@@ -637,6 +666,35 @@ const directJobMutations = [
     })),
   },
 ];
+
+test("rental Team reassignment rejects an active appointment before assignment writes", () => {
+  const source = read("../src/app/api/trade-team/route.ts");
+  const guardStart = source.indexOf("if (rentalInspection) {");
+  const assignmentBatchStart = source.indexOf("await guardedOnlineJobMutationBatch", guardStart);
+  assert.notEqual(guardStart, -1);
+  assert.notEqual(assignmentBatchStart, -1);
+
+  const guard = source.slice(guardStart, assignmentBatchStart);
+  assert.match(guard, /job\.assignee_member_id[\s\S]*!== memberId/);
+  assert.match(guard, /FROM trade_crm_appointments[\s\S]*status IN \('scheduled', 'en_route', 'arrived', 'in_progress'\)/);
+  assert.match(guard, /if \(activeAppointment\) throw new Error\("RENTAL_ACTIVE_APPOINTMENT"\)/);
+  assert.match(source, /if \(code === "RENTAL_ACTIVE_APPOINTMENT"\)[^\n]*, 409\)/);
+});
+
+test("rental Business Hub schedule and crew mutations require the Schedule workflow", () => {
+  const source = read("../src/app/api/trade-work-orders/route.ts");
+  const guardStart = source.indexOf(`if (String(current.service_category || "") === "rental-inspection"`);
+  const updateStart = source.indexOf("const requestedStage", guardStart);
+  assert.notEqual(guardStart, -1);
+  assert.notEqual(updateStart, -1);
+
+  const guard = source.slice(guardStart, updateStart);
+  assert.match(guard, /body\.assigneeLabel !== undefined/);
+  assert.match(guard, /body\.scheduledStart !== undefined/);
+  assert.match(guard, /body\.scheduledEnd !== undefined/);
+  assert.match(guard, /throw new Error\("RENTAL_SCHEDULE_WORKFLOW_REQUIRED"\)/);
+  assert.match(source, /if \(code === "RENTAL_SCHEDULE_WORKFLOW_REQUIRED"\)[^\n]*, 409\)/);
+});
 
 test("Business Hub schedule update rejects a job that fails the scheduling eligibility precheck", async () => {
   const { database, db } = fixture();

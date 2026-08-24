@@ -658,7 +658,7 @@ function cursorValue(value: string | null) {
 
 async function accessibleJobs(access: TeamAccess) {
   const db = getD1();
-  const [jobRows, taskRows, mediaRows, formRows, intentRows, complianceRows] = await Promise.all([
+  const [jobRows, taskRows, mediaRows, formRows, intentRows, complianceRows, rentalRows] = await Promise.all([
     db.prepare(`SELECT w.id, w.work_number, w.title, w.service_category, w.site_area, w.stage, w.priority,
         w.scheduled_start, w.scheduled_end, w.assignee_member_id, w.assignee_label, w.source_type,
         w.revision, w.updated_at, d.customer_source, d.description,
@@ -832,12 +832,49 @@ async function accessibleJobs(access: TeamAccess) {
         access.memberId,
         MAX_SYNC_COMPANION_ROWS + 1,
       ).all<Record<string, unknown>>(),
+    db.prepare(`SELECT inspection.id, inspection.work_order_id, inspection.inspection_number,
+        inspection.status, inspection.template_key, inspection.template_version,
+        inspection.rules_effective_from, inspection.module_selection_snapshot,
+        inspection.assessor_member_id, inspection.revision, inspection.issued_report_id,
+        inspection.issued_at,
+        COUNT(module.id) module_count,
+        SUM(CASE WHEN module.status = 'complete' THEN 1 ELSE 0 END) complete_module_count,
+        (SELECT COUNT(*) FROM trade_rental_inspection_items item
+          WHERE item.inspection_id = inspection.id AND item.firebase_uid = inspection.firebase_uid) item_count,
+        (SELECT COUNT(*) FROM trade_rental_evidence_links evidence
+          WHERE evidence.inspection_id = inspection.id AND evidence.firebase_uid = inspection.firebase_uid
+            AND evidence.status = 'active') evidence_count
+      FROM trade_rental_inspections inspection
+      JOIN trade_work_orders work_order ON work_order.id = inspection.work_order_id
+        AND work_order.firebase_uid = inspection.firebase_uid
+      LEFT JOIN trade_rental_inspection_modules module ON module.inspection_id = inspection.id
+        AND module.firebase_uid = inspection.firebase_uid
+      WHERE inspection.firebase_uid = ? AND work_order.record_status = 'active'
+        AND (? <> 'own' OR work_order.assignee_member_id = ?)
+        AND inspection.work_order_id IN (${ACCESSIBLE_JOB_COHORT_SQL})
+      GROUP BY inspection.id, inspection.work_order_id, inspection.inspection_number,
+        inspection.status, inspection.template_key, inspection.template_version,
+        inspection.rules_effective_from, inspection.module_selection_snapshot,
+        inspection.assessor_member_id, inspection.revision, inspection.issued_report_id,
+        inspection.issued_at
+      ORDER BY inspection.updated_at DESC
+      LIMIT ?`)
+      .bind(
+        access.ownerUid,
+        access.jobScope,
+        access.memberId,
+        access.ownerUid,
+        access.jobScope,
+        access.memberId,
+        MAX_SYNC_COMPANION_ROWS + 1,
+      ).all<Record<string, unknown>>(),
   ]);
   const companionRowCount = taskRows.results.length
     + mediaRows.results.length
     + formRows.results.length
     + intentRows.results.length
-    + complianceRows.results.length;
+    + complianceRows.results.length
+    + rentalRows.results.length;
   const workPacks = await listAssignedCreditexActivityWorkPacks(db, {
     ownerUid: access.ownerUid,
     actorUid: access.actorUid,
@@ -851,6 +888,7 @@ async function accessibleJobs(access: TeamAccess) {
     || formRows.results.length > MAX_SYNC_COMPANION_ROWS
     || intentRows.results.length > MAX_SYNC_COMPANION_ROWS
     || complianceRows.results.length > MAX_SYNC_COMPANION_ROWS
+    || rentalRows.results.length > MAX_SYNC_COMPANION_ROWS
     || workPacks.length > MAX_SYNC_COMPANION_ROWS
     || companionRowCount + workPacks.length > MAX_SYNC_COMPANION_ROWS
   ) {
@@ -972,6 +1010,45 @@ async function accessibleJobs(access: TeamAccess) {
               : "",
           };
         });
+      })(),
+      ...(() => {
+        const rental = rentalRows.results.find((inspection) => inspection.work_order_id === row.id);
+        if (!rental) return {};
+        const selectedModules = (() => {
+          try {
+            const parsed = JSON.parse(String(rental.module_selection_snapshot || "[]"));
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+          } catch {
+            return [];
+          }
+        })();
+        const terminal = ["issued", "superseded", "withdrawn"].includes(String(rental.status));
+        return { rentalInspection: {
+          id: String(rental.id),
+          inspectionNumber: String(rental.inspection_number),
+          status: String(rental.status),
+          templateKey: String(rental.template_key),
+          templateVersion: Number(rental.template_version || 1),
+          rulesEffectiveFrom: String(rental.rules_effective_from),
+          selectedModules,
+          assessorMemberId: String(rental.assessor_member_id || ""),
+          revision: Number(rental.revision || 1),
+          issuedReportId: String(rental.issued_report_id || ""),
+          issuedAt: String(rental.issued_at || ""),
+          progress: {
+            completeModules: Number(rental.complete_module_count || 0),
+            moduleTotal: Number(rental.module_count || 0),
+            savedItems: Number(rental.item_count || 0),
+            evidenceFiles: Number(rental.evidence_count || 0),
+          },
+          permissions: {
+            canEdit: access.canManageFieldEvidence && !terminal,
+            canIssue: access.canRunReports
+              && access.memberId === String(rental.assessor_member_id || "")
+              && access.memberId === String(row.assignee_member_id || "")
+              && !terminal,
+          },
+        } };
       })(),
       ...(() => {
         const cases = new Map<string, {
@@ -1608,7 +1685,7 @@ const INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL = `SELECT 1
 async function fieldFinishState(ownerUid: string, workOrderId: string) {
   const db = getD1();
   await ensureCreditexWorkPackSchemaGuards(db);
-  const [tasks, forms, issues, plan, unlinkedWorkPack, incompleteWorkPack, compliance, photo] = await Promise.all([
+  const [tasks, forms, issues, plan, unlinkedWorkPack, incompleteWorkPack, compliance, rentalReport, photo] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, ownerUid).first<Record<string, unknown>>(),
@@ -1623,6 +1700,10 @@ async function fieldFinishState(ownerUid: string, workOrderId: string) {
     db.prepare(`SELECT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL}) blocked`)
       .bind(workOrderId, ownerUid)
       .first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_rental_inspections
+      WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'issued'`)
+      .bind(workOrderId, ownerUid)
+      .first<Record<string, unknown>>(),
     photoFinishState(db, ownerUid, workOrderId),
   ]);
   const blockers = [Number(tasks?.count || 0) ? "assigned tasks" : "", Number(forms?.count || 0) ? "required forms" : "", Number(issues?.count || 0) ? "open issues" : "", Number(plan?.count || 0) ? "work-plan items" : ""].filter(Boolean);
@@ -1630,6 +1711,7 @@ async function fieldFinishState(ownerUid: string, workOrderId: string) {
     blockers.push("Creditex compliance work packs");
   }
   if (Number(compliance?.blocked || 0)) blockers.push("governed evidence");
+  if (Number(rentalReport?.count || 0)) blockers.push("the issued rental assessment report");
   if (!photo.ready) blockers.push("required photo proof");
   return { blockers, photoGuard: photo.guard };
 }
@@ -2073,6 +2155,11 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
         )
         AND NOT EXISTS (${UNLINKED_ACTIVE_COMPLIANCE_INTENT_SQL})
         AND NOT EXISTS (${INCOMPLETE_ACTIVE_COMPLIANCE_WORK_PACK_SQL})
+        AND NOT EXISTS (
+          SELECT 1 FROM trade_rental_inspections blocker
+          WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+            AND blocker.status <> 'issued'
+        )
         AND NOT EXISTS (${UNSATISFIED_GOVERNED_EVIDENCE_SQL})
         AND (
           (
@@ -2108,6 +2195,8 @@ async function applyAction(access: TeamAccess, deviceId: string, action: Offline
     const photoGuard = finishState.photoGuard;
     const finishBlockerValues = [
       transitionName,
+      workOrderId,
+      access.ownerUid,
       workOrderId,
       access.ownerUid,
       workOrderId,

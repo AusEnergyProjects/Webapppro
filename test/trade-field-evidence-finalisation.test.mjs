@@ -914,6 +914,7 @@ test("field evidence source enforces guarded finalisation and pinned custody rul
     deviceRevocationSource,
     /SET status = 'aborted'[\s\S]*status IN \('initiated', 'uploading', 'completing'\)[\s\S]*claim\.meta\.changes/,
   );
+  assert.match(devicesRouteSource, /abortDeviceUploads\(access\.ownerUid/);
   assert.match(mediaRouteSource, /exactText\(original\.exifState, 40\) !== "available"/);
   assert.match(mediaRouteSource, /bucket\(\)\.get\(session\.object_key\)/);
   assert.match(mediaRouteSource, /assembledSha256 !== session\.original_sha256/);

@@ -149,6 +149,10 @@ function conflictDispatchRoute(conflictCode) {
       plannedComplianceIntentReplanStatements: async () => [],
       previousTradeScheduleMutationGuardStatement: () => { throw new Error("UNEXPECTED_MUTATION_GUARD"); },
     },
+    "@/lib/trade-rental-assignment-server": {
+      isRentalInspectionAssignmentConflict: () => false,
+      rentalInspectionAssignmentStatements: () => [],
+    },
     "@/lib/trade-team-permission-policy.mjs": { canRescheduleWithinScope: () => true },
     "@/lib/trade-schedule-server": {
       assertTradeJobReadyForScheduling: async () => {},

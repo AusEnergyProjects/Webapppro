@@ -175,9 +175,13 @@ function applyMigrationChain(database, names) {
 }
 
 function applyCompleteMigrationChain(database) {
-  assert.equal(completeMigrationChain.length, 158);
+  assert.equal(completeMigrationChain.length, 159);
   assert.match(completeMigrationChain[0], /^0000_/);
-  assert.match(completeMigrationChain.at(-1), /^0159_/);
+  assert.match(completeMigrationChain.at(-1), /^0160_/);
+  assert.ok(
+    completeMigrationChain.includes("0160_trade_rental_inspections.sql"),
+    "the complete migration chain must include the rental inspection schema",
+  );
   applyMigrationChain(database, completeMigrationChain);
 }
 

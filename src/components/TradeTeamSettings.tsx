@@ -77,6 +77,16 @@ type MemberFile = {
   title: string;
   expiresAt: string;
   createdAt: string;
+  credential: null | {
+    id: string;
+    type: string;
+    name: string;
+    number: string;
+    issuer: string;
+    jurisdiction: string;
+    rentalGate: string;
+    status: string;
+  };
 };
 
 type TeamResult = {
@@ -251,6 +261,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   const [files, setFiles] = useState<MemberFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [preview, setPreview] = useState<{ file: MemberFile; url: string } | null>(null);
+  const [uploadRentalGate, setUploadRentalGate] = useState("");
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<RosterStatus>("all");
@@ -329,7 +340,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
 
   const openFiles = useCallback(async (member: TradeTeamMember) => {
     if (!restoreFocusRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setError("");
+    setMenu(null); setFilesMember(member); setFilesLoading(true); setFiles([]); setUploadRentalGate(""); setError("");
     if (preview) { URL.revokeObjectURL(preview.url); setPreview(null); }
     try {
       const response = await fetch(`/api/trade-team/member-files?memberId=${encodeURIComponent(member.id)}`, { headers: await tokenHeaders(), cache: "no-store" });
@@ -568,7 +579,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
       if (!response.ok || !result.ok) throw new Error(result.error || "The file could not be uploaded.");
       if (!result.file) throw new Error("The uploaded file record was not returned.");
       setFiles((current) => [result.file!, ...current]);
-      form.reset(); await load(); setMessage("Member file saved.");
+      form.reset(); setUploadRentalGate(""); await load(); setMessage(result.file.credential ? "Credential and supporting file saved." : "Member file saved.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "The file could not be uploaded."); }
     finally { setBusy(""); }
   }
@@ -602,7 +613,7 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   function closeFiles() {
     if (busy) return;
     if (preview) URL.revokeObjectURL(preview.url);
-    setPreview(null); setFilesMember(null); setFiles([]);
+    setPreview(null); setFilesMember(null); setFiles([]); setUploadRentalGate("");
     window.requestAnimationFrame(() => restoreFocusRef.current?.focus());
   }
 
@@ -677,8 +688,8 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
 
     {filesMember && <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) closeFiles(); }}><div ref={filesDialogRef} className={styles.filesDialog} role="dialog" aria-modal="true" aria-labelledby="member-files-title" tabIndex={-1} onKeyDown={(event) => trapDialogKey(event, closeFiles)}><header className={styles.dialogHeader}><div><span>Private member documents</span><h4 id="member-files-title">{memberLabel(filesMember)}</h4></div><button type="button" className={styles.iconButton} aria-label="Close member documents" disabled={Boolean(busy)} onClick={closeFiles}>X</button></header>
       <div className={styles.filesBody}><aside className={styles.filesSidebar}>
-        <form className={styles.uploadForm} onSubmit={uploadFile}><strong>Upload a document or photo</strong><label>Title<input name="title" required maxLength={180} placeholder="For example, grade licence or insurance" /></label><label>Expiry, optional<input type="date" name="expiresAt" /></label><label>Document or photo<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label><small className={styles.hint}>PDF, JPEG or PNG. Maximum 12 MB. The owner is notified 30 days before a saved expiry.</small><button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : "Upload document"}</button></form>
-        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small></div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or photos saved.</p>}</div>}
+        <form className={styles.uploadForm} onSubmit={uploadFile}><strong>Upload a document or credential</strong><label>Document use<select name="rentalGate" value={uploadRentalGate} onChange={(event) => setUploadRentalGate(event.target.value)}><option value="">General team document</option><option value="licensed_electrician">Electrical safety-check licence</option><option value="licensed_gasfitter">Gas safety-check licence or registration</option><option value="suitably_qualified_smoke_alarm_worker">Smoke alarm qualification or training</option></select></label><label>Title<input name="title" required maxLength={180} placeholder="For example, Victorian electrical licence" /></label>{uploadRentalGate && <><label>Credential type<select name="credentialType" required defaultValue={uploadRentalGate === "suitably_qualified_smoke_alarm_worker" ? "training" : "licence"}><option value="licence">Licence</option><option value="registration">Registration</option>{uploadRentalGate === "suitably_qualified_smoke_alarm_worker" && <option value="training">Training or qualification</option>}</select></label><label>Credential name<input name="credentialName" required maxLength={180} placeholder="Name shown on the credential" /></label><label>Credential number<input name="credentialNumber" required maxLength={120} /></label><label>Issuer<input name="credentialIssuer" required maxLength={180} placeholder="Issuing authority or training provider" /></label><label>Jurisdiction<select name="credentialJurisdiction" required defaultValue="VIC"><option value="VIC">Victoria</option><option value="NATIONAL">National</option></select></label></>}<label>{uploadRentalGate ? "Credential expiry" : "Expiry, optional"}<input type="date" name="expiresAt" required={Boolean(uploadRentalGate)} /></label><label>Supporting document or photo<input name="file" type="file" required accept="image/jpeg,image/png,application/pdf" /></label><small className={styles.hint}>{uploadRentalGate ? "The saved number must match the assessment form. TLink blocks optional module sign-off after this credential or supporting file expires. The business owner is notified 30 days before a saved expiry." : "PDF, JPEG or PNG. Maximum 12 MB. The business owner is notified 30 days before a saved expiry."}</small><button className={styles.primary} disabled={busy === "file-upload"}>{busy === "file-upload" ? "Uploading..." : uploadRentalGate ? "Save credential" : "Upload document"}</button></form>
+        {filesLoading ? <p className={styles.status}>Loading documents...</p> : <div className={styles.fileList}>{files.map((file) => <article key={file.id} className={`${styles.fileRow} ${preview?.file.id === file.id ? styles.selected : ""}`}><div><strong>{file.title}</strong><small>{file.credential ? `${file.credential.name} | ${file.credential.number} | ${file.credential.jurisdiction}` : "General document"}</small><small>{bytesLabel(file.sizeBytes)} | {file.expiresAt ? `Expires ${new Date(`${file.expiresAt}T00:00:00`).toLocaleDateString("en-AU")}` : "No expiry"}</small></div><div className={styles.fileRowActions}><button type="button" disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file)}>View</button><button type="button" aria-label={`Download ${file.title}`} disabled={busy === `file:${file.id}`} onClick={() => void fetchFile(file, true)}>Download</button><button type="button" aria-label={`Delete ${file.title}`} disabled={busy === `delete:${file.id}`} onClick={() => void deleteFile(file)}>Delete</button></div></article>)}{!files.length && <p className={styles.empty}>No documents or credentials saved.</p>}</div>}
       </aside><section className={styles.preview} aria-label="Member document preview">{preview ? preview.file.contentType.startsWith("image/") ? <img src={preview.url} alt={preview.file.title} /> : preview.file.contentType === "application/pdf" ? <iframe src={preview.url} title={preview.file.title} /> : <p className={styles.previewMessage}>This document cannot be previewed here. Use download to open it.</p> : <p className={styles.previewMessage}>Select View to open the image or PDF. Documents remain private to authorised business access.</p>}</section></div>
     </div></div>}
   </div>;

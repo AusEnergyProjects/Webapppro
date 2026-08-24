@@ -86,6 +86,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 24 August 2026/);
+  assert.match(
+    handover,
+    /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`[\s\S]{0,360}Prepared: 24 August 2026/,
+  );
   assert.match(handover, /Current production: Sites version 391/);
   assert.match(releaseTruth, /Last reconciled locally: 24 August 2026/);
   assert.match(releaseTruth, /## Current production release: grounded product and certificate guidance/);
@@ -1030,9 +1034,13 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: Grounded product and certificate guidance is released as public Sites version 391/);
-  assert.match(currentHandover, /## Next executable milestone: SURGE-OFFICIAL-REVIEW-OPERATIONS-82/);
-  assert.match(currentHandover, /Milestone ID: `AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81`/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-RENTAL-INSPECTION-65`/);
+  assert.match(currentHandover, /Milestone ID: `TLINK-RENTAL-INSPECTION-65`/);
+  assert.match(currentHandover, /Working branch: `codex\/rental-inspection-release`/);
+  assert.match(currentHandover, /Current-main integration baseline: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`/);
+  assert.match(currentHandover, /Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`/);
+  assert.match(currentHandover, /Current migration inventory: 159 migrations through `0160_trade_rental_inspections\.sql`/);
+  assert.match(currentHandover, /Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`/);
   assert.match(roadmap, /Follow-on application source `0944c9b91765535b873b30029f545bde8f744831`[\s\S]{0,900}deployed as Sites version 391 through `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
   assert.match(roadmap, /## Released milestone: AEA-SURGE-CONTEXT-GUIDANCE-CONTROLS-80/);
   assert.match(roadmap, /8d887f867269a157d84928fb553eac4951ed517b[\s\S]{0,420}Sites saved it as version 389/);
@@ -1042,15 +1050,13 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /9dc33106b51cb708837cbefa911ff1eaa3fa778d[\s\S]{0,360}Sites version 372/);
   assert.match(roadmap, /## Released milestone: AEA-PUBLIC-SURGE-UX-OPTIMISATION-71/);
   assert.match(roadmap, /9c5e7199f3f9c521cf47510dafcf39cbe74d81f6[\s\S]{0,360}Sites version 371/);
-  assert.match(handover, /Working branch: `codex\/job-schedule-week-calendar`/);
-  assert.match(handover, /Milestone source baseline: `bc82429e232d00ef83769016839a895c36d8069e`/);
-  assert.match(handover, /Current schedule-duration, calendar-sync and deep-link corrective application commit: `df86aa3ced0ee8d67022626369ebb0412af0b8da`/);
-  assert.match(handover, /Historical schedule-duration and calendar-sync corrective application commit: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
-  assert.match(handover, /Historical schedule-planning corrective application commit: `d35fdb8d52056fec6b62b6b56a4739a0443cadcf`/);
-  assert.match(handover, /Historical atomic schedule-planning application commit: `362be0632b5e1a1d89a312c791c3665924f037d7`/);
-  assert.match(handover, /Historical schedule-interaction and acceptance-receipt application commit: `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`/);
-  assert.match(handover, /Historical weekly job-schedule application commit: `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`/);
-  assert.match(handover, /Historical quote-acceptance, accepted-invoice and accounting application commit: `9624507b9f4ed274169b67076a40ddb34cd26acb`/);
+  assert.match(releaseTruth, /Current schedule-duration, calendar-sync and deep-link corrective application source \| `df86aa3ced0ee8d67022626369ebb0412af0b8da`/);
+  assert.match(releaseTruth, /Historical schedule-duration and calendar-sync corrective application source \| `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
+  assert.match(releaseTruth, /Historical schedule-planning corrective application source \| `d35fdb8d52056fec6b62b6b56a4739a0443cadcf`/);
+  assert.match(releaseTruth, /Historical atomic schedule-planning application source \| `362be0632b5e1a1d89a312c791c3665924f037d7`/);
+  assert.match(releaseTruth, /Historical schedule-interaction and acceptance-receipt application source \| `4d3463ec1173be50e3b76ef92fa92e9cb1f81993`/);
+  assert.match(releaseTruth, /Historical weekly job-schedule application source \| `b29598f7d7f3c3f07a86cf9e36fcccf6b167d47d`/);
+  assert.match(releaseTruth, /Historical quote-acceptance, accepted-invoice and accounting application source \| `9624507b9f4ed274169b67076a40ddb34cd26acb`/);
   assert.match(handover, /Historical versioned quote-delivery application commit: `852aaa4b60cc72b598b375bcd96bc4cc9dd29d3d`/);
   assert.match(handover, /Historical quote editor and delivery correction application commit: `c12fa0613901aa7cb4c1c2167b0e4720e57b0900`/);
   assert.match(handover, /Historical quote, job and invoice usability application commit: `e757ac2402da0830b68d0e50e95afd61281c03c0`/);
@@ -1061,7 +1067,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(currentHandover, /Current production: Sites version 391 at `https:\/\/compare\.ausenergyassessments\.com`/);
   assert.match(currentHandover, /Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc`/);
   assert.match(currentHandover, /Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`/);
-  assert.match(currentHandover, /Current migration inventory: 157 migrations through `0158_remove_surge_account_context\.sql`/);
+  assert.match(currentHandover, /Current migration inventory: 159 migrations through `0160_trade_rental_inspections\.sql`/);
   assert.match(handover, /32-pixel 30-minute card[\s\S]{0,80}64-pixel hour/);
   assert.match(handover, /a2af47a15e5fe7d1[\s\S]{0,120}a2af489e3eb1e7d1[\s\S]{0,80}outcome `ok`/);
   assert.match(handover, /Historical version 334 application source: `f92b2e1c90178e8fb56f1b2841b4cbbf7bb7e7cb`/);
@@ -1839,11 +1845,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.deepEqual(releaseTruthStepNumbers, [1, 2, 3, 4, 5]);
   assert.equal(normalisedHandoverNextFive, normalisedRoadmapNextFive);
   assert.equal(normalisedReleaseTruthNextFive, normalisedRoadmapNextFive);
-  assert.match(normalisedRoadmapNextFive, /^1\. \*\*Priority 1:\*\* connect the bounded official-change queue to scheduled official hash checks and reviewer approvals/);
-  assert.match(normalisedRoadmapNextFive, /\n2\. \*\*Priority 2:\*\* run the reviewed conversation corpus in CI and an aggregate operator quality view/);
-  assert.match(normalisedRoadmapNextFive, /\n3\. Run controlled same-browser context continuity rehearsals/);
-  assert.match(normalisedRoadmapNextFive, /\n4\. Enforce route-specific JavaScript and stylesheet graph budgets/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. Expand the reviewed practical-tip, product-specification and certificate-answer coverage across supported categories and brands/);
+  assert.match(normalisedRoadmapNextFive, /^1\. Reconcile the client service schedule against the governed question set, report wording, exclusions and completion rules/);
+  assert.match(normalisedRoadmapNextFive, /\n2\. Run a supervised end-to-end assessor rehearsal on a test property/);
+  assert.match(normalisedRoadmapNextFive, /\n3\. Add operational review screens for public rental requests/);
+  assert.match(normalisedRoadmapNextFive, /\n4\. Keep the optional electrical, gas and smoke-alarm workflow available only in pre-launch\/test-data mode; customer use and live launch remain gated on licensed-practitioner review of declaration wording and test logic\./);
+  assert.match(normalisedRoadmapNextFive, /\n5\. Run physical Android and iOS field QA for offline job visibility/);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

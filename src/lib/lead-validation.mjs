@@ -11,6 +11,14 @@ import {
   normalizePublicPlanQuotePreparation,
   PUBLIC_PLAN_QUOTE_PREPARATION_VERSION,
 } from "./public-plan-quote-preparation.mjs";
+import {
+  isPublicRentalAssessmentRequest,
+  isPublicRentalAssessmentRequesterRole,
+  isPublicRentalAssessmentSubmissionId,
+  normalizePublicRentalAssessmentOptionalModules,
+  PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION,
+  PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE,
+} from "./public-rental-assessment-request.mjs";
 import { ENERGY_SERVICE_IDS } from "./energy-service-catalogue.mjs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -136,7 +144,7 @@ export function validateLeadPayload(raw) {
     return { ok: false, error: "Unknown enquiry type." };
   }
 
-  const suppliedName = cleanText(raw.name, 120);
+  const suppliedName = cleanSingleLine(raw.name, 120);
   const email = cleanText(raw.email, 254).toLowerCase();
   const phone = cleanText(raw.phone, 40);
   const customerFirstName = cleanSingleLine(raw.customerFirstName, 60);
@@ -147,6 +155,7 @@ export function validateLeadPayload(raw) {
   const customerState = cleanSingleLine(raw.customerState, 3).toUpperCase();
   const enquiry = cleanText(raw.enquiry, 80);
   const publicPlanEnquiry = isPublicPlanEnquiry(enquiry);
+  const rentalAssessmentRequest = isPublicRentalAssessmentRequest(enquiry);
   const name = publicPlanEnquiry
     ? [customerFirstName, customerLastName].filter(Boolean).join(" ")
     : suppliedName;
@@ -154,6 +163,7 @@ export function validateLeadPayload(raw) {
   if (email && !EMAIL_RE.test(email)) return { ok: false, error: "Please enter a valid email address." };
   if (submissionType === 'comparison' && !email) return { ok: false, error: "An email address is required for comparison results." };
   if (submissionType === 'upgrade' && !email && !phone) return { ok: false, error: "Please enter an email address or phone number." };
+  if (rentalAssessmentRequest && !email) return { ok: false, error: "Please enter an email address." };
 
   const consent = raw.consent;
   const consentPurpose = cleanText(consent?.purpose, 160);
@@ -168,11 +178,91 @@ export function validateLeadPayload(raw) {
   )) {
     return { ok: false, error: "Please confirm the current contact notice for this upgrade enquiry." };
   }
+  if (rentalAssessmentRequest && (
+    consentPurpose !== PUBLIC_RENTAL_ASSESSMENT_CONSENT_PURPOSE
+    || consentVersion !== PUBLIC_RENTAL_ASSESSMENT_CONSENT_NOTICE_VERSION
+  )) {
+    return { ok: false, error: "Please confirm the current contact notice for this rental assessment request." };
+  }
 
   const annualKwh = cleanNumber(raw.annualKwh, 0, 100000000);
   const annualMj = cleanNumber(raw.annualMj, 0, 100000000);
   const postcode = cleanText(raw.postcode, 4);
   if (postcode && !/^\d{4}$/.test(postcode)) return { ok: false, error: "Invalid postcode." };
+  if (rentalAssessmentRequest) {
+    if (submissionType !== "upgrade") return { ok: false, error: "Unknown enquiry type." };
+    const requesterRole = cleanText(raw.requesterRole, 40);
+    const agencyName = cleanSingleLine(raw.agencyName, 160);
+    if (!isPublicRentalAssessmentRequesterRole(requesterRole)) {
+      return { ok: false, error: "Choose whether you are the rental provider or the agent/property manager." };
+    }
+    if (requesterRole === "agent-property-manager" && !agencyName) {
+      return { ok: false, error: "Enter the agency or property management business name." };
+    }
+    if (raw.authorityConfirmed !== true) {
+      return { ok: false, error: "Confirm that you are authorised to request an assessment for this property." };
+    }
+    if (!customerStreetAddress || !customerSuburb || !customerState || !postcode) {
+      return { ok: false, error: "Enter the Victorian property's street address, postcode and suburb." };
+    }
+    const addressLocality = resolveAddressLocalityTuple({
+      postcode,
+      suburb: customerSuburb,
+      state: customerState,
+    });
+    if (!addressLocality || addressLocality.state !== "VIC") {
+      return { ok: false, error: "Choose a Victorian suburb listed for this postcode." };
+    }
+    const submissionId = cleanText(raw.submissionId, 64);
+    if (!isPublicRentalAssessmentSubmissionId(submissionId)) {
+      return { ok: false, error: "Start a new rental assessment request and try again." };
+    }
+    const requestedOptionalModules = normalizePublicRentalAssessmentOptionalModules(raw.requestedOptionalModules);
+    if (!requestedOptionalModules) {
+      return { ok: false, error: "The optional assessment selection was not recognised." };
+    }
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phone && (!PUBLIC_PLAN_PHONE_RE.test(phone) || phoneDigits.length < 8 || phoneDigits.length > 15)) {
+      return { ok: false, error: "Please enter a valid phone number." };
+    }
+    return {
+      ok: true,
+      value: {
+        submissionType,
+        submissionId,
+        submittedAt: new Date().toISOString(),
+        name,
+        email,
+        phone,
+        customerUnitNumber,
+        customerStreetAddress,
+        customerSuburb: addressLocality.suburb,
+        customerState: "VIC",
+        postcode,
+        state: "VIC",
+        requesterRole,
+        agencyName: requesterRole === "agent-property-manager" ? agencyName : "",
+        requestedOptionalModules,
+        authorityConfirmed: true,
+        website: cleanText(raw.website, 200),
+        clientStartedAt: cleanNumber(raw.clientStartedAt, 0, Number.MAX_SAFE_INTEGER),
+        consent: {
+          accepted: true,
+          purpose: consentPurpose,
+          noticeVersion: consentVersion,
+          grantedAt: consentGrantedAt,
+        },
+        upgrades: true,
+        enquiry,
+        projectCategories: ["rental-inspection"],
+        projectStage: "assessment-ready",
+        projectPriorities: ["assessment-compliance"],
+        propertyRelationship: "landlord-manager",
+        preferredContact: phone ? "either" : "email",
+        projectNotes: cleanText(raw.projectNotes, 1200),
+      },
+    };
+  }
   const projectCategories = cleanDirectTradeCategories(raw.projectCategories);
   const state = canonicalAustralianState(raw.state) || "";
   const propertyType = cleanEnum(raw.propertyType, PROPERTY_TYPES);

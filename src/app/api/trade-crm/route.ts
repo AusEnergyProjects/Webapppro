@@ -68,6 +68,20 @@ import {
   tradeJobScheduleEligibilitySql,
   tradeScheduleAvailabilityGuardStatement,
 } from "@/lib/trade-schedule-server";
+import {
+  RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+  RENTAL_ASSESSMENT_TEMPLATE_KEY,
+  RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+  RENTAL_INSPECTION_SERVICE_CATEGORY,
+  normalizeRentalAssessmentModules,
+  rentalInspectionServiceAddressAccepted,
+  rentalAssessmentTemplateSnapshot,
+} from "@/lib/trade-rental-assessment.mjs";
+import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
+import {
+  isRentalInspectionAssignmentConflict,
+  rentalInspectionAssignmentStatements,
+} from "@/lib/trade-rental-assignment-server";
 
 export const runtime = "edge";
 
@@ -80,6 +94,7 @@ const WORK_STAGES = new Set(["backlog", "ready", "scheduled", "in_progress", "bl
 const PRIORITIES = new Set(["low", "standard", "high", "urgent"]);
 const SERVICE_CATEGORIES = new Set([
   ...ENERGY_SERVICE_IDS,
+  RENTAL_INSPECTION_SERVICE_CATEGORY,
   "electrical", "plumbing", "mounting-hardware", "controls",
 ]);
 const APPOINTMENT_TYPES = new Set(["phone_call", "site_visit", "quote_review", "installation", "service", "admin"]);
@@ -96,6 +111,7 @@ const JOB_REGISTER_STATUS_SET = new Set<string>(JOB_REGISTER_OPERATIONAL_STATUSE
 const CRM_REQUEST_MAX_BYTES = 96 * 1024;
 const SERVICE_LABELS: Record<string, string> = {
   ...ENERGY_SERVICE_LABELS,
+  [RENTAL_INSPECTION_SERVICE_CATEGORY]: "Rental inspection",
   "insulation-draughts": "Insulation and draught control",
   electrical: "Electrical services", plumbing: "Plumbing services",
   "mounting-hardware": "Mounting and hardware", controls: "Energy controls", other: "Other work",
@@ -331,6 +347,9 @@ function errorResponse(error: unknown) {
   if (isTradeComplianceIntentScheduleConflict(error)) {
     return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job, its schedule or its compliance plan changed elsewhere. Refresh it before saving." }, 409);
   }
+  if (isRentalInspectionAssignmentConflict(error)) {
+    return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This rental assessment assignment changed elsewhere. Refresh the job before scheduling it." }, 409);
+  }
   if (code.includes("Compliance-linked job activity date cannot change without case supersession")) {
     return adminJson({ ok: false, error: "This job is linked to a compliance case, so its planned installation date is locked. Governed case supersession is not available yet." }, 409);
   }
@@ -355,6 +374,7 @@ function errorResponse(error: unknown) {
   if (code === "JOB_ASSIGNMENT_REQUIRED") return adminJson({ ok: false, error: "Assign this job before adding an appointment." }, 409);
   if (code === "JOB_ASSIGNMENT_CHANGED") return adminJson({ ok: false, code: "REVISION_CONFLICT", error: "This job's assignment changed. Refresh it before booking." }, 409);
   if (code === "ACTIVE_APPOINTMENT_REASSIGN") return adminJson({ ok: false, error: "This job already has an active appointment. Move or cancel that appointment before assigning the job to someone else." }, 409);
+  if (code === "RENTAL_ACTIVE_APPOINTMENT") return adminJson({ ok: false, error: "This rental assessment already has an active appointment. Move or cancel that appointment instead of creating another one." }, 409);
   if (code === "TERMINAL_JOB_LOCKED") return adminJson({ ok: false, error: "Completed or cancelled jobs cannot be scheduled." }, 409);
   if (code === "JOB_RESCHEDULE_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow appointment scheduling or rescheduling." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
@@ -1890,6 +1910,9 @@ export async function POST(request: Request) {
       const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
+      if (!rentalInspectionServiceAddressAccepted(serviceCategory, serviceSite?.address_state)) {
+        return adminJson({ ok: false, error: "Rental inspections require a Victorian service address." }, 400);
+      }
       const displayName = createCustomer
         ? (businessName || `${firstName} ${lastName}`.trim())
         : existingCustomer ? customerDisplayName(existingCustomer) : "";
@@ -1907,6 +1930,7 @@ export async function POST(request: Request) {
       const requestedAssigneeMemberId = cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId || (guided ? identity.memberId : "");
       let assignee = "";
+      let assigneeUid = "";
       if (assigneeMemberId) {
         if (!identity.access.isOwner && identity.access.jobScope === "own" && assigneeMemberId !== identity.memberId) {
           throw new Error("JOB_ASSIGN_REQUIRED");
@@ -1918,6 +1942,7 @@ export async function POST(request: Request) {
         const member = await assertMemberCapability(db, identity, assigneeMemberId, serviceCategory);
         if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
         assignee = String(member.display_name || "");
+        assigneeUid = String(member.member_uid || "");
       }
       const appointmentType = APPOINTMENT_TYPES.has(cleanAdminText(body.appointmentType, 30)) ? cleanAdminText(body.appointmentType, 30) : "site_visit";
       let appointmentId = "";
@@ -1972,6 +1997,40 @@ export async function POST(request: Request) {
       );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
+      const rentalModuleKeys = serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY
+        ? normalizeRentalAssessmentModules(body.rentalInspectionModulesJson)
+        : [];
+      const rentalTemplate = rentalModuleKeys.length
+        ? rentalAssessmentTemplateSnapshot(rentalModuleKeys)
+        : null;
+      const rentalInspectionId = rentalTemplate ? crypto.randomUUID() : "";
+      const rentalInspectionNumber = rentalTemplate ? `RMS-${workNumber.replace(/^TLJ-/, "")}` : "";
+      if (rentalTemplate) await ensureTradeRentalSchemaGuards(db);
+      const rentalPropertySnapshot = rentalTemplate ? JSON.stringify({
+        schemaVersion: "tlink-rental-property-v1",
+        customer: {
+          id: customerId,
+          displayName,
+          email: createCustomer ? email : String(existingCustomer?.email || ""),
+          phone: createCustomer ? phone : String(existingCustomer?.phone || ""),
+        },
+        property: {
+          serviceSiteId,
+          buildingType,
+          addressLine1: String(serviceSite?.address_line_1 || ""),
+          addressLine2: String(serviceSite?.address_line_2 || ""),
+          suburb: String(serviceSite?.suburb || ""),
+          state: String(serviceSite?.address_state || ""),
+          postcode: String(serviceSite?.postcode || ""),
+        },
+        appointment: {
+          id: appointmentId,
+          startsAt: scheduledStart,
+          endsAt: scheduledEnd,
+          assessorMemberId: assigneeMemberId,
+          assessorLabel: assignee,
+        },
+      }) : "{}";
       const batchStatements: D1PreparedStatement[] = [
         ...intakeStatements,
         db.prepare(`INSERT INTO trade_work_orders
@@ -2022,6 +2081,68 @@ export async function POST(request: Request) {
             changedAt: now,
             excludeAppointmentId: appointmentId,
           }),
+        ] : []),
+        ...(rentalTemplate ? [
+          db.prepare(`INSERT INTO trade_rental_inspections
+            (id, work_order_id, firebase_uid, service_site_id, inspection_number, jurisdiction, status,
+             template_key, template_version, rules_effective_from, module_selection_snapshot, property_snapshot,
+             assessor_uid, assessor_member_id, assessor_snapshot, revision, creation_request_id, issued_report_id,
+             submitted_at, issued_at, superseded_at, created_by_uid, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
+            .bind(
+              rentalInspectionId,
+              workOrderId,
+              identity.uid,
+              serviceSiteId,
+              rentalInspectionNumber,
+              guided ? "scheduled" : "draft",
+              RENTAL_ASSESSMENT_TEMPLATE_KEY,
+              RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+              RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+              JSON.stringify(rentalModuleKeys),
+              rentalPropertySnapshot,
+              assigneeUid,
+              assigneeMemberId,
+              JSON.stringify({ memberId: assigneeMemberId, uid: assigneeUid, displayName: assignee }),
+              workOrderId,
+              identity.access.actorUid,
+              now,
+              now,
+            ),
+          ...rentalModuleKeys.map((moduleKey) => {
+            const moduleTemplate = rentalTemplate.modules[moduleKey];
+            return db.prepare(`INSERT INTO trade_rental_inspection_modules
+              (id, inspection_id, firebase_uid, module_key, required, status, template_version, template_name,
+               required_capability, template_snapshot, answers, revision, completed_by_uid, completed_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, '{}', 1, '', '', ?, ?)`)
+              .bind(
+                crypto.randomUUID(),
+                rentalInspectionId,
+                identity.uid,
+                moduleKey,
+                moduleKey === "minimum_standards" ? 1 : 0,
+                RENTAL_ASSESSMENT_TEMPLATE_VERSION,
+                String(moduleTemplate.title || moduleKey),
+                String(moduleTemplate.credentialGate || "qualified_assessor"),
+                JSON.stringify(moduleTemplate),
+                now,
+                now,
+              );
+          }),
+          db.prepare(`INSERT INTO trade_rental_inspection_events
+            (id, inspection_id, report_id, report_link_id, firebase_uid, actor_type, actor_uid,
+             event_type, request_id, summary, metadata, source_ip_sha256, user_agent_sha256, created_at)
+            VALUES (?, ?, '', '', ?, 'owner', ?, 'inspection_attached', ?, ?, ?, '', '', ?)`)
+            .bind(
+              crypto.randomUUID(),
+              rentalInspectionId,
+              identity.uid,
+              identity.access.actorUid,
+              workOrderId,
+              `Rental inspection attached with ${rentalModuleKeys.length} module${rentalModuleKeys.length === 1 ? "" : "s"}.`,
+              JSON.stringify({ moduleKeys: rentalModuleKeys }),
+              now,
+            ),
         ] : []),
         ...preparedComplianceIntents.flatMap((preparedIntent) => [
           db.prepare(`INSERT INTO trade_work_order_compliance_intents
@@ -2103,6 +2224,8 @@ export async function POST(request: Request) {
         complianceWorkPacks,
         workPackReady,
         workPackBlockers,
+        rentalInspectionAttached: Boolean(rentalTemplate),
+        rentalInspectionModuleCount: rentalModuleKeys.length,
         calendarSynced, calendarFailed }, 201);
     }
 
@@ -2172,12 +2295,17 @@ export async function POST(request: Request) {
       }
       const member = await assertMemberCapability(db, identity, assigneeMemberId, String(job.service_category || ""));
       if (!member) return adminJson({ ok: false, error: "Choose an available team member." }, 400);
-      if (assignmentChanged) {
+      const rentalInspectionAppointment = String(job.service_category || "") === RENTAL_INSPECTION_SERVICE_CATEGORY;
+      if (assignmentChanged || rentalInspectionAppointment) {
         const activeAppointment = await db.prepare(`SELECT id FROM trade_crm_appointments
           WHERE work_order_id = ? AND firebase_uid = ?
             AND status IN ('scheduled', 'en_route', 'arrived', 'in_progress') LIMIT 1`)
           .bind(workOrderId, identity.uid).first();
-        if (activeAppointment) throw new Error("ACTIVE_APPOINTMENT_REASSIGN");
+        if (activeAppointment) {
+          throw new Error(rentalInspectionAppointment
+            ? "RENTAL_ACTIVE_APPOINTMENT"
+            : "ACTIVE_APPOINTMENT_REASSIGN");
+        }
       }
       const assignee = String(member.display_name || "");
       const displayName = customerDisplayName(job);
@@ -2234,6 +2362,22 @@ export async function POST(request: Request) {
         .bind(appointmentId, workOrderId, identity.uid, appointmentType,
           appointmentTitle, startsAt, endsAt, assigneeMemberId, assignee,
           cleanAdminText(body.notes, 1000), now, now),
+        ...rentalInspectionAssignmentStatements(db, {
+          actorType: identity.access.isOwner ? "owner" : "assessor",
+          actorUid: identity.access.actorUid,
+          appointment: {
+            id: appointmentId,
+            startsAt,
+            endsAt,
+          },
+          assigneeLabel: assignee,
+          assigneeMemberId,
+          changedAt: now,
+          jobRevision,
+          ownerUid: identity.uid,
+          previousAssigneeMemberId: currentAssigneeMemberId,
+          workOrderId,
+        }),
         tradeCrmScheduleMemberGuardStatement(db, {
           ownerUid: identity.uid,
           memberId: assigneeMemberId,
@@ -2283,7 +2427,16 @@ export async function POST(request: Request) {
           previousAudienceMemberId: currentAssigneeMemberId,
         }),
       );
-      await db.batch(statements);
+      await guardedOnlineJobMutationBatch(db, statements, {
+        kind: "assignment",
+        assigneeLabel: assignee,
+        assigneeMemberId,
+        jobRevision,
+        jobStage: installation ? "scheduled" : String(job.stage),
+        ownerUid: identity.uid,
+        updatedAt: now,
+        workOrderId,
+      });
       let calendarSync = { connected: 0, synced: 0, failed: 0 };
       try { calendarSync = await syncCreatedAppointmentToConnectedCalendars(identity.uid, appointmentId); }
       catch { calendarSync = { connected: 0, synced: 0, failed: 1 }; }

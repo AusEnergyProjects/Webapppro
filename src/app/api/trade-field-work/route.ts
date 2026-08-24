@@ -5,6 +5,9 @@ import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/
 import { jobSyncChangeStatements, nextJobRevision } from "@/lib/trade-team-sync-server";
 import { photoRequestProofOverview } from "@/lib/photo-request-review-server";
 import { normalisePhotoRequirements } from "@/lib/trade-photo-requests";
+import { drainTradeCrmJobMediaCleanup } from "@/lib/trade-crm-job-media-cleanup";
+import { rentalImageWithinReportLimit } from "@/lib/trade-rental-image-dimensions.mjs";
+import { rentalEvidencePhotoCapture } from "@/lib/trade-rental-evidence.mjs";
 import {
   BoundedJsonRequestError,
   readBoundedJsonRequest,
@@ -13,6 +16,8 @@ import {
 export const runtime = "edge";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 4096;
+const MAX_IMAGE_PIXELS = 12_000_000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MEDIA_CATEGORIES = new Set(["before", "progress", "after", "document"]);
 const SIGNER_ROLES = new Set(["technician", "customer"]);
@@ -188,6 +193,29 @@ function safeName(value: string) {
   return value.replace(/[\r\n"\\/]/g, "_").slice(0, 180) || "job-file";
 }
 
+function serialisedEvidenceEnvelope(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || !value.trim()) return "{}";
+  if (value.length > 24_000) throw new Error("EVIDENCE_ENVELOPE_INVALID");
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    return JSON.stringify(parsed);
+  } catch {
+    throw new Error("EVIDENCE_ENVELOPE_INVALID");
+  }
+}
+
+function exactArrayBuffer(bytes: Uint8Array) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+async function sha256(bytes: Uint8Array) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", exactArrayBuffer(bytes)));
+  return Array.from(digest).map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 function fieldError(error: unknown) {
   if (error instanceof BoundedJsonRequestError) {
     return adminJson({
@@ -210,6 +238,7 @@ function fieldError(error: unknown) {
   if (code === "FIELD_EVIDENCE_VIEW_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field records." }, 403);
   if (code === "FIELD_EVIDENCE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow field record changes." }, 403);
   if (code === "PROTECTED_CUSTOMER") return adminJson({ ok: false, error: "Customer sign-off for an Australian Energy Assessments protected job must stay in the Australian Energy Assessments customer pathway." }, 403);
+  if (code === "EVIDENCE_ENVELOPE_INVALID") return adminJson({ ok: false, error: "The evidence location and capture-time record was invalid." }, 400);
   if (code === "STORAGE_UNAVAILABLE") return adminJson({ ok: false, error: "Job file storage is not available." }, 503);
   if (code === "FIELD_TRANSITION_CONFLICT") return adminJson({ ok: false, error: "The job changed on another device. Refresh before trying again." }, 409);
   return adminJson({ ok: false, error: "The field-work record could not be completed." }, 500);
@@ -256,7 +285,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
       AND fa.status IN ('scheduled', 'en_route', 'arrived', 'in_progress', 'completed')
       ORDER BY CASE fa.status WHEN 'in_progress' THEN 0 WHEN 'arrived' THEN 1 WHEN 'en_route' THEN 2 WHEN 'scheduled' THEN 3 ELSE 4 END, fa.starts_at DESC LIMIT 1)
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount] = await Promise.all([
+  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
@@ -265,11 +294,14 @@ async function payload(access: TeamAccess, workOrderId: string) {
     db.prepare("SELECT COUNT(*) count FROM trade_offline_actions WHERE owner_uid = ? AND entity_id = ? AND status IN ('processing', 'conflict')").bind(firebaseUid, workOrderId).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})`)
       .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_rental_inspections
+      WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'issued'`)
+      .bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
   ]);
   const customerContext = job?.source_type !== "opportunity"
     && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
   const address = customerContext ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
-  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0) };
+  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
     ...(counts.forms ? [{ key: "forms", label: `${counts.forms} required form${counts.forms === 1 ? " is" : "s are"} not complete`, target: "forms" }] : []),
@@ -278,6 +310,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
     ...(counts.plan ? [{ key: "scope", label: `${counts.plan} work-plan item${counts.plan === 1 ? " is" : "s are"} not complete`, target: "work-plan" }] : []),
     ...(counts.unsynced ? [{ key: "sync", label: "Unsynchronised field changes need attention", target: "sync" }] : []),
     ...(counts.compliance ? [{ key: "compliance", label: `${counts.compliance} governed evidence requirement${counts.compliance === 1 ? " is" : "s are"} awaiting submitted evidence`, target: "evidence" }] : []),
+    ...(counts.rentalReports ? [{ key: "rental-report", label: "The rental assessment report must be issued before this job can finish", target: "rental-assessment" }] : []),
   ];
   const appointmentStatus = String(job?.appointment_status || "");
   const fieldCompleted = appointmentStatus === "completed" && job?.stage === "completed";
@@ -297,6 +330,7 @@ async function payload(access: TeamAccess, workOrderId: string) {
       { key: "forms", label: "Required forms", complete: !counts.forms, count: counts.forms, target: "forms" },
       { key: "proof", label: "Required photo proof", complete: !request || request.status === "revoked" || Boolean(proofReview?.proofReady), count: request && request.status !== "revoked" && !proofReview?.proofReady ? 1 : 0, target: "evidence" },
       { key: "compliance", label: "Governed compliance evidence", complete: !counts.compliance, count: counts.compliance, target: "evidence" },
+      { key: "rental-report", label: "Rental assessment report issued", complete: !counts.rentalReports, count: counts.rentalReports, target: "rental-assessment" },
       { key: "issues", label: "Open issues or blockers", complete: !counts.issues, count: counts.issues, target: "notes" },
     ], blockers, completion: { ready: blockers.length === 0, invoiceReady: fieldCompleted, handoverReady: fieldCompleted } } : null;
   return {
@@ -390,6 +424,11 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
         WHERE blocker.owner_uid = ? AND blocker.entity_id = ?
           AND blocker.status IN ('processing', 'conflict')
       )
+      AND NOT EXISTS (
+        SELECT 1 FROM trade_rental_inspections blocker
+        WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
+          AND blocker.status <> 'issued'
+      )
       AND NOT EXISTS (${UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL})
       AND (
         (
@@ -435,6 +474,8 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
     access.ownerUid,
     access.ownerUid,
     workOrderId,
+    workOrderId,
+    access.ownerUid,
     workOrderId,
     access.ownerUid,
     photoGuard.kind,
@@ -528,23 +569,40 @@ async function upload(request: Request, access: TeamAccess) {
   const file = form.get("file");
   const categoryValue = cleanAdminText(form.get("category"), 20);
   const category = MEDIA_CATEGORIES.has(categoryValue) ? categoryValue : "progress";
+  const evidenceEnvelope = serialisedEvidenceEnvelope(form.get("evidenceEnvelope"));
   if (!(file instanceof File) || !file.name) return adminJson({ ok: false, error: "Choose a photo or PDF." }, 400);
   if (!ALLOWED_TYPES.has(file.type)) return adminJson({ ok: false, error: "Upload a JPEG, PNG, WebP or PDF file." }, 400);
   if (file.size <= 0 || file.size > MAX_FILE_BYTES) return adminJson({ ok: false, error: "The file must be no larger than 8 MB." }, 400);
+  const now = new Date().toISOString();
+  if (String(job.service_category || "") === "rental-inspection" && file.type.startsWith("image/")
+    && !rentalEvidencePhotoCapture(evidenceEnvelope, { receivedAtUtc: now })) {
+    return adminJson({ ok: false, error: "Rental assessment photos need a current device-reported capture time, non-mocked GPS position and accuracy within 100 metres." }, 400);
+  }
   const id = crypto.randomUUID();
   const objectKey = `crm-job-media/${access.ownerUid}/${workOrderId}/${crypto.randomUUID()}`;
-  const now = new Date().toISOString();
   const revision = nextJobRevision(job.revision);
   const store = bucket();
-  await store.put(objectKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type },
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  if (String(job.service_category || "") === "rental-inspection"
+    && ["image/png", "image/jpeg"].includes(file.type)) {
+    if (!rentalImageWithinReportLimit(fileBytes, file.type, {
+      maxDimension: MAX_IMAGE_DIMENSION,
+      maxPixels: MAX_IMAGE_PIXELS,
+    })) {
+      return adminJson({ ok: false, error: "Prepare the photo in TLink before uploading. Images must be valid and no larger than 4096 pixels or 12 megapixels." }, 400);
+    }
+  }
+  const originalSha256 = await sha256(fileBytes);
+  await store.put(objectKey, exactArrayBuffer(fileBytes), { httpMetadata: { contentType: file.type },
     customMetadata: { owner: access.ownerUid, actor: access.actorUid, workOrderId, mediaId: id } });
   try {
     await getD1().batch([
       getD1().prepare(`INSERT INTO trade_crm_job_media
-        (id, work_order_id, firebase_uid, category, file_name, content_type, size_bytes, object_key, caption, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        (id, work_order_id, firebase_uid, category, file_name, content_type, size_bytes, object_key,
+         caption, evidence_envelope, original_sha256, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(id, workOrderId, access.ownerUid, category, safeName(file.name), file.type, file.size, objectKey,
-          cleanAdminText(form.get("caption"), 300), now, now),
+          cleanAdminText(form.get("caption"), 300), evidenceEnvelope, originalSha256, now, now),
       getD1().prepare(`INSERT INTO trade_work_order_events
         (id, work_order_id, firebase_uid, event_type, summary, created_at)
         VALUES (?, ?, ?, 'field_file_added', 'Field photo or document added.', ?)`)
@@ -639,16 +697,44 @@ export async function DELETE(request: Request) {
         error: "This file is part of a compliance evidence record and cannot be deleted. Add a replacement or ask the assigned compliance team to record a supersession.",
       }, 409);
     }
+    const rentalEvidence = await getD1().prepare(`SELECT 1 AS rental_evidence
+      FROM trade_rental_evidence_links
+      WHERE job_media_id = ? AND firebase_uid = ?
+      LIMIT 1`).bind(id, access.ownerUid).first();
+    if (rentalEvidence) {
+      return adminJson({
+        ok: false,
+        error: "This file is retained with rental assessment history and cannot be deleted. Add a replacement file when the evidence changes.",
+      }, 409);
+    }
     const job = await assignedJob(access, record.work_order_id);
-    await bucket().delete(record.object_key);
     const now = new Date().toISOString(); const revision = nextJobRevision(job.revision);
-    await getD1().batch([
+    const cleanupAttemptId = crypto.randomUUID();
+    const results = await getD1().batch([
+      getD1().prepare(`INSERT INTO trade_crm_job_media_cleanup
+        (object_key, firebase_uid, work_order_id, attempt_id, claim_token, status, attempts,
+         next_attempt_at, last_error, created_at, updated_at)
+        VALUES (?, ?, ?, ?, '', 'staged', 0, ?, '', ?, ?)
+        ON CONFLICT(object_key) DO UPDATE SET firebase_uid = excluded.firebase_uid,
+          work_order_id = excluded.work_order_id, attempt_id = excluded.attempt_id,
+          claim_token = '', status = 'staged', attempts = 0, next_attempt_at = excluded.next_attempt_at,
+          last_error = '', updated_at = excluded.updated_at`)
+        .bind(record.object_key, access.ownerUid, record.work_order_id, cleanupAttemptId, now, now, now),
       getD1().prepare("DELETE FROM trade_crm_job_media WHERE id = ? AND firebase_uid = ?").bind(id, access.ownerUid),
-      getD1().prepare("UPDATE trade_work_orders SET revision = ?, updated_at = ? WHERE id = ? AND firebase_uid = ?")
-        .bind(revision, now, record.work_order_id, access.ownerUid),
+      getD1().prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
+        WHERE id = ? AND firebase_uid = ?
+          AND NOT EXISTS (SELECT 1 FROM trade_crm_job_media media
+            WHERE media.id = ? AND media.firebase_uid = trade_work_orders.firebase_uid)
+          AND EXISTS (SELECT 1 FROM trade_crm_job_media_cleanup cleanup
+            WHERE cleanup.object_key = ? AND cleanup.attempt_id = ? AND cleanup.status = 'staged')`)
+        .bind(revision, now, record.work_order_id, access.ownerUid, id, record.object_key, cleanupAttemptId),
       ...jobSyncChangeStatements(getD1(), { ownerUid: access.ownerUid, workOrderId: record.work_order_id,
         revision, changedAt: now, audienceMemberId: job.assignee_member_id }),
     ]);
+    if (Number(results[1]?.meta.changes || 0) !== 1 || Number(results[2]?.meta.changes || 0) !== 1) {
+      throw new Error("ONLINE_MUTATION_CONFLICT");
+    }
+    await drainTradeCrmJobMediaCleanup({ db: getD1(), bucket: bucket(), limit: 5 }).catch(() => undefined);
     return adminJson({ ok: true, revision, ...(await payload(access, record.work_order_id)) });
   } catch (error) { return fieldError(error); }
 }

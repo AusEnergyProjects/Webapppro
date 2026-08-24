@@ -16,14 +16,18 @@ function fromBase64Url(value: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-async function encryptionKey() {
+async function protectedKeyBytes() {
   const configured = String((env as unknown as { CRM_INTEGRATION_ENCRYPTION_KEY?: string }).CRM_INTEGRATION_ENCRYPTION_KEY || "").trim();
   if (!configured) throw new Error("INTEGRATION_ENCRYPTION_UNAVAILABLE");
   let keyBytes: Uint8Array;
   try { keyBytes = fromBase64Url(configured); }
   catch { throw new Error("INTEGRATION_ENCRYPTION_UNAVAILABLE"); }
   if (keyBytes.byteLength !== 32) throw new Error("INTEGRATION_ENCRYPTION_UNAVAILABLE");
-  return crypto.subtle.importKey("raw", keyBytes as BufferSource, "AES-GCM", false, ["encrypt", "decrypt"]);
+  return keyBytes;
+}
+
+async function encryptionKey() {
+  return crypto.subtle.importKey("raw", await protectedKeyBytes() as BufferSource, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
 export async function encryptProtectedPayload(value: Record<string, unknown>) {
@@ -50,6 +54,19 @@ export const decryptIntegrationCredentials = decryptProtectedPayload;
 
 export async function integrationStateHash(value: string) {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value))));
+}
+
+export async function keyedProtectedAuditHash(purpose: string, value: string) {
+  const sourceKey = await protectedKeyBytes();
+  const purposeBytes = encoder.encode(`aea-protected-audit:${purpose}`);
+  const derivedSource = new Uint8Array(sourceKey.byteLength + purposeBytes.byteLength);
+  derivedSource.set(sourceKey);
+  derivedSource.set(purposeBytes, sourceKey.byteLength);
+  const derivedKey = await crypto.subtle.digest("SHA-256", derivedSource);
+  const hmacKey = await crypto.subtle.importKey("raw", derivedKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, encoder.encode(value))))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export function newIntegrationState(weekStart = "") {

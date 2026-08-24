@@ -343,9 +343,24 @@ test("the combined Schedule tab assigns and books in one focused calendar action
   assert.match(createAppointment, /assignmentChanged && !canAssignJob\(identity\.access/);
   assert.match(createAppointment, /assertMemberCapability\(db, identity, assigneeMemberId/);
   assert.match(createAppointment, /revision = \? AND stage = \? AND stage NOT IN \('completed', 'cancelled'\) AND assignee_member_id = \?/);
+  assert.match(createAppointment, /rentalInspectionAssignmentStatements/);
   assert.match(createAppointment, /tradeJobScheduleEligibilityGuardStatement/);
   assert.match(createAppointment, /tradeScheduleAvailabilityGuardStatement/);
-  assert.match(createAppointment, /await db\.batch\(statements\)/);
+  assert.match(createAppointment, /await guardedOnlineJobMutationBatch\(db, statements/);
+  const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders");
+  const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", jobUpdate);
+  const rentalAssignment = createAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
+  const memberGuard = createAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
+  const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
+  const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
+  const mutationBatch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
+  const calendarSync = createAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", mutationBatch);
+  const response = createAppointment.indexOf("revision: jobRevision", calendarSync);
+  assert.ok(jobUpdate >= 0 && jobUpdate < appointmentInsert
+    && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
+    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
+    && availabilityGuard < mutationBatch && mutationBatch < calendarSync && calendarSync < response,
+  "job update, appointment, rental sync and guards must commit before calendar sync and response");
   assert.match(ui, /assignmentDirty \? "Assign and add appointment" : "Add appointment"/);
   assert.match(scheduleSection, /setBookingDraftOpen\(true\); \}\}>Add another appointment<\/button>/);
   assert.doesNotMatch(scheduleSection, /crm-job-assignment-form/);

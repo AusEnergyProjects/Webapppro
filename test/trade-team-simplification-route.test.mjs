@@ -129,6 +129,10 @@ test("ordinary staff availability is self-only while delegated managers can edit
       plannedComplianceIntentReplanStatements: async () => [],
       previousTradeScheduleMutationGuardStatement: () => ({ run: async () => ({ success: true, meta: { changes: 1 } }) }),
     },
+    "@/lib/trade-rental-assignment-server": {
+      isRentalInspectionAssignmentConflict: () => false,
+      rentalInspectionAssignmentStatements: () => [],
+    },
     "@/lib/trade-team-permission-policy.mjs": { canRescheduleWithinScope: () => false },
     "@/lib/trade-schedule-server": scheduleServer,
   });

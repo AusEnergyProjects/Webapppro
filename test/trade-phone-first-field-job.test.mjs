@@ -58,7 +58,9 @@ test("new job uses structured sites, provider-neutral suggestions and manual fal
 
 test("guided intake removes manual titles and carries scheduling into the same flow", () => {
   assert.doesNotMatch(newJob, /name="title"|datalist|type your own|Appointment title/);
-  assert.match(newJob, /const steps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(newJob, /const ordinarySteps = \["Work", "Customer", "Program", "Appointment", "Review"\]/);
+  assert.match(newJob, /const rentalInspectionSteps = \["Work", "Customer", "Inspection", "Appointment", "Review"\]/);
+  assert.match(newJob, /const steps = serviceCategory === "rental-inspection" \? rentalInspectionSteps : ordinarySteps/);
   for (const step of ["Choose the work", "Add or attach the customer", "Choose the program, if relevant", "Set the appointment", "Review and create"]) assert.match(newJob, new RegExp(step));
   assert.match(newJob, /name="buildingType"/);
   assert.match(newJob, /name="startsAt"/);
@@ -99,13 +101,21 @@ test("job workspace appointment creation commits assignment and booking before c
   assert.match(createAppointment, /expectedRevision !== Number\(job\.revision\)/);
   assert.match(createAppointment, /const assigneeMemberId = requestedAssigneeMemberId/);
   const jobUpdate = createAppointment.indexOf("UPDATE trade_work_orders");
-  const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", jobUpdate);
-  const batch = createAppointment.indexOf("await db.batch(statements)", appointmentInsert);
+  const mutationGuard = createAppointment.indexOf("previousTradeScheduleMutationGuardStatement", jobUpdate);
+  const appointmentInsert = createAppointment.indexOf("INSERT INTO trade_crm_appointments", mutationGuard);
+  const rentalAssignment = createAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
+  const memberGuard = createAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
+  const eligibilityGuard = createAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
+  const availabilityGuard = createAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
+  const batch = createAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
   const calendarDelivery = createAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", batch);
   const response = createAppointment.indexOf("revision: jobRevision", calendarDelivery);
-  assert.ok(jobUpdate >= 0 && jobUpdate < appointmentInsert && appointmentInsert < batch
+  assert.ok(jobUpdate >= 0 && jobUpdate < mutationGuard && mutationGuard < appointmentInsert
+    && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
+    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
+    && availabilityGuard < batch
     && batch < calendarDelivery && calendarDelivery < response,
-  "assignment and appointment must commit atomically before calendar network delivery and the revision response");
+  "assignment, appointment, rental sync and guards must commit atomically before calendar delivery and response");
   assert.match(createAppointment, /previousAudienceMemberId: currentAssigneeMemberId/);
   assert.match(createAppointment, /return adminJson\(\{ ok: true, id: appointmentId, revision: jobRevision, calendarSync \}, 201\)/);
 });

@@ -725,11 +725,23 @@ test("every existing work-order date mutation path shares the atomic replanning 
     /const installation = appointmentType === "installation"[\s\S]*?const complianceIntentStatements = installation[\s\S]*?plannedComplianceIntentReplanStatements\(db[\s\S]*?: \[\]/,
   );
   assert.match(crmAppointment, /\.\.\.complianceIntentStatements,[\s\S]*?SET assignee_member_id = \?, assignee_label = \?, scheduled_start = \?, scheduled_end = \?[\s\S]*?AND revision = \?[\s\S]*?previousTradeScheduleMutationGuardStatement/);
-  assert.ok(
-    crmAppointment.indexOf("...complianceIntentStatements")
-      < crmAppointment.indexOf("await db.batch(statements)"),
-    "installation compliance replans must be committed with appointment creation",
-  );
+  const complianceStatements = crmAppointment.indexOf("...complianceIntentStatements");
+  const crmJobUpdate = crmAppointment.indexOf("UPDATE trade_work_orders", complianceStatements);
+  const mutationGuard = crmAppointment.indexOf("previousTradeScheduleMutationGuardStatement", crmJobUpdate);
+  const appointmentInsert = crmAppointment.indexOf("INSERT INTO trade_crm_appointments", mutationGuard);
+  const rentalAssignment = crmAppointment.indexOf("rentalInspectionAssignmentStatements", appointmentInsert);
+  const memberGuard = crmAppointment.indexOf("tradeCrmScheduleMemberGuardStatement", rentalAssignment);
+  const eligibilityGuard = crmAppointment.indexOf("tradeJobScheduleEligibilityGuardStatement", memberGuard);
+  const availabilityGuard = crmAppointment.indexOf("tradeScheduleAvailabilityGuardStatement", eligibilityGuard);
+  const mutationBatch = crmAppointment.indexOf("await guardedOnlineJobMutationBatch(db, statements", availabilityGuard);
+  const calendarSync = crmAppointment.indexOf("await syncCreatedAppointmentToConnectedCalendars", mutationBatch);
+  const response = crmAppointment.indexOf("revision: jobRevision", calendarSync);
+  assert.ok(complianceStatements >= 0 && complianceStatements < crmJobUpdate
+    && crmJobUpdate < mutationGuard && mutationGuard < appointmentInsert
+    && appointmentInsert < rentalAssignment && rentalAssignment < memberGuard
+    && memberGuard < eligibilityGuard && eligibilityGuard < availabilityGuard
+    && availabilityGuard < mutationBatch && mutationBatch < calendarSync && calendarSync < response,
+  "installation compliance replan, appointment, rental sync and guards must commit before calendar sync and response");
   assert.equal(
     workOrdersRoute.match(
       /plannedComplianceIntentReplanStatements\(/g,

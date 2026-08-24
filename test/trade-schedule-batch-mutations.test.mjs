@@ -255,6 +255,10 @@ function scheduleRoute(d1, notifications = [], synced = [], access = ownerAccess
         VALUES (?, ?, ?, 1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END, ?)`)
         .bind(crypto.randomUUID(), input.ownerUid, `schedule-mutation:${crypto.randomUUID()}`, input.changedAt),
     },
+    "@/lib/trade-rental-assignment-server": {
+      isRentalInspectionAssignmentConflict: () => false,
+      rentalInspectionAssignmentStatements: () => [],
+    },
     "@/lib/trade-team-permission-policy.mjs": { canRescheduleWithinScope },
     "@/lib/trade-schedule-server": scheduleServerHelpers,
   });

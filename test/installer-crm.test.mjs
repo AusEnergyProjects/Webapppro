@@ -462,8 +462,8 @@ test("My day exposes owner scoped local workload and direct action charts", () =
 
 test("CRM writes no longer return the full customer and job workspace", () => {
   assert.equal((route.match(/crmPayload\(identity\)/g) || []).length, 0);
-  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*calendarSynced, calendarFailed \}, 201\)/);
-  assert.match(crm, /type CreateJobResult = \{[\s\S]*complianceIntentPlanned\?: boolean; complianceIntentCount\?: number; workPackReady\?: boolean;[\s\S]*workPackBlockers\?: Array<\{ code: string; message: string \}>;[\s\S]*calendarSynced\?: number; calendarFailed\?: number;/);
+  assert.match(route, /return adminJson\(\{ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,\s*appointmentId, complianceIntentPlanned: complianceIntents\.length > 0,\s*complianceIntentCount: complianceIntents\.length,\s*complianceWorkPacks,\s*workPackReady,\s*workPackBlockers,\s*rentalInspectionAttached: Boolean\(rentalTemplate\),\s*rentalInspectionModuleCount: rentalModuleKeys\.length,\s*calendarSynced, calendarFailed \}, 201\)/);
+  assert.match(crm, /type CreateJobResult = \{[\s\S]*complianceIntentPlanned\?: boolean; complianceIntentCount\?: number; workPackReady\?: boolean;[\s\S]*workPackBlockers\?: Array<\{ code: string; message: string \}>;[\s\S]*rentalInspectionAttached\?: boolean; rentalInspectionModuleCount\?: number;[\s\S]*calendarSynced\?: number; calendarFailed\?: number;/);
   assert.match(newJob, /The assigned compliance team can review the customer, site, activity and schedule/);
   assert.match(newJob, /regulated case opens only when the exact published rule, product, evidence policy and calculation pathway are ready/);
   assert.match(route, /return adminJson\(\{ ok: true, id, customerNumber \}, 201\)/);

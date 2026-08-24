@@ -677,6 +677,30 @@ export type FieldWorkPackCustomerContext = {
   contactRevision: string;
 };
 
+export type FieldRentalInspectionSummary = {
+  id: string;
+  inspectionNumber: string;
+  status: 'draft' | 'scheduled' | 'in_progress' | 'submitted' | 'issuing' | 'issued' | 'superseded' | 'withdrawn';
+  templateKey: string;
+  templateVersion: number;
+  rulesEffectiveFrom: string;
+  selectedModules: string[];
+  assessorMemberId: string;
+  revision: number;
+  issuedReportId: string;
+  issuedAt: string;
+  progress: {
+    completeModules: number;
+    moduleTotal: number;
+    savedItems: number;
+    evidenceFiles: number;
+  };
+  permissions: {
+    canEdit: boolean;
+    canIssue: boolean;
+  };
+};
+
 export type FieldJob = {
   id: string;
   workNumber: string;
@@ -719,6 +743,7 @@ export type FieldJob = {
   activityWorkPacks?: FieldActivityWorkPack[];
   complianceCases?: FieldJobCompliance[];
   compliance?: FieldJobCompliance;
+  rentalInspection?: FieldRentalInspectionSummary;
 };
 
 export type SyncChange = {

@@ -187,14 +187,16 @@ export function canAssignJob(access: TeamAccess, fromMemberId: string, toMemberI
 
 export async function assignedJob(access: TeamAccess, workOrderId: string) {
   const row = await getD1().prepare(`SELECT work.id, work.source_type, work.source_reference,
-      work.assignee_member_id, work.revision, details.customer_source
+      work.assignee_member_id, work.assignee_label, work.stage, work.service_category,
+      work.revision, details.customer_source
     FROM trade_work_orders work
     LEFT JOIN trade_crm_job_details details
       ON details.work_order_id = work.id AND details.firebase_uid = work.firebase_uid
     WHERE work.id = ? AND work.firebase_uid = ? AND work.partner_type = 'installer'
       AND work.record_status = 'active'`)
     .bind(workOrderId, access.ownerUid).first<{ id: string; source_type: string; source_reference: string;
-      assignee_member_id: string; revision: number; customer_source: string }>();
+      assignee_member_id: string; assignee_label: string; stage: string; service_category: string;
+      revision: number; customer_source: string }>();
   if (!row) throw new Error("JOB_NOT_FOUND");
   if (!access.isOwner && access.jobScope === "own" && row.assignee_member_id !== access.memberId) {
     throw new Error("JOB_NOT_ASSIGNED");

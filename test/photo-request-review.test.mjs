@@ -70,8 +70,10 @@ test("customer completion checks current required uploads and preserves reviewed
 
 test("governed field evidence is checked before object storage deletion", () => {
   const evidenceCheck = fieldRoute.indexOf("FROM compliance_case_evidence");
-  const objectDelete = fieldRoute.indexOf("await bucket().delete(record.object_key)");
-  assert.ok(evidenceCheck >= 0 && objectDelete > evidenceCheck);
+  const cleanupStage = fieldRoute.indexOf("INSERT INTO trade_crm_job_media_cleanup");
+  const cleanupDrain = fieldRoute.indexOf("await drainTradeCrmJobMediaCleanup");
+  assert.ok(evidenceCheck >= 0 && cleanupStage > evidenceCheck && cleanupDrain > cleanupStage);
+  assert.doesNotMatch(fieldRoute.slice(evidenceCheck), /await bucket\(\)\.delete\(record\.object_key\)/);
   assert.match(
     fieldRoute,
     /ask the assigned compliance team to record a supersession/,

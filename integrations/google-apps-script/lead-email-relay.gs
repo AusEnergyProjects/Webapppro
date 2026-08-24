@@ -337,6 +337,7 @@ function sendAdminNotification_(alert) {
 function eventType_(payload) {
   if (EVENT_TYPES.indexOf(payload.eventType) >= 0) return payload.eventType;
   if (payload.submissionType === "comparison") return "comparison.results";
+  if (payload.enquiry === "rental-assessment-request") return "direct_trade.project";
   if (payload.enquiry === "direct-trade-project") return "direct_trade.project";
   if (payload.enquiry === "direct-trade-partner") return "direct_trade.partner";
   if (payload.enquiry === "gas-heating" || payload.enquiry === "gas-hot-water") return "gas.upgrade";
@@ -402,7 +403,7 @@ function handleEnquiry_(payload) {
 }
 
 function publicPlanSubmissionFingerprint_(payload) {
-  if (payload.sourceJourney !== "public-home-energy-plan") return "";
+  if (payload.sourceJourney !== "public-home-energy-plan" && payload.sourceJourney !== "public-rental-assessment-request") return "";
   const fingerprint = String(payload.submissionFingerprint || "").toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error("Public plan submission fingerprint is invalid");
   return fingerprint;
@@ -489,7 +490,12 @@ function writeLead_(payload, options) {
 }
 
 function setRow_(row, header, value) {
-  row[column_(header) - 1] = value;
+  row[column_(header) - 1] = sheetCellValue_(value);
+}
+
+function sheetCellValue_(value) {
+  if (typeof value !== "string") return value;
+  return /^[=+\-@]/.test(value) ? "'" + value : value;
 }
 
 function comparisonDetails_(payload) {
@@ -521,6 +527,10 @@ function enquiryDetails_(payload) {
     customerSuburb: payload.customerSuburb || "",
     customerState: payload.customerState || "",
     projectNotes: payload.projectNotes || "",
+    requesterRole: payload.requesterRole || "",
+    agencyName: payload.agencyName || "",
+    requestedOptionalModules: payload.requestedOptionalModules || [],
+    authorityConfirmed: payload.authorityConfirmed === true,
     tradeSharing: payload.tradeSharing || null,
     partnerType: payload.partnerType || "",
     businessName: payload.businessName || "",
@@ -695,6 +705,12 @@ function acknowledgementContent_(payload) {
       + notice_("Your personalised plan is attached", "The PDF contains your private home energy roadmap, quick wins, preparation checks and trusted resources. It is emailed only to you and is not included in the trade enquiry.")
       + notice_("Your matching request is being processed", "Your email, postcode, selected services and any message you wrote will be shared with all approved TLink trades that service your area. Your name, phone and full service address are shared only when you selected each one. Your private plan PDF is not shared with trades. We are preparing that matching step now. A trade response is not a quote or availability guarantee.");
   }
+  if (payload.sourceJourney === "public-rental-assessment-request") {
+    return intro
+      + summaryGrid_(rentalAssessmentRows_(payload))
+      + notice_("Request received, not booked", "We will contact you to confirm authority, assessment scope, price, property access and an appointment. No inspection or trade job has been booked or scheduled by this form.")
+      + notice_("Included by default", "The Victorian rental minimum standards assessment is included. Electrical, gas and smoke alarm checks are separate and appear only when requested and confirmed.");
+  }
   if (payload.eventType === "direct_trade.project") {
     return intro
       + summaryGrid_(projectRows_(payload))
@@ -723,6 +739,13 @@ function acknowledgementText_(payload) {
       "Your name, phone and full service address are shared only when you selected each one. Your private plan PDF is not shared with trades.",
       "This acknowledgement is not a quote or installation booking.",
     );
+  } else if (payload.sourceJourney === "public-rental-assessment-request") {
+    lines.push(
+      "",
+      "Your Victorian rental assessment request has been received, but no inspection or trade job has been booked or scheduled.",
+      "We will contact you to confirm authority, scope, price, access and an appointment.",
+      "The minimum standards assessment is included by default. Optional electrical, gas and smoke alarm checks are separate.",
+    );
   } else {
     lines.push("", "We will review the information before responding. This acknowledgement is not a quote or installation booking.");
   }
@@ -740,6 +763,7 @@ function sendInternalEnquiry_(payload) {
     ["Phone", payload.phone || "Not supplied"],
   ].concat(payload.eventType === "electricity.upgrade" ? electricityRows_(payload)
     : payload.eventType === "gas.upgrade" ? gasRows_(payload)
+    : payload.sourceJourney === "public-rental-assessment-request" ? rentalAssessmentRows_(payload)
     : payload.eventType === "direct_trade.project" ? projectRows_(payload)
     : partnerRows_(payload));
 
@@ -822,6 +846,28 @@ function projectRows_(payload) {
         ? "Held for authority review."
         : "Privacy-safe matching is active; customer contact details remain withheld until release is authorised."],
   ]);
+}
+
+function rentalAssessmentRows_(payload) {
+  const role = payload.requesterRole === "agent-property-manager" ? "Agent or property manager" : "Rental provider";
+  return compactRows_([
+    ["Assessment", "Victorian rental minimum standards"],
+    ["Requester role", role],
+    ["Agency", payload.agencyName],
+    ["Property address", serviceAddress_(payload)],
+    ["Optional checks", listLabels_(payload.requestedOptionalModules, rentalModuleLabel_) || "None requested"],
+    ["Authority declaration", payload.authorityConfirmed === true ? "Confirmed" : "Not confirmed"],
+    ["Booking status", "Not booked or scheduled"],
+  ]);
+}
+
+function rentalModuleLabel_(value) {
+  const labels = {
+    electrical_safety_check: "Electrical safety check",
+    gas_safety_check: "Gas safety check",
+    smoke_alarm_check: "Smoke alarm check",
+  };
+  return labels[value] || value;
 }
 
 function triageStatusLabel_(value) {
@@ -965,6 +1011,7 @@ function internalAction_(payload) {
   if (payload.eventType === "electricity.upgrade") return "Review the electricity comparison and scenario assumptions, then respond using the preferred contact details.";
   if (payload.eventType === "gas.upgrade") return "Review the gas usage and electrification estimate, then confirm site, product, rebate and trade requirements.";
   if (payload.sourceJourney === "public-home-energy-plan") return "The customer consented to open matching. Confirm the active verified trade allocations for the selected service area without exposing the customer-only plan PDF.";
+  if (payload.sourceJourney === "public-rental-assessment-request") return "Manually confirm requester authority, the Victorian address, selected optional checks, price, property access and appointment details before creating and assigning the TLink rental inspection job.";
   if (payload.eventType === "direct_trade.project") return "Qualify the scope, authority, location, timing and trade capability before making a connection.";
   return "Review business credentials, coverage, capability, insurance and product support before discussing participation.";
 }
@@ -973,6 +1020,7 @@ function acknowledgementTitle_(payload) {
   if (payload.eventType === "electricity.upgrade") return "We received your electricity upgrade enquiry";
   if (payload.eventType === "gas.upgrade") return "We received your gas upgrade enquiry";
   if (payload.sourceJourney === "public-home-energy-plan") return "Your personalised home energy plan is attached";
+  if (payload.sourceJourney === "public-rental-assessment-request") return "We received your rental assessment request";
   if (payload.eventType === "direct_trade.project") return "Your Direct Trade project brief is in";
   return "Your participation enquiry is in";
 }
@@ -985,6 +1033,7 @@ function eventLabel_(payload) {
   if (payload.eventType === "electricity.upgrade") return upgradeLabel_(payload.enquiry);
   if (payload.eventType === "gas.upgrade") return payload.enquiry === "gas-hot-water" ? "Heat pump hot water enquiry" : "Reverse cycle heating enquiry";
   if (payload.sourceJourney === "public-home-energy-plan") return "Home energy plan upgrade enquiry";
+  if (payload.sourceJourney === "public-rental-assessment-request") return "Victorian rental assessment request";
   if (payload.eventType === "direct_trade.project") return "Direct Trade household project brief";
   return payload.partnerType === "supplier" ? "Direct Trade supplier expression of interest" : "Direct Trade installer expression of interest";
 }
@@ -1002,7 +1051,7 @@ function setupLabel_(value) {
 }
 
 function categoryLabel_(value) {
-  const labels = { assessment: "Independent energy assessment", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Windows and glazing", "window-coverings": "Blinds, shutters or external shading", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
+  const labels = { assessment: "Independent energy assessment", "rental-inspection": "Victorian rental minimum standards assessment", solar: "Rooftop solar", battery: "Home battery", "heating-cooling": "Heating and cooling", "hot-water": "Hot water", "draught-proofing": "Draught proofing", insulation: "Insulation", glazing: "Windows and glazing", "window-coverings": "Blinds, shutters or external shading", "insulation-draughts": "Insulation and draught control", "ev-charging": "EV charging", other: "Other energy upgrade" };
   return labels[value] || value;
 }
 
