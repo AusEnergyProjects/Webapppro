@@ -129,6 +129,7 @@ test("member profiles use a dense contact roster, schedule colour and validated 
   assert.match(settings, /Generate and email PIN/);
   assert.match(settings, /Set up my app/);
   assert.match(settings, /TLink emails the username and PIN/);
+  assert.match(settings, /result\.code !== "REVISION_CONFLICT"/);
 });
 
 test("staff portal renders only permission-backed operations", () => {

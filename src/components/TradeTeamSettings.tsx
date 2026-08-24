@@ -321,6 +321,8 @@ export function TradeTeamSettings({ user, navigationTarget }: { user: User; navi
   }, [appliedQuery, capabilityFilter, navigationTarget, page, statusFilter, tokenHeaders]);
   const handleMemberConflict = useCallback(async (response: Response) => {
     if (response.status !== 409) return false;
+    const result = await response.clone().json().catch(() => ({})) as { code?: string };
+    if (result.code !== "REVISION_CONFLICT") return false;
     await load();
     setEditing(null);
     setMenu(null);

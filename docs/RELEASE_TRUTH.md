@@ -1091,7 +1091,7 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Install TLink 1.0.1 build 2 over the existing Samsung test app, set John Smith's TLink username, generate the one-time PIN, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+1. Use `Set up my app` on the owner row and then a worker's `Open details` flow to generate and email deliberate test PINs, confirm both emails arrive with the exact username and PIN, sign in on Samsung, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.

@@ -61,7 +61,19 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       can_view_field_evidence = 1, can_manage_field_evidence = 1,
       can_run_reports = 1, can_search_customers = 1, status = 'active',
       accepted_at = CASE WHEN accepted_at = '' THEN ? ELSE accepted_at END, updated_at = ?
-      WHERE id = ? AND owner_uid = ?`).bind(ownerUid, email, displayName, now, now, existing.id, ownerUid).run();
+      WHERE id = ? AND owner_uid = ?
+        AND (member_uid <> ? OR email <> ? OR display_name <> ? OR role <> 'manager'
+          OR can_create_jobs <> 1 OR can_manage_jobs <> 1 OR can_assign_jobs <> 1 OR job_scope <> 'team'
+          OR can_view_customers <> 1 OR can_manage_customers <> 1
+          OR can_view_quotes <> 1 OR can_manage_quotes <> 1 OR can_send_quotes <> 1
+          OR can_view_invoices <> 1 OR can_manage_invoices <> 1
+          OR can_view_price_book <> 1 OR can_manage_price_book <> 1 OR can_apply_discounts <> 1
+          OR schedule_scope <> 'team' OR can_reschedule_jobs <> 1 OR can_manage_team <> 1
+          OR can_edit_team_permissions <> 1
+          OR can_view_field_evidence <> 1 OR can_manage_field_evidence <> 1
+          OR can_run_reports <> 1 OR can_search_customers <> 1 OR status <> 'active'
+          OR accepted_at = '')`).bind(ownerUid, email, displayName, now, now, existing.id, ownerUid,
+        ownerUid, email, displayName).run();
     return existing.id;
   }
   const id = crypto.randomUUID();
