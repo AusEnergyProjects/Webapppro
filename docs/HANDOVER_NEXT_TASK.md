@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-70` is validated, pushed and deployed publicly as Sites version 402; Android preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c`, signed TLink build 1.0.1 build 2 and Google Apps Script relay version 16 are current.
+Status: `TLINK-FIELD-APP-71` is in progress. It stops the schedule sync feedback loop and restores readable dark-theme text inputs in the native new-job flow.
 
 Prepared: 25 August 2026
 
-Milestone ID: `TLINK-FIELD-APP-70`
+Milestone ID: `TLINK-FIELD-APP-71`
 
 Working branch: `codex/tlink-field-app`
 
@@ -34,12 +34,12 @@ Current migration inventory: 161 migrations through `0162_trade_field_username.s
 
 ## Released task contract
 
-- User outcome: the valid PIN session opens the field schedule instead of remaining on `Checking trade access`, and the restricted screen shows the office-controlled username.
-- Owning workflow: field-session verification, encrypted local-owner preparation and the existing offline sync path.
-- In scope: bound reachability and JSON request waits, verify server access before local sync, release the loading gate before background work, stop repeated cursors, refresh the saved field username, and publish a compatible preview update plus matching Sites source.
-- Out of scope: a new Android binary, app-store submission, weakened access control, discarded local work, new workflow questions and unrelated team or schedule redesign.
-- Acceptance: a created session reaches `/api/field/access`, valid access opens the schedule before full sync, failed connectivity becomes an actionable retry state, repeated cursors stop, `test` is used as the restricted-screen identity, and exact-source validation and release provenance pass.
-- Validation: focused field-access and mobile-sync tests, mobile typecheck, lint, all 38 mobile tests, Android and iOS export, root typecheck, complete root validation, compatible EAS Update publication, Sites release, custom-domain route checks and post-release error-log review.
+- User outcome: the schedule finishes syncing instead of continuously restarting, and every new-job field keeps typed text and placeholder text readable in TLink's dark theme.
+- Owning workflow: native app session identity refresh, connectivity-triggered sync and the field-created job form.
+- In scope: prevent unchanged field identity from mutating React state, keep the network listener independent of display-name object changes, apply explicit dark input and placeholder colours, add regression coverage, and publish a compatible preview update plus matching Sites source.
+- Out of scope: a new Android binary, app-store submission, weakened access control, sync schema changes, workflow-question changes and unrelated dashboard redesign.
+- Acceptance: one successful username refresh cannot resubscribe and restart sync indefinitely, the schedule settles on the completed sync state, entered text has explicit contrast against the input background, placeholders remain legible, and exact-source validation and release provenance pass.
+- Validation: focused native and field-access tests, mobile typecheck, lint, mobile tests, Android and iOS export, root typecheck, complete root validation, compatible EAS Update publication, Sites release, custom-domain route checks and post-release error-log review.
 - Stop condition: stop for owner direction if delivery requires a new native capability, store credential, destructive data change or a lower minimum-version policy.
 
 ## Outcome

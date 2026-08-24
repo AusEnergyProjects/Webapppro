@@ -230,15 +230,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void syncNow();
   }), [syncNow]);
 
+  const signedIn = Boolean(user);
+
   useEffect(() => {
     const network = NetInfo.addEventListener((state) => {
       const online = state.isConnected !== false && state.isInternetReachable !== false;
       setSync((value) => ({ ...value, online }));
-      if (online && user) void syncNow();
+      if (online && signedIn) void syncNow();
     });
     const response = Notifications.addNotificationResponseReceivedListener(() => { void syncNow(); });
     const token = Notifications.addPushTokenListener(async (nextToken) => {
-      if (!user) return;
+      if (!signedIn) return;
       await rememberPushToken(String(nextToken.data));
       const modes = await resolveFieldAccessModes().catch(() => []);
       const deviceId = await getDeviceId();
@@ -260,7 +262,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ));
     });
     return () => { network(); response.remove(); token.remove(); };
-  }, [handleAccessError, syncNow, user]);
+  }, [handleAccessError, signedIn, syncNow]);
 
   const saveAction = useCallback(async (action: Omit<OfflineAction, 'clientActionId'>) => {
     await queueAction({ ...action, clientActionId: `act-${Crypto.randomUUID()}` });

@@ -133,7 +133,7 @@ export default function NewJobScreen() {
       <Text style={styles.label}>Time allowed</Text>
       <View style={styles.pills}>{[60, 90, 120, 180].map((value) => <Pressable key={value} onPress={() => setDuration(value)} style={[styles.pill, duration === value && styles.pillSelected]}><Text style={duration === value ? styles.selectedText : styles.pillText}>{value < 60 ? `${value} min` : `${value / 60} hr${value > 60 ? 's' : ''}`}</Text></Pressable>)}</View>
       <Text style={styles.label}>Access or visit notes, optional</Text>
-      <TextInput multiline numberOfLines={3} style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Keys, parking, tenant contact or hazards" />
+      <TextInput multiline numberOfLines={3} style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Keys, parking, tenant contact or hazards" placeholderTextColor={colours.muted} selectionColor={colours.green} />
     </View>
 
     {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
@@ -143,7 +143,7 @@ export default function NewJobScreen() {
 }
 
 function Field({ label, ...props }: { label: string; value: string; onChangeText: (value: string) => void; keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'number-pad'; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' }) {
-  return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput {...props} style={styles.input} placeholder={label} /></View>;
+  return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput {...props} style={styles.input} placeholder={label} placeholderTextColor={colours.muted} selectionColor={colours.green} /></View>;
 }
 
 const styles = StyleSheet.create({
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   field: { flex: 1, gap: spacing.xs },
   label: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs },
-  input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, color: colours.ink, backgroundColor: '#fbfdfc', fontSize: 16 },
+  input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, color: colours.ink, backgroundColor: colours.surfaceRaised, fontSize: 16 },
   notes: { minHeight: 88, paddingTop: spacing.sm, textAlignVertical: 'top' },
   vic: { color: colours.green, fontWeight: '800', backgroundColor: colours.mint, borderRadius: radius.sm, padding: spacing.sm },
   dateStrip: { flexDirection: 'row', gap: 4 },

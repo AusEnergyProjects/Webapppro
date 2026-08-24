@@ -11,8 +11,10 @@ const api = read("../mobile/src/lib/api.ts");
 const uploads = read("../mobile/src/lib/uploads.ts");
 const background = read("../mobile/src/lib/background.ts");
 const device = read("../mobile/src/lib/device.ts");
+const fieldSession = read("../mobile/src/lib/field-session.ts");
 const provider = read("../mobile/src/providers/app-provider.tsx");
 const work = read("../mobile/src/app/(tabs)/work.tsx");
+const newJob = read("../mobile/src/app/new-job.tsx");
 const job = read("../mobile/src/app/job/[id].tsx");
 const syncScreen = read("../mobile/src/app/(tabs)/sync.tsx");
 const readme = read("../mobile/README.md");
@@ -91,6 +93,17 @@ test("post-PIN access verification cannot stall before the secure API", () => {
   assert.match(sync, /MAX_SYNC_PAGES = 100/);
   assert.match(sync, /response\.hasMore && nextCursor === cursor/);
   assert.match(sync, /'SYNC_CURSOR_STALLED'/);
+});
+
+test("completed sync stays settled and new-job inputs remain readable", () => {
+  assert.match(fieldSession, /principal\.displayName === nextDisplayName\) return null/);
+  assert.match(provider, /const signedIn = Boolean\(user\)/);
+  assert.match(provider, /if \(online && signedIn\) void syncNow\(\)/);
+  assert.doesNotMatch(provider, /\[handleAccessError, syncNow, user\]/);
+  assert.match(newJob, /backgroundColor: colours\.surfaceRaised/);
+  assert.match(newJob, /color: colours\.ink/);
+  assert.match(newJob, /placeholderTextColor=\{colours\.muted\}/);
+  assert.match(newJob, /selectionColor=\{colours\.green\}/);
 });
 
 test("technician UI stays focused while retaining full field capability", () => {
