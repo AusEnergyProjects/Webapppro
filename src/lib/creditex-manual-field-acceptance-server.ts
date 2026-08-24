@@ -328,7 +328,7 @@ export async function submitManualFieldAcceptanceRun(
   const deviceId = cleanIdentifier(
     input.deviceId,
     "MANUAL_FIELD_ACCEPTANCE_DEVICE_INVALID",
-    "Choose the physical AEA Field device used for this test.",
+    "Choose the physical TLink device used for this test.",
   );
   const testerNote = cleanText(
     input.testerNote,
@@ -369,7 +369,7 @@ export async function submitManualFieldAcceptanceRun(
     fail(
       "MANUAL_FIELD_ACCEPTANCE_PHYSICAL_DEVICE_REQUIRED",
       409,
-      "Submit this acceptance from the active physical AEA Field device that captured the evidence.",
+      "Submit this acceptance from the active physical TLink device that captured the evidence.",
     );
   }
   const requestPlatform = input.platform === undefined
@@ -378,7 +378,7 @@ export async function submitManualFieldAcceptanceRun(
       input.platform,
       20,
       "MANUAL_FIELD_ACCEPTANCE_PLATFORM_INVALID",
-      "Record the AEA Field platform used for this physical run.",
+      "Record the TLink platform used for this physical run.",
     );
   const requestAppVersion = input.appVersion === undefined
     ? device.app_version
@@ -386,7 +386,7 @@ export async function submitManualFieldAcceptanceRun(
       input.appVersion,
       40,
       "MANUAL_FIELD_ACCEPTANCE_APP_VERSION_INVALID",
-      "Record the AEA Field app version used for this physical run.",
+      "Record the TLink app version used for this physical run.",
     );
   const testerScenarioJson = JSON.stringify(testerScenarios);
   if (existing) {
@@ -415,7 +415,7 @@ export async function submitManualFieldAcceptanceRun(
     fail(
       "MANUAL_FIELD_ACCEPTANCE_DEVICE_VERSION_MISMATCH",
       409,
-      "The submitted platform and app version must match the registered physical AEA Field device.",
+      "The submitted platform and app version must match the registered physical TLink device.",
     );
   }
 

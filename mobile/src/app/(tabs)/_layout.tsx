@@ -14,7 +14,7 @@ export default function FieldTabs() {
       headerTitleStyle: { fontWeight: '800' },
       tabBarActiveTintColor: colours.green,
       tabBarInactiveTintColor: colours.muted,
-      tabBarStyle: { height: 66, paddingBottom: 8, paddingTop: 6 },
+      tabBarStyle: { backgroundColor: colours.surface, borderTopColor: colours.line, height: 66, paddingBottom: 8, paddingTop: 6 },
       tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
     }}>
       <Tabs.Screen name="work" options={{ title: 'Schedule', tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={color} size={size} /> }} />

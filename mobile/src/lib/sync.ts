@@ -165,7 +165,7 @@ async function performSync(): Promise<SyncOutcome> {
         queuedUploads: counts.uploads,
         conflicts: counts.conflicts,
         updateRequired: error.minimumVersion || 'current',
-        message: 'Update TLink Field before syncing. Your saved work is still secure on this device.',
+        message: 'Update TLink before syncing. Your saved work is still secure on this device.',
       };
     }
     throw error;

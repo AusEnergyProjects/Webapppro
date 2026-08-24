@@ -67,6 +67,9 @@ function loadRoute(database, aborted) {
       if (target.memberUid === access.ownerUid) return { allowed: false, reason: "owner_protected" };
       return { allowed: true };
     } },
+    "@/lib/trade-field-access-policy.mjs": {
+      normalizeFieldAccessName: (value) => String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-AU").slice(0, 160),
+    },
     "@/lib/trade-rental-schema-guards": {
       ensureTradeRentalSchemaGuards: async () => {},
     },
@@ -94,6 +97,7 @@ function fixture() {
     CREATE TABLE trade_team_members (
       id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL, email text NOT NULL,
       display_name text NOT NULL, first_name text NOT NULL, last_name text NOT NULL, phone text NOT NULL,
+      field_username text NOT NULL DEFAULT '', field_username_normalized text NOT NULL DEFAULT '',
       schedule_colour text NOT NULL DEFAULT 'emerald', capabilities text NOT NULL, role text NOT NULL, ${permissionColumns.map((column) => `${column} integer NOT NULL DEFAULT 0`).join(", ")},
       job_scope text NOT NULL, schedule_scope text NOT NULL, status text NOT NULL,
       invited_at text NOT NULL, accepted_at text NOT NULL, last_active_at text NOT NULL,
@@ -117,6 +121,7 @@ function fixture() {
     CREATE TABLE trade_team_member_events (id text PRIMARY KEY, owner_uid text NOT NULL, team_member_id text NOT NULL,
       actor_uid text NOT NULL, entity_type text NOT NULL, entity_id text NOT NULL, event_type text NOT NULL,
       metadata text NOT NULL, created_at text NOT NULL);
+    CREATE TABLE trade_accounts (firebase_uid text PRIMARY KEY, capabilities text NOT NULL);
     CREATE TABLE trade_work_orders (id text PRIMARY KEY, firebase_uid text NOT NULL, assignee_member_id text NOT NULL);
   `);
   const columns = permissionColumns.join(", ");
@@ -133,6 +138,7 @@ function fixture() {
   insertMember("manager-1", "manager-uid", "active", "2026-08-12T00:00:00.000Z", 1);
   insertMember("target-1", "target-uid", "active", "2026-08-12T00:00:00.000Z");
   database.exec(`
+    INSERT INTO trade_accounts VALUES ('owner-1', '[]');
     INSERT INTO trade_mobile_devices VALUES ('device-1', 'owner-1', 'target-1', 'active', 'push-secret', '', '', '', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_field_access_codes VALUES ('field-code-1', 'owner-1', 'target-1', 'active', '2026-08-12T00:00:00.000Z');
     INSERT INTO trade_field_sessions VALUES ('field-session-1', 'owner-1', 'target-1', 'active', '', '2026-08-12T00:00:00.000Z');
@@ -149,6 +155,27 @@ async function patch(route, body) {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }));
 }
+
+async function post(route, body) {
+  return route.POST(new Request("https://test/api/trade-team", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+
+test("delegated Team add creates an editable unique TLink username without requiring an office login", async () => {
+  const database = fixture(); const route = loadRoute(database, []);
+  const response = await post(route, { action: "add_member", firstName: "Jane", lastName: "Worker",
+    displayName: "Jane Worker", fieldUsername: "Jane Field", phone: "0412 111 222" });
+  const payload = await response.json();
+  assert.equal(response.status, 201, payload.error);
+  assert.equal(payload.ok, true);
+  const created = database.prepare(`SELECT email, field_username, field_username_normalized, status
+    FROM trade_team_members WHERE id = ?`).get(payload.createdMemberId);
+  assert.equal(created.email, "");
+  assert.equal(created.field_username, "Jane Field");
+  assert.equal(created.field_username_normalized, "jane field");
+  assert.equal(created.status, "active");
+});
 
 test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on suspension, and retains history", async () => {
   const database = fixture(); const aborted = []; const route = loadRoute(database, aborted);
@@ -201,4 +228,13 @@ test("delegated Team PATCH lifecycle is stale-safe, bounded, destructive only on
   assert.equal(rejectedPhone.status, 400);
   assert.equal(database.prepare("SELECT phone, updated_at FROM trade_team_members WHERE id='target-1'").get().phone, "+61412345678");
   assert.equal(database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at, phoneRevision);
+
+  database.exec("UPDATE trade_field_access_codes SET status = 'active' WHERE id = 'field-code-1'");
+  const renamed = await patch(route, { action: "update_member", memberId: "target-1", fieldUsername: "John Smith",
+    expectedUpdatedAt: phoneRevision });
+  assert.equal(renamed.status, 200);
+  const username = database.prepare("SELECT field_username, field_username_normalized FROM trade_team_members WHERE id='target-1'").get();
+  assert.equal(username.field_username, "John Smith");
+  assert.equal(username.field_username_normalized, "john smith");
+  assert.equal(database.prepare("SELECT status FROM trade_field_access_codes WHERE id='field-code-1'").get().status, "revoked");
 });

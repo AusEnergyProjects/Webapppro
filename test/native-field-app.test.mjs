@@ -17,13 +17,19 @@ const syncScreen = read("../mobile/src/app/(tabs)/sync.tsx");
 const readme = read("../mobile/README.md");
 
 test("native field app requires encrypted custom iOS and Android builds", () => {
-  assert.match(appConfig, /"name": "TLink Field"/);
+  assert.match(appConfig, /"name": "TLink"/);
+  assert.match(appConfig, /"version": "1\.0\.1"/);
+  assert.match(appConfig, /"userInterfaceStyle": "dark"/);
   assert.match(appConfig, /"bundleIdentifier": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"package": "au\.com\.australianenergyassessments\.field"/);
   assert.match(appConfig, /"useSQLCipher": true/);
   assert.match(appConfig, /"allowBackup": false/);
   assert.match(readme, /custom development build/);
   assert.match(readme, /Expo Go cannot run the SQLCipher/);
+  assert.deepEqual(
+    fs.readFileSync(new URL("../mobile/assets/images/icon.png", import.meta.url)),
+    fs.readFileSync(new URL("../public/tlink-icon-512.png", import.meta.url)),
+  );
 });
 
 test("offline records, actions and addresses use the encrypted database policy", () => {

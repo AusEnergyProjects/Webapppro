@@ -4503,7 +4503,7 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:apprentice|worker|employee|staff|team member|technician|teammate)\b/i.test(query)) {
     return structured("trades", {
       directAnswer:
-        "In the signed-in TLink dashboard, open Team, choose Add team member, enter the apprentice's details and services, and give only the access they need. Add their email before saving if they need a login; TLink then displays a private link to copy and send only to that person, and it expires after seven days. For a roster-only member added without email, edit the member later, add the email and choose Create login link. Only the owner or a member with team-management access can add them, and only an owner or delegated access manager can grant permissions.",
+        "In the signed-in TLink dashboard, open Team and choose Add team member. Enter the apprentice's details and services, then save them. Open their details, set the TLink username and choose Generate 6-digit PIN. Copy the username and PIN to the worker so they can authorise the TLink app on their phone. Add an email only if they also need an office or browser login. Only the owner or a member with team-management access can add them, and only an owner or delegated access manager can grant permissions.",
       status: "answered",
       citations: [],
       confidence: "high",

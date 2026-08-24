@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       return json({
         ok: false,
         code: "MANUAL_FIELD_DEVICE_INVALID",
-        error: "The AEA Field test-device registration is invalid.",
+        error: "The TLink test-device registration is invalid.",
       }, 400);
     }
     return json({
@@ -84,7 +84,7 @@ export async function DELETE(request: Request) {
       return json({
         ok: false,
         code: "MANUAL_FIELD_DEVICE_INVALID",
-        error: "The AEA Field test-device sign-out is invalid.",
+        error: "The TLink test-device sign-out is invalid.",
       }, 400);
     }
     return json({

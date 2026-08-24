@@ -531,7 +531,7 @@ export function CreditexManualJobAuditWorkspace({
                 <Fact label="Technician">
                   {job.technicianLabel || job.technicianId || "Not assigned"}
                 </Fact>
-                <Fact label="AEA Field tester">
+                <Fact label="TLink tester">
                   {job.fieldTesterUid || "Not assigned"}
                 </Fact>
                 <Fact label="Test customer">
@@ -713,7 +713,7 @@ export function CreditexManualJobAuditWorkspace({
                         <Fact label="Platform">
                           {readable(run.platform)}
                         </Fact>
-                        <Fact label="AEA Field app">
+                        <Fact label="TLink app">
                           {run.appVersion || "Not recorded"}
                         </Fact>
                         <Fact label="Device attestation">

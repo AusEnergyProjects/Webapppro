@@ -200,7 +200,7 @@ function parsedEnvelope(value: unknown) {
     throw new CreditexManualFieldError(
       "EVIDENCE_ENVELOPE_INVALID",
       400,
-      "The AEA Field evidence envelope is invalid.",
+      "The TLink evidence envelope is invalid.",
     );
   }
   return envelope;
@@ -277,7 +277,7 @@ function validateEnvelope(
     throw new CreditexManualFieldError(
       "EVIDENCE_ORIGINAL_REQUIRED",
       409,
-      "Use the unedited original file captured or selected in AEA Field.",
+      "Use the unedited original file captured or selected in TLink.",
     );
   }
   if (
@@ -317,7 +317,7 @@ function validateEnvelope(
     throw new CreditexManualFieldError(
       "EVIDENCE_CAPTURE_SOURCE_INVALID",
       409,
-      "Take this photo inside AEA Field.",
+      "Take this photo inside TLink.",
     );
   }
   if (
@@ -327,7 +327,7 @@ function validateEnvelope(
     throw new CreditexManualFieldError(
       "EVIDENCE_CAPTURE_SOURCE_INVALID",
       409,
-      "Choose the original document in AEA Field.",
+      "Choose the original document in TLink.",
     );
   }
   return {
@@ -511,7 +511,7 @@ async function initiate(
   const deviceId = cleanIdentifier(
     input.deviceId || request.headers.get("x-aea-device-id"),
     "DEVICE_ID_REQUIRED",
-    "Register a stable AEA Field device ID.",
+    "Register a stable TLink device ID.",
     120,
   );
   const device = await requireManualFieldDevice(
@@ -689,7 +689,7 @@ async function uploadPart(request: Request, form: FormData) {
   const deviceId = cleanIdentifier(
     form.get("deviceId") || request.headers.get("x-aea-device-id"),
     "DEVICE_ID_REQUIRED",
-    "Register a stable AEA Field device ID.",
+    "Register a stable TLink device ID.",
     120,
   );
   await requireManualFieldDevice(request, database, member, deviceId);
@@ -803,7 +803,7 @@ async function complete(
   const deviceId = cleanIdentifier(
     input.deviceId || request.headers.get("x-aea-device-id"),
     "DEVICE_ID_REQUIRED",
-    "Register a stable AEA Field device ID.",
+    "Register a stable TLink device ID.",
     120,
   );
   const device = await requireManualFieldDevice(
@@ -825,7 +825,7 @@ async function complete(
     throw new CreditexManualFieldError(
       "EVIDENCE_DEVICE_INVALID",
       409,
-      "Resume this upload on the AEA Field device that started it.",
+      "Resume this upload on the TLink device that started it.",
     );
   }
   if (session.status === "completed") {
@@ -943,7 +943,7 @@ async function complete(
     throw new CreditexManualFieldError(
       "EVIDENCE_HASH_MISMATCH",
       409,
-      "The retained bytes do not match the original AEA Field digest.",
+      "The retained bytes do not match the original TLink digest.",
     );
   }
   if (!validSignature(bytes, session.content_type)) {
@@ -982,7 +982,7 @@ async function complete(
     throw new CreditexManualFieldError(
       "EVIDENCE_GPS_REQUIRED",
       409,
-      "The AEA Field capture does not contain a valid, non-mocked location within 100 metres accuracy.",
+      "The TLink capture does not contain a valid, non-mocked location within 100 metres accuracy.",
     );
   }
   const captureTimeState = field.fieldType === "photo"
@@ -993,7 +993,7 @@ async function complete(
     throw new CreditexManualFieldError(
       "EVIDENCE_CAPTURE_TIME_REQUIRED",
       409,
-      "The AEA Field capture time is missing or outside the seven-day test window.",
+      "The TLink capture time is missing or outside the seven-day test window.",
     );
   }
   const physicalDeviceState = Number(device.is_physical_device) === 1
@@ -1127,7 +1127,7 @@ export async function GET(request: Request) {
     const deviceId = cleanIdentifier(
       params.get("deviceId") || request.headers.get("x-aea-device-id"),
       "DEVICE_ID_REQUIRED",
-      "Register a stable AEA Field device ID.",
+    "Register a stable TLink device ID.",
       120,
     );
     await requireManualFieldDevice(
@@ -1149,7 +1149,7 @@ export async function GET(request: Request) {
       throw new CreditexManualFieldError(
         "EVIDENCE_DEVICE_INVALID",
         409,
-        "Resume this upload on the AEA Field device that started it.",
+        "Resume this upload on the TLink device that started it.",
       );
     }
     return json({ ok: true, upload: await sessionPayload(session) });

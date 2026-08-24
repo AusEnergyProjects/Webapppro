@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
@@ -74,11 +75,48 @@ test("the field calendar, self-intake, update control and TLink app entry remain
   assert.match(newJob, /rentalInspectionModulesJson/);
   assert.match(newJob, /assigneeMemberId: user\?\.memberId/);
   assert.match(settings, /Check for update/);
-  assert.match(dashboard, />Get the app</);
+  assert.match(dashboard, /tlink-get-app[\s\S]*Get the app/);
   assert.match(appPage, /one-time field app PIN/);
   assert.match(crmRoute, /const selfScheduledCreate = action === "create_scheduled_job"/);
   assert.match(crmRoute, /identity\.access\.jobScope === "own"/);
   assert.match(crmRoute, /&& !selfScheduledCreate\) throw new Error\("JOB_RESCHEDULE_REQUIRED"\)/);
+});
+
+test("team members have an office-controlled unique TLink username for PIN setup", async () => {
+  const [migration, schema, route, server, settings] = await Promise.all([
+    read("drizzle/0162_trade_field_username.sql"),
+    read("db/schema.ts"),
+    read("src/app/api/trade-team/route.ts"),
+    read("src/lib/trade-field-session-server.ts"),
+    read("src/components/TradeTeamSettings.tsx"),
+  ]);
+  assert.match(migration, /ADD COLUMN `field_username` text NOT NULL DEFAULT ''/);
+  assert.match(migration, /trade_team_members_owner_field_username_idx/);
+  assert.match(schema, /fieldUsername: text\("field_username"\)/);
+  assert.match(route, /fieldUsername: row\.field_username/);
+  assert.match(route, /field_username_normalized = \?/);
+  assert.match(server, /SELECT id, field_username, field_username_normalized, status/);
+  assert.match(settings, /TLink username/);
+  assert.match(settings, /Generate 6-digit PIN/);
+  assert.match(settings, /Copy username and PIN/);
+});
+
+test("migration 0162 enforces a unique normalized TLink username inside each business", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec("CREATE TABLE trade_team_members (id text PRIMARY KEY, owner_uid text NOT NULL)");
+  const migration = await read("drizzle/0162_trade_field_username.sql");
+  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+    database.exec(statement);
+  }
+  database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-1", "owner-1", "John Smith", "john smith");
+  assert.throws(() => database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-2", "owner-1", "JOHN  SMITH", "john smith"), /UNIQUE constraint failed/);
+  assert.doesNotThrow(() => database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-3", "owner-2", "John Smith", "john smith"));
 });
 
 test("migration 0161 adds authoritative scopes without rebuilding referenced rental tables", async () => {

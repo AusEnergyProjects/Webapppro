@@ -161,7 +161,7 @@ function mappedRequirement(
   const blockers: string[] = [];
   if (signatureRequired) {
     blockers.push(
-      "Signature capture is required by this locked form but is not available in AEA Field.",
+      "Signature capture is required by this locked form but is not available in TLink.",
     );
   }
   if (needsEmbeddedMetadata && !allowedContentTypes.includes("image/jpeg")) {
@@ -450,7 +450,7 @@ export async function registerManualFieldDevice(
   const deviceId = cleanText(input.deviceId, 120);
   const platform = cleanText(input.platform, 20);
   const appVersion = cleanText(input.appVersion, 40);
-  const deviceName = cleanText(input.deviceName, 100) || "AEA Field device";
+  const deviceName = cleanText(input.deviceName, 100) || "TLink device";
   const isPhysicalDevice = input.isPhysicalDevice === true ? 1 : 0;
   if (
     !MANUAL_FIELD_CLIENT_ID_PATTERN.test(deviceId)
@@ -459,14 +459,14 @@ export async function registerManualFieldDevice(
     throw new CreditexManualFieldError(
       "MANUAL_FIELD_DEVICE_INVALID",
       400,
-      "Add a stable AEA Field device ID and choose iOS or Android.",
+      "Add a stable TLink device ID and choose iOS or Android.",
     );
   }
   if (!appVersionAccepted(platform, appVersion)) {
     throw new CreditexManualFieldError(
       "APP_UPDATE_REQUIRED",
       426,
-      "Update AEA Field before registering this test device.",
+      "Update TLink before registering this test device.",
     );
   }
   const current = await database.prepare(`SELECT id, status
@@ -527,7 +527,7 @@ export async function revokeManualFieldDevice(
     throw new CreditexManualFieldError(
       "MANUAL_FIELD_DEVICE_INVALID",
       400,
-      "Choose the registered AEA Field test device to sign out.",
+      "Choose the registered TLink test device to sign out.",
     );
   }
   const current = await database.prepare(`SELECT id, status
@@ -582,7 +582,7 @@ export async function revokeManualFieldDevice(
       throw new CreditexManualFieldError(
         "MANUAL_FIELD_DEVICE_STATE_CONFLICT",
         409,
-        "The AEA Field test device changed before sign-out completed.",
+        "The TLink test device changed before sign-out completed.",
       );
     }
     return {
@@ -609,7 +609,7 @@ export async function requireManualFieldDevice(
     throw new CreditexManualFieldError(
       "DEVICE_ID_REQUIRED",
       400,
-      "Register a stable AEA Field device ID.",
+      "Register a stable TLink device ID.",
     );
   }
   const device = await database.prepare(`SELECT *
@@ -622,14 +622,14 @@ export async function requireManualFieldDevice(
     throw new CreditexManualFieldError(
       "DEVICE_NOT_REGISTERED",
       403,
-      "Register this AEA Field device before using the synthetic test lane.",
+      "Register this TLink device before using the synthetic test lane.",
     );
   }
   if (device.status !== "active") {
     throw new CreditexManualFieldError(
       "DEVICE_REVOKED",
       403,
-      "This AEA Field test device has been revoked.",
+      "This TLink test device has been revoked.",
     );
   }
   const platform = cleanText(
@@ -651,7 +651,7 @@ export async function requireManualFieldDevice(
     throw new CreditexManualFieldError(
       "APP_UPDATE_REQUIRED",
       426,
-      "Update AEA Field before syncing this test device.",
+      "Update TLink before syncing this test device.",
     );
   }
   const now = new Date().toISOString();
@@ -899,7 +899,7 @@ export async function saveManualFieldForm(
       status: "rejected",
       code: "MANUAL_FIELD_ACTION_UNSUPPORTED",
       error:
-        "Synthetic testing accepts only locked technical-form changes in AEA Field.",
+        "Synthetic testing accepts only locked technical-form changes in TLink.",
     };
   }
   if (formId !== `${jobId}:technical`) {
@@ -996,7 +996,7 @@ export async function saveManualFieldForm(
             id, organisation_id, job_id, event_type, actor_uid, summary,
             metadata, created_at
           ) VALUES (?, ?, ?, 'manual_field.form_saved', ?,
-            'Locked synthetic field form saved from AEA Field.', ?, ?)`)
+            'Locked synthetic field form saved from TLink.', ?, ?)`)
         .bind(
           crypto.randomUUID(),
           member.organisationId,
@@ -1284,7 +1284,7 @@ export async function attachVerifiedManualFieldCapture(
           id, organisation_id, job_id, event_type, actor_uid, summary,
           metadata, created_at
         ) SELECT ?, ?, ?, 'manual_field.capture_verified', ?,
-          'Original synthetic evidence bytes verified and retained from AEA Field.',
+        'Original synthetic evidence bytes verified and retained from TLink.',
           ?, ?
         WHERE EXISTS (
           SELECT 1 FROM compliance_manual_evidence_test_captures
@@ -1349,7 +1349,7 @@ export function manualFieldErrorResponse(error: unknown) {
     body: {
       ok: false,
       code: "MANUAL_FIELD_UNAVAILABLE",
-      error: "The synthetic AEA Field lane is temporarily unavailable.",
+      error: "The synthetic TLink lane is temporarily unavailable.",
     },
   };
 }

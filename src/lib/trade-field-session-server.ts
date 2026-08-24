@@ -152,14 +152,14 @@ export async function issueFieldSetupPin(input: {
   teamMemberId: string;
 }) {
   const db = getD1();
-  const member = await db.prepare(`SELECT id, display_name, status FROM trade_team_members
+  const member = await db.prepare(`SELECT id, field_username, field_username_normalized, status FROM trade_team_members
     WHERE id = ? AND owner_uid = ?`).bind(input.teamMemberId, input.ownerUid)
     .first<Record<string, unknown>>();
   if (!member) throw new Error("MEMBER_NOT_FOUND");
   if (member.status !== "active") throw new Error("MEMBER_INACTIVE");
-  const displayName = String(member.display_name || "").trim();
-  const normalizedName = normalizeFieldAccessName(displayName);
-  if (!normalizedName) throw new Error("FIELD_NAME_REQUIRED");
+  const username = String(member.field_username || "").trim();
+  const normalizedName = normalizeFieldAccessName(String(member.field_username_normalized || username));
+  if (!username || !normalizedName) throw new Error("FIELD_USERNAME_REQUIRED");
   const pin = randomPin();
   const salt = randomBytes(18);
   const pinHash = await derivePinHash(pin, salt);
@@ -178,7 +178,7 @@ export async function issueFieldSetupPin(input: {
       .bind(id, input.ownerUid, input.teamMemberId, normalizedName, bytesToBase64Url(salt), pinHash,
         expiresAt, input.actorUid, nowIso, nowIso),
   ]);
-  return { displayName, pin, expiresAt };
+  return { displayName: username, username, pin, expiresAt };
 }
 
 async function recordFailedAttempt(keyHash: string, current: Record<string, unknown> | null, nowMs: number) {

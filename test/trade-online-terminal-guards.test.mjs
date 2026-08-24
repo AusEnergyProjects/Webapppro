@@ -317,6 +317,9 @@ function teamRoute(db) {
     "@/lib/trade-team-lifecycle-policy.mjs": {
       memberLifecycleDecision: () => ({ allowed: true, reason: "allowed" }),
     },
+    "@/lib/trade-field-access-policy.mjs": {
+      normalizeFieldAccessName: (value) => String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-AU").slice(0, 160),
+    },
     "@/lib/trade-rental-schema-guards": {
       ensureTradeRentalSchemaGuards: async () => {},
     },

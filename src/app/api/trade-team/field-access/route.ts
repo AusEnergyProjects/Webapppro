@@ -13,7 +13,7 @@ function errorResponse(error: unknown) {
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, code, error: "Sign in to continue." }, 401);
   if (code === "MEMBER_NOT_FOUND") return adminJson({ ok: false, code, error: "Team member not found." }, 404);
   if (code === "MEMBER_INACTIVE") return adminJson({ ok: false, code, error: "Reactivate this team member before creating app access." }, 409);
-  if (code === "FIELD_NAME_REQUIRED") return adminJson({ ok: false, code, error: "Add the team member's name before creating app access." }, 409);
+  if (code === "FIELD_USERNAME_REQUIRED") return adminJson({ ok: false, code, error: "Save a TLink username for this team member before generating a PIN." }, 409);
   if (code === "TEAM_MANAGEMENT_REQUIRED") return adminJson({ ok: false, code, error: "Your account cannot manage field app access." }, 403);
   return adminJson({ ok: false, error: "Field app access could not be updated." }, 500);
 }

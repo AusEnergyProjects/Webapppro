@@ -4943,8 +4943,8 @@ body input[type="number"]::-webkit-outer-spin-button {
 .trade-portal-shell .dashboard-account-actions button { background: color-mix(in srgb, var(--trade-header-control) 72%, transparent); border: 1px solid var(--trade-header-control-border); border-radius: 9px; color: #fff; font-size: .61rem; font-weight: 800; margin: 0; min-height: 35px; padding: 8px 11px; text-decoration: none; }
 .trade-portal-shell .dashboard-account-actions a:hover,
 .trade-portal-shell .dashboard-account-actions button:hover { background: var(--trade-header-control-hover); border-color: #ffffff99; }
-.trade-portal-shell .dashboard-account-actions .tlink-get-app { background: #0aa879; border-color: #43d7ae; box-shadow: 0 5px 18px rgba(0, 0, 0, .14); font-weight: 900; white-space: nowrap; }
-.trade-portal-shell .dashboard-account-actions .tlink-get-app:hover { background: #0cc08a; }
+.trade-portal-shell .dashboard-account-actions .tlink-get-app { align-items: center; background: #0a2936; display: flex; gap: 7px; padding: 6px 9px; white-space: nowrap; }
+.trade-portal-shell .dashboard-account-actions .tlink-get-app img { border-radius: 7px; height: 28px; width: 28px; }
 .trade-portal-role { background: var(--trade-header-control); border: 1px solid var(--trade-header-control-border); border-radius: 999px; color: #fff; font-size: .52rem; font-weight: 900; padding: 5px 8px; text-transform: uppercase; }
 
 .tlink-field-app-page { background: #f3f8f6; color: #0b3432; min-height: 100vh; padding: clamp(24px, 5vw, 72px); }
@@ -4955,15 +4955,15 @@ body input[type="number"]::-webkit-outer-spin-button {
 .tlink-field-app-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .tlink-field-app-actions > a, .tlink-field-app-actions > span { border: 1px solid #ffffff4d; border-radius: 11px; color: #e8f6f2; padding: 13px 17px; text-decoration: none; }
 .tlink-field-app-actions > a.btn { background: #09a878; border-color: #09a878; color: #fff; }
-.tlink-field-phone { background: #f8f7f1; border: 8px solid #001a22; border-radius: 32px; color: #0b3432; min-height: 500px; padding: 18px; position: relative; }
+.tlink-field-phone { background: #06131f; border: 8px solid #000a12; border-radius: 32px; color: #f3faf8; min-height: 500px; padding: 18px; position: relative; }
 .tlink-field-phone header { display: flex; gap: 12px; }
-.tlink-field-phone header b { background: #063a31; border-radius: 13px; color: #fff; padding: 14px; }
+.tlink-field-phone header b { background: #10293a; border: 1px solid #2d5060; border-radius: 13px; color: #54e3b2; padding: 14px; }
 .tlink-field-days { display: grid; grid-template-columns: repeat(5, 1fr); margin: 22px 0 17px; }
 .tlink-field-days i { border-radius: 10px; display: grid; font-style: normal; text-align: center; }
-.tlink-field-days i.active { background: #063a31; color: #fff; }
+.tlink-field-days i.active { background: #10293a; color: #54e3b2; }
 .tlink-field-days em { font-style: normal; font-weight: 900; }
-.tlink-field-phone article { background: #fff; border: 1px solid #d4e3dd; border-radius: 15px; display: grid; margin-top: 10px; padding: 15px; }
-.tlink-field-phone > button { background: #07966f; border: 0; border-radius: 18px; bottom: 20px; color: #fff; font-size: 1.6rem; height: 56px; position: absolute; right: 20px; width: 56px; }
+.tlink-field-phone article { background: #0b2030; border: 1px solid #294657; border-radius: 15px; display: grid; margin-top: 10px; padding: 15px; }
+.tlink-field-phone > button { background: #54e3b2; border: 0; border-radius: 18px; bottom: 20px; color: #07182b; font-size: 1.6rem; height: 56px; position: absolute; right: 20px; width: 56px; }
 .tlink-field-app-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 24px; }
 .tlink-field-app-grid article, .tlink-field-app-note { background: #fff; border: 1px solid #d3e3dc; border-radius: 18px; padding: 24px; }
 .tlink-field-app-grid strong, .tlink-field-app-note strong, .tlink-field-app-grid p, .tlink-field-app-note p { display: block; margin-top: 8px; }

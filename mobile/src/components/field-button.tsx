@@ -25,7 +25,7 @@ export function FieldButton({
       onPress={onPress}
       style={({ pressed }) => [styles.base, styles[variant], pressed && styles.pressed, disabled && styles.disabled, style]}
     >
-      {loading ? <ActivityIndicator color={variant === 'primary' ? colours.white : colours.forest} /> : (
+      {loading ? <ActivityIndicator color={variant === 'primary' ? colours.forest : colours.green} /> : (
         <Text style={[styles.label, variant === 'primary' && styles.primaryLabel, variant === 'danger' && styles.dangerLabel]}>{children}</Text>
       )}
     </Pressable>
@@ -43,11 +43,11 @@ const styles = StyleSheet.create({
     borderColor: colours.line,
   },
   primary: { backgroundColor: colours.green, borderColor: colours.green },
-  secondary: { backgroundColor: colours.white, borderColor: colours.green },
+  secondary: { backgroundColor: colours.surfaceRaised, borderColor: colours.green },
   danger: { backgroundColor: colours.redSoft, borderColor: '#efb7b7' },
   quiet: { backgroundColor: 'transparent', borderColor: 'transparent' },
-  label: { color: colours.forest, fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  primaryLabel: { color: colours.white },
+  label: { color: colours.ink, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  primaryLabel: { color: colours.forest },
   dangerLabel: { color: colours.red },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.45 },

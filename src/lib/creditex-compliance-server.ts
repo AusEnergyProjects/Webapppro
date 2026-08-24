@@ -1739,14 +1739,14 @@ function policyReadinessBlockers(
     if (!supportedEvidenceTypes.has(requirement.evidenceType)) {
       add(
         "POLICY_EVIDENCE_TYPE_UNSUPPORTED",
-        `AEA Field cannot yet complete ${requirement.evidenceType} requirements.`,
+        `TLink cannot yet complete ${requirement.evidenceType} requirements.`,
         requirement.id,
       );
     }
     if (requirement.captureTiming !== "any") {
       add(
         "POLICY_CAPTURE_TIMING_UNSUPPORTED",
-        `AEA Field cannot yet enforce ${requirement.captureTiming.replaceAll("_", " ")} capture timing against an authoritative job milestone. Use any timing or keep this requirement in draft.`,
+        `TLink cannot yet enforce ${requirement.captureTiming.replaceAll("_", " ")} capture timing against an authoritative job milestone. Use any timing or keep this requirement in draft.`,
         requirement.id,
       );
     }
@@ -1763,7 +1763,7 @@ function policyReadinessBlockers(
     ) {
       add(
         "POLICY_CONTENT_TYPE_UNSUPPORTED",
-        "This requirement allows a file type that AEA Field cannot preserve and validate.",
+        "This requirement allows a file type that TLink cannot preserve and validate.",
         requirement.id,
       );
     }
@@ -1805,7 +1805,7 @@ function policyReadinessBlockers(
     if (Object.keys(requirement.conditionSnapshot).length) {
       add(
         "POLICY_CONDITIONS_UNSUPPORTED",
-        "Conditional evidence logic is not yet evaluated by AEA Field.",
+        "Conditional evidence logic is not yet evaluated by TLink.",
         requirement.id,
       );
     }
@@ -1822,7 +1822,7 @@ function policyReadinessBlockers(
     if (Object.keys(requirement.fieldSchema).length) {
       add(
         "POLICY_FIELD_SCHEMA_UNSUPPORTED",
-        "Dynamic evidence fields are not yet rendered by AEA Field.",
+        "Dynamic evidence fields are not yet rendered by TLink.",
         requirement.id,
       );
     }

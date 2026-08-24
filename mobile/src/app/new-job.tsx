@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
   heading: { color: colours.ink, fontSize: 27, lineHeight: 33, fontWeight: '800' },
   intro: { color: colours.muted, fontSize: 15, lineHeight: 22 },
-  card: { backgroundColor: colours.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm },
+  card: { backgroundColor: colours.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm },
   cardTitle: { color: colours.ink, fontSize: 19, fontWeight: '800' },
   help: { color: colours.muted, lineHeight: 20 },
   choice: { minHeight: 58, borderWidth: 1, borderColor: colours.line, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },

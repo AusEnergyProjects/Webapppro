@@ -48,9 +48,9 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
     if (parsed.protocol === 'https:') updateUrl = parsed.toString();
   } catch { /* full builds must come from an absolute HTTPS release URL */ }
   if (isNewer(latest, APP_VERSION) && updateUrl) {
-    return { kind: 'download', url: updateUrl, message: `TLink Field ${latest} is ready to install.` };
+    return { kind: 'download', url: updateUrl, message: `TLink ${latest} is ready to install.` };
   }
-  return { kind: 'current', message: `TLink Field ${APP_VERSION} is up to date.` };
+  return { kind: 'current', message: `TLink ${APP_VERSION} is up to date.` };
 }
 
 export async function restartIntoUpdate() {

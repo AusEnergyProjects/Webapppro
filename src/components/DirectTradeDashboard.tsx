@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { SiteFooter } from "./ComparatorChrome";
@@ -2094,7 +2095,7 @@ export function DirectTradeDashboard() {
               setWorkspace(target.workspace);
             }} onOpenOpportunity={(matchId) => void openOpportunityNotification(matchId)} />}
             <div className="dashboard-account-actions">
-              {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app">Get the app</a>}
+              {!isSupplier && <a className="tlink-get-app" href="/direct-trade/field-app"><Image src="/tlink-icon-192.png" alt="" width={25} height={25} /><span>Get the app</span></a>}
               <span className="trade-portal-role">{isSupplier ? "Wholesaler" : "Installer"}</span>
               <div>
                 <small>Business account</small>

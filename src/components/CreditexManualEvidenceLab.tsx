@@ -1737,18 +1737,18 @@ export function CreditexManualEvidenceLab({
 
                 <p className={styles.fileBoundary}>
                   File prompts are read-only here. Assign this job to your
-                  verified AEA Field login, then capture original bytes on the
+                  verified TLink login, then capture original bytes on the
                   device. Creditex shows only the server-verified result and
                   never trusts a manually ticked metadata box.
                 </p>
 
                 <div className={styles.fieldAssignment}>
                   <div>
-                    <strong>AEA Field assignment</strong>
+                    <strong>TLink assignment</strong>
                     <span>
                       {selectedJob.fieldTesterUid
                         ? "Assigned to a verified Creditex login"
-                        : "Not assigned to an AEA Field login"}
+                        : "Not assigned to a TLink login"}
                     </span>
                   </div>
                   <button
@@ -1764,11 +1764,11 @@ export function CreditexManualEvidenceLab({
                       void mutate("assign_field_tester", {
                         jobId: selectedJob.id,
                         revision: selectedJob.revision,
-                      }, "This synthetic job is available in AEA Field for the current login.")}
+                      }, "This synthetic job is available in TLink for the current login.")}
                   >
                     {selectedJob.fieldTesterUid
                       ? "Reassign to my login"
-                      : "Assign to my AEA Field login"}
+                      : "Assign to my TLink login"}
                   </button>
                 </div>
 
@@ -1839,7 +1839,7 @@ export function CreditexManualEvidenceLab({
                                     {field.maximumCount || 20}
                                   </span>
                                 </div>
-                                <span>Captured in AEA Field</span>
+                                <span>Captured in TLink</span>
                               </header>
                               {response.captures.map((capture, captureIndex) => (
                                 <article
@@ -1884,7 +1884,7 @@ export function CreditexManualEvidenceLab({
                               {!response.captures.length && (
                                 <p>
                                   No verified original file has arrived. Open
-                                  this assigned job in AEA Field and follow the
+                                  this assigned job in TLink and follow the
                                   locked prompt.
                                 </p>
                               )}
@@ -2158,7 +2158,7 @@ export function CreditexManualEvidenceLab({
           </aside>
           <div className={styles.phoneFrame}>
             <header>
-              <span>TLink Field</span>
+              <span>TLink</span>
               <strong>{previewForm?.title || "No form selected"}</strong>
               <small>Synthetic installer preview</small>
             </header>

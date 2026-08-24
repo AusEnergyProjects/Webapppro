@@ -70,7 +70,7 @@ test("member lifecycle preserves historical records and has no hard-delete contr
   assert.match(settings, /Reactivate access/);
   assert.match(settings, /Job history and member documents remain saved/);
   assert.match(settings, /revoked devices and old invitation links remain inactive/);
-  assert.match(settings, /!isCurrentMember\(member\).*?member\.status === "active"/);
+  assert.match(settings, /!isCurrentMember\(editing\).*?editing\.status === "active"/);
   assert.doesNotMatch(settings, /delete_member|remove_member|Delete team member|Remove team member/);
   assert.match(settings, /device\.memberStatus === "suspended"/);
   assert.match(settings, /Reactivate this team member before authorising a device/);
@@ -89,7 +89,7 @@ test("large field device inventories remain searchable and revokable beyond the 
 
 test("member files support context, touch and protected inline preview", () => {
   assert.match(settings, /onContextMenu/);
-  assert.match(settings, />Open<\/button>/);
+  assert.match(settings, />Open details<\/button>/);
   assert.match(settings, /role="menu"/);
   assert.match(settings, /Open documents/);
   assert.match(settings, /application\/pdf/);
@@ -124,6 +124,9 @@ test("member profiles use a dense contact roster, schedule colour and validated 
   assert.match(settings, /scheduleColour: String\(data\.get\("scheduleColour"\)/);
   assert.match(settings, /ENERGY_SERVICE_CATALOGUE/);
   assert.match(settings, /capabilities: memberServices/);
+  assert.match(settings, /fieldUsername: fieldUsernameDraft\.trim\(\)/);
+  assert.match(settings, /TLink username/);
+  assert.match(settings, /Generate 6-digit PIN/);
 });
 
 test("staff portal renders only permission-backed operations", () => {

@@ -47,7 +47,7 @@ function JobCard({ job }: { job: FieldJob }) {
       <Text style={styles.jobTitle}>{job.title || 'Field job'}</Text>
       <View style={styles.fact}><MaterialCommunityIcons name="clock-outline" color={colours.muted} size={19} /><Text style={styles.factText}>{dayLabel(job.scheduledStart)}</Text></View>
       <View style={styles.fact}><MaterialCommunityIcons name={job.protectedJob ? 'shield-lock-outline' : 'map-marker-outline'} color={job.protectedJob ? colours.green : colours.muted} size={19} /><Text numberOfLines={2} style={styles.factText}>{job.protectedJob ? `${job.siteArea || 'Service region'} | Australian Energy Assessments protected` : job.serviceAddress || job.siteArea || 'Address available when assigned'}</Text></View>
-      <View style={styles.progressRow}><Text>{rental
+      <View style={styles.progressRow}><Text style={styles.progressText}>{rental
         ? rental.status === 'issued'
           ? `Rental report issued | ${rental.progress.evidenceFiles} evidence files`
           : `${rental.progress.completeModules} of ${rental.progress.moduleTotal} assessment modules complete`
@@ -83,7 +83,7 @@ export default function WorkScreen() {
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={sync.running} onRefresh={() => void syncNow()} tintColor={colours.green} />}>
         <View style={styles.hero}>
           <View><Text style={styles.eyebrow}>MY SCHEDULE</Text><Text style={styles.heading}>Good day, {user?.displayName?.split(' ')[0] || 'there'}</Text></View>
-          <View style={[styles.connection, !sync.online && styles.offline]}><View style={styles.dot} /><Text>{sync.online ? 'Connected' : 'Offline'}</Text></View>
+          <View style={[styles.connection, !sync.online && styles.offline]}><View style={styles.dot} /><Text style={styles.connectionText}>{sync.online ? 'Connected' : 'Offline'}</Text></View>
         </View>
         <View style={styles.calendarCard}>
           <View style={styles.calendarTop}>
@@ -114,11 +114,12 @@ const styles = StyleSheet.create({
   eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
   heading: { color: colours.ink, fontSize: 28, lineHeight: 34, fontWeight: '800', marginTop: 3 },
   connection: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 8, borderRadius: 999, backgroundColor: colours.mint },
+  connectionText: { color: colours.ink, fontWeight: '700' },
   offline: { backgroundColor: colours.amberSoft },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colours.green },
   syncNote: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colours.mint, padding: spacing.md, borderRadius: radius.md },
   syncText: { flex: 1, color: colours.ink, lineHeight: 20 },
-  calendarCard: { backgroundColor: colours.white, borderWidth: 1, borderColor: colours.line, borderRadius: radius.lg, padding: spacing.sm, gap: spacing.sm },
+  calendarCard: { backgroundColor: colours.surface, borderWidth: 1, borderColor: colours.line, borderRadius: radius.lg, padding: spacing.sm, gap: spacing.sm },
   calendarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   iconButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: colours.mint, alignItems: 'center', justifyContent: 'center' },
   month: { color: colours.ink, fontWeight: '800', fontSize: 17, textAlign: 'center' },
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   dayHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
   section: { color: colours.ink, fontWeight: '800', fontSize: 20 },
   jobCount: { color: colours.muted, marginTop: 2 },
-  card: { backgroundColor: colours.white, borderRadius: radius.md, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm },
+  card: { backgroundColor: colours.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm },
   pressed: { opacity: 0.72 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   number: { backgroundColor: colours.forest, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6 },
@@ -147,7 +148,8 @@ const styles = StyleSheet.create({
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   factText: { flex: 1, color: colours.muted, lineHeight: 21 },
   progressRow: { borderTopWidth: 1, borderTopColor: colours.line, paddingTop: spacing.sm, marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  empty: { alignItems: 'center', padding: spacing.xl, backgroundColor: colours.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, gap: spacing.sm },
+  progressText: { color: colours.ink, flex: 1 },
+  empty: { alignItems: 'center', padding: spacing.xl, backgroundColor: colours.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, gap: spacing.sm },
   emptyTitle: { color: colours.ink, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   emptyText: { color: colours.muted, lineHeight: 21, textAlign: 'center' },
   addButton: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 62, height: 62, borderRadius: 22, backgroundColor: colours.green, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: '#001f21', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },

@@ -26,6 +26,34 @@
   gap: 20px;
 }
 
+.setupGuide {
+  background: linear-gradient(135deg, #07182a, #0a2d35);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.setupGuide > div {
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: auto 1fr;
+  padding: 10px;
+}
+
+.setupGuide span {
+  background: #63eab7;
+  border-radius: 999px;
+  color: #061828;
+  font-size: .8rem;
+  font-weight: 950;
+  grid-row: 1 / 3;
+  padding: 5px 9px;
+}
+
+.setupGuide strong { color: #f4fbf9; font-size: .84rem; }
+.setupGuide small { color: #9db9bb; font-size: .8rem; line-height: 1.35; }
+
 .heading div,
 .memberHeader div,
 .fileRow div {
@@ -640,6 +668,73 @@
   width: 100%;
 }
 
+.fieldAccessPanel {
+  align-items: start;
+  background: linear-gradient(135deg, #061729, #0a3137);
+  border: 1px solid #20505b;
+  border-radius: 15px;
+  color: #f4fbf9;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  padding: 15px;
+}
+
+.fieldAccessPanel > img {
+  border-radius: 14px;
+  height: 58px;
+  width: 58px;
+}
+
+.fieldAccessBody {
+  display: grid;
+  gap: 12px;
+}
+
+.fieldAccessBody > div:first-child strong { color: #fff; }
+.fieldAccessBody > div:first-child p,
+.fieldPrompt {
+  color: #a9c0c2;
+  font-size: .82rem;
+  line-height: 1.45;
+  margin: 3px 0 0;
+}
+
+.fieldAccessPanel label { color: #dcecea; }
+.fieldAccessPanel input {
+  background: #0b2234;
+  border-color: #31576a;
+  color: #fff;
+}
+
+.fieldAccessPanel input::placeholder { color: #78949d; }
+.fieldAccessPanel .hint { color: #9db9bb; }
+
+.fieldAccessPanel .actions,
+.memberControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fieldAccessPanel .actions small { color: #ffc66d; font-size: .8rem; }
+
+.pinResult {
+  background: #0c2738;
+  border: 1px solid #43bd98;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+}
+
+.pinResult span { color: #7fe8bd; font-size: .8rem; font-weight: 900; letter-spacing: .08em; }
+.pinResult strong { color: #fff; font-size: 1.1rem; overflow-wrap: anywhere; }
+.pinResult > div:nth-child(2) strong { font-family: monospace; font-size: 1.35rem; letter-spacing: .18em; }
+.pinResult p { color: #9db9bb; font-size: .8rem; grid-column: 1 / -1; line-height: 1.4; margin: 0; }
+.pinResult button { grid-column: 1 / -1; justify-self: start; }
+
 .permissionGroup {
   background: #f5faf8;
   border: 1px solid #d6e6e0;
@@ -799,6 +894,17 @@
   .deviceRow {
     grid-template-columns: 1fr;
   }
+
+  .setupGuide,
+  .fieldAccessPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .setupGuide { gap: 7px; }
+  .fieldAccessPanel > img { height: 50px; width: 50px; }
+  .pinResult { grid-template-columns: 1fr; }
+  .pinResult p,
+  .pinResult button { grid-column: 1; }
 
   .colourPicker > div {
     grid-template-columns: repeat(3, minmax(72px, 1fr));
