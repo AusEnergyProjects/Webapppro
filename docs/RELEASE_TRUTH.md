@@ -10,9 +10,9 @@ Deployment evidence last verified: 25 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Current production release: correct installed-version sign-in and startup update settings
+## Current production release: bounded post-PIN access and field sync
 
-Application and mobile update source `9660681ea933d36d3817555c4f5fd18b7d5f8da9` on branch `codex/tlink-field-app` is the exact source deployed publicly as Sites version 401 and published to the Android preview update channel for runtime 1.0.1. Signed Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains the compatible native build from mobile source `f325d924242be20429edc7806b968b72d8a5d26c`.
+Application and mobile update source `740433354bc689bd3199e2ccf28612dac22856ab` on branch `codex/tlink-field-app` is the exact source deployed publicly as Sites version 402 and published to the Android preview update channel for runtime 1.0.1. Signed Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains the compatible native build from mobile source `f325d924242be20429edc7806b968b72d8a5d26c`.
 
 The release keeps Victorian rental minimum standards selected by default while allowing it to be unticked. Minimum standards, electrical safety, gas safety and smoke alarm are four independent choices, and at least one is required. The same scope contract is enforced in public request intake, TLink job creation and TLink Field job creation. The web and mobile workflows use a section overview, open one section per screen, save before continuing and return Back to the overview.
 
@@ -22,45 +22,47 @@ The main-account save loop is fixed. Owner access bootstrapping no longer rewrit
 
 The installed version mismatch is fixed without weakening the server gate. Signed Android build 2 is version 1.0.1, but its JavaScript request configuration had been hardcoded to 1.0.0, so the existing minimum 1.0.1 policy correctly rejected sign-in. TLink now reads `nativeApplicationVersion` from the installed binary and uses Expo config only as a fallback. The signed-out startup screen has an accessible top-right settings cog with check for update, secure full-build install, app version and native build details. The same existing update checker remains available after sign-in.
 
+The post-PIN access stall is fixed. The created live Samsung session had never advanced beyond its creation timestamp, which proves the previous client stopped before the first authenticated access request. The client now caps the reachability probe at 1.5 seconds, verifies field access before encrypted local-owner preparation, releases the route gate before background synchronisation, caps JSON requests at 20 seconds, and stops repeated sync cursors. The authenticated access response refreshes the restricted-screen identity to the office-controlled field username.
+
 PIN creation now uses a per-code salt and a server-held HMAC-SHA256 pepper instead of the slow Worker PBKDF2 path that caused the reported HTTP 500 timeout. Only the hash is stored. The email contains the exact saved username, one-time PIN, expiry and TLink app link. If Resend does not accept the email, the exact newly issued PIN is revoked and the dashboard reports that delivery failed rather than presenting false success.
 
 TLink gives each technician, trade and assessor a device-bound session, a week calendar, assigned jobs, mobile job creation, workflow forms, pull-to-refresh and an explicit update check. The dashboard keeps a compact TLink-logo Get the app control at the top right, and the install page serves signed Android version 1.0.1 build 2. The assigned qualified assessor remains the final issuer. Evidence retains capture time, upload time and governed location metadata. Public report capabilities remain hashed, revocable and bounded to 60 days, require no viewer account, and expose the issued report plus PDF except internal notes.
 
 | Release evidence | Exact identity |
 | --- | --- |
-| Application source | `9660681ea933d36d3817555c4f5fd18b7d5f8da9` |
-| Mobile update source | `9660681ea933d36d3817555c4f5fd18b7d5f8da9` |
+| Application source | `740433354bc689bd3199e2ccf28612dac22856ab` |
+| Mobile update source | `740433354bc689bd3199e2ccf28612dac22856ab` |
 | Mobile native build source | `f325d924242be20429edc7806b968b72d8a5d26c` |
 | Git branch | `codex/tlink-field-app` |
 | Sites project | `appgprj_6a550c378000819185caf094173422bb` |
-| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_c8e187b84234819197959f5a2f99dd12` |
-| Public version | Sites version 401 |
-| Deployment | `appgdep_6a8c59e23d7481918279a1d9fe37e9b2` with status `succeeded` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_7273c4aa4b748191b309ba2cc4d85d21` |
+| Public version | Sites version 402 |
+| Deployment | `appgdep_6a8c61b940248191bbaa0d6ecf980495` with status `succeeded` |
 | Provider deployment | `info294029--aea-energy-comparison` |
 | Hosted environment | Revision 28 |
-| Local release archive | 12,358,369 bytes, SHA-256 `118EE21C754E0BFC5C0A7554FDB71BD7834704A964733D4ABBEA8656ABF65BD2` |
-| Stored archive | 45,281,280 bytes, 501 files, `sha256:b95717e40e7c3cf7b3d8a5ee8212d40f1d6881d9abc1caa8b1f324b6f4ebf4e8` |
+| Local release archive | 12,357,806 bytes, SHA-256 `78030A5072A64C96A550C614F677B2C5C73B12F401A63BF0689110E20CE1666C` |
+| Stored archive | 45,281,280 bytes, 501 files, `sha256:d9f472ebe926acb95f751148fab1fa15c402208d5615666c348ab1e0b920c6a1` |
 | Expo project | `@ausenergy/aea-field`, project `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9` |
 | Signed Android build | `233c6924-48ca-4417-abd8-9447135ad74f`, version 1.0.1, build 2, runtime 1.0.1, preview channel |
-| Android update | Group `945b72d9-22fd-4bbb-b317-51ec9f3d4588`, update `01a0343d-d384-792b-b122-df41534dd69b`, runtime 1.0.1, preview channel |
+| Android update | Group `64442fbf-b762-49cd-a9cd-9743dc764060`, update `01a0345b-dbb2-7041-a91d-5e128dcf578c`, runtime 1.0.1, preview channel |
 | Android APK | `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026 |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Validation and runtime evidence
 
-- On exact released application source `9660681ea933d36d3817555c4f5fd18b7d5f8da9`, root typecheck, warning-free lint, the complete repository test suite, fresh D1 replay across 161 exact migrations through `0162_trade_field_username.sql`, the production build, Sites bundle audit and public-performance budgets passed. The final CSS payload met its 735,000-byte budget exactly.
-- Focused root version, field-access, mobile-sync and release-integrity checks passed 25 of 25. Native typecheck, lint and all 38 mobile tests passed. The Android export bundled 1,511 modules and retained runtime 1.0.1.
+- On exact released application source `740433354bc689bd3199e2ccf28612dac22856ab`, root typecheck, warning-free lint, the complete repository test suite, fresh D1 replay across 161 exact migrations through `0162_trade_field_username.sql`, the production build, Sites bundle audit and public-performance budgets passed. The final CSS payload met its 735,000-byte budget exactly.
+- Focused root field-access and mobile-sync checks passed 28 of 28. Native typecheck, lint and all 38 mobile tests passed. Android bundled 1,511 modules and iOS bundled 1,390 modules.
 - Focused field-access tests passed 77 of 77. They cover owner username setup, owner lifecycle and permission protections, HMAC-pepper PIN storage without plaintext, missing-secret fail-closed behaviour, recipient selection, escaped TLink email content, successful provider acceptance, provider-failure PIN revocation and missing-email handling.
 - Native mobile typecheck, lint and Android Expo export passed. The export bundled 1,511 modules and the TLink icon. Expo public config reported TLink version 1.0.1, runtime policy `appVersion` and the TLink icon paths. EAS produced the signed Android build from exact source `f325d924242be20429edc7806b968b72d8a5d26c`.
 - The native TLink 512-pixel icon hash matches the public TLink icon, foreground and splash assets; the 192-pixel public icon matches the mobile favicon.
 - Migration `0162_trade_field_username.sql` is additive. It adds the office-controlled username and normalised lookup value plus a per-owner uniqueness index. It performs no production table drop or rename.
-- EAS published the Android update from a clean working tree at exact commit `9660681ea933d36d3817555c4f5fd18b7d5f8da9`. The preview channel resolves update group `945b72d9-22fd-4bbb-b317-51ec9f3d4588` for Android runtime 1.0.1.
-- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to exact application source `9660681ea933d36d3817555c4f5fd18b7d5f8da9` before version 401 was saved.
-- Sites version 401 deployed successfully with environment revision 28. The custom-domain health endpoint, Android release-policy endpoint and TLink field-app route returned HTTP 200 after deployment. The subsequent 10-minute production error-log query returned zero events. The minimum and latest Android versions remain 1.0.1.
+- EAS published the Android update from a clean working tree at exact commit `740433354bc689bd3199e2ccf28612dac22856ab`. The preview channel resolves update group `64442fbf-b762-49cd-a9cd-9743dc764060` for Android runtime 1.0.1.
+- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to exact application source `740433354bc689bd3199e2ccf28612dac22856ab` before version 402 was saved.
+- Sites version 402 deployed successfully with environment revision 28. The custom-domain health endpoint, Android release-policy endpoint and TLink field-app route returned HTTP 200 after deployment. The subsequent production error-log query returned zero events. The minimum and latest Android versions remain 1.0.1.
 
 ### Boundaries
 
-- Applying Android update `01a0343d-d384-792b-b122-df41534dd69b` and completing PIN sign-in on the Samsung remain the immediate physical-device verification. Automated coverage, native export and EAS compatibility do not replace that test.
+- Samsung installation of version 1.0.1 build 2 and the prior settings-cog update are confirmed by the supplied screenshots. Applying Android update `01a0345b-dbb2-7041-a91d-5e128dcf578c` and confirming the schedule transition and assigned test job remain the immediate physical-device verification.
 - Real Resend mailbox delivery of a TLink PIN remains to be verified by the first deliberate owner or worker setup. Provider acceptance and failure rollback are covered by automated tests, but release verification did not create a live credential or send an unsolicited email.
 - Any unused PIN issued before version 399 must be regenerated because the new server-secret-backed hash deliberately does not accept the former PBKDF2 representation.
 - Contract-specific service wording remains provisional until the client service schedule is supplied and reviewed.
@@ -72,7 +74,7 @@ TLink gives each technician, trade and assessor a device-bound session, a week c
 
 ## Incorporated release foundation: governed sources, conversation quality, continuity and route budgets
 
-Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` was validated in application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`, saved and deployed as Sites version 392 through deployment `appgdep_6a8bee30af108191b5d8db124c788fc0`, and then incorporated into the current version 401 application. Version 392 passed live desktop and phone acceptance before the later TLink releases superseded it.
+Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` was validated in application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`, saved and deployed as Sites version 392 through deployment `appgdep_6a8bee30af108191b5d8db124c788fc0`, and then incorporated into the current version 402 application. Version 392 passed live desktop and phone acceptance before the later TLink releases superseded it.
 
 The release completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
 
@@ -1099,7 +1101,7 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. Fully close and reopen TLink on Samsung so preview update `01a0343d-d384-792b-b122-df41534dd69b` downloads, close and reopen once more if the cog is not yet visible, use the startup cog to confirm version 1.0.1 build 2 is current, redeem the deliberate owner PIN, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+1. Open the top-right cog, choose Check for update, restart into preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c`, and confirm the existing `test` session opens the schedule and shows the assigned test job without generating another PIN.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.

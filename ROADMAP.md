@@ -30,7 +30,27 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-FIELD-APP-69
+## Released milestone: TLINK-FIELD-APP-70
+
+Release status: application and mobile update commit `740433354bc689bd3199e2ccf28612dac22856ab` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 402, and published as Android preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_7273c4aa4b748191b309ba2cc4d85d21` and deployment `appgdep_6a8c61b940248191bbaa0d6ecf980495` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
+
+### Outcome
+
+The Samsung post-PIN loading stall is repaired. Live data proved the PIN was consumed and a device-bound field session was created, but no authenticated request followed. TLink now bounds the Android reachability probe, verifies the field session before local database preparation, opens the schedule as soon as access is approved, times out unreadable JSON requests with a visible retry state, and stops repeated sync cursors. The access screen now uses the office-controlled field username rather than the business display name.
+
+### Acceptance result
+
+- The existing consumed PIN session remains usable; no new PIN or app download is required.
+- A connection-state lookup cannot block the first authenticated access request for more than 1.5 seconds.
+- A valid field session opens the schedule before the heavier local sync completes.
+- JSON API calls fail visibly after 20 seconds instead of leaving a permanent spinner.
+- Sync stops after a repeated cursor or 100 pages instead of looping indefinitely.
+- The current field username is refreshed into encrypted device storage after access verification.
+- Mobile typecheck, lint, all 38 mobile tests, Android and iOS exports, full repository validation, exact-source GitHub and Sites publication, custom-domain HTTP checks and the production error-log check passed.
+
+Applying preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c` and confirming the assigned test job on Samsung are the remaining physical-device acceptance gate.
+
+## Previous released milestone: TLINK-FIELD-APP-69
 
 Release status: application and mobile update commit `9660681ea933d36d3817555c4f5fd18b7d5f8da9` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 401, and published as Android preview update `01a0343d-d384-792b-b122-df41534dd69b` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_c8e187b84234819197959f5a2f99dd12` and deployment `appgdep_6a8c59e23d7481918279a1d9fe37e9b2` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
@@ -60,7 +80,7 @@ The installed build now reports its real native version instead of the stale har
 - The public capability link requires no account, expires after 60 days unless revoked sooner, and exposes the complete issued report and PDF except internal notes.
 - Complete repository tests, root typecheck and lint, all 161 exact migrations through `0162_trade_field_username.sql`, production build and budgets, native mobile validation, signed Android build, exact-source packaging, public deployment, signed-in desktop QA and 412-pixel QA passed.
 
-The executable, Android update and public deployment gates are met for Sites version 401. Applying the update and completing PIN sign-in on Samsung, the assigned-job rehearsal, public-request operational triage, the client service schedule and licensed-practitioner review remain explicit bounded follow-up work.
+The executable, Android update and public deployment gates were met for Sites version 401. The later post-PIN access correction is recorded in milestone `TLINK-FIELD-APP-70` above.
 
 ## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
@@ -3378,7 +3398,7 @@ The foundation passed `npm.cmd run validate`, including all 36 integration tests
 
 ## Next five logical product steps
 
-1. Fully close and reopen TLink on Samsung so preview update `01a0343d-d384-792b-b122-df41534dd69b` downloads, close and reopen once more if the cog is not yet visible, use the startup cog to confirm version 1.0.1 build 2 is current, redeem the deliberate owner PIN, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+1. Open the top-right cog, choose Check for update, restart into preview update `01a0345b-dbb2-7041-a91d-5e128dcf578c`, and confirm the existing `test` session opens the schedule and shows the assigned test job without generating another PIN.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
