@@ -1857,7 +1857,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(normalisedRoadmapNextFive, /\n2\. Add an operations review queue for public rental requests/);
   assert.match(normalisedRoadmapNextFive, /\n3\. Reconcile the client service schedule and obtain licensed-practitioner review/);
   assert.match(normalisedRoadmapNextFive, /\n4\. Run a supervised test-property issue and share rehearsal/);
-  assert.match(normalisedRoadmapNextFive, /\n5\. Replace the internal test APK with the approved permanent distribution lifecycle/);
+  assert.match(normalisedRoadmapNextFive, /\n5\. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026/);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

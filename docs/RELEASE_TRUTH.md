@@ -35,7 +35,7 @@ TLink gives each technician, trade and assessor a device-bound session, a week c
 | Stored archive | 45,271,040 bytes, 501 files, `sha256:f4cae5f0e4c719b4cb3a4d0a41d2cf0ae7f13087411182afe49f000fe8de5dd3` |
 | Expo project | `@ausenergy/aea-field`, project `3b02565e-dc34-4088-8cdd-e3c8a9ba11e9` |
 | Signed Android build | `233c6924-48ca-4417-abd8-9447135ad74f`, version 1.0.1, build 2, runtime 1.0.1, preview channel |
-| Android APK | `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121` |
+| Android APK | `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026 |
 | Custom domain | `https://compare.ausenergyassessments.com` |
 
 ### Validation and runtime evidence
@@ -54,7 +54,7 @@ TLink gives each technician, trade and assessor a device-bound session, a week c
 - Contract-specific service wording remains provisional until the client service schedule is supplied and reviewed.
 - Optional electrical, gas and smoke-alarm modules remain pre-launch/test-data capability until their declaration wording and test logic receive licensed-practitioner review.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
-- The internal Android APK is a testing distribution and must be refreshed when required or replaced by the permanent app distribution path. An iOS installable build was not produced in this release.
+- The internal Android APK expires on 7 September 2026 and must be refreshed or replaced by the permanent app distribution path before then. An iOS installable build was not produced in this release.
 - Physical Android field testing and a supervised test-property rehearsal remain separate acceptance work.
 - The hosted product remains pre-launch until the product owner explicitly declares it live.
 
@@ -1091,7 +1091,7 @@ sent or received and no provider callback was reconciled.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, while retaining the in-app update check and signed full-build fallback.
+5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
 
 ## Previous quote, job and invoice usability release
 

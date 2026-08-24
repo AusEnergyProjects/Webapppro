@@ -22,7 +22,7 @@ Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_d5b2a5a
 
 Current deployment: `appgdep_6a8c424b93488191a3a067b2caeff2ba`, status `succeeded`, environment revision 27
 
-Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@ausenergy/aea-field`, version 1.0.1, build 2, runtime 1.0.1, signed internal APK `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, APK SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`
+Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@ausenergy/aea-field`, version 1.0.1, build 2, runtime 1.0.1, signed internal APK `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, APK SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026
 
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
@@ -88,7 +88,7 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - Optional statutory-module certification still requires the correct practitioner credential and final licensed-practitioner review of declarations and test logic.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
 - Physical Samsung installation of version 1.0.1 build 2 remains unverified. Native export does not replace the planned real-device test, and no installable iOS build was produced.
-- The internal Android APK is a testing distribution and must be refreshed when required or replaced by the permanent distribution path.
+- The internal Android APK expires on 7 September 2026 and must be refreshed or replaced by the permanent distribution path before then.
 - Hosted records remain pre-launch test data until the product owner explicitly declares the platform live.
 
 ## Next five logical product steps
@@ -97,7 +97,7 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, while retaining the in-app update check and signed full-build fallback.
+5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
