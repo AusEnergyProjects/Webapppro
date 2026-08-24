@@ -204,7 +204,7 @@ function presentInspection(row: Row) {
     templateKey: String(row.template_key),
     templateVersion: integer(row.template_version),
     rulesEffectiveFrom: String(row.rules_effective_from),
-    selectedModules: parsedArray(row.module_selection_snapshot).map(String),
+    selectedModules: parsedArray(row.selected_modules_snapshot || row.module_selection_snapshot).map(String),
     property: parsedObject(row.property_snapshot),
     assessor: parsedObject(row.assessor_snapshot),
     assessorMemberId: String(row.assessor_member_id || ""),
@@ -222,7 +222,7 @@ function presentModule(row: Row) {
     id: String(row.id),
     inspectionId: String(row.inspection_id),
     key: String(row.module_key),
-    required: Boolean(row.required),
+    required: row.selected_required === null || row.selected_required === undefined ? true : Boolean(row.selected_required),
     status: String(row.status),
     templateVersion: integer(row.template_version),
     title: String(row.template_name),
@@ -312,7 +312,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
   const inspectionId = String(context.inspection.id);
   const [moduleRows, itemRows, findingRows, evidenceRows, reports] = await Promise.all([
     db.prepare(`SELECT * FROM trade_rental_inspection_modules
-      WHERE inspection_id = ? AND firebase_uid = ? ORDER BY required DESC, created_at, id`)
+      WHERE inspection_id = ? AND firebase_uid = ? ORDER BY COALESCE(selected_required, 1) DESC, created_at, id`)
       .bind(inspectionId, context.access.ownerUid).all<Row>(),
     db.prepare(`SELECT * FROM trade_rental_inspection_items
       WHERE inspection_id = ? AND firebase_uid = ? ORDER BY sort_order, created_at, id`)

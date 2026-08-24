@@ -389,6 +389,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
       template_version integer NOT NULL DEFAULT 1,
       rules_effective_from text NOT NULL DEFAULT '2026-06-30',
       module_selection_snapshot text NOT NULL DEFAULT '["minimum_standards"]',
+      selected_modules_snapshot text,
       assessor_member_id text NOT NULL DEFAULT '',
       revision integer NOT NULL DEFAULT 1,
       issued_report_id text NOT NULL DEFAULT '',

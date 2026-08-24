@@ -81,16 +81,34 @@ test("the field calendar, self-intake, update control and TLink app entry remain
   assert.match(crmRoute, /&& !selfScheduledCreate\) throw new Error\("JOB_RESCHEDULE_REQUIRED"\)/);
 });
 
-test("migration 0161 removes the minimum-only database assumption and retains non-empty unique scopes", async () => {
+test("migration 0161 adds authoritative scopes without rebuilding referenced rental tables", async () => {
   const migration = await read("drizzle/0161_trade_field_access_and_rental_scope.sql");
-  assert.match(migration, /json_extract\(`module_selection_snapshot`, '\$\[0\]'\) IN \('minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check'\)/);
-  assert.doesNotMatch(migration, /json_extract\(`module_selection_snapshot`, '\$\[0\]'\) = 'minimum_standards'/);
-  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) BETWEEN 1 AND 4/);
-  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 2 OR json_extract\(`module_selection_snapshot`, '\$\[1\]'\) <>/);
-  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 3 OR json_extract\(`module_selection_snapshot`, '\$\[2\]'\) NOT IN/);
-  assert.match(migration, /json_array_length\(`module_selection_snapshot`\) < 4 OR json_extract\(`module_selection_snapshot`, '\$\[3\]'\) NOT IN/);
-  assert.doesNotMatch(migration, /coalesce\(json_extract\(`module_selection_snapshot`, '\$\[2\]'\), ''\) NOT IN/);
-  assert.match(migration, /CONSTRAINT `trade_rental_modules_required_check` CHECK \(`required` = 1\)/);
+  assert.match(migration, /ALTER TABLE `trade_rental_inspections` ADD COLUMN `selected_modules_snapshot`/);
+  assert.match(migration, /json_array_length\(`selected_modules_snapshot`\) BETWEEN 1 AND 4/);
+  assert.match(migration, /json_array_length\(`selected_modules_snapshot`\) < 2 OR json_extract\(`selected_modules_snapshot`, '\$\[1\]'\) <>/);
+  assert.match(migration, /json_array_length\(`selected_modules_snapshot`\) < 3 OR json_extract\(`selected_modules_snapshot`, '\$\[2\]'\) NOT IN/);
+  assert.match(migration, /json_array_length\(`selected_modules_snapshot`\) < 4 OR json_extract\(`selected_modules_snapshot`, '\$\[3\]'\) NOT IN/);
+  assert.match(migration, /ALTER TABLE `trade_rental_inspection_modules` ADD COLUMN `selected_required` integer CHECK \(`selected_required` IS NULL OR `selected_required` = 1\)/);
+  assert.doesNotMatch(migration, /DROP TABLE `trade_rental_inspections`/);
+  assert.doesNotMatch(migration, /DROP TABLE `trade_rental_inspection_modules`/);
+  assert.match(migration, /DROP TRIGGER IF EXISTS `trade_rental_inspections_terminal_immutable`/);
+  assert.match(migration, /DROP TRIGGER IF EXISTS `trade_rental_modules_parent_guard_insert`/);
   assert.match(migration, /CREATE TABLE `trade_field_sessions`/);
   assert.match(migration, /CREATE UNIQUE INDEX `trade_field_sessions_token_idx`/);
+});
+
+test("new rental jobs separate the exact selected scope from the legacy minimum-first shadow", async () => {
+  const [crmRoute, guards, report, sync] = await Promise.all([
+    read("src/app/api/trade-crm/route.ts"),
+    read("src/lib/trade-rental-schema-guards.ts"),
+    read("src/lib/trade-rental-report-server.ts"),
+    read("src/app/api/trade-team/sync/route.ts"),
+  ]);
+  assert.match(crmRoute, /const rentalCompatibilityModuleKeys/);
+  assert.match(crmRoute, /module_selection_snapshot, selected_modules_snapshot/);
+  assert.match(crmRoute, /moduleKey === "minimum_standards" \? 1 : 0/);
+  assert.match(crmRoute, /required, selected_required, status/);
+  assert.match(guards, /COALESCE\(inspection\.selected_modules_snapshot, inspection\.module_selection_snapshot\)/);
+  assert.match(report, /inspection\.selected_modules_snapshot \|\| inspection\.module_selection_snapshot/);
+  assert.match(sync, /rental\.selected_modules_snapshot \|\| rental\.module_selection_snapshot/);
 });

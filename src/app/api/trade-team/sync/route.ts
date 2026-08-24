@@ -835,6 +835,7 @@ async function accessibleJobs(access: TeamAccess) {
     db.prepare(`SELECT inspection.id, inspection.work_order_id, inspection.inspection_number,
         inspection.status, inspection.template_key, inspection.template_version,
         inspection.rules_effective_from, inspection.module_selection_snapshot,
+        inspection.selected_modules_snapshot,
         inspection.assessor_member_id, inspection.revision, inspection.issued_report_id,
         inspection.issued_at,
         COUNT(module.id) module_count,
@@ -855,6 +856,7 @@ async function accessibleJobs(access: TeamAccess) {
       GROUP BY inspection.id, inspection.work_order_id, inspection.inspection_number,
         inspection.status, inspection.template_key, inspection.template_version,
         inspection.rules_effective_from, inspection.module_selection_snapshot,
+        inspection.selected_modules_snapshot,
         inspection.assessor_member_id, inspection.revision, inspection.issued_report_id,
         inspection.issued_at
       ORDER BY inspection.updated_at DESC
@@ -1016,7 +1018,7 @@ async function accessibleJobs(access: TeamAccess) {
         if (!rental) return {};
         const selectedModules = (() => {
           try {
-            const parsed = JSON.parse(String(rental.module_selection_snapshot || "[]"));
+            const parsed = JSON.parse(String(rental.selected_modules_snapshot || rental.module_selection_snapshot || "[]"));
             return Array.isArray(parsed) ? parsed.map(String) : [];
           } catch {
             return [];

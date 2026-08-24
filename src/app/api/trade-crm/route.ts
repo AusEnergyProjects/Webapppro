@@ -2010,6 +2010,9 @@ export async function POST(request: Request) {
       const rentalTemplate = rentalModuleKeys.length
         ? rentalAssessmentTemplateSnapshot(rentalModuleKeys)
         : null;
+      const rentalCompatibilityModuleKeys = rentalTemplate
+        ? ["minimum_standards", ...rentalModuleKeys.filter((moduleKey) => moduleKey !== "minimum_standards")]
+        : [];
       const rentalInspectionId = rentalTemplate ? crypto.randomUUID() : "";
       const rentalInspectionNumber = rentalTemplate ? `RMS-${workNumber.replace(/^TLJ-/, "")}` : "";
       if (rentalTemplate) await ensureTradeRentalSchemaGuards(db);
@@ -2092,10 +2095,10 @@ export async function POST(request: Request) {
         ...(rentalTemplate ? [
           db.prepare(`INSERT INTO trade_rental_inspections
             (id, work_order_id, firebase_uid, service_site_id, inspection_number, jurisdiction, status,
-             template_key, template_version, rules_effective_from, module_selection_snapshot, property_snapshot,
+             template_key, template_version, rules_effective_from, module_selection_snapshot, selected_modules_snapshot, property_snapshot,
              assessor_uid, assessor_member_id, assessor_snapshot, revision, creation_request_id, issued_report_id,
              submitted_at, issued_at, superseded_at, created_by_uid, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
+            VALUES (?, ?, ?, ?, ?, 'VIC', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '', '', '', ?, ?, ?)`)
             .bind(
               rentalInspectionId,
               workOrderId,
@@ -2106,6 +2109,7 @@ export async function POST(request: Request) {
               RENTAL_ASSESSMENT_TEMPLATE_KEY,
               RENTAL_ASSESSMENT_TEMPLATE_VERSION,
               RENTAL_ASSESSMENT_TEMPLATE_EFFECTIVE_FROM,
+              JSON.stringify(rentalCompatibilityModuleKeys),
               JSON.stringify(rentalModuleKeys),
               rentalPropertySnapshot,
               assigneeUid,
@@ -2119,14 +2123,15 @@ export async function POST(request: Request) {
           ...rentalModuleKeys.map((moduleKey) => {
             const moduleTemplate = rentalTemplate.modules[moduleKey];
             return db.prepare(`INSERT INTO trade_rental_inspection_modules
-              (id, inspection_id, firebase_uid, module_key, required, status, template_version, template_name,
+              (id, inspection_id, firebase_uid, module_key, required, selected_required, status, template_version, template_name,
                required_capability, template_snapshot, answers, revision, completed_by_uid, completed_at, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, '{}', 1, '', '', ?, ?)`)
+              VALUES (?, ?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, '{}', 1, '', '', ?, ?)`)
               .bind(
                 crypto.randomUUID(),
                 rentalInspectionId,
                 identity.uid,
                 moduleKey,
+                moduleKey === "minimum_standards" ? 1 : 0,
                 1,
                 RENTAL_ASSESSMENT_TEMPLATE_VERSION,
                 String(moduleTemplate.title || moduleKey),

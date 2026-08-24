@@ -1,5 +1,3 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
-
 CREATE TABLE `__new_trade_rental_inspections` (
 	`id` text PRIMARY KEY NOT NULL,
 	`work_order_id` text NOT NULL,
@@ -36,13 +34,7 @@ CREATE TABLE `__new_trade_rental_inspections` (
 	CONSTRAINT `trade_rental_inspections_time_check` CHECK (datetime(`created_at`) IS NOT NULL AND datetime(`updated_at`) IS NOT NULL)
 );--> statement-breakpoint
 INSERT INTO `__new_trade_rental_inspections` SELECT * FROM `trade_rental_inspections`;--> statement-breakpoint
-DROP TABLE `trade_rental_inspections`;--> statement-breakpoint
-ALTER TABLE `__new_trade_rental_inspections` RENAME TO `trade_rental_inspections`;--> statement-breakpoint
-CREATE UNIQUE INDEX `trade_rental_inspections_owner_work_idx` ON `trade_rental_inspections` (`firebase_uid`,`work_order_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `trade_rental_inspections_owner_number_idx` ON `trade_rental_inspections` (`firebase_uid`,`inspection_number`);--> statement-breakpoint
-CREATE UNIQUE INDEX `trade_rental_inspections_creation_request_idx` ON `trade_rental_inspections` (`firebase_uid`,`creation_request_id`) WHERE `creation_request_id` <> '';--> statement-breakpoint
-CREATE INDEX `trade_rental_inspections_owner_status_idx` ON `trade_rental_inspections` (`firebase_uid`,`status`,`updated_at`);--> statement-breakpoint
-CREATE INDEX `trade_rental_inspections_work_idx` ON `trade_rental_inspections` (`work_order_id`,`updated_at`);--> statement-breakpoint
+DROP TABLE `__new_trade_rental_inspections`;--> statement-breakpoint
 
 CREATE TABLE `__new_trade_rental_inspection_modules` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -72,11 +64,13 @@ CREATE TABLE `__new_trade_rental_inspection_modules` (
 	CONSTRAINT `trade_rental_modules_time_check` CHECK (datetime(`created_at`) IS NOT NULL AND datetime(`updated_at`) IS NOT NULL)
 );--> statement-breakpoint
 INSERT INTO `__new_trade_rental_inspection_modules` (`id`,`inspection_id`,`firebase_uid`,`module_key`,`required`,`status`,`template_version`,`template_name`,`required_capability`,`template_snapshot`,`answers`,`credential_snapshot`,`revision`,`completed_by_uid`,`completed_at`,`created_at`,`updated_at`) SELECT `id`,`inspection_id`,`firebase_uid`,`module_key`,1,`status`,`template_version`,`template_name`,`required_capability`,`template_snapshot`,`answers`,`credential_snapshot`,`revision`,`completed_by_uid`,`completed_at`,`created_at`,`updated_at` FROM `trade_rental_inspection_modules`;--> statement-breakpoint
-DROP TABLE `trade_rental_inspection_modules`;--> statement-breakpoint
-ALTER TABLE `__new_trade_rental_inspection_modules` RENAME TO `trade_rental_inspection_modules`;--> statement-breakpoint
-CREATE UNIQUE INDEX `trade_rental_modules_inspection_key_idx` ON `trade_rental_inspection_modules` (`inspection_id`,`module_key`);--> statement-breakpoint
-CREATE INDEX `trade_rental_modules_owner_status_idx` ON `trade_rental_inspection_modules` (`firebase_uid`,`status`,`updated_at`);--> statement-breakpoint
-CREATE INDEX `trade_rental_modules_inspection_idx` ON `trade_rental_inspection_modules` (`inspection_id`,`updated_at`);--> statement-breakpoint
+DROP TABLE `__new_trade_rental_inspection_modules`;--> statement-breakpoint
+
+ALTER TABLE `trade_rental_inspections` ADD COLUMN `selected_modules_snapshot` text CHECK (`selected_modules_snapshot` IS NULL OR (json_valid(`selected_modules_snapshot`) AND json_type(`selected_modules_snapshot`) = 'array' AND json_array_length(`selected_modules_snapshot`) BETWEEN 1 AND 4 AND json_extract(`selected_modules_snapshot`, '$[0]') IN ('minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(`selected_modules_snapshot`, '$[1]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(`selected_modules_snapshot`, '$[2]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND coalesce(json_extract(`selected_modules_snapshot`, '$[3]'), '') IN ('', 'minimum_standards', 'electrical_safety_check', 'gas_safety_check', 'smoke_alarm_check') AND (json_array_length(`selected_modules_snapshot`) < 2 OR json_extract(`selected_modules_snapshot`, '$[1]') <> json_extract(`selected_modules_snapshot`, '$[0]')) AND (json_array_length(`selected_modules_snapshot`) < 3 OR json_extract(`selected_modules_snapshot`, '$[2]') NOT IN (json_extract(`selected_modules_snapshot`, '$[0]'), json_extract(`selected_modules_snapshot`, '$[1]'))) AND (json_array_length(`selected_modules_snapshot`) < 4 OR json_extract(`selected_modules_snapshot`, '$[3]') NOT IN (json_extract(`selected_modules_snapshot`, '$[0]'), json_extract(`selected_modules_snapshot`, '$[1]'), json_extract(`selected_modules_snapshot`, '$[2]')))));--> statement-breakpoint
+ALTER TABLE `trade_rental_inspection_modules` ADD COLUMN `selected_required` integer CHECK (`selected_required` IS NULL OR `selected_required` = 1);--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trade_rental_inspections_terminal_immutable`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trade_rental_modules_parent_guard_insert`;--> statement-breakpoint
+DROP TRIGGER IF EXISTS `trade_rental_modules_parent_guard_update`;--> statement-breakpoint
 
 CREATE TABLE `trade_field_access_codes` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -135,5 +129,3 @@ CREATE TABLE `trade_field_sessions` (
 CREATE UNIQUE INDEX `trade_field_sessions_token_idx` ON `trade_field_sessions` (`token_hash`);--> statement-breakpoint
 CREATE INDEX `trade_field_sessions_member_status_idx` ON `trade_field_sessions` (`owner_uid`,`team_member_id`,`status`,`expires_at`);--> statement-breakpoint
 CREATE INDEX `trade_field_sessions_device_status_idx` ON `trade_field_sessions` (`owner_uid`,`device_id`,`status`,`expires_at`);--> statement-breakpoint
-
-PRAGMA foreign_keys=ON;

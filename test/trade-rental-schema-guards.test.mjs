@@ -24,6 +24,10 @@ async function fixture() {
   `);
   const migration = await readFile(migrationUrl, "utf8");
   database.exec(migration.replaceAll("--> statement-breakpoint", ""));
+  database.exec(`
+    ALTER TABLE trade_rental_inspections ADD COLUMN selected_modules_snapshot text;
+    ALTER TABLE trade_rental_inspection_modules ADD COLUMN selected_required integer;
+  `);
   for (const definition of TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS) database.exec(definition.sql);
   return { database, migration };
 }

@@ -33,7 +33,7 @@ const inspectionWorkOrderMismatch = `NOT EXISTS (
 const moduleParentMismatch = `NOT EXISTS (
   SELECT 1 FROM trade_rental_inspections inspection
   WHERE inspection.id = NEW.inspection_id AND inspection.firebase_uid = NEW.firebase_uid
-    AND EXISTS (SELECT 1 FROM json_each(inspection.module_selection_snapshot) selected WHERE selected.value = NEW.module_key)
+    AND EXISTS (SELECT 1 FROM json_each(COALESCE(inspection.selected_modules_snapshot, inspection.module_selection_snapshot)) selected WHERE selected.value = NEW.module_key)
 )`;
 
 const itemParentMismatch = `NOT EXISTS (
@@ -135,6 +135,7 @@ const terminalInspectionChanged = `OLD.status IN ('issued', 'superseded', 'withd
   OR NEW.template_key IS NOT OLD.template_key OR NEW.template_version IS NOT OLD.template_version
   OR NEW.rules_effective_from IS NOT OLD.rules_effective_from
   OR NEW.module_selection_snapshot IS NOT OLD.module_selection_snapshot
+  OR NEW.selected_modules_snapshot IS NOT OLD.selected_modules_snapshot
   OR NEW.property_snapshot IS NOT OLD.property_snapshot OR NEW.assessor_uid IS NOT OLD.assessor_uid
   OR NEW.assessor_member_id IS NOT OLD.assessor_member_id OR NEW.assessor_snapshot IS NOT OLD.assessor_snapshot
   OR NEW.creation_request_id IS NOT OLD.creation_request_id OR NEW.issued_report_id IS NOT OLD.issued_report_id
@@ -223,10 +224,11 @@ const REQUIRED_COLUMNS = {
   trade_rental_inspections: [
     "id", "work_order_id", "firebase_uid", "service_site_id", "inspection_number", "jurisdiction",
     "status", "template_key", "template_version", "rules_effective_from", "module_selection_snapshot",
+    "selected_modules_snapshot",
     "property_snapshot", "assessor_uid", "assessor_member_id", "assessor_snapshot", "creation_request_id",
     "issued_report_id", "submitted_at", "issued_at", "superseded_at", "created_by_uid", "created_at",
   ],
-  trade_rental_inspection_modules: ["id", "inspection_id", "firebase_uid", "module_key"],
+  trade_rental_inspection_modules: ["id", "inspection_id", "firebase_uid", "module_key", "selected_required"],
   trade_rental_inspection_items: ["id", "inspection_id", "module_id", "firebase_uid"],
   trade_rental_findings: ["id", "inspection_id", "module_id", "item_id", "firebase_uid"],
   trade_rental_evidence_links: ["id", "inspection_id", "module_id", "item_id", "finding_id", "job_media_id", "firebase_uid"],

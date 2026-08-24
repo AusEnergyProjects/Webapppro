@@ -185,7 +185,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
   }
   const [moduleRows, itemRows, findingRows, evidenceRows, business, assessor] = await Promise.all([
     db.prepare(`SELECT * FROM trade_rental_inspection_modules
-      WHERE inspection_id = ? AND firebase_uid = ? ORDER BY required DESC, created_at, id`)
+      WHERE inspection_id = ? AND firebase_uid = ? ORDER BY COALESCE(selected_required, 1) DESC, created_at, id`)
       .bind(inspection.id, access.ownerUid).all<Row>(),
     db.prepare(`SELECT * FROM trade_rental_inspection_items
       WHERE inspection_id = ? AND firebase_uid = ? ORDER BY sort_order, created_at, id`)
@@ -210,7 +210,7 @@ async function reportSource(access: TeamAccess, workOrderId: string) {
       .bind(access.memberId, access.ownerUid).first<Row>(),
   ]);
   if (!business || !assessor) throw new Error("ASSESSOR_REQUIRED");
-  const selectedModuleKeys = parsedArray(inspection.module_selection_snapshot).map(String).sort();
+  const selectedModuleKeys = parsedArray(inspection.selected_modules_snapshot || inspection.module_selection_snapshot).map(String).sort();
   const storedModuleKeys = moduleRows.results.map((module) => String(module.module_key)).sort();
   if (!selectedModuleKeys.length
     || selectedModuleKeys.length !== storedModuleKeys.length
@@ -380,7 +380,7 @@ async function buildReportSnapshot(source: Awaited<ReturnType<typeof reportSourc
       id: String(modulePublicIds.get(String(module.id))),
       key: String(module.module_key),
       title: String(module.template_name),
-      required: Boolean(module.required),
+      required: module.selected_required === null || module.selected_required === undefined ? true : Boolean(module.selected_required),
       status: String(module.status),
       reportBoundary: String(template.reportBoundary || ""),
       credentialGate: String(template.credentialGate || module.required_capability || ""),
