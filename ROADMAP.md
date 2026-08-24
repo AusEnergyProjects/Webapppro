@@ -30,15 +30,17 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-FIELD-APP-68
+## Released milestone: TLINK-FIELD-APP-69
 
-Release status: application commit `b3a57eeb8dc75cda01b46f1f75ef21d120fedac3` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, and deployed as public Sites version 400 at `https://compare.ausenergyassessments.com`. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_75b8b39f74448191aaf3eb3c816f6b95` and deployment `appgdep_6a8c5368d3d881919f3dce5075ebb708` report the exact application commit and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains version 1.0.1 build 2 from mobile source `f325d924242be20429edc7806b968b72d8a5d26c`. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
+Release status: application and mobile update commit `9660681ea933d36d3817555c4f5fd18b7d5f8da9` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 401, and published as Android preview update `01a0343d-d384-792b-b122-df41534dd69b` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_c8e187b84234819197959f5a2f99dd12` and deployment `appgdep_6a8c59e23d7481918279a1d9fe37e9b2` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2. Exact package, validation and runtime evidence is recorded in [release truth](./docs/RELEASE_TRUTH.md).
 
 ### Outcome
 
 Give technicians, field trades and assessors one simple, correctly branded TLink app for their calendar, assigned jobs and workflow forms. Give the office a visible add person, open details, edit username and generate and email PIN path. Let sole traders set up the main account directly, while allowing minimum standards, electrical, gas and smoke alarm work to be selected independently on every job.
 
 Owner username save now completes without a false stale-record loop. The authoritative owner bootstrap preserves the member revision when nothing changed, while real owner-authority drift is still repaired and revisioned.
+
+The installed build now reports its real native version instead of the stale hardcoded 1.0.0 value. Signed-out users can always open the top-right settings cog to check for a compatible update, open the secure full-build page and confirm their app version and build.
 
 ### Acceptance result
 
@@ -48,6 +50,8 @@ Owner username save now completes without a false stale-record loop. The authori
 - TLink Team shows one three-step setup path, lets the office control a unique editable username, requires a saved email for PIN delivery, sends the username and one-time PIN to that address, stores only a salted secret-backed hash and can revoke a device or sign the worker out everywhere.
 - The owner row exposes `Set up my app`, allowing a sole trader to create their own field username and emailed PIN without adding a duplicate team record.
 - Owner bootstrap no longer changes `updated_at` on every authenticated request, and Team stale-record recovery runs only for the typed `REVISION_CONFLICT` response.
+- Android build 2 reports native version 1.0.1 to the existing minimum-version gate, and the gate remains at 1.0.1.
+- The signed-out and restricted startup screens expose an accessible 44-pixel settings cog with update, install, version and build controls.
 - Provider delivery failure revokes the exact newly created PIN and reports failure. The dashboard does not present a credential as successfully delivered when Resend rejects it.
 - The native app is named TLink, uses the TLink launcher icon and rich navy and green identity, opens to a simple week calendar, shows only the worker's assigned jobs, supports mobile job creation and opens the selected job workflow.
 - Get the app remains at the top right of the TLink dashboard with the TLink icon beside its text. The install page and in-app update check resolve signed Android version 1.0.1 build 2.
@@ -56,7 +60,7 @@ Owner username save now completes without a false stale-record loop. The authori
 - The public capability link requires no account, expires after 60 days unless revoked sooner, and exposes the complete issued report and PDF except internal notes.
 - Complete repository tests, root typecheck and lint, all 161 exact migrations through `0162_trade_field_username.sql`, production build and budgets, native mobile validation, signed Android build, exact-source packaging, public deployment, signed-in desktop QA and 412-pixel QA passed.
 
-The executable and public deployment gates are met for Sites version 400. Physical Samsung installation of build 2, real owner and worker credential-email delivery, the assigned-job rehearsal, public-request operational triage, the client service schedule and licensed-practitioner review remain explicit bounded follow-up work.
+The executable, Android update and public deployment gates are met for Sites version 401. Applying the update and completing PIN sign-in on Samsung, the assigned-job rehearsal, public-request operational triage, the client service schedule and licensed-practitioner review remain explicit bounded follow-up work.
 
 ## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
@@ -3374,7 +3378,7 @@ The foundation passed `npm.cmd run validate`, including all 36 integration tests
 
 ## Next five logical product steps
 
-1. Use `Set up my app` on the owner row and then a worker's `Open details` flow to generate and email deliberate test PINs, confirm both emails arrive with the exact username and PIN, sign in on Samsung, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
+1. Fully close and reopen TLink on Samsung so preview update `01a0343d-d384-792b-b122-df41534dd69b` downloads, close and reopen once more if the cog is not yet visible, use the startup cog to confirm version 1.0.1 build 2 is current, redeem the deliberate owner PIN, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.
 2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
 3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
 4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
