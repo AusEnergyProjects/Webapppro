@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-71` is validated, pushed and deployed. It stops the schedule sync feedback loop and restores readable dark-theme text inputs in the native new-job flow.
+Status: `TLINK-FIELD-APP-72` is validated, pushed and deployed. It completes field-created appointment scheduling, postcode-first suburb selection, saved-customer reuse and optional customer calendar invitations.
 
 Prepared: 25 August 2026
 
-Milestone ID: `TLINK-FIELD-APP-71`
+Milestone ID: `TLINK-FIELD-APP-72`
 
 Working branch: `codex/tlink-field-app`
 
@@ -12,21 +12,21 @@ Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`
 
 Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`
 
-Released application source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
+Released application source: `6a414bc98c255d8fdab7444674371c1ce31dc4ba`
 
-Released mobile update source: `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
+Released mobile update source: `6a414bc98c255d8fdab7444674371c1ce31dc4ba`
 
 Released mobile native source: `f325d924242be20429edc7806b968b72d8a5d26c`
 
-Current production: Sites version 403 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 404 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_9b95aaa255048191970b02d31d302f1c`
 
-Current deployment: `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4`, status `succeeded`, environment revision 28
+Current deployment: `appgdep_6a8c753910548191b047be4e4887d947`, status `succeeded`, environment revision 28
 
 Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@ausenergy/aea-field`, version 1.0.1, build 2, runtime 1.0.1, signed internal APK `https://expo.dev/artifacts/eas/cFVT_w5DmGllF2kIxs-eGg5DJlYZ23oewaErhK9fHqg.apk`, APK SHA-256 `6BC7610FC419086C0EAF41C81C97F063970A4241525E4B1BF5AE9937D4F63121`, expires 7 September 2026
 
-Current Android update: preview group `29fe8909-903b-481d-99d6-8db0b3ccdba2`, update `01a03475-deab-7cce-93b2-6f9afa26b287`, runtime 1.0.1, exact commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`
+Current Android update: preview group `459fa8ec-c7fc-408f-9130-56f6687cd4cd`, update `01a034a8-58e9-75f9-9f2f-728fa6b059b8`, runtime 1.0.1, exact commit `6a414bc98c255d8fdab7444674371c1ce31dc4ba`
 
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
@@ -34,12 +34,12 @@ Current migration inventory: 161 migrations through `0162_trade_field_username.s
 
 ## Released task contract
 
-- User outcome: the schedule finishes syncing instead of continuously restarting, and every new-job field keeps typed text and placeholder text readable in TLink's dark theme.
-- Owning workflow: native app session identity refresh, connectivity-triggered sync and the field-created job form.
-- In scope: prevent unchanged field identity from mutating React state, keep the network listener independent of display-name object changes, apply explicit dark input and placeholder colours, add regression coverage, and publish a compatible preview update plus matching Sites source.
-- Out of scope: a new Android binary, app-store submission, weakened access control, sync schema changes, workflow-question changes and unrelated dashboard redesign.
-- Acceptance: one successful username refresh cannot resubscribe and restart sync indefinitely, the schedule settles on the completed sync state, entered text has explicit contrast against the input background, placeholders remain legible, and exact-source validation and release provenance pass.
-- Validation: focused native and field-access tests, mobile typecheck, lint, mobile tests, Android and iOS export, root typecheck, complete root validation, compatible EAS Update publication, Sites release, custom-domain route checks and post-release error-log review.
+- User outcome: a field worker can schedule the complete day, set a precise duration, select the correct suburb from a postcode, reuse an existing customer and choose whether TLink emails the appointment invite.
+- Owning workflow: native field-created job intake, owner-scoped customer reuse, appointment creation and customer calendar delivery.
+- In scope: 24-hour 15-minute start choices, 15-minute to 8-hour duration slider, postcode-first Victorian locality lookup, exact-email saved-customer selection, optional post-commit TLink calendar invite, regression coverage, compatible preview update and matching Sites source.
+- Out of scope: a new Android binary, app-store submission, customer-directory access for field-only users, creating a new property for an existing customer, delivery-provider callback reconciliation, workflow-question changes and unrelated dashboard redesign.
+- Acceptance: all valid times and durations are reachable, suburb cannot precede postcode, one locality selects automatically, multiple localities remain selectable, duplicate email offers the existing owner-scoped customer, invite failure cannot roll back the job, and exact-source validation and release provenance pass.
+- Validation: focused scheduling, customer, calendar and access tests, mobile typecheck, lint, mobile tests, Android and iOS export, root typecheck, lint, complete repository tests, migration replay, production build, compatible EAS Update publication, Sites release, custom-domain route checks and post-release error-log review.
 - Stop condition: stop for owner direction if delivery requires a new native capability, store credential, destructive data change or a lower minimum-version policy.
 
 ## Outcome
@@ -55,6 +55,8 @@ The Samsung sign-in update block is fixed at its source. Build 2 is version 1.0.
 The later post-PIN stall is also fixed. Live D1 evidence showed that TLink consumed the PIN and created the Samsung field session at 14:59:02 UTC, but `last_seen_at` never advanced, proving the app had not reached its first authenticated request. The app now caps the reachability probe at 1.5 seconds, verifies the session before local database preparation, opens the schedule immediately after approval, caps JSON requests at 20 seconds and stops repeated sync cursors. The access response also refreshes the encrypted local identity to the office-controlled username `test`.
 
 The subsequent endless schedule sync is fixed at its state boundary. An unchanged display-name refresh now returns no state mutation, and the connectivity listener observes only signed-in status rather than the complete principal object. This prevents the immediate NetInfo callback from restarting sync after every successful identity refresh. The new-job form also uses explicit dark raised surfaces with light text, muted placeholders and a visible green selection colour, so typed values no longer disappear into white fields.
+
+Field-created appointments now use a complete, logical phone flow. Start time covers every 15-minute point across the 24-hour day. Duration is a touch slider from 15 minutes through 8 hours with exact 15-minute decrease and increase controls. Postcode appears before suburb, one authoritative Victorian locality selects automatically, and multiple valid localities remain explicit choices. Entering an email already held by this TLink business now offers the existing customer and service site instead of blocking creation. A separate checkbox can email a branded TLink calendar invitation after the job and appointment are durably saved.
 
 Victorian rental minimum standards are selected by default but can be unticked. Minimum standards, electrical safety, gas safety and smoke alarm are four independent choices, and at least one is required. The existing account-free request, qualified-assessor issue and revocable 60-day report remain part of the same governed path.
 
@@ -82,6 +84,7 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - Optional electrical, gas and smoke-alarm modules with separate completion gates.
 - Existing TLink job assignment, weekly scheduling, field progress and completion blockers.
 - TLink Field week calendar, daily assigned jobs, pull-to-refresh, plus-job flow, secure field session and dedicated rental workflow surface.
+- Complete-day appointment selection, 15-minute duration slider, postcode-first Victorian suburb resolution, saved-customer reuse and optional post-commit TLink calendar invitation.
 - In-app update check with Expo update support and signed-APK fallback through `/api/field/app-release`.
 - Native TLink identity across Android name, launcher icon, splash, in-app login and dark field screens.
 - Assessor issue and supersede lifecycle, immutable report snapshots and hash-verified PDF artifacts.
@@ -93,20 +96,20 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - The original rental branch was not deployed over newer work. Field access and scope changes were integrated in a separate release worktree and retained the current Surge, schedule, work-pack and performance foundations.
 - The rental migration was renumbered from the colliding `0142` identifier to `0160`; existing Creditex migration history remains unchanged.
 - Migration `0162_trade_field_username.sql` is additive. It adds the office-controlled username and normalised lookup value plus a per-owner uniqueness index without dropping or renaming a production table.
-- Deployment versions 394 and 395 failed inside migration transactions and committed no release mutation. Version 396 proved the additive rental migration, version 397 added its presentation correction, version 398 released the TLink identity and team setup flow, version 399 fixed PIN creation and added owner setup plus credential email delivery, version 400 fixed the false owner revision conflict, version 401 corrected installed-version and startup update controls, version 402 repaired the post-PIN access transition, and version 403 stops the completed-sync feedback loop and restores new-job input contrast.
+- Deployment versions 394 and 395 failed inside migration transactions and committed no release mutation. Version 396 proved the additive rental migration, version 397 added its presentation correction, version 398 released the TLink identity and team setup flow, version 399 fixed PIN creation and added owner setup plus credential email delivery, version 400 fixed the false owner revision conflict, version 401 corrected installed-version and startup update controls, version 402 repaired the post-PIN access transition, version 403 stopped the completed-sync feedback loop and restored new-job input contrast, and version 404 completes field-created appointment intake and optional customer invitations.
 - Google Apps Script relay version 16 was updated in place before the Sites release so requester role, agency, optional modules, authority and replay-safe fingerprints are retained without changing the public relay URL.
 - The relay root returned HTTP 200 with the active-service page after deployment.
 
 ## Release evidence
 
-- On exact released application source `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488`, root typecheck, warning-free lint, the complete repository suite, fresh Cloudflare D1 replay through `0162_trade_field_username.sql`, production build, Sites bundle audit and performance budgets passed.
-- The focused native and field-access regression set passed 16 of 16. Native typecheck, warning-free lint and all 38 mobile tests passed. Android bundled 1,511 modules and iOS bundled 1,390 modules.
+- On exact released application source `6a414bc98c255d8fdab7444674371c1ce31dc4ba`, root typecheck, warning-free lint, all 2,914 executed repository tests with 11 intentional skips, fresh Cloudflare D1 replay through `0162_trade_field_username.sql`, production build, Sites bundle audit and performance budgets passed.
+- The focused scheduling, customer, calendar and access set passed 38 of 38. Native typecheck, warning-free lint and all 38 mobile tests passed. Android bundled 1,511 modules and iOS bundled 1,390 modules.
 - Focused field-access checks passed 77 of 77, covering owner setup protections, secret-backed hashing without plaintext, missing configuration, exact email recipient and content, provider acceptance, provider-failure revocation and missing-email handling.
 - Mobile typecheck, lint and Android Expo export passed. The export bundled 1,511 modules and the TLink icon. The signed Android EAS build finished from exact source. Physical-device field behaviour remains a separate gate.
-- EAS published Android update group `29fe8909-903b-481d-99d6-8db0b3ccdba2` from exact clean commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` to the preview channel for runtime 1.0.1; Android update `01a03475-deab-7cce-93b2-6f9afa26b287` is the physical-device target.
-- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` before version 403 was saved.
-- The matching local archive is 12,357,970 bytes with SHA-256 `4A4B498F999DB36F707E8EE0AA9DB169D91436EA11B10BAE990A81D2304DCB96`.
-- Sites stored 45,281,280 bytes across 501 files with content hash `sha256:fe187c8273e2003b8284fe7efb287dabdc178062e682d9f32a2b18266a83c334` and deployed version 403 successfully through `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4` at environment revision 28.
+- EAS published Android update group `459fa8ec-c7fc-408f-9130-56f6687cd4cd` from exact clean commit `6a414bc98c255d8fdab7444674371c1ce31dc4ba` to the preview channel for runtime 1.0.1; Android update `01a034a8-58e9-75f9-9f2f-728fa6b059b8` is the physical-device target.
+- Branch `codex/tlink-field-app` and Sites managed `main` both resolved to `6a414bc98c255d8fdab7444674371c1ce31dc4ba` before version 404 was saved.
+- The matching local archive is 12,361,985 bytes with SHA-256 `5995B2254D20AF4F5A7F518BD4EE38EE620AD5CAA1FD67BE53B5D02077FB8589`.
+- Sites stored 45,291,520 bytes across 501 files with content hash `sha256:72498fce253a7778a19d05a12f90a7ab5fafc1719304cafdc93c6364935b4707` and deployed version 404 successfully through `appgdep_6a8c753910548191b047be4e4887d947` at environment revision 28.
 - The custom-domain health endpoint, Android release-policy endpoint and field-app route returned HTTP 200 after deployment. The following production error-log query returned zero events. Release verification reused the existing field session and did not generate a PIN or send an unsolicited credential email.
 
 ## Boundaries
@@ -114,7 +117,8 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 - Contract-specific service wording remains provisional until the client service schedule or specification is supplied and reviewed.
 - Optional statutory-module certification still requires the correct practitioner credential and final licensed-practitioner review of declarations and test logic.
 - A device-reported GPS record is evidence metadata, not independent proof that a person attended the property.
-- Samsung installation of version 1.0.1 build 2 and the settings-cog update are confirmed by the supplied screenshots. Applying update `01a03475-deab-7cce-93b2-6f9afa26b287`, confirming sync settles without a spinner, and confirming new-job text remains visible are the physical-device gate. No installable iOS build was produced.
+- Samsung installation of version 1.0.1 build 2 and the settings-cog update are confirmed by the supplied screenshots. Applying update `01a034a8-58e9-75f9-9f2f-728fa6b059b8` and completing the new appointment flow are the current physical-device gate. No installable iOS build was produced.
+- Real inbox receipt of the optional appointment invitation was not triggered during release QA. Automated tests cover exact recipient, TLink email and calendar content, provider acceptance, failure isolation and the saved job event.
 - The first deliberate owner or worker setup must verify real Resend mailbox delivery. Provider acceptance and rollback are automated, but a live credential email was not sent during release QA.
 - Regenerate any unused PIN created before version 399 because the new secret-backed hash intentionally replaces the failed legacy representation.
 - The internal Android APK expires on 7 September 2026 and must be refreshed or replaced by the permanent distribution path before then.
@@ -122,11 +126,11 @@ Victorian rental minimum standards are selected by default but can be unticked. 
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
-2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
-4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
+1. On Samsung, open the top-right cog, choose Check for update, restart into update `01a034a8-58e9-75f9-9f2f-728fa6b059b8`, then create one test job using an existing customer, a postcode with multiple valid localities, a non-hour duration and the customer-invite checkbox.
+2. Add a durable customer-invite delivery ledger with authenticated Resend callback reconciliation, safe retry and clear office-visible delivered, bounced and failed states.
+3. Extend saved-customer selection to several service properties and a permission-bounded add-new-property path without exposing the customer directory to field-only users.
+4. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+5. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
 
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 

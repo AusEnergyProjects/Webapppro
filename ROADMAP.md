@@ -30,7 +30,26 @@ Sequence is dependency based, not a calendar promise. A source change is not a r
 - The hosted product remains a pre-launch test environment until the product owner explicitly declares it live. Test customer, wholesaler, trade-account and job data may be replaced during testing, but the final wipe remains a separately authorised launch operation.
 - Applied database migration history is immutable. Database change uses staged forward migrations: a compatible expansion before application activation, followed by a separately reconciled contract cleanup only after the new application is live.
 
-## Released milestone: TLINK-FIELD-APP-71
+## Released milestone: TLINK-FIELD-APP-72
+
+Release status: application and mobile update commit `6a414bc98c255d8fdab7444674371c1ce31dc4ba` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 404, and published as Android preview update `01a034a8-58e9-75f9-9f2f-728fa6b059b8` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_9b95aaa255048191970b02d31d302f1c` and deployment `appgdep_6a8c753910548191b047be4e4887d947` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
+
+### Outcome
+
+The field-created job now uses one complete appointment flow. A worker can choose any start time across the day in 15-minute steps, set a 15-minute to 8-hour duration with a phone-friendly slider, enter the postcode before selecting its authoritative Victorian suburb, reuse an existing customer instead of being blocked by duplicate email, and optionally send that customer a branded TLink calendar invitation after the job is saved.
+
+### Acceptance result
+
+- Start time covers the complete 24-hour day in 15-minute increments without a wall of fixed chips.
+- Duration uses a touch slider plus exact 15-minute decrease and increase controls from 15 minutes through 8 hours.
+- A valid Victorian postcode selects its only locality automatically or presents all valid locality choices when several exist.
+- An exact existing-customer email presents owner-scoped customer and service-site choices; field access cannot search or attach another business's records.
+- The optional customer invite is sent only after the job and appointment commit. Provider rejection cannot undo the saved job, and the result is written to the job event history.
+- Mobile typecheck, warning-free lint, all 38 mobile tests, Android and iOS exports, root typecheck, warning-free lint, all 2,914 executed repository tests, fresh migration replay, production build, exact-source GitHub and Sites publication, compatible Android update publication, custom-domain HTTP checks and the production error-log check passed.
+
+Selecting Check for update in the TLink settings cog and completing one Samsung test with an existing customer, a multi-locality postcode and the email-invite option is the remaining physical-device and real-inbox gate.
+
+## Previous released milestone: TLINK-FIELD-APP-71
 
 Release status: application and mobile update commit `746df6d1ffe3fb8cfe9c8e6deab0d52516e65488` is validated, pushed to branch `codex/tlink-field-app` and the Sites managed source branch, deployed as public Sites version 403, and published as Android preview update `01a03475-deab-7cce-93b2-6f9afa26b287` for runtime 1.0.1. Saved version `appgprj_6a550c378000819185caf094173422bb~appgver_fae830ad12dc8191873f5bde961b51c9` and deployment `appgdep_6a8c68f328b88191b2c2a6d4ce53a7f4` report the exact source and environment revision 28. Signed TLink Android build `233c6924-48ca-4417-abd8-9447135ad74f` remains compatible version 1.0.1 build 2.
 
@@ -3415,11 +3434,11 @@ The foundation passed `npm.cmd run validate`, including all 36 integration tests
 
 ## Next five logical product steps
 
-1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.
-2. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
-3. Reconcile the client service schedule and obtain licensed-practitioner review of optional electrical, gas and smoke-alarm declarations, test logic, exclusions and completion rules.
-4. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
-5. Replace the internal test APK with the approved permanent distribution lifecycle, or refresh it before 7 September 2026, while retaining the in-app update check and signed full-build fallback.
+1. On Samsung, open the top-right cog, choose Check for update, restart into update `01a034a8-58e9-75f9-9f2f-728fa6b059b8`, then create one test job using an existing customer, a postcode with multiple valid localities, a non-hour duration and the customer-invite checkbox.
+2. Add a durable customer-invite delivery ledger with authenticated Resend callback reconciliation, safe retry and clear office-visible delivered, bounced and failed states.
+3. Extend saved-customer selection to several service properties and a permission-bounded add-new-property path without exposing the customer directory to field-only users.
+4. Add an operations review queue for public rental requests so staff can triage, deduplicate, contact and deliberately convert an accepted request into a TLink job.
+5. Run a supervised test-property issue and share rehearsal covering section recovery, optional scopes, full PDF, 60-day link, revocation and supersede.
 
 ## Global stop conditions
 
