@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-68` is validated, pushed and deployed publicly as Sites version 400; signed TLink Android test build 1.0.1 build 2 and Google Apps Script relay version 16 remain live.
+Status: `TLINK-FIELD-APP-69` is in progress. Sites version 400 and signed TLink Android test build 1.0.1 build 2 remain the current releases while installed-version reporting and signed-out update access are corrected.
 
 Prepared: 25 August 2026
 
-Milestone ID: `TLINK-FIELD-APP-68`
+Milestone ID: `TLINK-FIELD-APP-69`
 
 Working branch: `codex/tlink-field-app`
 
@@ -27,6 +27,16 @@ Current Android build: `233c6924-48ca-4417-abd8-9447135ad74f`, Expo project `@au
 Current Google Apps Script relay: version 16 on deployment `AKfycbxBjHL_I3aw0FsGkOVaUDic6AwW1W0ItuxadP1NF-0NolTwLahYnc9PsGpPAdv2tMqW`; source SHA-256 `a57866eaa403c3b15c5c2ea469e9dd17dfc2dff556f89656acdc27d80e34c55a`.
 
 Current migration inventory: 161 migrations through `0162_trade_field_username.sql`
+
+## Active task contract
+
+- User outcome: the installed TLink 1.0.1 Android build can redeem its PIN without a false update block, and update controls are always reachable from the signed-out startup screen.
+- Owning workflow: native field-app version reporting, signed-out startup settings and the existing EAS Update/release-policy path.
+- In scope: derive the request version from the installed native application, add an accessible top-right settings cog, expose check for update, secure full-build install and current version/build details, and publish a compatible preview-channel update plus the matching Sites source release.
+- Out of scope: new native dependencies, a new Android binary, app-store submission, authentication-policy weakening, field workflow redesign and iOS distribution.
+- Acceptance: the native request reports 1.0.1 for build 2, the server's existing 1.0.1 minimum remains enforced, signed-out update checking works without authentication, the settings panel is usable at phone width, existing signed-in settings remain available, and exact-source validation and release provenance pass.
+- Validation: focused field-access and mobile tests, mobile typecheck, lint, Android export, root typecheck, complete root validation, compatible EAS Update publication, Sites release, custom-domain route checks and post-release error-log review.
+- Stop condition: stop for owner direction if delivery requires a new native capability, store credential, destructive data change or a lower minimum-version policy.
 
 ## Outcome
 

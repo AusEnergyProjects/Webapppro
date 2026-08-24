@@ -63,9 +63,11 @@ test("field sessions are one-time, device-bound, server-secret hashed and routed
 });
 
 test("the field calendar, self-intake, update control and TLink app entry remain connected", async () => {
-  const [calendar, newJob, settings, dashboard, appPage, crmRoute] = await Promise.all([
+  const [calendar, newJob, signIn, config, settings, dashboard, appPage, crmRoute] = await Promise.all([
     read("mobile/src/app/(tabs)/work.tsx"),
     read("mobile/src/app/new-job.tsx"),
+    read("mobile/src/app/index.tsx"),
+    read("mobile/src/lib/config.ts"),
     read("mobile/src/app/(tabs)/settings.tsx"),
     read("src/components/DirectTradeDashboard.tsx"),
     read("src/app/direct-trade/field-app/page.tsx"),
@@ -75,6 +77,13 @@ test("the field calendar, self-intake, update control and TLink app entry remain
   assert.match(calendar, /router\.push\('\/new-job'\)/);
   assert.match(newJob, /rentalInspectionModulesJson/);
   assert.match(newJob, /assigneeMemberId: user\?\.memberId/);
+  assert.match(signIn, /accessibilityLabel="Open TLink settings"/);
+  assert.match(signIn, /Check for update/);
+  assert.match(signIn, /Open secure install page/);
+  assert.match(signIn, /Application\.nativeBuildVersion/);
+  assert.match(config, /Application\.nativeApplicationVersion/);
+  assert.match(config, /Constants\.expoConfig\?\.version/);
+  assert.doesNotMatch(config, /APP_VERSION = '1\.0\.0'/);
   assert.match(settings, /Check for update/);
   assert.match(dashboard, /tlink-get-app[\s\S]*Get the app/);
   assert.match(appPage, /one-time field app PIN/);
