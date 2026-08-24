@@ -7,6 +7,7 @@ const appConfig = read("../mobile/app.json");
 const database = read("../mobile/src/lib/database.ts");
 const encryption = read("../mobile/src/lib/encrypted-files.ts");
 const sync = read("../mobile/src/lib/sync.ts");
+const api = read("../mobile/src/lib/api.ts");
 const uploads = read("../mobile/src/lib/uploads.ts");
 const background = read("../mobile/src/lib/background.ts");
 const device = read("../mobile/src/lib/device.ts");
@@ -76,6 +77,20 @@ test("sync registers the device, safely replays work and handles revocation", ()
   assert.match(provider, /NetInfo\.addEventListener/);
   assert.match(provider, /addNotificationResponseReceivedListener/);
   assert.match(provider, /addPushTokenListener/);
+});
+
+test("post-PIN access verification cannot stall before the secure API", () => {
+  assert.match(provider, /NETWORK_STATUS_TIMEOUT_MS = 1_500/);
+  assert.match(provider, /Promise\.race\(\[NetInfo\.fetch\(\)\.catch\(\(\) => null\), fallback\]\)/);
+  assert.match(provider, /const verified = await verifyFieldAccess\(\);[\s\S]{0,300}setAccess\(approvedAccess\);\s*await prepareLocalDataOwner\(localOwnerKey\)/);
+  assert.match(provider, /updateFieldPrincipalDisplayName\(verified\.fieldUsername\)/);
+  assert.match(provider, /setLoading\(false\);[\s\S]{0,120}void syncNow\(\);/);
+  assert.match(api, /JSON_REQUEST_TIMEOUT_MS = 20_000/);
+  assert.match(api, /controller\.abort\(\)/);
+  assert.match(api, /'NETWORK_TIMEOUT'/);
+  assert.match(sync, /MAX_SYNC_PAGES = 100/);
+  assert.match(sync, /response\.hasMore && nextCursor === cursor/);
+  assert.match(sync, /'SYNC_CURSOR_STALLED'/);
 });
 
 test("technician UI stays focused while retaining full field capability", () => {

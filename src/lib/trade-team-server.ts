@@ -16,6 +16,7 @@ export type TeamAccess = {
   actorEmail: string;
   memberId: string;
   displayName: string;
+  fieldUsername?: string;
   isOwner: boolean;
   businessName: string;
   canCreateJobs: boolean;

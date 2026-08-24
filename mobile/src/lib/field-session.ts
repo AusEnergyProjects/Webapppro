@@ -49,6 +49,18 @@ export async function saveFieldSession(token: string, principal: Omit<FieldPrinc
   return saved;
 }
 
+export async function updateFieldPrincipalDisplayName(displayName: string) {
+  const principal = await getFieldPrincipal();
+  const nextDisplayName = displayName.trim();
+  if (!principal || principal.authMode !== 'field_pin' || !nextDisplayName
+    || principal.displayName === nextDisplayName) return principal;
+  const updated = { ...principal, displayName: nextDisplayName };
+  await SecureStore.setItemAsync(FIELD_PRINCIPAL_KEY, JSON.stringify(updated), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  return updated;
+}
+
 export async function clearFieldSession() {
   await Promise.all([
     SecureStore.deleteItemAsync(FIELD_TOKEN_KEY),

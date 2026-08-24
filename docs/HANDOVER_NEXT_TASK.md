@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: `TLINK-FIELD-APP-69` is validated, pushed and deployed publicly as Sites version 401; Android preview update `01a0343d-d384-792b-b122-df41534dd69b`, signed TLink build 1.0.1 build 2 and Google Apps Script relay version 16 are current.
+Status: `TLINK-FIELD-APP-70` is in progress. It repairs the post-PIN access-check stall confirmed on Samsung after the field session was created but before the first authenticated access request.
 
 Prepared: 25 August 2026
 
-Milestone ID: `TLINK-FIELD-APP-69`
+Milestone ID: `TLINK-FIELD-APP-70`
 
 Working branch: `codex/tlink-field-app`
 

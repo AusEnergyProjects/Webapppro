@@ -112,6 +112,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
     actorEmail: String(row.email || ""),
     memberId,
     displayName: String(row.display_name || "Field worker"),
+    fieldUsername: String(row.field_username || ""),
     isOwner: false,
     businessName: String(row.business_name || "Installer business"),
     canCreateJobs: Boolean(row.can_create_jobs),
@@ -140,7 +141,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
   } as TeamAccess & { fieldSessionId: string };
 }
 
-const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.display_name,
+const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.display_name, m.field_username,
   m.can_create_jobs, m.can_manage_jobs, m.can_assign_jobs, m.job_scope,
   m.can_view_customers, m.can_manage_customers, m.can_view_quotes, m.can_manage_quotes,
   m.can_send_quotes, m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book,
@@ -313,7 +314,7 @@ export async function redeemFieldSetupPin(input: {
     principal: {
       ownerId: access.ownerUid,
       memberId: access.memberId,
-      displayName: access.displayName,
+      displayName: String(matched.field_username || access.displayName),
       email: access.actorEmail,
       businessName: access.businessName,
       permissions: {

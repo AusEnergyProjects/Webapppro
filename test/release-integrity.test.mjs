@@ -89,7 +89,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus:[\s\S]{0,360}Prepared: 25 August 2026/);
   assert.match(
     handover,
-    /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-69`[\s\S]{0,360}Prepared: 25 August 2026/,
+    /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-70`[\s\S]{0,360}Prepared: 25 August 2026/,
   );
   assert.match(handover, /Current production: Sites version 401/);
   assert.match(releaseTruth, /Last reconciled locally: 25 August 2026/);
@@ -1040,8 +1040,8 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-69`/);
-  assert.match(currentHandover, /Milestone ID: `TLINK-FIELD-APP-69`/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus: `TLINK-FIELD-APP-70`/);
+  assert.match(currentHandover, /Milestone ID: `TLINK-FIELD-APP-70`/);
   assert.match(currentHandover, /Working branch: `codex\/tlink-field-app`/);
   assert.match(currentHandover, /Current-main integration baseline: `6fa65d7233266f71b0ab2583f6977613d01126ac`/);
   assert.match(currentHandover, /Original rental workflow commit: `724218fc90f7c4c741721ba443f8ba00c21ef431`/);

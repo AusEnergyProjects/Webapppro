@@ -33,9 +33,10 @@ import {
   getFieldPrincipal,
   getFieldSessionToken,
   saveFieldSession,
+  updateFieldPrincipalDisplayName,
   type FieldPrincipal,
 } from '@/lib/field-session';
-import { localSyncOutcome, resolveFieldAccessModes, runSync, type SyncOutcome } from '@/lib/sync';
+import { localSyncOutcome, resolveFieldAccessModes, runSync, verifyFieldAccess, type SyncOutcome } from '@/lib/sync';
 import type { FieldAccessMode, FieldJob, OfflineAction } from '@/lib/types';
 
 type UploadInput = {
@@ -77,6 +78,18 @@ const emptySync: AppValue['sync'] = {
 };
 
 const AppContext = createContext<AppValue | null>(null);
+const NETWORK_STATUS_TIMEOUT_MS = 1_500;
+
+async function networkAvailable() {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const fallback = new Promise<null>((resolve) => {
+    timeout = setTimeout(() => resolve(null), NETWORK_STATUS_TIMEOUT_MS);
+  });
+  const state = await Promise.race([NetInfo.fetch().catch(() => null), fallback]);
+  if (timeout) clearTimeout(timeout);
+  if (!state) return true;
+  return state.isConnected !== false && state.isInternetReachable !== false;
+}
 
 function shouldRevalidateFieldAccess(error: unknown): error is ApiError {
   return error instanceof ApiError && [401, 403, 404].includes(error.status);
@@ -156,18 +169,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fieldPrincipal = await getFieldPrincipal();
     const currentUser = firebaseAuth.currentUser;
     if (!fieldPrincipal && !currentUser) return;
-    await prepareLocalDataOwner(fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`);
-    const network = await NetInfo.fetch();
-    const online = network.isConnected !== false && network.isInternetReachable !== false;
+    const localOwnerKey = fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`;
+    const online = await networkAvailable();
     if (!online) {
-      const local = await localSyncOutcome();
-      setSync((value) => ({ ...value, ...local, online: false }));
+      const local = await prepareLocalDataOwner(localOwnerKey)
+        .then(() => localSyncOutcome())
+        .catch(() => ({
+          ...emptySync,
+          message: 'Reconnect so TLink can prepare secure field work on this device.',
+        }));
+      setSync((value) => ({ ...value, ...local, running: false, online: false }));
       setAccess((value) => value.status === 'approved' ? value : networkVerificationRequired);
       return;
     }
     setSync((value) => ({ ...value, running: true, online: true, message: 'Syncing secure field work...' }));
     try {
-      const result = await runSync();
+      const verified = await verifyFieldAccess();
+      if (fieldPrincipal && verified.fieldUsername) {
+        const updatedPrincipal = await updateFieldPrincipalDisplayName(verified.fieldUsername);
+        if (updatedPrincipal) setUser(updatedPrincipal);
+      }
+      setAccess(approvedAccess);
+      await prepareLocalDataOwner(localOwnerKey);
+      const result = await runSync(verified.modes);
       setSync((value) => ({ ...value, ...result, running: false, online: true }));
       setJobs(await listJobs());
       setAccess(approvedAccess);
@@ -199,15 +223,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
     setJobs([]);
     setAccess(checkingAccess);
-    try {
-      await registerBackgroundSync().catch(() => undefined);
-      await syncNow();
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
+    void registerBackgroundSync().catch(() => undefined);
+    void syncNow();
   }), [syncNow]);
 
   useEffect(() => {
@@ -283,13 +303,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const principal = await saveFieldSession(response.token, response.principal);
     setUser(principal);
     setAccess(checkingAccess);
-    setLoading(true);
-    try {
-      await registerBackgroundSync().catch(() => undefined);
-      await syncNow();
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
+    void registerBackgroundSync().catch(() => undefined);
+    void syncNow();
   }, [syncNow]);
 
   const signOut = useCallback(async () => {

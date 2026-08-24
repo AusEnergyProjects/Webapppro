@@ -55,6 +55,8 @@ test("field sessions are one-time, device-bound, server-secret hashed and routed
   assert.match(server, /sha256\(`\$\{normalizedName\}\\n\$\{clientAddress\}`\)/);
   assert.doesNotMatch(server, /sha256\(`\$\{input\.deviceId\}\\n\$\{normalizedName\}/);
   assert.match(server, /field-member:\$\{memberId\}/);
+  assert.match(server, /displayName: String\(matched\.field_username \|\| access\.displayName\)/);
+  assert.match(server, /fieldUsername: String\(row\.field_username \|\| ""\)/);
   assert.match(team, /isFieldSessionRequest\(request\)/);
   assert.match(sessionRoute, /readBoundedJsonRequest/);
   assert.match(sessionRoute, /APP_UPDATE_REQUIRED/);
