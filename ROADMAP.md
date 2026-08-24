@@ -3338,11 +3338,11 @@ Recalculate saved-context guidance whenever the allowlisted profile changes so r
 
 Exact application source `8d887f867269a157d84928fb553eac4951ed517b` passed the full validation gate and was pushed to GitHub and Sites managed `main`. Sites saved it as version 389 under `appgprj_6a550c378000819185caf094173422bb~appgver_dd2b493446408191b9b4b321d682d39b` and deployed it publicly through `appgdep_6a898f2b620c81918109cac63f954590` at environment revision 24. Live desktop QA confirmed 45 of 45 saved responses and no moisture advice after moisture was removed. Live phone QA confirmed compact secondary drawers, a visible composer and no horizontal overflow.
 
-## Locally validated milestone: AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82
+## Released milestone: AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82
 
 Complete the requested five priorities with a fail-closed source-approval hash registry, a reviewed 20-case conversation corpus and aggregate quality gate, deterministic session continuity rehearsal, separate home, Surge, plan and calculator JavaScript and stylesheet graph budgets, and expanded practical-tip, product, certificate, brand-comparison and context-clarification regressions.
 
-The candidate passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact deployment identity and live browser acceptance remain pending release reconciliation in [release truth](./docs/RELEASE_TRUTH.md).
+Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. It was pushed to GitHub and Sites managed `main`, packaged, saved as Sites version 392 under `appgprj_6a550c378000819185caf094173422bb~appgver_dc5db73a1b708191ad47cfd0847bb8d2` and deployed successfully through `appgdep_6a8bee30af108191b5d8db124c788fc0`. Live desktop and phone acceptance passed on the custom domain.
 
 ## Next five logical product steps
 

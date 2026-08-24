@@ -1,6 +1,6 @@
 # Next task handover
 
-Status: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated and ready for an exact Sites release. Current production remains public Sites version 391 until the release identity below is reconciled.
+Status: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is released as public Sites version 392 from exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`.
 
 Prepared: 24 August 2026
 
@@ -8,21 +8,21 @@ Milestone ID: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82`
 
 Working branch: `codex/job-schedule-week-calendar`
 
-Current production application source: `0944c9b91765535b873b30029f545bde8f744831`
+Current production application source: `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`
 
 Performance foundation commit: `bd27d65f98b80b673c5ffc9812b9bc92bd78f9a4`
 
-Current production: Sites version 391 at `https://compare.ausenergyassessments.com`
+Current production: Sites version 392 at `https://compare.ausenergyassessments.com`
 
-Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc`
+Current saved version: `appgprj_6a550c378000819185caf094173422bb~appgver_dc5db73a1b708191ad47cfd0847bb8d2`
 
-Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`
+Current deployment: `appgdep_6a8bee30af108191b5d8db124c788fc0`
 
 Current environment revision: 24
 
-Release-candidate migration inventory: 158 migrations through `0159_surge_conversation_quality_dimensions.sql`
+Current migration inventory: 158 migrations through `0159_surge_conversation_quality_dimensions.sql`
 
-## Locally validated milestone: governed sources, conversation quality, continuity and route budgets
+## Released milestone: governed sources, conversation quality, continuity and route budgets
 
 This milestone completes the requested five priorities without storing customer conversation content or weakening any current-fact boundary.
 
@@ -32,9 +32,9 @@ This milestone completes the requested five priorities without storing customer 
 - Home, Surge, plan and calculator routes now have separate JavaScript and stylesheet graph budgets measured from the production build.
 - The practical-tip and conversation regression set covers low-cost draught measures, reverse-cycle heating, evaporative-cooling vent covers, solar and tariff load shifting, heat-pump clothes dryers, exact-product questions and governed certificate answers.
 
-### Local validation evidence
+### Validation and release evidence
 
-- `npm.cmd run validate` completed with exit code 0 on the release candidate.
+- `npm.cmd run validate` completed with exit code 0 against exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7`.
 - All 36 integration tests and the complete repository test suite passed.
 - Fresh D1 migration verification passed through `0159_surge_conversation_quality_dimensions.sql`.
 - Official-source approval audit passed for 32 of 32 volatile sources.
@@ -42,6 +42,11 @@ This milestone completes the requested five priorities without storing customer 
 - Session continuity rehearsal passed.
 - Production build, Sites server-bundle audit, customer-plan PDF audit and public performance budgets passed.
 - Route graphs were measured at home 291,663 bytes JavaScript and 1,385 bytes CSS, Surge 561,624 and 37,285, plan 508,969 and 27,524, and calculator 458,978 and 43,470.
+- Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` was pushed to the working branch, GitHub `main` and Sites managed `main` before packaging.
+- The matching local archive is 12,225,380 bytes with SHA-256 `757DE1B28A317C795C5C539BD3EEE183248D196DEE3292471205580D29C65E22`.
+- Sites saved version 392 as `appgprj_6a550c378000819185caf094173422bb~appgver_dc5db73a1b708191ad47cfd0847bb8d2`, storing 484 files and 44,595,200 bytes with content hash `sha256:e01fa4d43a5e69bb67344a3549ff50f6282f6b2d45953098f12a6c9508370894`.
+- Deployment `appgdep_6a8bee30af108191b5d8db124c788fc0` succeeded at environment revision 24 through provider deployment `info294029--aea-energy-comparison`.
+- Live desktop QA passed on home, Surge, plan and calculator. Live 390 by 844 phone QA confirmed the compact scrolling header, collapsed secondary Surge rails, readable home copy and no horizontal overflow. Tested routes reported no browser console errors.
 
 ### Boundaries
 
@@ -50,7 +55,7 @@ This milestone completes the requested five priorities without storing customer 
 - Route budgets now fail the release when a graph grows beyond its allowance. Further stylesheet and graph splitting remains separate optimisation work.
 - Product and certificate responses remain limited to maintained official registries and deterministic calculators. Missing, stale or unsupported facts still fail closed.
 
-## Released milestone: grounded product and certificate guidance
+## Previous released milestone: grounded product and certificate guidance
 
 This follow-on release grounds supported product, brand, model, rebate and certificate questions in the maintained official registry and governed calculation paths. The resolver is generic across supported public product categories and brands and does not hardcode Reclaim, iStore or another vendor as a special case.
 

@@ -10,17 +10,32 @@ Deployment evidence last verified: 24 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
-## Validated release candidate: governed sources, conversation quality, continuity and route budgets
+## Current production release: governed sources, conversation quality, continuity and route budgets
 
-Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated. Production remains Sites version 391 until the exact application commit, saved version, deployment and live acceptance evidence are added here.
+Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is deployed from exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` as public Sites version 392 at `https://compare.ausenergyassessments.com`.
 
-The candidate completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
+The release completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
 
 `npm.cmd run validate` passed with all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites server-bundle audit and public performance budgets. The source-approval audit passed 32 of 32 volatile sources. The conversation-quality aggregate passed 20 of 20 reviewed cases across all 10 dimensions. The continuity rehearsal passed. Measured route graphs are home 291,663 bytes JavaScript and 1,385 bytes CSS, Surge 561,624 and 37,285, plan 508,969 and 27,524, and calculator 458,978 and 43,470.
 
+| Release evidence | Exact identity |
+| --- | --- |
+| Application source | `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` |
+| Sites project | `appgprj_6a550c378000819185caf094173422bb` |
+| Saved version | `appgprj_6a550c378000819185caf094173422bb~appgver_dc5db73a1b708191ad47cfd0847bb8d2` |
+| Public version | Sites version 392 |
+| Deployment | `appgdep_6a8bee30af108191b5d8db124c788fc0` with status `succeeded` |
+| Provider deployment | `info294029--aea-energy-comparison` |
+| Hosted environment | Revision 24 |
+| Stored package | 484 files and 44,595,200 bytes, content hash `sha256:e01fa4d43a5e69bb67344a3549ff50f6282f6b2d45953098f12a6c9508370894` |
+| Local release archive | 12,225,380 bytes, SHA-256 `757DE1B28A317C795C5C539BD3EEE183248D196DEE3292471205580D29C65E22` |
+| Custom domain | `https://compare.ausenergyassessments.com` |
+
+Live desktop acceptance passed on home, Surge, plan and calculator. Live 390 by 844 phone acceptance confirmed the compact scrolling header, readable home hero, collapsed context and guidance rails, and the active setup content first. The checked routes reported no browser console errors.
+
 This does not claim scheduled remote-byte retrieval, human approval of future upstream changes, deployed-model corpus execution, real-browser cross-session continuity, or completed stylesheet splitting. Those remain in the next five.
 
-## Current production release: grounded product and certificate guidance
+## Previous production release: grounded product and certificate guidance
 
 Application source `0944c9b91765535b873b30029f545bde8f744831` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 391 at `https://compare.ausenergyassessments.com`.
 
