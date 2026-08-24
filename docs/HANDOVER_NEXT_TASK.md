@@ -1,10 +1,10 @@
 # Next task handover
 
-Status: Grounded product and certificate guidance is released as public Sites version 391. Priority 1 is governed official-change operations; Priority 2 is continuous conversation-quality enforcement.
+Status: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated and ready for an exact Sites release. Current production remains public Sites version 391 until the release identity below is reconciled.
 
 Prepared: 24 August 2026
 
-Milestone ID: `AEA-SURGE-PRACTICAL-ASSESSOR-GUIDANCE-81`
+Milestone ID: `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82`
 
 Working branch: `codex/job-schedule-week-calendar`
 
@@ -20,7 +20,35 @@ Current deployment: `appgdep_6a8af0d5ca1081919f3c86b55f68a163`
 
 Current environment revision: 24
 
-Current migration inventory: 157 migrations through `0158_remove_surge_account_context.sql`
+Release-candidate migration inventory: 158 migrations through `0159_surge_conversation_quality_dimensions.sql`
+
+## Locally validated milestone: governed sources, conversation quality, continuity and route budgets
+
+This milestone completes the requested five priorities without storing customer conversation content or weakening any current-fact boundary.
+
+- All 32 volatile official sources now require an identified, current review-role approval whose SHA-256 matches the canonical maintained evidence record. A missing, overdue or changed approval fails closed.
+- The reviewed conversation corpus now contains 20 approved cases across 10 dimensions, including practical guidance, product specifications, certificate coverage, neutral brand comparison and context clarification. The aggregate release report requires one reviewed result for every corpus case and stores no transcript.
+- Deterministic session-selection rehearsal covers persistent same-browser context, newer incomplete duplicate tabs and newer conversation state. It exercises the pure merge boundary used by the Surge client.
+- Home, Surge, plan and calculator routes now have separate JavaScript and stylesheet graph budgets measured from the production build.
+- The practical-tip and conversation regression set covers low-cost draught measures, reverse-cycle heating, evaporative-cooling vent covers, solar and tariff load shifting, heat-pump clothes dryers, exact-product questions and governed certificate answers.
+
+### Local validation evidence
+
+- `npm.cmd run validate` completed with exit code 0 on the release candidate.
+- All 36 integration tests and the complete repository test suite passed.
+- Fresh D1 migration verification passed through `0159_surge_conversation_quality_dimensions.sql`.
+- Official-source approval audit passed for 32 of 32 volatile sources.
+- Conversation-quality reporting passed 20 of 20 reviewed cases across all 10 required dimensions with no coverage errors.
+- Session continuity rehearsal passed.
+- Production build, Sites server-bundle audit, customer-plan PDF audit and public performance budgets passed.
+- Route graphs were measured at home 291,663 bytes JavaScript and 1,385 bytes CSS, Surge 561,624 and 37,285, plan 508,969 and 27,524, and calculator 458,978 and 43,470.
+
+### Boundaries
+
+- The approval hash covers the canonical maintained evidence record. Scheduled retrieval of retained remote bytes and human approval of future upstream changes remains the next governed-source step.
+- The continuity rehearsal is deterministic source-level coverage. A real-browser duplicate-tab, close, reopen and storage-failure matrix remains next.
+- Route budgets now fail the release when a graph grows beyond its allowance. Further stylesheet and graph splitting remains separate optimisation work.
+- Product and certificate responses remain limited to maintained official registries and deterministic calculators. Missing, stale or unsupported facts still fail closed.
 
 ## Released milestone: grounded product and certificate guidance
 
@@ -288,11 +316,11 @@ Connect the bounded official-change queue to scheduled official hash checks and 
 
 ## Next five logical product steps
 
-1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
-2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
-3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
-4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
-5. Expand the reviewed practical-tip, product-specification and certificate-answer coverage across supported categories and brands, together with the context-mutation regression matrix for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
+1. Schedule retained-byte retrieval for all 32 volatile official sources and require named human review before a changed hash can become answer authority.
+2. Run the reviewed conversation corpus against the deployed assistant in CI and publish a privacy-safe aggregate operator trend with no customer transcript or identity.
+3. Add real-browser continuity rehearsals across route changes, duplicate tabs, close and reopen, storage failure and recovery.
+4. Split the remaining shared stylesheet and JavaScript graphs by public, customer, trade and Creditex ownership, then reduce the enforced route budgets from measured evidence.
+5. Expand independently reviewed official product, certificate and practical-guidance vectors across supported jurisdictions and categories, including context-mutation tests for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Historical release handovers
 

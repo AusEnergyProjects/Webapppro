@@ -42,6 +42,7 @@ import { createHomeEnergyPlannerPublicPlanSnapshot } from "@/lib/home-energy-pla
 import { takePendingSurgeDraft } from "@/lib/surge-page-navigation";
 import { homeContextTips } from "@/lib/surge-home-context-tips";
 import { recordSurgeProfileStorageHealth } from "@/lib/surge-profile-storage-health";
+import { preferSurgeConversation, preferSurgeProfile } from "@/lib/surge-session-continuity";
 import {
   ENERGY_ASSISTANT_MATCHING_EXPLANATION,
   ENERGY_ASSISTANT_MATCHING_PRIVACY_EXPLANATION,
@@ -752,27 +753,22 @@ function savedConversationActivity(session: SavedConversation) {
   return timestamps.length ? Math.max(...timestamps) : Number.NEGATIVE_INFINITY;
 }
 
+function savedContinuityMetrics(session: SavedConversation) {
+  return {
+    reviewedAnswers: surgeProfileReviewedAnswerCount(session.profile),
+    knownAnswers: surgeProfileKnownAnswerCount(session.profile),
+    completed: session.profile.completed,
+    conversationActivityAt: savedConversationActivity(session),
+    profileUpdatedAt: new Date(session.profileUpdatedAt || "").getTime(),
+  };
+}
+
 function savedConversationIsPreferred(candidate: SavedConversation, current: SavedConversation) {
-  const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
-  const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
-  if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
-  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
-  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
-  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
-  if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
-  return savedConversationActivity(candidate) > savedConversationActivity(current);
+  return preferSurgeConversation(savedContinuityMetrics(candidate), savedContinuityMetrics(current));
 }
 
 function savedProfileIsPreferred(candidate: SavedConversation, current: SavedConversation) {
-  const candidateReviewed = surgeProfileReviewedAnswerCount(candidate.profile);
-  const currentReviewed = surgeProfileReviewedAnswerCount(current.profile);
-  if (candidateReviewed !== currentReviewed) return candidateReviewed > currentReviewed;
-  const candidateKnown = surgeProfileKnownAnswerCount(candidate.profile);
-  const currentKnown = surgeProfileKnownAnswerCount(current.profile);
-  if (candidateKnown !== currentKnown) return candidateKnown > currentKnown;
-  if (candidate.profile.completed !== current.profile.completed) return candidate.profile.completed;
-  return new Date(candidate.profileUpdatedAt || "").getTime()
-    > new Date(current.profileUpdatedAt || "").getTime();
+  return preferSurgeProfile(savedContinuityMetrics(candidate), savedContinuityMetrics(current));
 }
 
 function accessBrowserStorage<T>(operation: (storage: Storage) => T, fallback: T): T {

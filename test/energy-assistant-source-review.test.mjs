@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildOfficialSourceReviewQueue,
+  canonicalOfficialSourceEvidence,
   sourceMayAnswerCurrentFact,
 } from "../src/lib/energy-assistant-source-review.ts";
+import { createHash } from "node:crypto";
 
 function source(overrides = {}) {
   return {
@@ -43,7 +45,18 @@ test("changed and overdue sources enter the bounded review queue in priority ord
 
 test("volatile current facts fail closed after a detected change or missed review", () => {
   const current = source({ reviewDue: "2026-08-30" });
-  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22"), true);
-  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", true), false);
-  assert.equal(sourceMayAnswerCurrentFact(current, "2026-09-01"), false);
+  const hash = createHash("sha256").update(canonicalOfficialSourceEvidence(current)).digest("hex");
+  const approval = {
+    sourceId: current.id,
+    evidenceRecordSha256: hash,
+    approvedBy: "Independent reviewer",
+    approvedOn: "2026-08-22",
+    reviewDue: current.reviewDue,
+    status: "approved",
+  };
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22"), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, approval, hash), true);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", true, approval, hash), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, approval, "changed"), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-09-01", false, approval, hash), false);
 });

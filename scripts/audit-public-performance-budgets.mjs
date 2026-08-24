@@ -44,6 +44,18 @@ function graphBytes(manifest, key) {
   return [...graphAssets(manifest, key)].reduce((total, file) => total + assetBytes(file), 0);
 }
 
+function routeGraphBytes(manifest, key) {
+  const javascript = new Set();
+  const css = new Set();
+  for (const dependency of collectStaticGraph(manifest, key)) {
+    const entry = requireEntry(manifest, dependency);
+    if (entry.file?.endsWith(".js")) javascript.add(entry.file);
+    for (const stylesheet of entry.css || []) css.add(stylesheet);
+  }
+  const total = (files) => [...files].reduce((sum, file) => sum + assetBytes(file), 0);
+  return { javascript: total(javascript), css: total(css) };
+}
+
 if (!fs.existsSync(manifestPath)) fail("run the production build before this audit");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const lazy = requireEntry(manifest, "src/components/LazyEnergyAssistantWidget.tsx");
@@ -54,6 +66,18 @@ const surfaceEntries = {
   customer: "src/components/CustomerDashboard.tsx",
   trade: "src/components/DirectTradeDashboard.tsx",
   creditex: "src/components/CreditexCompliancePortal.tsx",
+};
+const routeEntries = {
+  home: "src/components/LazyEnergyAssistantWidget.tsx",
+  surge: "src/components/EnergyAssistantWidget.tsx",
+  plan: "src/components/HomeEnergyPlanner.tsx",
+  calculator: "src/components/PublicRebateCalculatorWorkspace.tsx",
+};
+const routeBudgets = {
+  home: { javascript: 305_000, css: 2_000 },
+  surge: { javascript: 585_000, css: 40_000 },
+  plan: { javascript: 530_000, css: 30_000 },
+  calculator: { javascript: 480_000, css: 46_000 },
 };
 
 if (!lazy.dynamicImports?.includes("src/components/EnergyAssistantWidget.tsx")) {
@@ -108,6 +132,17 @@ for (const [surface, maximum] of Object.entries({
   }
 }
 
+const routeBytes = Object.fromEntries(
+  Object.entries(routeEntries).map(([route, key]) => [route, routeGraphBytes(manifest, key)]),
+);
+for (const [route, budgets] of Object.entries(routeBudgets)) {
+  for (const assetType of ["javascript", "css"]) {
+    if (routeBytes[route][assetType] > budgets[assetType]) {
+      fail(`${route} ${assetType} graph is ${routeBytes[route][assetType]} bytes; budget is ${budgets[assetType]}`);
+    }
+  }
+}
+
 for (const [file, maximum] of [
   ["aea-immersive-home-journey.webp", 150_000],
   ["surge-mascot.webp", 100_000],
@@ -118,4 +153,5 @@ for (const [file, maximum] of [
 
 console.log(
   `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, global CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, customer ${surfaceBytes.customer}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex} bytes.`,
+  `Route graphs: ${Object.entries(routeBytes).map(([route, bytes]) => `${route} JS ${bytes.javascript}, CSS ${bytes.css}`).join("; ")}.`,
 );

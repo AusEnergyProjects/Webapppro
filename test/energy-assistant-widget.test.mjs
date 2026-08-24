@@ -475,14 +475,8 @@ test("Surge keeps the most complete, newest home context synchronized across bro
   assert.match(widget, /saved\.profile\.completed[\s\S]*setProfileEditing\(false\)/);
   assert.match(widget, /function savedConversationIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
   assert.match(widget, /function savedProfileIsPreferred\(candidate: SavedConversation, current: SavedConversation\)/);
-  assert.match(widget, /candidateReviewed !== currentReviewed[\s\S]*candidateReviewed > currentReviewed/);
-  assert.match(widget, /candidateKnown !== currentKnown[\s\S]*candidateKnown > currentKnown/);
-  assert.ok(
-    widget.indexOf("candidateReviewed !== currentReviewed") < widget.indexOf("candidateKnown !== currentKnown"),
-    "all reviewed answers, including explicit Not sure answers, must be preserved before known-answer count",
-  );
-  assert.match(widget, /candidate\.profile\.completed !== current\.profile\.completed/);
-  assert.match(widget, /savedConversationActivity\(candidate\) > savedConversationActivity\(current\)/);
+  assert.match(widget, /preferSurgeConversation\(savedContinuityMetrics\(candidate\), savedContinuityMetrics\(current\)\)/);
+  assert.match(widget, /preferSurgeProfile\(savedContinuityMetrics\(candidate\), savedContinuityMetrics\(current\)\)/);
   assert.match(widget, /if \(!savedConversationIsPreferred\(saved, current\)\) return/);
   assert.match(widget, /updateSurgeProfileField\(profileRef\.current, field, value, checked\)/);
   assert.match(widget, /profileUpdatedAtRef\.current = nextProfileUpdatedAt/);

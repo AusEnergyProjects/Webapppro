@@ -1,0 +1,5 @@
+ALTER TABLE surge_conversation_quality_release_daily ADD COLUMN practical_guidance_pass_rate REAL;
+ALTER TABLE surge_conversation_quality_release_daily ADD COLUMN product_specification_pass_rate REAL;
+ALTER TABLE surge_conversation_quality_release_daily ADD COLUMN certificate_coverage_pass_rate REAL;
+ALTER TABLE surge_conversation_quality_release_daily ADD COLUMN brand_comparison_pass_rate REAL;
+ALTER TABLE surge_conversation_quality_release_daily ADD COLUMN context_clarification_pass_rate REAL;

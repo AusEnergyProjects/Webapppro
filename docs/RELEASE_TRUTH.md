@@ -10,6 +10,16 @@ Deployment evidence last verified: 24 August 2026
 
 This is the only current implementation and release-status document. The [dated complete audit](./audit/2026-07-21-complete-current-state/README.md) is the immutable evidence baseline. [ROADMAP.md](../ROADMAP.md) owns forward sequence. [HANDOVER_NEXT_TASK.md](./HANDOVER_NEXT_TASK.md) owns one executable milestone.
 
+## Validated release candidate: governed sources, conversation quality, continuity and route budgets
+
+Milestone `AEA-SURGE-GOVERNANCE-QUALITY-BUDGETS-82` is locally validated. Production remains Sites version 391 until the exact application commit, saved version, deployment and live acceptance evidence are added here.
+
+The candidate completes the requested five controls. Thirty-two volatile official sources require an identified, current review-role approval and a SHA-256 match against the canonical maintained evidence record. The reviewed conversation corpus contains 20 approved cases across 10 required dimensions and its aggregate release report requires exactly one result per case without storing customer transcript content. Deterministic session selection rehearses persistent context and conversation continuity. Home, Surge, plan and calculator routes have separately enforced JavaScript and CSS graph budgets. Reviewed regressions cover practical household tips, exact product questions, certificate coverage, brand-neutral comparisons and context clarification.
+
+`npm.cmd run validate` passed with all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites server-bundle audit and public performance budgets. The source-approval audit passed 32 of 32 volatile sources. The conversation-quality aggregate passed 20 of 20 reviewed cases across all 10 dimensions. The continuity rehearsal passed. Measured route graphs are home 291,663 bytes JavaScript and 1,385 bytes CSS, Surge 561,624 and 37,285, plan 508,969 and 27,524, and calculator 458,978 and 43,470.
+
+This does not claim scheduled remote-byte retrieval, human approval of future upstream changes, deployed-model corpus execution, real-browser cross-session continuity, or completed stylesheet splitting. Those remain in the next five.
+
 ## Current production release: grounded product and certificate guidance
 
 Application source `0944c9b91765535b873b30029f545bde8f744831` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 391 at `https://compare.ausenergyassessments.com`.
@@ -1029,11 +1039,11 @@ sent or received and no provider callback was reconciled.
 
 ## Next five logical product steps
 
-1. **Priority 1:** connect the bounded official-change queue to scheduled official hash checks and reviewer approvals, keeping changed or overdue facts fail-closed.
-2. **Priority 2:** run the reviewed conversation corpus in CI and an aggregate operator quality view, enforcing direct-answer, one-question, correction, source-status and privacy thresholds.
-3. Run controlled same-browser context continuity rehearsals across reloads, route changes, duplicate tabs and storage pressure, retaining aggregate-only failure evidence.
-4. Enforce route-specific JavaScript and stylesheet graph budgets while extracting the remaining shared stylesheet into public, customer, trade and Creditex chunks.
-5. Expand the reviewed practical-tip, product-specification and certificate-answer coverage across supported categories and brands, together with the context-mutation regression matrix for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
+1. Schedule retained-byte retrieval for all 32 volatile official sources and require named human review before a changed hash can become answer authority.
+2. Run the reviewed conversation corpus against the deployed assistant in CI and publish a privacy-safe aggregate operator trend with no customer transcript or identity.
+3. Add real-browser continuity rehearsals across route changes, duplicate tabs, close and reopen, storage failure and recovery.
+4. Split the remaining shared stylesheet and JavaScript graphs by public, customer, trade and Creditex ownership, then reduce the enforced route budgets from measured evidence.
+5. Expand independently reviewed official product, certificate and practical-guidance vectors across supported jurisdictions and categories, including context-mutation tests for climate, tenure, tariffs, heating, cooling, glazing, insulation and ventilation.
 
 ## Previous quote, job and invoice usability release
 
