@@ -14,6 +14,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     public readonly minimumVersion = '',
+    public readonly payload: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
@@ -94,6 +95,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
       response.status,
       String(body.code || ''),
       String(body.minimumVersion || ''),
+      body,
     );
     throw error;
   }
@@ -110,6 +112,7 @@ export async function publicApiRequest<T>(path: string, init: RequestInit = {}) 
     response.status,
     String(body.code || ''),
     String(body.minimumVersion || ''),
+    body,
   );
   return body as T;
 }

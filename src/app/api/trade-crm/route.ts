@@ -12,7 +12,7 @@ import { decodeKeysetCursor, encodeKeysetCursor, keysetAfter, type KeysetDirecti
 import { performanceJson, routeTimer } from "@/lib/route-performance";
 import { ftsPrefixQuery } from "@/lib/fts-search";
 import { appointmentEndsAt, assertAppointmentSlot, assertFutureAppointment, australiaLocalDateTime } from "@/lib/trade-schedule";
-import { findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
+import { directCustomerHasEmail, findDirectCustomerDuplicates } from "@/lib/trade-customer-dedup-server";
 import {
   assignedJob,
   canAssignJob,
@@ -22,6 +22,7 @@ import {
   type TeamAccess,
 } from "@/lib/trade-team-server";
 import { syncCreatedAppointmentToConnectedCalendars } from "@/lib/trade-calendar-sync-server";
+import { sendDirectAppointmentCalendarInvite } from "@/lib/direct-appointment-invite-server";
 import {
   autoOpenReadyPlannedComplianceWorkPacks,
   ComplianceDomainError,
@@ -1524,6 +1525,9 @@ export async function POST(request: Request) {
     if (customerActions.has(action) && !identity.access.canManageCustomers) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
     if (action === "find_customer_duplicates" && (!identity.access.canViewCustomers
       || !identity.access.canSearchCustomers)) throw new Error("CUSTOMER_SEARCH_REQUIRED");
+    if (action === "find_field_customer_by_email" && !canCreateJobs(identity.access)) {
+      throw new Error("JOB_CREATE_REQUIRED");
+    }
 
     if (action === "create_template") {
       const templateCount = await db.prepare("SELECT COUNT(*) count FROM trade_crm_job_templates WHERE firebase_uid = ? AND record_status = 'active'")
@@ -1553,6 +1557,14 @@ export async function POST(request: Request) {
         addressState: cleanAdminText(body.addressState, 10).toUpperCase(),
         postcode: cleanAdminText(body.postcode, 12),
       });
+      return adminJson({ ok: true, duplicateCandidates });
+    }
+
+    if (action === "find_field_customer_by_email") {
+      const email = cleanAdminText(body.email, 180).toLowerCase();
+      if (!EMAIL_PATTERN.test(email)) return adminJson({ ok: true, duplicateCandidates: [] });
+      const duplicateCandidates = (await findDirectCustomerDuplicates(db, identity.uid, { email }))
+        .filter((candidate) => candidate.reasons.includes("email"));
       return adminJson({ ok: true, duplicateCandidates });
     }
 
@@ -1693,8 +1705,14 @@ export async function POST(request: Request) {
       const customerMode = cleanAdminText(body.customerMode, 20);
       const serviceSiteMode = cleanAdminText(body.serviceSiteMode, 20);
       const createCustomer = customerMode === "new";
+      const boundedFieldCustomerAttach = guided
+        && !createCustomer
+        && Boolean(customerId)
+        && serviceSiteMode !== "new"
+        && identity.access.jobScope === "own";
       if ((customerId || (!createCustomer && serviceSiteMode === "new"))
-        && !identity.access.canManageCustomers) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
+        && !identity.access.canManageCustomers
+        && !boundedFieldCustomerAttach) throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
       const firstName = cleanAdminText(body.firstName, 80);
       const lastName = cleanAdminText(body.lastName, 80);
       const businessName = cleanAdminText(body.businessName, 140);
@@ -1776,6 +1794,10 @@ export async function POST(request: Request) {
       }
       if (customerId) {
         if (!createCustomer) existingCustomer = await ownedCustomer(db, identity, customerId);
+        if (boundedFieldCustomerAttach
+          && !(await directCustomerHasEmail(db, identity.uid, customerId, email))) {
+          throw new Error("CUSTOMER_MANAGEMENT_REQUIRED");
+        }
         if (!createCustomer && serviceSiteMode === "new") {
           if (!addressLine1 || !suburb || !ADDRESS_STATES.has(addressState) || !/^\d{4}$/.test(postcode)) return adminJson({ ok: false, error: "Add the service street, suburb, state and four-digit postcode." }, 400);
           serviceSiteId = crypto.randomUUID();
@@ -2230,6 +2252,37 @@ export async function POST(request: Request) {
           calendarFailed = 1;
         }
       }
+      const calendarInviteRequested = guided
+        && (body.emailCalendarInvite === true || body.emailCalendarInvite === "true" || body.emailCalendarInvite === "on");
+      let calendarInvite: { requested: boolean; status: string; message: string } = {
+        requested: false,
+        status: "not_requested",
+        message: "",
+      };
+      if (calendarInviteRequested) {
+        calendarInvite = await sendDirectAppointmentCalendarInvite({
+          appointmentId,
+          ownerUid: identity.uid,
+          origin: new URL(request.url).origin,
+        });
+        try {
+          await db.prepare(`INSERT INTO trade_work_order_events
+            (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)`)
+            .bind(
+              crypto.randomUUID(),
+              workOrderId,
+              identity.uid,
+              calendarInvite.status === "accepted" ? "customer_calendar_invite_accepted" : "customer_calendar_invite_failed",
+              calendarInvite.message,
+              new Date().toISOString(),
+            ).run();
+        } catch {
+          calendarInvite = calendarInvite.status === "accepted"
+            ? calendarInvite
+            : { ...calendarInvite, message: "The job was saved, but the calendar invite needs to be sent again." };
+        }
+      }
       return adminJson({ ok: true, id: workOrderId, workNumber, customerId, serviceSiteId,
         appointmentId, complianceIntentPlanned: complianceIntents.length > 0,
         complianceIntentCount: complianceIntents.length,
@@ -2238,7 +2291,7 @@ export async function POST(request: Request) {
         workPackBlockers,
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
-        calendarSynced, calendarFailed }, 201);
+        calendarSynced, calendarFailed, calendarInvite }, 201);
     }
 
     const workOrderId = cleanAdminText(body.workOrderId, 180);

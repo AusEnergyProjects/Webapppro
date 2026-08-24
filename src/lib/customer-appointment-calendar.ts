@@ -42,15 +42,17 @@ export function customerAppointmentCalendar(input: {
   attendeeEmail?: string;
   organizerEmail?: string;
   sequence?: number;
+  productName?: string;
 }) {
   const startsAt = calendarStamp(input.startsAt);
   const endsAt = calendarStamp(input.endsAt);
   if (!startsAt || !endsAt || endsAt <= startsAt) return null;
   const workNumber = bounded(input.workNumber, 40) || "appointment";
   const businessName = bounded(input.businessName, 120) || "your installer";
+  const productName = bounded(input.productName, 60) || "Australian Energy Assessments";
   const timeZone = Object.values(STATE_TIME_ZONES).includes(input.timeZone) ? input.timeZone : STATE_TIME_ZONES.NSW;
   const title = `${businessName} appointment`;
-  const details = `Appointment with ${businessName}. Australian Energy Assessments job reference ${workNumber}.`;
+  const details = `Appointment with ${businessName}. ${productName} job reference ${workNumber}.`;
   const attendeeEmail = calendarEmail(input.attendeeEmail);
   const organizerEmail = calendarEmail(input.organizerEmail);
   const invitation = Boolean(attendeeEmail && organizerEmail);
