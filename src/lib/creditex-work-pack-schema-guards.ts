@@ -736,10 +736,15 @@ async function installCreditexSchemaGuards(
         !== canonicalCreditexWorkPackSchemaGuardSql(definition.sql);
   });
   if (replacements.length) {
-    await database.batch(replacements.flatMap((definition) => [
-      database.prepare(`DROP TRIGGER IF EXISTS \`${definition.name}\``),
-      database.prepare(definition.sql),
-    ]));
+    // D1 prepares a batch before executing it. Drop the superseded, oversized
+    // triggers first so SQLite does not compile them while preparing the
+    // replacement trigger bodies.
+    await database.batch(replacements.map((definition) =>
+      database.prepare(`DROP TRIGGER IF EXISTS \`${definition.name}\``)
+    ));
+    await database.batch(replacements.map((definition) =>
+      database.prepare(definition.sql)
+    ));
     installed = await installedGuards(database);
   }
   const mismatched = definitions.filter(

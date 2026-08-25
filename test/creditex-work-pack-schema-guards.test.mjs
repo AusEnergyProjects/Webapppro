@@ -27,7 +27,7 @@ function migration(name) {
   return fs.readFileSync(new URL(`../drizzle/${name}`, import.meta.url), "utf8");
 }
 
-function testD1(database) {
+function testD1(database, batchSql = []) {
   class Statement {
     constructor(sql, values = []) {
       this.sql = sql;
@@ -49,6 +49,7 @@ function testD1(database) {
       return new Statement(sql);
     },
     async batch(statements) {
+      batchSql.push(statements.map((statement) => statement.sql));
       database.exec("BEGIN IMMEDIATE");
       try {
         const results = [];
@@ -217,7 +218,11 @@ test("runtime installation atomically replaces only exact known SRES predecessor
     database.exec(replacement.previousSql);
   }
 
-  await ensureCreditexWorkPackSchemaGuards(testD1(database));
+  const batchSql = [];
+  await ensureCreditexWorkPackSchemaGuards(testD1(database, batchSql));
+
+  assert.ok(batchSql[0].every((sql) => /^DROP TRIGGER IF EXISTS /.test(sql)));
+  assert.ok(batchSql[1].every((sql) => /^CREATE TRIGGER IF NOT EXISTS /.test(sql)));
 
   const installed = new Map(database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
