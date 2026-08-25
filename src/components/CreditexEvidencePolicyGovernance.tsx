@@ -893,7 +893,7 @@ export function CreditexEvidencePolicyGovernance({
                 : "Add evidence requirement"}
             </h4>
             <p>
-              Only capture controls enforced by AEA Field are available in this
+              Only capture controls enforced by TLink are available in this
               release. Conditional fields and in-app signatures remain blocked.
             </p>
           </header>
@@ -1296,7 +1296,7 @@ export function CreditexEvidencePolicyGovernance({
           <h4>Evidence policy versions</h4>
           <p>
             Draft requirements preview the same activity-driven contract sent
-            to AEA Field. Published versions are immutable.
+            to TLink. Published versions are immutable.
           </p>
         </header>
         <div className={styles.policyList}>

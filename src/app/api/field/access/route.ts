@@ -34,6 +34,7 @@ export async function GET(request: Request) {
   const modes: Array<"trade_team" | "creditex_manual"> = [];
   let displayName = "";
   let businessName = "";
+  let fieldUsername = "";
   let tradeError: unknown;
   let manualError: unknown;
   try {
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     modes.push("trade_team");
     displayName = trade.displayName;
     businessName = trade.businessName;
+    fieldUsername = trade.fieldUsername || "";
   } catch (error) {
     tradeError = error;
   }
@@ -65,6 +67,7 @@ export async function GET(request: Request) {
       modes,
       displayName,
       businessName,
+      fieldUsername,
       ...(modes.includes("creditex_manual")
         ? { recordMode: "synthetic_test" }
         : {}),

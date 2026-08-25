@@ -445,7 +445,7 @@ test("number remains explicit and required signature is visibly fail-closed", as
   assert.equal(signature.compatibility.requiresSignatureCapture, true);
   assert.match(
     signature.compatibility.blockers[0],
-    /not available in AEA Field/,
+    /not available in TLink/,
   );
   const progress = database.prepare(`SELECT
       required_count, completed_required_count

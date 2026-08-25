@@ -15,19 +15,14 @@ function sourceFiles(directory) {
   });
 }
 
-function removeExplicitlyAllowedUses(line, file) {
+function removeExplicitlyAllowedUses(line) {
   let remaining = line
-    .replaceAll("AEA Field", "")
     .replaceAll("X-AEA", "")
     .replaceAll("AEA-Link-Audit", "")
     .replaceAll("AEA-", "")
     .replaceAll("^AEA", "")
     .replace(/\bAEA(?=\$\{)/g, "");
 
-  const isFieldProductMark = file.endsWith(path.join("mobile", "src", "app", "index.tsx"))
-    || file.endsWith(path.join("mobile", "assets", "aea-field-icon.svg"))
-    || file.endsWith(path.join("mobile", "assets", "aea-field-foreground.svg"));
-  if (isFieldProductMark) remaining = remaining.replaceAll(">AEA<", "><");
   return remaining;
 }
 
@@ -45,6 +40,6 @@ test("visible copy spells out Australian Energy Assessments", () => {
   assert.deepEqual(
     violations,
     [],
-    `Spell out Australian Energy Assessments in visible copy. Allowed uses are the AEA Field product name, AEA reference prefixes, X-AEA headers and the internal link-audit user agent.\n${violations.join("\n")}`,
+    `Spell out Australian Energy Assessments in visible copy. Allowed uses are AEA reference prefixes, X-AEA headers and the internal link-audit user agent.\n${violations.join("\n")}`,
   );
 });

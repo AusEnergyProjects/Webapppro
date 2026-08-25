@@ -1,6 +1,6 @@
-# TLink Field
+# TLink
 
-TLink Field is the native iOS and Android app for technicians, trades and assessors using TLink. It is intentionally narrower than the office workspace: field workers see assigned work, complete workflows, record time and add field evidence without receiving protected customer contact information.
+TLink is the native iOS and Android app for technicians, trades and assessors using the TLink field workspace. It is intentionally narrower than the office workspace: field workers see assigned work, complete workflows, record time and add field evidence without receiving protected customer contact information.
 
 ## What is implemented
 
@@ -54,7 +54,7 @@ These credentials are not source code and must not be committed. TLink name and 
 
 ## Evidence capture boundary
 
-Camera capture disables editing, requests the highest picker quality and available EXIF, then preserves and encrypts the exact file returned by the platform picker. The picker or operating system may still determine the camera output format. On iOS, Expo ImagePicker does not return GPS tags in EXIF for camera captures, so TLink Field records a separate foreground location observation with its timestamp, permission state, accuracy, altitude and heading when available.
+Camera capture disables editing, requests the highest picker quality and available EXIF, then preserves and encrypts the exact file returned by the platform picker. The picker or operating system may still determine the camera output format. On iOS, Expo ImagePicker does not return GPS tags in EXIF for camera captures, so TLink records a separate foreground location observation with its timestamp, permission state, accuracy, altitude and heading when available.
 
 `expo-location` is configured for foreground use only. The app never requests background location. A new native development or distribution build is required after adding this module. If location permission is denied, location services are off or no fix is available, the envelope records that state. A governed requirement marked as GPS-required is blocked until a current location is available.
 

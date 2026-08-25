@@ -1179,7 +1179,7 @@ export async function assignManualEvidenceFieldTester(
   const body = recordInput(
     input,
     "MANUAL_EVIDENCE_REQUEST_INVALID",
-    "Enter a valid AEA Field test assignment.",
+    "Enter a valid TLink test assignment.",
   );
   const jobId = requiredText(
     body.jobId,
@@ -1202,7 +1202,7 @@ export async function assignManualEvidenceFieldTester(
     throw new CreditexManualEvidenceLabError(
       "MANUAL_EVIDENCE_FIELD_ASSIGNMENT_LOCKED",
       409,
-      "Return the test job to field testing before changing its AEA Field assignment.",
+      "Return the test job to field testing before changing its TLink assignment.",
     );
   }
   if (
@@ -1213,7 +1213,7 @@ export async function assignManualEvidenceFieldTester(
     throw new CreditexManualEvidenceLabError(
       "MANUAL_EVIDENCE_FIELD_ASSIGNMENT_REQUIRED",
       403,
-      "An administrator must replace another tester's AEA Field assignment.",
+      "An administrator must replace another tester's TLink assignment.",
     );
   }
   const now = new Date().toISOString();
@@ -1236,7 +1236,7 @@ export async function assignManualEvidenceFieldTester(
         id, organisation_id, job_id, event_type, actor_uid, summary,
         metadata, created_at
       ) SELECT ?, ?, ?, 'manual_field.tester_assigned', ?,
-        'Synthetic job assigned to the current verified AEA Field login.',
+        'Synthetic job assigned to the current verified TLink login.',
         ?, ?
       WHERE EXISTS (
         SELECT 1 FROM compliance_manual_evidence_test_jobs
@@ -1267,7 +1267,7 @@ export async function assignManualEvidenceFieldTester(
     throw new CreditexManualEvidenceLabError(
       "MANUAL_EVIDENCE_REVISION_CONFLICT",
       409,
-      "The test job changed before the AEA Field assignment completed.",
+      "The test job changed before the TLink assignment completed.",
     );
   }
   return mapJob(requireJob(

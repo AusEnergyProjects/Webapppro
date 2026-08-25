@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
@@ -37,7 +38,7 @@ test("field PIN attempts reset by window and lock at the bounded threshold", () 
   });
 });
 
-test("field sessions are one-time, device-bound, hashed and routed through team scope", async () => {
+test("field sessions are one-time, device-bound, server-secret hashed and routed through team scope", async () => {
   const [server, team, sessionRoute, nativeSession, nativeApi] = await Promise.all([
     read("src/lib/trade-field-session-server.ts"),
     read("src/lib/trade-team-server.ts"),
@@ -45,14 +46,17 @@ test("field sessions are one-time, device-bound, hashed and routed through team 
     read("mobile/src/lib/field-session.ts"),
     read("mobile/src/lib/api.ts"),
   ]);
-  assert.match(server, /PBKDF2/);
-  assert.match(server, /210_000/);
+  assert.match(server, /TLINK_FIELD_PIN_PEPPER/);
+  assert.match(server, /name: "HMAC", hash: "SHA-256"/);
+  assert.match(server, /FIELD_ACCESS_NOT_CONFIGURED/);
   assert.match(server, /status = 'consumed'/);
   assert.match(server, /token_hash/);
   assert.match(server, /s\.device_id = \?/);
   assert.match(server, /sha256\(`\$\{normalizedName\}\\n\$\{clientAddress\}`\)/);
   assert.doesNotMatch(server, /sha256\(`\$\{input\.deviceId\}\\n\$\{normalizedName\}/);
   assert.match(server, /field-member:\$\{memberId\}/);
+  assert.match(server, /displayName: String\(matched\.field_username \|\| access\.displayName\)/);
+  assert.match(server, /fieldUsername: String\(row\.field_username \|\| ""\)/);
   assert.match(team, /isFieldSessionRequest\(request\)/);
   assert.match(sessionRoute, /readBoundedJsonRequest/);
   assert.match(sessionRoute, /APP_UPDATE_REQUIRED/);
@@ -61,9 +65,11 @@ test("field sessions are one-time, device-bound, hashed and routed through team 
 });
 
 test("the field calendar, self-intake, update control and TLink app entry remain connected", async () => {
-  const [calendar, newJob, settings, dashboard, appPage, crmRoute] = await Promise.all([
+  const [calendar, newJob, signIn, config, settings, dashboard, appPage, crmRoute] = await Promise.all([
     read("mobile/src/app/(tabs)/work.tsx"),
     read("mobile/src/app/new-job.tsx"),
+    read("mobile/src/app/index.tsx"),
+    read("mobile/src/lib/config.ts"),
     read("mobile/src/app/(tabs)/settings.tsx"),
     read("src/components/DirectTradeDashboard.tsx"),
     read("src/app/direct-trade/field-app/page.tsx"),
@@ -73,12 +79,57 @@ test("the field calendar, self-intake, update control and TLink app entry remain
   assert.match(calendar, /router\.push\('\/new-job'\)/);
   assert.match(newJob, /rentalInspectionModulesJson/);
   assert.match(newJob, /assigneeMemberId: user\?\.memberId/);
+  assert.match(signIn, /accessibilityLabel="Open TLink settings"/);
+  assert.match(signIn, /Check for update/);
+  assert.match(signIn, /Open secure install page/);
+  assert.match(signIn, /Application\.nativeBuildVersion/);
+  assert.match(config, /Application\.nativeApplicationVersion/);
+  assert.match(config, /Constants\.expoConfig\?\.version/);
+  assert.doesNotMatch(config, /APP_VERSION = '1\.0\.0'/);
   assert.match(settings, /Check for update/);
-  assert.match(dashboard, />Get the app</);
+  assert.match(dashboard, /tlink-get-app[\s\S]*Get the app/);
   assert.match(appPage, /one-time field app PIN/);
   assert.match(crmRoute, /const selfScheduledCreate = action === "create_scheduled_job"/);
   assert.match(crmRoute, /identity\.access\.jobScope === "own"/);
   assert.match(crmRoute, /&& !selfScheduledCreate\) throw new Error\("JOB_RESCHEDULE_REQUIRED"\)/);
+});
+
+test("team members have an office-controlled unique TLink username for PIN setup", async () => {
+  const [migration, schema, route, server, settings] = await Promise.all([
+    read("drizzle/0162_trade_field_username.sql"),
+    read("db/schema.ts"),
+    read("src/app/api/trade-team/route.ts"),
+    read("src/lib/trade-field-session-server.ts"),
+    read("src/components/TradeTeamSettings.tsx"),
+  ]);
+  assert.match(migration, /ADD COLUMN `field_username` text NOT NULL DEFAULT ''/);
+  assert.match(migration, /trade_team_members_owner_field_username_idx/);
+  assert.match(schema, /fieldUsername: text\("field_username"\)/);
+  assert.match(route, /fieldUsername: row\.field_username/);
+  assert.match(route, /field_username_normalized = \?/);
+  assert.match(server, /SELECT id, email, display_name, field_username, field_username_normalized, status/);
+  assert.match(settings, /TLink username/);
+  assert.match(settings, /Generate and email PIN/);
+  assert.match(settings, /Copy username and PIN/);
+  assert.match(settings, /Set up my app/);
+});
+
+test("migration 0162 enforces a unique normalized TLink username inside each business", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec("CREATE TABLE trade_team_members (id text PRIMARY KEY, owner_uid text NOT NULL)");
+  const migration = await read("drizzle/0162_trade_field_username.sql");
+  for (const statement of migration.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+    database.exec(statement);
+  }
+  database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-1", "owner-1", "John Smith", "john smith");
+  assert.throws(() => database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-2", "owner-1", "JOHN  SMITH", "john smith"), /UNIQUE constraint failed/);
+  assert.doesNotThrow(() => database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, field_username, field_username_normalized) VALUES (?, ?, ?, ?)`)
+    .run("member-3", "owner-2", "John Smith", "john smith"));
 });
 
 test("migration 0161 adds authoritative scopes without rebuilding referenced rental tables", async () => {

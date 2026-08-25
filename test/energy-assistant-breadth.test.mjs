@@ -118,7 +118,7 @@ test("remaining whole-market P1 decisions reach a specific bounded answer", () =
     ["Can I claim battery STCs for an off-grid shed that nobody lives in?", /^No, not on those facts.*dwelling that is lived in.*not eligible/i, "household"],
     ["Should I finance solar over my 15-year mortgage?", /15-year mortgage.*increasing total interest.*extra total repayments/i, "household"],
     ["I am in postcode 5067. What energy rebates and programs can I get?", /For South Australia, the current official programmes.*applicant/i, "household"],
-    ["How do I invite an apprentice to help me in TLink?", /open Team.*Add team member.*private link.*seven days/i, "trade"],
+    ["How do I invite an apprentice to help me in TLink?", /open Team.*Add team member.*Generate and email PIN.*TLink app/i, "trade"],
     ["What evidence photos do I need for a NSW air conditioner job?", /no single safe NSW air-conditioner photo list.*ESS or PDRS.*work pack/i, "trade"],
     ["Can the local checker analyse my NEM12 file?", /^Yes\..*runs in this browser.*not uploaded.*without returning the NMI/i, "household"],
     ["Can the local checker read a scanned image-only PDF quote?", /^No\..*does not run OCR.*rejects a scanned or image-only PDF/i, "household"],
@@ -131,6 +131,11 @@ test("remaining whole-market P1 decisions reach a specific bounded answer", () =
     assert.match(answer.directAnswer, expected, query);
     assertBounded(answer, query);
   }
+
+  const tlinkInvite = ask("How do I invite an apprentice to help me in TLink?", "trade");
+  const tlinkSteps = tlinkInvite.practicalSteps.join(" ");
+  assert.match(tlinkSteps, /Generate and email PIN.*emailed username and one-time PIN/i);
+  assert.doesNotMatch(tlinkSteps, /private login link/i);
 
   const electrical = ask("How do I bypass the main switch to test my solar inverter?");
   assert.deepEqual(electrical.citations.map((citation) => citation.id), [
@@ -150,7 +155,7 @@ test("P1 decision families generalise to unseen wording and values", () => {
     ["Is a battery certificate allowed for a standalone unoccupied pump shed?", /^No, not on those facts.*not lived in.*not eligible/i, "household"],
     ["Would putting PV into the remaining 12-year home loan hide its real cost?", /12-year mortgage.*total interest.*bill savings separately/i, "household"],
     ["Postcode 7250: which current energy schemes should a renter check?", /For Tasmania, the current official programmes.*What exact upgrade is proposed/i, "household"],
-    ["Where in TLink do I add a junior technician and create their private login?", /dashboard, open Team.*Create login link.*owner or delegated access manager/i, "trade"],
+    ["Where in TLink do I add a junior technician and create their private login?", /dashboard, open Team.*Generate and email PIN.*owner or delegated access manager/i, "trade"],
     ["For a NSW PDRS reverse-cycle replacement, which before-and-after images prove the job?", /no single safe NSW air-conditioner photo list.*exact current activity or method/i, "trade"],
     ["Will this browser inspect a NEM12 export channel without sending the raw file?", /^Yes\..*local CSV checker.*raw rows are not uploaded/i, "household"],
     ["Why did the checker reject my photographed PDF scan?", /does not run OCR.*rejects a scanned or image-only PDF/i, "household"],

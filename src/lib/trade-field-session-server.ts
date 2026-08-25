@@ -13,7 +13,8 @@ import {
 
 const encoder = new TextEncoder();
 const FIELD_AUTH_SCHEME = "TLinkField";
-const PIN_DERIVATION_ITERATIONS = 210_000;
+const FIELD_PIN_PEPPER_MINIMUM_LENGTH = 32;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type MemberAccessRow = Record<string, unknown> & {
   owner_uid: string;
@@ -62,17 +63,26 @@ function randomPin() {
   return digits.join("");
 }
 
+function fieldPinPepper(runtime: Record<string, string | undefined> = process.env) {
+  const value = String(runtime.TLINK_FIELD_PIN_PEPPER || "").trim();
+  if (value.length < FIELD_PIN_PEPPER_MINIMUM_LENGTH) throw new Error("FIELD_ACCESS_NOT_CONFIGURED");
+  return value;
+}
+
 async function derivePinHash(pin: string, salt: Uint8Array) {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(pin), "PBKDF2", false, ["deriveBits"]);
-  const saltBuffer = new ArrayBuffer(salt.byteLength);
-  new Uint8Array(saltBuffer).set(salt);
-  const bits = await crypto.subtle.deriveBits({
-    name: "PBKDF2",
-    hash: "SHA-256",
-    salt: saltBuffer,
-    iterations: PIN_DERIVATION_ITERATIONS,
-  }, key, 256);
-  return bytesToHex(new Uint8Array(bits));
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(fieldPinPepper()),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(`${bytesToBase64Url(salt)}:${pin}`),
+  );
+  return bytesToHex(new Uint8Array(signature));
 }
 
 function timingSafeHexEqual(left: string, right: string) {
@@ -102,6 +112,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
     actorEmail: String(row.email || ""),
     memberId,
     displayName: String(row.display_name || "Field worker"),
+    fieldUsername: String(row.field_username || ""),
     isOwner: false,
     businessName: String(row.business_name || "Installer business"),
     canCreateJobs: Boolean(row.can_create_jobs),
@@ -130,7 +141,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
   } as TeamAccess & { fieldSessionId: string };
 }
 
-const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.display_name,
+const MEMBER_ACCESS_COLUMNS = `m.id team_member_id, m.owner_uid, m.email, m.display_name, m.field_username,
   m.can_create_jobs, m.can_manage_jobs, m.can_assign_jobs, m.job_scope,
   m.can_view_customers, m.can_manage_customers, m.can_view_quotes, m.can_manage_quotes,
   m.can_send_quotes, m.can_view_invoices, m.can_manage_invoices, m.can_view_price_book,
@@ -152,14 +163,16 @@ export async function issueFieldSetupPin(input: {
   teamMemberId: string;
 }) {
   const db = getD1();
-  const member = await db.prepare(`SELECT id, display_name, status FROM trade_team_members
+  const member = await db.prepare(`SELECT id, email, display_name, field_username, field_username_normalized, status FROM trade_team_members
     WHERE id = ? AND owner_uid = ?`).bind(input.teamMemberId, input.ownerUid)
     .first<Record<string, unknown>>();
   if (!member) throw new Error("MEMBER_NOT_FOUND");
   if (member.status !== "active") throw new Error("MEMBER_INACTIVE");
-  const displayName = String(member.display_name || "").trim();
-  const normalizedName = normalizeFieldAccessName(displayName);
-  if (!normalizedName) throw new Error("FIELD_NAME_REQUIRED");
+  const username = String(member.field_username || "").trim();
+  const normalizedName = normalizeFieldAccessName(String(member.field_username_normalized || username));
+  if (!username || !normalizedName) throw new Error("FIELD_USERNAME_REQUIRED");
+  const recipientEmail = String(member.email || "").trim().toLowerCase();
+  if (!EMAIL_PATTERN.test(recipientEmail)) throw new Error("FIELD_EMAIL_REQUIRED");
   const pin = randomPin();
   const salt = randomBytes(18);
   const pinHash = await derivePinHash(pin, salt);
@@ -178,7 +191,21 @@ export async function issueFieldSetupPin(input: {
       .bind(id, input.ownerUid, input.teamMemberId, normalizedName, bytesToBase64Url(salt), pinHash,
         expiresAt, input.actorUid, nowIso, nowIso),
   ]);
-  return { displayName, pin, expiresAt };
+  return {
+    id,
+    displayName: String(member.display_name || username),
+    username,
+    pin,
+    expiresAt,
+    recipientEmail,
+  };
+}
+
+export async function revokeIssuedFieldSetupPin(ownerUid: string, teamMemberId: string, codeId: string) {
+  const now = new Date().toISOString();
+  await getD1().prepare(`UPDATE trade_field_access_codes SET status = 'revoked', updated_at = ?
+    WHERE id = ? AND owner_uid = ? AND team_member_id = ? AND status = 'active'`)
+    .bind(now, codeId, ownerUid, teamMemberId).run();
 }
 
 async function recordFailedAttempt(keyHash: string, current: Record<string, unknown> | null, nowMs: number) {
@@ -287,7 +314,7 @@ export async function redeemFieldSetupPin(input: {
     principal: {
       ownerId: access.ownerUid,
       memberId: access.memberId,
-      displayName: access.displayName,
+      displayName: String(matched.field_username || access.displayName),
       email: access.actorEmail,
       businessName: access.businessName,
       permissions: {

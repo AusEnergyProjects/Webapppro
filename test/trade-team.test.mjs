@@ -52,12 +52,13 @@ test("owners and roster-only people are assignable before a separate login is cr
   assert.match(access, /ensureOwnerTeamMember/);
   assert.match(access, /memberId = await ensureOwnerTeamMember/);
   assert.match(route, /action === "add_member"/);
-  assert.match(route, /SELECT \?, \?, '', \?, \?, \?, \?, \?, \?, \?,/);
+  assert.match(route, /field_username, field_username_normalized/);
+  assert.match(route, /appUsername\.username, appUsername\.normalized/);
   assert.match(route, /WHERE \$\{createGuard\.sql\}/);
   assert.match(route, /hasLogin: Boolean\(row\.member_uid\)/);
   assert.match(settings, /Email, optional/);
   assert.match(settings, /Roster only/);
-  assert.match(settings, /Create login link/);
+  assert.match(settings, /Create office login link/);
   assert.match(rosterMigration, /WHERE `email` <> ''/);
 });
 

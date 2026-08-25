@@ -426,6 +426,8 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   firstName: text("first_name").notNull().default(""),
   lastName: text("last_name").notNull().default(""),
   phone: text("phone").notNull().default(""),
+  fieldUsername: text("field_username").notNull().default(""),
+  fieldUsernameNormalized: text("field_username_normalized").notNull().default(""),
   scheduleColour: text("schedule_colour").notNull().default("emerald"),
   capabilities: text("capabilities").notNull().default("[]"),
   role: text("role").notNull().default("technician"),
@@ -459,6 +461,7 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   uniqueIndex("trade_team_members_owner_email_idx").on(table.ownerUid, table.email).where(sql`${table.email} <> ''`),
+  uniqueIndex("trade_team_members_owner_field_username_idx").on(table.ownerUid, table.fieldUsernameNormalized).where(sql`${table.fieldUsernameNormalized} <> ''`),
   index("trade_team_members_owner_member_idx").on(table.ownerUid, table.memberUid),
   index("trade_team_members_member_status_idx").on(table.memberUid, table.status, table.updatedAt),
   index("trade_team_members_owner_status_idx").on(table.ownerUid, table.status, table.updatedAt),

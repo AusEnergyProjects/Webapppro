@@ -6,12 +6,15 @@ import { getDeviceId } from '@/lib/device';
 import { firebaseAuth } from '@/lib/auth';
 import { getFieldSessionToken } from '@/lib/field-session';
 
+const JSON_REQUEST_TIMEOUT_MS = 20_000;
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
     public readonly code: string,
     public readonly minimumVersion = '',
+    public readonly payload: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
@@ -53,6 +56,26 @@ function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
+async function fetchJson(url: string, init: RequestInit) {
+  if (init.signal) return fetch(url, init);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), JSON_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError(
+        'TLink could not reach the secure service. Check reception and try again.',
+        408,
+        'NETWORK_TIMEOUT',
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function governedReferenceDocumentBytesSha256(bytes: Uint8Array) {
   const exactBytes = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(exactBytes).set(bytes);
@@ -64,7 +87,7 @@ export async function governedReferenceDocumentBytesSha256(bytes: Uint8Array) {
 export async function apiRequest<T>(path: string, init: RequestInit = {}, user?: User | null) {
   const headers = await authenticatedHeaders(init, user);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers });
   const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
   if (!response.ok) {
     const error = new ApiError(
@@ -72,6 +95,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
       response.status,
       String(body.code || ''),
       String(body.minimumVersion || ''),
+      body,
     );
     throw error;
   }
@@ -81,13 +105,14 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
 export async function publicApiRequest<T>(path: string, init: RequestInit = {}) {
   const headers = await deviceHeaders(init);
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetchJson(`${API_BASE_URL}${path}`, { ...init, headers });
   const body = await response.json().catch(() => ({ error: 'The server returned an unreadable response.' })) as Record<string, unknown>;
   if (!response.ok) throw new ApiError(
     String(body.error || 'The request could not be completed.'),
     response.status,
     String(body.code || ''),
     String(body.minimumVersion || ''),
+    body,
   );
   return body as T;
 }

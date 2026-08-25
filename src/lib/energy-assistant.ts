@@ -4503,15 +4503,15 @@ export function composeEnergyAssistantAnswer(
     && /\b(?:apprentice|worker|employee|staff|team member|technician|teammate)\b/i.test(query)) {
     return structured("trades", {
       directAnswer:
-        "In the signed-in TLink dashboard, open Team, choose Add team member, enter the apprentice's details and services, and give only the access they need. Add their email before saving if they need a login; TLink then displays a private link to copy and send only to that person, and it expires after seven days. For a roster-only member added without email, edit the member later, add the email and choose Create login link. Only the owner or a member with team-management access can add them, and only an owner or delegated access manager can grant permissions.",
+        "In the signed-in TLink dashboard, open Team and choose Add team member. Enter the apprentice's details, services and email, then save them. Open their details, set the TLink username and choose Generate and email PIN. TLink emails the username and one-time PIN to the worker so they can authorise the TLink app on their phone. The email is required for PIN delivery, while office or browser login remains optional. A sole trader can use Set up my app on the owner row. Only the owner or a member with team-management access can add people, and only an owner or delegated access manager can grant permissions.",
       status: "answered",
       citations: [],
       confidence: "high",
       assumptions: ["No private team record was opened or changed, and the requester is not assumed to have team-management permission."],
       practicalSteps: [
-        "Open TLink dashboard, then Team, and add the apprentice with their real name, services and email only if a login is required.",
-        "Apply assigned-job and least-privilege access, save the member, then copy the displayed private login link.",
-        "Send the link only to that person and verify their access before assigning work or evidence tasks.",
+        "Open TLink dashboard, then Team, and add the apprentice with their real name, services and email. The email receives their one-time app PIN.",
+        "Apply assigned-job and least-privilege access, save the member, then choose Generate and email PIN in their details.",
+        "Ask the worker to use the emailed username and one-time PIN in the TLink app, then verify their access before assigning work or evidence tasks.",
       ],
       toolActions: [{ id: "open-trade-team", label: "Open TLink team management", href: "/direct-trade/dashboard" }],
       suggestedQuestions: ["Should the apprentice see only assigned jobs, or do they need any additional schedule, customer, quote or field-evidence access?"],

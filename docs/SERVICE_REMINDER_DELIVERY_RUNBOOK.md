@@ -28,6 +28,12 @@ The AEA Twilio account is upgraded. The `AEA service reminders` Messaging Servic
 
 Resend requests use the delivery idempotency key. Bounces, suppression and complaints immediately disable email reminders for that customer asset and prevent queued retries.
 
+## TLink field app PIN email
+
+TLink field app setup uses the same protected Resend sender. Store a randomly generated secret of at least 32 characters as the protected `TLINK_FIELD_PIN_PEPPER` Sites secret. The secret keeps six-digit PIN hashes resistant to an offline database-only attack. Rotating it invalidates every unused PIN, so rotate it only as a deliberate field-access reset and then tell affected workers to request a new PIN.
+
+Generating a PIN requires a saved worker email. TLink emails the exact username, one-time PIN, expiry and app link to that address. If Resend does not accept the email, TLink revokes the new PIN and returns a clear retry message. The PIN is never written to logs, email-delivery metadata or a plaintext database field.
+
 ## Twilio SMS and mobile verification
 
 1. Create or use the AEA Twilio account and complete the Australian sender and compliance requirements for the intended traffic.

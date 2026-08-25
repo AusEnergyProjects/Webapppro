@@ -55,8 +55,8 @@ export default function SettingsScreen() {
         <View style={styles.fact}><Text style={styles.body}>Device reference</Text><Text numberOfLines={1} style={[styles.value, styles.reference]}>{deviceId.slice(-12) || 'Preparing...'}</Text></View>
       </View>
       <View style={styles.privacy}><MaterialCommunityIcons name="shield-lock-outline" size={26} color={colours.green} /><View style={styles.flex}><Text style={styles.title}>Privacy by design</Text><Text style={styles.body}>Offline records are encrypted. Signing out or remote revocation removes cached jobs, queued files and addresses from this device.</Text></View></View>
-      <FieldButton variant="danger" onPress={() => Alert.alert('Sign out of TLink Field?', 'All offline work on this device will be removed. Sync saved changes first if possible.', [{ text: 'Stay signed in', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => void signOut() }])}>Sign out and remove local work</FieldButton>
-      <Text style={styles.footer}>Australian Energy Assessments | Secure field service</Text>
+      <FieldButton variant="danger" onPress={() => Alert.alert('Sign out of TLink?', 'All offline work on this device will be removed. Sync saved changes first if possible.', [{ text: 'Stay signed in', style: 'cancel' }, { text: 'Sign out', style: 'destructive', onPress: () => void signOut() }])}>Sign out and remove local work</FieldButton>
+      <Text style={styles.footer}>TLink | Secure field service</Text>
     </Screen>
   );
 }
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
   heading: { color: colours.ink, fontSize: 28, fontWeight: '800' },
   intro: { color: colours.muted, fontSize: 16, lineHeight: 23 },
-  card: { backgroundColor: colours.white, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colours.line, gap: spacing.sm },
+  card: { backgroundColor: colours.surface, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colours.line, gap: spacing.sm },
   icon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colours.forest, alignItems: 'center', justifyContent: 'center' },
   title: { color: colours.ink, fontSize: 19, fontWeight: '800' },
   body: { color: colours.muted, lineHeight: 21 },

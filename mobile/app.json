@@ -1,19 +1,21 @@
 {
   "expo": {
-    "name": "TLink Field",
+    "name": "TLink",
     "slug": "aea-field",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "aeafield",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#06131f",
+    "primaryColor": "#07182b",
     "description": "Simple, secure TLink schedules and field workflows for technicians, trades and assessors.",
     "ios": {
       "bundleIdentifier": "au.com.australianenergyassessments.field",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": false,
@@ -23,11 +25,10 @@
     "android": {
       "package": "au.com.australianenergyassessments.field",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#063a31",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#07182b",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
@@ -46,7 +47,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#063a31",
+          "backgroundColor": "#06131f",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -62,21 +63,21 @@
         "expo-secure-store",
         {
           "configureAndroidBackup": false,
-          "faceIDPermission": "Allow TLink Field to unlock protected offline work."
+          "faceIDPermission": "Allow TLink to unlock protected offline work."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow TLink Field to attach job photos.",
-          "cameraPermission": "Allow TLink Field to photograph job progress and evidence.",
+          "photosPermission": "Allow TLink to attach job photos.",
+          "cameraPermission": "Allow TLink to photograph job progress and evidence.",
           "microphonePermission": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow TLink Field to record the installation location with field evidence.",
+          "locationWhenInUsePermission": "Allow TLink to record the installation location with field evidence.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false

@@ -77,7 +77,7 @@ test("quality migrations add grounded model identity aggregates without raw conv
     "utf8",
   );
   const additiveSource = await readFile(
-    new URL("../drizzle/0162_surge_conversation_quality_model_identity.sql", import.meta.url),
+    new URL("../drizzle/0163_surge_conversation_quality_model_identity.sql", import.meta.url),
     "utf8",
   );
   assert.match(originalSource, /CREATE TABLE `surge_conversation_quality_daily`/);

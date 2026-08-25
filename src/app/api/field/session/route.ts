@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     }
     if (!appVersionAccepted(platform, appVersion)) {
       const policy = mobileAppPolicy(platform);
-      return adminJson({ ok: false, code: "APP_UPDATE_REQUIRED", error: "Update AEA Field before signing in.",
+      return adminJson({ ok: false, code: "APP_UPDATE_REQUIRED", error: "Update TLink before signing in.",
         minimumVersion: policy.minimumVersion, policy }, 426);
     }
     const session = await redeemFieldSetupPin({

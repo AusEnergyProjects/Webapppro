@@ -36,7 +36,7 @@ export const networkVerificationRequired: FieldAccessState = {
   status: 'pending',
   code: 'NETWORK_VERIFICATION_REQUIRED',
   title: 'Connect to verify access',
-  message: 'TLink Field must confirm this account with TLink before protected work can open.',
+  message: 'TLink must confirm this account before protected work can open.',
   guidance: 'Reconnect, then choose Check access again.',
 };
 

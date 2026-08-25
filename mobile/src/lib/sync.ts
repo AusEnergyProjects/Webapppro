@@ -17,6 +17,7 @@ import type { FieldAccessMode, OfflineAction, SyncResponse } from '@/lib/types';
 import { processUploadQueue } from '@/lib/uploads';
 
 let activeSync: Promise<SyncOutcome> | null = null;
+const MAX_SYNC_PAGES = 100;
 
 export type SyncOutcome = {
   lastSyncedAt: string;
@@ -31,13 +32,26 @@ function isFieldAccessMode(value: unknown): value is FieldAccessMode {
   return value === 'trade_team' || value === 'creditex_manual';
 }
 
-export async function resolveFieldAccessModes() {
-  const response = await apiRequest<{ mode: FieldAccessMode; modes?: FieldAccessMode[] }>('/api/field/access');
+export async function verifyFieldAccess() {
+  const response = await apiRequest<{
+    mode: FieldAccessMode;
+    modes?: FieldAccessMode[];
+    fieldUsername?: string;
+  }>('/api/field/access');
   const modes = [...new Set((response.modes?.length ? response.modes : [response.mode])
     .filter(isFieldAccessMode))];
   if (!modes.length) {
     throw new ApiError('No active field access was returned.', 403, 'FIELD_ACCESS_REQUIRED');
   }
+  return { modes, fieldUsername: String(response.fieldUsername || '').trim() };
+}
+
+export async function verifyFieldAccessModes() {
+  return (await verifyFieldAccess()).modes;
+}
+
+export async function resolveFieldAccessModes() {
+  const modes = await verifyFieldAccessModes();
   await setSetting('field_access_mode', modes[0]);
   return modes;
 }
@@ -102,7 +116,12 @@ async function fetchChanges(mode: FieldAccessMode) {
   const setting = cursorSetting(mode);
   let cursor = await getSetting(setting);
   let hasMore = true;
+  let pages = 0;
   while (hasMore) {
+    pages += 1;
+    if (pages > MAX_SYNC_PAGES) {
+      throw new ApiError('TLink stopped a repeating sync. Try again.', 409, 'SYNC_PAGE_LIMIT');
+    }
     const params = new URLSearchParams({
       deviceId: await getDeviceId(),
       platform: MOBILE_PLATFORM,
@@ -112,7 +131,11 @@ async function fetchChanges(mode: FieldAccessMode) {
     if (cursor) params.set('cursor', cursor);
     const response = await apiRequest<SyncResponse>(`${syncPath(mode)}?${params}`);
     await applyChanges(response.changes, response.bootstrap, response.serverTime, mode);
-    cursor = response.nextCursor;
+    const nextCursor = response.nextCursor;
+    if (response.hasMore && nextCursor === cursor) {
+      throw new ApiError('TLink stopped a repeating sync. Try again.', 409, 'SYNC_CURSOR_STALLED');
+    }
+    cursor = nextCursor;
     await setSetting(setting, cursor);
     hasMore = response.hasMore;
   }
@@ -124,13 +147,14 @@ async function revokedSignOut() {
   await firebaseSignOut();
 }
 
-async function performSync(): Promise<SyncOutcome> {
+async function performSync(verifiedModes?: FieldAccessMode[]): Promise<SyncOutcome> {
   const currentUser = firebaseAuth.currentUser;
   const fieldPrincipal = await getFieldPrincipal();
   if (!currentUser && !fieldPrincipal) throw new ApiError('Sign in to continue.', 401, 'AUTH_REQUIRED');
   await prepareLocalDataOwner(fieldPrincipal?.localOwnerKey || `firebase:${currentUser!.uid}`);
   try {
-    const modes = await resolveFieldAccessModes();
+    const modes = verifiedModes?.length ? [...new Set(verifiedModes)] : await verifyFieldAccessModes();
+    await setSetting('field_access_mode', modes[0]);
     await purgeExpiredAddresses();
     for (const mode of modes) {
       await registerDevice(mode);
@@ -165,15 +189,15 @@ async function performSync(): Promise<SyncOutcome> {
         queuedUploads: counts.uploads,
         conflicts: counts.conflicts,
         updateRequired: error.minimumVersion || 'current',
-        message: 'Update TLink Field before syncing. Your saved work is still secure on this device.',
+        message: 'Update TLink before syncing. Your saved work is still secure on this device.',
       };
     }
     throw error;
   }
 }
 
-export function runSync() {
-  activeSync ||= performSync().finally(() => { activeSync = null; });
+export function runSync(verifiedModes?: FieldAccessMode[]) {
+  activeSync ||= performSync(verifiedModes).finally(() => { activeSync = null; });
   return activeSync;
 }
 
