@@ -3,14 +3,20 @@ import {
   surgeProfileReviewedAnswerCount,
   type SurgeStarterProfile,
 } from "./surge-assessor-profile.ts";
+import {
+  SURGE_REVIEWED_GUIDANCE,
+  type ReviewedSurgeGuidance,
+} from "../data/surge-reviewed-guidance.ts";
 
-export type HomeContextTip = {
-  title: string;
-  detail: string;
-};
+export type HomeContextTip = Omit<ReviewedSurgeGuidance, "effectiveFrom" | "effectiveTo">;
 
 type RankedTip = HomeContextTip & {
   priority: number;
+};
+
+export type HomeContextTipsOptions = {
+  asOf?: Date | string;
+  guidance?: readonly ReviewedSurgeGuidance[];
 };
 
 const hasAny = (profile: SurgeStarterProfile, values: readonly string[]) =>
@@ -19,23 +25,54 @@ const hasAny = (profile: SurgeStarterProfile, values: readonly string[]) =>
 const reviewed = (profile: SurgeStarterProfile, fieldId: string) =>
   profile.reviewed.includes(fieldId);
 
+function isoDay(value: Date | string) {
+  const parsed = typeof value === "string" ? new Date(value) : value;
+  if (!Number.isFinite(parsed.getTime())) throw new Error("A valid guidance date is required.");
+  return parsed.toISOString().slice(0, 10);
+}
+
+function currentGuidance(
+  guidance: readonly ReviewedSurgeGuidance[],
+  asOf: string,
+) {
+  return new Map(guidance
+    .filter((item) => item.effectiveFrom <= asOf
+      && (!item.effectiveTo || item.effectiveTo >= asOf)
+      && item.reviewedOn <= asOf
+      && item.reviewDue >= asOf
+      && item.sourceIds.length > 0
+      && item.jurisdictions.length > 0)
+    .map((item) => [item.id, item]));
+}
+
 /**
  * Build a fresh, deterministic guidance rail from the latest saved profile.
- * Each rule is deliberately tied to a reviewed answer so outdated or inferred
- * concerns cannot survive after the customer changes that answer.
+ * Rules only select reviewed registry records. A missing or expired record is
+ * removed and lower-ranked reviewed guidance takes its place.
  */
-export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] {
+export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[];
+export function homeContextTips(
+  profile: SurgeStarterProfile,
+  options: HomeContextTipsOptions,
+): HomeContextTip[];
+export function homeContextTips(
+  profile: SurgeStarterProfile,
+  options: HomeContextTipsOptions = {},
+): HomeContextTip[] {
+  const asOf = isoDay(options.asOf || new Date());
+  const guidance = currentGuidance(options.guidance || SURGE_REVIEWED_GUIDANCE, asOf);
   const tips: RankedTip[] = [];
-  const add = (priority: number, title: string, detail: string) => {
-    if (!tips.some((tip) => tip.title === title)) tips.push({ priority, title, detail });
+  const add = (priority: number, id: string) => {
+    const item = guidance.get(id);
+    if (!item || tips.some((tip) => tip.id === id || tip.title === item.title)) return;
+    const { effectiveFrom, effectiveTo, ...tip } = item;
+    void effectiveFrom;
+    void effectiveTo;
+    tips.push({ priority, ...tip });
   };
 
   if (surgeProfileReviewedAnswerCount(profile) < SURGE_PROFILE_FIELDS.length) {
-    add(
-      100,
-      "Finish the missing context",
-      "Resume at the next unanswered section so Surge AI can use the complete home picture.",
-    );
+    add(100, "missing-context");
   }
 
   const moistureReported = reviewed(profile, "feature:comfort-concerns")
@@ -47,62 +84,27 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
     reviewed(profile, "feature:ceiling-insulation")
     && hasAny(profile, ["ceiling-insulation-none", "ceiling-insulation-limited"])
   ) {
-    add(
-      94,
-      "Check the ceiling first",
-      moistureReported
-        ? "Find the moisture source first, then have insulation coverage, gaps and safe clearances checked before topping it up."
-        : "Have insulation coverage, gaps and safe clearances checked, then top it up before paying for larger heating or cooling equipment.",
-    );
+    add(94, moistureReported ? "ceiling-moisture-first" : "ceiling-topup-first");
   }
 
-  if (moistureReported) {
-    add(
-      92,
-      "Control moisture before sealing",
-      "Use exhaust fans, short purposeful airing or a dehumidifier when needed, and find any leak before sealing draughts. Keep required ventilation working.",
-    );
-  } else if (draughtsReported) {
-    add(
-      91,
-      "Stop the easy draughts first",
-      "Try a door snake and removable door or window seals first. Use suitable sealant only on confirmed fixed gaps, never required vents, exhausts, chimneys or flues.",
-    );
-  }
+  if (moistureReported) add(92, "moisture-before-sealing");
+  else if (draughtsReported) add(91, "easy-draughts");
 
   if (
     reviewed(profile, "feature:heating-cooling-systems")
     && profile.features.includes("electric-resistance-heating")
-  ) {
-    add(
-      90,
-      "Avoid portable heaters for whole rooms",
-      "For occupied rooms, an efficient reverse-cycle air conditioner usually uses less electricity than portable resistance heating. An electric throw can warm a person with much less energy.",
-    );
-  }
+  ) add(90, "avoid-portable-heaters");
 
   if (
     reviewed(profile, "feature:heating-cooling-systems")
     && profile.features.includes("reverse-cycle")
     && profile.features.includes("gas-heating")
-  ) {
-    add(
-      89,
-      "Use reverse-cycle heating first",
-      "When it can comfortably heat the occupied area, try the reverse-cycle air conditioner before gas heating and keep its filters clean.",
-    );
-  }
+  ) add(89, "rcac-before-gas");
 
   if (
     reviewed(profile, "feature:ventilation-features")
     && profile.features.includes("evaporative-ducts")
-  ) {
-    add(
-      88,
-      "Check unused evaporative outlets",
-      "If the evaporative system is safely shut down for the season, suitable removable outlet covers can reduce winter heat loss. Do not block an operating or required ventilation path.",
-    );
-  }
+  ) add(88, "evaporative-outlets");
 
   if (
     reviewed(profile, "feature:glazing")
@@ -112,13 +114,7 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
       && hasAny(profile, ["window-coverings-none", "window-coverings-basic", "window-coverings-mixed"]);
     const weakShade = reviewed(profile, "feature:external-shading")
       && profile.features.includes("external-shading-none");
-    add(
-      87,
-      "Improve windows without replacing them",
-      weakCoverings || weakShade
-        ? "Start with seals, close-fitting honeycomb or thermal coverings and external summer shade. Removable low-emissivity or reflective film may help where it suits the glass and sunlight."
-        : "Check seals and room-by-room comfort first. Removable low-emissivity or reflective film may help where it suits the glass and sunlight.",
-    );
+    add(87, weakCoverings || weakShade ? "windows-basic-measures" : "windows-seals-film");
   }
 
   if (
@@ -126,73 +122,36 @@ export function homeContextTips(profile: SurgeStarterProfile): HomeContextTip[] 
     && profile.features.includes("external-shading-none")
     && reviewed(profile, "feature:comfort-concerns")
     && profile.features.includes("comfort-too-hot")
-  ) {
-    add(
-      86,
-      "Shade hot windows before upgrading cooling",
-      "Use external shade where practical. A correctly placed deciduous tree can block summer sun while allowing winter sun after its leaves fall.",
-    );
-  }
+  ) add(86, "shade-hot-windows");
 
-  if (
-    reviewed(profile, "feature:solar")
-    && profile.features.includes("solar")
-  ) {
-    add(
-      85,
-      "Use more of your solar directly",
-      "Run flexible loads such as the dishwasher, washing machine or heat-pump dryer during strong solar hours when it is safe and practical.",
-    );
+  if (reviewed(profile, "feature:solar") && profile.features.includes("solar")) {
+    add(85, "solar-load-shift");
   }
 
   if (
     reviewed(profile, "supplemental:billPressure")
     && (profile.billPressure === "higher-than-expected" || profile.billPressure === "hard-to-manage")
-  ) {
-    add(
-      78,
-      "Shift flexible loads to cheaper hours",
-      "Check the complete tariff, then move suitable loads to cheaper or free-use windows. A free three-hour period is only useful if the rest of the plan still suits the home.",
-    );
-  }
+  ) add(78, "tariff-load-shift");
 
   if (reviewed(profile, "supplemental:gasConnection") && profile.gasConnection === "connected") {
-    add(
-      74,
-      "Sequence mains gas replacement carefully",
-      "Reduce demand first, then confirm electrical capacity before replacing major mains gas appliances.",
-    );
+    add(74, "mains-gas-sequence");
   }
-
   if (reviewed(profile, "supplemental:gasConnection") && profile.gasConnection === "bottled-lpg") {
-    add(
-      74,
-      "Plan around bottled gas use",
-      "Identify which appliances use LPG, then compare staged electric replacements after checking switchboard capacity.",
-    );
+    add(74, "lpg-sequence");
   }
 
   if (
     reviewed(profile, "supplemental:plannedWorks")
     && (profile.plannedWorks === "renovation" || profile.plannedWorks === "new-build")
-  ) {
-    add(
-      72,
-      "Coordinate upgrades with planned building work",
-      "Use the planned works to improve access, insulation continuity and electrical capacity before finishes are closed up.",
-    );
-  }
+  ) add(72, "planned-work");
 
-  if (tips.length === 0) {
-    add(
-      1,
-      "Your context is ready",
-      "Ask Surge AI what to prioritise and it will use the confirmed details saved in this browser.",
-    );
-  }
+  if (tips.length === 0) add(1, "context-ready");
 
   return tips
-    .sort((left, right) => right.priority - left.priority)
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
     .slice(0, 3)
-    .map(({ title, detail }) => ({ title, detail }));
+    .map(({ priority, ...tip }) => {
+      void priority;
+      return tip;
+    });
 }

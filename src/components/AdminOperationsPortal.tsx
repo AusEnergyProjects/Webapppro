@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import "./AdminOperationsPortal.css";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,

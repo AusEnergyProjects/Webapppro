@@ -6,7 +6,10 @@ import {
   type SurgeModelAdmissionRequest,
   type SurgeModelCallReservation,
 } from "@/lib/energy-assistant-server";
-import type { SurgeConversationQualityEvent } from "@/lib/energy-assistant-quality";
+import type {
+  SurgeConversationQualityEvent,
+  SurgeConversationQualityMetadata,
+} from "@/lib/energy-assistant-quality";
 import { createSurgeConversationQualityRecorder } from "@/lib/energy-assistant-quality-server";
 import {
   generateSurgeModelAnswer,
@@ -90,6 +93,28 @@ function hostedString(source: Record<string, unknown>, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function firstHostedString(source: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = hostedString(source, key);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function hostedQualityMetadata(): Partial<SurgeConversationQualityMetadata> {
+  const source = env as unknown as Record<string, unknown>;
+  return {
+    corpusSha256: firstHostedString(source, "SURGE_QUALITY_CORPUS_SHA256"),
+    promptSha256: firstHostedString(source, "SURGE_QUALITY_PROMPT_SHA256", "SURGE_PROMPT_SHA256"),
+    sourceSha256: firstHostedString(source, "SURGE_QUALITY_SOURCE_SHA256", "SURGE_SOURCE_SHA256"),
+    appVersion: firstHostedString(source, "SURGE_APP_VERSION", "APP_VERSION", "CF_PAGES_BRANCH"),
+    gitSha: firstHostedString(source, "SURGE_GIT_SHA", "GIT_COMMIT_SHA", "CF_PAGES_COMMIT_SHA"),
+    deploymentId: firstHostedString(source, "SURGE_DEPLOYMENT_ID", "CF_PAGES_DEPLOYMENT_ID"),
+    requestedModel: firstHostedString(source, "SURGE_MODEL"),
+    providerModel: firstHostedString(source, "SURGE_PROVIDER_MODEL"),
+  };
+}
+
 function hostedBoolean(value: string | undefined) {
   if (value === undefined) return undefined;
   if (/^(?:1|true|yes|on)$/i.test(value)) return true;
@@ -128,6 +153,7 @@ function handleEnergyAssistantRequest(
   return handleEnergyAssistantServerRequest(request, {
     ...dependencies,
     generateAnswer: generateHostedModelAnswer,
+    qualityMetadata: hostedQualityMetadata(),
   });
 }
 

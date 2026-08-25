@@ -26,6 +26,7 @@ import {
 import {
   evaluateSurgeConversationQuality,
   type SurgeConversationQualityEvent,
+  type SurgeConversationQualityMetadata,
 } from "./energy-assistant-quality.ts";
 import {
   parseSurgePlanContext,
@@ -81,6 +82,8 @@ export type ServerDependencies = {
     request: SurgeModelAdmissionRequest,
   ) => Promise<SurgeModelCallReservation>;
   recordQuality?: (event: SurgeConversationQualityEvent) => Promise<void>;
+  qualityMetadata?: Partial<SurgeConversationQualityMetadata>;
+  monotonicNow?: () => number;
 };
 
 export class EnergyAssistantServerError extends Error {
@@ -503,6 +506,8 @@ async function readBody(request: Request) {
 }
 
 async function ask(request: Request, dependencies: ServerDependencies) {
+  const monotonicNow = dependencies.monotonicNow || (() => performance.now());
+  const startedAt = monotonicNow();
   const requestBody = await readBody(request);
   if (requestBody.action !== "ask") {
     throw new EnergyAssistantServerError(
@@ -584,11 +589,36 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
   const safeContinuation = publicSafeContinuation(nextContinuation, audience);
+  const publicPolicyPassed = audience === "trade" || (
+    !surgeOutputViolatesPublicPolicy(`${reply.content}\n${JSON.stringify(safeContinuation)}`)
+    && !containsSurgeNamedReference(JSON.stringify(safeContinuation))
+    && !containsSurgeInternalPlatformName(JSON.stringify(safeContinuation))
+  );
+  const quality = evaluateSurgeConversationQuality({
+    day: now.toISOString().slice(0, 10),
+    audience,
+    message,
+    before: continuation,
+    after: safeContinuation,
+    answerSource,
+    answerStatus: reply.status,
+    publicPolicyPassed,
+    followUpQuestion: reply.followUpQuestion,
+    latencyMs: monotonicNow() - startedAt,
+    metadata: dependencies.qualityMetadata,
+  });
+  const exposeQualityCategories = request.headers.get("x-surge-quality-rehearsal") === "aggregate-v1";
   const response = {
     ok: true,
     ...(requestId ? { requestId } : {}),
     reply,
     continuation: safeContinuation,
+    ...(exposeQualityCategories ? {
+      quality: {
+        answerSource: quality.answerSource,
+        answerStatus: quality.answerStatus,
+      },
+    } : {}),
   };
   if (new TextEncoder().encode(JSON.stringify(response)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
@@ -598,22 +628,6 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     );
   }
   if (dependencies.recordQuality) {
-    const publicPolicyPassed = audience === "trade" || (
-      !surgeOutputViolatesPublicPolicy(`${reply.content}\n${JSON.stringify(safeContinuation)}`)
-      && !containsSurgeNamedReference(JSON.stringify(safeContinuation))
-      && !containsSurgeInternalPlatformName(JSON.stringify(safeContinuation))
-    );
-    const quality = evaluateSurgeConversationQuality({
-      day: now.toISOString().slice(0, 10),
-      audience,
-      message,
-      before: continuation,
-      after: safeContinuation,
-      answerSource,
-      answerStatus: reply.status,
-      publicPolicyPassed,
-      followUpQuestion: reply.followUpQuestion,
-    });
     await dependencies.recordQuality(quality).catch(() => undefined);
   }
   return response;

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { updateHomeFeatureSelection } from "@/lib/customer-projects.mjs";
 import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
@@ -29,11 +30,11 @@ import {
 } from "@/lib/home-energy-planner-schema";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
 import { SurgeOpenButton } from "@/components/SurgeOpenButton";
-import {
-  PublicPlanEnquiryForm,
-  type PublicPlanUpgradeInterest,
-} from "@/components/PublicPlanEnquiryForm";
+import type { PublicPlanUpgradeInterest } from "@/components/PublicPlanEnquiryForm";
 import styles from "./HomeEnergyPlanner.module.css";
+
+const PublicPlanEnquiryForm = dynamic(() => import("@/components/PublicPlanEnquiryForm")
+  .then((module) => module.PublicPlanEnquiryForm));
 
 type Option = HomeEnergyPlannerOption;
 type CustomerPlanItem = {
@@ -231,6 +232,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
     firstIncompleteHomeEnergyPlannerStage(explicitHomeEnergyPlannerDraft(initialSelection)));
   const [attemptedStage, setAttemptedStage] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
+  const [enquiryOpen, setEnquiryOpen] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hydratedRef = useRef(false);
   const previousStageRef = useRef(stage);
@@ -415,6 +417,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
     setStage(0);
     setAttemptedStage(null);
     setRestored(false);
+    setEnquiryOpen(false);
   }
 
   const progressValue = stage === 4 ? 100 : Math.round(((stage + 1) / PRIMARY_STAGE_COUNT) * 100);
@@ -617,21 +620,33 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
             </section>
           ) : null}
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
-            <PublicPlanEnquiryForm
-              planHref={printablePlanHref}
-              initialPostcode={draft.postcode}
-              suggestedInterests={enquiryInterests}
-              planSnapshot={{
-                goals: draft.goals,
-                pace: draft.pace,
-                situation: draft.situation,
-                approvalContext: draft.approvalContext,
-                budgetRange: draft.budgetRange,
-                addressState: draft.addressState,
-                features: draft.features,
-                propertyContext: enquiryPropertyContext,
-              }}
-            />
+            {enquiryOpen ? (
+              <PublicPlanEnquiryForm
+                planHref={printablePlanHref}
+                initialPostcode={draft.postcode}
+                suggestedInterests={enquiryInterests}
+                planSnapshot={{
+                  goals: draft.goals,
+                  pace: draft.pace,
+                  situation: draft.situation,
+                  approvalContext: draft.approvalContext,
+                  budgetRange: draft.budgetRange,
+                  addressState: draft.addressState,
+                  features: draft.features,
+                  propertyContext: enquiryPropertyContext,
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="planner-primary-result"
+                aria-controls="plan-enquiry"
+                aria-expanded="false"
+                onClick={() => setEnquiryOpen(true)}
+              >
+                Ask Australian Energy Assessments about an upgrade
+              </button>
+            )}
           </section>
           <div className="planner-result-actions">
             <Link className="planner-primary-result" href={printablePlanHref}>Open my printable plan</Link>

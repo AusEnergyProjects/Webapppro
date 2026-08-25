@@ -26,6 +26,17 @@ test("quality evaluator records a correction outcome without retaining conversat
     answerStatus: "answered",
     publicPolicyPassed: true,
     followUpQuestion: "Which room is hardest to heat?",
+    latencyMs: 87.6,
+    metadata: {
+      corpusSha256: "corpus-abc",
+      promptSha256: "prompt-def",
+      sourceSha256: "source-ghi",
+      appVersion: "app-42",
+      gitSha: "git-123",
+      deploymentId: "deploy-456",
+      requestedModel: "gpt-requested",
+      providerModel: "gpt-provider",
+    },
   });
 
   assert.equal(event.turnIntent, "correction");
@@ -39,12 +50,16 @@ test("quality evaluator records a correction outcome without retaining conversat
     "correctionPassed",
     "day",
     "followUpPassed",
+    "latencyMs",
+    "metadata",
     "privacyPassed",
     "topicSwitchExpected",
     "topicSwitchPassed",
     "turnIntent",
   ]);
-  assert.doesNotMatch(JSON.stringify(event), /Private Street|Actually I rent|message|content|request|client|identity|answerText/i);
+  assert.equal(event.latencyMs, 88);
+  assert.equal(event.metadata.deploymentId, "deploy-456");
+  assert.doesNotMatch(JSON.stringify(event), /Private Street|Actually I rent|question_text|answer_text|answerText|recentTurns/i);
 });
 
 test("quality evaluator distinguishes a successful subject change from an unchanged continuation", () => {

@@ -13,22 +13,27 @@ test("reviewed synthetic corpus covers every release dimension without customer 
     [...new Set(SURGE_CONVERSATION_EVALUATION_CORPUS.map((entry) => entry.dimension))].sort(),
     [...SURGE_CONVERSATION_EVALUATION_DIMENSIONS].sort(),
   );
-  assert.doesNotMatch(JSON.stringify(SURGE_CONVERSATION_EVALUATION_CORPUS), /email@|phone number|street address|customer_id|request_id/i);
+  const syntheticTurns = SURGE_CONVERSATION_EVALUATION_CORPUS.flatMap((entry) => entry.syntheticTurns);
+  assert.doesNotMatch(JSON.stringify(syntheticTurns), /email@|phone number|street address|customer_id|request_id/i);
   assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => entry.reviewStatus === "approved" && entry.reviewedBy), true);
+  assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => entry.assertions.length > 0), true);
+  assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => !Object.hasOwn(entry, "passed")), true);
 });
 
 test("release gate requires passing evidence in every dimension", () => {
   const passing = SURGE_CONVERSATION_REVIEWED_RESULTS;
   assert.equal(evaluateSurgeConversationReleaseGate(passing).ready, true);
 
-  const failing = passing.map((entry) => entry.dimension === "privacy" ? { ...entry, passed: false } : entry);
+  const failing = passing.map((entry) => entry.caseId === "privacy-contact-details"
+    ? { ...entry, response: "Repeat synthetic contact marker in the response." }
+    : entry);
   const result = evaluateSurgeConversationReleaseGate(failing);
   assert.equal(result.ready, false);
   assert.deepEqual(result.failedDimensions, ["privacy"]);
 
   const incomplete = evaluateSurgeConversationReleaseGate(passing.slice(1));
   assert.equal(incomplete.ready, false);
-  assert.match(incomplete.coverageErrors.join("\n"), /correction-tenure: result missing/);
+  assert.match(incomplete.coverageErrors.join("\n"), /correction-tenure: observation missing/);
 });
 
 test("quality release migration stores only aggregate rates and readiness", async () => {

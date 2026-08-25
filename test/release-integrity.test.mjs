@@ -105,6 +105,32 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(releaseTruth, /Sites version 391/);
   assert.match(releaseTruth, /appgprj_6a550c378000819185caf094173422bb~appgver_3666fa042f0c8191a42942f3229725bc/);
   assert.match(releaseTruth, /appgdep_6a8af0d5ca1081919f3c86b55f68a163/);
+  const surgeGovernedDepthDocuments = [
+    ["ROADMAP.md", roadmap],
+    ["docs/HANDOVER_NEXT_TASK.md", currentHandover],
+    ["docs/RELEASE_TRUTH.md", releaseTruth],
+  ];
+  for (const [label, document] of surgeGovernedDepthDocuments) {
+    assert.match(document, /## Incorporated release candidate: AEA-SURGE-GOVERNED-DEPTH-83/, label);
+    assert.match(document, /Release deployment identity: pending\./, label);
+    assert.match(document, /0162_surge_conversation_quality_model_identity\.sql/, label);
+    assert.match(document, /Official-source custody captures exact upstream bytes/, label);
+    assert.match(document, /Conversation-quality reporting aggregates reviewed-case outcomes/, label);
+    assert.match(document, /Installed-browser continuity rehearsal covers restart, duplicate tab/, label);
+    assert.match(document, /Route graph budgets inspect built manifest and React Server Components/, label);
+    assert.match(document, /Reviewed guidance covers six practical and product categories/, label);
+    assert.match(
+      document,
+      /exact-byte source custody release gate is not yet required because no reviewed baseline and independent approval exist/i,
+      label,
+    );
+    assert.match(document, /evaluation corpus and continuity API are synthetic until a deployed-model run/i, label);
+    assert.match(
+      document,
+      /must not guess customer certificate quantities, trading values, registration fees, compliance fees, aggregator deductions or final cash discounts/i,
+      label,
+    );
+  }
   assert.match(releaseTruth, /## Previous production release: durable Surge context and chronological workspace/);
   assert.match(releaseTruth, /## Previous production release: visible Surge edits and compact mobile navigation/);
   assert.match(releaseTruth, /## Previous production release: public Surge UX optimisation and shared wide layout/);
@@ -1858,6 +1884,37 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(normalisedRoadmapNextFive, /\n3\. Reconcile the client service schedule and obtain licensed-practitioner review/);
   assert.match(normalisedRoadmapNextFive, /\n4\. Run a supervised test-property issue and share rehearsal/);
   assert.match(normalisedRoadmapNextFive, /\n5\. Replace the expiring internal APK with the approved permanent distribution lifecycle/);
+  const surgeFollowOnPattern =
+    /### Surge governed-depth follow-on queue\r?\n\r?\n((?:\d+\. .*(?:\r?\n|$))+)/g;
+  const roadmapSurgeFollowOnMatches = [...roadmap.matchAll(surgeFollowOnPattern)];
+  const handoverSurgeFollowOnMatches = [...currentHandover.matchAll(surgeFollowOnPattern)];
+  const releaseTruthSurgeFollowOnMatches = [...releaseTruth.matchAll(surgeFollowOnPattern)];
+  assert.equal(roadmapSurgeFollowOnMatches.length, 1, "ROADMAP.md must have one Surge follow-on queue");
+  assert.equal(
+    handoverSurgeFollowOnMatches.length,
+    1,
+    "HANDOVER_NEXT_TASK.md must have one Surge follow-on queue",
+  );
+  assert.equal(
+    releaseTruthSurgeFollowOnMatches.length,
+    1,
+    "RELEASE_TRUTH.md must have one Surge follow-on queue",
+  );
+  const roadmapSurgeFollowOn = roadmapSurgeFollowOnMatches.at(0)?.[1];
+  const handoverSurgeFollowOn = handoverSurgeFollowOnMatches.at(0)?.[1];
+  const releaseTruthSurgeFollowOn = releaseTruthSurgeFollowOnMatches.at(0)?.[1];
+  assert.ok(roadmapSurgeFollowOn, "ROADMAP.md must contain five ordered Surge follow-on steps");
+  assert.ok(handoverSurgeFollowOn, "HANDOVER_NEXT_TASK.md must contain five ordered Surge follow-on steps");
+  assert.ok(releaseTruthSurgeFollowOn, "RELEASE_TRUTH.md must contain five ordered Surge follow-on steps");
+  const normalisedRoadmapSurgeFollowOn = roadmapSurgeFollowOn.replaceAll("\r\n", "\n");
+  const normalisedHandoverSurgeFollowOn = handoverSurgeFollowOn.replaceAll("\r\n", "\n");
+  const normalisedReleaseTruthSurgeFollowOn = releaseTruthSurgeFollowOn.replaceAll("\r\n", "\n");
+  const surgeFollowOnNumbers = [...normalisedRoadmapSurgeFollowOn.matchAll(/^(\d+)\. /gm)].map((match) =>
+    Number(match[1]),
+  );
+  assert.deepEqual(surgeFollowOnNumbers, [1, 2, 3, 4, 5]);
+  assert.equal(normalisedHandoverSurgeFollowOn, normalisedRoadmapSurgeFollowOn);
+  assert.equal(normalisedReleaseTruthSurgeFollowOn, normalisedRoadmapSurgeFollowOn);
   assert.match(roadmap, /hosted product remains a pre-launch test environment[\s\S]{0,240}final wipe remains a separately authorised launch operation/i);
   assert.match(handover, /hosted environment remains a test environment[\s\S]{0,180}final wipe is a separate deliberate operation/i);
   assert.match(releaseTruth, /hosted environment remains pre-launch test[\s\S]{0,220}separately authorised launch operation/i);

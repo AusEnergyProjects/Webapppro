@@ -3367,6 +3367,34 @@ Complete the requested five priorities with a fail-closed source-approval hash r
 
 The foundation passed `npm.cmd run validate`, including all 36 integration tests, the complete repository suite, fresh D1 migrations through `0159_surge_conversation_quality_dimensions.sql`, customer-plan PDF audit, production build, Sites bundle audit and public performance budgets. Exact application source `7627d3ef7a28002b3b1b2cf6aebdbf76257683b7` was saved as Sites version 392 and then incorporated into the exact version 397 TLink release source recorded above.
 
+## Incorporated release candidate: AEA-SURGE-GOVERNED-DEPTH-83
+
+Release deployment identity: pending. This release has no recorded application source, Sites saved version or deployment identifier until exact release evidence exists.
+
+### Completed contracts
+
+1. Official-source custody captures exact upstream bytes with URL and HTTP metadata and SHA-256, compares them with a maintained baseline, and keeps reviewer and approval state separate so the audit fails closed.
+2. Conversation-quality reporting aggregates reviewed-case outcomes, required dimensions, latency, source and status counts, corpus, prompt and source hashes, and application, deployment and model identity without storing transcripts or customer identity.
+3. Installed-browser continuity rehearsal covers restart, duplicate tab, fresh profile, corrupt-primary backup recovery and scroll handoff through a synthetic intercepted API.
+4. Route graph budgets inspect built manifest and React Server Components page and layout ownership and enforce separate JavaScript and CSS budgets for home, Surge, plan and calculator.
+5. Reviewed guidance covers six practical and product categories, certificate pathways, exact-input deterministic calculations and brand-neutral comparison boundaries.
+
+The release adds migration `0162_surge_conversation_quality_model_identity.sql` for aggregate corpus, prompt, source, application, Git, deployment, requested-model, provider-model and latency identity. It stores no transcript or customer identity.
+
+### Honest boundaries
+
+- The exact-byte source custody release gate is not yet required because no reviewed baseline and independent approval exist. It becomes required only after the first production fixture is captured and independently approved.
+- The evaluation corpus and continuity API are synthetic until a deployed-model run is recorded. This does not prove production provider response quality.
+- Surge must not guess customer certificate quantities, trading values, registration fees, compliance fees, aggregator deductions or final cash discounts. Missing or stale exact inputs fail closed.
+
+### Surge governed-depth follow-on queue
+
+1. Capture the first production official-source fixture, complete independent review and make the exact-byte custody gate required.
+2. Run the reviewed corpus against the deployed provider and model and establish a signed baseline and release threshold.
+3. Extend installed-browser continuity rehearsal to concurrent two-way tab edits, conflict handling and deterministic replay.
+4. Tighten the per-route JavaScript and CSS graph budgets after measured chunk and stylesheet restructuring.
+5. Expand independently reviewed exact-model specifications and current programme and certificate coverage while preserving the exact-input and no-guessed-values rule.
+
 ## Next five logical product steps
 
 1. Install the signed build on the Samsung, issue a John Smith field PIN from TLink Team, confirm the assigned test job appears on the correct calendar day, and complete the full workflow with offline, reconnection, photo, location and timestamp checks.

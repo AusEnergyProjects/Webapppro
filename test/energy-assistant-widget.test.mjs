@@ -506,7 +506,7 @@ test("Surge inherits the platform typography roles instead of inventing tiny var
 test("mobile Surge collapses secondary context and suggestions while chat follows page scroll", () => {
   assert.match(widget, /contextMobileSummary/);
   assert.match(widget, /<details[\s\S]{0,160}className=\{styles\.contextRail\}/);
-  assert.match(widget, /<div className=\{styles\.contextRailBody\}>/);
+  assert.match(widget, /<div[^>]*className=\{styles\.contextRailBody\}[^>]*>/);
   assert.match(widget, /<details className=\{styles\.starterDrawer\}>/);
   assert.match(styles, /\.contextMobileSummary \{\s*display: none;/);
   assert.match(styles, /\.rootDedicated \.contextRail \{[^}]*max-height: none;[^}]*overflow: visible;/);
@@ -546,7 +546,7 @@ test("context edit actions reveal and move focus to the selected intake step", (
   assert.match(widget, /intake\.scrollIntoView\(\{[\s\S]{0,180}block: "start"/);
   assert.match(widget, /intake\.focus\(\{ preventScroll: true \}\)/);
   assert.match(widget, /onClick=\{\(\) => editStarterProfileStep\(stepIndex\)\}/);
-  assert.match(widget, /<form ref=\{intakeRef\} className=\{styles\.intake\}[^>]*tabIndex=\{-1\}>/);
+  assert.match(widget, /<form[^>]*ref=\{intakeRef\}[^>]*className=\{styles\.intake\}[^>]*tabIndex=\{-1\}>/);
   assert.match(styles, /\.intake \{[^}]*scroll-margin-top: 16px;/);
 });
 

@@ -1877,6 +1877,7 @@ export function EnergyAssistantWidget({
           {dedicated && (
             <details
               ref={contextRailRef}
+              data-testid="surge-context-rail"
               className={styles.contextRail}
               aria-label="Your home context"
               open={contextRailOpen}
@@ -1897,7 +1898,7 @@ export function EnergyAssistantWidget({
                 </span>
                 <span className={styles.contextRailToggle} aria-hidden="true">⌄</span>
               </summary>
-              <div className={styles.contextRailBody}>
+              <div data-testid="surge-context-scroll" className={styles.contextRailBody}>
               <div className={styles.contextProgress}>
                 <div>
                   <strong>{profileKnownAnswerCount}</strong>
@@ -1916,7 +1917,7 @@ export function EnergyAssistantWidget({
                   </p>
                 )}
                 {nextIncompleteProfileStep >= 0 && (
-                  <button className={styles.contextContinue} type="button" onClick={continueStarterProfile}>
+                  <button data-testid="surge-context-continue" className={styles.contextContinue} type="button" onClick={continueStarterProfile}>
                     {profileUnreviewedAnswerCount > 0
                       ? "Continue setup"
                       : `Review ${profileUnconfirmedAnswerCount} not sure ${profileUnconfirmedAnswerCount === 1 ? "answer" : "answers"}`}
@@ -2011,9 +2012,9 @@ export function EnergyAssistantWidget({
             </button>}
           </header>
 
-          <div ref={conversationRef} className={styles.conversation} tabIndex={-1} onWheel={handOffConversationScroll}>
+          <div ref={conversationRef} data-testid="surge-conversation-scroll" className={styles.conversation} tabIndex={-1} onWheel={handOffConversationScroll}>
             {needsStarterProfile && (
-              <form ref={intakeRef} className={styles.intake} onSubmit={completeStarterProfile} tabIndex={-1}>
+              <form ref={intakeRef} data-testid="surge-context-intake" className={styles.intake} onSubmit={completeStarterProfile} tabIndex={-1}>
                 <header>
                   <span>Build your home context · Step {profileStep + 1} of {SURGE_PROFILE_STEPS.length}</span>
                   <progress max={SURGE_PROFILE_STEPS.length} value={profileStep + 1} aria-label={`Step ${profileStep + 1} of ${SURGE_PROFILE_STEPS.length}`} />
@@ -2396,7 +2397,7 @@ export function EnergyAssistantWidget({
             {busy && <p className={styles.thinking} role="status">Surge AI is checking that...</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
             {status && <p className={styles.status} role="status">{status}</p>}
-            <div ref={conversationEndRef} className={styles.conversationEnd} aria-hidden="true" />
+            <div ref={conversationEndRef} data-testid="surge-conversation-end" className={styles.conversationEnd} aria-hidden="true" />
           </div>
 
           {(context.audience === "trade" || profile.completed || profileDeferred || messages.length > 0) && <form className={styles.composer} onSubmit={submitQuestion}>
@@ -2404,6 +2405,7 @@ export function EnergyAssistantWidget({
             <div>
               <textarea
                 ref={composerRef}
+                data-testid="surge-composer-input"
                 id="aea-energy-guide-question"
                 rows={2}
                 maxLength={MAX_MESSAGE_LENGTH}
@@ -2418,7 +2420,7 @@ export function EnergyAssistantWidget({
                   }
                 }}
               />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge AI">
+              <button data-testid="surge-composer-submit" type="submit" disabled={busy || !draft.trim()} aria-label="Ask Surge AI">
                 <span aria-hidden="true">Send</span>
               </button>
             </div>

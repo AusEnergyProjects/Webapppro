@@ -25,6 +25,7 @@ function request(body, options = {}) {
     "user-agent": "AEA assistant API test",
   };
   if (options.origin !== null) headers.origin = options.origin || ORIGIN;
+  if (options.qualityRehearsal) headers["x-surge-quality-rehearsal"] = "aggregate-v1";
   return new Request(`${ORIGIN}/api/energy-assistant`, {
     method: options.method || "POST",
     headers,
@@ -136,6 +137,7 @@ test("canonical ask API is stateless and performs zero D1 operations", async () 
   assert.equal("sessionId" in payload, false);
   assert.equal("accessKey" in payload, false);
   assert.equal("messages" in payload, false);
+  assert.equal("quality" in payload, false);
   assert.equal(d1.count(), 0);
   assert.ok(Buffer.byteLength(JSON.stringify(payload.reply)) <= ENERGY_ASSISTANT_MAX_RESPONSE_BYTES);
 });
@@ -151,6 +153,24 @@ test("ask API emits one privacy-safe categorical quality event after a successfu
     audience: "public",
   }), {
     now: () => new Date(NOW),
+    monotonicNow: (() => {
+      let tick = 100;
+      return () => {
+        const value = tick;
+        tick += 64;
+        return value;
+      };
+    })(),
+    qualityMetadata: {
+      corpusSha256: "corpus-sha",
+      promptSha256: "prompt-sha",
+      sourceSha256: "source-sha",
+      appVersion: "app-v1",
+      gitSha: "git-sha",
+      deploymentId: "deploy-v1",
+      requestedModel: "gpt-5.6-terra",
+      providerModel: "provider-terra",
+    },
     composeAnswer: () => fixedAnswer("Start by checking the ceiling insulation."),
     generateAnswer: async () => null,
     recordQuality: async (event) => {
@@ -163,7 +183,38 @@ test("ask API emits one privacy-safe categorical quality event after a successfu
   assert.equal(qualityEvents[0].audience, "household");
   assert.equal(qualityEvents[0].answerSource, "deterministic");
   assert.equal(qualityEvents[0].answerStatus, "answered");
-  assert.doesNotMatch(JSON.stringify(qualityEvents[0]), /Private Street|insulation at|message|content|request|client|identity|answerText/i);
+  assert.equal(qualityEvents[0].latencyMs, 64);
+  assert.equal(qualityEvents[0].metadata.deploymentId, "deploy-v1");
+  assert.equal(qualityEvents[0].metadata.requestedModel, "gpt-5.6-terra");
+  assert.doesNotMatch(
+    JSON.stringify(qualityEvents[0]),
+    /Private Street|insulation at|message|content|requestId|clientId|email|phone|address|postcode|ipAddress|answerText/i,
+  );
+});
+
+test("aggregate quality rehearsal exposes only categorical answer metadata", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "quality-rehearsal-0001",
+    message: "What should I check first?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Start with a ceiling insulation inspection."),
+    generateAnswer: async () => null,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.deepEqual(payload.quality, {
+    answerSource: "deterministic",
+    answerStatus: "answered",
+  });
+  assert.equal("latencyMs" in payload.quality, false);
+  assert.equal("metadata" in payload.quality, false);
+  assert.doesNotMatch(JSON.stringify(payload.quality), /message|content|transcript|answerText/i);
 });
 
 test("registry-grounded product guidance bypasses the general model and records its source", async () => {
