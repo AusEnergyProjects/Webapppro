@@ -534,6 +534,13 @@ function splitD1GuardStatements(
   });
 }
 
+const SRES_ACTIVATION_SNAPSHOT_ACTOR_KIND_GUARD_SQL = `CREATE TRIGGER IF NOT EXISTS compliance_sres_activation_snapshot_insert_guard
+BEFORE INSERT ON compliance_sres_activation_snapshots
+WHEN NEW.created_actor_kind NOT IN ('compliance', 'admin')
+BEGIN
+  SELECT RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID');
+END;`;
+
 const SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS = new Map<
   string,
   readonly { name: string; sql: string }[]
@@ -552,6 +559,13 @@ const SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS = new Map<
         "compliance_sres_activation_snapshot_record_review_guard",
         "compliance_sres_activation_snapshot_completeness_guard",
       ],
+    ).map((definition, index) =>
+      index === 0
+        ? {
+            name: definition.name,
+            sql: SRES_ACTIVATION_SNAPSHOT_ACTOR_KIND_GUARD_SQL,
+          }
+        : definition,
     ),
   ],
   [

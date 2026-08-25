@@ -135,9 +135,19 @@ test("the SRES activation guards stay below D1 expression depth without weakenin
 
   assert.equal(snapshotGuards.length, 7);
   assert.equal(outputGuards.length, 4);
-  assert.ok([...snapshotGuards, ...outputGuards].every(
-    (definition) => (definition.sql.match(/SELECT CASE/g) ?? []).length === 1,
-  ));
+  const actorKindGuard = snapshotGuards.find(
+    (definition) => definition.name === "compliance_sres_activation_snapshot_insert_guard",
+  );
+  assert.match(
+    actorKindGuard.sql,
+    /WHEN NEW\.created_actor_kind NOT IN \('compliance', 'admin'\)/,
+  );
+  assert.equal((actorKindGuard.sql.match(/SELECT CASE/g) ?? []).length, 0);
+  assert.ok(
+    [...snapshotGuards.filter((definition) => definition !== actorKindGuard), ...outputGuards].every(
+      (definition) => (definition.sql.match(/SELECT CASE/g) ?? []).length === 1,
+    ),
+  );
 
   assert.equal(
     (snapshotGuard.match(/COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID/g) ?? []).length,
