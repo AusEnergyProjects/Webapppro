@@ -75,16 +75,19 @@ const CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS = [
 const SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL = `CREATE TRIGGER IF NOT EXISTS compliance_sres_activation_snapshot_insert_guard
 BEFORE INSERT ON compliance_sres_activation_snapshots
 BEGIN
-  SELECT CASE WHEN NOT (
-    NEW.created_actor_kind = 'compliance' AND EXISTS (
+  SELECT CASE WHEN NEW.created_actor_kind NOT IN ('compliance', 'admin')
+    THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID') END;
+
+  SELECT CASE WHEN NEW.created_actor_kind = 'compliance' AND NOT EXISTS (
       SELECT 1 FROM compliance_users member
       WHERE member.organisation_id = NEW.organisation_id
         AND member.firebase_uid = NEW.created_by_uid
         AND member.status = 'active'
         AND member.role IN ('admin', 'case_manager', 'reviewer')
         AND member.governance_identity_verified = 1
-    )
-    OR NEW.created_actor_kind = 'admin' AND EXISTS (
+    ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID') END;
+
+  SELECT CASE WHEN NEW.created_actor_kind = 'admin' AND NOT EXISTS (
       SELECT 1 FROM admin_users administrator
       JOIN compliance_organisations organisation
         ON organisation.id = NEW.organisation_id
@@ -93,8 +96,7 @@ BEGIN
       WHERE administrator.firebase_uid = NEW.created_by_uid
         AND administrator.status = 'active'
         AND administrator.role IN ('owner', 'admin')
-    )
-  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID') END;
+    ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID') END;
 
   SELECT CASE WHEN EXISTS (
     SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
@@ -543,6 +545,8 @@ const SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS = new Map<
       SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL,
       [
         "compliance_sres_activation_snapshot_insert_guard",
+        "compliance_sres_activation_snapshot_compliance_author_guard",
+        "compliance_sres_activation_snapshot_admin_author_guard",
         "compliance_sres_activation_snapshot_record_binding_guard",
         "compliance_sres_activation_snapshot_record_freshness_guard",
         "compliance_sres_activation_snapshot_record_review_guard",

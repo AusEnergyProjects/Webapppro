@@ -87,7 +87,7 @@ test("Sites migrations 0142 through 0147 contain no trigger statements", () => {
 });
 
 test("the prepared-statement guard inventory is exact and complete", () => {
-  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 70);
+  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 72);
   assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 16);
   assert.equal(
     new Set(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
@@ -111,6 +111,8 @@ test("the prepared-statement guard inventory is exact and complete", () => {
 test("the SRES activation guards stay below D1 expression depth without weakening custody checks", () => {
   const snapshotNames = new Set([
     "compliance_sres_activation_snapshot_insert_guard",
+    "compliance_sres_activation_snapshot_compliance_author_guard",
+    "compliance_sres_activation_snapshot_admin_author_guard",
     "compliance_sres_activation_snapshot_record_binding_guard",
     "compliance_sres_activation_snapshot_record_freshness_guard",
     "compliance_sres_activation_snapshot_record_review_guard",
@@ -131,7 +133,7 @@ test("the SRES activation guards stay below D1 expression depth without weakenin
   const snapshotGuard = snapshotGuards.map((definition) => definition.sql).join("\n");
   const outputGuard = outputGuards.map((definition) => definition.sql).join("\n");
 
-  assert.equal(snapshotGuards.length, 5);
+  assert.equal(snapshotGuards.length, 7);
   assert.equal(outputGuards.length, 4);
   assert.ok([...snapshotGuards, ...outputGuards].every(
     (definition) => (definition.sql.match(/SELECT CASE/g) ?? []).length === 1,
@@ -180,7 +182,7 @@ test("runtime installation restores all guards before direct guarded work", asyn
   const installed = database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
   ).all();
-  assert.equal(installed.length, 70);
+  assert.equal(installed.length, 72);
   for (const definition of CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS) {
     const row = installed.find((item) => item.name === definition.name);
     assert.ok(row, definition.name);
