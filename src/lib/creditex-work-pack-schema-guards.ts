@@ -502,15 +502,73 @@ BEGIN
   ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
 END;`;
 
-const SRES_D1_EXPRESSION_DEPTH_GUARD_SQL = new Map<string, string>([
+function splitD1GuardStatements(
+  canonicalName: string,
+  sql: string,
+  names: readonly string[],
+) {
+  const beginMarker = "\nBEGIN\n";
+  const endMarker = "\nEND;";
+  const bodyStart = sql.indexOf(beginMarker);
+  const bodyEnd = sql.lastIndexOf(endMarker);
+  if (bodyStart < 0 || bodyEnd <= bodyStart) {
+    throw new Error(`CREDITEX_WORK_PACK_SCHEMA_GUARD_SPLIT_INVALID:${canonicalName}`);
+  }
+
+  const prefix = sql.slice(0, bodyStart);
+  const statements = sql
+    .slice(bodyStart + beginMarker.length, bodyEnd)
+    .split(/\n\s*\n(?=  SELECT CASE)/);
+  if (statements.length !== names.length || names[0] !== canonicalName) {
+    throw new Error(`CREDITEX_WORK_PACK_SCHEMA_GUARD_SPLIT_COUNT_INVALID:${canonicalName}`);
+  }
+
+  return statements.map((statement, index) => {
+    const name = names[index];
+    return {
+      name,
+      sql: `${prefix.replace(canonicalName, name)}${beginMarker}${statement}${endMarker}`,
+    };
+  });
+}
+
+const SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS = new Map<
+  string,
+  readonly { name: string; sql: string }[]
+>([
   [
     "compliance_sres_activation_snapshot_insert_guard",
-    SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL,
+    splitD1GuardStatements(
+      "compliance_sres_activation_snapshot_insert_guard",
+      SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL,
+      [
+        "compliance_sres_activation_snapshot_insert_guard",
+        "compliance_sres_activation_snapshot_record_binding_guard",
+        "compliance_sres_activation_snapshot_record_freshness_guard",
+        "compliance_sres_activation_snapshot_record_review_guard",
+        "compliance_sres_activation_snapshot_completeness_guard",
+      ],
+    ),
   ],
   [
     "compliance_sres_output_action_activation_guard",
-    SRES_OUTPUT_ACTION_ACTIVATION_GUARD_SQL,
+    splitD1GuardStatements(
+      "compliance_sres_output_action_activation_guard",
+      SRES_OUTPUT_ACTION_ACTIVATION_GUARD_SQL,
+      [
+        "compliance_sres_output_action_activation_guard",
+        "compliance_sres_output_action_record_binding_guard",
+        "compliance_sres_output_action_record_freshness_guard",
+        "compliance_sres_output_action_record_review_guard",
+      ],
+    ),
   ],
+] as const);
+
+const SRES_D1_EXPRESSION_DEPTH_GUARD_SQL = new Map<string, string>([
+  ...[...SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS].map(
+    ([name, definitions]) => [name, definitions[0].sql] as const,
+  ),
 ]);
 
 // Keep the exact superseded SQL so an already-initialised database can move
@@ -535,10 +593,10 @@ const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_SQL = new Map(
 );
 
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
-  CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.map((definition) => ({
-    ...definition,
-    sql: SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.get(definition.name) ?? definition.sql,
-  }));
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.flatMap((definition) =>
+    SRES_D1_EXPRESSION_DEPTH_GUARD_DEFINITIONS.get(definition.name)
+      ?? [definition],
+  );
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
   "compliance_activity_work_pack_versions",

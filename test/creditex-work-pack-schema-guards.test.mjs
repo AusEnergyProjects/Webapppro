@@ -87,7 +87,7 @@ test("Sites migrations 0142 through 0147 contain no trigger statements", () => {
 });
 
 test("the prepared-statement guard inventory is exact and complete", () => {
-  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 63);
+  assert.equal(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length, 70);
   assert.equal(CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES.length, 16);
   assert.equal(
     new Set(CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.map((item) => item.name)).size,
@@ -109,12 +109,33 @@ test("the prepared-statement guard inventory is exact and complete", () => {
 });
 
 test("the SRES activation guards stay below D1 expression depth without weakening custody checks", () => {
-  const snapshotGuard = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.find(
-    (definition) => definition.name === "compliance_sres_activation_snapshot_insert_guard",
-  )?.sql ?? "";
-  const outputGuard = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.find(
-    (definition) => definition.name === "compliance_sres_output_action_activation_guard",
-  )?.sql ?? "";
+  const snapshotNames = new Set([
+    "compliance_sres_activation_snapshot_insert_guard",
+    "compliance_sres_activation_snapshot_record_binding_guard",
+    "compliance_sres_activation_snapshot_record_freshness_guard",
+    "compliance_sres_activation_snapshot_record_review_guard",
+    "compliance_sres_activation_snapshot_completeness_guard",
+  ]);
+  const outputNames = new Set([
+    "compliance_sres_output_action_activation_guard",
+    "compliance_sres_output_action_record_binding_guard",
+    "compliance_sres_output_action_record_freshness_guard",
+    "compliance_sres_output_action_record_review_guard",
+  ]);
+  const snapshotGuards = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.filter(
+    (definition) => snapshotNames.has(definition.name),
+  );
+  const outputGuards = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.filter(
+    (definition) => outputNames.has(definition.name),
+  );
+  const snapshotGuard = snapshotGuards.map((definition) => definition.sql).join("\n");
+  const outputGuard = outputGuards.map((definition) => definition.sql).join("\n");
+
+  assert.equal(snapshotGuards.length, 5);
+  assert.equal(outputGuards.length, 4);
+  assert.ok([...snapshotGuards, ...outputGuards].every(
+    (definition) => (definition.sql.match(/SELECT CASE/g) ?? []).length === 1,
+  ));
 
   assert.equal(
     (snapshotGuard.match(/COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID/g) ?? []).length,
@@ -159,7 +180,7 @@ test("runtime installation restores all guards before direct guarded work", asyn
   const installed = database.prepare(
     "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' ORDER BY name",
   ).all();
-  assert.equal(installed.length, 63);
+  assert.equal(installed.length, 70);
   for (const definition of CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS) {
     const row = installed.find((item) => item.name === definition.name);
     assert.ok(row, definition.name);
