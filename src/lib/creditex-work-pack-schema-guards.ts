@@ -69,8 +69,9 @@ const CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS = [
 ] as const;
 
 // Cloudflare D1 enforces SQLite's default expression-tree depth of 100. Keep
-// each SRES custody decision in a separate trigger step so the release path
-// stays fail closed without relying on a larger SQLite compile-time limit.
+// each SRES custody decision in a separate trigger step and flatten repeated
+// equality checks into row-value comparisons so the release path stays fail
+// closed without relying on a larger SQLite compile-time limit.
 const SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL = `CREATE TRIGGER IF NOT EXISTS compliance_sres_activation_snapshot_insert_guard
 BEFORE INSERT ON compliance_sres_activation_snapshots
 BEGIN
@@ -99,29 +100,42 @@ BEGIN
     SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
     WHERE NOT EXISTS (
       SELECT 1 FROM compliance_sres_activation_records record
-      WHERE record.id = json_extract(evidence.value, '$.recordId')
-        AND record.organisation_id = NEW.organisation_id
-        AND record.program_code = NEW.program_code
-        AND record.activity_template_id = NEW.activity_template_id
+      WHERE (
+        record.id,
+        record.organisation_id,
+        record.program_code,
+        record.activity_template_id,
+        record.evidence_kind,
+        record.subject_key,
+        record.result_code,
+        record.source_artifact_id,
+        record.source_artifact_sha256,
+        record.response_sha256,
+        record.source_record_key,
+        record.effective_from,
+        record.effective_to,
+        record.observed_at,
+        record.valid_until,
+        record.supersedes_record_id
+      ) = (
+        json_extract(evidence.value, '$.recordId'),
+        NEW.organisation_id,
+        NEW.program_code,
+        NEW.activity_template_id,
+        json_extract(evidence.value, '$.evidenceKind'),
+        json_extract(evidence.value, '$.subjectKey'),
+        json_extract(evidence.value, '$.resultCode'),
+        json_extract(evidence.value, '$.sourceArtifactId'),
+        json_extract(evidence.value, '$.sourceArtifactSha256'),
+        json_extract(evidence.value, '$.responseSha256'),
+        json_extract(evidence.value, '$.sourceRecordKey'),
+        json_extract(evidence.value, '$.effectiveFrom'),
+        json_extract(evidence.value, '$.effectiveTo'),
+        json_extract(evidence.value, '$.observedAt'),
+        json_extract(evidence.value, '$.validUntil'),
+        COALESCE(json_extract(evidence.value, '$.supersedesRecordId'), '')
+      )
         AND record.case_id IN ('', NEW.case_id)
-        AND record.evidence_kind = json_extract(evidence.value, '$.evidenceKind')
-        AND record.subject_key = json_extract(evidence.value, '$.subjectKey')
-        AND record.result_code = json_extract(evidence.value, '$.resultCode')
-        AND record.source_artifact_id =
-          json_extract(evidence.value, '$.sourceArtifactId')
-        AND record.source_artifact_sha256 =
-          json_extract(evidence.value, '$.sourceArtifactSha256')
-        AND record.response_sha256 =
-          json_extract(evidence.value, '$.responseSha256')
-        AND record.source_record_key =
-          json_extract(evidence.value, '$.sourceRecordKey')
-        AND record.effective_from = json_extract(evidence.value, '$.effectiveFrom')
-        AND record.effective_to = json_extract(evidence.value, '$.effectiveTo')
-        AND record.observed_at = json_extract(evidence.value, '$.observedAt')
-        AND record.valid_until = json_extract(evidence.value, '$.validUntil')
-        AND record.supersedes_record_id = COALESCE(
-          json_extract(evidence.value, '$.supersedesRecordId'), ''
-        )
     )
   ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID') END;
 
@@ -129,10 +143,17 @@ BEGIN
     SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
     WHERE NOT EXISTS (
       SELECT 1 FROM compliance_sres_activation_records record
-      WHERE record.id = json_extract(evidence.value, '$.recordId')
-        AND record.organisation_id = NEW.organisation_id
-        AND record.program_code = NEW.program_code
-        AND record.activity_template_id = NEW.activity_template_id
+      WHERE (
+        record.id,
+        record.organisation_id,
+        record.program_code,
+        record.activity_template_id
+      ) = (
+        json_extract(evidence.value, '$.recordId'),
+        NEW.organisation_id,
+        NEW.program_code,
+        NEW.activity_template_id
+      )
         AND record.case_id IN ('', NEW.case_id)
         AND record.effective_from <= NEW.activity_date
         AND (record.effective_to = '' OR record.effective_to >= NEW.activity_date)
@@ -151,40 +172,78 @@ BEGIN
       SELECT 1
       FROM compliance_sres_activation_records record
       JOIN compliance_sres_activation_reviews review
-        ON review.organisation_id = record.organisation_id
-        AND review.activation_record_id = record.id
-        AND review.response_sha256 = record.response_sha256
-        AND review.source_artifact_id = record.source_artifact_id
-        AND review.source_artifact_sha256 = record.source_artifact_sha256
-        AND review.decision = 'approved'
+        ON (
+          review.organisation_id,
+          review.activation_record_id,
+          review.response_sha256,
+          review.source_artifact_id,
+          review.source_artifact_sha256,
+          review.decision
+        ) = (
+          record.organisation_id,
+          record.id,
+          record.response_sha256,
+          record.source_artifact_id,
+          record.source_artifact_sha256,
+          'approved'
+        )
       JOIN compliance_official_source_artifacts artifact
-        ON artifact.id = record.source_artifact_id
-        AND artifact.organisation_id = record.organisation_id
-        AND artifact.sha256 = record.source_artifact_sha256
+        ON (
+          artifact.id,
+          artifact.organisation_id,
+          artifact.sha256
+        ) = (
+          record.source_artifact_id,
+          record.organisation_id,
+          record.source_artifact_sha256
+        )
       JOIN compliance_official_source_review_decisions source_review
-        ON source_review.organisation_id = artifact.organisation_id
-        AND source_review.subject_type = 'artifact'
-        AND source_review.subject_id = artifact.id
-        AND source_review.artifact_id = artifact.id
-        AND source_review.artifact_sha256 = artifact.sha256
-        AND source_review.artifact_object_key = artifact.object_key
-        AND source_review.decision = 'approved'
-      WHERE record.id = json_extract(evidence.value, '$.recordId')
-        AND record.organisation_id = NEW.organisation_id
-        AND record.program_code = NEW.program_code
-        AND record.activity_template_id = NEW.activity_template_id
+        ON (
+          source_review.organisation_id,
+          source_review.subject_type,
+          source_review.subject_id,
+          source_review.artifact_id,
+          source_review.artifact_sha256,
+          source_review.artifact_object_key,
+          source_review.decision
+        ) = (
+          artifact.organisation_id,
+          'artifact',
+          artifact.id,
+          artifact.id,
+          artifact.sha256,
+          artifact.object_key,
+          'approved'
+        )
+      WHERE (
+        record.id,
+        record.organisation_id,
+        record.program_code,
+        record.activity_template_id,
+        record.source_artifact_id,
+        record.source_artifact_sha256,
+        record.response_sha256
+      ) = (
+        json_extract(evidence.value, '$.recordId'),
+        NEW.organisation_id,
+        NEW.program_code,
+        NEW.activity_template_id,
+        json_extract(evidence.value, '$.sourceArtifactId'),
+        json_extract(evidence.value, '$.sourceArtifactSha256'),
+        json_extract(evidence.value, '$.responseSha256')
+      )
         AND record.case_id IN ('', NEW.case_id)
-        AND record.source_artifact_id =
-          json_extract(evidence.value, '$.sourceArtifactId')
-        AND record.source_artifact_sha256 =
-          json_extract(evidence.value, '$.sourceArtifactSha256')
-        AND record.response_sha256 =
-          json_extract(evidence.value, '$.responseSha256')
-        AND json_extract(evidence.value, '$.reviewed') = 1
-        AND review.id = json_extract(evidence.value, '$.reviewId')
-        AND review.reviewed_by_uid =
-          json_extract(evidence.value, '$.reviewedByUid')
-        AND review.reviewed_at = json_extract(evidence.value, '$.reviewedAt')
+        AND (
+          json_extract(evidence.value, '$.reviewed'),
+          review.id,
+          review.reviewed_by_uid,
+          review.reviewed_at
+        ) = (
+          1,
+          json_extract(evidence.value, '$.reviewId'),
+          json_extract(evidence.value, '$.reviewedByUid'),
+          json_extract(evidence.value, '$.reviewedAt')
+        )
         AND datetime(NEW.created_at) >= datetime(review.reviewed_at)
         AND NOT EXISTS (
           SELECT 1 FROM compliance_official_source_review_decisions successor
@@ -196,28 +255,20 @@ BEGIN
   SELECT CASE WHEN (
     SELECT COUNT(DISTINCT json_extract(item.value, '$.evidenceKind'))
     FROM json_each(NEW.snapshot_json, '$.records') item
-    WHERE
-      (json_extract(item.value, '$.evidenceKind') =
-        'rec_registry_submission_contract'
-        AND json_extract(item.value, '$.resultCode') IN (
-          'manual_submission_contract_current',
-          'adapter_submission_contract_current'
-        ))
-      OR (json_extract(item.value, '$.evidenceKind') = 'declaration_snapshot'
-        AND json_extract(item.value, '$.resultCode') = 'current')
-      OR (json_extract(item.value, '$.evidenceKind') = 'component_recall_status'
-        AND json_extract(item.value, '$.resultCode') = 'listed_not_removed')
-      OR (json_extract(item.value, '$.evidenceKind') = 'calculator_vector_suite'
-        AND json_extract(item.value, '$.resultCode') = 'passed')
-      OR (json_extract(item.value, '$.evidenceKind') =
-        'registered_agent_assignment'
-        AND json_extract(item.value, '$.resultCode') = 'verified_assigned')
-      OR (json_extract(item.value, '$.evidenceKind') = 'component_eligibility'
-        AND json_extract(item.value, '$.resultCode') = 'eligible')
-      OR (json_extract(item.value, '$.evidenceKind') = 'installer_accreditation'
-        AND json_extract(item.value, '$.resultCode') = 'active')
-      OR (json_extract(item.value, '$.evidenceKind') = 'designer_accreditation'
-        AND json_extract(item.value, '$.resultCode') = 'active')
+    WHERE (
+      json_extract(item.value, '$.evidenceKind'),
+      json_extract(item.value, '$.resultCode')
+    ) IN (VALUES
+      ('rec_registry_submission_contract', 'manual_submission_contract_current'),
+      ('rec_registry_submission_contract', 'adapter_submission_contract_current'),
+      ('declaration_snapshot', 'current'),
+      ('component_recall_status', 'listed_not_removed'),
+      ('calculator_vector_suite', 'passed'),
+      ('registered_agent_assignment', 'verified_assigned'),
+      ('component_eligibility', 'eligible'),
+      ('installer_accreditation', 'active'),
+      ('designer_accreditation', 'active')
+    )
   ) <> 8 THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_INCOMPLETE') END;
 END;`;
 
@@ -228,19 +279,23 @@ WHEN NEW.action_kind = 'certificate_submission'
 BEGIN
   SELECT CASE WHEN NOT EXISTS (
     SELECT 1 FROM compliance_sres_activation_snapshots activation
-    WHERE activation.id = json_extract(
-      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    WHERE (
+      activation.id,
+      activation.organisation_id,
+      activation.program_code,
+      activation.activity_template_id,
+      activation.case_id,
+      activation.snapshot_sha256,
+      activation.snapshot_json
+    ) = (
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'),
+      NEW.organisation_id,
+      NEW.program_code,
+      NEW.activity_template_id,
+      NEW.compliance_case_id,
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidenceSha256'),
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidence')
     )
-      AND activation.organisation_id = NEW.organisation_id
-      AND activation.program_code = NEW.program_code
-      AND activation.activity_template_id = NEW.activity_template_id
-      AND activation.case_id = NEW.compliance_case_id
-      AND activation.snapshot_sha256 = json_extract(
-        NEW.packet_snapshot, '$.programActivationEvidenceSha256'
-      )
-      AND activation.snapshot_json = json_extract(
-        NEW.packet_snapshot, '$.programActivationEvidence'
-      )
       AND datetime(NEW.prepared_at) >= datetime(activation.created_at)
   ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
 
@@ -248,38 +303,57 @@ BEGIN
     SELECT 1
     FROM compliance_sres_activation_snapshots activation
     JOIN json_each(activation.snapshot_json, '$.records') evidence
-    WHERE activation.id = json_extract(
-      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    WHERE (
+      activation.id,
+      activation.organisation_id,
+      activation.program_code,
+      activation.activity_template_id,
+      activation.case_id
+    ) = (
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'),
+      NEW.organisation_id,
+      NEW.program_code,
+      NEW.activity_template_id,
+      NEW.compliance_case_id
     )
-      AND activation.organisation_id = NEW.organisation_id
-      AND activation.program_code = NEW.program_code
-      AND activation.activity_template_id = NEW.activity_template_id
-      AND activation.case_id = NEW.compliance_case_id
       AND NOT EXISTS (
         SELECT 1 FROM compliance_sres_activation_records record
-        WHERE record.id = json_extract(evidence.value, '$.recordId')
-          AND record.organisation_id = activation.organisation_id
-          AND record.program_code = activation.program_code
-          AND record.activity_template_id = activation.activity_template_id
+        WHERE (
+          record.id,
+          record.organisation_id,
+          record.program_code,
+          record.activity_template_id,
+          record.evidence_kind,
+          record.subject_key,
+          record.result_code,
+          record.source_artifact_id,
+          record.source_artifact_sha256,
+          record.response_sha256,
+          record.source_record_key,
+          record.effective_from,
+          record.effective_to,
+          record.observed_at,
+          record.valid_until,
+          record.supersedes_record_id
+        ) = (
+          json_extract(evidence.value, '$.recordId'),
+          activation.organisation_id,
+          activation.program_code,
+          activation.activity_template_id,
+          json_extract(evidence.value, '$.evidenceKind'),
+          json_extract(evidence.value, '$.subjectKey'),
+          json_extract(evidence.value, '$.resultCode'),
+          json_extract(evidence.value, '$.sourceArtifactId'),
+          json_extract(evidence.value, '$.sourceArtifactSha256'),
+          json_extract(evidence.value, '$.responseSha256'),
+          json_extract(evidence.value, '$.sourceRecordKey'),
+          json_extract(evidence.value, '$.effectiveFrom'),
+          json_extract(evidence.value, '$.effectiveTo'),
+          json_extract(evidence.value, '$.observedAt'),
+          json_extract(evidence.value, '$.validUntil'),
+          COALESCE(json_extract(evidence.value, '$.supersedesRecordId'), '')
+        )
           AND record.case_id IN ('', activation.case_id)
-          AND record.evidence_kind = json_extract(evidence.value, '$.evidenceKind')
-          AND record.subject_key = json_extract(evidence.value, '$.subjectKey')
-          AND record.result_code = json_extract(evidence.value, '$.resultCode')
-          AND record.source_artifact_id =
-            json_extract(evidence.value, '$.sourceArtifactId')
-          AND record.source_artifact_sha256 =
-            json_extract(evidence.value, '$.sourceArtifactSha256')
-          AND record.response_sha256 =
-            json_extract(evidence.value, '$.responseSha256')
-          AND record.source_record_key =
-            json_extract(evidence.value, '$.sourceRecordKey')
-          AND record.effective_from = json_extract(evidence.value, '$.effectiveFrom')
-          AND record.effective_to = json_extract(evidence.value, '$.effectiveTo')
-          AND record.observed_at = json_extract(evidence.value, '$.observedAt')
-          AND record.valid_until = json_extract(evidence.value, '$.validUntil')
-          AND record.supersedes_record_id = COALESCE(
-            json_extract(evidence.value, '$.supersedesRecordId'), ''
-          )
       )
   ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
 
@@ -287,19 +361,32 @@ BEGIN
     SELECT 1
     FROM compliance_sres_activation_snapshots activation
     JOIN json_each(activation.snapshot_json, '$.records') evidence
-    WHERE activation.id = json_extract(
-      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    WHERE (
+      activation.id,
+      activation.organisation_id,
+      activation.program_code,
+      activation.activity_template_id,
+      activation.case_id
+    ) = (
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'),
+      NEW.organisation_id,
+      NEW.program_code,
+      NEW.activity_template_id,
+      NEW.compliance_case_id
     )
-      AND activation.organisation_id = NEW.organisation_id
-      AND activation.program_code = NEW.program_code
-      AND activation.activity_template_id = NEW.activity_template_id
-      AND activation.case_id = NEW.compliance_case_id
       AND NOT EXISTS (
         SELECT 1 FROM compliance_sres_activation_records record
-        WHERE record.id = json_extract(evidence.value, '$.recordId')
-          AND record.organisation_id = activation.organisation_id
-          AND record.program_code = activation.program_code
-          AND record.activity_template_id = activation.activity_template_id
+        WHERE (
+          record.id,
+          record.organisation_id,
+          record.program_code,
+          record.activity_template_id
+        ) = (
+          json_extract(evidence.value, '$.recordId'),
+          activation.organisation_id,
+          activation.program_code,
+          activation.activity_template_id
+        )
           AND record.case_id IN ('', activation.case_id)
           AND record.effective_from <= activation.activity_date
           AND (record.effective_to = ''
@@ -317,51 +404,95 @@ BEGIN
     SELECT 1
     FROM compliance_sres_activation_snapshots activation
     JOIN json_each(activation.snapshot_json, '$.records') evidence
-    WHERE activation.id = json_extract(
-      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    WHERE (
+      activation.id,
+      activation.organisation_id,
+      activation.program_code,
+      activation.activity_template_id,
+      activation.case_id
+    ) = (
+      json_extract(NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'),
+      NEW.organisation_id,
+      NEW.program_code,
+      NEW.activity_template_id,
+      NEW.compliance_case_id
     )
-      AND activation.organisation_id = NEW.organisation_id
-      AND activation.program_code = NEW.program_code
-      AND activation.activity_template_id = NEW.activity_template_id
-      AND activation.case_id = NEW.compliance_case_id
       AND NOT EXISTS (
         SELECT 1
         FROM compliance_sres_activation_records record
         JOIN compliance_sres_activation_reviews review
-          ON review.organisation_id = record.organisation_id
-          AND review.activation_record_id = record.id
-          AND review.response_sha256 = record.response_sha256
-          AND review.source_artifact_id = record.source_artifact_id
-          AND review.source_artifact_sha256 = record.source_artifact_sha256
-          AND review.decision = 'approved'
+          ON (
+            review.organisation_id,
+            review.activation_record_id,
+            review.response_sha256,
+            review.source_artifact_id,
+            review.source_artifact_sha256,
+            review.decision
+          ) = (
+            record.organisation_id,
+            record.id,
+            record.response_sha256,
+            record.source_artifact_id,
+            record.source_artifact_sha256,
+            'approved'
+          )
         JOIN compliance_official_source_artifacts artifact
-          ON artifact.id = record.source_artifact_id
-          AND artifact.organisation_id = record.organisation_id
-          AND artifact.sha256 = record.source_artifact_sha256
+          ON (
+            artifact.id,
+            artifact.organisation_id,
+            artifact.sha256
+          ) = (
+            record.source_artifact_id,
+            record.organisation_id,
+            record.source_artifact_sha256
+          )
         JOIN compliance_official_source_review_decisions source_review
-          ON source_review.organisation_id = artifact.organisation_id
-          AND source_review.subject_type = 'artifact'
-          AND source_review.subject_id = artifact.id
-          AND source_review.artifact_id = artifact.id
-          AND source_review.artifact_sha256 = artifact.sha256
-          AND source_review.artifact_object_key = artifact.object_key
-          AND source_review.decision = 'approved'
-        WHERE record.id = json_extract(evidence.value, '$.recordId')
-          AND record.organisation_id = activation.organisation_id
-          AND record.program_code = activation.program_code
-          AND record.activity_template_id = activation.activity_template_id
+          ON (
+            source_review.organisation_id,
+            source_review.subject_type,
+            source_review.subject_id,
+            source_review.artifact_id,
+            source_review.artifact_sha256,
+            source_review.artifact_object_key,
+            source_review.decision
+          ) = (
+            artifact.organisation_id,
+            'artifact',
+            artifact.id,
+            artifact.id,
+            artifact.sha256,
+            artifact.object_key,
+            'approved'
+          )
+        WHERE (
+          record.id,
+          record.organisation_id,
+          record.program_code,
+          record.activity_template_id,
+          record.source_artifact_id,
+          record.source_artifact_sha256,
+          record.response_sha256
+        ) = (
+          json_extract(evidence.value, '$.recordId'),
+          activation.organisation_id,
+          activation.program_code,
+          activation.activity_template_id,
+          json_extract(evidence.value, '$.sourceArtifactId'),
+          json_extract(evidence.value, '$.sourceArtifactSha256'),
+          json_extract(evidence.value, '$.responseSha256')
+        )
           AND record.case_id IN ('', activation.case_id)
-          AND record.source_artifact_id =
-            json_extract(evidence.value, '$.sourceArtifactId')
-          AND record.source_artifact_sha256 =
-            json_extract(evidence.value, '$.sourceArtifactSha256')
-          AND record.response_sha256 =
-            json_extract(evidence.value, '$.responseSha256')
-          AND json_extract(evidence.value, '$.reviewed') = 1
-          AND review.id = json_extract(evidence.value, '$.reviewId')
-          AND review.reviewed_by_uid =
-            json_extract(evidence.value, '$.reviewedByUid')
-          AND review.reviewed_at = json_extract(evidence.value, '$.reviewedAt')
+          AND (
+            json_extract(evidence.value, '$.reviewed'),
+            review.id,
+            review.reviewed_by_uid,
+            review.reviewed_at
+          ) = (
+            1,
+            json_extract(evidence.value, '$.reviewId'),
+            json_extract(evidence.value, '$.reviewedByUid'),
+            json_extract(evidence.value, '$.reviewedAt')
+          )
           AND datetime(NEW.prepared_at) >= datetime(review.reviewed_at)
           AND NOT EXISTS (
             SELECT 1 FROM compliance_official_source_review_decisions successor
@@ -383,7 +514,7 @@ const SRES_D1_EXPRESSION_DEPTH_GUARD_SQL = new Map<string, string>([
 ]);
 
 // Keep the exact superseded SQL so an already-initialised database can move
-// from the original, D1-incompatible trigger bodies to the split guards. Only
+// from the original, D1-incompatible trigger bodies to the flattened guards. Only
 // an exact known predecessor is replaceable; every other mismatch still fails
 // closed as possible schema drift or tampering.
 export const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS =
