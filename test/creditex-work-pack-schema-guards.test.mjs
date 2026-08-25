@@ -6,6 +6,7 @@ import {
   canonicalCreditexWorkPackSchemaGuardSql,
   CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES,
   CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS,
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS,
   ensureCreditexWorkPackSchemaGuards,
 } from "../src/lib/creditex-work-pack-schema-guards.ts";
 import {
@@ -107,6 +108,36 @@ test("the prepared-statement guard inventory is exact and complete", () => {
   }
 });
 
+test("the SRES activation guards stay below D1 expression depth without weakening custody checks", () => {
+  const snapshotGuard = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.find(
+    (definition) => definition.name === "compliance_sres_activation_snapshot_insert_guard",
+  )?.sql ?? "";
+  const outputGuard = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.find(
+    (definition) => definition.name === "compliance_sres_output_action_activation_guard",
+  )?.sql ?? "";
+
+  assert.equal(
+    (snapshotGuard.match(/COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID/g) ?? []).length,
+    3,
+  );
+  assert.match(snapshotGuard, /COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID/);
+  assert.match(snapshotGuard, /COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_INCOMPLETE/);
+  assert.match(snapshotGuard, /successor\.supersedes_record_id = record\.id/);
+  assert.match(snapshotGuard, /successor\.supersedes_decision_id = source_review\.id/);
+  assert.match(
+    snapshotGuard,
+    /COUNT\(DISTINCT json_extract\(item\.value, '\$\.evidenceKind'\)\)/,
+  );
+
+  assert.equal(
+    (outputGuard.match(/COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID/g) ?? []).length,
+    4,
+  );
+  assert.match(outputGuard, /json_each\(activation\.snapshot_json, '\$\.records'\)/);
+  assert.match(outputGuard, /successor\.supersedes_record_id = record\.id/);
+  assert.match(outputGuard, /successor\.supersedes_decision_id = source_review\.id/);
+});
+
 test("runtime installation restores all guards before direct guarded work", async () => {
   const database = triggerlessSchemaDatabase();
   database.exec(`
@@ -144,6 +175,31 @@ test("runtime installation restores all guards before direct guarded work", asyn
       WHERE id = 'event-before-guards'`).run(),
     /COMPLIANCE_OUTPUT_ACTION_EVENT_IMMUTABLE/,
   );
+  database.close();
+});
+
+test("runtime installation atomically replaces only exact known SRES predecessors", async () => {
+  const database = triggerlessSchemaDatabase();
+  for (const replacement of CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS) {
+    database.exec(replacement.previousSql);
+  }
+
+  await ensureCreditexWorkPackSchemaGuards(testD1(database));
+
+  const installed = new Map(database.prepare(
+    "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger'",
+  ).all().map((row) => [row.name, row.sql]));
+  for (const replacement of CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS) {
+    const current = CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.find(
+      (definition) => definition.name === replacement.name,
+    );
+    assert.ok(current, replacement.name);
+    assert.equal(
+      canonicalCreditexWorkPackSchemaGuardSql(installed.get(replacement.name)),
+      canonicalCreditexWorkPackSchemaGuardSql(current.sql),
+      replacement.name,
+    );
+  }
   database.close();
 });
 

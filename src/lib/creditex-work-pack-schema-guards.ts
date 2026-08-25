@@ -2,7 +2,7 @@
 // statements. Sites migrations split SQL on semicolons and therefore cannot
 // safely carry trigger bodies.
 
-export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS = [
+const CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS = [
   { name: "compliance_work_pack_calculation_review_insert_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_calculation_review_insert_guard`\nBEFORE INSERT ON `compliance_activity_work_pack_calculation_reviews`\nBEGIN\n  SELECT CASE WHEN NOT EXISTS (\n    SELECT 1\n    FROM `compliance_activity_work_pack_instances` instance\n    JOIN `compliance_cases` compliance_case\n      ON compliance_case.`id` = instance.`compliance_case_id`\n      AND compliance_case.`organisation_id` = instance.`organisation_id`\n    JOIN `compliance_calculation_runs` calculation\n      ON calculation.`id` = NEW.`calculation_run_id`\n      AND calculation.`organisation_id` = instance.`organisation_id`\n      AND calculation.`case_id` = instance.`compliance_case_id`\n      AND calculation.`case_revision` = compliance_case.`revision`\n      AND calculation.`status` = 'calculated'\n      AND calculation.`run_by_uid` <> NEW.`reviewer_uid`\n    JOIN `compliance_calculator_versions` calculator\n      ON calculator.`id` = NEW.`calculator_version_id`\n      AND calculator.`id` = calculation.`calculator_version_id`\n      AND calculator.`organisation_id` = instance.`organisation_id`\n      AND calculator.`activity_version_id` = compliance_case.`activity_version_id`\n      AND calculator.`approval_state` = 'approved'\n      AND calculator.`official_source_sha256` = NEW.`calculator_source_sha256`\n    JOIN `compliance_calculator_engine_receipts` engine_receipt\n      ON engine_receipt.`id` = NEW.`engine_receipt_id`\n      AND engine_receipt.`organisation_id` = instance.`organisation_id`\n      AND engine_receipt.`calculator_version_id` = calculator.`id`\n      AND engine_receipt.`calculator_version_number` = calculator.`version`\n      AND engine_receipt.`result` = 'passed'\n    JOIN json_each(\n      instance.`response_snapshot`, '$.response.dependencyResolutions'\n    ) dependency\n      ON dependency.`key` = NEW.`dependency_key`\n      AND json_extract(dependency.`value`, '$.referenceIds[0]') =\n        NEW.`calculation_run_id`\n      AND json_array_length(\n        json_extract(dependency.`value`, '$.referenceIds')\n      ) = 1\n    WHERE instance.`id` = NEW.`case_instance_id`\n      AND instance.`instance_key` = NEW.`instance_key`\n      AND instance.`organisation_id` = NEW.`organisation_id`\n      AND NOT EXISTS (\n        SELECT 1 FROM `compliance_activity_work_pack_instances` newer\n        WHERE newer.`organisation_id` = instance.`organisation_id`\n          AND newer.`instance_key` = instance.`instance_key`\n          AND newer.`revision` > instance.`revision`\n      )\n  ) THEN RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEW_BINDING_INVALID') END;\n  SELECT CASE WHEN NOT EXISTS (\n    SELECT 1\n    FROM `compliance_users` reviewer\n    WHERE reviewer.`organisation_id` = NEW.`organisation_id`\n      AND reviewer.`firebase_uid` = NEW.`reviewer_uid`\n      AND reviewer.`status` = 'active'\n      AND reviewer.`role` IN ('admin', 'reviewer')\n      AND reviewer.`governance_identity_verified` = 1\n      AND trim(reviewer.`governance_identity_verified_by_uid`) <> ''\n      AND reviewer.`governance_identity_verified_by_uid` <> reviewer.`firebase_uid`\n    UNION ALL\n    SELECT 1\n    FROM `admin_users` reviewer\n    JOIN `compliance_organisations` organisation\n      ON organisation.`id` = NEW.`organisation_id`\n      AND organisation.`organisation_code` = 'CREDITEX-AU'\n      AND organisation.`status` = 'active'\n    WHERE reviewer.`firebase_uid` = NEW.`reviewer_uid`\n      AND reviewer.`status` = 'active'\n      AND reviewer.`role` IN ('owner', 'admin', 'reviewer')\n  ) THEN RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEWER_INVALID') END;\nEND;" },
   { name: "compliance_work_pack_calculation_review_update_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_calculation_review_update_guard`\nBEFORE UPDATE ON `compliance_activity_work_pack_calculation_reviews`\nBEGIN\n  SELECT RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEW_IMMUTABLE');\nEND;" },
   { name: "compliance_work_pack_calculation_review_delete_guard", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_work_pack_calculation_review_delete_guard`\nBEFORE DELETE ON `compliance_activity_work_pack_calculation_reviews`\nBEGIN\n  SELECT RAISE(ABORT, 'COMPLIANCE_WORK_PACK_CALCULATION_REVIEW_DELETE_BLOCKED');\nEND;" },
@@ -67,6 +67,347 @@ export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS = [
   { name: "compliance_sres_activation_review_audit", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_sres_activation_review_audit`\nAFTER INSERT ON `compliance_sres_activation_reviews`\nBEGIN\n  INSERT INTO `compliance_audit_events` (\n    `id`, `organisation_id`, `actor_type`, `actor_uid`, `event_type`,\n    `target_type`, `target_id`, `summary`, `metadata`, `created_at`\n  ) VALUES (\n    'sres-activation-review:' || NEW.`id`, NEW.`organisation_id`,\n    'compliance', NEW.`reviewed_by_uid`,\n    'sres_activation.' || NEW.`decision`,\n    'compliance_sres_activation_record', NEW.`activation_record_id`,\n    'An independent SRES activation evidence review was retained.',\n    json_object(\n      'identityRealm', NEW.`reviewed_actor_kind`,\n      'decision', NEW.`decision`,\n      'responseSha256', NEW.`response_sha256`,\n      'sourceArtifactId', NEW.`source_artifact_id`,\n      'sourceArtifactSha256', NEW.`source_artifact_sha256`\n    ), NEW.`reviewed_at`\n  );\nEND;" },
   { name: "compliance_sres_activation_snapshot_audit", sql: "CREATE TRIGGER IF NOT EXISTS `compliance_sres_activation_snapshot_audit`\nAFTER INSERT ON `compliance_sres_activation_snapshots`\nBEGIN\n  INSERT INTO `compliance_audit_events` (\n    `id`, `organisation_id`, `actor_type`, `actor_uid`, `event_type`,\n    `target_type`, `target_id`, `summary`, `metadata`, `created_at`\n  ) VALUES (\n    'sres-activation-snapshot:' || NEW.`id`, NEW.`organisation_id`,\n    'compliance', NEW.`created_by_uid`, 'sres_activation.snapshot_frozen',\n    'compliance_sres_activation_snapshot', NEW.`id`,\n    'The exact independently reviewed SRES activation evidence was frozen.',\n    json_object(\n      'identityRealm', NEW.`created_actor_kind`,\n      'activityTemplateId', NEW.`activity_template_id`,\n      'caseId', NEW.`case_id`,\n      'activityDate', NEW.`activity_date`,\n      'snapshotSha256', NEW.`snapshot_sha256`\n    ), NEW.`created_at`\n  );\nEND;" },
 ] as const;
+
+// Cloudflare D1 enforces SQLite's default expression-tree depth of 100. Keep
+// each SRES custody decision in a separate trigger step so the release path
+// stays fail closed without relying on a larger SQLite compile-time limit.
+const SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL = `CREATE TRIGGER IF NOT EXISTS compliance_sres_activation_snapshot_insert_guard
+BEFORE INSERT ON compliance_sres_activation_snapshots
+BEGIN
+  SELECT CASE WHEN NOT (
+    NEW.created_actor_kind = 'compliance' AND EXISTS (
+      SELECT 1 FROM compliance_users member
+      WHERE member.organisation_id = NEW.organisation_id
+        AND member.firebase_uid = NEW.created_by_uid
+        AND member.status = 'active'
+        AND member.role IN ('admin', 'case_manager', 'reviewer')
+        AND member.governance_identity_verified = 1
+    )
+    OR NEW.created_actor_kind = 'admin' AND EXISTS (
+      SELECT 1 FROM admin_users administrator
+      JOIN compliance_organisations organisation
+        ON organisation.id = NEW.organisation_id
+        AND organisation.organisation_code = 'CREDITEX-AU'
+        AND organisation.status = 'active'
+      WHERE administrator.firebase_uid = NEW.created_by_uid
+        AND administrator.status = 'active'
+        AND administrator.role IN ('owner', 'admin')
+    )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_AUTHOR_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
+    WHERE NOT EXISTS (
+      SELECT 1 FROM compliance_sres_activation_records record
+      WHERE record.id = json_extract(evidence.value, '$.recordId')
+        AND record.organisation_id = NEW.organisation_id
+        AND record.program_code = NEW.program_code
+        AND record.activity_template_id = NEW.activity_template_id
+        AND record.case_id IN ('', NEW.case_id)
+        AND record.evidence_kind = json_extract(evidence.value, '$.evidenceKind')
+        AND record.subject_key = json_extract(evidence.value, '$.subjectKey')
+        AND record.result_code = json_extract(evidence.value, '$.resultCode')
+        AND record.source_artifact_id =
+          json_extract(evidence.value, '$.sourceArtifactId')
+        AND record.source_artifact_sha256 =
+          json_extract(evidence.value, '$.sourceArtifactSha256')
+        AND record.response_sha256 =
+          json_extract(evidence.value, '$.responseSha256')
+        AND record.source_record_key =
+          json_extract(evidence.value, '$.sourceRecordKey')
+        AND record.effective_from = json_extract(evidence.value, '$.effectiveFrom')
+        AND record.effective_to = json_extract(evidence.value, '$.effectiveTo')
+        AND record.observed_at = json_extract(evidence.value, '$.observedAt')
+        AND record.valid_until = json_extract(evidence.value, '$.validUntil')
+        AND record.supersedes_record_id = COALESCE(
+          json_extract(evidence.value, '$.supersedesRecordId'), ''
+        )
+    )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
+    WHERE NOT EXISTS (
+      SELECT 1 FROM compliance_sres_activation_records record
+      WHERE record.id = json_extract(evidence.value, '$.recordId')
+        AND record.organisation_id = NEW.organisation_id
+        AND record.program_code = NEW.program_code
+        AND record.activity_template_id = NEW.activity_template_id
+        AND record.case_id IN ('', NEW.case_id)
+        AND record.effective_from <= NEW.activity_date
+        AND (record.effective_to = '' OR record.effective_to >= NEW.activity_date)
+        AND (record.valid_until = ''
+          OR datetime(record.valid_until) >= datetime(NEW.created_at))
+        AND NOT EXISTS (
+          SELECT 1 FROM compliance_sres_activation_records successor
+          WHERE successor.supersedes_record_id = record.id
+        )
+    )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.snapshot_json, '$.records') evidence
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM compliance_sres_activation_records record
+      JOIN compliance_sres_activation_reviews review
+        ON review.organisation_id = record.organisation_id
+        AND review.activation_record_id = record.id
+        AND review.response_sha256 = record.response_sha256
+        AND review.source_artifact_id = record.source_artifact_id
+        AND review.source_artifact_sha256 = record.source_artifact_sha256
+        AND review.decision = 'approved'
+      JOIN compliance_official_source_artifacts artifact
+        ON artifact.id = record.source_artifact_id
+        AND artifact.organisation_id = record.organisation_id
+        AND artifact.sha256 = record.source_artifact_sha256
+      JOIN compliance_official_source_review_decisions source_review
+        ON source_review.organisation_id = artifact.organisation_id
+        AND source_review.subject_type = 'artifact'
+        AND source_review.subject_id = artifact.id
+        AND source_review.artifact_id = artifact.id
+        AND source_review.artifact_sha256 = artifact.sha256
+        AND source_review.artifact_object_key = artifact.object_key
+        AND source_review.decision = 'approved'
+      WHERE record.id = json_extract(evidence.value, '$.recordId')
+        AND record.organisation_id = NEW.organisation_id
+        AND record.program_code = NEW.program_code
+        AND record.activity_template_id = NEW.activity_template_id
+        AND record.case_id IN ('', NEW.case_id)
+        AND record.source_artifact_id =
+          json_extract(evidence.value, '$.sourceArtifactId')
+        AND record.source_artifact_sha256 =
+          json_extract(evidence.value, '$.sourceArtifactSha256')
+        AND record.response_sha256 =
+          json_extract(evidence.value, '$.responseSha256')
+        AND json_extract(evidence.value, '$.reviewed') = 1
+        AND review.id = json_extract(evidence.value, '$.reviewId')
+        AND review.reviewed_by_uid =
+          json_extract(evidence.value, '$.reviewedByUid')
+        AND review.reviewed_at = json_extract(evidence.value, '$.reviewedAt')
+        AND datetime(NEW.created_at) >= datetime(review.reviewed_at)
+        AND NOT EXISTS (
+          SELECT 1 FROM compliance_official_source_review_decisions successor
+          WHERE successor.supersedes_decision_id = source_review.id
+        )
+    )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_RECORD_INVALID') END;
+
+  SELECT CASE WHEN (
+    SELECT COUNT(DISTINCT json_extract(item.value, '$.evidenceKind'))
+    FROM json_each(NEW.snapshot_json, '$.records') item
+    WHERE
+      (json_extract(item.value, '$.evidenceKind') =
+        'rec_registry_submission_contract'
+        AND json_extract(item.value, '$.resultCode') IN (
+          'manual_submission_contract_current',
+          'adapter_submission_contract_current'
+        ))
+      OR (json_extract(item.value, '$.evidenceKind') = 'declaration_snapshot'
+        AND json_extract(item.value, '$.resultCode') = 'current')
+      OR (json_extract(item.value, '$.evidenceKind') = 'component_recall_status'
+        AND json_extract(item.value, '$.resultCode') = 'listed_not_removed')
+      OR (json_extract(item.value, '$.evidenceKind') = 'calculator_vector_suite'
+        AND json_extract(item.value, '$.resultCode') = 'passed')
+      OR (json_extract(item.value, '$.evidenceKind') =
+        'registered_agent_assignment'
+        AND json_extract(item.value, '$.resultCode') = 'verified_assigned')
+      OR (json_extract(item.value, '$.evidenceKind') = 'component_eligibility'
+        AND json_extract(item.value, '$.resultCode') = 'eligible')
+      OR (json_extract(item.value, '$.evidenceKind') = 'installer_accreditation'
+        AND json_extract(item.value, '$.resultCode') = 'active')
+      OR (json_extract(item.value, '$.evidenceKind') = 'designer_accreditation'
+        AND json_extract(item.value, '$.resultCode') = 'active')
+  ) <> 8 THEN RAISE(ABORT, 'COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_INCOMPLETE') END;
+END;`;
+
+const SRES_OUTPUT_ACTION_ACTIVATION_GUARD_SQL = `CREATE TRIGGER IF NOT EXISTS compliance_sres_output_action_activation_guard
+BEFORE INSERT ON compliance_output_action_packets
+WHEN NEW.action_kind = 'certificate_submission'
+  AND NEW.program_code = 'SRES'
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM compliance_sres_activation_snapshots activation
+    WHERE activation.id = json_extract(
+      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    )
+      AND activation.organisation_id = NEW.organisation_id
+      AND activation.program_code = NEW.program_code
+      AND activation.activity_template_id = NEW.activity_template_id
+      AND activation.case_id = NEW.compliance_case_id
+      AND activation.snapshot_sha256 = json_extract(
+        NEW.packet_snapshot, '$.programActivationEvidenceSha256'
+      )
+      AND activation.snapshot_json = json_extract(
+        NEW.packet_snapshot, '$.programActivationEvidence'
+      )
+      AND datetime(NEW.prepared_at) >= datetime(activation.created_at)
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1
+    FROM compliance_sres_activation_snapshots activation
+    JOIN json_each(activation.snapshot_json, '$.records') evidence
+    WHERE activation.id = json_extract(
+      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    )
+      AND activation.organisation_id = NEW.organisation_id
+      AND activation.program_code = NEW.program_code
+      AND activation.activity_template_id = NEW.activity_template_id
+      AND activation.case_id = NEW.compliance_case_id
+      AND NOT EXISTS (
+        SELECT 1 FROM compliance_sres_activation_records record
+        WHERE record.id = json_extract(evidence.value, '$.recordId')
+          AND record.organisation_id = activation.organisation_id
+          AND record.program_code = activation.program_code
+          AND record.activity_template_id = activation.activity_template_id
+          AND record.case_id IN ('', activation.case_id)
+          AND record.evidence_kind = json_extract(evidence.value, '$.evidenceKind')
+          AND record.subject_key = json_extract(evidence.value, '$.subjectKey')
+          AND record.result_code = json_extract(evidence.value, '$.resultCode')
+          AND record.source_artifact_id =
+            json_extract(evidence.value, '$.sourceArtifactId')
+          AND record.source_artifact_sha256 =
+            json_extract(evidence.value, '$.sourceArtifactSha256')
+          AND record.response_sha256 =
+            json_extract(evidence.value, '$.responseSha256')
+          AND record.source_record_key =
+            json_extract(evidence.value, '$.sourceRecordKey')
+          AND record.effective_from = json_extract(evidence.value, '$.effectiveFrom')
+          AND record.effective_to = json_extract(evidence.value, '$.effectiveTo')
+          AND record.observed_at = json_extract(evidence.value, '$.observedAt')
+          AND record.valid_until = json_extract(evidence.value, '$.validUntil')
+          AND record.supersedes_record_id = COALESCE(
+            json_extract(evidence.value, '$.supersedesRecordId'), ''
+          )
+      )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1
+    FROM compliance_sres_activation_snapshots activation
+    JOIN json_each(activation.snapshot_json, '$.records') evidence
+    WHERE activation.id = json_extract(
+      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    )
+      AND activation.organisation_id = NEW.organisation_id
+      AND activation.program_code = NEW.program_code
+      AND activation.activity_template_id = NEW.activity_template_id
+      AND activation.case_id = NEW.compliance_case_id
+      AND NOT EXISTS (
+        SELECT 1 FROM compliance_sres_activation_records record
+        WHERE record.id = json_extract(evidence.value, '$.recordId')
+          AND record.organisation_id = activation.organisation_id
+          AND record.program_code = activation.program_code
+          AND record.activity_template_id = activation.activity_template_id
+          AND record.case_id IN ('', activation.case_id)
+          AND record.effective_from <= activation.activity_date
+          AND (record.effective_to = ''
+            OR record.effective_to >= activation.activity_date)
+          AND (record.valid_until = ''
+            OR datetime(record.valid_until) >= datetime(NEW.prepared_at))
+          AND NOT EXISTS (
+            SELECT 1 FROM compliance_sres_activation_records successor
+            WHERE successor.supersedes_record_id = record.id
+          )
+      )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
+
+  SELECT CASE WHEN EXISTS (
+    SELECT 1
+    FROM compliance_sres_activation_snapshots activation
+    JOIN json_each(activation.snapshot_json, '$.records') evidence
+    WHERE activation.id = json_extract(
+      NEW.packet_snapshot, '$.programActivationEvidence.snapshotId'
+    )
+      AND activation.organisation_id = NEW.organisation_id
+      AND activation.program_code = NEW.program_code
+      AND activation.activity_template_id = NEW.activity_template_id
+      AND activation.case_id = NEW.compliance_case_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM compliance_sres_activation_records record
+        JOIN compliance_sres_activation_reviews review
+          ON review.organisation_id = record.organisation_id
+          AND review.activation_record_id = record.id
+          AND review.response_sha256 = record.response_sha256
+          AND review.source_artifact_id = record.source_artifact_id
+          AND review.source_artifact_sha256 = record.source_artifact_sha256
+          AND review.decision = 'approved'
+        JOIN compliance_official_source_artifacts artifact
+          ON artifact.id = record.source_artifact_id
+          AND artifact.organisation_id = record.organisation_id
+          AND artifact.sha256 = record.source_artifact_sha256
+        JOIN compliance_official_source_review_decisions source_review
+          ON source_review.organisation_id = artifact.organisation_id
+          AND source_review.subject_type = 'artifact'
+          AND source_review.subject_id = artifact.id
+          AND source_review.artifact_id = artifact.id
+          AND source_review.artifact_sha256 = artifact.sha256
+          AND source_review.artifact_object_key = artifact.object_key
+          AND source_review.decision = 'approved'
+        WHERE record.id = json_extract(evidence.value, '$.recordId')
+          AND record.organisation_id = activation.organisation_id
+          AND record.program_code = activation.program_code
+          AND record.activity_template_id = activation.activity_template_id
+          AND record.case_id IN ('', activation.case_id)
+          AND record.source_artifact_id =
+            json_extract(evidence.value, '$.sourceArtifactId')
+          AND record.source_artifact_sha256 =
+            json_extract(evidence.value, '$.sourceArtifactSha256')
+          AND record.response_sha256 =
+            json_extract(evidence.value, '$.responseSha256')
+          AND json_extract(evidence.value, '$.reviewed') = 1
+          AND review.id = json_extract(evidence.value, '$.reviewId')
+          AND review.reviewed_by_uid =
+            json_extract(evidence.value, '$.reviewedByUid')
+          AND review.reviewed_at = json_extract(evidence.value, '$.reviewedAt')
+          AND datetime(NEW.prepared_at) >= datetime(review.reviewed_at)
+          AND NOT EXISTS (
+            SELECT 1 FROM compliance_official_source_review_decisions successor
+            WHERE successor.supersedes_decision_id = source_review.id
+          )
+      )
+  ) THEN RAISE(ABORT, 'COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID') END;
+END;`;
+
+const SRES_D1_EXPRESSION_DEPTH_GUARD_SQL = new Map<string, string>([
+  [
+    "compliance_sres_activation_snapshot_insert_guard",
+    SRES_ACTIVATION_SNAPSHOT_INSERT_GUARD_SQL,
+  ],
+  [
+    "compliance_sres_output_action_activation_guard",
+    SRES_OUTPUT_ACTION_ACTIVATION_GUARD_SQL,
+  ],
+]);
+
+// Keep the exact superseded SQL so an already-initialised database can move
+// from the original, D1-incompatible trigger bodies to the split guards. Only
+// an exact known predecessor is replaceable; every other mismatch still fails
+// closed as possible schema drift or tampering.
+export const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS =
+  [...SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.keys()].map((name) => {
+    const previous = CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.find(
+      (definition) => definition.name === name,
+    );
+    if (!previous) {
+      throw new Error(`CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_MISSING:${name}`);
+    }
+    return { name, previousSql: previous.sql };
+  });
+
+const CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_SQL = new Map(
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_DEFINITIONS.map(
+    (definition) => [definition.name, definition.previousSql],
+  ),
+);
+
+export const CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS =
+  CREDITEX_WORK_PACK_SCHEMA_GUARD_BASE_DEFINITIONS.map((definition) => ({
+    ...definition,
+    sql: SRES_D1_EXPRESSION_DEPTH_GUARD_SQL.get(definition.name) ?? definition.sql,
+  }));
 
 export const CREDITEX_WORK_PACK_REQUIRED_SCHEMA_TABLES = [
   "compliance_activity_work_pack_versions",
@@ -174,7 +515,26 @@ async function installCreditexSchemaGuards(
     requiredTables,
     `${errorPrefix}_MIGRATIONS_REQUIRED`,
   );
-  const installed = await installedGuards(database);
+  let installed = await installedGuards(database);
+  const replacements = definitions.filter((definition) => {
+    const previousSql = CREDITEX_WORK_PACK_SCHEMA_GUARD_REPLACEMENT_SQL.get(
+      definition.name,
+    );
+    return previousSql
+      && installed.has(definition.name)
+      && canonicalCreditexWorkPackSchemaGuardSql(
+        installed.get(definition.name) || "",
+      ) === canonicalCreditexWorkPackSchemaGuardSql(previousSql)
+      && canonicalCreditexWorkPackSchemaGuardSql(previousSql)
+        !== canonicalCreditexWorkPackSchemaGuardSql(definition.sql);
+  });
+  if (replacements.length) {
+    await database.batch(replacements.flatMap((definition) => [
+      database.prepare(`DROP TRIGGER IF EXISTS \`${definition.name}\``),
+      database.prepare(definition.sql),
+    ]));
+    installed = await installedGuards(database);
+  }
   const mismatched = definitions.filter(
     (definition) => installed.has(definition.name)
       && canonicalCreditexWorkPackSchemaGuardSql(

@@ -257,7 +257,7 @@ test("SRES certificates require eight current independently reviewed activation 
   assert.match(service, /SRES_ACTIVATION_CALCULATOR_SOURCE_MISMATCH/);
   assert.match(service, /sres_activation_snapshot_stale_or_invalid/);
   assert.match(workPackGuardSql, /compliance_sres_output_action_activation_guard/);
-  assert.match(workPackGuardSql, /json_each\(activation\.`snapshot_json`, '\$\.records'\)/);
+  assert.match(workPackGuardSql, /json_each\(activation\.snapshot_json, '\$\.records'\)/);
   assert.match(workPackGuardSql, /COMPLIANCE_SRES_OUTPUT_ACTIVATION_INVALID/);
 });
 
