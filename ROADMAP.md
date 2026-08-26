@@ -3441,6 +3441,18 @@ The release adds migration `0163_surge_conversation_quality_model_identity.sql` 
 4. Tighten the per-route JavaScript and CSS graph budgets after measured chunk and stylesheet restructuring.
 5. Expand independently reviewed exact-model specifications and current programme and certificate coverage while preserving the exact-input and no-guessed-values rule.
 
+## Incorporated release candidate: AEA-SURGE-ASSESSOR-OPERATING-MODEL-84
+
+Give Surge one stable assessor and educator operating model without changing the visual interface. Seven supplied education documents and all 465 pages are held with exact custody, page-count, SHA-256 and review boundaries, while 19 teaching cards reviewed for editorial use provide bounded retrieval for generic deterministic education. Independent subject-matter review remains outstanding.
+
+The contract is beginner-first and answer-first. Surge explains why advice fits, asks at most one highest-value question, uses Good, Better and Best only for meaningful method-quality choices, remains provider-neutral, excludes hazardous do-it-yourself and regulated trade instruction, and prohibits em dashes and en dashes in generated conversation.
+
+Reviewed education never overrides exact product, rebate, certificate, tariff, eligibility, safety or current-programme routes. Volatile or exact claims require current authoritative evidence and governed deterministic calculations. Missing evidence fails closed.
+
+The generated 22-page `surge-ai-operating-model-and-education-framework.pdf`, SHA-256 `5AE904A523986FBA43719C56C75FFA3D5D438EF9B90939179E865BB9212A4108`, documents the role, priorities, decision method, source hierarchy, teaching pathway, personality, guardrails, product and programme boundaries, context handling, quality controls and change-management process.
+
+The next five Surge priorities are independent subject-matter review, broader current official product and programme coverage, deployed-provider corpus baselining, explicit education change approval, and aggregate evidence-led response-quality monitoring.
+
 ## Next five logical product steps
 
 1. Open the top-right cog, choose Check for update, restart into preview update `01a03475-deab-7cce-93b2-6f9afa26b287`, and confirm the existing `test` session shows `All field work is safely synced` without a spinner and typed new-job text remains visible against the dark inputs.

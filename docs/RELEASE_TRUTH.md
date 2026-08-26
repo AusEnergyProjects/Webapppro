@@ -114,6 +114,41 @@ The release adds migration `0163_surge_conversation_quality_model_identity.sql` 
 4. Tighten the per-route JavaScript and CSS graph budgets after measured chunk and stylesheet restructuring.
 5. Expand independently reviewed exact-model specifications and current programme and certificate coverage while preserving the exact-input and no-guessed-values rule.
 
+## Incorporated release candidate: AEA-SURGE-ASSESSOR-OPERATING-MODEL-84
+
+Release deployment identity: pending. This release has no recorded application source, Sites saved version or deployment identifier until exact release evidence exists.
+
+### User and product outcome
+
+Surge now has one stable assessor and educator operating model without a visual redesign. He is a calm, practical Australian home-energy guide who assumes the customer may be new to the subject, answers the immediate question first, explains why the recommendation fits, and asks at most one highest-value follow-up question when more context is genuinely required.
+
+The seven supplied education documents were read in full, covering 465 of 465 pages. Their exact source custody, page counts, SHA-256 identities and review boundaries are maintained separately from the 19 teaching cards reviewed for editorial use that Surge can retrieve. Independent subject-matter review of those cards and the operating-model PDF remains outstanding. `electric saul.pdf` is treated as a useful baseline, while Surge is deliberately more explanatory, transparent and helpful.
+
+### Reasoning and education contracts
+
+1. Reviewed education can improve generic deterministic household guidance, but cannot override exact product, rebate, certificate, tariff, eligibility, safety or current-programme routes.
+2. Good, Better and Best are optional method-quality tiers based on evidence, suitability, durability and verification. They must never imply social status, assume a budget or turn into a product sales ladder.
+3. Product and brand guidance remains provider-neutral. Exact-model comparisons require approved specification evidence, while volatile claims require current official sources and governed deterministic calculations.
+4. Hazardous do-it-yourself work, regulated trade instructions and unsupported legal conclusions are excluded. When uncertainty matters, Surge identifies it and asks one useful question or directs the customer to the appropriate qualified person.
+5. Generated conversation copy remains plain Australian English and prohibits em dashes and en dashes.
+
+The operating model is documented in the generated 22-page `surge-ai-operating-model-and-education-framework.pdf`. Its SHA-256 is `5AE904A523986FBA43719C56C75FFA3D5D438EF9B90939179E865BB9212A4108`. The PDF includes the role, priorities, decision method, source hierarchy, teaching pathway, personality, guardrails, product and programme boundaries, context handling, quality controls and change-management process.
+
+### Honest boundaries
+
+- The 19 teaching cards are a bounded reviewed set, not a claim that every subject in the 465-page corpus is already encoded.
+- Source custody and automated checks do not replace independent professional approval of future education changes.
+- A stronger operating model does not make stale programme, certificate, tariff, price or model data current. Those answers still fail closed unless authoritative current evidence is available.
+- Automated corpus tests do not yet prove the deployed provider and model will satisfy every conversation-quality expectation.
+
+### Surge assessor follow-on queue
+
+1. Complete independent subject-matter review of the 19 teaching cards and the operating-model PDF.
+2. Expand current official product, programme and certificate coverage while preserving exact-input calculations and fail-closed answers.
+3. Run the reviewed conversation corpus against the deployed provider and model, then baseline beginner clarity, one-question progression, neutrality and leakage controls.
+4. Add explicit approval and change-control records for every education-source and teaching-card revision.
+5. Aggregate response-quality monitoring and tune Surge only from reviewed evidence rather than isolated anecdotes.
+
 ## Previous production release: grounded product and certificate guidance
 
 Application source `0944c9b91765535b873b30029f545bde8f744831` on branch `codex/job-schedule-week-calendar` is the exact source deployed as public Sites version 391 at `https://compare.ausenergyassessments.com`.

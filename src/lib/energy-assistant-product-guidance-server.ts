@@ -10,6 +10,10 @@ import {
   type ReviewedProductGuidanceCategory,
 } from "../data/energy-assistant-reviewed-product-guidance.ts";
 import type { EnergyAssistantKnowledgeSource } from "../data/energy-assistant-knowledge.ts";
+import {
+  SURGE_ASSESSOR_EDUCATION_CARDS,
+  type SurgeAssessorEducationCard,
+} from "../data/surge-assessor-education.ts";
 import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import {
   CERTIFICATE_PRICE_SOURCE_URL,
@@ -415,6 +419,21 @@ function uniqueCitations(citations: readonly EnergyAssistantCitation[]) {
   return [...new Map(citations.map((item) => [item.id, item] as const)).values()];
 }
 
+function reviewedProductComparisonMethod(): SurgeAssessorEducationCard {
+  const card = SURGE_ASSESSOR_EDUCATION_CARDS.find((item) => (
+    item.id === "compare-exact-products-on-identical-scope"
+    && item.topics.includes("product_model_comparison")
+  ));
+  if (
+    !card
+    || card.review.status !== "reviewed_for_editorial_use"
+    || card.currentFactBoundary !== "verify_with_current_official_sources"
+  ) {
+    throw new Error("Approved product comparison education is unavailable.");
+  }
+  return card;
+}
+
 function answer(input: {
   directAnswer: string;
   practicalSteps: readonly string[];
@@ -511,9 +530,10 @@ async function resolveMatchedGuidance(
   const practicalSteps = tips.slice(0, 3).map((tip) => (
     tip.safetyBoundary ? `${tip.guidance} ${tip.safetyBoundary}` : tip.guidance
   ));
+  const comparisonMethod = reviewedProductComparisonMethod();
   const dimensions = category.comparisonDimensions.map((dimension) => dimension.consumerLabel);
 
-  let direct = `For ${category.consumerLabel.toLowerCase()}, compare exact options on ${dimensions.join(", ")}.`;
+  let direct = `${comparisonMethod.answerFirst} For ${category.consumerLabel.toLowerCase()}, the reviewed comparison dimensions are ${dimensions.join(", ")}. ${comparisonMethod.why}`;
   let initial: SearchResult | null = null;
   let brands: string[] = [];
   let brandMatches: BrandMatch[] = [];
@@ -658,7 +678,9 @@ async function resolveMatchedGuidance(
     }
   }
 
-  let question = category.contextQuestions[0] || "What exact option and site requirements should I compare?";
+  let question = comparisonIntent
+    ? comparisonMethod.decisionQuestions[1]
+    : category.contextQuestions[0] || comparisonMethod.decisionQuestions[0];
   let status: EnergyAssistantAnswer["status"] = "answered";
   let confidence: EnergyAssistantAnswer["confidence"] = "high";
   if (certificateIntent && !postcode) {
@@ -690,7 +712,7 @@ async function resolveMatchedGuidance(
     status,
     confidence,
     citations,
-    sourceBoundary: `Approved reviewed category guidance and current official sources only.${registryBoundary} Quantities and amounts come only from callable governed resolvers or reported source data.`,
+    sourceBoundary: `Approved reviewed category guidance and current official sources only.${registryBoundary} Reviewed assessor education is used only for the comparison method and follow-up selection. It does not establish current eligibility, product specifications, certificate quantities, prices or compatibility. Quantities and amounts come only from callable governed resolvers or reported source data.`,
   });
 }
 

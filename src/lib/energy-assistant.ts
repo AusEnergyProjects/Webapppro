@@ -27,6 +27,11 @@ import {
   GOVERNMENT_PROGRAM_TEMPLATES,
   type GovernmentProgramTemplate,
 } from "./australian-government-program-catalogue.ts";
+import {
+  SURGE_ASSESSOR_EDUCATION_CARDS,
+  type SurgeAssessorEducationCard,
+  type SurgeAssessorEducationTopicId,
+} from "../data/surge-assessor-education.ts";
 
 export type EnergyAssistantCitation = {
   id: string;
@@ -602,6 +607,71 @@ function searchable(value: string) {
     .trim();
 }
 
+const SURGE_STABLE_EDUCATION_TOPICS: readonly [
+  SurgeAssessorEducationTopicId,
+  RegExp,
+][] = [
+  ["renter_strata", /\b(?:renter|renting|tenant|landlord|strata|owners corporation|common property)\b/],
+  ["ev_mobility", /\b(?:ev|electric vehicle|vehicle charging|home charging|charger|mobility)\b/],
+  ["hot_water", /\b(?:hot water|water heater|shower recovery)\b/],
+  ["battery", /\b(?:home battery|battery storage|backup power|blackout backup)\b/],
+  ["solar", /\b(?:solar|photovoltaic|self consumption|solar export)\b/],
+  ["tariffs", /\b(?:tariff|time of use|off peak|controlled load|energy plan|retailer plan)\b/],
+  ["appliances", /\b(?:appliance|clothes dryer|heat pump dryer|cooktop|fridge|dishwasher|washing machine)\b/],
+  ["draught_ventilation_moisture", /\b(?:draughts?|drafts?|air leak|airtight|seal|caulk|condensation|damp|moisture|mould|humidity|ventilation|exhaust fan|door snake)\b/],
+  ["insulation_windows", /\b(?:insulation|glazing|window film|low e|honeycomb blind|thermal envelope|renshade|window shade)\b/],
+  ["heating_cooling", /\b(?:heating|cooling|heat pump|reverse cycle|air conditioner|portable heater|space heater|split system)\b/],
+  ["building_diagnostics", /\b(?:diagnos|investigat|find cause|why is|test my home|measure|energy assessment|blower door|thermal camera|incense)\b/],
+];
+
+const SURGE_CURRENT_FACT_REQUEST_PATTERN =
+  /\b(?:rebates?|grants?|incentives?|certificates?|stcs?|veecs?|escs?|prcs?|veu|sres|nsw[ -]?ess|nsw[ -]?pdrs|act[ -]?eeis|sa[ -]?reps|feed in tariff|tariff rate|current value|latest|today|as of|live price|price|cost|quote|payback|discount|approved product|eligible|eligibility|model number|brand|manufacturer)\b/;
+
+const SURGE_RENTER_STRATA_ENERGY_PATTERN =
+  /\b(?:home energy|energy use|energy bill|upgrade|retrofit|insulation|glazing|window|draught|draft|heating|cooling|hot water|solar|battery|appliance|ev charger|vehicle charging|electrification|ventilation|condensation|moisture|mould|shade)\b/;
+
+const SURGE_EDUCATION_DIY_WORK_PATTERN =
+  /\b(?:diy|myself|ourselves|my own|our own|without (?:an? )?(?:electrician|plumber|gasfitter|technician|installer|refrigerant licence)|how (?:do|can|would) i|can i|could i|may i|should i)\b[\s\S]{0,100}\b(?:rewire|hardwire|wire|connect|install|open|repair|service|remove|disconnect|bypass|bridge|drill|cut|sample|release|vent|charge|vacuum)\b|\b(?:rewire|hardwire|wire|connect|install|open|repair|service|remove|disconnect|bypass|bridge|drill|cut|sample|release|vent|charge|vacuum)\b[\s\S]{0,100}\b(?:diy|myself|ourselves|my own|our own|without (?:an? )?(?:electrician|plumber|gasfitter|technician|installer|refrigerant licence))\b/;
+
+function reviewedStableEducationCard(
+  query: string,
+  audience: EnergyAssistantAudience | undefined,
+): SurgeAssessorEducationCard | null {
+  if (audience === "trade" || audience === "assessor") return null;
+  const normal = searchable(query);
+  if (!normal
+    || SURGE_CURRENT_FACT_REQUEST_PATTERN.test(normal)
+    || SURGE_EDUCATION_DIY_WORK_PATTERN.test(normal)
+    || safetyQuery(query)) return null;
+  const topic = SURGE_STABLE_EDUCATION_TOPICS.find(([, pattern]) => pattern.test(normal))?.[0];
+  if (!topic) return null;
+  if (topic === "renter_strata" && !SURGE_RENTER_STRATA_ENERGY_PATTERN.test(normal)) return null;
+  return SURGE_ASSESSOR_EDUCATION_CARDS.find((card) => card.topics.includes(topic)) || null;
+}
+
+function reviewedEducationAnswer(card: SurgeAssessorEducationCard, query: string) {
+  const normal = searchable(query);
+  const useMethodLadder = Boolean(
+    card.optionalLadder
+      && /\b(?:how|what|where|which|should|first|start|improve|reduce|fix|check|test|options|steps|approach|compare)\b/.test(normal),
+  );
+  return {
+    directAnswer: sanitizeSurgePublicText(
+      `${card.answerFirst} This approach fits the situation you described. ${card.why} ${card.safetyBoundary}`,
+    ),
+    practicalSteps: useMethodLadder && card.optionalLadder
+      ? [
+          sanitizeSurgePublicText(`Good: ${card.optionalLadder.good}`),
+          sanitizeSurgePublicText(`Better: ${card.optionalLadder.better}`),
+          sanitizeSurgePublicText(`Best: ${card.optionalLadder.best}`),
+        ]
+      : [],
+    suggestedQuestions: card.decisionQuestions.length
+      ? [sanitizeSurgePublicText(card.decisionQuestions[0])]
+      : [],
+  };
+}
+
 function queryTerms(query: string) {
   const normal = searchable(query);
   const terms = new Set(
@@ -1008,8 +1078,7 @@ function directPlaybookId(
   if (
     !(/\b(?:NatHERS|NCC)\b/i.test(message) && /\b(?:climate|zone|location|map|postcode)\b/i.test(message))
     && (
-    /\b(?:STC|STCs|small-scale technology certificate)\b/i.test(message)
-    || /(?:\$\s*[\d,]+(?:\.\d+)?\s*(?:per|\/)\s*certificate|certificate\s+(?:price|value|rate))\b/i.test(message)
+    /\b(?:SRES|STCs?|small-scale (?:renewable energy scheme|technology certificates?))\b/i.test(message)
     || /\b(?:solar|PV|panel|battery)\b/i.test(message)
       && /\b(?:rebate|discount|certificate|incentive)\b/i.test(message)
     )
@@ -1032,9 +1101,13 @@ function directPlaybookId(
 }
 
 function isStandaloneAssistanceQuestion(message: string) {
-  return /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|VEECs?|STCs?)\b/i.test(message)
-    && /\b(?:Victoria|Victorian|VIC|New South Wales|NSW|Queensland|QLD|South Australia|SA|Tasmania|TAS|Western Australia|WA|ACT|Northern Territory|NT|\d{4})\b/i.test(message)
-    && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|hot[- ]?water|heat[- ]?pump|solar|battery|insulation|glazing|draught|induction|EV|charger)\b/i.test(message);
+  const assistance = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|VEU|VEECs?|NSW[- ]?ESS|ESCs?|NSW[- ]?PDRS|PDRS|PRCs?|SRES|STCs?|ACT[- ]?EEIS|SA[- ]?REPS|Victorian Energy Upgrades?|Energy Savings Scheme|Peak Demand Reduction Scheme|Small-scale Renewable Energy Scheme|Energy Efficiency Improvement Scheme|Retailer Energy Productivity Scheme)\b/i.test(message);
+  const technology = /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|hot[- ]?water|heat[- ]?pump|solar|battery|insulation|glazing|draught|induction|EV|charger)\b/i.test(message);
+  if (!assistance || !technology) return false;
+  return Boolean(
+    explicitProgramJurisdiction(message)
+    || namedCertificateProgram(message),
+  );
 }
 
 function isClarificationRequest(message: string) {
@@ -1580,6 +1653,100 @@ function latestExplicitProgramJurisdiction(query: string) {
   return null;
 }
 
+type NamedCertificateRequestIntent = "current_value" | "count" | "discount";
+
+type NamedCertificateProgram = {
+  programCode: string;
+  programLabel: string;
+  certificateLabel: string;
+  jurisdiction: GovernmentProgramTemplate["jurisdiction"];
+  jurisdictionLabel: string;
+  pattern: RegExp;
+  sourceIds: readonly string[];
+  tradable: boolean;
+};
+
+const NAMED_CERTIFICATE_PROGRAMS: readonly NamedCertificateProgram[] = [
+  {
+    programCode: "VEU",
+    programLabel: "Victorian Energy Upgrades",
+    certificateLabel: "VEEC",
+    jurisdiction: "VIC",
+    jurisdictionLabel: "Victoria",
+    pattern: /\b(?:VEU|VEECs?|Victorian Energy Upgrades?)\b/i,
+    sourceIds: ["veu-water-space-activity-guide-v3-19"],
+    tradable: true,
+  },
+  {
+    programCode: "NSW-ESS",
+    programLabel: "NSW Energy Savings Scheme",
+    certificateLabel: "ESC",
+    jurisdiction: "NSW",
+    jurisdictionLabel: "New South Wales",
+    pattern: /\b(?:NSW[- ]?ESS|ESCs?|Energy Savings Scheme)\b/i,
+    sourceIds: ["nsw-ess-rule-current-2026"],
+    tradable: true,
+  },
+  {
+    programCode: "NSW-PDRS",
+    programLabel: "NSW Peak Demand Reduction Scheme",
+    certificateLabel: "PRC",
+    jurisdiction: "NSW",
+    jurisdictionLabel: "New South Wales",
+    pattern: /\b(?:NSW[- ]?PDRS|PDRS|PRCs?|Peak Demand Reduction Scheme)\b/i,
+    sourceIds: ["nsw-pdrs-rule-current-2026"],
+    tradable: true,
+  },
+  {
+    programCode: "SRES",
+    programLabel: "Small-scale Renewable Energy Scheme",
+    certificateLabel: "STC",
+    jurisdiction: "AU",
+    jurisdictionLabel: "Australia",
+    pattern: /\b(?:SRES|STCs?|Small-scale Renewable Energy Scheme|Small-scale Technology Certificates?)\b/i,
+    sourceIds: ["cer-stc-entitlement-calculation", "cer-small-scale-system-requirements"],
+    tradable: true,
+  },
+  {
+    programCode: "ACT-EEIS",
+    programLabel: "ACT Energy Efficiency Improvement Scheme",
+    certificateLabel: "programme benefit",
+    jurisdiction: "ACT",
+    jurisdictionLabel: "Australian Capital Territory",
+    pattern: /\b(?:ACT[- ]?EEIS|Energy Efficiency Improvement Scheme)\b/i,
+    sourceIds: [],
+    tradable: false,
+  },
+  {
+    programCode: "SA-REPS",
+    programLabel: "South Australian Retailer Energy Productivity Scheme",
+    certificateLabel: "programme benefit",
+    jurisdiction: "SA",
+    jurisdictionLabel: "South Australia",
+    pattern: /\b(?:SA[- ]?REPS|Retailer Energy Productivity Scheme)\b/i,
+    sourceIds: [],
+    tradable: false,
+  },
+];
+
+function namedCertificateProgram(query: string) {
+  return namedCertificatePrograms(query)[0] || null;
+}
+
+function namedCertificatePrograms(query: string) {
+  return NAMED_CERTIFICATE_PROGRAMS.filter((program) => program.pattern.test(query));
+}
+
+function namedCertificateRequestIntent(query: string): NamedCertificateRequestIntent | null {
+  if (
+    /\b(?:values?|prices?|worth|rates?|spot|market|trade(?:d|s|ing)?)\b/i.test(query)
+    && /\b(?:current|latest|today|as of|live|last|spot|market|trade(?:d|s|ing)?|values?|prices?|worth|rates?)\b/i.test(query)
+  ) return "current_value";
+  if (/\b(?:how many|number|count|quantity|calculate|calculator|created|generated|entitlement)\b/i.test(query)) return "count";
+  if (/\b(?:discount|rebate|saving|incentive|quote reduction|how much)\b/i.test(query)) return "discount";
+  return null;
+}
+
 function latestResidentialTenure(query: string): "renter" | "owner" | null {
   const matches = [...query.matchAll(/\b(rent(?:er|ing|al)?|tenant|owner|homeowner|owner[- ]occupier|I own|we own)\b/gi)];
   const latest = matches.at(-1)?.[1] || "";
@@ -1651,26 +1818,33 @@ function catalogueProgramAnswer(query: string): {
   jurisdictionLabel: string;
   certificateIntent: boolean;
 } | null {
+  const namedProgram = namedCertificateProgram(query);
   const scopedRenterHelp = /\b(?:rent|renter|tenant|rental)\b/i.test(query)
     && /\bhelp\b/i.test(query)
     && /\b(?:insulation|glazing|windows?|heating|cooling|hot[- ]?water|draught|draft|energy bills?)\b/i.test(query)
     && /\b(?:only|relevant|available|current|do not show|don't show|exclude|without)\b/i.test(query);
-  if (!scopedRenterHelp
+  if (!namedProgram
+    && !scopedRenterHelp
     && !/\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|STCs?|VEECs?|ESCs?|PRCs?|Home Energy Saver|Household Energy Upgrades Fund|HEUF|Solar Sharer Offer)\b/i.test(query)) {
     return null;
   }
-  const jurisdiction = explicitProgramJurisdiction(query);
+  const jurisdiction = namedProgram
+    ? [namedProgram.jurisdiction, namedProgram.jurisdictionLabel] as const
+    : explicitProgramJurisdiction(query);
   if (!jurisdiction) return null;
   const [jurisdictionCode, jurisdictionLabel] = jurisdiction;
-  const certificateIntent = /\b(?:certificates?|STCs?|VEECs?|ESCs?|PRCs?|credit schemes?)\b/i.test(query);
+  const certificateIntent = Boolean(namedProgram)
+    || /\b(?:certificates?|STCs?|VEECs?|ESCs?|PRCs?|credit schemes?)\b/i.test(query);
   const financialIntent = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?)\b/i.test(query);
   const financialOutcomes = new Set(["rebate", "grant", "loan", "tradable_certificate", "retailer_obligation_credit"]);
   const certificateOutcomes = new Set(["tradable_certificate", "retailer_obligation_credit"]);
   const queryTokens = queryTerms(query).terms;
   const rankedPrograms = GOVERNMENT_PROGRAM_TEMPLATES
     .filter((program) => program.catalogueState === "current" || program.catalogueState === "limited")
-    .filter((program) => program.jurisdiction === jurisdictionCode
-      || (jurisdictionCode !== "AU" && program.jurisdiction === "AU"))
+    .filter((program) => namedProgram
+      ? program.programCode === namedProgram.programCode
+      : program.jurisdiction === jurisdictionCode
+        || (jurisdictionCode !== "AU" && program.jurisdiction === "AU"))
     .filter((program) => !certificateIntent || certificateOutcomes.has(program.outcomeClass))
     .filter((program) => !financialIntent || financialOutcomes.has(program.outcomeClass))
     .filter((program) => programMatchesApplicant(program, query))
@@ -1818,6 +1992,7 @@ export function composeEnergyAssistantAnswer(
       practicalSteps?: string[];
       toolActions?: EnergyAssistantAction[];
       suggestedQuestions?: string[];
+      sourceBoundary?: string;
     },
   ): EnergyAssistantAnswer {
     const toolActions = values.toolActions
@@ -1836,8 +2011,28 @@ export function composeEnergyAssistantAnswer(
       suggestedQuestions: (values.suggestedQuestions
         || suggestionsFor(selectedTopics.length ? selectedTopics : [topic])).slice(0, 1),
       toolActions,
-      sourceBoundary,
+      sourceBoundary: values.sourceBoundary || sourceBoundary,
     };
+  }
+
+  function structuredReviewedEducation(
+    card: SurgeAssessorEducationCard,
+    question: string,
+  ): EnergyAssistantAnswer {
+    const educationAnswer = reviewedEducationAnswer(card, question);
+    return structured(fallbackTopic, {
+      ...educationAnswer,
+      status: "answered",
+      citations: [],
+      confidence: "medium",
+      assumptions: [
+        "This is general educational guidance based only on the details supplied in this conversation, not a site inspection.",
+        "Current prices, rebates, certificates, tariffs, approved products and exact model facts were not assessed.",
+      ],
+      toolActions: [],
+      sourceBoundary:
+        "This answer uses reviewed stable education guidance only. Current prices, rebates, certificates, tariffs, approved products and exact model facts require current official verification.",
+    });
   }
 
   const playbookOfficial = playbookResults.filter(
@@ -4130,7 +4325,13 @@ export function composeEnergyAssistantAnswer(
       || (retrievalQuery !== query && looksLikeTerseFollowUp)
       ? "in"
       : currentDomainIntent;
-  if (domainIntent === "out") {
+  const namedCertificateMatches = namedCertificatePrograms(query);
+  const namedCertificateIntent = namedCertificateRequestIntent(query);
+  const stableEducationCard = reviewedStableEducationCard(retrievalQuery, options.audience);
+  if (domainIntent === "out" && !namedCertificateIntent && stableEducationCard) {
+    return structuredReviewedEducation(stableEducationCard, retrievalQuery);
+  }
+  if (domainIntent === "out" && !namedCertificateIntent) {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
         "Surge AI is here for Australian home energy and upgrades. It only covers Australian home energy and upgrade questions, including comfort, bills, appliances, solar, batteries, EVs, rebates, quotes and authorised trade workspace tasks.",
@@ -4143,7 +4344,7 @@ export function composeEnergyAssistantAnswer(
       suggestedQuestions: [],
     });
   }
-  if (domainIntent === "ambiguous") {
+  if (domainIntent === "ambiguous" && !namedCertificateIntent) {
     return structured("comfort_fabric", {
       directAnswer:
         "Which home-energy decision do you mean: comfort, bills, equipment, solar, a rebate, or an authorised trade-platform task? Tell me the outcome you want and I will narrow it down one step at a time.",
@@ -4157,6 +4358,114 @@ export function composeEnergyAssistantAnswer(
         "Which appliance or tariff is driving my bill?",
         "What do I need before requesting an upgrade quote?",
       ],
+    });
+  }
+
+  if (namedCertificateIntent && namedCertificateMatches.length > 1) {
+    return structured("rebates_certificates", {
+      directAnswer:
+        "Those names refer to separate governed programmes. I cannot combine their certificate values, counts or discounts into one generic answer. Tell me the installation state, exact product or activity, replaced equipment and which programme you want checked first.",
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-rebates"]),
+      confidence: "high",
+      assumptions: ["More than one certificate programme was named in the current question."],
+      practicalSteps: [
+        "Choose one programme and confirm the installation state.",
+        "Provide the exact product, model or activity and the equipment being replaced.",
+        "Check the current official programme rules before calculating any certificate count or discount.",
+      ],
+      toolActions: [{ id: "open-rebates", label: "Check official certificate sources", href: "/rebates" }],
+      suggestedQuestions: ["Which programme and installation state should I check first?"],
+    });
+  }
+  if (namedCertificateIntent && namedCertificateMatches.length === 1) {
+    const namedProgram = namedCertificateMatches[0];
+    const locationConversation = NAMED_CERTIFICATE_PROGRAMS.reduce(
+      (conversation, program) => conversation.replace(program.pattern, " "),
+      userConversation,
+    );
+    const installationJurisdiction = latestExplicitProgramJurisdiction(locationConversation);
+    if (namedProgram.jurisdiction !== "AU"
+      && installationJurisdiction
+      && installationJurisdiction[0] !== namedProgram.jurisdiction) {
+      return structured("rebates_certificates", {
+        directAnswer:
+          `${namedProgram.programLabel} applies in ${namedProgram.jurisdictionLabel}, not the detected installation jurisdiction of ${installationJurisdiction[1]}. I will not use it to estimate a certificate count or discount for this property. Confirm the installation postcode so I can identify the correct governed programme.`,
+        status: "answered",
+        citations: officialCitationsById(["energy-gov-rebates"]),
+        confidence: "high",
+        assumptions: [`The latest explicit location in the conversation is ${installationJurisdiction[1]}.`],
+        practicalSteps: [
+          "Confirm the installation postcode.",
+          "Identify the programme administered for that jurisdiction.",
+          "Use the exact product and replaced equipment to check eligibility and calculate the benefit.",
+        ],
+        toolActions: [{ id: "open-rebates", label: "Find the correct state programme", href: "/rebates" }],
+        suggestedQuestions: ["What is the installation postcode and exact upgrade?"],
+      });
+    }
+
+    const catalogueEntries = GOVERNMENT_PROGRAM_TEMPLATES.filter(
+      (program) => program.programCode === namedProgram.programCode,
+    );
+    const programmeCitations = catalogueProgramCitations(catalogueEntries, options.asOf || new Date());
+    const exactCitations = namedProgram.sourceIds.length
+      ? officialCitationsById(namedProgram.sourceIds)
+      : programmeCitations;
+    const citations = exactCitations.length
+      ? exactCitations
+      : officialCitationsById(["energy-gov-rebates"]);
+
+    if (!namedProgram.tradable) {
+      return structured("rebates_certificates", {
+        directAnswer:
+          `${namedProgram.programLabel} is represented here as a retailer obligation programme, not as a household-traded certificate market. I will not invent a certificate price or count. To assess the available benefit, I need the installation state, exact upgrade or product and the provider delivery pathway.`,
+        status: "needs_context",
+        citations,
+        confidence: "high",
+        assumptions: ["No exact activity, product, provider pathway or current offer has been supplied."],
+        practicalSteps: [
+          "Confirm the installation postcode and applicant type.",
+          "Provide the exact upgrade, product and existing equipment.",
+          "Check the current provider-delivered offer against the official programme rules.",
+        ],
+        toolActions: [{ id: "open-rebates", label: "Check the official programme", href: "/rebates" }],
+        suggestedQuestions: ["What is the postcode, exact upgrade and proposed provider pathway?"],
+      });
+    }
+
+    if (namedCertificateIntent === "current_value") {
+      return structured("rebates_certificates", {
+        directAnswer:
+          `I cannot give a current ${namedProgram.certificateLabel} trading value from the maintained official programme rules because they do not provide a verified live market trade. I will not substitute another state's certificate value or invent a current price. Supply the market source and trade date you want checked, then treat the result as a market input rather than a guaranteed customer discount.`,
+        status: "source_review_required",
+        citations,
+        confidence: "high",
+        assumptions: ["No verified live certificate-market trade and date were supplied."],
+        practicalSteps: [
+          "Confirm the certificate programme and installation jurisdiction.",
+          "Provide the market source and trade date for the current value.",
+          "Separate the gross certificate value from registration, compliance and provider charges before estimating a customer discount.",
+        ],
+        toolActions: [{ id: "open-rebates", label: "Check official programme rules", href: "/rebates" }],
+        suggestedQuestions: ["Which market source and trade date should I use for the current certificate value?"],
+      });
+    }
+
+    return structured("rebates_certificates", {
+      directAnswer:
+        `${namedProgram.programLabel} certificate counts and customer discounts depend on the exact eligible activity, exact approved model or product, existing equipment, installation location and current programme method. A certificate count is not the same as the discount paid to the customer. Give me those inputs and I can use the governed programme path without substituting another state or a generic estimate.`,
+      status: "needs_context",
+      citations,
+      confidence: "high",
+      assumptions: ["The exact activity, product or model and replaced equipment have not all been supplied."],
+      practicalSteps: [
+        "Confirm the installation postcode and exact programme.",
+        "Provide the exact product or model, existing equipment and installation scope.",
+        "Calculate the certificate count under the current method, then apply a separately sourced commercial certificate value and charges to estimate the discount.",
+      ],
+      toolActions: [{ id: "open-rebates", label: "Open the governed certificate check", href: "/rebates" }],
+      suggestedQuestions: ["What is the postcode, exact product or model and equipment being replaced?"],
     });
   }
 
@@ -7332,6 +7641,9 @@ export function composeEnergyAssistantAnswer(
   }
 
   if (!activeOfficial.length) {
+    if (stableEducationCard) {
+      return structuredReviewedEducation(stableEducationCard, retrievalQuery);
+    }
     return structured(fallbackTopic, {
       directAnswer:
         "Tell me the home or trade decision you are trying to make. Useful details are the postcode, property type, owner or renter status, current equipment and the problem you want to solve. I will narrow the answer to current cited sources.",

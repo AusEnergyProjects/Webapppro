@@ -156,6 +156,35 @@ The release adds migration `0163_surge_conversation_quality_model_identity.sql` 
 4. Tighten the per-route JavaScript and CSS graph budgets after measured chunk and stylesheet restructuring.
 5. Expand independently reviewed exact-model specifications and current programme and certificate coverage while preserving the exact-input and no-guessed-values rule.
 
+## Incorporated release candidate: AEA-SURGE-ASSESSOR-OPERATING-MODEL-84
+
+Release deployment identity: pending. This release has no recorded application source, Sites saved version or deployment identifier until exact release evidence exists.
+
+### Completed scope
+
+- Give Surge one explicit assessor and educator operating model without changing the visual interface.
+- Treat seven supplied documents and all 465 pages as reviewed source material with exact custody, page-count, hash and review boundaries.
+- Retrieve from 19 teaching cards reviewed for editorial use only when generic deterministic education is useful and no higher-priority exact, current, product, certificate, rebate, tariff, eligibility or safety route applies. Independent subject-matter review remains outstanding.
+- Answer first, explain the practical reason, assume beginner knowledge and ask at most one highest-value context question.
+- Use Good, Better and Best only for meaningful method-quality choices, never as a price or status ladder.
+- Keep product guidance provider-neutral and fail closed on current or exact claims that lack authoritative evidence.
+- Exclude hazardous do-it-yourself, regulated trade and unsupported legal instructions, and prohibit em dashes and en dashes in generated conversation.
+- Generate and visually verify the 22-page `surge-ai-operating-model-and-education-framework.pdf`, SHA-256 `5AE904A523986FBA43719C56C75FFA3D5D438EF9B90939179E865BB9212A4108`.
+
+### Honest boundaries
+
+- The 19 teaching cards are a bounded reviewed set, not the full encoded content of all seven documents.
+- Automated custody and response tests do not replace independent subject-matter approval or a deployed-provider corpus run.
+- Current programmes, certificate values, tariffs, prices, eligibility and exact-model specifications still require current official evidence and governed calculations.
+
+### Next five Surge priorities
+
+1. Complete independent subject-matter review of the 19 teaching cards and the operating-model PDF.
+2. Expand current official product, programme and certificate coverage while preserving exact-input calculations and fail-closed answers.
+3. Run the reviewed conversation corpus against the deployed provider and model, then baseline beginner clarity, one-question progression, neutrality and leakage controls.
+4. Add explicit approval and change-control records for every education-source and teaching-card revision.
+5. Aggregate response-quality monitoring and tune Surge only from reviewed evidence rather than isolated anecdotes.
+
 ## Released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79
 
 ### User outcome

@@ -733,3 +733,50 @@ test("neutral comparison of exact customer-supplied options remains allowed", as
   assert.ok(result);
   assert.match(result.answer.directAnswer, /Option A.*Option B.*Neither is endorsed/i);
 });
+
+test("model prompt applies assessor education response guardrails without leaking source custody", async () => {
+  let observedBody;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What should I do first to improve winter comfort?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Start by checking the ceiling insulation coverage because missing or compressed sections can cause major winter heat loss. This check helps separate an insulation problem from an equipment-sizing problem.",
+        followUpQuestion: "Can you safely see whether the ceiling insulation is continuous?",
+      }));
+    },
+  });
+
+  assert.ok(result);
+  const prompt = observedBody.input[0].content[0].text;
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.match(prompt, /Give the useful part of the answer before asking/i);
+  assert.match(prompt, /ask exactly one short highest-value follow-up question/i);
+  assert.match(prompt, /keep asking one useful question at a time/i);
+  assert.match(prompt, /understand what the answer means and why it matters/i);
+  assert.match(prompt, /Never use an em dash or en dash/i);
+  assert.match(prompt, /Do not recommend, rank, promote or endorse a product, brand/i);
+  assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);
+  assert.match(prompt, /reviewedEducation is never current official/i);
+  assert.match(prompt, /rank the methods by evidence quality, fit, durability and verification/i);
+  assert.ok(Array.isArray(context.reviewedEducation));
+  assert.ok(context.reviewedEducation.length > 0);
+  assert.ok(context.reviewedEducation.length <= 4);
+  assert.match(
+    context.reviewedEducation
+      .map((card) => `${card.title} ${card.guidance}`)
+      .join("\n"),
+    /insulation|ceiling|thermal envelope|heat loss/i,
+  );
+  assert.ok(
+    context.reviewedEducation.every(
+      (card) => card.authorityBoundary === "verify_current_facts_with_governed_evidence",
+    ),
+  );
+  assert.doesNotMatch(
+    `${prompt}\n${JSON.stringify(context.reviewedEducation)}`,
+    /48260e86e921a25b4e468ed93a3b6ed754137f2c1d0c70df3addd4667aecd32c|pdfSha256|extractedTextSha256|pageStart|pageEnd|pypdf|pdfplumber|Poppler/i,
+  );
+});
