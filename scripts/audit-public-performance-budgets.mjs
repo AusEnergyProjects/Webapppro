@@ -116,7 +116,7 @@ const globalCss = fs.readdirSync(path.join(clientRoot, "assets"))
   .map((file) => ({ file, bytes: assetBytes(path.join("assets", file)) }))
   .sort((left, right) => right.bytes - left.bytes)[0];
 if (!globalCss) fail("global stylesheet was not found");
-if (globalCss.bytes > 735_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 735000`);
+if (globalCss.bytes > 725_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 725000`);
 
 const surfaceBytes = Object.fromEntries(
   Object.entries(surfaceEntries).map(([surface, key]) => [surface, graphBytes(manifest, key)]),
@@ -144,11 +144,24 @@ for (const [route, budgets] of Object.entries(routeBudgets)) {
 }
 
 for (const [file, maximum] of [
-  ["aea-immersive-home-journey.webp", 150_000],
   ["surge-mascot.webp", 100_000],
 ]) {
   const bytes = assetBytes(file);
   if (bytes > maximum) fail(`${file} is ${bytes} bytes; budget is ${maximum}`);
+}
+
+for (const retiredAsset of [
+  "aea-home-energy-plan-og.png",
+  "aea-immersive-home-journey.webp",
+  "file.svg",
+  "globe.svg",
+  "next.svg",
+  "vercel.svg",
+  "window.svg",
+]) {
+  if (fs.existsSync(path.join(clientRoot, retiredAsset))) {
+    fail(`retired public asset returned to the Sites package: ${retiredAsset}`);
+  }
 }
 
 console.log(

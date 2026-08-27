@@ -9,7 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativeP
 const home = read("../src/app/page.tsx");
 const guide = read("../src/components/GettingStarted.tsx");
 const customerScene = read("../src/components/CustomerJourneyScene.tsx");
-const plannerJourney = read("../src/components/PlannerHomeJourney.tsx");
+const plannerJourneyPath = path.resolve(directory, "../src/components/PlannerHomeJourney.tsx");
 const chrome = read("../src/components/ComparatorChrome.tsx");
 const responsiveNav = read("../src/components/ResponsiveSiteNav.tsx");
 const surgeHeaderButton = read("../src/components/SurgeHeaderButton.tsx");
@@ -53,7 +53,6 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
-const immersiveHomeAsset = path.resolve(directory, "../public/aea-immersive-home-journey.webp");
 const surgeHomeAsset = path.resolve(directory, "../public/surge-command-centre-home.webp");
 
 test("site navigation and customer reports share one exact AEA brandmark", () => {
@@ -296,38 +295,11 @@ test("homepage uses an accessible static journey without persistent rendering wo
   assert.doesNotMatch(styles, /\.customer-scene-home::before|customer-hologram-sweep/);
 });
 
-test("the optimised whole-home scene is visible and drives the planner room journey", () => {
+test("the optimised whole-home scene is visible and the retired planner scene stays removed", () => {
   assert.match(customerScene, /src="\/surge-command-centre-home\.webp"/);
   assert.match(customerScene, /sizes="\(max-width: 720px\) 100vw, \(max-width: 1800px\) 100vw, 1760px"/);
-  assert.match(plannerJourney, /export function PlannerHomeJourney/);
-  assert.match(plannerJourney, /stage: PlannerJourneyStage/);
-  assert.match(plannerJourney, /focusKey\?: string/);
-  assert.match(plannerJourney, /data-focus=\{activeFocus\}/);
-  assert.match(plannerJourney, /sizes="\(max-width: 720px\) 110vw, 100vw"/);
-  assert.match(plannerJourney, /ceiling-insulation|insulation/);
-  assert.match(plannerJourney, /heating-cooling/);
-  assert.match(plannerJourney, /hot-water/);
-  assert.match(plannerJourney, /battery/);
-  assert.match(plannerJourney, /aria-label="Home planning journey"/);
-  assert.match(plannerJourney, /focusPositions/);
-  assert.match(plannerJourney, /data-entry=\{safeProgress <= 5/);
-  assert.match(plannerJourney, /Start with the question below/);
-  assert.doesNotMatch(plannerJourney, /WebGL|from ["']three["']|HolographicEnergyField|<canvas|pointermove|planner-home-telemetry/);
-  assert.match(styles, /\.planner-home-journey\[data-focus="insulation"\]/);
-  assert.match(styles, /\.planner-home-journey\[data-focus="windows"\]/);
-  assert.match(styles, /\.planner-home-journey\[data-focus="ventilation"\]/);
-  assert.match(styles, /\.planner-home-journey\[data-focus="heating-cooling"\]/);
-  assert.match(styles, /\.planner-home-journey\[data-focus="solar"\]/);
-  assert.match(styles, /\.planner-home-journey\[data-entry="true"\] \{ min-height: clamp\(570px, 70svh, 780px\); \}/);
-  assert.match(styles, /\.planner-home-journey\[data-stage="plan"\] \{ min-height: clamp\(540px, 62svh, 700px\); \}/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey \{ min-height: 330px; \}/);
-  assert.match(styles, /@media \(max-width: 720px\)[\s\S]*\.planner-home-journey\[data-entry="true"\] \{ min-height: 570px; \}/);
-  assert.equal(fs.existsSync(immersiveHomeAsset), true);
-  assert.ok(fs.statSync(immersiveHomeAsset).size > 50_000);
-  assert.ok(fs.statSync(immersiveHomeAsset).size < 150_000);
-  const immersiveImage = fs.readFileSync(immersiveHomeAsset);
-  assert.equal(immersiveImage.toString("ascii", 0, 4), "RIFF");
-  assert.equal(immersiveImage.toString("ascii", 8, 12), "WEBP");
+  assert.equal(fs.existsSync(plannerJourneyPath), false);
+  assert.doesNotMatch(styles, /\.planner-home-journey|\.planner-home-render-volume|\.planner-home-question-cue/);
   assert.equal(fs.existsSync(surgeHomeAsset), true);
   assert.ok(fs.statSync(surgeHomeAsset).size > 50_000);
   assert.ok(fs.statSync(surgeHomeAsset).size < 100_000);

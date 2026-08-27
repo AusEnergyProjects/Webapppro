@@ -227,7 +227,7 @@ Every customer click should feel immediate, the home page must remain visually s
 ### Owning workflow and expected files
 
 - Public route shell and customer navigation: `src/app/layout.tsx`, `src/components/ComparatorChrome.tsx` and a lightweight Surge loader.
-- Home and planner visual shell: `src/components/CustomerJourneyScene.tsx`, `src/components/PlannerHomeJourney.tsx`, their feature-local styles in `src/app/globals.css` and the shared home asset.
+- Home visual shell: `src/components/CustomerJourneyScene.tsx`, its feature-local styles in `src/app/globals.css` and the shared home asset. The unmounted `PlannerHomeJourney` shell is retired.
 - Regression coverage: focused navigation, hero and lazy-Surge tests.
 
 ### In scope
