@@ -28,6 +28,21 @@ test("cold-window guidance recommends honeycomb blinds alongside thermal curtain
   assert.match(answer.directAnswer, /close-fitting honeycomb blinds or thermal curtains with pelmets/i);
 });
 
+test("Surge gives a direct and evidence-bounded Electric Saul comparison", () => {
+  const answer = composeEnergyAssistantAnswer(
+    "Why is Surge better than Electric Saul?",
+    { asOf: "2026-08-20T00:00:00.000Z" },
+  );
+
+  assert.equal(answer.status, "answered");
+  assert.match(answer.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
+  assert.match(answer.directAnswer, /45 structured details/i);
+  assert.match(answer.directAnswer, /111 maintained official Australian sources/i);
+  assert.match(answer.directAnswer, /machine-learning AI/i);
+  assert.match(answer.directAnswer, /does not learn from or train on your private conversation/i);
+  assert.doesNotMatch(answer.directAnswer, /over 1,?000|only seven PDFs|basic Google|personality injectors/i);
+});
+
 test("customer output policy rejects internal assessor-method copy", () => {
   assert.equal(
     surgeOutputViolatesPublicPolicy(

@@ -97,6 +97,9 @@ export const SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER =
 export const SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP =
   "What exact home-energy question or customer-supplied options should I help with?";
 
+export const SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER =
+  "Electric Saul is a useful general electrification guide. Surge AI is the stronger choice for detailed, source-governed whole-home decisions because it can work from 45 structured details about your home and household, and combines machine-learning AI with 111 maintained official Australian sources, current product and programme checks, and deterministic calculation pathways. Surge separates evidence from estimates, checks source freshness, explains assumptions, and applies privacy and safety controls. Its personality is presentation, not the evidence layer.\n\nI will not invent or repeat claims about Electric Saul's private prompt, corpus size or learning design without independently verifiable evidence. Surge also does not learn from or train on your private conversation. Its advantage is governed evidence, richer structured context and checkable calculations, not uncontrolled self-learning.";
+
 const SURGE_INTERNAL_IMPLEMENTATION_PATTERN =
   /\b(?:ChatGPT|OpenAI|Anthropic|Claude|Gemini|Vertex\s+AI|Google(?:'s)?\s+AI\s+models?|Responses\s+API|large\s+language\s+model|LLM|GPT(?:[-\s]?(?:3|4|5|\d)[A-Za-z0-9.\-]*)?)\b/i;
 
@@ -105,6 +108,9 @@ const SURGE_NAMED_REFERENCE_PATTERN =
 
 const SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN =
   /\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?)\b/;
+
+const SURGE_OTHER_NAMED_REFERENCE_PATTERN =
+  /\b(?:Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
 
 const SURGE_GENERIC_IMPLEMENTATION_QUESTION_PATTERNS = [
   /\b(?:what|which|who|name|identify|reveal|disclose|confirm)\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|company)\b[^\n?]{0,100}\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
@@ -188,6 +194,12 @@ export function isSurgeNamedReferenceQuestion(value: string) {
     /\b(?:according\s+to|what\s+(?:does|did|would)|copy|repeat|quote|source|reference|trained|training|inspir(?:e|ed|ation)|recommend|rank|best|opinion|say|says|said)\b/i.test(value)
     || /\b(?:where|how)\b[^\n]{0,50}\b(?:information|answers?|advice|knowledge)\b/i.test(value)
   );
+}
+
+export function isSurgeElectricSaulQuestion(value: string) {
+  return /\bElectric\s+Saul\b/i.test(value)
+    && !SURGE_OTHER_NAMED_REFERENCE_PATTERN.test(value)
+    && !SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN.test(value);
 }
 
 export function stripSurgePublicLinksAndCitationLines(value: string) {
@@ -2070,6 +2082,19 @@ export function composeEnergyAssistantAnswer(
   if (isSurgeImplementationIdentityQuestion(query)) {
     return structured("comfort_fabric", {
       directAnswer: SURGE_PUBLIC_IDENTITY_ANSWER,
+      status: "answered",
+      citations: [],
+      confidence: "high",
+      assumptions: [],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
+  if (isSurgeElectricSaulQuestion(query)) {
+    return structured("products_ratings", {
+      directAnswer: SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER,
       status: "answered",
       citations: [],
       confidence: "high",

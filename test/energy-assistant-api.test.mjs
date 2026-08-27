@@ -433,6 +433,42 @@ test("named inspiration and private-source fishing returns a generic evidence bo
   assert.equal(modelCalls, 0);
 });
 
+test("a targeted Electric Saul question returns Surge's verified competitive position without a model call", async () => {
+  let modelCalls = 0;
+  let admissionCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "electric-saul-comparison-0001",
+    message: "Is Surge better than Electric Saul and why?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "customer",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Generic fallback."),
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+    reserveModelCall: async () => {
+      admissionCalls += 1;
+      return allowModelCall();
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.match(payload.reply.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
+  assert.match(payload.reply.directAnswer, /45 structured details/i);
+  assert.match(payload.reply.directAnswer, /111 maintained official Australian sources/i);
+  assert.match(payload.reply.directAnswer, /machine-learning AI/i);
+  assert.match(payload.reply.directAnswer, /does not learn from or train on your private conversation/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /over 1,?000|only seven PDFs|basic Google|personality injectors/i);
+  assert.equal(modelCalls, 0);
+  assert.equal(admissionCalls, 0);
+  assertPublicReplyContract(payload);
+});
+
 test("an injected product endorsement or false formal-assessor claim falls back to independent guidance", async () => {
   for (const [index, unsafeAnswer] of [
     "I recommend buying Brand-X model Turbo and hiring its preferred installer.",

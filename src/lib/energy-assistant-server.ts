@@ -8,10 +8,12 @@ import {
   containsSurgeInternalPlatformName,
   containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
+  isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
   sanitizeSurgePublicText,
   sanitizeSurgeReferenceText,
+  SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER,
   SURGE_PUBLIC_IDENTITY_ANSWER,
   SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER,
   SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP,
@@ -350,6 +352,14 @@ function publicPolicyAnswer(message: string): EnergyAssistantAnswer | null {
     return {
       ...common,
       directAnswer: SURGE_PUBLIC_IDENTITY_ANSWER,
+      status: "answered",
+      suggestedQuestions: [],
+    };
+  }
+  if (isSurgeElectricSaulQuestion(message)) {
+    return {
+      ...common,
+      directAnswer: SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER,
       status: "answered",
       suggestedQuestions: [],
     };
