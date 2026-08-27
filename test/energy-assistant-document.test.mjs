@@ -41,6 +41,7 @@ test("Word bill analysis extracts useful figures without returning private ident
   });
   assert.equal(result.accepted, true);
   assert.equal(result.kind, "electricity_bill");
+  assert.match(result.directAnswer, /^I found an electricity bill\./);
   assert.match(result.directAnswer, /\$188\.20/);
   assert.match(result.directAnswer, /412 KWH/);
   assert.doesNotMatch(result.directAnswer, /6401234567|Private Street/);

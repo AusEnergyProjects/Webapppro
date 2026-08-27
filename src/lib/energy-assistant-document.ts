@@ -256,6 +256,7 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
   const usage = usageFigures(text);
   if (kind === "electricity_bill" || kind === "gas_bill") {
     const service = kind === "electricity_bill" ? "electricity" : "gas";
+    const article = kind === "electricity_bill" ? "an" : "a";
     const figures = [
       total ? `an apparent total due of ${total}` : "no clearly labelled total due",
       usage.length ? `usage figures including ${usage.join(", ")}` : "no clearly labelled usage total",
@@ -263,7 +264,7 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
     return {
       accepted: true,
       kind,
-      directAnswer: `I found a ${service} bill. The readable content shows ${figures}. Check the billing period, daily supply charge, usage rates, concessions and any solar feed-in credit before comparing plans. I have not repeated account numbers, meter identifiers or address details in this analysis.`,
+      directAnswer: `I found ${article} ${service} bill. The readable content shows ${figures}. Check the billing period, daily supply charge, usage rates, concessions and any solar feed-in credit before comparing plans. I have not repeated account numbers, meter identifiers or address details in this analysis.`,
     };
   }
 
