@@ -1935,30 +1935,29 @@ function rentalSafetySourceId(query: string) {
 }
 
 const ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX = "Uploaded energy quote summary for follow-up:";
-const ATTACHED_ENERGY_QUOTE_SCOPE = [
-  "solar",
-  "battery",
-  "hot water",
-  "electric cooking",
-  "heating or cooling",
-  "insulation",
-  "windows or draught sealing",
-  "EV charging",
-  "electrical work",
-  "gas appliance replacement",
-] as const;
-const ATTACHED_ENERGY_QUOTE_STRUCTURE = [
-  "itemised pricing",
-  "model or capacity details",
-  "allowances or exclusions",
-  "warranty terms",
-] as const;
 
 type AttachedEnergyQuoteContext = {
-  categories: string[];
-  structure: string[];
   apparentTotal: string;
-  certificateOrRebateAssumptions: boolean;
+  certificateFacts: Array<{
+    code: "STC" | "VEEC";
+    quantity: number;
+    unitRate: string;
+    credit: string;
+    reconciles: boolean;
+  }>;
+  veecFees: {
+    gross: string;
+    registration: string;
+    compliance: string;
+    net: string;
+    reconciles: boolean;
+  } | null;
+  certificateCreditTotal: string;
+  solarVictoriaRebate: string;
+  marketReference: {
+    tradedOn: string;
+    values: Partial<Record<"STC" | "VEEC", string>>;
+  } | null;
 };
 
 function latestAttachedEnergyQuoteContext(
@@ -1968,13 +1967,41 @@ function latestAttachedEnergyQuoteContext(
     .reverse()
     .find((message) => message.startsWith(ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX));
   if (!context) return null;
-  const scope = context.match(/\bscope includes ([^;]+);/i)?.[1] || "";
-  const structure = context.match(/\bquote structure includes ([^;]+);/i)?.[1] || "";
+  const certificateFacts = (["STC", "VEEC"] as const).flatMap((code) => {
+    const match = context.match(new RegExp(`\\b${code} (\\d{1,5}) at (\\$[\\d,]+(?:\\.\\d{2})?) = (\\$[\\d,]+(?:\\.\\d{2})?) ex GST, arithmetic (reconciles|does not reconcile);`, "i"));
+    return match ? [{
+      code,
+      quantity: Number(match[1]),
+      unitRate: match[2],
+      credit: match[3],
+      reconciles: match[4].toLowerCase() === "reconciles",
+    }] : [];
+  });
+  const veecFeeMatch = context.match(/\bVEEC fee breakdown gross (\$[\d,]+(?:\.\d{2})?), registration (\$[\d,]+(?:\.\d{2})?), compliance (\$[\d,]+(?:\.\d{2})?), net (\$[\d,]+(?:\.\d{2})?), arithmetic (reconciles|does not reconcile);/i);
+  const marketMatch = context.match(/\blatest reported market reference (\d{4}-\d{2}-\d{2}): ([^;]+);/i);
+  const marketValues: Partial<Record<"STC" | "VEEC", string>> = {};
+  if (marketMatch) {
+    for (const code of ["STC", "VEEC"] as const) {
+      const value = marketMatch[2].match(new RegExp(`\\b${code} (\\$[\\d,]+(?:\\.\\d{2})?)`, "i"))?.[1];
+      if (value) marketValues[code] = value;
+    }
+  }
   return {
-    categories: ATTACHED_ENERGY_QUOTE_SCOPE.filter((category) => scope.includes(category)),
-    structure: ATTACHED_ENERGY_QUOTE_STRUCTURE.filter((item) => structure.includes(item)),
     apparentTotal: context.match(/\bapparent total (\$[\d,]+(?:\.\d{2})?);?/i)?.[1] || "",
-    certificateOrRebateAssumptions: /\bcertificate credits or rebate assumptions detected\b/i.test(context),
+    certificateFacts,
+    veecFees: veecFeeMatch ? {
+      gross: veecFeeMatch[1],
+      registration: veecFeeMatch[2],
+      compliance: veecFeeMatch[3],
+      net: veecFeeMatch[4],
+      reconciles: veecFeeMatch[5].toLowerCase() === "reconciles",
+    } : null,
+    certificateCreditTotal: context.match(/\btotal certificate credits (\$[\d,]+(?:\.\d{2})?) ex GST;/i)?.[1] || "",
+    solarVictoriaRebate: context.match(/\bconditional Solar Victoria rebate (\$[\d,]+(?:\.\d{2})?) not included;/i)?.[1] || "",
+    marketReference: marketMatch && Object.keys(marketValues).length ? {
+      tradedOn: marketMatch[1],
+      values: marketValues,
+    } : null,
   };
 }
 
@@ -2179,32 +2206,49 @@ export function composeEnergyAssistantAnswer(
 
   const attachedQuoteContext = latestAttachedEnergyQuoteContext(priorUserMessages);
   if (attachedQuoteContext && asksForAttachedQuoteReview(query)) {
-    const scope = attachedQuoteContext.categories.length
-      ? attachedQuoteContext.categories.join(", ")
-      : "home-energy work";
-    const apparentTotal = attachedQuoteContext.apparentTotal
-      ? ` The apparent total is ${attachedQuoteContext.apparentTotal}.`
+    const fact = (code: "STC" | "VEEC") => attachedQuoteContext.certificateFacts.find((item) => item.code === code);
+    const stc = fact("STC");
+    const veec = fact("VEEC");
+    const completeCertificateMaths = Boolean(stc && veec && attachedQuoteContext.certificateCreditTotal);
+    const amount = (value: string | undefined) => Number(value?.replace(/[$,]/g, ""));
+    const certificateMathsReconcile = Boolean(
+      completeCertificateMaths
+      && stc?.reconciles
+      && veec?.reconciles
+      && Math.abs(amount(stc.credit) + amount(veec.credit) - amount(attachedQuoteContext.certificateCreditTotal)) < 0.011,
+    );
+    const market = attachedQuoteContext.marketReference;
+    const marketSummary = market
+      ? ` Latest reported market references (${market.tradedOn}) are${market.values.STC ? ` STCs ${market.values.STC}` : ""}${market.values.STC && market.values.VEEC ? " and" : ""}${market.values.VEEC ? ` VEECs ${market.values.VEEC}` : ""}.`
       : "";
-    const creditBoundary = attachedQuoteContext.certificateOrRebateAssumptions
-      ? " The summary also shows certificate credits or rebate assumptions, which must be checked for eligible quantities, rates, GST treatment and any conditional rebate."
+    const quoteRates = stc && veec
+      ? ` The quote uses ${stc.unitRate} per STC and ${veec.unitRate} per VEEC.`
       : "";
-    const structureVerdict = attachedQuoteContext.structure.length
-      ? `On structure, yes: this looks like a well-prepared quote. It records ${attachedQuoteContext.structure.join(", ")}.`
-      : "The scope looks reasonably comprehensive, but the summary does not prove how clearly the quote is itemised.";
+    const feeSummary = attachedQuoteContext.veecFees
+      ? ` For VEECs it starts at ${attachedQuoteContext.veecFees.gross}, then takes off ${attachedQuoteContext.veecFees.registration} registration and ${attachedQuoteContext.veecFees.compliance} compliance, leaving ${attachedQuoteContext.veecFees.net} each. Those fee figures ${attachedQuoteContext.veecFees.reconciles ? "add up" : "do not add up"}.`
+      : "";
+    const totalSummary = attachedQuoteContext.certificateCreditTotal
+      ? ` The ${stc?.quantity || "quoted"} STCs and ${veec?.quantity || "quoted"} VEECs provide ${attachedQuoteContext.certificateCreditTotal} in credits ex GST${attachedQuoteContext.apparentTotal ? `, bringing the payable total to ${attachedQuoteContext.apparentTotal} including GST` : ""}.`
+      : attachedQuoteContext.apparentTotal ? ` The payable total is ${attachedQuoteContext.apparentTotal}.` : "";
+    const rebateSummary = attachedQuoteContext.solarVictoriaRebate
+      ? ` The possible ${attachedQuoteContext.solarVictoriaRebate} Solar Victoria rebate is separate and has not been deducted.`
+      : "";
+    const fallback = completeCertificateMaths
+      ? ""
+      : " I cannot verify the certificate maths because the extracted summary does not include every quantity and rate.";
+    const mismatch = completeCertificateMaths && !certificateMathsReconcile
+      ? " At least one certificate line or the credit total does not add up."
+      : "";
     return structured("products_ratings", {
       directAnswer:
-        `${structureVerdict} It covers ${scope}.${apparentTotal}${creditBoundary} I still cannot call the price itself good from this summary alone. Confirm the actual quantities, capacities and room-by-room sizing, what switchboard, pipe and cable work is included, every extra rate, and who carries the warranty and after-sales responsibility. Then compare one like-for-like quote using the same complete scope. A lower headline price is not better if equipment, electrical work, certificate assumptions or exclusions differ.`,
+        `Yes. The quote maths ${certificateMathsReconcile ? "makes sense" : "needs checking"}.${marketSummary}${quoteRates}${feeSummary}${totalSummary}${rebateSummary}${fallback}${mismatch}`,
       status: "answered",
       citations: [],
-      confidence: "medium",
+      confidence: completeCertificateMaths ? "high" : "medium",
       assumptions: [
-        "This assessment uses only the bounded extracted summary, not the full quote text, site inspection or competing quote.",
+        "This verdict checks the extracted quote arithmetic and disclosed fees, not final certificate eligibility or installation quality.",
       ],
-      practicalSteps: [
-        "Confirm exact models, quantities, capacities and room-by-room sizing.",
-        "Check inclusions, allowances, exclusions, certificate assumptions, GST, warranties and after-sales responsibility.",
-        "Compare one like-for-like quote using the same complete installed scope.",
-      ],
+      practicalSteps: [],
       toolActions: [],
       suggestedQuestions: [],
       sourceBoundary: "This assessment uses only the privacy-safe extracted quote summary retained in the conversation.",

@@ -994,7 +994,7 @@ test("an attached quote follow-up stays quote-specific and cannot be replaced by
     recentTurns: [
       {
         role: "user",
-        content: "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; quote structure includes itemised pricing, model or capacity details, allowances or exclusions, warranty terms; certificate credits or rebate assumptions detected.",
+        content: "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST; conditional Solar Victoria rebate $1,000.00 not included; latest reported market reference 2026-08-21: STC $39.65, VEEC $82.40;",
       },
       { role: "assistant", content: "I found a home-energy quote and checked its bounded summary." },
     ],
@@ -1020,9 +1020,12 @@ test("an attached quote follow-up stays quote-specific and cannot be replaced by
   assert.equal(response.status, 200);
   const payload = await body(response);
   assert.equal(modelCalls, 0);
-  assert.match(payload.reply.directAnswer, /On structure, yes: this looks like a well-prepared quote.*itemised pricing/i);
-  assert.match(payload.reply.directAnswer, /\$5,785\.07.*certificate credits or rebate assumptions/i);
-  assert.doesNotMatch(payload.reply.content, /staged whole-home diagnosis|affected room or major end use/i);
+  assert.match(payload.reply.directAnswer, /^Yes\. The quote maths makes sense\./);
+  assert.match(payload.reply.directAnswer, /STCs \$39\.65.*VEECs \$82\.40/);
+  assert.match(payload.reply.directAnswer, /\$82\.25.*\$4\.35 registration.*\$7\.35 compliance.*fee figures add up/i);
+  assert.match(payload.reply.directAnswer, /\$6,854\.40.*\$5,785\.07 including GST/i);
+  assert.ok(payload.reply.directAnswer.split(/\s+/).length <= 100);
+  assert.doesNotMatch(payload.reply.content, /staged whole-home diagnosis|affected room or major end use|like-for-like|confirm exact/i);
   assert.equal(payload.reply.followUpQuestion, "");
   assertPublicReplyContract(payload);
 });

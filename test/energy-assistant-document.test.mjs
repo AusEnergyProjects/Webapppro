@@ -6,6 +6,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import {
   analyseEnergyDocumentBytes,
   analyseExtractedEnergyDocument,
+  appendEnergyCertificateMarketReferences,
   classifyEnergyDocument,
   EnergyDocumentError,
 } from "../src/lib/energy-assistant-document.ts";
@@ -76,18 +77,32 @@ test("whole-home electrification quote analysis distinguishes scope from rebate 
   const result = analyseExtractedEnergyDocument(
     "Quotation. Supply and install reverse-cycle heating and cooling, a heat-pump hot-water unit, "
     + "an electric stove and dedicated circuits. Model numbers and workmanship warranty included. "
-    + "Total payable $5,785.07 after 88 VEECs and 17 STCs. A possible Solar Victoria rebate is not included.",
+    + "Total payable $5,785.07. VEEC credit - 88 at $70.55 ex GST -$6,208.40. "
+    + "STC credit - 17 at $38.00 ex GST -$646.00. Total certificate credits are $6,854.40 ex GST. "
+    + "$82.25 sale value - $4.35 registration - $7.35 compliance = $70.55 ex GST per VEEC. "
+    + "Potential Solar Victoria hot-water rebate - not included -$1,000.00.",
   );
   assert.equal(result.kind, "energy_quote");
   assert.match(result.directAnswer, /heating or cooling/);
   assert.match(result.directAnswer, /hot water/);
   assert.match(result.directAnswer, /electric cooking/);
-  assert.match(result.directAnswer, /certificate credits or rebate assumptions/);
+  assert.match(result.directAnswer, /17 STCs at \$38\.00 each \(\$646\.00 ex GST\)/);
+  assert.match(result.directAnswer, /88 VEECs at \$70\.55 each \(\$6,208\.40 ex GST\)/);
   assert.doesNotMatch(result.directAnswer, /covering solar/);
   assert.match(result.conversationContext, /scope includes hot water, electric cooking, heating or cooling;/);
   assert.match(result.conversationContext, /apparent total \$5,785\.07/);
-  assert.match(result.conversationContext, /certificate credits or rebate assumptions detected/);
-  assert.doesNotMatch(result.conversationContext, /Solar Victoria|VEECs|STCs/);
+  assert.match(result.conversationContext, /STC 17 at \$38\.00 = \$646\.00 ex GST, arithmetic reconciles/);
+  assert.match(result.conversationContext, /VEEC 88 at \$70\.55 = \$6,208\.40 ex GST, arithmetic reconciles/);
+  assert.match(result.conversationContext, /VEEC fee breakdown gross \$82\.25, registration \$4\.35, compliance \$7\.35, net \$70\.55, arithmetic reconciles/);
+  assert.match(result.conversationContext, /total certificate credits \$6,854\.40 ex GST/);
+  assert.match(result.conversationContext, /conditional Solar Victoria rebate \$1,000\.00 not included/);
+  assert.ok(result.conversationContext.length <= 600);
+  const enriched = appendEnergyCertificateMarketReferences(result.conversationContext, [
+    { code: "STC", tradedOn: "2026-08-21", priceCents: 3965 },
+    { code: "VEEC", tradedOn: "2026-08-21", priceCents: 8240 },
+  ]);
+  assert.match(enriched, /latest reported market reference 2026-08-21: STC \$39\.65, VEEC \$82\.40/);
+  assert.ok(enriched.length <= 600);
 });
 
 test("document handling rejects renamed files and remains transient", async () => {
@@ -116,7 +131,8 @@ test("document handling rejects renamed files and remains transient", async () =
   assert.match(route, /local \? localDocumentRateLimiter : documentRateLimiter/);
   assert.match(route, /energy-assistant-document:\$\{requestFingerprint\(request\)\}/);
   assert.match(route, /retention: "transient"/);
-  assert.match(route, /conversationContext: analysis\.conversationContext/);
+  assert.match(route, /conversationContext,/);
+  assert.match(route, /appendEnergyCertificateMarketReferences/);
   assert.doesNotMatch(route, /getR2|bucket\.put|file.*\.prepare\(/);
   assert.match(client, /new FormData\(\)/);
   assert.match(client, /\/api\/energy-assistant\/document/);

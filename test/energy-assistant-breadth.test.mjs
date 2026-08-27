@@ -632,13 +632,17 @@ test("a quote-quality follow-up uses the retained safe document summary before w
     asOf,
     priorUserMessages: [
       "Saved home energy plan baseline: postcode: 3000; tenure: I own the home; dwelling type: Apartment or unit.",
-      "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; quote structure includes itemised pricing, model or capacity details, allowances or exclusions, warranty terms; certificate credits or rebate assumptions detected.",
+      "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST; conditional Solar Victoria rebate $1,000.00 not included; latest reported market reference 2026-08-21: STC $39.65, VEEC $82.40;",
     ],
   });
-  assert.match(answer.directAnswer, /On structure, yes: this looks like a well-prepared quote.*itemised pricing/i);
-  assert.match(answer.directAnswer, /hot water, electric cooking, heating or cooling, electrical work.*\$5,785\.07/i);
-  assert.match(answer.directAnswer, /certificate credits or rebate assumptions.*actual quantities.*like-for-like quote/i);
-  assert.doesNotMatch(answer.directAnswer, /staged whole-home diagnosis|affected room or major end use/i);
+  assert.match(answer.directAnswer, /^Yes\. The quote maths makes sense\./);
+  assert.match(answer.directAnswer, /2026-08-21.*STCs \$39\.65.*VEECs \$82\.40/);
+  assert.match(answer.directAnswer, /quote uses \$38\.00 per STC and \$70\.55 per VEEC/);
+  assert.match(answer.directAnswer, /\$82\.25.*\$4\.35 registration.*\$7\.35 compliance.*fee figures add up/i);
+  assert.match(answer.directAnswer, /17 STCs and 88 VEECs provide \$6,854\.40.*\$5,785\.07 including GST/i);
+  assert.match(answer.directAnswer, /\$1,000\.00 Solar Victoria rebate is separate and has not been deducted/i);
+  assert.ok(answer.directAnswer.split(/\s+/).length <= 100);
+  assert.doesNotMatch(answer.directAnswer, /staged whole-home diagnosis|affected room or major end use|like-for-like|confirm exact/i);
   assert.deepEqual(answer.suggestedQuestions, []);
   assertBounded(answer, "attached quote follow-up");
 });

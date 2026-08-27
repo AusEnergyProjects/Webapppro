@@ -1,9 +1,11 @@
 import { getD1 } from "../../../../../db";
 import {
   analyseEnergyDocumentBytes,
+  appendEnergyCertificateMarketReferences,
   EnergyDocumentError,
   MAX_ENERGY_DOCUMENT_REQUEST_BYTES,
 } from "@/lib/energy-assistant-document";
+import { loadCertificatePriceDataset } from "@/lib/certificate-prices-server";
 import {
   createMemoryLeadRateLimiter,
   createSharedLeadRateLimiter,
@@ -108,11 +110,30 @@ export async function POST(request: Request) {
       fileName: file.name,
       contentType: file.type,
     });
+    let conversationContext = analysis.conversationContext;
+    if (analysis.kind === "energy_quote" && /\b(?:STC|VEEC) \d+ at \$/.test(conversationContext)) {
+      try {
+        const dataset = await loadCertificatePriceDataset(getD1());
+        if (dataset.source.status === "current") {
+          const references = dataset.certificates.flatMap((certificate) => {
+            if ((certificate.code !== "STC" && certificate.code !== "VEEC") || !certificate.latest) return [];
+            return [{
+              code: certificate.code,
+              tradedOn: certificate.latest.tradedOn,
+              priceCents: certificate.latest.priceCents,
+            }];
+          });
+          conversationContext = appendEnergyCertificateMarketReferences(conversationContext, references);
+        }
+      } catch {
+        // Quote analysis remains useful when the optional market reference is unavailable.
+      }
+    }
     return json({
       ok: true,
       accepted: analysis.accepted,
       kind: analysis.kind,
-      conversationContext: analysis.conversationContext,
+      conversationContext,
       reply: assistantReply(analysis.directAnswer),
       retention: "transient",
     });

@@ -18,6 +18,12 @@ export type EnergyDocumentAnalysis = {
   conversationContext: string;
 };
 
+export type EnergyCertificateMarketReference = {
+  code: "STC" | "VEEC";
+  tradedOn: string;
+  priceCents: number;
+};
+
 export class EnergyDocumentError extends Error {
   readonly status: number;
   readonly code: string;
@@ -214,6 +220,116 @@ function usageFigures(text: string) {
   return [...new Set(figures)].slice(0, 3);
 }
 
+type QuoteCertificateFact = {
+  code: "STC" | "VEEC";
+  quantity: number;
+  unitRate: string;
+  credit: string;
+  reconciles: boolean;
+};
+
+function decimalAmount(value: string) {
+  const amount = Number(value.replaceAll(",", ""));
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function money(value: number) {
+  return `$${value.toLocaleString("en-AU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })}`;
+}
+
+function quoteCertificateFact(text: string, code: QuoteCertificateFact["code"]): QuoteCertificateFact | null {
+  const patterns = [
+    new RegExp(`\\b${code}(?:\\s+credit)?\\s*[-:–]?\\s*(\\d{1,5})\\s+(?:at|x)\\s+\\$([\\d,]+(?:\\.\\d{1,2})?)[^\\n]{0,40}?-?\\$([\\d,]+(?:\\.\\d{1,2})?)`, "i"),
+    new RegExp(`\\b${code}\\s+total[^\\n]{0,120}?\\b(\\d{1,5})\\s+\\$([\\d,]+(?:\\.\\d{1,2})?)\\s+\\$([\\d,]+(?:\\.\\d{1,2})?)`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const quantity = Number(match[1]);
+    const rate = decimalAmount(match[2]);
+    const credit = decimalAmount(match[3]);
+    if (!Number.isInteger(quantity) || quantity < 1 || rate === null || rate <= 0 || credit === null || credit <= 0) continue;
+    return {
+      code,
+      quantity,
+      unitRate: money(rate),
+      credit: money(credit),
+      reconciles: Math.abs((quantity * rate) - credit) < 0.011,
+    };
+  }
+  return null;
+}
+
+function quoteCertificateFacts(text: string) {
+  return (["STC", "VEEC"] as const)
+    .map((code) => quoteCertificateFact(text, code))
+    .filter((fact): fact is QuoteCertificateFact => fact !== null);
+}
+
+function quoteVeecFeeBreakdown(text: string) {
+  const match = text.match(/\$([\d,]+(?:\.\d{1,2})?)\s+sale value\s*-\s*\$([\d,]+(?:\.\d{1,2})?)\s+registration\s*-\s*\$([\d,]+(?:\.\d{1,2})?)\s+compliance\s*=\s*\$([\d,]+(?:\.\d{1,2})?)\s+ex gst/i);
+  if (!match) return null;
+  const saleValue = decimalAmount(match[1]);
+  const registration = decimalAmount(match[2]);
+  const compliance = decimalAmount(match[3]);
+  const net = decimalAmount(match[4]);
+  if (saleValue === null || saleValue < 0
+    || registration === null || registration < 0
+    || compliance === null || compliance < 0
+    || net === null || net < 0) return null;
+  return {
+    saleValue: money(saleValue),
+    registration: money(registration),
+    compliance: money(compliance),
+    net: money(net),
+    reconciles: Math.abs((saleValue - registration - compliance) - net) < 0.011,
+  };
+}
+
+function quoteCertificateCreditTotal(text: string) {
+  const value = firstMatch(text, [
+    /\btotal certificate credits? (?:are|of)?\s*\$([\d,]+(?:\.\d{1,2})?)\s+ex gst/i,
+    /\bcertificate credits?[^\n]{0,120}?\btotal\s*-?\$([\d,]+(?:\.\d{1,2})?)/i,
+  ]);
+  const amount = value ? decimalAmount(value) : null;
+  return amount !== null && amount > 0 ? money(amount) : "";
+}
+
+function quoteConditionalSolarVictoriaRebate(text: string) {
+  const value = firstMatch(text, [
+    /\bpotential solar victoria[^\n]{0,100}?not included\s*-?\$([\d,]+(?:\.\d{1,2})?)/i,
+    /\bpossible solar victoria amount[^\n]{0,100}?\$([\d,]+(?:\.\d{1,2})?)[^\n]{0,80}?not (?:included|deducted)/i,
+  ]);
+  const amount = value ? decimalAmount(value) : null;
+  return amount !== null && amount > 0 ? money(amount) : "";
+}
+
+export function appendEnergyCertificateMarketReferences(
+  conversationContext: string,
+  references: readonly EnergyCertificateMarketReference[],
+) {
+  if (!conversationContext.startsWith("Uploaded energy quote summary for follow-up:")
+    || !/\b(?:STC|VEEC) \d+ at \$/.test(conversationContext)) return conversationContext;
+  const quotedCodes = (["STC", "VEEC"] as const)
+    .filter((code) => new RegExp(`\\b${code} \\d+ at \\$`).test(conversationContext));
+  const relevant = references
+    .filter((reference) => quotedCodes.includes(reference.code)
+      && /^\d{4}-\d{2}-\d{2}$/.test(reference.tradedOn)
+      && Number.isInteger(reference.priceCents)
+      && reference.priceCents > 0)
+    .sort((left, right) => left.code.localeCompare(right.code));
+  const dates = new Set(relevant.map((reference) => reference.tradedOn));
+  if (relevant.length !== quotedCodes.length || dates.size !== 1) return conversationContext;
+  const tradedOn = relevant[0].tradedOn;
+  const values = relevant.map((reference) => `${reference.code} ${money(reference.priceCents / 100)}`).join(", ");
+  const next = `${conversationContext} latest reported market reference ${tradedOn}: ${values};`;
+  return next.length <= 600 ? next : conversationContext;
+}
+
 const ENERGY_QUOTE_CATEGORIES: ReadonlyArray<[string, RegExp]> = [
   ["solar", /\b(?:solar pv|solar panels?|photovoltaic|pv system|solar inverter)\b/i],
   ["battery", /\b(?:home battery|battery storage|battery system)\b/i],
@@ -290,6 +406,10 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
     .filter(([, pattern]) => pattern.test(text))
     .map(([label]) => label);
   const scope = categories.length ? categories.join(", ") : "home-energy work";
+  const certificateFacts = quoteCertificateFacts(text);
+  const veecFees = quoteVeecFeeBreakdown(text);
+  const certificateCreditTotal = quoteCertificateCreditTotal(text);
+  const solarVictoriaRebate = quoteConditionalSolarVictoriaRebate(text);
   const hasCertificateOrRebateAssumptions = /\b(?:certificate credits?|veecs?|stcs?|rebate allowance|rebate assumption)\b/i.test(text);
   const creditDirection = hasCertificateOrRebateAssumptions
     ? " The quote appears to include certificate credits or rebate assumptions, so confirm the eligible quantities, rates, GST treatment and any conditional rebate separately before signing."
@@ -300,12 +420,18 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
   return {
     accepted: true,
     kind,
-    directAnswer: `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${structureDirection}${creditDirection} Before accepting it, confirm the supplied details match the site, the complete installation and switchboard scope, extra rates, certificate assumptions, warranty and after-sales responsibility.`,
+    directAnswer: certificateFacts.length
+      ? `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}. The readable certificate lines show ${certificateFacts.map((fact) => `${fact.quantity} ${fact.code}s at ${fact.unitRate} each (${fact.credit} ex GST)`).join(" and ")}${certificateCreditTotal ? `, totalling ${certificateCreditTotal} ex GST` : ""}. You can ask me whether the quoted rates, fees or final total look reasonable.`
+      : `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${structureDirection}${creditDirection} Before accepting it, confirm the supplied details match the site, the complete installation and switchboard scope, extra rates, certificate assumptions, warranty and after-sales responsibility.`,
     conversationContext: [
       `Uploaded energy quote summary for follow-up: scope includes ${scope};`,
       total ? `apparent total ${total};` : "",
-      quoteStructure.length ? `quote structure includes ${quoteStructure.join(", ")};` : "",
-      hasCertificateOrRebateAssumptions ? "certificate credits or rebate assumptions detected." : "",
+      ...certificateFacts.map((fact) => `${fact.code} ${fact.quantity} at ${fact.unitRate} = ${fact.credit} ex GST, arithmetic ${fact.reconciles ? "reconciles" : "does not reconcile"};`),
+      veecFees ? `VEEC fee breakdown gross ${veecFees.saleValue}, registration ${veecFees.registration}, compliance ${veecFees.compliance}, net ${veecFees.net}, arithmetic ${veecFees.reconciles ? "reconciles" : "does not reconcile"};` : "",
+      certificateCreditTotal ? `total certificate credits ${certificateCreditTotal} ex GST;` : "",
+      solarVictoriaRebate ? `conditional Solar Victoria rebate ${solarVictoriaRebate} not included;` : "",
+      !certificateFacts.length && quoteStructure.length ? `quote structure includes ${quoteStructure.join(", ")};` : "",
+      !certificateFacts.length && hasCertificateOrRebateAssumptions ? "certificate credits or rebate assumptions detected." : "",
     ].filter(Boolean).join(" ").trim(),
   };
 }
