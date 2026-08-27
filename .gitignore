@@ -27,6 +27,7 @@
 /.netlify/
 /.wrangler/
 /.openai/*.tar.gz
+/.sites-release/
 tailwindcss-*.log
 
 # misc

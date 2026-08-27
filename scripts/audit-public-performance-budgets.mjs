@@ -204,7 +204,7 @@ if (assistantBytes > 89_000) fail(`deferred Surge assistant is ${assistantBytes}
 const rootGlobalCss = rscManifest.serverResources?.["src/app/layout.tsx"]?.css?.map(normalizeAsset) || [];
 if (rootGlobalCss.length !== 1) fail(`expected one root layout stylesheet, found ${rootGlobalCss.length}`);
 const globalCss = { file: rootGlobalCss[0], bytes: assetBytes(rootGlobalCss[0]) };
-if (globalCss.bytes > 735_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 735000`);
+if (globalCss.bytes > 725_000) fail(`global stylesheet is ${globalCss.bytes} bytes; budget is 725000`);
 
 const surfaceBytes = Object.fromEntries(
   Object.entries(surfaceEntries).map(([surface, key]) => [surface, graphBytes(manifest, key)]),
@@ -255,16 +255,30 @@ for (const [route, graph] of Object.entries(routeGraphs)) {
 }
 
 for (const [file, maximum] of [
-  ["aea-immersive-home-journey.webp", 150_000],
   ["surge-mascot.webp", 100_000],
 ]) {
   const bytes = assetBytes(file);
   if (bytes > maximum) fail(`${file} is ${bytes} bytes; budget is ${maximum}`);
 }
 
+for (const retiredAsset of [
+  "aea-home-energy-plan-og.png",
+  "aea-immersive-home-journey.webp",
+  "file.svg",
+  "globe.svg",
+  "next.svg",
+  "vercel.svg",
+  "window.svg",
+]) {
+  if (fs.existsSync(path.join(clientRoot, retiredAsset))) {
+    fail(`retired public asset returned to the Sites package: ${retiredAsset}`);
+  }
+}
+
 const routeSummary = Object.entries(routeGraphs)
   .map(([route, graph]) => `${route} JS ${graph.javascript}, CSS ${graph.css}`)
   .join("; ");
+
 console.log(
   `Public performance budgets passed: root launcher ${lazyBytes} bytes, deferred assistant ${assistantBytes} bytes, root layout CSS ${globalCss.bytes} bytes. Surface graphs: public ${surfaceBytes.public}, customer ${surfaceBytes.customer}, trade ${surfaceBytes.trade}, Creditex ${surfaceBytes.creditex} bytes.`,
   `Actual route graphs (page + root layout): ${routeSummary}.`,

@@ -32,12 +32,28 @@ Build a trustworthy Australian Energy Assessments site for independent energy-pl
 - Keep gas and electricity pricing engines separate.
 - Prefer server routes for retailer-data requests.
 - Do not deploy, submit leads, or change external services without explicit approval.
-- After validated changes, commit the approved scope, push it to GitHub, and publish it to Sites without a separate release prompt. Never deploy to Netlify unless the user explicitly requests it.
 - No em dashes or en dashes in user-facing copy.
 - All `date` and `datetime-local` inputs must use the delegated `SiteDatePicker` pop-out provided by the root layout. Date ranges must share a stable `data-date-range-group` and use `data-date-range-role="start"` and `data-date-range-role="end"` so one calendar can select and apply the range.
-- Before finishing code work, run npm run build.
 - Use Next.js App Router. Read relevant local Next documentation before unfamiliar APIs.
 - Preserve the compatibility comparator until the native electricity migration passes the same interaction audit.
 - Keep TLink trade software free. Do not add a commercial access, seat, lead, job or quote gate.
 - Require a checksum-valid ABN and an authorised authoritative business review before granting any trade workspace or API access.
 - Treat the dated audit as immutable history. Update current truth in RELEASE_TRUTH.md, forward sequence in ROADMAP.md and the active contract in HANDOVER_NEXT_TASK.md.
+
+## Default fast live workflow
+
+- Default every implementation request and follow-up adjustment for this project to `FAST LIVE` mode unless the user explicitly says it is read-only, local-only, or must not be committed, pushed or published. Questions, explanations, reviews and read-only audits do not mutate or release anything.
+- In `FAST LIVE` mode, begin implementation immediately after confirming the repository, branch, dirty state and applicable instructions. Do not produce a plan unless a genuine blocker prevents implementation.
+- Inspect only the requested feature, its direct dependencies and directly relevant tests. Do not perform broad repository exploration, historical research, unrelated audits or speculative investigation.
+- Lock scope to the requested outcome. Do not add unrelated cleanup, refactors, dependencies, abstractions, features, migrations, roadmap work or documentation changes.
+- Do not use subagents, web research, plugins or external services unless the requested result genuinely requires them.
+- Make reasonable low-risk assumptions and proceed. Ask the user only when a decision materially changes visible behaviour, destructive action is required, credentials or external authority are missing, or the requirement conflicts with repository evidence.
+- Implement the smallest complete production-quality change using existing patterns. Prefer one cohesive edit-and-validation pass over repeated discussion of minor decisions.
+- Validate proportionately before every live release. Always inspect the scoped diff and run `git diff --check`. For low-risk copy, styling and isolated UI changes, run existing focused tests plus the build required for publication. For logic and API changes, run focused unit or integration tests, typecheck and the publication build. Run the full release suite only for authentication, permissions, billing, database migrations, privacy, security, shared production contracts, or when a focused failure indicates wider risk.
+- Separate pre-existing failures from failures caused by the task. Do not widen scope to repair unrelated failures.
+- After two failed attempts using the same approach, stop repeating it, preserve completed work and report the exact blocker and smallest action needed.
+- After proportionate validation passes, stage and commit only the files owned by the current task, push the exact commit to the current approved GitHub branch, verify the remote commit, build or package Sites from that committed state, publish the matching Sites version, verify source and deployment provenance, and perform focused live checks of only the affected desktop and mobile flow.
+- Never stage or publish unrelated existing worktree changes. If a clean artifact cannot be produced from the exact scoped commit, stop and report the conflicting files or release dependency rather than deploying a mixed state.
+- Do not update `docs/RELEASE_TRUTH.md`, `docs/HANDOVER_NEXT_TASK.md`, `ROADMAP.md`, release assertions or next-five recommendations for routine adjustments. Update them only when the user requests it, a material milestone or migration changes canonical product state, or an existing automated release gate requires it.
+- Keep progress updates brief and factual. Report only the outcome, exact files changed, checks and results, GitHub commit and remote verification, Sites version and live verification, and genuine blockers or unverified areas.
+- Never deploy to Netlify unless the user explicitly requests it.

@@ -11,7 +11,6 @@ const notifications = read("../src/components/TradeJobNotifications.tsx");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
 const fieldRoute = read("../src/app/api/trade-field-work/route.ts");
 const fieldPanel = read("../src/components/TradeFieldWorkPanel.tsx");
-const invoiceStep = read("../src/components/TradeQuickInvoiceStep.tsx");
 const invoicePanel = read("../src/components/TradeQuickInvoicePanel.tsx");
 const crm = read("../src/components/InstallerCrmWorkspace.tsx");
 const comparator = read("../public/electricity-comparator.html");
@@ -130,13 +129,11 @@ test("job data refreshes preserve the active job tab", () => {
   assert.match(crm, /navigationTarget\.kind === "job"[\s\S]*setFocusedJobRefreshing\(true\)[\s\S]*setRefreshNonce\(\(value\) => value \+ 1\)/);
 });
 
-test("both quick invoice send paths require a visible preview confirmation", () => {
-  for (const source of [invoiceStep, invoicePanel]) {
-    assert.match(source, /crm-invoice-preview-dialog/);
-    assert.match(source, /Check before sending/);
-    assert.match(source, /Confirm and send/);
-  }
-  assert.match(invoiceStep, /Preview invoice and finish/);
+test("the active quick invoice send path requires a visible preview confirmation", () => {
+  assert.equal(fs.existsSync(new URL("../src/components/TradeQuickInvoiceStep.tsx", import.meta.url)), false);
+  assert.match(invoicePanel, /crm-invoice-preview-dialog/);
+  assert.match(invoicePanel, /Check before sending/);
+  assert.match(invoicePanel, /Confirm and send/);
   assert.match(invoicePanel, /Preview and send invoice/);
 });
 
@@ -150,5 +147,5 @@ test("the compatibility comparator uses local system typography consistently", (
 });
 
 test("new review flow copy avoids prohibited dash characters", () => {
-  assert.doesNotMatch(`${route}\n${notifications}\n${fieldPanel}\n${invoiceStep}\n${invoicePanel}`, /[\u2013\u2014]/);
+  assert.doesNotMatch(`${route}\n${notifications}\n${fieldPanel}\n${invoicePanel}`, /[\u2013\u2014]/);
 });
