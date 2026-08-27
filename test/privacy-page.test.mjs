@@ -23,7 +23,8 @@ test("the public privacy route covers the operational data boundary", () => {
   assert.match(privacy, /bounded home-profile summary/);
   assert.match(privacy, /relevant maintained energy guidance to an external AI processing provider/);
   assert.match(privacy, /provider-side response storage disabled/);
-  assert.match(privacy, /Planner photos, uploaded files and contact details are not included/);
+  assert.match(privacy, /Planner photos, document attachments and contact details are not included in that question context/);
+  assert.match(privacy, /processed transiently and not saved to server storage or sent to an external AI provider/);
   assert.match(privacy, /Newer details you tell Surge AI override conflicting profile or saved-plan answers/);
   assert.match(privacy, /does not create or read a server-side conversation record/);
   assert.match(privacy, /conversation text is not placed in analytics/);

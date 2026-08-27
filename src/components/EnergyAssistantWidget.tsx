@@ -4,6 +4,8 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type WheelEvent as ReactWheelEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -53,7 +55,10 @@ import {
 } from "@/lib/energy-assistant-lead-client.mjs";
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
+import type { DocumentConversationMessage } from "@/lib/energy-assistant-document-client";
 import styles from "./EnergyAssistantWidget.module.css";
+
+const EnergyAssistantDocumentTools = lazy(() => import("./EnergyAssistantDocumentTools"));
 
 type Audience = "public" | "customer" | "trade";
 
@@ -1522,6 +1527,12 @@ export function EnergyAssistantWidget({
     void ask(draft);
   };
 
+  const addDocumentMessages = (nextMessages: DocumentConversationMessage[], accepted: boolean) => {
+    conversationScrollPendingRef.current = true;
+    replaceMessages([...messagesRef.current, ...nextMessages]);
+    if (accepted) setHasUsefulAnswer(true);
+  };
+
   const updateStarterProfile = (field: SurgeProfileField, value: string, checked = true) => {
     const updatedProfile = updateSurgeProfileField(profileRef.current, field, value, checked);
     const nextProfile: SurgeStarterProfile = {
@@ -2360,16 +2371,6 @@ export function EnergyAssistantWidget({
               </form>
             )}
 
-            <footer className={styles.privacy}>
-              <p>Chat history stays on this device for 30 days. Your question and recent context are securely processed to answer you.</p>
-              <div>
-                <a href="/privacy">Privacy</a>
-                <button type="button" disabled={busy || leadBusy} onClick={resetConversation}>
-                  Clear conversation
-                </button>
-              </div>
-            </footer>
-
             {messages.length > 0 && (
               <ol className={styles.messages} aria-label="Energy guide conversation" aria-live="polite" aria-relevant="additions text">
                 {messages.map((message) => (
@@ -2429,6 +2430,13 @@ export function EnergyAssistantWidget({
             </div>
             <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
           </form>}
+          <Suspense fallback={null}>
+            <EnergyAssistantDocumentTools
+              disabled={busy || leadBusy}
+              onMessages={addDocumentMessages}
+              onClear={resetConversation}
+            />
+          </Suspense>
           </div>
 
           {dedicated && (

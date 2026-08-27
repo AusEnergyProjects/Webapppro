@@ -26,6 +26,8 @@ const surgeRouteStyles = read("../src/app/surge/surge-page.module.css");
 const surgeOpenButton = read("../src/components/SurgeOpenButton.tsx");
 const surgeNavigation = read("../src/lib/surge-page-navigation.ts");
 const homeContextTipsSource = read("../src/lib/surge-home-context-tips.ts");
+const documentClient = read("../src/lib/energy-assistant-document-client.ts");
+const documentTools = read("../src/components/EnergyAssistantDocumentTools.tsx");
 const mascotImage = readFileSync(new URL("../public/surge-mascot.webp", import.meta.url));
 
 function functionSource(source, name) {
@@ -237,8 +239,8 @@ test("only bounded local transcript, home profile, continuation, last activity a
   assert.match(widget, /const MAX_LOCAL_STORAGE_CHARACTERS = 160_000/);
   assert.match(widget, /const LOCAL_RETENTION_MS = 30 \* 24 \* 60 \* 60 \* 1000/);
   assert.doesNotMatch(persistedSource, /lead|draft|email|phone|serviceConsent|marketingConsent/);
-  assert.match(widget, /Chat history stays on this device for 30 days\. Your question and recent context are securely processed to answer you\./);
-  assert.match(widget, />\s*Clear conversation/);
+  assert.match(privacy, /kept in that browser for up to 30 days/);
+  assert.match(documentTools, />Clear chat</);
   assert.match(widget, /const messagesRef = useRef<AssistantMessage\[\]>\(\[\]\)/);
   assert.match(widget, /const replaceMessages = \(nextMessages: AssistantMessage\[\]\) =>/);
   assert.match(widget, /messagesRef\.current = boundedMessages[\s\S]*persistLocalSession\(\{ nextMessages: boundedMessages \}\)/);
@@ -263,7 +265,7 @@ test("same-browser local continuation is explicit and does not create tracking i
   assert.match(widget, /const nextContinuation = parseSurgeConversationState\(record\.continuation\)/);
   assert.match(widget, /continuationRef\.current = nextContinuation/);
   assert.match(widget, /setContinuation\(nextContinuation\)/);
-  assert.match(widget, /Chat history stays on this device for 30 days/);
+  assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.doesNotMatch(widget, /Last active \$\{lastActive\}/);
   assert.doesNotMatch(widget, /document\.cookie|canvas\.toDataURL|navigator\.plugins/);
   assert.match(widget, /setLead\(EMPTY_LEAD\)/);
@@ -797,10 +799,20 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(expired.profileUpdatedAt, "");
 });
 
-test("Surge AI has no customer file-upload or local-document feature", () => {
-  assert.doesNotMatch(widget, /type="file"|accept="\.pdf|Choose PDF|documentResult|analyseDocument|documentLeadSummary|structuredDocumentSummary|shareDocumentSummary/);
-  assert.doesNotMatch(styles, /\.documentTool|\.documentPicker|\.documentResult|\.documentVehicles|\.documentUse/);
-  assert.doesNotMatch(privacy, /PDF quote|electricity interval file|bytes and extracted text/);
+test("Surge AI keeps compact chat and bounded document tools at the bottom", () => {
+  assert.match(widget, /lazy\(\(\) => import\("\.\/EnergyAssistantDocumentTools"\)\)/);
+  assert.match(documentTools, /className=\{styles\.composerTools\}/);
+  assert.match(documentTools, /type="file"/);
+  assert.match(documentTools, /accept="\.pdf,\.docx"/);
+  assert.match(documentTools, /Energy quotes and bills only\. Files are not saved\./);
+  assert.match(documentTools, /href="\/privacy">Privacy</);
+  assert.match(documentTools, /analyseEnergyDocumentFile/);
+  assert.match(documentClient, /content: "Attached a document for analysis\."/);
+  assert.doesNotMatch(`${widget}\n${documentTools}\n${documentClient}`, /content:\s*file\.name|file\.name[\s\S]{0,120}replaceMessages/);
+  assert.match(styles, /\.composerTools\s*\{[\s\S]{0,360}flex:\s*0 0 auto/);
+  assert.match(styles, /\.attachmentButton input\s*\{[\s\S]{0,180}opacity:\s*0/);
+  assert.match(privacy, /processed transiently and not saved to server storage or sent to an external AI provider/);
+  assert.match(privacy, /filename and extracted text are not added to local chat history/);
 });
 
 test("optional help is available after intake and routes one consented destination", () => {
@@ -871,11 +883,10 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /if \(leadBusy \|\| leadStatus \|\| !lead\.serviceConsent\) return/);
   assert.doesNotMatch(widget, /setLead\(EMPTY_LEAD\)[\s\S]{0,160}catch/);
 
-  const privacyIndex = widget.indexOf("<footer className={styles.privacy}>");
   const transcriptIndex = widget.indexOf("{messages.length > 0 && (");
   const transcriptEndIndex = widget.indexOf("ref={conversationEndRef}");
   const composerIndex = widget.indexOf("<form className={styles.composer}");
-  assert.ok(privacyIndex < transcriptIndex, "privacy information should precede the live transcript");
+  assert.match(privacy, /kept in that browser for up to 30 days/);
   assert.ok(transcriptIndex < transcriptEndIndex, "the transcript should end at its scroll anchor");
   assert.ok(transcriptEndIndex < composerIndex, "the chronological transcript should sit immediately above the composer");
 });
@@ -964,7 +975,6 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.match(styles, /\.rootOpen\s*\{[\s\S]*flex-direction:\s*column-reverse[\s\S]*gap:\s*10px/);
   assert.match(styles, /\.rootOpen \.panel\s*\{[\s\S]*calc\(100dvh - 98px\)/);
   assert.match(styles, /\.conversation\s*\{[\s\S]*align-content:\s*start[\s\S]*overflow-y:\s*auto/);
-  assert.match(styles, /\.privacy a,[\s\S]*\.privacy button\s*\{[\s\S]*align-items:\s*center[\s\S]*display:\s*inline-flex/);
   assert.match(styles, /\.conversation\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /\.contextGroups\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.rootOpen\s*\{[\s\S]*bottom:\s*max\(12px,[\s\S]*top:\s*auto/);
