@@ -807,7 +807,9 @@ test("Surge AI keeps compact chat and bounded document tools at the bottom", () 
   assert.match(documentTools, /Energy quotes and bills only\. Files are not saved\./);
   assert.match(documentTools, /href="\/privacy">Privacy</);
   assert.match(documentTools, /analyseEnergyDocumentFile/);
-  assert.match(documentClient, /content: "Attached a document for analysis\."/);
+  assert.match(documentClient, /content: conversationContext/);
+  assert.match(documentClient, /rawConversationContext\.length <= 600/);
+  assert.match(documentClient, /\^Uploaded \(\?:electricity bill\|gas bill\|energy quote\) summary for follow-up:/);
   assert.doesNotMatch(`${widget}\n${documentTools}\n${documentClient}`, /content:\s*file\.name|file\.name[\s\S]{0,120}replaceMessages/);
   assert.match(styles, /\.composerTools\s*\{[\s\S]{0,360}flex:\s*0 0 auto/);
   assert.match(styles, /\.attachmentButton input\s*\{[\s\S]{0,180}opacity:\s*0/);

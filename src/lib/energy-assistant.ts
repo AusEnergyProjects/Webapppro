@@ -1934,6 +1934,65 @@ function rentalSafetySourceId(query: string) {
   return jurisdiction ? sources[jurisdiction] || null : null;
 }
 
+const ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX = "Uploaded energy quote summary for follow-up:";
+const ATTACHED_ENERGY_QUOTE_SCOPE = [
+  "solar",
+  "battery",
+  "hot water",
+  "electric cooking",
+  "heating or cooling",
+  "insulation",
+  "windows or draught sealing",
+  "EV charging",
+  "electrical work",
+  "gas appliance replacement",
+] as const;
+const ATTACHED_ENERGY_QUOTE_STRUCTURE = [
+  "itemised pricing",
+  "model or capacity details",
+  "allowances or exclusions",
+  "warranty terms",
+] as const;
+
+type AttachedEnergyQuoteContext = {
+  categories: string[];
+  structure: string[];
+  apparentTotal: string;
+  certificateOrRebateAssumptions: boolean;
+};
+
+function latestAttachedEnergyQuoteContext(
+  priorUserMessages: readonly string[],
+): AttachedEnergyQuoteContext | null {
+  const context = [...priorUserMessages]
+    .reverse()
+    .find((message) => message.startsWith(ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX));
+  if (!context) return null;
+  const scope = context.match(/\bscope includes ([^;]+);/i)?.[1] || "";
+  const structure = context.match(/\bquote structure includes ([^;]+);/i)?.[1] || "";
+  return {
+    categories: ATTACHED_ENERGY_QUOTE_SCOPE.filter((category) => scope.includes(category)),
+    structure: ATTACHED_ENERGY_QUOTE_STRUCTURE.filter((item) => structure.includes(item)),
+    apparentTotal: context.match(/\bapparent total (\$[\d,]+(?:\.\d{2})?);?/i)?.[1] || "",
+    certificateOrRebateAssumptions: /\bcertificate credits or rebate assumptions detected\b/i.test(context),
+  };
+}
+
+function asksForAttachedQuoteReview(query: string) {
+  return (
+    /\b(?:quote|price|cost|deal)\b/i.test(query)
+    && /\b(?:good|fair|reasonable|competitive|worth|value|overpriced|expensive|cheap|okay|ok|think)\b/i.test(query)
+  ) || /\bwhat do you think\b[^?\n]{0,60}\b(?:quote|price|cost|deal)\b/i.test(query);
+}
+
+export function isEnergyDocumentQuoteReviewRequest(
+  query: string,
+  priorUserMessages: readonly string[],
+) {
+  return asksForAttachedQuoteReview(query)
+    && latestAttachedEnergyQuoteContext(priorUserMessages) !== null;
+}
+
 export function composeEnergyAssistantAnswer(
   query: string,
   options: {
@@ -2115,6 +2174,40 @@ export function composeEnergyAssistantAnswer(
       practicalSteps: [],
       toolActions: [],
       suggestedQuestions: [SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP],
+    });
+  }
+
+  const attachedQuoteContext = latestAttachedEnergyQuoteContext(priorUserMessages);
+  if (attachedQuoteContext && asksForAttachedQuoteReview(query)) {
+    const scope = attachedQuoteContext.categories.length
+      ? attachedQuoteContext.categories.join(", ")
+      : "home-energy work";
+    const apparentTotal = attachedQuoteContext.apparentTotal
+      ? ` The apparent total is ${attachedQuoteContext.apparentTotal}.`
+      : "";
+    const creditBoundary = attachedQuoteContext.certificateOrRebateAssumptions
+      ? " The summary also shows certificate credits or rebate assumptions, which must be checked for eligible quantities, rates, GST treatment and any conditional rebate."
+      : "";
+    const structureVerdict = attachedQuoteContext.structure.length
+      ? `On structure, yes: this looks like a well-prepared quote. It records ${attachedQuoteContext.structure.join(", ")}.`
+      : "The scope looks reasonably comprehensive, but the summary does not prove how clearly the quote is itemised.";
+    return structured("products_ratings", {
+      directAnswer:
+        `${structureVerdict} It covers ${scope}.${apparentTotal}${creditBoundary} I still cannot call the price itself good from this summary alone. Confirm the actual quantities, capacities and room-by-room sizing, what switchboard, pipe and cable work is included, every extra rate, and who carries the warranty and after-sales responsibility. Then compare one like-for-like quote using the same complete scope. A lower headline price is not better if equipment, electrical work, certificate assumptions or exclusions differ.`,
+      status: "answered",
+      citations: [],
+      confidence: "medium",
+      assumptions: [
+        "This assessment uses only the bounded extracted summary, not the full quote text, site inspection or competing quote.",
+      ],
+      practicalSteps: [
+        "Confirm exact models, quantities, capacities and room-by-room sizing.",
+        "Check inclusions, allowances, exclusions, certificate assumptions, GST, warranties and after-sales responsibility.",
+        "Compare one like-for-like quote using the same complete installed scope.",
+      ],
+      toolActions: [],
+      suggestedQuestions: [],
+      sourceBoundary: "This assessment uses only the privacy-safe extracted quote summary retained in the conversation.",
     });
   }
 

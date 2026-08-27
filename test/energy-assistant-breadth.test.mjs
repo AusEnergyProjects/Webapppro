@@ -627,6 +627,22 @@ test("whole-home triage stays simple, staged and diagnostic", () => {
   }
 });
 
+test("a quote-quality follow-up uses the retained safe document summary before whole-home triage", () => {
+  const answer = composeEnergyAssistantAnswer("does it seem like a good quote", {
+    asOf,
+    priorUserMessages: [
+      "Saved home energy plan baseline: postcode: 3000; tenure: I own the home; dwelling type: Apartment or unit.",
+      "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; quote structure includes itemised pricing, model or capacity details, allowances or exclusions, warranty terms; certificate credits or rebate assumptions detected.",
+    ],
+  });
+  assert.match(answer.directAnswer, /On structure, yes: this looks like a well-prepared quote.*itemised pricing/i);
+  assert.match(answer.directAnswer, /hot water, electric cooking, heating or cooling, electrical work.*\$5,785\.07/i);
+  assert.match(answer.directAnswer, /certificate credits or rebate assumptions.*actual quantities.*like-for-like quote/i);
+  assert.doesNotMatch(answer.directAnswer, /staged whole-home diagnosis|affected room or major end use/i);
+  assert.deepEqual(answer.suggestedQuestions, []);
+  assertBounded(answer, "attached quote follow-up");
+});
+
 test("progressive STC questioning advances once and preserves collected state", () => {
   const messages = [
     "How much is my solar rebate?",

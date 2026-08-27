@@ -8,6 +8,7 @@ import {
   containsSurgeInternalPlatformName,
   containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
+  isEnergyDocumentQuoteReviewRequest,
   isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
@@ -543,15 +544,18 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
-  const protectedAnswer = requiresDeterministicSafety ? null : publicPolicyAnswer(message);
-  const planPriorityAnswer = requiresDeterministicSafety || protectedAnswer
+  const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteReviewRequest(message, priorUserMessages);
+  const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
+    ? null
+    : publicPolicyAnswer(message);
+  const planPriorityAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer || protectedAnswer
     ? null
     : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
   const deterministicAnswer = protectedAnswer || planPriorityAnswer || composedAnswer;
   let answer = deterministicAnswer;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!requiresDeterministicSafety && !protectedAnswer && !planPriorityAnswer) {
+  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !protectedAnswer && !planPriorityAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,

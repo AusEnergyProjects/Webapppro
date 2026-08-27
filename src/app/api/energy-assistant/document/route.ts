@@ -112,6 +112,7 @@ export async function POST(request: Request) {
       ok: true,
       accepted: analysis.accepted,
       kind: analysis.kind,
+      conversationContext: analysis.conversationContext,
       reply: assistantReply(analysis.directAnswer),
       retention: "transient",
     });

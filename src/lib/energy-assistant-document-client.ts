@@ -62,12 +62,19 @@ export async function analyseEnergyDocumentFile(file: File) {
     : null;
   const directAnswer = typeof reply?.directAnswer === "string" ? reply.directAnswer.trim() : "";
   if (!directAnswer) throw new Error("The document analysis returned an empty answer.");
+  const rawConversationContext = typeof record.conversationContext === "string"
+    ? record.conversationContext.trim()
+    : "";
+  const conversationContext = rawConversationContext.length <= 600
+    && /^Uploaded (?:electricity bill|gas bill|energy quote) summary for follow-up:/i.test(rawConversationContext)
+    ? rawConversationContext
+    : "Attached a document for analysis.";
   const now = new Date().toISOString();
   const messages: DocumentConversationMessage[] = [{
     id: `document:${crypto.randomUUID()}`,
     role: "user",
     createdAt: now,
-    content: "Attached a document for analysis.",
+    content: conversationContext,
     directAnswer: "",
     practicalSteps: [],
     nextAction: "",

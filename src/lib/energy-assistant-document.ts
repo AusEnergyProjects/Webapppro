@@ -15,6 +15,7 @@ export type EnergyDocumentAnalysis = {
   accepted: boolean;
   kind: EnergyDocumentKind | "unrelated";
   directAnswer: string;
+  conversationContext: string;
 };
 
 export class EnergyDocumentError extends Error {
@@ -226,6 +227,13 @@ const ENERGY_QUOTE_CATEGORIES: ReadonlyArray<[string, RegExp]> = [
   ["gas appliance replacement", /\b(?:gas heater|gas hot water|gas appliance).{0,80}\b(?:replace|replacement|decommission|remove)\b/i],
 ];
 
+const ENERGY_QUOTE_STRUCTURE: ReadonlyArray<[string, RegExp]> = [
+  ["itemised pricing", /\b(?:detailed scope and pricing|unit ex gst|amount ex gst|price summary|net price by section)\b/i],
+  ["model or capacity details", /\b(?:model|capacity|\d+(?:\.\d+)?\s*(?:kw|litres?|liters?|l\b))\b/i],
+  ["allowances or exclusions", /\b(?:allowance|allowances|excluded|exclusion|exclusions|beyond (?:the )?(?:base )?scope)\b/i],
+  ["warranty terms", /\bwarrant(?:y|ies)\b/i],
+];
+
 export function classifyEnergyDocument(textInput: string): EnergyDocumentKind | "unrelated" {
   const text = tidyText(textInput);
   const hasBillStructure = /\b(?:tax invoice|energy bill|electricity bill|gas bill|billing period|amount due|total due|account summary|meter read)\b/i.test(text);
@@ -250,6 +258,7 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
       accepted: false,
       kind,
       directAnswer: "This document doesn’t appear to be related to a home-energy quote or electricity or gas bill, so I haven’t analysed it.",
+      conversationContext: "",
     };
   }
 
@@ -266,20 +275,38 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
       accepted: true,
       kind,
       directAnswer: `I found ${article} ${service} bill. The readable content shows ${figures}. Check the billing period, daily supply charge, usage rates, concessions and any solar feed-in credit before comparing plans. I have not repeated account numbers, meter identifiers or address details in this analysis.`,
+      conversationContext: [
+        `Uploaded ${service} bill summary for follow-up:`,
+        total ? `apparent total due ${total}` : "no clearly labelled total due",
+        usage.length ? `usage figures ${usage.join(", ")}` : "no clearly labelled usage total",
+      ].join(" "),
     };
   }
 
   const categories = ENERGY_QUOTE_CATEGORIES
     .filter(([, pattern]) => pattern.test(text))
     .map(([label]) => label);
+  const quoteStructure = ENERGY_QUOTE_STRUCTURE
+    .filter(([, pattern]) => pattern.test(text))
+    .map(([label]) => label);
   const scope = categories.length ? categories.join(", ") : "home-energy work";
-  const creditDirection = /\b(?:certificate credits?|veecs?|stcs?|rebate allowance|rebate assumption)\b/i.test(text)
+  const hasCertificateOrRebateAssumptions = /\b(?:certificate credits?|veecs?|stcs?|rebate allowance|rebate assumption)\b/i.test(text);
+  const creditDirection = hasCertificateOrRebateAssumptions
     ? " The quote appears to include certificate credits or rebate assumptions, so confirm the eligible quantities, rates, GST treatment and any conditional rebate separately before signing."
+    : "";
+  const structureDirection = quoteStructure.length
+    ? ` The readable content also appears to include ${quoteStructure.join(", ")}.`
     : "";
   return {
     accepted: true,
     kind,
-    directAnswer: `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${creditDirection} Before accepting it, confirm exact brand and model numbers, quantities and capacity, the full installation and switchboard scope, cable or pipe allowances, exclusions, workmanship warranty and who provides after-sales support.`,
+    directAnswer: `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${structureDirection}${creditDirection} Before accepting it, confirm the supplied details match the site, the complete installation and switchboard scope, extra rates, certificate assumptions, warranty and after-sales responsibility.`,
+    conversationContext: [
+      `Uploaded energy quote summary for follow-up: scope includes ${scope};`,
+      total ? `apparent total ${total};` : "",
+      quoteStructure.length ? `quote structure includes ${quoteStructure.join(", ")};` : "",
+      hasCertificateOrRebateAssumptions ? "certificate credits or rebate assumptions detected." : "",
+    ].filter(Boolean).join(" ").trim(),
   };
 }
 

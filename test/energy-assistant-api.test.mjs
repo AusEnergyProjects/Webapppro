@@ -985,6 +985,48 @@ test("bounded recent turns retain user context and never trust assistant prose a
   assert.doesNotMatch(payload.reply.directAnswer, /size solar|EV charging|mansion/i);
 });
 
+test("an attached quote follow-up stays quote-specific and cannot be replaced by generic model guidance", async () => {
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "quote-followup-0001",
+    message: "does it seem like a good quote",
+    recentTurns: [
+      {
+        role: "user",
+        content: "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; quote structure includes itemised pricing, model or capacity details, allowances or exclusions, warranty terms; certificate credits or rebate assumptions detected.",
+      },
+      { role: "assistant", content: "I found a home-energy quote and checked its bounded summary." },
+    ],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "tenure", value: "I own the home" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+  });
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalls, 0);
+  assert.match(payload.reply.directAnswer, /On structure, yes: this looks like a well-prepared quote.*itemised pricing/i);
+  assert.match(payload.reply.directAnswer, /\$5,785\.07.*certificate credits or rebate assumptions/i);
+  assert.doesNotMatch(payload.reply.content, /staged whole-home diagnosis|affected room or major end use/i);
+  assert.equal(payload.reply.followUpQuestion, "");
+  assertPublicReplyContract(payload);
+});
+
 test("saved-plan baseline is validated and older than explicit chat corrections", async () => {
   const planContext = {
     version: 1,
