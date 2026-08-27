@@ -269,10 +269,35 @@ test("returns reviewed practical guidance for all six live categories", async ()
     assert.ok(result, categoryId);
     assert.match(result.directAnswer.toLowerCase(), new RegExp(label));
     assert.ok(result.practicalSteps.length > 0, categoryId);
-    assert.match(result.directAnswer, /reviewed pathway coverage/i);
+    assert.match(result.directAnswer, /start here/i);
+    assert.doesNotMatch(result.directAnswer, /ask for exact model and variant|reviewed comparison dimensions|reviewed pathway coverage/i);
     assert.equal(result.status, "answered");
     noDash(result);
   }
+});
+
+test("does not hijack a short answer to Surge's room-comfort follow-up", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({}, {
+    searchProducts: createRegistrySearch({}),
+    loadPrices: async () => prices(),
+  });
+  const followUp = request("mostly my louge and bedroom");
+  followUp.recentTurns = [
+    {
+      role: "assistant",
+      content: "A moving draught can point to gaps that may be sealed. Which rooms are hardest to keep comfortable?",
+    },
+  ];
+  followUp.continuation = {
+    version: 1,
+    activeTopic: "heating_cooling",
+    goal: "Improve winter comfort",
+    facts: [],
+    pendingQuestion: "Which rooms are hardest to keep comfortable?",
+    lastAnswerSummary: "Explained how to distinguish draughts from cold surfaces.",
+  };
+
+  assert.equal(await resolver(followUp), null);
 });
 
 test("compares exact models only on the same reviewed unit and test condition", async () => {

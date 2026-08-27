@@ -123,6 +123,12 @@ const SURGE_IMPLEMENTATION_DISCLOSURE_PATTERNS = [
   /\b(?:I|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\s+(?:am|is)\s+(?:an?\s+)?(?:proprietary\s+|generative\s+|foundation\s+)?(?:language\s+model|neural\s+network|foundation\s+model)\b/i,
 ] as const;
 
+const SURGE_INTERNAL_EDITORIAL_OUTPUT_PATTERNS = [
+  /\bask for exact model and variant details, then compare only decision-relevant specifications\b/i,
+  /\bthe reviewed comparison dimensions are\b/i,
+  /\breviewed pathway coverage for this category includes\b/i,
+] as const;
+
 const SURGE_PRODUCT_ENDORSEMENT_PATTERNS = [
   /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing))\b)/i,
   /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?:buying|choosing|using|hiring)\b/i,
@@ -211,6 +217,7 @@ export function sanitizeSurgePublicText(value: string) {
 export function surgeOutputViolatesPublicPolicy(value: string) {
   return SURGE_INTERNAL_IMPLEMENTATION_PATTERN.test(value)
     || SURGE_IMPLEMENTATION_DISCLOSURE_PATTERNS.some((pattern) => pattern.test(value))
+    || SURGE_INTERNAL_EDITORIAL_OUTPUT_PATTERNS.some((pattern) => pattern.test(value))
     || SURGE_PRODUCT_ENDORSEMENT_PATTERNS.some((pattern) => pattern.test(value))
     || SURGE_FALSE_ASSESSOR_CLAIM_PATTERNS.some((pattern) => pattern.test(value));
 }

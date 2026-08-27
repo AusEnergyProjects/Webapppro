@@ -133,8 +133,20 @@ function conversationText(request: SurgeModelRequest) {
 function categoryForRequest(request: SurgeModelRequest) {
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
+
+  const lastAssistantReply = [...request.recentTurns]
+    .reverse()
+    .find((turn) => turn.role === "assistant")?.content || "";
+  const continuingGroundedLookup = /\b(?:property's postcode|exact brand and model number|verified specification sheet|existing equipment and exact proposed product)\b/i
+    .test(lastAssistantReply)
+    || /\bwhat (?:system|existing heater|existing equipment)[^?]{0,100}\breplac/i
+      .test(lastAssistantReply);
+  if (!continuingGroundedLookup) return null;
+
   for (let index = request.recentTurns.length - 1; index >= 0; index -= 1) {
-    const previous = resolveReviewedProductGuidanceIntent(request.recentTurns[index].content);
+    const turn = request.recentTurns[index];
+    if (turn.role !== "user") continue;
+    const previous = resolveReviewedProductGuidanceIntent(turn.content);
     if (previous) return previous;
   }
   return null;
@@ -533,7 +545,11 @@ async function resolveMatchedGuidance(
   const comparisonMethod = reviewedProductComparisonMethod();
   const dimensions = category.comparisonDimensions.map((dimension) => dimension.consumerLabel);
 
-  let direct = `${comparisonMethod.answerFirst} For ${category.consumerLabel.toLowerCase()}, the reviewed comparison dimensions are ${dimensions.join(", ")}. ${comparisonMethod.why}`;
+  let direct = comparisonIntent
+    ? `To compare ${category.consumerLabel.toLowerCase()} properly, provide the exact model number and complete installed scope for each option. The useful comparison points are ${dimensions.join(", ")}. A brand name, price or headline specification alone does not establish which option fits the home.`
+    : certificateIntent
+      ? `For ${category.consumerLabel.toLowerCase()}, rebates and certificates depend on the location, existing equipment, exact proposed product and installation details. I will only give an exact quantity when every required input is verified.`
+      : `For ${category.consumerLabel.toLowerCase()}, start here: ${practicalSteps[0] || "describe the problem you want to solve and the current equipment or building condition."}`;
   let initial: SearchResult | null = null;
   let brands: string[] = [];
   let brandMatches: BrandMatch[] = [];
@@ -634,9 +650,9 @@ async function resolveMatchedGuidance(
   }
 
   const pathwayCodes = [...new Set(applicablePathways.map((pathway) => pathway.code))];
-  if (pathwayCodes.length) {
+  if (certificateIntent && pathwayCodes.length) {
     const place = state ? `For ${state}` : "Depending on the state or territory";
-    direct += ` ${place}, reviewed pathway coverage for this category includes ${pathwayCodes.join(", ")}. Coverage is not proof of eligibility, certificate quantity or customer discount.`;
+    direct += ` ${place}, the currently maintained pathways to check are ${pathwayCodes.join(", ")}. That does not by itself confirm eligibility, a certificate quantity or the customer's discount.`;
   }
 
   let sresQuantityResolved = false;

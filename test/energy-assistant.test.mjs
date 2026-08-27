@@ -9,12 +9,28 @@ import {
   energyAssistantKnowledgeHealth,
   sanitizeSurgeReferenceText,
   searchEnergyAssistantKnowledge,
+  surgeOutputViolatesPublicPolicy,
 } from "../src/lib/energy-assistant.ts";
 
 test("Surge reference answers never expose en or em dashes", () => {
   assert.equal(
     sanitizeSurgeReferenceText("Seal gaps — keep ventilation – then recheck."),
     "Seal gaps, keep ventilation, then recheck.",
+  );
+});
+
+test("customer output policy rejects internal assessor-method copy", () => {
+  assert.equal(
+    surgeOutputViolatesPublicPolicy(
+      "Ask for exact model and variant details, then compare only decision-relevant specifications.",
+    ),
+    true,
+  );
+  assert.equal(
+    surgeOutputViolatesPublicPolicy(
+      "For insulation and glazing, the reviewed comparison dimensions are installed R-value and whole-window U-value.",
+    ),
+    true,
   );
 });
 
