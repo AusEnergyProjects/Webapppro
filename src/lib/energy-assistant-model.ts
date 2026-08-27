@@ -301,6 +301,34 @@ function normalizedReply(value: string) {
     .trim();
 }
 
+const QUESTION_NOISE_WORDS = new Set([
+  "a", "an", "are", "did", "do", "does", "even", "is", "really", "still",
+  "the", "there", "very", "was", "were", "when",
+]);
+
+function questionWords(value: string) {
+  return new Set(
+    normalizedReply(value)
+      .split(" ")
+      .filter((word) => word && !QUESTION_NOISE_WORDS.has(word)),
+  );
+}
+
+function repeatsAnsweredPendingQuestion(question: string, request: SurgeModelRequest) {
+  const pending = request.continuation?.pendingQuestion || "";
+  if (
+    !question
+    || !pending
+    || classifySurgeConversationTurn(request.message, request.continuation) !== "answer_to_follow_up"
+  ) return false;
+
+  const currentWords = questionWords(question);
+  const pendingWords = questionWords(pending);
+  if (!currentWords.size || !pendingWords.size) return false;
+  const shared = [...currentWords].filter((word) => pendingWords.has(word)).length;
+  return shared / Math.max(currentWords.size, pendingWords.size) >= 0.9;
+}
+
 function repeatsPreviousReply(answer: string, request: SurgeModelRequest) {
   const previous = [...request.recentTurns]
     .reverse()
@@ -463,11 +491,14 @@ export async function generateSurgeModelAnswer(
       request.audience,
       request.message,
     );
-    const followUp = identityQuestion
+    const candidateFollowUp = identityQuestion
       ? ""
       : oneFollowUp(request.audience === "trade"
         ? rawFollowUp
         : sanitizeSurgePublicText(rawFollowUp));
+    const followUp = repeatsAnsweredPendingQuestion(candidateFollowUp, request)
+      ? ""
+      : candidateFollowUp;
     const confidence = record.confidence === "high" || record.confidence === "medium"
       ? record.confidence
       : "low";

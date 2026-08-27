@@ -295,6 +295,47 @@ test("a short reply is identified as the answer to Surge's pending question", as
   assert.deepEqual(result.continuation.facts, [
     { key: "existing_heating", value: "ducted gas" },
   ]);
+  assert.equal(result.answer.suggestedQuestions[0], "Are you considering ducted reverse-cycle or separate split systems?");
+  assert.equal(result.continuation.pendingQuestion, "Are you considering ducted reverse-cycle or separate split systems?");
+});
+
+test("a near-duplicate pending question is removed after the user answers it", async () => {
+  const pendingQuestion = "Do the windows feel cold even when there is no wind?";
+  const result = await generateSurgeModelAnswer(request({
+    message: "yeah freezing",
+    recentTurns: [
+      {
+        role: "assistant",
+        content: `Try the low-cost draught fixes first. ${pendingQuestion}`,
+      },
+    ],
+    continuation: state({
+      activeTopic: "glazing_shading",
+      pendingQuestion,
+      lastAnswerSummary: "Explained the difference between a draught and cold glazing.",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "If the glass feels freezing on still nights, close-fitting curtains can reduce discomfort before considering window replacement.",
+      followUpQuestion: "Do the windows feel very cold when there is no wind?",
+      state: state({
+        activeTopic: "glazing_shading",
+        facts: [{ key: "windows_cold_without_wind", value: "yes, freezing" }],
+        pendingQuestion: "Do the windows feel very cold when there is no wind?",
+        lastAnswerSummary: "Explained practical options for very cold window glass.",
+      }),
+    })),
+  });
+
+  assert.ok(result);
+  assert.equal(result.answer.directAnswer, "If the glass feels freezing on still nights, close-fitting curtains can reduce discomfort before considering window replacement.");
+  assert.equal(result.answer.status, "answered");
+  assert.deepEqual(result.answer.suggestedQuestions, []);
+  assert.equal(result.continuation.pendingQuestion, "");
+  assert.deepEqual(result.continuation.facts, [
+    { key: "windows_cold_without_wind", value: "yes, freezing" },
+  ]);
 });
 
 test("a substantially repeated provider answer is rejected instead of being shown twice", async () => {
