@@ -1960,13 +1960,34 @@ type AttachedEnergyQuoteContext = {
   } | null;
 };
 
+type AttachedEnergyQuoteIntent =
+  | "overview"
+  | "fees"
+  | "rates"
+  | "rebate"
+  | "total"
+  | "maths"
+  | "decision"
+  | "explanation";
+
+function latestAttachedEnergyQuoteContextEntry(
+  priorUserMessages: readonly string[],
+) {
+  for (let index = priorUserMessages.length - 1; index >= 0; index -= 1) {
+    const message = priorUserMessages[index];
+    if (message.startsWith(ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX)) {
+      return { context: message, index };
+    }
+  }
+  return null;
+}
+
 function latestAttachedEnergyQuoteContext(
   priorUserMessages: readonly string[],
 ): AttachedEnergyQuoteContext | null {
-  const context = [...priorUserMessages]
-    .reverse()
-    .find((message) => message.startsWith(ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX));
-  if (!context) return null;
+  const entry = latestAttachedEnergyQuoteContextEntry(priorUserMessages);
+  if (!entry) return null;
+  const { context } = entry;
   const certificateFacts = (["STC", "VEEC"] as const).flatMap((code) => {
     const match = context.match(new RegExp(`\\b${code} (\\d{1,5}) at (\\$[\\d,]+(?:\\.\\d{2})?) = (\\$[\\d,]+(?:\\.\\d{2})?) ex GST, arithmetic (reconciles|does not reconcile);`, "i"));
     return match ? [{
@@ -2012,12 +2033,42 @@ function asksForAttachedQuoteReview(query: string) {
   ) || /\bwhat do you think\b[^?\n]{0,60}\b(?:quote|price|cost|deal)\b/i.test(query);
 }
 
-export function isEnergyDocumentQuoteReviewRequest(
+function isAttachedQuoteConversationMessage(message: string) {
+  return asksForAttachedQuoteReview(message)
+    || /\b(?:quote|quoted|stcs?|veecs?|certificates?|rebate|solar victoria|fees?|charges?|deductions?|registration|compliance|rates?|payable|total|gst|maths?|calculation|figures?|add up|accept|sign|proceed|go ahead|good|fair|reasonable|competitive|worth|value|overpriced|expensive|cheap)\b/i.test(message)
+    || /^(?:so\s+)?(?:why|how|what about|what do you (?:think|reckon)|is that|are (?:they|these|those)|does that|can you explain|explain (?:that|it)|yes|no|okay|ok|right|correct)\b/i.test(message.trim());
+}
+
+function attachedEnergyQuoteIntent(
+  query: string,
+  priorUserMessages: readonly string[],
+): AttachedEnergyQuoteIntent | null {
+  const entry = latestAttachedEnergyQuoteContextEntry(priorUserMessages);
+  if (!entry) return null;
+  if (asksForAttachedQuoteReview(query)) return "overview";
+
+  const quoteFrameActive = priorUserMessages
+    .slice(entry.index + 1)
+    .every(isAttachedQuoteConversationMessage);
+  if (!quoteFrameActive || !isAttachedQuoteConversationMessage(query)) return null;
+  const explicitNewEnergyTopic = /\b(?:insulation|draught|windows?|glazing|heating|cooling|hot water|solar panels?|battery|electric vehicle|ev charger|electricity bill|gas bill|tariff)\b/i.test(query);
+  const explicitQuoteAnchor = /\b(?:quote|quoted|stcs?|veecs?|certificates?|fees?|registration|compliance|solar victoria)\b/i.test(query);
+  if (explicitNewEnergyTopic && !explicitQuoteAnchor) return null;
+  if (/\b(?:fees?|charges?|deductions?|registration|compliance)\b/i.test(query)) return "fees";
+  if (/\b(?:rebate|solar victoria)\b/i.test(query)) return "rebate";
+  if (/\b(?:rates?|stcs?|veecs?|certificates? value)\b/i.test(query)) return "rates";
+  if (/\b(?:payable|total|gst|out[ -]?of[ -]?pocket|final amount)\b/i.test(query)) return "total";
+  if (/\b(?:maths?|calculation|figures?|add up|reconcile)\b/i.test(query)) return "maths";
+  if (/\b(?:accept|sign|proceed|go ahead|should i|worth it)\b/i.test(query)) return "decision";
+  if (/\b(?:why|how|explain|what do you mean)\b/i.test(query)) return "explanation";
+  return "overview";
+}
+
+export function isEnergyDocumentQuoteConversationRequest(
   query: string,
   priorUserMessages: readonly string[],
 ) {
-  return asksForAttachedQuoteReview(query)
-    && latestAttachedEnergyQuoteContext(priorUserMessages) !== null;
+  return attachedEnergyQuoteIntent(query, priorUserMessages) !== null;
 }
 
 export function composeEnergyAssistantAnswer(
@@ -2205,7 +2256,8 @@ export function composeEnergyAssistantAnswer(
   }
 
   const attachedQuoteContext = latestAttachedEnergyQuoteContext(priorUserMessages);
-  if (attachedQuoteContext && asksForAttachedQuoteReview(query)) {
+  const attachedQuoteFollowUp = attachedEnergyQuoteIntent(query, priorUserMessages);
+  if (attachedQuoteContext && attachedQuoteFollowUp) {
     const fact = (code: "STC" | "VEEC") => attachedQuoteContext.certificateFacts.find((item) => item.code === code);
     const stc = fact("STC");
     const veec = fact("VEEC");
@@ -2239,9 +2291,46 @@ export function composeEnergyAssistantAnswer(
     const mismatch = completeCertificateMaths && !certificateMathsReconcile
       ? " At least one certificate line or the credit total does not add up."
       : "";
+    const overviewAnswer =
+      `${certificateMathsReconcile ? "Yes. The quote maths makes sense." : "No. The quote maths needs checking."}${marketSummary}${quoteRates}${feeSummary}${totalSummary}${rebateSummary}${fallback}${mismatch}`;
+    const directAnswer = (() => {
+      if (attachedQuoteFollowUp === "fees") {
+        if (!attachedQuoteContext.veecFees) {
+          return "I cannot verify the fees because the retained quote summary does not include a fee breakdown.";
+        }
+        const fees = attachedQuoteContext.veecFees;
+        return `Yes. The VEEC fees ${fees.reconciles ? "add up" : "do not add up"}. The quote starts at ${fees.gross} per VEEC, deducts ${fees.registration} registration and ${fees.compliance} compliance, leaving ${fees.net} each. ${fees.reconciles ? "The disclosed fee arithmetic is correct." : "Ask the supplier to correct the fee line before accepting the quote."}`;
+      }
+      if (attachedQuoteFollowUp === "rates") {
+        if (!stc || !veec || !market) {
+          return "I cannot compare the certificate rates because the retained quote summary does not contain both quoted rates and a dated market reference.";
+        }
+        const quotedVeecRate = attachedQuoteContext.veecFees?.gross || veec.unitRate;
+        return `Yes. The quoted certificate rates are reasonable against the retained market references. The STC rate is ${stc.unitRate} versus ${market.values.STC || "an unavailable reference"}, and the VEEC gross rate is ${quotedVeecRate} versus ${market.values.VEEC || "an unavailable reference"} before the disclosed fees.${attachedQuoteContext.veecFees ? ` After ${attachedQuoteContext.veecFees.registration} registration and ${attachedQuoteContext.veecFees.compliance} compliance, the VEEC net is ${attachedQuoteContext.veecFees.net}.` : ""}`;
+      }
+      if (attachedQuoteFollowUp === "rebate") {
+        return attachedQuoteContext.solarVictoriaRebate
+          ? `The possible ${attachedQuoteContext.solarVictoriaRebate} Solar Victoria rebate is separate and has not been deducted${attachedQuoteContext.apparentTotal ? ` from the ${attachedQuoteContext.apparentTotal} payable total` : ""}. Do not count it until eligibility and approval are confirmed.`
+          : "The retained quote summary does not show a separate Solar Victoria rebate, so I cannot include one in the price.";
+      }
+      if (attachedQuoteFollowUp === "total") {
+        return `The quote shows ${attachedQuoteContext.certificateCreditTotal || "an unconfirmed amount"} in certificate credits ex GST${attachedQuoteContext.apparentTotal ? ` and an apparent payable total of ${attachedQuoteContext.apparentTotal} including GST` : ""}. ${certificateMathsReconcile ? "The certificate figures add up." : "The certificate figures need checking."}${rebateSummary}`;
+      }
+      if (attachedQuoteFollowUp === "maths") {
+        return certificateMathsReconcile
+          ? `Yes. The maths adds up: ${stc?.credit} in STCs plus ${veec?.credit} in VEECs equals ${attachedQuoteContext.certificateCreditTotal} in certificate credits ex GST.${attachedQuoteContext.apparentTotal ? ` The apparent payable total is ${attachedQuoteContext.apparentTotal} including GST.` : ""}`
+          : `No. The retained certificate quantities, rates and credit total do not fully reconcile.${mismatch || fallback}`;
+      }
+      if (attachedQuoteFollowUp === "decision") {
+        return `On the price arithmetic alone, ${certificateMathsReconcile ? "yes, the quote looks reasonable" : "no, the quote needs checking"}. The certificate rates and disclosed fees ${certificateMathsReconcile ? "add up" : "do not fully add up"}. Before accepting it, confirm the exact equipment, full installation and switchboard scope, warranty, certificate eligibility and that there are no extra fees.`;
+      }
+      if (attachedQuoteFollowUp === "explanation") {
+        return `Because the certificate rates are close to the retained market references, the disclosed VEEC fees ${attachedQuoteContext.veecFees?.reconciles ? "add up" : "need checking"}, and the certificate credit total ${certificateMathsReconcile ? "reconciles" : "does not fully reconcile"}.${attachedQuoteContext.apparentTotal ? ` That leaves the stated payable total at ${attachedQuoteContext.apparentTotal} including GST.` : ""}${rebateSummary}`;
+      }
+      return overviewAnswer;
+    })();
     return structured("products_ratings", {
-      directAnswer:
-        `Yes. The quote maths ${certificateMathsReconcile ? "makes sense" : "needs checking"}.${marketSummary}${quoteRates}${feeSummary}${totalSummary}${rebateSummary}${fallback}${mismatch}`,
+      directAnswer,
       status: "answered",
       citations: [],
       confidence: completeCertificateMaths ? "high" : "medium",

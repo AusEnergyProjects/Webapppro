@@ -647,6 +647,39 @@ test("a quote-quality follow-up uses the retained safe document summary before w
   assertBounded(answer, "attached quote follow-up");
 });
 
+test("short quote follow-ups stay on the active quote and answer the question asked", () => {
+  const quoteContext = "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST; conditional Solar Victoria rebate $1,000.00 not included; latest reported market reference 2026-08-21: STC $39.65, VEEC $82.40;";
+  const priorUserMessages = [quoteContext, "does it seem like a good quote"];
+  const cases = [
+    ["what about the fees?", /VEEC fees add up.*\$82\.25.*\$4\.35.*\$7\.35.*\$70\.55/is],
+    ["are those rates fair?", /certificate rates are reasonable.*STC.*\$38\.00.*\$39\.65.*VEEC.*\$82\.25.*\$82\.40/is],
+    ["what about the rebate?", /\$1,000\.00 Solar Victoria rebate.*separate.*not been deducted/is],
+    ["why?", /^Because the certificate rates are close to the retained market references/is],
+    ["so is it actually worth it?", /^On the price arithmetic alone, yes, the quote looks reasonable/is],
+  ];
+
+  for (const [query, expected] of cases) {
+    const answer = composeEnergyAssistantAnswer(query, { asOf, priorUserMessages });
+    assert.match(answer.directAnswer, expected, query);
+    assert.doesNotMatch(answer.directAnswer, /staged whole-home diagnosis|affected room or major end use/i, query);
+    assert.deepEqual(answer.suggestedQuestions, [], query);
+    assertBounded(answer, query);
+  }
+});
+
+test("an explicit new topic is not hijacked by the retained quote frame", () => {
+  for (const query of ["tell me about ceiling insulation", "what insulation rebates are available?"]) {
+    const answer = composeEnergyAssistantAnswer(query, {
+      asOf,
+      priorUserMessages: [
+        "Uploaded energy quote summary for follow-up: scope includes hot water; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST;",
+        "does it seem like a good quote",
+      ],
+    });
+    assert.doesNotMatch(answer.directAnswer, /\$5,785\.07|\$82\.25|\$70\.55|quote maths/i, query);
+  }
+});
+
 test("progressive STC questioning advances once and preserves collected state", () => {
   const messages = [
     "How much is my solar rebate?",

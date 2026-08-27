@@ -8,7 +8,7 @@ import {
   containsSurgeInternalPlatformName,
   containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
-  isEnergyDocumentQuoteReviewRequest,
+  isEnergyDocumentQuoteConversationRequest,
   isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
@@ -544,7 +544,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
-  const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteReviewRequest(message, priorUserMessages);
+  const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     ? null
     : publicPolicyAnswer(message);

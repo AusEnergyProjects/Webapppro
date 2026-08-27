@@ -1030,6 +1030,76 @@ test("an attached quote follow-up stays quote-specific and cannot be replaced by
   assertPublicReplyContract(payload);
 });
 
+test("elliptical quote follow-ups remain deterministic and do not fall into saved-plan triage", async () => {
+  const recentTurns = [
+    {
+      role: "user",
+      content: "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST; conditional Solar Victoria rebate $1,000.00 not included; latest reported market reference 2026-08-21: STC $39.65, VEEC $82.40;",
+    },
+    { role: "assistant", content: "I found a home-energy quote and retained a safe summary for follow-up." },
+    { role: "user", content: "does it seem like a good quote" },
+    { role: "assistant", content: "Yes. The quote maths makes sense and the rates are reasonable." },
+  ];
+  const planContext = buildSurgePlanContextFromStoredAssessment(JSON.stringify({
+    version: 1,
+    stage: 4,
+    draft: {
+      postcode: "3000",
+      situation: "owner",
+      approvalContext: "strata",
+      propertyType: "apartment",
+      occupants: "two",
+      goals: ["improve-comfort", "lower-bills"],
+      pace: "whole-home",
+      budgetRange: "under_2k",
+      storeys: "single",
+      ageBand: "1960_1999",
+      floorArea: "under_100",
+      sharedWalls: "two_plus_sides",
+      wallConstruction: "masonry_concrete",
+      floorConstruction: "suspended_concrete",
+      roofType: "tile",
+      roofColour: "light",
+      roofForm: "flat_low_pitch",
+      roofCondition: "good",
+      switchboard: "modern_breakers",
+      features: [
+        "comfort-too-cold", "condensation-moisture", "ceiling-insulation-not-applicable",
+        "floor-insulation-not-applicable", "single-glazing", "window-coverings-basic",
+        "external-shading-none", "kitchen-exhaust-fan", "bathroom-exhaust-fan", "reverse-cycle",
+      ],
+    },
+  }));
+  assert.ok(planContext);
+
+  for (const [index, query] of ["what about the fees?", "why?"].entries()) {
+    let modelCalls = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `quote-elliptical-${index.toString().padStart(4, "0")}`,
+      message: query,
+      recentTurns,
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => {
+        modelCalls += 1;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, query);
+    const payload = await body(response);
+    assert.equal(modelCalls, 0, query);
+    assert.match(payload.reply.directAnswer, /quote|certificate|VEEC/i, query);
+    assert.doesNotMatch(payload.reply.content, /staged whole-home diagnosis|affected room or major end use/i, query);
+    assert.equal(payload.reply.followUpQuestion, "", query);
+    assertPublicReplyContract(payload);
+  }
+});
+
 test("saved-plan baseline is validated and older than explicit chat corrections", async () => {
   const planContext = {
     version: 1,
