@@ -35,12 +35,17 @@ test("Surge gives a direct and evidence-bounded Electric Saul comparison", () =>
   );
 
   assert.equal(answer.status, "answered");
+  assert.match(answer.directAnswer, /Electric Saul's own chat describes what is, by comparison, an entry-level Google-hosted AI configuration/i);
+  assert.match(answer.directAnswer, /four main persona and formatting instruction groups/i);
+  assert.match(answer.directAnswer, /six operational guardrails and seven baseline fact sheets/i);
   assert.match(answer.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
   assert.match(answer.directAnswer, /45 structured details/i);
   assert.match(answer.directAnswer, /111 maintained official Australian sources/i);
-  assert.match(answer.directAnswer, /machine-learning AI/i);
-  assert.match(answer.directAnswer, /does not learn from or train on your private conversation/i);
-  assert.doesNotMatch(answer.directAnswer, /over 1,?000|only seven PDFs|basic Google|personality injectors/i);
+  assert.match(answer.directAnswer, /machine-learning-assisted reasoning/i);
+  assert.match(answer.directAnswer, /continuous governed improvement.*accredited assessors monitoring, assessing and refining/i);
+  assert.match(answer.directAnswer, /accountable human quality assurance/i);
+  assert.doesNotMatch(answer.directAnswer, /not uncontrolled self-learning|only seven PDFs|basic Google|personality injectors/i);
+  assert.equal(surgeOutputViolatesPublicPolicy(answer.directAnswer), false);
 });
 
 test("customer output policy rejects internal assessor-method copy", () => {

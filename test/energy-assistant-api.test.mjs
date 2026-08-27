@@ -458,12 +458,16 @@ test("a targeted Electric Saul question returns Surge's verified competitive pos
 
   assert.equal(response.status, 200);
   const payload = await body(response);
+  assert.match(payload.reply.directAnswer, /Electric Saul's own chat describes what is, by comparison, an entry-level Google-hosted AI configuration/i);
+  assert.match(payload.reply.directAnswer, /four main persona and formatting instruction groups/i);
+  assert.match(payload.reply.directAnswer, /six operational guardrails and seven baseline fact sheets/i);
   assert.match(payload.reply.directAnswer, /stronger choice for detailed, source-governed whole-home decisions/i);
   assert.match(payload.reply.directAnswer, /45 structured details/i);
   assert.match(payload.reply.directAnswer, /111 maintained official Australian sources/i);
-  assert.match(payload.reply.directAnswer, /machine-learning AI/i);
-  assert.match(payload.reply.directAnswer, /does not learn from or train on your private conversation/i);
-  assert.doesNotMatch(payload.reply.directAnswer, /over 1,?000|only seven PDFs|basic Google|personality injectors/i);
+  assert.match(payload.reply.directAnswer, /machine-learning-assisted reasoning/i);
+  assert.match(payload.reply.directAnswer, /continuous governed improvement.*accredited assessors monitoring, assessing and refining/i);
+  assert.match(payload.reply.directAnswer, /accountable human quality assurance/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /not uncontrolled self-learning|only seven PDFs|basic Google|personality injectors/i);
   assert.equal(modelCalls, 0);
   assert.equal(admissionCalls, 0);
   assertPublicReplyContract(payload);
