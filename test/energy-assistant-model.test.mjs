@@ -96,7 +96,7 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   const body = JSON.parse(observedOptions.body);
   assert.equal(body.model, "gpt-5.6-terra");
   assert.equal(body.store, false);
-  assert.deepEqual(body.reasoning, { effort: "low" });
+  assert.deepEqual(body.reasoning, { effort: "medium" });
   assert.equal(body.max_output_tokens, 800);
   assert.equal(body.text.verbosity, "low");
   assert.equal(body.text.format.type, "json_schema");
