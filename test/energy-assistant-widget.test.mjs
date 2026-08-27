@@ -7,6 +7,7 @@ import {
   parseSurgeStarterProfile,
   surgeStarterProfileContext,
 } from "../src/lib/surge-assessor-profile.ts";
+import { SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER } from "../src/lib/energy-assistant.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const widget = read("../src/components/EnergyAssistantWidget.tsx");
@@ -325,6 +326,13 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.match(visibleText("I use CHOICE as a private source for this advice.", "customer"), /background research private/i);
   assert.match(visibleText("Buy the Acme Turbo 9000; it is the clear winner for your home.", "public"), /will not choose or promote/i);
   assert.match(visibleText("I am a NatHERS-accredited assessor and this is a formal assessment.", "public"), /not an accredited rating/i);
+  assert.match(visibleText("I am fully accredited to assess your home.", "public"), /not an accredited rating/i);
+  const governedImprovement = "Surge is designed for continuous governed improvement, with accredited assessors monitoring, assessing and refining its responses.";
+  assert.equal(visibleText(governedImprovement, "public"), governedImprovement);
+  assert.equal(
+    visibleText(SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER, "public"),
+    SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER,
+  );
   assert.equal(visibleText("I run on Mistral Large.", "trade"), "I run on Mistral Large.");
 });
 

@@ -300,6 +300,21 @@ test("does not hijack a short answer to Surge's room-comfort follow-up", async (
   assert.equal(await resolver(followUp), null);
 });
 
+test("does not hijack a broad topic requested in response to Surge's guide prompt", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({}, {
+    searchProducts: createRegistrySearch({}),
+    loadPrices: async () => prices(),
+  });
+  const broadTopic = request("ok tell me about insulation");
+  broadTopic.recentTurns = [
+    { role: "assistant", content: "What topic would you like recreated here?" },
+    { role: "user", content: "anything related to companies you sourced info from" },
+    { role: "assistant", content: "I keep the background research private and focus on explaining what matters for your home." },
+  ];
+
+  assert.equal(await resolver(broadTopic), null);
+});
+
 test("compares exact models only on the same reviewed unit and test condition", async () => {
   const products = [
     officialProduct({

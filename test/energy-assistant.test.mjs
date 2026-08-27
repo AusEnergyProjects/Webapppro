@@ -48,6 +48,21 @@ test("Surge gives a direct and evidence-bounded Electric Saul comparison", () =>
   assert.equal(surgeOutputViolatesPublicPolicy(answer.directAnswer), false);
 });
 
+test("a broad insulation topic continues with useful education instead of a product-guidance card", () => {
+  const answer = composeEnergyAssistantAnswer(
+    "ok tell me about insulation",
+    {
+      asOf: "2026-08-20T00:00:00.000Z",
+      priorUserMessages: ["anything related to companies you sourced info from"],
+    },
+  );
+
+  assert.match(answer.directAnswer, /Insulation resists heat flow/i);
+  assert.match(answer.directAnswer, /higher total R-values/i);
+  assert.deepEqual(answer.suggestedQuestions, ["Which ceiling, roof, wall or floor areas are accessible?"]);
+  assert.doesNotMatch(answer.directAnswer, /For insulation, glazing and draught control, start here/i);
+});
+
 test("customer output policy rejects internal assessor-method copy", () => {
   assert.equal(
     surgeOutputViolatesPublicPolicy(

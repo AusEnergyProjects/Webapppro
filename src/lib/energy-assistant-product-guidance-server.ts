@@ -27,6 +27,7 @@ import type { SurgeModelRequest } from "./energy-assistant-model.ts";
 
 const CERTIFICATE_INTENT = /\b(?:rebate|discount|certificate|stc|veec|esc|prc|incentive|support)\b/i;
 const COMPARISON_INTENT = /\b(?:compare|comparison|versus|vs\.?|better|best|quieter|faster|efficien(?:t|cy)|specification|specs?)\b/i;
+const BROAD_EDUCATIONAL_TOPIC_INTENT = /^\s*(?:ok(?:ay)?[,.]?\s*)?(?:(?:tell|teach)\s+me\s+about|explain(?:\s+to\s+me)?|help\s+me\s+understand)\s+(?:home\s+)?(?:insulation|glazing|draughts?|draught\s+(?:proofing|control)|hot\s+water|heat\s+pumps?|heating(?:\s+and\s+cooling)?|air\s+conditioning|solar|home\s+batter(?:y|ies)|ev\s+charging|electric\s+vehicle\s+charging|induction\s+cooking|electric\s+cooking|appliances?)\s*(?:please)?[?.!]*\s*$/i;
 
 const PRODUCT_KIND_ALIASES: readonly [CreditexOfficialProductKind, RegExp][] = [
   ["sres_solar_water_heater", /\bsolar\s+(?:hot\s+water|water\s+heater)\b/i],
@@ -131,6 +132,7 @@ function conversationText(request: SurgeModelRequest) {
 }
 
 function categoryForRequest(request: SurgeModelRequest) {
+  if (BROAD_EDUCATIONAL_TOPIC_INTENT.test(request.message)) return null;
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
 

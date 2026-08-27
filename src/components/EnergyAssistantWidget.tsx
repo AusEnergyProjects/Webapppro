@@ -467,7 +467,7 @@ function customerVisibleText(value: string, audience: Audience): string {
     return "I keep the background research private and focus on explaining what matters for your home.";
   }
   if (
-    /\b(?:I am|I'm|Surge(?: AI)?\s+is)\b[^.!?\n]{0,100}\b(?:accredited|licensed|certified|registered|qualified)\b/i.test(safePlatformNames)
+    /\b(?:I am|I'm|Surge(?: AI)?\s+is)\s+(?:(?:an?|fully)\s+)?(?:NatHERS[- ]?)?(?:accredited|licensed|certified|registered|qualified)\b/i.test(safePlatformNames)
     || /\b(?:this is|I provide|I issue)\b[^.!?\n]{0,80}\b(?:formal assessment|formal rating|certificate decision)\b/i.test(safePlatformNames)
   ) {
     return "Surge AI provides general home-energy guidance, not an accredited rating, certificate or formal assessment.";
