@@ -104,8 +104,13 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.text.format.strict, true);
   assert.equal(body.text.format.schema.additionalProperties, false);
   assert.deepEqual(body.text.format.schema.required, [
-    "answer",
+    "answerType",
+    "verdict",
+    "reason",
+    "steps",
+    "extraDetail",
     "followUpQuestion",
+    "quickReplies",
     "confidence",
     "state",
     "usedSourceIds",
@@ -885,7 +890,7 @@ test("neutral comparison of exact customer-supplied options remains allowed", as
   });
 
   assert.ok(result);
-  assert.match(result.answer.directAnswer, /Option A.*Option B.*Neither is endorsed/i);
+  assert.match(result.answer.directAnswer, /Option A[\s\S]*Option B[\s\S]*Neither is endorsed/i);
 });
 
 test("model prompt applies assessor education response guardrails without leaking source custody", async () => {

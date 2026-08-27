@@ -2445,33 +2445,33 @@ export function composeEnergyAssistantAnswer(
     const tenure = latestResidentialTenure(wholeHomeConversation);
     const knownContext = [jurisdiction, tenure].filter(Boolean).join(" ");
     const focus = [
-      /\b(?:roasting|overheat|too hot|hot upstairs|cooks? upstairs|gross in summer|summer heat)\b/i.test(wholeHomeConversation) ? "overheating" : null,
+      /\b(?:roasting|boiling|overheat|too hot|hot upstairs|cooks? upstairs|gross in summer|summer heat)\b/i.test(wholeHomeConversation) ? "overheating" : null,
       /\b(?:condensation|windows? drip|mould|mold|damp|moisture)\b/i.test(wholeHomeConversation) ? "moisture or condensation" : null,
-      /\b(?:high|large|expensive|rising)?\s*(?:power|electricity|energy)?\s*bills?\b/i.test(wholeHomeConversation) ? "energy bills" : null,
+      /\b(?:high|large|expensive|rising)?\s*(?:power|electricity|energy)?\s*bills?\b|\b(?:bleeds money|costs? a fortune|bills? (?:are )?savage)\b/i.test(wholeHomeConversation) ? "energy bills" : null,
       /\b(?:cold|freezing|hard to heat|winter comfort|cold living room)\b/i.test(wholeHomeConversation) ? "winter comfort" : null,
     ].filter(Boolean);
     const hasPostcode = /\b(?:postcode\s*)?\d{4}\b/i.test(wholeHomeConversation);
     const hasPropertyType = /\b(?:detached(?:\s+house)?|house|townhouse|terrace|apartment|unit|duplex)\b/i.test(wholeHomeConversation);
-    const nextQuestion = !hasPostcode
-      ? "What is the property postcode?"
-      : !hasPropertyType
-        ? "Is the property a detached house, townhouse, apartment or unit?"
-        : focus.length === 0
-          ? "What is the single biggest problem: safety, moisture, discomfort, high bills or ageing gas equipment?"
-          : "Which affected room or major end use should be measured first?";
+    const nextQuestion = focus.length > 0
+      ? "Which room or appliance is causing the biggest problem?"
+      : !hasPostcode
+        ? "What is the main problem you want to fix first: comfort, moisture or the bill?"
+        : !hasPropertyType
+          ? "Is the property a detached house, townhouse, apartment or unit?"
+          : "Which room or appliance is causing the biggest problem?";
     return structured("comfort_fabric", {
       directAnswer:
-        `${knownContext ? `For the supplied ${knownContext} context, start` : "Start"} with a staged whole-home diagnosis, not a shopping list.${focus.length ? ` The supplied symptoms keep ${focus.join(" and ")} in the first diagnostic stage.` : ""} First address immediate safety, moisture and the rooms that fail comfort. Second use bills or interval data plus a fabric check to find the largest loads, solar gains, air leaks, insulation gaps and glazing problems. Third reduce demand and electrify end-of-life heating, hot water and cooking with site-sized equipment; then size solar to the resulting load and consider a battery only for measured surplus, tariff shifting or defined backup.`,
+        `${knownContext ? `For this ${knownContext} home, start` : "Start"} with the problem you notice most, not a shopping list.${focus.length ? ` You mentioned ${focus.join(" and ")}, so deal with those before buying major equipment.` : ""} Fix urgent safety, leaks or persistent condensation first. Then check the worst room for draughts, window coverings, insulation gaps and whether the existing heater or air conditioner is working properly. Use the bills to find the appliances costing the most. Replace ageing gas appliances when they are due, then size solar for the home's actual electricity use. Consider a battery only after checking spare daytime solar and evening use.`,
       status: "needs_context",
       citations: officialCitationsById(["energy-gov-electrification-sequence", "yourhome-passive-design-system", "energy-gov-reduce-energy-bills"]),
       confidence: "medium",
       assumptions: [`${knownContext ? `The supplied ${knownContext} context is retained, but no` : "No"} property safety, comfort, bill, equipment-age, fabric or budget evidence has been reviewed.`],
       practicalSteps: [
-        "Record safety or moisture faults, the worst rooms and when discomfort occurs.",
-        "Collect a bill or local interval summary and inspect accessible fabric, shade, seals and major equipment schedules.",
-        "Sequence fabric and appliance work before final solar, battery, finance and programme decisions.",
+        "Write down the worst room, when it is uncomfortable and any safety or moisture problem.",
+        "Check obvious draughts, window coverings, accessible insulation and heating or cooling filters.",
+        "Compare actual bill usage before choosing larger appliances, solar or a battery.",
       ],
-      toolActions: [{ id: "open-home-plan", label: "Build a staged whole-home plan", href: "/plan" }],
+      toolActions: [{ id: "open-home-plan", label: "Build my home-energy plan", href: "/plan" }],
       suggestedQuestions: [nextQuestion],
     });
   };

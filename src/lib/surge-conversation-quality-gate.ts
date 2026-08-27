@@ -5,6 +5,7 @@ import {
   type SurgeConversationEvaluationCase,
   type SurgeConversationEvaluationDimension,
 } from "../data/surge-conversation-evaluation-corpus.ts";
+import { surgePlainLanguageMetrics } from "./surge-everyday-answer.ts";
 
 export const SURGE_CONVERSATION_RELEASE_THRESHOLDS = {
   correction: 0.95,
@@ -17,6 +18,11 @@ export const SURGE_CONVERSATION_RELEASE_THRESHOLDS = {
   certificate_coverage: 1,
   brand_comparison: 1,
   context_clarification: 1,
+  directness: 1,
+  plain_language: 1,
+  actionability: 1,
+  context_use: 1,
+  progressive_detail: 1,
 } as const satisfies Record<SurgeConversationEvaluationDimension, number>;
 
 export type SurgeConversationEvaluationObservation = {
@@ -27,6 +33,12 @@ export type SurgeConversationEvaluationObservation = {
   latencyMs: number;
   requestedModel?: string;
   providerModel?: string;
+  verdict?: string;
+  reason?: string;
+  practicalSteps?: readonly string[];
+  extraDetail?: string;
+  followUpQuestion?: string;
+  quickReplies?: readonly { id: string; label: string; message: string }[];
 };
 
 export type SurgeConversationEvaluationResult = SurgeConversationEvaluationObservation & {
@@ -63,6 +75,38 @@ function evaluateAssertion(
     case "max_questions": {
       const count = countQuestions(observation.response);
       return count <= assertion.maximum ? null : `asked ${count} questions, maximum is ${assertion.maximum}`;
+    }
+    case "max_words": {
+      const count = surgePlainLanguageMetrics(observation.response).wordCount;
+      return count <= assertion.maximum ? null : `used ${count} words, maximum is ${assertion.maximum}`;
+    }
+    case "max_average_sentence_words": {
+      const count = surgePlainLanguageMetrics(observation.response).averageSentenceWords;
+      return count <= assertion.maximum ? null : `average sentence length was ${count} words, maximum is ${assertion.maximum}`;
+    }
+    case "max_sentence_words": {
+      const count = surgePlainLanguageMetrics(observation.response).longestSentenceWords;
+      return count <= assertion.maximum ? null : `longest sentence was ${count} words, maximum is ${assertion.maximum}`;
+    }
+    case "max_jargon": {
+      const count = surgePlainLanguageMetrics(observation.response).jargonCount;
+      return count <= assertion.maximum ? null : `used ${count} blocked jargon phrase(s), maximum is ${assertion.maximum}`;
+    }
+    case "requires_structured_answer":
+      return observation.verdict?.trim() && observation.reason?.trim()
+        ? null
+        : "structured verdict and reason were missing";
+    case "min_practical_steps": {
+      const count = observation.practicalSteps?.filter((step) => step.trim()).length || 0;
+      return count >= assertion.minimum ? null : `included ${count} practical steps, minimum is ${assertion.minimum}`;
+    }
+    case "requires_extra_detail":
+      return observation.extraDetail?.trim() ? null : "progressive extra detail was missing";
+    case "quick_reply_range": {
+      const count = observation.quickReplies?.length || 0;
+      return count >= assertion.minimum && count <= assertion.maximum
+        ? null
+        : `included ${count} quick replies, expected ${assertion.minimum} to ${assertion.maximum}`;
     }
     case "answer_source":
       return observation.answerSource === assertion.value

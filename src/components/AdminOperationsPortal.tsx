@@ -37,6 +37,7 @@ import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderD
 import { AdminJobDirectory } from "@/components/AdminJobDirectory";
 import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
 import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLeads";
+import { AdminSurgeAnswerReviews } from "@/components/AdminSurgeAnswerReviews";
 
 type AdminRole = "owner" | "admin" | "reviewer" | "support";
 type AdminSession = { email: string; displayName: string; role: AdminRole };
@@ -144,7 +145,7 @@ export function AdminOperationsPortal() {
   const [password, setPassword] = useState("");
   const [bootstrapCode, setBootstrapCode] = useState("");
   const [tab, setTab] = useState<
-    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
+    "inbox" | "overview" | "directory" | "jobs" | "customers" | "partners" | "assistant-leads" | "assistant-reviews" | "opportunities" | "catalogue" | "enquiries" | "handovers" | "asset-safety" | "asset-governance" | "form-governance" | "field-pilot" | "database" | "access"
   >("inbox");
   const [metrics, setMetrics] = useState<Metrics>({});
   const [audit, setAudit] = useState<AuditItem[]>([]);
@@ -740,6 +741,12 @@ export function AdminOperationsPortal() {
           >
             <span>G</span>Guide follow-ups
           </button>
+          {session.role !== "support" && <button
+            className={tab === "assistant-reviews" ? "active" : ""}
+            onClick={() => setTab("assistant-reviews")}
+          >
+            <span>R</span>Surge answer reviews
+          </button>}
           <button
             className={tab === "opportunities" ? "active" : ""}
             onClick={() => setTab("opportunities")}
@@ -1069,6 +1076,10 @@ export function AdminOperationsPortal() {
 
           {tab === "assistant-leads" && (
             <AdminEnergyAssistantLeads api={api} target={assistantLeadTarget} setStatus={setStatus} />
+          )}
+
+          {tab === "assistant-reviews" && session.role !== "support" && (
+            <AdminSurgeAnswerReviews api={api} setStatus={setStatus} />
           )}
 
           {tab === "catalogue" && (

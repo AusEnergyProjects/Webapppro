@@ -81,6 +81,12 @@ type AssistantAction = {
   href: string;
 };
 
+type QuickReply = {
+  id: string;
+  label: string;
+  message: string;
+};
+
 type AssistantMessage = {
   id: string;
   role: "user" | "assistant";
@@ -92,6 +98,11 @@ type AssistantMessage = {
   assumptions: string[];
   confidence: string;
   answerStatus: string;
+  answerType?: string;
+  verdict?: string;
+  reason?: string;
+  extraDetail?: string;
+  quickReplies?: QuickReply[];
   sourceBoundary: string;
   citations: Citation[];
   suggestions: string[];
@@ -398,6 +409,22 @@ function parseActions(value: unknown): AssistantAction[] {
   }).slice(0, 4);
 }
 
+function parseQuickReplies(value: unknown): QuickReply[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    const record = asRecord(item);
+    if (!record) return [];
+    const label = asString(record.label, 42);
+    const message = asString(record.message, 160);
+    if (!label || !message) return [];
+    return [{
+      id: asString(record.id, 60) || `quick-reply-${index + 1}`,
+      label,
+      message,
+    }];
+  }).slice(0, 4);
+}
+
 function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assistant"): AssistantMessage | null {
   if (typeof value === "string") {
     const content = asString(value);
@@ -439,6 +466,11 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
     assumptions: asStringList(record.assumptions, 4, 320),
     confidence: asString(record.confidence ?? record.confidenceLabel, 80),
     answerStatus: asString(record.status, 80),
+    answerType: asString(record.answerType ?? record.answer_type, 40),
+    verdict: asString(record.verdict, 360),
+    reason: asString(record.reason, 700),
+    extraDetail: asString(record.extraDetail ?? record.extra_detail, 1_200),
+    quickReplies: parseQuickReplies(record.quickReplies ?? record.quick_replies),
     sourceBoundary: asString(record.sourceBoundary ?? record.source_boundary, 700),
     citations: parseCitations(record.citations ?? record.sources),
     suggestions: asString(record.followUpQuestion, 180)
@@ -961,6 +993,7 @@ export function EnergyAssistantWidget({
   const [openPathname, setOpenPathname] = useState(initialOpen ? pathname : "");
   const [mascotTucked, setMascotTucked] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [answerReviewState, setAnswerReviewState] = useState<Record<string, "sending" | "sent" | "error">>({});
   const [continuation, setContinuation] = useState<SurgeConversationState | null>(null);
   const [profile, setProfile] = useState<SurgeStarterProfile>(EMPTY_STARTER_PROFILE);
   const [profileStep, setProfileStep] = useState(0);
@@ -1529,6 +1562,32 @@ export function EnergyAssistantWidget({
     void ask(draft);
   };
 
+  const submitAnswerReview = async (message: AssistantMessage, messageIndex: number) => {
+    const question = [...messages.slice(0, messageIndex)]
+      .reverse()
+      .find((item) => item.role === "user")?.content || "";
+    if (!question || answerReviewState[message.id] === "sending" || answerReviewState[message.id] === "sent") return;
+    setAnswerReviewState((current) => ({ ...current, [message.id]: "sending" }));
+    try {
+      const response = await fetch("/api/energy-assistant/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answerId: message.id,
+          question,
+          answer: message.content || message.directAnswer,
+        }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok || asRecord(payload)?.ok !== true) {
+        throw new Error(parseApiError(payload, "The answer could not be sent for review."));
+      }
+      setAnswerReviewState((current) => ({ ...current, [message.id]: "sent" }));
+    } catch {
+      setAnswerReviewState((current) => ({ ...current, [message.id]: "error" }));
+    }
+  };
+
   const addDocumentMessages = (nextMessages: DocumentConversationMessage[], accepted: boolean) => {
     conversationScrollPendingRef.current = true;
     replaceMessages([...messagesRef.current, ...nextMessages]);
@@ -1615,6 +1674,7 @@ export function EnergyAssistantWidget({
 
   const resetConversation = () => {
     if (busy || leadBusy) return;
+    setAnswerReviewState({});
     clearLocalSession({
       nextStatus: "Chat cleared. Home details kept",
       keepProfile: true,
@@ -2375,7 +2435,7 @@ export function EnergyAssistantWidget({
 
             {messages.length > 0 && (
               <ol className={styles.messages} aria-label="Energy guide conversation" aria-live="polite" aria-relevant="additions text">
-                {messages.map((message) => (
+                {messages.map((message, messageIndex) => (
                   <li key={message.id} className={message.role === "user" ? styles.userMessage : styles.assistantMessage}>
                     {message.role === "user" ? (
                       <p>{message.content}</p>
@@ -2389,10 +2449,51 @@ export function EnergyAssistantWidget({
                           {message.answerStatus === "source_review_required" && (
                             <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                           )}
-                          <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
+                          {message.verdict ? (
+                            <>
+                              <p className={styles.verdict}>{customerVisibleText(message.verdict, context.audience)}</p>
+                              {message.reason && <p className={styles.directAnswer}>{customerVisibleText(message.reason, context.audience)}</p>}
+                              {message.practicalSteps.length > 0 && (
+                                <ol className={styles.practicalSteps}>
+                                  {message.practicalSteps.map((step) => <li key={step}>{customerVisibleText(step, context.audience)}</li>)}
+                                </ol>
+                              )}
+                              {message.extraDetail && (
+                                <details className={styles.extraDetail}>
+                                  <summary>Why this matters</summary>
+                                  <p>{customerVisibleText(message.extraDetail, context.audience)}</p>
+                                </details>
+                              )}
+                            </>
+                          ) : (
+                            <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
+                          )}
                           {naturalFollowUpFor(message, context.audience) && (
                             <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
                           )}
+                          {message.id === messages[messages.length - 1]?.id && (message.quickReplies?.length || 0) > 0 && (
+                            <div className={styles.quickReplies} aria-label="Suggested replies">
+                              {message.quickReplies?.map((reply) => (
+                                <button type="button" key={reply.id} disabled={busy} onClick={() => void ask(reply.message)}>
+                                  {reply.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.reviewAnswer}
+                            disabled={answerReviewState[message.id] === "sending" || answerReviewState[message.id] === "sent"}
+                            onClick={() => void submitAnswerReview(message, messageIndex)}
+                          >
+                            {answerReviewState[message.id] === "sending"
+                              ? "Sending..."
+                              : answerReviewState[message.id] === "sent"
+                                ? "Sent for review"
+                                : answerReviewState[message.id] === "error"
+                                  ? "Try review again"
+                                  : "Review answer"}
+                          </button>
                         </article>
                       </>
                     )}

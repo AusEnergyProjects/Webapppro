@@ -26,3 +26,80 @@
 .admin-text-button { background: transparent; border: 0; color: var(--color-aea-green-dark); cursor: pointer; font-size: .7rem; font-weight: 850; margin-top: 18px; padding: 0; text-decoration: underline; }
 .admin-loading { animation: admin-pulse 1.2s ease-in-out infinite; background: linear-gradient(90deg, #dcece6, #65d6b2, #dcece6); background-size: 200% 100%; border-radius: 999px; height: 7px; margin-top: 20px; }
 @keyframes admin-pulse { to { background-position: -200% 0; } }
+.admin-surge-reviews {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-surge-review-filter {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-surge-review-filter select,
+.admin-surge-review-filter button,
+.admin-surge-review-actions textarea,
+.admin-surge-review-actions button {
+  font: inherit;
+}
+
+.admin-surge-review-filter select,
+.admin-surge-review-filter button,
+.admin-surge-review-actions button {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.admin-surge-review-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-surge-review-list > article {
+  background: #fff;
+  border: 1px solid #d7e2df;
+  border-radius: 12px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.admin-surge-review-list > article > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.admin-surge-review-list section small {
+  color: #53736c;
+  display: block;
+  font-weight: 800;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.admin-surge-review-list section p,
+.admin-surge-review-note {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.admin-surge-review-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-surge-review-actions textarea {
+  border: 1px solid #b8cbc6;
+  border-radius: 8px;
+  padding: 9px;
+  width: 100%;
+}
+
+.admin-surge-review-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

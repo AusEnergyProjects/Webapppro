@@ -11,8 +11,10 @@ export function createSurgeConversationQualityRecorder(database: D1Database) {
         correction_expected_count, correction_pass_count,
         topic_switch_expected_count, topic_switch_pass_count,
         privacy_pass_count, follow_up_pass_count,
+        directness_pass_count, plain_language_pass_count,
+        actionability_expected_count, actionability_pass_count,
         latency_total_ms, latency_samples, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       ON CONFLICT (
         day, audience, turn_intent, answer_source, answer_status,
         corpus_sha256, prompt_sha256, source_sha256, app_version,
@@ -26,6 +28,10 @@ export function createSurgeConversationQualityRecorder(database: D1Database) {
         topic_switch_pass_count = topic_switch_pass_count + excluded.topic_switch_pass_count,
         privacy_pass_count = privacy_pass_count + excluded.privacy_pass_count,
         follow_up_pass_count = follow_up_pass_count + excluded.follow_up_pass_count,
+        directness_pass_count = directness_pass_count + excluded.directness_pass_count,
+        plain_language_pass_count = plain_language_pass_count + excluded.plain_language_pass_count,
+        actionability_expected_count = actionability_expected_count + excluded.actionability_expected_count,
+        actionability_pass_count = actionability_pass_count + excluded.actionability_pass_count,
         latency_total_ms = latency_total_ms + excluded.latency_total_ms,
         latency_samples = latency_samples + excluded.latency_samples,
         updated_at = excluded.updated_at
@@ -49,6 +55,10 @@ export function createSurgeConversationQualityRecorder(database: D1Database) {
       Number(event.topicSwitchExpected && event.topicSwitchPassed),
       Number(event.privacyPassed),
       Number(event.followUpPassed),
+      Number(event.directnessPassed),
+      Number(event.plainLanguagePassed),
+      Number(event.actionabilityExpected),
+      Number(event.actionabilityExpected && event.actionabilityPassed),
       event.latencyMs,
       Date.now(),
     ).run();

@@ -22,6 +22,16 @@ import {
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
 import type { SurgePlanContext } from "./energy-assistant-plan-context.ts";
+import {
+  deriveSurgeAnswerPresentation,
+  normalizeSurgeAnswerPresentation,
+  SURGE_ANSWER_TYPES,
+  surgeQuickRepliesForQuestion,
+  surgePresentationPassesEverydayLanguage,
+  surgePresentationText,
+  type SurgeAnswerPresentation,
+  type SurgeQuickReply,
+} from "./surge-everyday-answer.ts";
 
 export type SurgeModelTurn = {
   role: "user" | "assistant";
@@ -41,6 +51,7 @@ export type SurgeModelRequest = {
 
 export type SurgeModelResult = {
   answer: EnergyAssistantAnswer;
+  presentation?: SurgeAnswerPresentation;
   continuation: SurgeConversationState;
 };
 
@@ -88,10 +99,43 @@ const MAX_FOLLOW_UP_CHARS = 220;
 const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "followUpQuestion", "confidence", "state", "usedSourceIds"],
+  required: [
+    "answerType",
+    "verdict",
+    "reason",
+    "steps",
+    "extraDetail",
+    "followUpQuestion",
+    "quickReplies",
+    "confidence",
+    "state",
+    "usedSourceIds",
+  ],
   properties: {
-    answer: { type: "string" },
+    answerType: { type: "string", enum: SURGE_ANSWER_TYPES },
+    verdict: { type: "string" },
+    reason: { type: "string" },
+    steps: {
+      type: "array",
+      maxItems: 3,
+      items: { type: "string" },
+    },
+    extraDetail: { type: "string" },
     followUpQuestion: { type: ["string", "null"] },
+    quickReplies: {
+      type: "array",
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "label", "message"],
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          message: { type: "string" },
+        },
+      },
+    },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
     state: {
       type: "object",
@@ -141,6 +185,26 @@ function oneFollowUp(value: unknown) {
   return first ? `${first}?` : "";
 }
 
+function textList(value: unknown, maximumItems: number, maximumChars: number) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => text(item, maximumChars))
+    .filter(Boolean)
+    .slice(0, maximumItems);
+}
+
+function quickReplyList(value: unknown): SurgeQuickReply[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const id = text(record.id, 60);
+    const label = text(record.label, 42);
+    const message = text(record.message, 160);
+    return id && label && message ? [{ id, label, message }] : [];
+  }).slice(0, 4);
+}
+
 function responseText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
   const source = payload as Record<string, unknown>;
@@ -178,9 +242,11 @@ Answer the user's actual question and continue the current decision logically. T
 
 Response contract:
 - Lead with the conclusion. For a yes/no, value or "does this make sense" question, begin with the verdict. For "where should I start", give the first action immediately.
-- Use plain Australian English, usually 45 to 140 words in two or three short paragraphs. Teach enough for the user to understand what the answer means and why it matters. Omit generic introductions, repeated caveats, source lists and long checklists.
+- Return a structured everyday answer: answerType, a short verdict, a plain reason, up to three practical steps, optional extraDetail, at most one followUpQuestion and two to four short quickReplies when a follow-up is asked. Each quick reply must contain the exact user message to send when selected.
+- Use plain Australian English, usually 45 to 140 words in total. Keep the immediately visible verdict, reason and steps under 120 words. Put useful secondary explanation in extraDetail so the interface can reveal it only when requested. Teach enough for the user to understand what the answer means and why it matters. Omit generic introductions, repeated caveats, source lists and long checklists.
+- Do not use unexplained technical shorthand or phrases such as building fabric, conductive heat flow, diagnostic stage, end use, interval data, load profile, measured surplus, site-sized, staged whole-home diagnosis, tariff shifting or thermal envelope. Use ordinary descriptions of what the house or equipment is doing.
 - Never use an em dash or en dash. Sound relaxed and practical, not corporate, academic or bureaucratic.
-- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question, then keep asking one useful question at a time. Never respond with only a question or dump a questionnaire.
+- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question and include two to four context-specific quick replies, then keep asking one useful question at a time. If no follow-up is needed, return an empty followUpQuestion and no quickReplies. Never respond with only a question or dump a questionnaire.
 - Never repeat a previous answer or a question the user has already answered. For clarification, explain the previous answer in simpler and more concrete words.
 
 Conversation contract:
@@ -426,6 +492,11 @@ function repeatsPreviousReply(answer: string, request: SurgeModelRequest) {
   return similarity >= 0.9;
 }
 
+function containsUnsafeProductDirection(value: string) {
+  return /\b(?:buy|choose|pick|select|go with)\s+(?:the\s+)?[A-Z][\w-]+(?:\s+[A-Z0-9][\w-]+){0,4}\b/iu.test(value)
+    || /\b(?:option|model|brand)\s+[A-Z0-9-]+\s+is\s+the\s+(?:better|best)\s+(?:choice|option)\b/i.test(value);
+}
+
 function hasOnlyGroundedQuantities(answer: string, groundingText: string) {
   const claims = answer.match(/(?:\$\s*\d[\d,.]*|\b\d+(?:\.\d+)?\s*(?:%|kwh|wh|kw|mw|mj|gj|km|litres?|l\/100\s*km|kwh\/100\s*km)\b)/gi) || [];
   const normalGrounding = groundingText.toLowerCase().replace(/\s+/g, " ");
@@ -561,16 +632,25 @@ export async function generateSurgeModelAnswer(
     }
     const record = parsed as Record<string, unknown>;
     const identityQuestion = isSurgeImplementationIdentityQuestion(request.message);
-    const rawAnswerText = text(record.answer, MAX_MODEL_ANSWER_CHARS);
+    const legacyAnswerText = text(record.answer, MAX_MODEL_ANSWER_CHARS);
+    const rawVerdict = text(record.verdict, 360);
+    const rawReason = text(record.reason, 700);
+    const rawSteps = textList(record.steps, 3, 360);
+    const rawExtraDetail = text(record.extraDetail, 1_200);
     const rawFollowUp = oneFollowUp(record.followUpQuestion);
+    const rawQuickReplies = quickReplyList(record.quickReplies);
     const continuation = parseSurgeConversationState(record.state);
     const continuationText = continuation ? JSON.stringify(continuation) : "";
-    const rawGeneratedText = `${rawAnswerText}\n${rawFollowUp}\n${continuationText}`;
-    const answerText = publicAnswer(
-      rawAnswerText,
-      request.audience,
-      request.message,
-    );
+    const rawGeneratedText = [
+      rawVerdict,
+      legacyAnswerText,
+      rawReason,
+      ...rawSteps,
+      rawExtraDetail,
+      rawFollowUp,
+      ...rawQuickReplies.flatMap((reply) => [reply.label, reply.message]),
+      continuationText,
+    ].join("\n");
     const candidateFollowUp = identityQuestion
       ? ""
       : oneFollowUp(request.audience === "trade"
@@ -580,6 +660,31 @@ export async function generateSurgeModelAnswer(
       || asksForKnownPlanFact(candidateFollowUp, request)
       ? ""
       : candidateFollowUp;
+    const legacyPresentation = !rawVerdict && legacyAnswerText
+      ? deriveSurgeAnswerPresentation({
+        ...request.deterministicAnswer,
+        directAnswer: publicAnswer(legacyAnswerText, request.audience, request.message),
+        suggestedQuestions: followUp ? [followUp] : [],
+      }, request.message)
+      : null;
+    const presentation = normalizeSurgeAnswerPresentation(legacyPresentation || {
+      answerType: SURGE_ANSWER_TYPES.includes(record.answerType as (typeof SURGE_ANSWER_TYPES)[number])
+        ? record.answerType as (typeof SURGE_ANSWER_TYPES)[number]
+        : "general",
+      verdict: publicAnswer(rawVerdict, request.audience, request.message),
+      reason: publicAnswer(rawReason, request.audience, ""),
+      steps: rawSteps.map((step) => publicAnswer(step, request.audience, "")),
+      extraDetail: publicAnswer(rawExtraDetail, request.audience, ""),
+      followUpQuestion: followUp,
+      quickReplies: followUp
+        ? (rawQuickReplies.length ? rawQuickReplies : surgeQuickRepliesForQuestion(followUp)).map((reply) => ({
+          id: reply.id,
+          label: publicAnswer(reply.label, request.audience, ""),
+          message: publicAnswer(reply.message, request.audience, ""),
+        }))
+        : [],
+    });
+    const answerText = surgePresentationText(presentation);
     const confidence = record.confidence === "high" || record.confidence === "medium"
       ? record.confidence
       : "low";
@@ -592,11 +697,13 @@ export async function generateSurgeModelAnswer(
       !answerText
       || !continuation
       || surgeOutputViolatesPublicPolicy(rawGeneratedText)
+      || containsUnsafeProductDirection(rawGeneratedText)
       || protectedReferenceLeak
       || publicContinuationLeaksInternalPlatform
       || !hasOnlyGroundedQuantities(answerText, JSON.stringify(prepared.context.payload))
       || repeatsPreviousReply(answerText, request)
       || modelAnswerFailsConversationQuality(answerText, request)
+      || (Boolean(rawVerdict) && !surgePresentationPassesEverydayLanguage(presentation))
     ) {
       reportFailure(dependencies, { code: "provider_output_rejected" });
       return null;
@@ -614,7 +721,7 @@ export async function generateSurgeModelAnswer(
     return {
       answer: {
         directAnswer: answerText,
-        practicalSteps: [],
+        practicalSteps: presentation.steps,
         nextAction: "",
         status: followUp ? "needs_context" : "answered",
         citations: [],
@@ -624,6 +731,7 @@ export async function generateSurgeModelAnswer(
         toolActions: [],
         sourceBoundary: "",
       },
+      presentation,
       continuation: {
         ...continuation,
         pendingQuestion: followUp,

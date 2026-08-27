@@ -14,6 +14,21 @@ function state(overrides = {}) {
   };
 }
 
+function presentation() {
+  return {
+    answerType: "starting_plan",
+    verdict: "Start with the coldest room.",
+    reason: "That gives the clearest first check.",
+    steps: ["Check the window seals."],
+    extraDetail: "Compare the result on a still and windy day.",
+    followUpQuestion: "Which room is hardest to heat?",
+    quickReplies: [
+      { id: "lounge", label: "Lounge", message: "The lounge" },
+      { id: "bedroom", label: "Bedroom", message: "The bedroom" },
+    ],
+  };
+}
+
 test("quality evaluator records a correction outcome without retaining conversation content", () => {
   const sensitiveMessage = "Actually I rent rather than own the home at 8 Private Street.";
   const event = evaluateSurgeConversationQuality({
@@ -26,6 +41,7 @@ test("quality evaluator records a correction outcome without retaining conversat
     answerStatus: "answered",
     publicPolicyPassed: true,
     followUpQuestion: "Which room is hardest to heat?",
+    presentation: presentation(),
     latencyMs: 87.6,
     metadata: {
       corpusSha256: "corpus-abc",
@@ -43,15 +59,19 @@ test("quality evaluator records a correction outcome without retaining conversat
   assert.equal(event.correctionExpected, true);
   assert.equal(event.correctionPassed, true);
   assert.deepEqual(Object.keys(event).sort(), [
+    "actionabilityExpected",
+    "actionabilityPassed",
     "answerSource",
     "answerStatus",
     "audience",
     "correctionExpected",
     "correctionPassed",
     "day",
+    "directnessPassed",
     "followUpPassed",
     "latencyMs",
     "metadata",
+    "plainLanguagePassed",
     "privacyPassed",
     "topicSwitchExpected",
     "topicSwitchPassed",
@@ -73,6 +93,7 @@ test("quality evaluator distinguishes a successful subject change from an unchan
     answerStatus: "answered",
     publicPolicyPassed: true,
     followUpQuestion: "What is your postcode?",
+    presentation: presentation(),
   });
   const failed = evaluateSurgeConversationQuality({
     day: "2026-08-22",
@@ -84,6 +105,7 @@ test("quality evaluator distinguishes a successful subject change from an unchan
     answerStatus: "answered",
     publicPolicyPassed: true,
     followUpQuestion: "What is your postcode?",
+    presentation: presentation(),
   });
 
   assert.equal(passed.topicSwitchExpected, true);

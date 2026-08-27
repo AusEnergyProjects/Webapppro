@@ -35,6 +35,10 @@ test("quality recorder persists only categorical aggregate dimensions and counts
     topicSwitchPassed: true,
     privacyPassed: true,
     followUpPassed: true,
+    directnessPassed: true,
+    plainLanguagePassed: true,
+    actionabilityExpected: true,
+    actionabilityPassed: true,
     latencyMs: 123,
     metadata: {
       corpusSha256: "corpus-abc",
@@ -65,9 +69,9 @@ test("quality recorder persists only categorical aggregate dimensions and counts
     "gpt-requested",
     "gpt-provider",
   ]);
-  assert.equal(bindings.length, 21);
-  assert.equal(bindings[19], 123);
-  assert.equal(typeof bindings[20], "number");
+  assert.equal(bindings.length, 25);
+  assert.equal(bindings[23], 123);
+  assert.equal(typeof bindings[24], "number");
   assert.doesNotMatch(`${sql}\n${JSON.stringify(bindings)}`, /message|question_text|answer_text|request_id|client_id|email|phone|address|postcode|ip_address/i);
 });
 

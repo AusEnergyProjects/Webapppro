@@ -9,6 +9,11 @@ export const SURGE_CONVERSATION_EVALUATION_DIMENSIONS = [
   "certificate_coverage",
   "brand_comparison",
   "context_clarification",
+  "directness",
+  "plain_language",
+  "actionability",
+  "context_use",
+  "progressive_detail",
 ] as const;
 
 export type SurgeConversationEvaluationDimension =
@@ -24,6 +29,14 @@ export type SurgeConversationAssertion =
   | { type: "excludes_all"; values: readonly string[] }
   | { type: "matches"; pattern: string; flags?: string }
   | { type: "max_questions"; maximum: number }
+  | { type: "max_words"; maximum: number }
+  | { type: "max_average_sentence_words"; maximum: number }
+  | { type: "max_sentence_words"; maximum: number }
+  | { type: "max_jargon"; maximum: number }
+  | { type: "requires_structured_answer" }
+  | { type: "min_practical_steps"; minimum: number }
+  | { type: "requires_extra_detail" }
+  | { type: "quick_reply_range"; minimum: number; maximum: number }
   | { type: "answer_source"; value: "deterministic" | "grounded" | "model" }
   | { type: "answer_status"; value: "answered" | "clarification_required" | "source_review_required" | "unavailable" };
 
@@ -64,6 +77,162 @@ function reviewedCase(
     prohibitedPatterns: [...COMMON_PROHIBITED_PATTERNS, ...(entry.prohibitedPatterns ?? [])],
   };
 }
+
+type EverydayScenario = {
+  id: string;
+  dimension: Extract<SurgeConversationEvaluationDimension,
+    "directness" | "plain_language" | "actionability" | "context_use" | "progressive_detail">;
+  opening: string;
+  question: string;
+  expected: string;
+  verdict: string;
+  reason: string;
+  steps: readonly string[];
+  extraDetail: string;
+  followUpQuestion?: string;
+  quickReplies?: readonly { id: string; label: string; message: string }[];
+  includes: readonly string[];
+  excludes?: readonly string[];
+};
+
+const EVERYDAY_SCENARIOS: readonly EverydayScenario[] = [
+  {
+    id: "quote-verdict", dimension: "directness", opening: "I have a synthetic heat-pump quote with the model and installation scope.", question: "So is it a good quote or not?", expected: "Give a direct verdict before explaining the checks.",
+    verdict: "Yes, the quote looks broadly sensible.", reason: "The model, installation work and certificate deductions are itemised, so the main costs can be checked.", steps: ["Confirm the written warranty and final out-of-pocket total."], extraDetail: "A quote can still change if switchboard, plumbing or access work is excluded.", includes: ["yes", "quote"], excludes: ["whole-home diagnosis"],
+  },
+  {
+    id: "battery-verdict", dimension: "directness", opening: "This synthetic home has solar but very little evening use.", question: "Is a battery worth it then?", expected: "Say no or not yet before the explanation.",
+    verdict: "Probably not yet.", reason: "Low evening use gives a battery less bill-saving work to do.", steps: ["Check a month of evening imports before getting quotes."], extraDetail: "Backup power or a changing tariff could still make it useful for reasons other than simple payback.", includes: ["not yet", "evening"],
+  },
+  {
+    id: "draught-verdict", dimension: "directness", opening: "The synthetic lounge has a moving draught around one opening window.", question: "Where do I start?", expected: "Name the first action immediately.",
+    verdict: "Start by sealing the moving gap around that window.", reason: "A suitable window seal is cheap, reversible and directly targets the draught you noticed.", steps: ["Check that the window still opens, closes and drains normally."], extraDetail: "Honeycomb blinds or close-fitting thermal curtains can help after the air leak is controlled.", includes: ["start", "window"],
+  },
+  {
+    id: "bill-verdict", dimension: "directness", opening: "I have a synthetic gas bill and electricity bill for the same month.", question: "Which one should I look at first?", expected: "Choose one bill and say why.",
+    verdict: "Start with the bill for the energy source causing the cost jump.", reason: "That keeps the first check tied to the problem instead of reviewing everything at once.", steps: ["Compare usage, not just the dollar total, with the same season last year."], extraDetail: "Tariff changes and longer billing periods can raise the total even when household use has not changed much.", includes: ["start", "usage"],
+  },
+  {
+    id: "glazing-plain", dimension: "plain_language", opening: "Surge mentioned glazing while discussing synthetic cold windows.", question: "What does glazing mean in normal words?", expected: "Translate the term into ordinary language.",
+    verdict: "Glazing simply means the glass in a window.", reason: "Single, double and triple glazing describe how many panes and sealed spaces the window uses.", steps: [], extraDetail: "The frame and seals matter too, so two windows with the same number of panes can perform differently.", includes: ["glass", "window"], excludes: ["conductive heat flow"],
+  },
+  {
+    id: "usage-pattern-plain", dimension: "plain_language", opening: "A synthetic solar discussion used the words load profile.", question: "Can you say that without the tech talk?", expected: "Explain the idea without repeating jargon.",
+    verdict: "It means when and how much electricity the home uses.", reason: "Daytime use, evening use and short power peaks affect which upgrades will help.", steps: [], extraDetail: "A smart-meter download can show this pattern in half-hour blocks.", includes: ["when", "electricity"], excludes: ["load profile", "end use"],
+  },
+  {
+    id: "veec-plain", dimension: "plain_language", opening: "A Victorian synthetic quote lists VEECs as a discount.", question: "Wot even is a VEEC?", expected: "Expand the acronym and explain it briefly.",
+    verdict: "A VEEC is a Victorian Energy Efficiency Certificate.", reason: "Eligible upgrades can create certificates that an accredited provider turns into part of the customer discount.", steps: [], extraDetail: "The certificate value moves, and administration or compliance costs can reduce the amount shown to the customer.", includes: ["victorian energy efficiency certificate", "discount"], excludes: ["guaranteed value"],
+  },
+  {
+    id: "reverse-cycle-plain", dimension: "plain_language", opening: "The synthetic home currently uses gas heating.", question: "Explain reverse cycle like im five", expected: "Use a simple physical explanation.",
+    verdict: "A reverse-cycle air conditioner moves heat instead of making it by burning fuel.", reason: "It can move heat inside during winter and move heat outside during summer.", steps: [], extraDetail: "That is why one unit can both heat and cool a room efficiently.", includes: ["moves heat", "winter"], excludes: ["coefficient of performance"],
+  },
+  {
+    id: "cold-bedroom-action", dimension: "actionability", opening: "The synthetic bedroom is cold and the window seal visibly moves in wind.", question: "Ok what do i actually do tonight?", expected: "Give safe actions that can be done immediately.",
+    verdict: "Stop the obvious draught first.", reason: "The moving seal shows where cold outside air is entering.", steps: ["Use a temporary removable window seal.", "Close a honeycomb blind or thermal curtain after sunset."], extraDetail: "Do not seal fixed vents or anything needed for safe ventilation.", includes: ["seal", "honeycomb"],
+  },
+  {
+    id: "condensation-action", dimension: "actionability", opening: "The synthetic bathroom has condensation after showers but no plumbing leak.", question: "What should i try first mate?", expected: "Give the first safe moisture actions.",
+    verdict: "Use the exhaust fan during the shower and for a short time afterwards.", reason: "Removing moist air at the source is the quickest first test.", steps: ["Open the bathroom briefly after the shower.", "Check that the fan actually exhausts outside."], extraDetail: "If condensation remains widespread, investigate heating, insulation and hidden moisture sources.", includes: ["exhaust fan", "outside"],
+  },
+  {
+    id: "high-bill-action", dimension: "actionability", opening: "The synthetic electricity bill rose but the tariff also changed.", question: "How do i work out whats actually wrong?", expected: "Separate price and usage with a small sequence.",
+    verdict: "Compare electricity use before blaming an appliance.", reason: "A higher tariff can raise the bill even when the home used the same amount.", steps: ["Compare kilowatt-hours with the same season last year.", "Then check which days or times use jumped."], extraDetail: "Half-hourly smart-meter data is useful after the basic bill comparison.", includes: ["kilowatt-hours", "tariff"],
+  },
+  {
+    id: "hot-water-action", dimension: "actionability", opening: "The synthetic hot-water quote has a brand but no exact model.", question: "What do i ask the installer for?", expected: "Provide a short request list.",
+    verdict: "Ask for the exact model number and complete installed price.", reason: "Those details determine performance, eligibility and what work is included.", steps: ["Request the tank size and recovery details.", "Confirm electrical, plumbing and disposal costs in writing."], extraDetail: "Also check warranty responsibility and expected noise near bedrooms or neighbours.", followUpQuestion: "Can you see an exact model number on the quote?", quickReplies: [{ id: "yes", label: "Yes", message: "Yes, I can see the exact model number" }, { id: "no", label: "No", message: "No, the quote only shows a brand" }, { id: "not-sure", label: "Not sure", message: "I am not sure which number is the model" }], includes: ["exact model", "installed price"],
+  },
+  {
+    id: "bedroom-context", dimension: "context_use", opening: "We were discussing a synthetic cold lounge with a confirmed window draught.", question: "What about the bedroom then?", expected: "Carry the diagnostic logic to the newly named room without restarting.",
+    verdict: "Check the bedroom for the same moving draught first.", reason: "The lounge already showed that window air leaks are present in this home.", steps: ["Feel around the opening parts of the bedroom window on a windy day."], extraDetail: "If it stays cold without wind, window coverings or insulation may matter more.", includes: ["bedroom", "same"], excludes: ["tell me about your home"],
+  },
+  {
+    id: "renter-context", dimension: "context_use", opening: "The synthetic profile said owner, but the user corrected it to renter.", question: "Can i still do that sealing idea?", expected: "Use the correction and give renter-safe guidance.",
+    verdict: "Yes, use removable seals that do not damage the property.", reason: "You corrected the home status to renting, so permanent changes may need the owner's approval.", steps: ["Photograph the gap and ask before drilling, cutting or applying permanent sealant."], extraDetail: "A door snake and removable weather strip are usually easier to reverse.", includes: ["rent", "removable"], excludes: ["as the owner"],
+  },
+  {
+    id: "quote-context", dimension: "context_use", opening: "Surge just explained the synthetic quote's STC and VEEC deductions.", question: "Does it seem fair though?", expected: "Resolve it as the quote follow-up and answer directly.",
+    verdict: "Yes, the deductions look plausible from the itemised quote.", reason: "The certificate values and listed fees are separated instead of being hidden in one discount.", steps: ["Confirm the final customer price and whether any certificate value can change before installation."], extraDetail: "A plausible structure is not proof of final eligibility or workmanship quality.", includes: ["quote", "fees"], excludes: ["what are you referring to"],
+  },
+  {
+    id: "pending-context", dimension: "context_use", opening: "Surge asked whether the synthetic windows feel cold when there is no wind.", question: "yeah freezing", expected: "Treat the short reply as the answer and continue.",
+    verdict: "That points to heat moving through the window as well as any draught.", reason: "Cold glass on still nights is different from cold air entering through a moving gap.", steps: ["Use close-fitting honeycomb blinds or thermal curtains first."], extraDetail: "Window replacement becomes more relevant if the glass and frames stay very cold across a large area.", includes: ["still", "honeycomb"], excludes: ["do the windows feel cold"],
+  },
+  {
+    id: "honeycomb-detail", dimension: "progressive_detail", opening: "The synthetic room has sealed windows but cold glass at night.", question: "Would honeycomb blinds help?", expected: "Answer briefly and keep the deeper mechanism optional.",
+    verdict: "Yes, well-fitted honeycomb blinds can reduce the cold feeling near the glass.", reason: "Their trapped air pockets slow heat loss when the blind sits close to the window.", steps: ["Choose a close fit and manage condensation behind the blind."], extraDetail: "Side gaps, an open top and a wet window can reduce the benefit, so installation and ventilation still matter.", includes: ["yes", "honeycomb"],
+  },
+  {
+    id: "solar-detail", dimension: "progressive_detail", opening: "The synthetic solar system exports most power at midday.", question: "Should i move my dishwasher to daytime?", expected: "Give the action first and hide tariff nuance in extra detail.",
+    verdict: "Yes, daytime use can make better use of your own solar.", reason: "Running the dishwasher while panels are producing can reduce electricity bought from the grid.", steps: ["Use the delay timer for a sunny late-morning or early-afternoon run."], extraDetail: "Check your feed-in tariff and controlled-load arrangements because some tariffs can change the best time.", includes: ["yes", "daytime"],
+  },
+  {
+    id: "insulation-detail", dimension: "progressive_detail", opening: "The synthetic ceiling has patchy old insulation.", question: "Is R6 automatically best?", expected: "Give a qualified verdict then optional technical context.",
+    verdict: "Not automatically.", reason: "Continuous safe coverage and correct installation can matter more than a higher label with gaps or compression.", steps: ["Check existing coverage and ceiling clearances before choosing a target rating."], extraDetail: "The suitable level depends on climate, roof space, product type, electrical safety and the rest of the home.", includes: ["not automatically", "gaps"],
+  },
+  {
+    id: "noise-detail", dimension: "progressive_detail", opening: "The synthetic heat-pump unit would sit near a bedroom and boundary.", question: "How much should i care about noise?", expected: "Give a practical verdict with optional specification detail.",
+    verdict: "Care about it before choosing the model or location.", reason: "A unit cycling near a bedroom or neighbour can be annoying even when it meets a headline rating.", steps: ["Compare the exact model's published sound data and proposed placement."], extraDetail: "Ask about night modes, mounting, vibration control and whether the quoted measurement is sound pressure or sound power.", followUpQuestion: "Is the proposed outdoor unit close to a bedroom or boundary?", quickReplies: [{ id: "bedroom", label: "Near a bedroom", message: "It is close to a bedroom" }, { id: "boundary", label: "Near the boundary", message: "It is close to the property boundary" }, { id: "neither", label: "Neither", message: "It is away from bedrooms and boundaries" }], includes: ["bedroom", "exact model"],
+  },
+] as const;
+
+const EVERYDAY_VARIANTS = [
+  { id: "clear", prefix: "" },
+  { id: "casual", prefix: "Mate, " },
+  { id: "quick", prefix: "Quick one, " },
+  { id: "messy", prefix: "sorry if this is dumb but " },
+] as const;
+
+function everydayAssertions(scenario: EverydayScenario): SurgeConversationAssertion[] {
+  const assertions: SurgeConversationAssertion[] = [
+    { type: "includes_all", values: scenario.includes },
+    { type: "excludes_all", values: scenario.excludes || [] },
+    { type: "requires_structured_answer" },
+    { type: "max_words", maximum: 180 },
+    { type: "max_average_sentence_words", maximum: 22 },
+    { type: "max_sentence_words", maximum: 36 },
+    { type: "max_jargon", maximum: 0 },
+    { type: "max_questions", maximum: scenario.followUpQuestion ? 1 : 0 },
+  ];
+  if (scenario.dimension === "actionability") assertions.push({ type: "min_practical_steps", minimum: 1 });
+  if (scenario.dimension === "progressive_detail") assertions.push({ type: "requires_extra_detail" });
+  if (scenario.followUpQuestion) assertions.push({ type: "quick_reply_range", minimum: 2, maximum: 4 });
+  return assertions;
+}
+
+const SURGE_EVERYDAY_EVALUATION_CASES: readonly SurgeConversationEvaluationCase[] = EVERYDAY_SCENARIOS.flatMap((scenario) => (
+  EVERYDAY_VARIANTS.map((variant) => reviewedCase({
+    id: `${scenario.dimension}-${scenario.id}-${variant.id}`,
+    dimension: scenario.dimension,
+    reviewedOn: "2026-08-28",
+    description: `${scenario.expected} ${variant.id} everyday-language variant.`,
+    expected: scenario.expected,
+    syntheticTurns: [
+      { role: "user", content: scenario.opening },
+      { role: "assistant", content: "Understood. I will keep that context for the next question." },
+      { role: "user", content: `${variant.prefix}${scenario.question}` },
+    ],
+    assertions: everydayAssertions(scenario),
+  }))
+));
+
+export const SURGE_EVERYDAY_REVIEWED_RESULTS = EVERYDAY_SCENARIOS.flatMap((scenario) => (
+  EVERYDAY_VARIANTS.map((variant) => ({
+    caseId: `${scenario.dimension}-${scenario.id}-${variant.id}`,
+    response: [scenario.verdict, scenario.reason, ...scenario.steps, scenario.extraDetail, scenario.followUpQuestion || ""].filter(Boolean).join("\n\n"),
+    answerSource: "model" as const,
+    answerStatus: scenario.followUpQuestion ? "clarification_required" as const : "answered" as const,
+    latencyMs: 620,
+    verdict: scenario.verdict,
+    reason: scenario.reason,
+    practicalSteps: [...scenario.steps],
+    extraDetail: scenario.extraDetail,
+    followUpQuestion: scenario.followUpQuestion || "",
+    quickReplies: [...(scenario.quickReplies || [])],
+  }))
+));
 
 // Synthetic reviewer cases only. No customer prompts, answers or identifiers belong here.
 export const SURGE_CONVERSATION_EVALUATION_CORPUS = [
@@ -270,4 +439,5 @@ export const SURGE_CONVERSATION_EVALUATION_CORPUS = [
       { type: "answer_source", value: "deterministic" },
     ],
   }),
+  ...SURGE_EVERYDAY_EVALUATION_CASES,
 ] as const satisfies readonly SurgeConversationEvaluationCase[];

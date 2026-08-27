@@ -42,6 +42,15 @@ import {
   type SurgeModelRequest,
   type SurgeModelResult,
 } from "./energy-assistant-model.ts";
+import {
+  deriveSurgeAnswerPresentation,
+  normalizeSurgeAnswerPresentation,
+  surgePresentationPassesEverydayLanguage,
+  surgePresentationText,
+  type SurgeAnswerPresentation,
+  type SurgeAnswerType,
+  type SurgeQuickReply,
+} from "./surge-everyday-answer.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
 export const ENERGY_ASSISTANT_MAX_MESSAGE_CHARS = 1_200;
@@ -64,7 +73,13 @@ export type EnergyAssistantReply = {
   createdAt: string;
   status: "answered" | "needs_context" | "source_review_required";
   confidence: "high" | "medium" | "low";
+  answerType: SurgeAnswerType;
+  verdict: string;
+  reason: string;
+  practicalSteps: string[];
+  extraDetail: string;
   followUpQuestion: string;
+  quickReplies: SurgeQuickReply[];
 };
 
 export type SurgeModelAdmissionRequest = {
@@ -393,7 +408,7 @@ function generatedResultIsPolicySafe(
   audience: EnergyAssistantAudience,
 ) {
   const continuationText = JSON.stringify(generated.continuation);
-  const generatedText = `${policyText(generated.answer)}\n${continuationText}`;
+  const generatedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}\n${continuationText}`;
   if (
     surgeOutputViolatesPublicPolicy(generatedText)
     || containsSurgeNamedReference(generatedText)
@@ -460,23 +475,34 @@ function enforceCustomerPolicy(
 
 function buildReply(
   answerInput: EnergyAssistantAnswer,
+  message: string,
+  presentationInput: SurgeAnswerPresentation | null,
   now: Date,
   randomUUID: () => string,
 ): EnergyAssistantReply {
   const answer = boundedAnswer(answerInput);
   const followUpQuestion = limitedText(answer.suggestedQuestions[0] || "", 220);
+  const candidatePresentation = presentationInput
+    ? normalizeSurgeAnswerPresentation({ ...presentationInput, followUpQuestion })
+    : deriveSurgeAnswerPresentation(answer, message);
+  const presentation = surgePresentationPassesEverydayLanguage(candidatePresentation)
+    ? candidatePresentation
+    : deriveSurgeAnswerPresentation(answer, message);
   const reply: EnergyAssistantReply = {
     id: randomUUID().toLowerCase(),
     role: "assistant",
-    content: [
-      answer.directAnswer,
-      followUpQuestion,
-    ].filter(Boolean).join("\n\n"),
+    content: surgePresentationText(presentation, true),
     directAnswer: answer.directAnswer,
     createdAt: now.toISOString(),
     status: answer.status,
     confidence: answer.confidence,
-    followUpQuestion,
+    answerType: presentation.answerType,
+    verdict: presentation.verdict,
+    reason: presentation.reason,
+    practicalSteps: presentation.steps,
+    extraDetail: presentation.extraDetail,
+    followUpQuestion: presentation.followUpQuestion,
+    quickReplies: presentation.quickReplies,
   };
   if (new TextEncoder().encode(JSON.stringify(reply)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
@@ -553,6 +579,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
   const deterministicAnswer = protectedAnswer || planPriorityAnswer || composedAnswer;
   let answer = deterministicAnswer;
+  let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
   if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !protectedAnswer && !planPriorityAnswer) {
@@ -590,6 +617,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
           const generated = await generate(modelRequest).catch(() => null);
           if (generated && generatedResultIsPolicySafe(generated, audience)) {
             answer = generated.answer;
+            presentation = generated.presentation || null;
             nextContinuation = generated.continuation;
             answerSource = "model";
           }
@@ -599,10 +627,13 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       }
     }
   }
+  const safeAnswer = audience === "trade"
+    ? answer
+    : enforceCustomerPolicy(answer, deterministicAnswer, protectedAnswer);
   const reply = buildReply(
-    audience === "trade"
-      ? answer
-      : enforceCustomerPolicy(answer, deterministicAnswer, protectedAnswer),
+    safeAnswer,
+    message,
+    answerSource === "model" && safeAnswer.directAnswer === answer.directAnswer ? presentation : null,
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
@@ -622,6 +653,15 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     answerStatus: reply.status,
     publicPolicyPassed,
     followUpQuestion: reply.followUpQuestion,
+    presentation: {
+      answerType: reply.answerType,
+      verdict: reply.verdict,
+      reason: reply.reason,
+      steps: reply.practicalSteps,
+      extraDetail: reply.extraDetail,
+      followUpQuestion: reply.followUpQuestion,
+      quickReplies: reply.quickReplies,
+    },
     latencyMs: monotonicNow() - startedAt,
     metadata: dependencies.qualityMetadata,
   });

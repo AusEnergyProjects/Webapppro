@@ -4,6 +4,10 @@ import {
   type SurgeConversationState,
   type SurgeConversationTurnIntent,
 } from "./energy-assistant-conversation.ts";
+import {
+  surgePresentationPassesEverydayLanguage,
+  type SurgeAnswerPresentation,
+} from "./surge-everyday-answer.ts";
 
 export type SurgeConversationAnswerSource = "deterministic" | "grounded" | "model";
 export type SurgeConversationAnswerStatus = "answered" | "needs_context" | "source_review_required";
@@ -31,6 +35,10 @@ export type SurgeConversationQualityEvent = {
   topicSwitchPassed: boolean;
   privacyPassed: boolean;
   followUpPassed: boolean;
+  directnessPassed: boolean;
+  plainLanguagePassed: boolean;
+  actionabilityExpected: boolean;
+  actionabilityPassed: boolean;
   latencyMs: number;
   metadata: SurgeConversationQualityMetadata;
 };
@@ -84,6 +92,7 @@ export function evaluateSurgeConversationQuality(input: {
   answerStatus: SurgeConversationAnswerStatus;
   publicPolicyPassed: boolean;
   followUpQuestion: string;
+  presentation: SurgeAnswerPresentation;
   latencyMs?: number;
   metadata?: Partial<SurgeConversationQualityMetadata>;
 }): SurgeConversationQualityEvent {
@@ -95,6 +104,7 @@ export function evaluateSurgeConversationQuality(input: {
   const topicSwitchPassed = !topicSwitchExpected
     || Boolean(input.after.activeTopic && input.after.activeTopic !== (input.before?.activeTopic || "general"));
   const followUpQuestionMarks = input.followUpQuestion.match(/\?/g)?.length || 0;
+  const actionabilityExpected = /\b(?:what should|where should|how (?:do|can|should)|start|do next|actually do|good quote|worth it)\b/i.test(input.message);
   return {
     day: input.day,
     audience: input.audience,
@@ -107,6 +117,11 @@ export function evaluateSurgeConversationQuality(input: {
     topicSwitchPassed,
     privacyPassed: input.publicPolicyPassed,
     followUpPassed: input.followUpQuestion.length <= 220 && followUpQuestionMarks <= 1,
+    directnessPassed: Boolean(input.presentation.verdict.trim())
+      && input.presentation.verdict.trim().split(/\s+/u).length <= 28,
+    plainLanguagePassed: surgePresentationPassesEverydayLanguage(input.presentation),
+    actionabilityExpected,
+    actionabilityPassed: !actionabilityExpected || input.presentation.steps.length > 0,
     latencyMs: latencyMilliseconds(input.latencyMs),
     metadata: qualityMetadata(input.metadata),
   };

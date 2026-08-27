@@ -90,20 +90,25 @@ function continuation(overrides = {}) {
 
 function assertPublicReplyContract(payload) {
   assert.deepEqual(Object.keys(payload.reply).sort(), [
+    "answerType",
     "confidence",
     "content",
     "createdAt",
     "directAnswer",
+    "extraDetail",
     "followUpQuestion",
     "id",
+    "practicalSteps",
+    "quickReplies",
+    "reason",
     "role",
     "status",
+    "verdict",
   ]);
   for (const privateField of [
     "assumptions",
     "citations",
     "nextAction",
-    "practicalSteps",
     "sourceBoundary",
     "suggestedQuestions",
     "toolActions",
@@ -112,6 +117,10 @@ function assertPublicReplyContract(payload) {
     assert.equal(privateField in payload.reply, false, privateField);
   }
   assert.equal(typeof payload.reply.followUpQuestion, "string");
+  assert.equal(typeof payload.reply.verdict, "string");
+  assert.equal(typeof payload.reply.reason, "string");
+  assert.equal(Array.isArray(payload.reply.practicalSteps), true);
+  assert.equal(Array.isArray(payload.reply.quickReplies), true);
 }
 
 test("canonical ask API is stateless and performs zero D1 operations", async () => {
@@ -1293,7 +1302,7 @@ test("deterministic fallback gives a newer explicit correction priority over the
   });
   assert.equal(response.status, 200);
   const payload = await body(response);
-  assert.match(payload.reply.directAnswer, /South Australia renter context/i);
+  assert.match(payload.reply.directAnswer, /South Australia renter home/i);
   assert.doesNotMatch(payload.reply.directAnswer, /Victoria owner context/i);
 });
 
@@ -1441,8 +1450,8 @@ test("stateless API composes progressive STC, HPHW, EV and whole-home user frame
     "Gas ducted heating, old evaporative cooling, gas hot water, no solar",
   ];
   const sa = await call("Electricity 6000 kWh and gas 45000 MJ each year", saPrior, "api-progressive-sa-0001");
-  assert.match(sa.directAnswer, /South Australia owner context.*overheating and energy bills and winter comfort/i);
-  assert.match(sa.directAnswer, /bills or interval data plus a fabric check.*electrify end-of-life heating, hot water and cooking.*size solar/i);
+  assert.match(sa.directAnswer, /South Australia owner home.*overheating and energy bills and winter comfort/i);
+  assert.match(sa.directAnswer, /Use the bills.*Replace ageing gas appliances.*size solar/i);
   assert.doesNotMatch(sa.directAnswer, /New South Wales|NSW|renter context|tenant/i);
 
   const isolated = await call(

@@ -1079,6 +1079,102 @@
   white-space: pre-wrap;
 }
 
+.verdict {
+  color: #075f4a;
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.practicalSteps {
+  color: #17372f;
+  display: grid;
+  font-size: 0.72rem;
+  gap: 7px;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.extraDetail {
+  background: #f3faf7;
+  border: 1px solid #d0e5dd;
+  border-radius: 9px;
+  color: #315f53;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.extraDetail > summary {
+  color: #087757;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.extraDetail > p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.quickReplies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.quickReplies button {
+  background: #e8f7f1;
+  border: 1px solid #83cbb7;
+  border-radius: 999px;
+  color: #075f4a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 850;
+  min-height: 44px;
+  padding: 7px 11px;
+}
+
+.quickReplies button:hover:not(:disabled),
+.quickReplies button:focus-visible {
+  background: #cef0e4;
+  border-color: #0eaf78;
+  outline: none;
+}
+
+.quickReplies button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.reviewAnswer {
+  background: transparent;
+  border: 0;
+  color: #53736c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 750;
+  justify-self: start;
+  min-height: 44px;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.reviewAnswer:hover:not(:disabled),
+.reviewAnswer:focus-visible {
+  color: #075f4a;
+}
+
+.reviewAnswer:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
 .reviewRequired {
   background: #fff0ed;
   border: 1px solid #e8b8ae;

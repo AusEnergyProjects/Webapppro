@@ -18,6 +18,8 @@ test("reviewed synthetic corpus covers every release dimension without customer 
   assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => entry.reviewStatus === "approved" && entry.reviewedBy), true);
   assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => entry.assertions.length > 0), true);
   assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.every((entry) => !Object.hasOwn(entry, "passed")), true);
+  assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.length, 100);
+  assert.equal(SURGE_CONVERSATION_EVALUATION_CORPUS.filter((entry) => entry.syntheticTurns.length >= 3).length >= 80, true);
 });
 
 test("release gate requires passing evidence in every dimension", () => {

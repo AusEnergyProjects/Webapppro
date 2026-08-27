@@ -1,4 +1,5 @@
 import type { SurgeConversationEvaluationObservation } from "../lib/surge-conversation-quality-gate.ts";
+import { SURGE_EVERYDAY_REVIEWED_RESULTS } from "./surge-conversation-evaluation-corpus.ts";
 
 // Synthetic observations only. These are executable fixtures, not assertions that a case passed.
 export const SURGE_CONVERSATION_REVIEWED_RESULTS = [
@@ -22,4 +23,5 @@ export const SURGE_CONVERSATION_REVIEWED_RESULTS = [
   { caseId: "brand-no-invented-winner", response: "I cannot verify that comparison without the exact model. What model appears on each quote?", answerSource: "grounded", answerStatus: "clarification_required", latencyMs: 370 },
   { caseId: "clarify-rebate-context", response: "What is the home's postcode?", answerSource: "deterministic", answerStatus: "clarification_required", latencyMs: 33 },
   { caseId: "clarify-enough-context", response: "The governed inputs are complete. I calculated the support, subject to final eligibility, certificate market value and fees.", answerSource: "deterministic", answerStatus: "answered", latencyMs: 51 },
+  ...SURGE_EVERYDAY_REVIEWED_RESULTS,
 ] as const satisfies readonly SurgeConversationEvaluationObservation[];
