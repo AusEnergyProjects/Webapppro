@@ -308,6 +308,23 @@ function quoteConditionalSolarVictoriaRebate(text: string) {
   return amount !== null && amount > 0 ? money(amount) : "";
 }
 
+function quotePrimaryProductModel(text: string) {
+  const candidates: string[] = [];
+  const patterns = [
+    /\bmodel(?: number| no\.?)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{2,29})\b/gi,
+    /\b((?:HPA|HWS)[A-Z0-9]*(?:-[A-Z0-9]+)+)\b/gi,
+    /\b([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+)\b(?=[^\n]{0,24}\bmodel\b)/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const candidate = match[1]?.replace(/[./]+$/g, "").toUpperCase();
+      if (!candidate || !/[A-Z]/.test(candidate) || !/\d/.test(candidate)) continue;
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
+  }
+  return candidates[0] || "";
+}
+
 export function appendEnergyCertificateMarketReferences(
   conversationContext: string,
   references: readonly EnergyCertificateMarketReference[],
@@ -406,6 +423,7 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
     .filter(([, pattern]) => pattern.test(text))
     .map(([label]) => label);
   const scope = categories.length ? categories.join(", ") : "home-energy work";
+  const quotedModel = quotePrimaryProductModel(text);
   const certificateFacts = quoteCertificateFacts(text);
   const veecFees = quoteVeecFeeBreakdown(text);
   const certificateCreditTotal = quoteCertificateCreditTotal(text);
@@ -421,10 +439,11 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
     accepted: true,
     kind,
     directAnswer: certificateFacts.length
-      ? `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}. The readable certificate lines show ${certificateFacts.map((fact) => `${fact.quantity} ${fact.code}s at ${fact.unitRate} each (${fact.credit} ex GST)`).join(" and ")}${certificateCreditTotal ? `, totalling ${certificateCreditTotal} ex GST` : ""}. You can ask me whether the quoted rates, fees or final total look reasonable.`
+      ? `I found a home-energy quote covering ${scope}${quotedModel ? `, quoting model ${quotedModel}` : ""}${total ? `, with an apparent total of ${total}` : ""}. The readable certificate lines show ${certificateFacts.map((fact) => `${fact.quantity} ${fact.code}s at ${fact.unitRate} each (${fact.credit} ex GST)`).join(" and ")}${certificateCreditTotal ? `, totalling ${certificateCreditTotal} ex GST` : ""}. You can ask me whether the quoted equipment, rates, fees or final total look reasonable.`
       : `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${structureDirection}${creditDirection} Before accepting it, confirm the supplied details match the site, the complete installation and switchboard scope, extra rates, certificate assumptions, warranty and after-sales responsibility.`,
     conversationContext: [
       `Uploaded energy quote summary for follow-up: scope includes ${scope};`,
+      quotedModel ? `quoted model ${quotedModel};` : "",
       total ? `apparent total ${total};` : "",
       ...certificateFacts.map((fact) => `${fact.code} ${fact.quantity} at ${fact.unitRate} = ${fact.credit} ex GST, arithmetic ${fact.reconciles ? "reconciles" : "does not reconcile"};`),
       veecFees ? `VEEC fee breakdown gross ${veecFees.saleValue}, registration ${veecFees.registration}, compliance ${veecFees.compliance}, net ${veecFees.net}, arithmetic ${veecFees.reconciles ? "reconciles" : "does not reconcile"};` : "",

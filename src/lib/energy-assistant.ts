@@ -32,6 +32,8 @@ import {
   type SurgeAssessorEducationCard,
   type SurgeAssessorEducationTopicId,
 } from "../data/surge-assessor-education.ts";
+import { EMERALD_SELECT_PRO_270_COMPARISON } from "../data/energy-assistant-reviewed-product-comparisons.ts";
+import { isSurgeContextDependentMessage } from "./energy-assistant-conversation.ts";
 
 export type EnergyAssistantCitation = {
   id: string;
@@ -1937,6 +1939,7 @@ function rentalSafetySourceId(query: string) {
 const ATTACHED_ENERGY_QUOTE_CONTEXT_PREFIX = "Uploaded energy quote summary for follow-up:";
 
 type AttachedEnergyQuoteContext = {
+  quotedModels: string[];
   apparentTotal: string;
   certificateFacts: Array<{
     code: "STC" | "VEEC";
@@ -1962,6 +1965,7 @@ type AttachedEnergyQuoteContext = {
 
 type AttachedEnergyQuoteIntent =
   | "overview"
+  | "product_comparison"
   | "fees"
   | "rates"
   | "rebate"
@@ -2008,6 +2012,8 @@ function latestAttachedEnergyQuoteContext(
     }
   }
   return {
+    quotedModels: [...context.matchAll(/\bquoted model ([A-Z0-9][A-Z0-9._/-]{2,29});/gi)]
+      .map((match) => match[1].toUpperCase()),
     apparentTotal: context.match(/\bapparent total (\$[\d,]+(?:\.\d{2})?);?/i)?.[1] || "",
     certificateFacts,
     veecFees: veecFeeMatch ? {
@@ -2033,10 +2039,20 @@ function asksForAttachedQuoteReview(query: string) {
   ) || /\bwhat do you think\b[^?\n]{0,60}\b(?:quote|price|cost|deal)\b/i.test(query);
 }
 
+function asksForAttachedHotWaterProductComparison(query: string, context: string) {
+  const quoteCoversHotWater = /\bscope includes [^;]*\bhot water\b/i.test(context)
+    || /\bquoted model (?:HPA|HWS)/i.test(context);
+  const hotWaterSignal = /\b(?:hot\s*water|water heater|hws|heat[- ]pump)\b/i.test(query);
+  const alternativeSignal = /\b(?:pro|dc[ -]?(?:motor|inverter)|different model|another model|upgrade model)\b/i.test(query);
+  const decisionSignal = /\b(?:instead|switch|change|upgrade|better|worth|make sense|makes sense|should i|get(?:ting)?)\b/i.test(query);
+  return quoteCoversHotWater && hotWaterSignal && alternativeSignal && decisionSignal;
+}
+
 function isAttachedQuoteConversationMessage(message: string) {
   return asksForAttachedQuoteReview(message)
+    || /\b(?:hot\s*water|water heater|hws|heat[- ]pump)\b[^\n]{0,100}\b(?:pro|dc[ -]?(?:motor|inverter)|different model|another model|upgrade model)\b/i.test(message)
     || /\b(?:quote|quoted|stcs?|veecs?|certificates?|rebate|solar victoria|fees?|charges?|deductions?|registration|compliance|rates?|payable|total|gst|maths?|calculation|figures?|add up|accept|sign|proceed|go ahead|good|fair|reasonable|competitive|worth|value|overpriced|expensive|cheap)\b/i.test(message)
-    || /^(?:so\s+)?(?:why|how|what about|what do you (?:think|reckon)|is that|are (?:they|these|those)|does that|can you explain|explain (?:that|it)|yes|no|okay|ok|right|correct)\b/i.test(message.trim());
+    || isSurgeContextDependentMessage(message);
 }
 
 function attachedEnergyQuoteIntent(
@@ -2045,13 +2061,20 @@ function attachedEnergyQuoteIntent(
 ): AttachedEnergyQuoteIntent | null {
   const entry = latestAttachedEnergyQuoteContextEntry(priorUserMessages);
   if (!entry) return null;
+  if (asksForAttachedHotWaterProductComparison(query, entry.context)) return "product_comparison";
+  const priorProductComparison = priorUserMessages
+    .slice(entry.index + 1)
+    .some((message) => asksForAttachedHotWaterProductComparison(message, entry.context));
+  if (priorProductComparison && isSurgeContextDependentMessage(query)) {
+    return "product_comparison";
+  }
   if (asksForAttachedQuoteReview(query)) return "overview";
 
   const quoteFrameActive = priorUserMessages
     .slice(entry.index + 1)
     .every(isAttachedQuoteConversationMessage);
   if (!quoteFrameActive || !isAttachedQuoteConversationMessage(query)) return null;
-  const explicitNewEnergyTopic = /\b(?:insulation|draught|windows?|glazing|heating|cooling|hot water|solar panels?|battery|electric vehicle|ev charger|electricity bill|gas bill|tariff)\b/i.test(query);
+  const explicitNewEnergyTopic = /\b(?:insulation|draught|windows?|glazing|heating|cooling|hot[- ]?water|solar panels?|battery|electric vehicle|ev charger|electricity bill|gas bill|tariff)\b/i.test(query);
   const explicitQuoteAnchor = /\b(?:quote|quoted|stcs?|veecs?|certificates?|fees?|registration|compliance|solar victoria)\b/i.test(query);
   if (explicitNewEnergyTopic && !explicitQuoteAnchor) return null;
   if (/\b(?:fees?|charges?|deductions?|registration|compliance)\b/i.test(query)) return "fees";
@@ -2091,16 +2114,18 @@ export function composeEnergyAssistantAnswer(
   };
   const currentResults = searchEnergyAssistantKnowledge(query, searchOptions);
   const queryWordCount = searchable(query).split(/\s+/).filter(Boolean).length;
-  const looksLikeTerseFollowUp = queryWordCount <= 12 && (
-    /^(?:yes|no|maybe|unsure|not sure)\b/i.test(query.trim())
-    || /\b(?:it|that|those|them|same|also|more)\b/i.test(query)
-    || /\d/.test(query)
-    || queryWordCount <= 4
+  const looksLikeContextualFollowUp = isSurgeContextDependentMessage(query) || (
+    queryWordCount <= 12 && (
+      /^(?:yes|no|maybe|unsure|not sure)\b/i.test(query.trim())
+      || /\b(?:it|that|those|them|same|also|more)\b/i.test(query)
+      || /\d/.test(query)
+      || queryWordCount <= 4
+    )
   );
   let retrievalQuery = query;
   if (
     (!currentResults.length || currentResults[0].relevanceScore < 9)
-    && looksLikeTerseFollowUp
+    && looksLikeContextualFollowUp
   ) {
     const prior = [...(options.priorUserMessages || [])]
       .slice(-8)
@@ -2117,7 +2142,7 @@ export function composeEnergyAssistantAnswer(
     query,
     priorUserMessages,
     options.audience,
-    looksLikeTerseFollowUp || !currentResults.length || currentResults[0].relevanceScore < 9,
+    looksLikeContextualFollowUp || !currentResults.length || currentResults[0].relevanceScore < 9,
   );
   const playbookConversation = playbookConversationFrame(playbookId, query, priorUserMessages);
   const evSavingsConversation = evSavingsConversationFrame(query, priorUserMessages);
@@ -2258,6 +2283,9 @@ export function composeEnergyAssistantAnswer(
   const attachedQuoteContext = latestAttachedEnergyQuoteContext(priorUserMessages);
   const attachedQuoteFollowUp = attachedEnergyQuoteIntent(query, priorUserMessages);
   if (attachedQuoteContext && attachedQuoteFollowUp) {
+    const reviewedProductComparisonAvailable = attachedQuoteFollowUp === "product_comparison"
+      && (!attachedQuoteContext.quotedModels.length
+        || attachedQuoteContext.quotedModels.includes(EMERALD_SELECT_PRO_270_COMPARISON.quotedModel));
     const fact = (code: "STC" | "VEEC") => attachedQuoteContext.certificateFacts.find((item) => item.code === code);
     const stc = fact("STC");
     const veec = fact("VEEC");
@@ -2294,6 +2322,18 @@ export function composeEnergyAssistantAnswer(
     const overviewAnswer =
       `${certificateMathsReconcile ? "Yes. The quote maths makes sense." : "No. The quote maths needs checking."}${marketSummary}${quoteRates}${feeSummary}${totalSummary}${rebateSummary}${fallback}${mismatch}`;
     const directAnswer = (() => {
+      if (attachedQuoteFollowUp === "product_comparison") {
+        const comparison = EMERALD_SELECT_PRO_270_COMPARISON;
+        const exactQuotedModel = attachedQuoteContext.quotedModels.includes(comparison.quotedModel);
+        const differentQuotedModel = attachedQuoteContext.quotedModels.find((model) => model !== comparison.quotedModel);
+        if (differentQuotedModel) {
+          return `The retained quote shows model ${differentQuotedModel}, so I cannot safely treat it as the Emerald Select-to-Pro comparison. "Pro" and "DC motor" are not a complete model identity. Compare the supplier's exact alternative model and installed price against ${differentQuotedModel} before switching.`;
+        }
+        const modelLead = exactQuotedModel
+          ? `For this quote, moving from the ${comparison.products.select.name} (${comparison.quotedModel}) to the comparable ${comparison.products.pro.name} (${comparison.alternativeModel}) makes sense if the installed upgrade price is modest.`
+          : `Yes, it can make sense if the current quoted unit is the ${comparison.products.select.name} (${comparison.quotedModel}). The older retained quote summary does not include its model code, so check that first.`;
+        return `${modelLead} The Pro uses a DC-inverter compressor and fan, with ${comparison.products.pro.ratedInputKw} kW rated input and COP ${comparison.products.pro.cop}, compared with ${comparison.products.select.ratedInputKw} kW and COP ${comparison.products.select.cop} for the Select. Both list ${comparison.products.pro.heatingCapacityKw} kW heating and ${comparison.products.pro.recoveryLitresPerHour} L/h recovery. The bigger practical upgrade is warranty: Pro has ${comparison.products.pro.tankWarrantyYears} years on the tank and ${comparison.products.pro.labourWarrantyYears} years labour, versus ${comparison.products.select.tankWarrantyYears} and ${comparison.products.select.labourWarrantyYears} years for Select. I would lean Pro for a premium of a few hundred dollars, but not a large premium for energy savings alone. Ask the installer for ${comparison.alternativeModel}, the installed price difference and revised certificate and rebate figures.`;
+      }
       if (attachedQuoteFollowUp === "fees") {
         if (!attachedQuoteContext.veecFees) {
           return "I cannot verify the fees because the retained quote summary does not include a fee breakdown.";
@@ -2332,7 +2372,20 @@ export function composeEnergyAssistantAnswer(
     return structured("products_ratings", {
       directAnswer,
       status: "answered",
-      citations: [],
+      citations: reviewedProductComparisonAvailable
+        ? EMERALD_SELECT_PRO_270_COMPARISON.sources.map((source) => ({
+          ...source,
+          publisher: "Emerald Energy",
+          sourceTier: "primary_official" as const,
+          jurisdiction: "Australia",
+          effectiveFrom: null,
+          effectiveTo: null,
+          lastChecked: EMERALD_SELECT_PRO_270_COMPARISON.reviewedOn,
+          reviewDue: EMERALD_SELECT_PRO_270_COMPARISON.reviewDue,
+          storagePolicy: "local_factual_summary" as const,
+          stale: EMERALD_SELECT_PRO_270_COMPARISON.reviewDue < answerDay,
+        }))
+        : [],
       confidence: completeCertificateMaths ? "high" : "medium",
       assumptions: [
         "This verdict checks the extracted quote arithmetic and disclosed fees, not final certificate eligibility or installation quality.",
@@ -2340,7 +2393,9 @@ export function composeEnergyAssistantAnswer(
       practicalSteps: [],
       toolActions: [],
       suggestedQuestions: [],
-      sourceBoundary: "This assessment uses only the privacy-safe extracted quote summary retained in the conversation.",
+      sourceBoundary: reviewedProductComparisonAvailable
+        ? "This comparison uses the privacy-safe quote summary and the cited current manufacturer data. Confirm the exact installed model, price difference and incentive eligibility in the revised quote."
+        : "This assessment uses only the privacy-safe extracted quote summary retained in the conversation.",
     });
   }
 
@@ -4580,7 +4635,7 @@ export function composeEnergyAssistantAnswer(
   const domainIntent = currentDomainIntent === "blocked"
     ? "out"
     : playbookId || wholeHomeConversation !== query || continuingProgrammeConversation
-      || (retrievalQuery !== query && looksLikeTerseFollowUp)
+      || (retrievalQuery !== query && looksLikeContextualFollowUp)
       ? "in"
       : currentDomainIntent;
   const namedCertificateMatches = namedCertificatePrograms(query);

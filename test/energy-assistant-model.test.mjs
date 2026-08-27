@@ -213,6 +213,45 @@ test("clarification includes the previous Surge reply as bounded conversational 
   assert.equal(result.answer.suggestedQuestions.length, 1);
 });
 
+test("ambiguous casual wording carries an explicit recent-context resolution cue", async () => {
+  let observedBody;
+  const recentTurns = [
+    { role: "user", content: "I am comparing the Emerald Select and Pro hot-water systems." },
+    { role: "assistant", content: "The Pro uses inverter controls and has a longer labour warranty." },
+    { role: "user", content: "The Pro is a few hundred dollars more." },
+  ];
+  const result = await generateSurgeModelAnswer(request({
+    message: "does the more expensive one make sense instead?",
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Yes, the Pro can make sense if the extra warranty and quieter variable-speed operation matter enough to justify the modest price difference.",
+        state: state({
+          activeTopic: "products_ratings",
+          goal: "Compare the two hot-water options",
+          lastAnswerSummary: "Explained when the more expensive Pro option is worthwhile.",
+        }),
+      }));
+    },
+  });
+
+  assert.ok(result);
+  const developerPrompt = observedBody.input[0].content[0].text;
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.conversationCue.intent, "contextual_follow_up");
+  assert.equal(context.referenceResolution.status, "resolved_from_recent_context");
+  assert.equal(context.referenceResolution.basis, "recent_user_turns");
+  assert.deepEqual(context.referenceResolution.anchorUserMessages, [
+    "I am comparing the Emerald Select and Pro hot-water systems.",
+    "The Pro is a few hundred dollars more.",
+  ]);
+  assert.match(developerPrompt, /infer the most likely meaning from the newest compatible user turns/i);
+  assert.match(developerPrompt, /Do not let one isolated word pull the conversation into an unrelated topic/i);
+});
+
 test("correction and topic switch are explicit model cues and newest state facts replace old ones", async () => {
   let observedContext;
   const result = await generateSurgeModelAnswer(request({

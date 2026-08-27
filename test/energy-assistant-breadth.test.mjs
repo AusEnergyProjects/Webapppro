@@ -667,6 +667,63 @@ test("short quote follow-ups stay on the active quote and answer the question as
   }
 });
 
+test("a hot-water model follow-up compares the quoted Select with the Pro instead of starting STC or EV questions", () => {
+  const quoteContext = "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; quoted model HPA1-S270; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; VEEC fee breakdown gross $82.25, registration $4.35, compliance $7.35, net $70.55, arithmetic reconciles; total certificate credits $6,854.40 ex GST; conditional Solar Victoria rebate $1,000.00 not included;";
+  const query = "i was thinking of getting the pro hotwater that has a dc motor instead does that make sense?";
+  const answer = composeEnergyAssistantAnswer(query, { asOf, priorUserMessages: [quoteContext] });
+
+  assert.match(answer.directAnswer, /For this quote.*HPA1-S270.*EE-HWS-A1-270.*makes sense/is);
+  assert.match(answer.directAnswer, /DC-inverter compressor and fan.*0\.58 kW.*COP 4\.8.*0\.63 kW.*COP 4\.41/is);
+  assert.match(answer.directAnswer, /Both list 2\.8 kW heating and 58 L\/h recovery/is);
+  assert.match(answer.directAnswer, /7 years on the tank and 5 years labour.*5 and 2 years for Select/is);
+  assert.match(answer.directAnswer, /lean Pro for a premium of a few hundred dollars.*not a large premium/is);
+  assert.doesNotMatch(answer.directAnswer, /completely new system|vehicle driven|staged whole-home diagnosis/i);
+  assert.deepEqual(answer.citations.map((citation) => citation.id), [
+    "emerald-select-data-sheet-2025-08",
+    "emerald-pro-data-sheet-2025-05",
+    "emerald-hot-water-range-warranties-2026-08",
+  ]);
+  assert.deepEqual(answer.suggestedQuestions, []);
+  assertBounded(answer, query);
+});
+
+test("the active legacy quote stays useful when its old retained summary omitted the product model", () => {
+  const quoteContext = "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; total certificate credits $6,854.40 ex GST;";
+  const query = "i was thinking of getting the pro hotwater that has a dc motor instead does that make sense?";
+  const answer = composeEnergyAssistantAnswer(query, { asOf, priorUserMessages: [quoteContext] });
+
+  assert.match(answer.directAnswer, /^Yes, it can make sense if the current quoted unit is the Emerald All-In-One Select 270 L \(HPA1-S270\)/);
+  assert.match(answer.directAnswer, /EE-HWS-A1-270/);
+  assert.doesNotMatch(answer.directAnswer, /completely new system|vehicle driven|staged whole-home diagnosis/i);
+  assertBounded(answer, query);
+});
+
+test("a short why after the Pro comparison stays on the product decision", () => {
+  const quoteContext = "Uploaded energy quote summary for follow-up: scope includes hot water; quoted model HPA1-S270; apparent total $5,785.07;";
+  const comparisonQuestion = "i was thinking of getting the pro hotwater that has a dc motor instead does that make sense?";
+  const answer = composeEnergyAssistantAnswer("why?", {
+    asOf,
+    priorUserMessages: [quoteContext, comparisonQuestion],
+  });
+
+  assert.match(answer.directAnswer, /HPA1-S270.*EE-HWS-A1-270.*DC-inverter/is);
+  assert.doesNotMatch(answer.directAnswer, /certificate rates|vehicle driven|staged whole-home diagnosis/i);
+  assertBounded(answer, "why after product comparison");
+});
+
+test("an elliptical comparison follow-up keeps the active product meaning", () => {
+  const quoteContext = "Uploaded energy quote summary for follow-up: scope includes hot water; quoted model HPA1-S270; apparent total $5,785.07;";
+  const comparisonQuestion = "i was thinking of getting the pro hotwater that has a dc motor instead does that make sense?";
+  const answer = composeEnergyAssistantAnswer("does the more expensive one make sense instead?", {
+    asOf,
+    priorUserMessages: [quoteContext, comparisonQuestion],
+  });
+
+  assert.match(answer.directAnswer, /HPA1-S270.*EE-HWS-A1-270.*DC-inverter/is);
+  assert.doesNotMatch(answer.directAnswer, /certificate rates|vehicle driven|staged whole-home diagnosis/i);
+  assertBounded(answer, "elliptical product comparison");
+});
+
 test("an explicit new topic is not hijacked by the retained quote frame", () => {
   for (const query of ["tell me about ceiling insulation", "what insulation rebates are available?"]) {
     const answer = composeEnergyAssistantAnswer(query, {

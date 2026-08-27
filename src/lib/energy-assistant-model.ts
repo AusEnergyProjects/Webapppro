@@ -17,6 +17,7 @@ import {
 import {
   classifySurgeConversationTurn,
   parseSurgeConversationState,
+  resolveSurgeConversationReference,
   SURGE_CONVERSATION_STATE_VERSION,
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
@@ -186,6 +187,8 @@ Writing rules:
 - Never repeat a question that the user has already answered. If the user corrects a fact, the newest statement replaces the old one.
 - Never repeat your previous answer. If the user says "huh", "what do you mean" or otherwise asks for clarification, explain the previous answer in simpler and more concrete words.
 - When the user answers your pending question with a short reply, accept that reply as context and continue the same decision. Do not restart the topic.
+- When the current wording depends on context, such as "it", "that one", "the other one", "the Pro", "instead" or a short casual follow-up, infer the most likely meaning from the newest compatible user turns, the pending question and the active decision. Do not let one isolated word pull the conversation into an unrelated topic.
+- If one interpretation is clearly most likely, answer using it naturally. If two materially different interpretations remain plausible, briefly state what you think the user means and ask one focused clarification. Never invent a product, household fact or earlier answer.
 - Acknowledge corrections briefly, remove the superseded fact from state and continue using only the corrected fact.
 - If the user changes subject, change topic immediately. Do not drag the old topic into the new answer.
 - Avoid bureaucratic phrases such as "potentially relevant pathways", "reviewed as at" and "this is not an eligibility decision". Say the practical meaning in normal language.
@@ -259,12 +262,17 @@ function contextPayload(request: SurgeModelRequest) {
     priorTurns: request.recentTurns,
     conversationState: request.continuation,
     conversationCue: {
-      intent: classifySurgeConversationTurn(request.message, request.continuation),
+      intent: classifySurgeConversationTurn(request.message, request.continuation, request.recentTurns),
       lastUserMessage,
       lastAssistantReply,
       pendingQuestion: request.continuation?.pendingQuestion || "",
       previousAnswerSummary: request.continuation?.lastAnswerSummary || "",
     },
+    referenceResolution: resolveSurgeConversationReference(
+      request.message,
+      request.recentTurns,
+      request.continuation,
+    ),
     deterministicReference: {
       answer: request.deterministicAnswer.directAnswer,
       status: request.deterministicAnswer.status,

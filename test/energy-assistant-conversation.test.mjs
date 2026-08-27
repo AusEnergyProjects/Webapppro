@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   classifySurgeConversationTurn,
   emptySurgeConversationState,
+  isSurgeContextDependentMessage,
   parseSurgeConversationState,
+  resolveSurgeConversationReference,
   SURGE_CONVERSATION_STATE_VERSION,
   SURGE_MAX_FACTS,
 } from "../src/lib/energy-assistant-conversation.ts";
@@ -119,4 +121,43 @@ test("conversation turn classifier recognises natural corrections and explicit s
     classifySurgeConversationTurn("Actually, change the subject to solar instead.", current),
     "correction_and_topic_change",
   );
+});
+
+test("context-dependent wording resolves against the newest compatible user turns", () => {
+  const turns = [
+    { role: "user", content: "I am comparing the Emerald Select and Pro hot-water systems." },
+    { role: "assistant", content: "The Pro has an inverter compressor." },
+    { role: "user", content: "The Pro costs a few hundred dollars more." },
+  ];
+  const message = "does the more expensive one make sense instead?";
+  const resolution = resolveSurgeConversationReference(message, turns, null);
+
+  assert.equal(isSurgeContextDependentMessage(message), true);
+  assert.equal(resolution.status, "resolved_from_recent_context");
+  assert.equal(resolution.basis, "recent_user_turns");
+  assert.deepEqual(resolution.anchorUserMessages, [
+    "I am comparing the Emerald Select and Pro hot-water systems.",
+    "The Pro costs a few hundred dollars more.",
+  ]);
+  assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up");
+});
+
+test("explicit topic changes do not inherit an unrelated reference frame", () => {
+  const turns = [{ role: "user", content: "I was comparing two hot-water systems." }];
+  const message = "Different question: what about ceiling insulation?";
+  const resolution = resolveSurgeConversationReference(message, turns, null);
+
+  assert.equal(resolution.status, "self_contained");
+  assert.deepEqual(resolution.anchorUserMessages, []);
+  assert.equal(classifySurgeConversationTurn(message, null, turns), "topic_change");
+});
+
+test("a context-dependent question without any usable context asks for clarification", () => {
+  const resolution = resolveSurgeConversationReference("is that one better?", [], null);
+
+  assert.equal(resolution.contextDependent, true);
+  assert.equal(resolution.status, "needs_clarification");
+  assert.equal(resolution.basis, "none");
+  assert.deepEqual(resolution.anchorUserMessages, []);
+  assert.equal(classifySurgeConversationTurn("is that one better?", null, []), "new_question");
 });

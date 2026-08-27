@@ -1030,6 +1030,48 @@ test("an attached quote follow-up stays quote-specific and cannot be replaced by
   assertPublicReplyContract(payload);
 });
 
+test("an attached hot-water product comparison stays deterministic and uses the quoted model", async () => {
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "quote-product-followup-0001",
+    message: "i was thinking of getting the pro hotwater that has a dc motor instead does that make sense?",
+    recentTurns: [
+      {
+        role: "user",
+        content: "Uploaded energy quote summary for follow-up: scope includes hot water, electric cooking, heating or cooling, electrical work; quoted model HPA1-S270; apparent total $5,785.07; STC 17 at $38.00 = $646.00 ex GST, arithmetic reconciles; VEEC 88 at $70.55 = $6,208.40 ex GST, arithmetic reconciles; total certificate credits $6,854.40 ex GST;",
+      },
+      { role: "assistant", content: "I found the quote and retained a privacy-safe summary for follow-up." },
+    ],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "tenure", value: "I own the home" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+  });
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalls, 0);
+  assert.match(payload.reply.directAnswer, /HPA1-S270.*EE-HWS-A1-270.*DC-inverter/is);
+  assert.match(payload.reply.directAnswer, /0\.58 kW.*COP 4\.8.*0\.63 kW.*COP 4\.41/is);
+  assert.doesNotMatch(payload.reply.content, /completely new system|vehicle driven|staged whole-home diagnosis/i);
+  assert.equal(payload.reply.followUpQuestion, "");
+  assertPublicReplyContract(payload);
+});
+
 test("elliptical quote follow-ups remain deterministic and do not fall into saved-plan triage", async () => {
   const recentTurns = [
     {

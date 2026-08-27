@@ -1,0 +1,52 @@
+export const EMERALD_SELECT_PRO_270_COMPARISON = {
+  id: "emerald-select-pro-270",
+  quotedModel: "HPA1-S270",
+  alternativeModel: "EE-HWS-A1-270",
+  reviewedOn: "2026-08-28",
+  reviewDue: "2026-11-28",
+  products: {
+    select: {
+      name: "Emerald All-In-One Select 270 L",
+      model: "HPA1-S270",
+      heatingCapacityKw: 2.8,
+      ratedInputKw: 0.63,
+      cop: 4.41,
+      recoveryLitresPerHour: 58,
+      compressor: "non-inverter rotary",
+      fan: "non-DC-inverter",
+      tankWarrantyYears: 5,
+      partsWarrantyYears: 5,
+      labourWarrantyYears: 2,
+    },
+    pro: {
+      name: "Emerald All-In-One Pro 270 L",
+      model: "EE-HWS-A1-270",
+      heatingCapacityKw: 2.8,
+      ratedInputKw: 0.58,
+      cop: 4.8,
+      recoveryLitresPerHour: 58,
+      compressor: "DC-inverter rotary",
+      fan: "DC-inverter",
+      tankWarrantyYears: 7,
+      partsWarrantyYears: 5,
+      labourWarrantyYears: 5,
+    },
+  },
+  sources: [
+    {
+      id: "emerald-select-data-sheet-2025-08",
+      title: "Emerald Hot Water Heat Pump All-In-One Select data sheet",
+      url: "https://www.emerald.com.au/wp-content/uploads/2025/08/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+    },
+    {
+      id: "emerald-pro-data-sheet-2025-05",
+      title: "Emerald Hot Water Heat Pump All-In-One Pro data sheet",
+      url: "https://www.emerald.com.au/wp-content/uploads/2025/05/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+    },
+    {
+      id: "emerald-hot-water-range-warranties-2026-08",
+      title: "Emerald hot water heat pump range and warranties",
+      url: "https://www.emerald.com.au/hotwaterheatpump/",
+    },
+  ],
+} as const;
