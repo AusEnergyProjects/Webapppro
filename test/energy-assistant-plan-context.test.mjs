@@ -7,6 +7,7 @@ import {
   SURGE_PLAN_CONTEXT_MAX_TOTAL_CHARS,
   surgePlanContextSummary,
 } from "../src/lib/energy-assistant-plan-context.ts";
+import { composeSurgePlanPriorityAnswer } from "../src/lib/energy-assistant-plan-priority.ts";
 import { customerHomeFeatureSections } from "../src/lib/customer-projects.mjs";
 
 function storedAssessment(stage, overrides = {}) {
@@ -170,4 +171,68 @@ test("the deterministic plan summary states that newer chat corrections win", ()
   assert.match(summary, /newer chat corrections override it/i);
   assert.match(summary, /postcode: 3006/);
   assert.match(summary, /property type: Detached house/);
+});
+
+test("a completed apartment survey produces a specific ranked starting plan", () => {
+  const context = buildSurgePlanContextFromStoredAssessment(storedAssessment(4, {
+    postcode: "3000",
+    approvalContext: "strata",
+    propertyType: "apartment",
+    occupants: "two",
+    goals: ["improve-comfort", "lower-bills"],
+    pace: "whole-home",
+    budgetRange: "under_2k",
+    sharedWalls: "two_plus_sides",
+    floorConstruction: "suspended_concrete",
+    features: [
+      "comfort-too-hot",
+      "comfort-too-cold",
+      "condensation-moisture",
+      "ceiling-insulation-not-applicable",
+      "wall-insulation-none",
+      "floor-insulation-not-applicable",
+      "single-glazing",
+      "window-coverings-basic",
+      "external-shading-none",
+      "sun-exposure-morning",
+      "ventilation-none-known",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
+      "reverse-cycle",
+      "gas-heating",
+      "gas-storage-hot-water",
+      "gas-cooking",
+      "electrical-supply-single-phase",
+      "solar-none",
+      "battery-none",
+      "ev",
+      "lighting-mostly-led",
+      "pool-spa-none",
+    ],
+  }));
+  assert.ok(context);
+  const answer = composeSurgePlanPriorityAnswer(
+    "where should i start based on my answers",
+    context,
+  );
+  assert.ok(answer);
+  assert.match(answer.directAnswer, /saved answers/i);
+  assert.match(answer.directAnswer, /apartment or unit/i);
+  assert.match(answer.directAnswer, /under \$2,000/i);
+  assert.match(answer.directAnswer, /condensation/i);
+  assert.match(answer.directAnswer, /honeycomb blinds|thermal curtains/i);
+  assert.match(answer.directAnswer, /reverse-cycle air conditioner/i);
+  assert.match(answer.directAnswer, /ceiling and underfloor insulation advice does not fit/i);
+  assert.match(answer.directAnswer, /solar and a battery as later/i);
+  assert.equal(answer.suggestedQuestions.length, 1);
+});
+
+test("a newer chat correction prevents the saved-plan priority shortcut", () => {
+  const context = buildSurgePlanContextFromStoredAssessment(storedAssessment(4));
+  assert.ok(context);
+  assert.equal(composeSurgePlanPriorityAnswer(
+    "What should I do first?",
+    context,
+    [{ role: "user", content: "Correction: I now rent in postcode 5067." }],
+  ), null);
 });

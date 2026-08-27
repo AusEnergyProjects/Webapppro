@@ -34,6 +34,7 @@ import {
   parseSurgePlanContext,
   surgePlanContextSummary,
 } from "./energy-assistant-plan-context.ts";
+import { composeSurgePlanPriorityAnswer } from "./energy-assistant-plan-priority.ts";
 import {
   estimateSurgeModelReservationMicroUsd,
   generateSurgeModelAnswer,
@@ -543,11 +544,14 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
   const protectedAnswer = requiresDeterministicSafety ? null : publicPolicyAnswer(message);
-  const deterministicAnswer = protectedAnswer || composedAnswer;
+  const planPriorityAnswer = requiresDeterministicSafety || protectedAnswer
+    ? null
+    : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
+  const deterministicAnswer = protectedAnswer || planPriorityAnswer || composedAnswer;
   let answer = deterministicAnswer;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!requiresDeterministicSafety && !protectedAnswer) {
+  if (!requiresDeterministicSafety && !protectedAnswer && !planPriorityAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,

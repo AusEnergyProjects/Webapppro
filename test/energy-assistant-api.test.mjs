@@ -10,6 +10,7 @@ import {
   ENERGY_ASSISTANT_MAX_RESPONSE_BYTES,
   handleEnergyAssistantRequest,
 } from "../src/lib/energy-assistant-server.ts";
+import { buildSurgePlanContextFromStoredAssessment } from "../src/lib/energy-assistant-plan-context.ts";
 
 const NOW = new Date("2026-08-20T02:00:00.000Z");
 const ORIGIN = "https://compare.example.test";
@@ -1041,6 +1042,70 @@ test("saved-plan baseline is validated and older than explicit chat corrections"
     assert.equal(invalid.status, 400);
     assert.equal((await body(invalid)).error.code, "INVALID_PLAN_CONTEXT");
   }
+});
+
+test("a completed survey returns a ranked home-specific starting plan before generic model guidance", async () => {
+  const planContext = buildSurgePlanContextFromStoredAssessment(JSON.stringify({
+    version: 1,
+    stage: 4,
+    draft: {
+      postcode: "3000",
+      situation: "owner",
+      approvalContext: "strata",
+      propertyType: "apartment",
+      occupants: "two",
+      goals: ["improve-comfort", "lower-bills"],
+      pace: "whole-home",
+      budgetRange: "under_2k",
+      storeys: "single",
+      ageBand: "1960_1999",
+      floorArea: "under_100",
+      sharedWalls: "two_plus_sides",
+      wallConstruction: "masonry_concrete",
+      floorConstruction: "suspended_concrete",
+      roofType: "tile",
+      roofColour: "light",
+      roofForm: "flat_low_pitch",
+      roofCondition: "good",
+      switchboard: "modern_breakers",
+      features: [
+        "comfort-too-hot", "comfort-too-cold", "condensation-moisture",
+        "ceiling-insulation-not-applicable", "wall-insulation-none",
+        "floor-insulation-not-applicable", "single-glazing",
+        "window-coverings-basic", "external-shading-none", "sun-exposure-morning",
+        "ventilation-none-known", "kitchen-exhaust-fan", "bathroom-exhaust-fan",
+        "reverse-cycle", "gas-heating", "gas-storage-hot-water",
+        "gas-cooking", "electrical-supply-single-phase", "solar-none", "battery-none",
+        "ev", "lighting-mostly-led", "pool-spa-none",
+      ],
+    },
+  }));
+  assert.ok(planContext);
+  let modelCalled = false;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "completed-survey-priority-0001",
+    message: "where should i start based on my answers",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalled = true;
+      return null;
+    },
+  });
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalled, false);
+  assert.match(payload.reply.directAnswer, /saved answers/i);
+  assert.match(payload.reply.directAnswer, /honeycomb blinds|thermal curtains/i);
+  assert.match(payload.reply.directAnswer, /reverse-cycle air conditioner/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /staged whole-home diagnosis/i);
+  assert.match(payload.reply.followUpQuestion, /Which room has the worst condensation/i);
 });
 
 test("deterministic fallback gives a newer explicit correction priority over the saved plan", async () => {
