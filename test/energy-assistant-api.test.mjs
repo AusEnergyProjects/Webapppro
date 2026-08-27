@@ -1262,6 +1262,7 @@ test("a completed survey returns a ranked home-specific starting plan before gen
   assert.match(payload.reply.directAnswer, /honeycomb blinds|thermal curtains/i);
   assert.match(payload.reply.directAnswer, /reverse-cycle air conditioner/i);
   assert.doesNotMatch(payload.reply.directAnswer, /staged whole-home diagnosis/i);
+  assert.ok(payload.reply.directAnswer.split(/\s+/).length <= 180);
   assert.match(payload.reply.followUpQuestion, /Which room has the worst condensation/i);
 });
 

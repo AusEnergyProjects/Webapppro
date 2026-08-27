@@ -14,7 +14,7 @@ function lowerFirst(value: string) {
 }
 
 function numbered(items: readonly string[]) {
-  return items.map((item, index) => `${index + 1}. ${item}`).join("\n\n");
+  return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
 }
 
 function joinNatural(items: readonly string[]) {
@@ -79,33 +79,40 @@ export function composeSurgePlanPriorityAnswer(
   const actions: string[] = [];
 
   if (roofProblem) {
-    actions.push("Fix the reported roof leak or deterioration before energy upgrades. Water entry can damage insulation and finishes, and the source needs to be found before condensation or mould is blamed on normal indoor moisture.");
+    actions.push("Fix the reported roof leak or damage before energy upgrades, because water can damage insulation and finishes.");
   }
   if (moisture) {
-    const fanDirection = /kitchen|bathroom/i.test(exhaust)
-      ? "Use the existing kitchen and bathroom exhaust every time moisture is produced and check that each fan actually clears steam."
-      : "Use effective kitchen and bathroom exhaust whenever moisture is produced.";
-    actions.push(`Control condensation before sealing the home more tightly. ${fanDirection} Investigate leaks and persistent mould, and never block required ventilation.`);
+    const existingExhaust = /kitchen/i.test(exhaust) && /bathroom/i.test(exhaust)
+      ? "kitchen and bathroom exhaust"
+      : /kitchen/i.test(exhaust)
+        ? "kitchen exhaust"
+        : /bathroom/i.test(exhaust)
+          ? "bathroom exhaust"
+          : "";
+    const fanDirection = existingExhaust
+      ? `Run the ${existingExhaust} whenever moisture is produced, and check ${existingExhaust.includes(" and ") ? "each fan" : "it"} clears steam`
+      : "Use effective kitchen and bathroom exhaust whenever moisture is produced";
+    actions.push(`Control condensation first: ${fanDirection}. Investigate leaks or persistent mould before sealing more gaps.`);
   }
   if (weakWindows && (hotOrCold || /comfort/i.test(priorities))) {
     const approvalDirection = strataApplies
-      ? "Get strata or owners-corporation approval before external awnings, films or changes affecting common property."
-      : "Use external shade on strongly sun-exposed glass where the site and glazing allow it.";
-    actions.push(`Improve the worst windows within the first-stage budget. Fit close-fitting honeycomb blinds or thermal curtains with pelmets, then seal only confirmed moving gaps around opening windows and doors. ${approvalDirection}`);
+      ? "Get strata approval before external changes"
+      : "Add external shade where strong summer sun hits the glass";
+    actions.push(`Improve the coldest windows: fit close-fitting honeycomb blinds or thermal curtains with pelmets, then seal confirmed moving gaps. ${approvalDirection}.`);
   }
   if (ceilingNeedsWork) {
-    actions.push("Inspect the accessible ceiling insulation and repair safe, confirmed gaps or thin areas before sizing new heating or cooling. Keep required clearances around heat-producing fittings and have electrical hazards checked first.");
+    actions.push("Check accessible ceiling insulation for safe, confirmed gaps before sizing new heating or cooling, while preserving required electrical clearances.");
   }
   if (hasReverseCycle) {
-    actions.push(`Use the existing reverse-cycle air conditioner as the main heating and cooling for occupied rooms. Clean its filters, close unused areas and avoid running gas heating at the same time${hasGasHeating ? "; this tests a lower-gas operating pattern before buying replacement equipment" : ""}.`);
+    actions.push(`Use the existing reverse-cycle air conditioner in occupied rooms: clean its filters and close unused areas${hasGasHeating ? " rather than running the gas heater at the same time" : ""}.`);
   } else if (hasGasHeating) {
-    actions.push("Before the gas heater fails, get a room-by-room heating and cooling load assessment and price a correctly sized reverse-cycle replacement, including electrical capacity, outdoor-unit location and noise.");
+    actions.push("Before the gas heater fails, price a correctly sized reverse-cycle replacement, including electrical capacity, outdoor-unit location and noise.");
   }
   if (actions.length < 3 && /lower energy bills/i.test(priorities)) {
-    actions.push("Compare the electricity plan using actual usage, and compare gas separately while the home remains connected. A tariff check can reduce cost without locking in building work.");
+    actions.push("Compare electricity using actual usage, and compare gas separately while the home remains connected.");
   }
   if (actions.length < 3 && /older fuse/i.test(switchboard)) {
-    actions.push("Have a licensed electrician assess the older fuse board before adding large electric appliances or EV charging. Ask for the required capacity and protection work as a separate written scope.");
+    actions.push("Have a licensed electrician assess the older fuse board before adding large electric appliances or EV charging.");
   }
 
   const selectedActions = actions.slice(0, 3);
@@ -119,15 +126,15 @@ export function composeSurgePlanPriorityAnswer(
     hasReverseCycle ? "an existing reverse-cycle system" : "",
   ].filter(Boolean);
   const unsuitableInsulation = ceilingUnavailable && floorUnavailable
-    ? " Generic ceiling and underfloor insulation advice does not fit because another dwelling is above and a slab or another dwelling is below."
+    ? " Generic ceiling and underfloor insulation advice does not fit because another dwelling is above and a slab or dwelling is below."
     : ceilingUnavailable
       ? " Generic ceiling-insulation advice does not fit because another dwelling is directly above."
       : "";
   const later: string[] = [];
-  if (hasGasAppliances) later.push("plan gas hot-water and cooking replacements around equipment end-of-life rather than replacing working systems blindly");
-  if (evPlanned) later.push(`${strataApplies ? "confirm strata approval and " : ""}have a licensed electrician scope EV charging and supply capacity`);
+  if (hasGasAppliances) later.push("replace gas hot-water and cooking at end-of-life");
+  if (evPlanned) later.push(`${strataApplies ? "confirm strata approval and " : ""}scope EV charging and supply capacity with an electrician`);
   if (isApartment && /no rooftop solar/i.test(solar) && /no home battery/i.test(battery)) {
-    later.push("treat solar and a battery as later common-property and load-profile decisions");
+    later.push("treat solar and a battery as later common-property decisions");
   }
 
   const startWith = roofProblem
@@ -144,9 +151,9 @@ export function composeSurgePlanPriorityAnswer(
               ? "the existing reverse-cycle system"
               : "the first ranked action below";
   const homeDescription = propertyType ? `Your ${lowerFirst(propertyType)}` : "Your home";
-  const intro = `Based on your saved answers, start with ${startWith}. ${homeDescription} has ${joinNatural(reasons) || "several interacting comfort and energy constraints"}.${unsuitableInsulation}`;
+  const intro = `Based on your saved answers, start with ${startWith}. This fits ${lowerFirst(homeDescription)} and ${joinNatural(reasons) || "the issues you recorded"}.${unsuitableInsulation}`;
   const laterDirection = later.length
-    ? `\n\nAfter those first steps, ${later.join("; ")}.`
+    ? `\n\nLater, ${later.join("; ")}.`
     : "";
   const followUp = moisture
     ? "Which room has the worst condensation or temperature problem: the living room, bedroom, bathroom or somewhere else?"

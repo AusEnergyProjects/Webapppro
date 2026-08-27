@@ -2430,7 +2430,9 @@ export function EnergyAssistantWidget({
                 <span aria-hidden="true">Send</span>
               </button>
             </div>
-            <small>Independent guidance. Confirm regulated work and final eligibility before committing.</small>
+            <small>{context.audience !== "trade" && profile.completed
+              ? "Uses your saved home details and this conversation. Confirm regulated work and final eligibility before committing."
+              : "Independent guidance. Confirm regulated work and final eligibility before committing."}</small>
           </form>}
           <Suspense fallback={null}>
             <EnergyAssistantDocumentTools

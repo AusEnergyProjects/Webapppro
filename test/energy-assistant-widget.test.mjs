@@ -77,6 +77,7 @@ test("the dedicated Surge AI route keeps chat present without a launcher, close 
   assert.match(widget, /<details[\s\S]{0,120}ref=\{contextRailRef\}[\s\S]{0,120}className=\{styles\.contextRail\}/);
   assert.match(widget, /<div className=\{styles\.workspace\}>/);
   assert.match(widget, /<aside className=\{styles\.guidanceRail\} aria-label="Home guidance">/);
+  assert.match(widget, /Uses your saved home details and this conversation/);
   assert.match(styles, /@media \(max-width: 1280px\) \{[\s\S]*?\.guidanceRail \{\s*display: none;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.root\.rootDedicated \{[\s\S]*?position: relative;/);
   assert.match(styles, /@media \(max-width: 640px\) \{[\s\S]*?\.rootDedicated \.starters \{[^}]*grid-template-columns: 1fr;/);

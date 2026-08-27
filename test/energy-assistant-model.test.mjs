@@ -96,8 +96,8 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   const body = JSON.parse(observedOptions.body);
   assert.equal(body.model, "gpt-5.6-terra");
   assert.equal(body.store, false);
-  assert.deepEqual(body.reasoning, { effort: "none" });
-  assert.equal(body.max_output_tokens, 600);
+  assert.deepEqual(body.reasoning, { effort: "low" });
+  assert.equal(body.max_output_tokens, 800);
   assert.equal(body.text.verbosity, "low");
   assert.equal(body.text.format.type, "json_schema");
   assert.equal(body.text.format.name, "surge_energy_answer");
@@ -377,6 +377,80 @@ test("a near-duplicate pending question is removed after the user answers it", a
   ]);
 });
 
+test("a follow-up already answered by the saved home plan is removed", async () => {
+  const result = await generateSurgeModelAnswer(request({
+    message: "okay, what about that next?",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "solar", value: "No rooftop solar" },
+      ],
+    },
+    recentTurns: [
+      { role: "user", content: "I want to reduce my evening electricity bill." },
+      { role: "assistant", content: "Start by checking the evening load before choosing equipment." },
+    ],
+    continuation: state({
+      activeTopic: "battery_vpp",
+      goal: "Reduce evening grid use",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Because the saved plan records no rooftop solar, first check whether reducing evening use or adding solar has the stronger case before comparing a battery.",
+      followUpQuestion: "Does the home already have rooftop solar?",
+      state: state({
+        activeTopic: "battery_vpp",
+        goal: "Reduce evening grid use",
+        pendingQuestion: "Does the home already have rooftop solar?",
+        lastAnswerSummary: "Explained why solar and evening use should be checked before a battery.",
+      }),
+    })),
+  });
+
+  assert.ok(result);
+  assert.equal(result.answer.status, "answered");
+  assert.deepEqual(result.answer.suggestedQuestions, []);
+  assert.equal(result.continuation.pendingQuestion, "");
+});
+
+test("a contextual follow-up rejects a generic whole-home restart", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "does the more expensive one make sense instead?",
+    recentTurns: [
+      { role: "user", content: "I am comparing two heat-pump hot-water quotes." },
+      { role: "assistant", content: "The second quote includes a longer labour warranty." },
+    ],
+    continuation: state({
+      activeTopic: "products_ratings",
+      goal: "Compare two hot-water quotes",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "For the supplied context, start with a staged whole-home diagnosis before choosing equipment.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected" }]);
+});
+
+test("an overlong model answer is rejected before it reaches the customer", async () => {
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: Array.from({ length: 181 }, () => "detail").join(" "),
+    })),
+  });
+
+  assert.equal(result, null);
+});
+
 test("a substantially repeated provider answer is rejected instead of being shown twice", async () => {
   const previousReply = "The discount depends on the eligible unit, the heater being replaced and the installation. Compare the final installed price, not only the advertised discount.";
   const failures = [];
@@ -443,10 +517,10 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.model, "gpt-5.6-terra");
   assert.equal(estimate.serializedBodyBytes, exactBytes);
-  assert.equal(estimate.maxOutputTokens, 600);
+  assert.equal(estimate.maxOutputTokens, 800);
   assert.equal(
     estimate.worstCaseMicroUsd,
-    Math.ceil(((exactBytes * 2) + (600 * 12)) * 1.25),
+    Math.ceil(((exactBytes * 2) + (800 * 12)) * 1.25),
   );
   assert.equal(
     estimateSurgeModelReservationMicroUsd(modelRequest),
@@ -842,6 +916,9 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);
   assert.match(prompt, /reviewedEducation is never current official/i);
   assert.match(prompt, /rank the methods by evidence quality, fit, durability and verification/i);
+  assert.match(prompt, /Lead with the conclusion/i);
+  assert.match(prompt, /usually 45 to 140 words/i);
+  assert.ok(prompt.length < 7_000);
   assert.ok(Array.isArray(context.reviewedEducation));
   assert.ok(context.reviewedEducation.length > 0);
   assert.ok(context.reviewedEducation.length <= 4);
