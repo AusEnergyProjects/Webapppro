@@ -1102,24 +1102,28 @@ export function EnergyAssistantWidget({
   const clearLocalSession = useCallback(({
     nextMessages = [],
     nextStatus = "",
-    resetMode = false,
+    keepProfile = false,
   }: {
     nextMessages?: AssistantMessage[];
     nextStatus?: string;
-    resetMode?: boolean;
+    keepProfile?: boolean;
   } = {}) => {
-    removeStoredSession();
     messagesRef.current = nextMessages;
     continuationRef.current = null;
-    profileRef.current = EMPTY_STARTER_PROFILE;
-    profileUpdatedAtRef.current = "";
     setMessages(nextMessages);
     setContinuation(null);
-    setProfile(EMPTY_STARTER_PROFILE);
-    setProfileStep(0);
-    setProfileEditing(false);
-    setProfileDeferred(false);
-    setProfileError("");
+    if (keepProfile) {
+      persistLocalSession({ nextMessages, nextContinuation: null });
+    } else {
+      removeStoredSession();
+      profileRef.current = EMPTY_STARTER_PROFILE;
+      profileUpdatedAtRef.current = "";
+      setProfile(EMPTY_STARTER_PROFILE);
+      setProfileStep(0);
+      setProfileEditing(false);
+      setProfileDeferred(false);
+      setProfileError("");
+    }
     setHasUsefulAnswer(false);
     setServiceInterest(false);
     setLeadOpen(false);
@@ -1140,11 +1144,7 @@ export function EnergyAssistantWidget({
     setStatus(nextStatus);
     setBusy(false);
     setLeadBusy(false);
-    if (resetMode) {
-      const nextMode = explicitRouteAudience(pathname) || "public";
-      setMode(nextMode);
-    }
-  }, [pathname]);
+  }, [persistLocalSession]);
 
   useEffect(() => {
     if (hydrationStartedRef.current) return;
@@ -1602,7 +1602,10 @@ export function EnergyAssistantWidget({
 
   const resetConversation = () => {
     if (busy || leadBusy) return;
-    clearLocalSession({ nextStatus: "Local conversation history cleared.", resetMode: true });
+    clearLocalSession({
+      nextStatus: "Chat cleared. Home details kept",
+      keepProfile: true,
+    });
   };
 
   const toggleServiceCategory = (value: string) => {

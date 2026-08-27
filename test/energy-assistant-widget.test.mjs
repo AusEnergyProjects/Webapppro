@@ -336,17 +336,19 @@ test("public and customer widget copy never exposes internal platform names", ()
   assert.equal(visibleText("I run on Mistral Large.", "trade"), "I run on Mistral Large.");
 });
 
-test("expired local conversations and explicit resets atomically clear transcript and lead state", () => {
+test("clearing chat preserves the home profile while full expiry cleanup still clears local state", () => {
   assert.match(widget, /function savedConversation\(value: unknown, now = Date\.now\(\)\)/);
   assert.match(widget, /now - activeAt > LOCAL_RETENTION_MS/);
   assert.match(widget, /messages:\s*expired \? \[\] : boundedLocalMessages/);
   assert.match(widget, /Your locally saved conversation expired after 30 days of inactivity/);
   assert.match(widget, /const clearLocalSession = useCallback/);
-  assert.match(widget, /removeStoredSession\(\)/);
+  assert.match(widget, /if \(keepProfile\)[\s\S]*persistLocalSession\(\{ nextMessages, nextContinuation: null \}\)/);
+  assert.match(widget, /else \{[\s\S]*removeStoredSession\(\);[\s\S]*profileRef\.current = EMPTY_STARTER_PROFILE/);
   assert.match(widget, /continuationRef\.current = null/);
   assert.match(widget, /setMessages\(nextMessages\)/);
   assert.match(widget, /setContinuation\(null\)/);
-  assert.match(widget, /Local conversation history cleared/);
+  assert.match(widget, /clearLocalSession\(\{[\s\S]*Chat cleared\. Home details kept[\s\S]*keepProfile: true/);
+  assert.doesNotMatch(widget, /clearLocalSession\(\{[^}]*Chat cleared[^}]*resetMode: true/);
   assert.doesNotMatch(widget, /fetch\([^)]*delete|SESSION_CREDENTIAL/);
 });
 
@@ -361,8 +363,7 @@ test("trade and customer guide modes survive navigation into shared utility rout
   assert.match(widget, /setMode\(explicitRouteAudience\(pathname\) \|\| saved\.mode\)/);
   assert.match(widget, /mode:\s*context\.audience/);
   assert.match(widget, /mode:\s*record\?\.mode === "trade" \|\| record\?\.mode === "customer"/);
-  assert.match(widget, /const nextMode = explicitRouteAudience\(pathname\) \|\| "public"/);
-  assert.match(widget, /setMode\(nextMode\)/);
+  assert.doesNotMatch(widget, /Chat cleared[\s\S]{0,160}setMode/);
   assert.match(widget, /if \(hydrationStartedRef\.current\) return/);
 });
 
