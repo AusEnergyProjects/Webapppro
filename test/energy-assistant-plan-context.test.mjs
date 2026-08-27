@@ -212,7 +212,7 @@ test("a completed apartment survey produces a specific ranked starting plan", ()
   }));
   assert.ok(context);
   const answer = composeSurgePlanPriorityAnswer(
-    "where should i start based on my answers",
+    "where should i start",
     context,
   );
   assert.ok(answer);

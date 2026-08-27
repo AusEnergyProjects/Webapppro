@@ -4,9 +4,9 @@ export const LEAD_RATE_WINDOW_MS = 60 * 60 * 1000;
 const SECRET_MIN_LENGTH = 32;
 const MAX_WRITE_ATTEMPTS = 12;
 
-function retryAfterSeconds(timestamps, now) {
+function retryAfterSeconds(timestamps, now, windowMs) {
   const earliest = Math.min(...timestamps);
-  return Math.max(1, Math.ceil((earliest + LEAD_RATE_WINDOW_MS - now) / 1000));
+  return Math.max(1, Math.ceil((earliest + windowMs - now) / 1000));
 }
 
 async function obscureClientKey(key, secret) {
@@ -30,16 +30,20 @@ function validTimestamps(value) {
     && value.every((timestamp) => Number.isFinite(timestamp) && timestamp >= 0);
 }
 
-export function createMemoryLeadRateLimiter({ now = Date.now } = {}) {
+export function createMemoryLeadRateLimiter({
+  now = Date.now,
+  limit = LEAD_RATE_LIMIT,
+  windowMs = LEAD_RATE_WINDOW_MS,
+} = {}) {
   const buckets = new Map();
   return {
     mode: "memory",
     async check(key) {
       const currentTime = now();
-      const recent = (buckets.get(key) || []).filter((time) => currentTime - time < LEAD_RATE_WINDOW_MS);
-      if (recent.length >= LEAD_RATE_LIMIT) {
+      const recent = (buckets.get(key) || []).filter((time) => currentTime - time < windowMs);
+      if (recent.length >= limit) {
         buckets.set(key, recent);
-        return { allowed: false, retryAfterSeconds: retryAfterSeconds(recent, currentTime) };
+        return { allowed: false, retryAfterSeconds: retryAfterSeconds(recent, currentTime, windowMs) };
       }
       recent.push(currentTime);
       buckets.set(key, recent);
@@ -52,6 +56,8 @@ export function createSharedLeadRateLimiter({
   env = process.env,
   now = Date.now,
   getDatabase,
+  limit = LEAD_RATE_LIMIT,
+  windowMs = LEAD_RATE_WINDOW_MS,
 } = {}) {
   let memoryLimiter;
   let sharedChecks = 0;
@@ -61,7 +67,7 @@ export function createSharedLeadRateLimiter({
     mode: shared ? "shared" : "memory",
     async check(clientKey) {
       if (!shared) {
-        memoryLimiter ||= createMemoryLeadRateLimiter({ now });
+        memoryLimiter ||= createMemoryLeadRateLimiter({ now, limit, windowMs });
         return memoryLimiter.check(clientKey);
       }
 
@@ -90,11 +96,11 @@ export function createSharedLeadRateLimiter({
           }
           if (!validTimestamps(timestamps)) return { allowed: false, unavailable: true };
 
-          const recent = timestamps.filter((time) => currentTime - time < LEAD_RATE_WINDOW_MS);
-          if (recent.length >= LEAD_RATE_LIMIT) {
+          const recent = timestamps.filter((time) => currentTime - time < windowMs);
+          if (recent.length >= limit) {
             return {
               allowed: false,
-              retryAfterSeconds: retryAfterSeconds(recent, currentTime),
+              retryAfterSeconds: retryAfterSeconds(recent, currentTime, windowMs),
             };
           }
 
@@ -116,7 +122,7 @@ export function createSharedLeadRateLimiter({
             if (sharedChecks % 100 === 0) {
               await database.prepare(
                 "DELETE FROM lead_rate_limits WHERE updated_at < ?",
-              ).bind(currentTime - (LEAD_RATE_WINDOW_MS * 2)).run().catch(() => undefined);
+              ).bind(currentTime - (windowMs * 2)).run().catch(() => undefined);
             }
             return { allowed: true };
           }

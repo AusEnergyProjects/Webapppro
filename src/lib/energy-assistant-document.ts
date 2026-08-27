@@ -214,9 +214,10 @@ function usageFigures(text: string) {
 }
 
 const ENERGY_QUOTE_CATEGORIES: ReadonlyArray<[string, RegExp]> = [
-  ["solar", /\b(?:solar|photovoltaic|pv system|inverter)\b/i],
+  ["solar", /\b(?:solar pv|solar panels?|photovoltaic|pv system|solar inverter)\b/i],
   ["battery", /\b(?:home battery|battery storage|battery system)\b/i],
-  ["heat-pump hot water", /\b(?:heat pump hot water|heat-pump hot water|hpwh)\b/i],
+  ["hot water", /\b(?:heat[- ]pump (?:hot[- ]water|water heater)|hot[- ]water (?:system|unit)|water heater|\bhws\b)\b/i],
+  ["electric cooking", /\b(?:electric stove|electric cooktop|induction cooktop|electric oven|cooking appliance)\b/i],
   ["heating or cooling", /\b(?:reverse[- ]cycle|split system|air conditioning|heating and cooling|hvac)\b/i],
   ["insulation", /\binsulation\b/i],
   ["windows or draught sealing", /\b(?:double glazing|glazing|window replacement|draught seal|weather seal)\b/i],
@@ -272,10 +273,13 @@ export function analyseExtractedEnergyDocument(textInput: string): EnergyDocumen
     .filter(([, pattern]) => pattern.test(text))
     .map(([label]) => label);
   const scope = categories.length ? categories.join(", ") : "home-energy work";
+  const creditDirection = /\b(?:certificate credits?|veecs?|stcs?|rebate allowance|rebate assumption)\b/i.test(text)
+    ? " The quote appears to include certificate credits or rebate assumptions, so confirm the eligible quantities, rates, GST treatment and any conditional rebate separately before signing."
+    : "";
   return {
     accepted: true,
     kind,
-    directAnswer: `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}. Before accepting it, confirm exact brand and model numbers, capacity or performance, the full installation and switchboard scope, exclusions, rebate assumptions, workmanship warranty and who provides after-sales support.`,
+    directAnswer: `I found a home-energy quote covering ${scope}${total ? `, with an apparent total of ${total}` : ""}.${creditDirection} Before accepting it, confirm exact brand and model numbers, quantities and capacity, the full installation and switchboard scope, cable or pipe allowances, exclusions, workmanship warranty and who provides after-sales support.`,
   };
 }
 

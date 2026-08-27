@@ -908,9 +908,9 @@ function storeMascotTucked(tucked: boolean) {
   }, false);
 }
 
-async function readStoredPlanContext() {
+async function readStoredPlanContext(currentAssessment = "") {
   try {
-    const storedAssessment = readStoredPlannerAssessment();
+    const storedAssessment = currentAssessment || readStoredPlannerAssessment();
     if (!storedAssessment) return null;
     const { buildSurgePlanContextFromStoredAssessment } = await import(
       "@/lib/energy-assistant-plan-context"
@@ -1486,7 +1486,9 @@ export function EnergyAssistantWidget({
     setError("");
     setStatus("");
     try {
-      const planContext = context.audience === "trade" ? null : await readStoredPlanContext();
+      const planContext = context.audience === "trade"
+        ? null
+        : await readStoredPlanContext(JSON.stringify(plannerProfile.session));
       const response = await fetch("/api/energy-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

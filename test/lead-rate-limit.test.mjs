@@ -69,6 +69,15 @@ test("memory limiter enforces the rolling window and reports retry timing", asyn
   assert.deepEqual(await limiter.check("client"), { allowed: true });
 });
 
+test("a caller can configure a higher document-analysis allowance without changing the lead default", async () => {
+  const limiter = createMemoryLeadRateLimiter({ limit: 20 });
+  for (let request = 0; request < 20; request += 1) {
+    assert.equal((await limiter.check("document-client")).allowed, true);
+  }
+  assert.equal((await limiter.check("document-client")).allowed, false);
+  assert.equal(LEAD_RATE_LIMIT, 5);
+});
+
 test("shared limiter atomically allows only five simultaneous requests", async () => {
   const database = createAtomicDatabase();
   const limiter = createSharedLeadRateLimiter({

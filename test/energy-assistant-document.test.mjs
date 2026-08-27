@@ -64,6 +64,20 @@ test("PDF quote analysis works for a generated text-based document", async () =>
   assert.match(result.directAnswer, /\$7,200/);
 });
 
+test("whole-home electrification quote analysis distinguishes scope from rebate references", () => {
+  const result = analyseExtractedEnergyDocument(
+    "Quotation. Supply and install reverse-cycle heating and cooling, a heat-pump hot-water unit, "
+    + "an electric stove and dedicated circuits. Model numbers and workmanship warranty included. "
+    + "Total payable $5,785.07 after 88 VEECs and 17 STCs. A possible Solar Victoria rebate is not included.",
+  );
+  assert.equal(result.kind, "energy_quote");
+  assert.match(result.directAnswer, /heating or cooling/);
+  assert.match(result.directAnswer, /hot water/);
+  assert.match(result.directAnswer, /electric cooking/);
+  assert.match(result.directAnswer, /certificate credits or rebate assumptions/);
+  assert.doesNotMatch(result.directAnswer, /covering solar/);
+});
+
 test("document handling rejects renamed files and remains transient", async () => {
   await assert.rejects(
     analyseEnergyDocumentBytes({
@@ -85,6 +99,8 @@ test("document handling rejects renamed files and remains transient", async () =
   assert.match(route, /origin === new URL\(request\.url\)\.origin/);
   assert.match(route, /request\.formData\(\)/);
   assert.match(route, /createSharedLeadRateLimiter/);
+  assert.match(route, /const DOCUMENT_RATE_LIMIT = 20/);
+  assert.match(route, /limit: DOCUMENT_RATE_LIMIT/);
   assert.match(route, /local \? localDocumentRateLimiter : documentRateLimiter/);
   assert.match(route, /energy-assistant-document:\$\{requestFingerprint\(request\)\}/);
   assert.match(route, /retention: "transient"/);

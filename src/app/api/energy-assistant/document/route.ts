@@ -17,9 +17,14 @@ const securityHeaders = {
   "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
 };
-const documentRateLimiterOptions = { env: process.env, getDatabase: getD1 };
+const DOCUMENT_RATE_LIMIT = 20;
+const documentRateLimiterOptions = {
+  env: process.env,
+  getDatabase: getD1,
+  limit: DOCUMENT_RATE_LIMIT,
+};
 const documentRateLimiter = createSharedLeadRateLimiter(documentRateLimiterOptions);
-const localDocumentRateLimiter = createMemoryLeadRateLimiter();
+const localDocumentRateLimiter = createMemoryLeadRateLimiter({ limit: DOCUMENT_RATE_LIMIT });
 
 function json(body: object, status = 200, headers: HeadersInit = {}) {
   return Response.json(body, {

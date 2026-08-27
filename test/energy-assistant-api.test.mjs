@@ -1085,7 +1085,7 @@ test("a completed survey returns a ranked home-specific starting plan before gen
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
     requestId: "completed-survey-priority-0001",
-    message: "where should i start based on my answers",
+    message: "where should i start",
     recentTurns: [],
     planContext,
     pageContext: "/surge",

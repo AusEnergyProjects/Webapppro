@@ -170,7 +170,7 @@ test("Surge receives only bounded completed planner answers and excludes them fr
   assert.match(widget, /await import\(\s*"@\/lib\/energy-assistant-plan-context"\s*\)/);
   assert.match(widget, /const storedAssessment = readStoredPlannerAssessment\(\)/);
   assert.match(widget, /availableSessionStorages\(\)/);
-  assert.match(widget, /const planContext = context\.audience === "trade" \? null : await readStoredPlanContext\(\)/);
+  assert.match(widget, /readStoredPlanContext\(JSON\.stringify\(plannerProfile\.session\)\)/);
   assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*planContext,[\s\S]*pageContext:/);
   assert.match(planner, /HOME_ENERGY_ASSESSMENT_STORAGE_KEY/);
   assert.match(planner, /If you ask Surge AI, completed plan answers are sent as bounded context/);
