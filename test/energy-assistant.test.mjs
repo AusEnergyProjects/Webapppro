@@ -19,6 +19,15 @@ test("Surge reference answers never expose en or em dashes", () => {
   );
 });
 
+test("cold-window guidance recommends honeycomb blinds alongside thermal curtains", () => {
+  const answer = composeEnergyAssistantAnswer(
+    "The bedroom windows feel freezing even when there is no wind. What should I try first?",
+    { asOf: "2026-08-20T00:00:00.000Z" },
+  );
+
+  assert.match(answer.directAnswer, /close-fitting honeycomb blinds or thermal curtains with pelmets/i);
+});
+
 test("customer output policy rejects internal assessor-method copy", () => {
   assert.equal(
     surgeOutputViolatesPublicPolicy(

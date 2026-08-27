@@ -4508,7 +4508,7 @@ export function composeEnergyAssistantAnswer(
     && !/\b(?:rent|rental|renter|tenant|mould|mold|damp|shower|bathroom|draught|draft|weatherstripp?ing|secondary glazing)\b/i.test(query)) {
     return structured("glazing_shading", {
       directAnswer:
-        "Cold windows often mean heat is moving quickly through the glass or frame, and gaps around the frame can make the room feel even colder. Condensation happens when warm indoor air touches a cold surface. Before replacing every window, check close-fitting curtains or blinds, gaps around frames, outside shade, drainage and whether the glass or frame is the coldest part. A better window can help, but the right fix depends on its direction, size, frame and your climate.",
+        "Cold windows often mean heat is moving quickly through the glass or frame, and gaps around the frame can make the room feel even colder. Condensation happens when warm indoor air touches a cold surface. Before replacing every window, check close-fitting honeycomb blinds or thermal curtains with pelmets, gaps around frames, outside shade, drainage and whether the glass or frame is the coldest part. A better window can help, but the right fix depends on its direction, size, frame and your climate.",
       status: "needs_context",
       citations: officialCitationsById(["energy-gov-windows", "yourhome-glazing", "yourhome-condensation-moisture"]),
       confidence: "medium",

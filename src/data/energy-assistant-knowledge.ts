@@ -1809,11 +1809,12 @@ const ENERGY_ASSISTANT_KNOWLEDGE_RECORDS = [
     storagePolicy: "local_factual_summary",
     official: true,
     summary:
-      "Before full window replacement, identify whether discomfort comes from direct sun, air leakage, conductive heat flow or the frame and installation. Weather seals, external shading and close-fitting curtains with pelmets can be lower-cost steps. For replacement, compare whole-window U-value and solar heat gain coefficient for the climate and orientation, then check safety glazing, waterproofing, approvals and installation quality.",
+      "Before full window replacement, identify whether discomfort comes from direct sun, air leakage, conductive heat flow or the frame and installation. Weather seals, external shading and close-fitting honeycomb blinds or thermal curtains with pelmets can be lower-cost steps. For replacement, compare whole-window U-value and solar heat gain coefficient for the climate and orientation, then check safety glazing, waterproofing, approvals and installation quality.",
     keywords: [
       "window retrofit",
       "weather seal",
       "external shading",
+      "honeycomb blind",
       "curtain pelmet",
       "whole window u value",
       "solar heat gain coefficient",
