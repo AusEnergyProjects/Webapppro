@@ -178,8 +178,8 @@ test("ask API emits one privacy-safe categorical quality event after a successfu
       appVersion: "app-v1",
       gitSha: "git-sha",
       deploymentId: "deploy-v1",
-      requestedModel: "gpt-5.6-terra",
-      providerModel: "provider-terra",
+      requestedModel: "gpt-5.6-sol",
+      providerModel: "provider-sol",
     },
     composeAnswer: () => fixedAnswer("Start by checking the ceiling insulation."),
     generateAnswer: async () => null,
@@ -195,7 +195,7 @@ test("ask API emits one privacy-safe categorical quality event after a successfu
   assert.equal(qualityEvents[0].answerStatus, "answered");
   assert.equal(qualityEvents[0].latencyMs, 64);
   assert.equal(qualityEvents[0].metadata.deploymentId, "deploy-v1");
-  assert.equal(qualityEvents[0].metadata.requestedModel, "gpt-5.6-terra");
+  assert.equal(qualityEvents[0].metadata.requestedModel, "gpt-5.6-sol");
   assert.doesNotMatch(
     JSON.stringify(qualityEvents[0]),
     /Private Street|insulation at|message|content|requestId|clientId|email|phone|address|postcode|ipAddress|answerText/i,

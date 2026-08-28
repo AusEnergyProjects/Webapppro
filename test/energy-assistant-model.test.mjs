@@ -78,7 +78,7 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   let observedOptions;
   const result = await generateSurgeModelAnswer(request(), {
     apiKey: "test-api-key",
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async (url, options) => {
       observedUrl = url;
       observedOptions = options;
@@ -94,9 +94,9 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.ok(observedOptions.signal instanceof AbortSignal);
 
   const body = JSON.parse(observedOptions.body);
-  assert.equal(body.model, "gpt-5.6-terra");
+  assert.equal(body.model, "gpt-5.6-sol");
   assert.equal(body.store, false);
-  assert.deepEqual(body.reasoning, { effort: "medium" });
+  assert.deepEqual(body.reasoning, { effort: "low" });
   assert.equal(body.max_output_tokens, 800);
   assert.equal(body.text.verbosity, "low");
   assert.equal(body.text.format.type, "json_schema");
@@ -186,7 +186,7 @@ test("clarification includes the previous Surge reply as bounded conversational 
     }),
   }), {
     apiKey: "test-api-key",
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async (_url, options) => {
       observedBody = JSON.parse(options.body);
       return jsonResponse(modelPayload({
@@ -473,7 +473,7 @@ test("a substantially repeated provider answer is rejected instead of being show
   assert.deepEqual(failures, [{ code: "provider_output_rejected" }]);
 });
 
-test("only the reviewed Terra model is allowed", async () => {
+test("only the reviewed Sol model is allowed", async () => {
   const previousModel = process.env.SURGE_MODEL;
   let calls = 0;
   process.env.SURGE_MODEL = "gpt-5.6-luna";
@@ -490,7 +490,7 @@ test("only the reviewed Terra model is allowed", async () => {
 
     const supported = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       fetch: async () => {
         calls += 1;
         return jsonResponse(modelPayload());
@@ -510,7 +510,7 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   let serializedBody = "";
   const result = await generateSurgeModelAnswer(modelRequest, {
     apiKey: "test-api-key",
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async (_url, options) => {
       serializedBody = options.body;
       return jsonResponse(modelPayload());
@@ -520,12 +520,12 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   assert.ok(result);
   assert.ok(estimate);
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
-  assert.equal(estimate.model, "gpt-5.6-terra");
+  assert.equal(estimate.model, "gpt-5.6-sol");
   assert.equal(estimate.serializedBodyBytes, exactBytes);
   assert.equal(estimate.maxOutputTokens, 800);
   assert.equal(
     estimate.worstCaseMicroUsd,
-    Math.ceil(((exactBytes * 2) + (800 * 12)) * 1.25),
+    Math.ceil(((exactBytes * 4) + (800 * 20)) * 1.25),
   );
   assert.equal(
     estimateSurgeModelReservationMicroUsd(modelRequest),
@@ -539,7 +539,7 @@ test("oversized serialized model input is rejected before provider fetch", async
   let calls = 0;
   const result = await generateSurgeModelAnswer(oversizedRequest, {
     apiKey: "test-api-key",
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async () => {
       calls += 1;
       return jsonResponse(modelPayload());
@@ -602,7 +602,7 @@ test("provider errors and timeout make one attempt and fail soft with null", asy
       let calls = 0;
       const result = await generateSurgeModelAnswer(request(), {
         apiKey: "test-api-key",
-        model: "gpt-5.6-terra",
+        model: "gpt-5.6-sol",
         fetch: async () => {
           calls += 1;
           return new Response("unavailable", { status });
@@ -617,7 +617,7 @@ test("provider errors and timeout make one attempt and fail soft with null", asy
     let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       timeoutMs: 1,
       fetch: async (_url, options) => {
         calls += 1;
@@ -637,7 +637,7 @@ test("malformed model output fails soft with null", async (t) => {
   await t.test("invalid JSON output", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       fetch: async () => new Response(JSON.stringify({ output_text: "{not-json" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -649,7 +649,7 @@ test("malformed model output fails soft with null", async (t) => {
   await t.test("invalid conversation state", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       fetch: async () => jsonResponse(modelPayload({
         state: state({ facts: Array.from({ length: 17 }, (_, index) => ({
           key: `fact_${index}`,
@@ -663,7 +663,7 @@ test("malformed model output fails soft with null", async (t) => {
   await t.test("unknown evidence id", async () => {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       fetch: async () => jsonResponse(modelPayload({
         usedSourceIds: ["invented-source-id"],
       })),
@@ -679,7 +679,7 @@ test("disabled model path returns null without calling the provider", async () =
   try {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       fetch: async () => {
         calls += 1;
         return jsonResponse(modelPayload());
@@ -700,7 +700,7 @@ test("an explicit hosted enabled setting overrides a stale process-level disable
   try {
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "hosted-test-api-key",
-      model: "gpt-5.6-terra",
+      model: "gpt-5.6-sol",
       enabled: true,
       fetch: async () => {
         calls += 1;
@@ -719,7 +719,7 @@ test("failure observability contains only a safe code and provider status", asyn
   const failures = [];
   const result = await generateSurgeModelAnswer(request(), {
     apiKey: "test-api-key",
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async () => new Response("secret provider body that must not be logged", { status: 429 }),
     onFailure: (failure) => failures.push(failure),
   });
@@ -736,7 +736,7 @@ test("API secret is never included in the serialized request body, estimate or r
   const estimate = estimateSurgeModelRequest(modelRequest);
   const result = await generateSurgeModelAnswer(modelRequest, {
     apiKey: secret,
-    model: "gpt-5.6-terra",
+    model: "gpt-5.6-sol",
     fetch: async (_url, options) => {
       serializedBody = options.body;
       return jsonResponse(modelPayload());

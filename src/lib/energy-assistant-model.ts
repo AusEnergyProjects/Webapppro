@@ -79,19 +79,19 @@ export type SurgeModelFailure = {
 };
 
 export type SurgeModelRequestEstimate = {
-  model: "gpt-5.6-terra";
+  model: "gpt-5.6-sol";
   serializedBodyBytes: number;
   maxOutputTokens: 800;
   worstCaseMicroUsd: number;
 };
 
 const MODEL_ENDPOINT = "https://api.openai.com/v1/responses";
-const SUPPORTED_MODEL = "gpt-5.6-terra" as const;
+const SUPPORTED_MODEL = "gpt-5.6-sol" as const;
 const DEFAULT_TIMEOUT_MS = 18_000;
 const MAX_PROVIDER_INPUT_BYTES = 24_000;
 const MAX_PROVIDER_OUTPUT_TOKENS = 800 as const;
-const TERRA_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE = 2;
-const TERRA_OUTPUT_MICRO_USD_PER_TOKEN = 12;
+const SOL_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE = 4;
+const SOL_OUTPUT_MICRO_USD_PER_TOKEN = 20;
 const COST_SAFETY_MARGIN_MULTIPLIER = 1.25;
 const MAX_MODEL_ANSWER_CHARS = 2_000;
 const MAX_FOLLOW_UP_CHARS = 220;
@@ -507,7 +507,7 @@ function providerBody(request: SurgeModelRequest, context: ReturnType<typeof con
   return {
     model: SUPPORTED_MODEL,
     store: false,
-    reasoning: { effort: "medium" },
+    reasoning: { effort: "low" },
     max_output_tokens: MAX_PROVIDER_OUTPUT_TOKENS,
     text: {
       verbosity: "low",
@@ -537,8 +537,8 @@ function prepareProviderRequest(request: SurgeModelRequest) {
   const serializedBodyBytes = new TextEncoder().encode(serializedBody).byteLength;
   if (serializedBodyBytes > MAX_PROVIDER_INPUT_BYTES) return null;
   const baseMicroUsd = (
-    serializedBodyBytes * TERRA_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE
-    + MAX_PROVIDER_OUTPUT_TOKENS * TERRA_OUTPUT_MICRO_USD_PER_TOKEN
+    serializedBodyBytes * SOL_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE
+    + MAX_PROVIDER_OUTPUT_TOKENS * SOL_OUTPUT_MICRO_USD_PER_TOKEN
   );
   const estimate: SurgeModelRequestEstimate = {
     model: SUPPORTED_MODEL,
