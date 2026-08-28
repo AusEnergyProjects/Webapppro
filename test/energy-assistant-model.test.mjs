@@ -919,11 +919,23 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /close-fitting honeycomb blinds or thermal curtains with pelmets/i);
   assert.match(prompt, /Do not recommend, rank, promote or endorse a product, brand/i);
   assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);
+  assert.match(prompt, /Use industryLibrary first for stable technical reasoning/i);
+  assert.match(prompt, /Use maintainedEvidence to confirm or fill gaps involving current rules/i);
   assert.match(prompt, /reviewedEducation is never current official/i);
   assert.match(prompt, /rank the methods by evidence quality, fit, durability and verification/i);
   assert.match(prompt, /Lead with the conclusion/i);
   assert.match(prompt, /usually 45 to 140 words/i);
-  assert.ok(prompt.length < 7_000);
+  assert.ok(prompt.length < 8_000, `prompt length: ${prompt.length}`);
+  assert.ok(Array.isArray(context.industryLibrary));
+  assert.ok(context.industryLibrary.length > 0);
+  assert.ok(context.industryLibrary.length <= 3);
+  assert.match(
+    context.industryLibrary.map((passage) => passage.excerpt).join("\n"),
+    /insulation|ceiling|heat loss/i,
+  );
+  assert.ok(context.industryLibrary.every(
+    (passage) => passage.authorityBoundary === "stable_industry_guidance_only_verify_current_facts_officially",
+  ));
   assert.ok(Array.isArray(context.reviewedEducation));
   assert.ok(context.reviewedEducation.length > 0);
   assert.ok(context.reviewedEducation.length <= 4);

@@ -8,7 +8,6 @@ import {
   containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
   isEnergyDocumentQuoteConversationRequest,
-  isThreePhaseSupplyUpgradeQuestion,
   isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
@@ -422,6 +421,23 @@ function generatedResultIsPolicySafe(
   );
 }
 
+const SURGE_GENERIC_NON_ANSWER_PATTERNS = [
+  /\b(?:question|request|query) is not specific enough\b/i,
+  /\bI (?:found|have) (?:a )?related (?:current )?official source\b/i,
+  /\bname the exact home-energy decision\b/i,
+  /\btell me the home or trade decision\b/i,
+  /\bwhat topic would you like (?:covered|recreated)\b/i,
+  /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
+] as const;
+
+function isGenericNonAnswer(
+  answer: EnergyAssistantAnswer,
+  presentation: SurgeAnswerPresentation | null = null,
+) {
+  const visibleText = `${answer.directAnswer}\n${presentation ? surgePresentationText(presentation, true) : ""}`;
+  return SURGE_GENERIC_NON_ANSWER_PATTERNS.some((pattern) => pattern.test(visibleText));
+}
+
 function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
   const clean = audience === "trade"
     ? sanitizeSurgeReferenceText(value)
@@ -614,7 +630,6 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
   const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
-  const requiresDeterministicThreePhaseAnswer = isThreePhaseSupplyUpgradeQuestion(message);
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     ? null
     : publicPolicyAnswer(message);
@@ -630,7 +645,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !requiresDeterministicThreePhaseAnswer && !protectedAnswer && !planPriorityAnswer) {
+  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !protectedAnswer && !planPriorityAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
@@ -641,36 +656,43 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       planContext,
       deterministicAnswer,
     };
-    const groundedAnswer = dependencies.resolveGroundedAnswer
+    const groundedCandidate = dependencies.resolveGroundedAnswer
       ? await dependencies.resolveGroundedAnswer(modelRequest).catch(() => null)
+      : null;
+    const groundedAnswer = groundedCandidate && !isGenericNonAnswer(groundedCandidate)
+      ? groundedCandidate
       : null;
     if (groundedAnswer) {
       answer = groundedAnswer;
       answerSource = "grounded";
     }
-    const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
-    if (!groundedAnswer && estimatedMicroUsd !== null && dependencies.reserveModelCall) {
-      let reservation: SurgeModelCallReservation = { allowed: false };
-      try {
-        reservation = await dependencies.reserveModelCall({
-          requestId: requestId || (dependencies.randomUUID || (() => crypto.randomUUID()))(),
-          estimatedMicroUsd,
-        });
-      } catch {
-        reservation = { allowed: false };
-      }
-      if (reservation.allowed) {
+    if (!groundedAnswer && dependencies.reserveModelCall) {
+      const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
+      if (estimatedMicroUsd !== null) {
+        let reservation: SurgeModelCallReservation = { allowed: false };
         try {
-          const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
-          const generated = await generate(modelRequest).catch(() => null);
-          if (generated && generatedResultIsPolicySafe(generated, audience)) {
-            answer = generated.answer;
-            presentation = generated.presentation || null;
-            nextContinuation = generated.continuation;
-            answerSource = "model";
+          reservation = await dependencies.reserveModelCall({
+            requestId: requestId || (dependencies.randomUUID || (() => crypto.randomUUID()))(),
+            estimatedMicroUsd,
+          });
+        } catch {
+          reservation = { allowed: false };
+        }
+        if (reservation.allowed) {
+          try {
+            const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
+            const generated = await generate(modelRequest).catch(() => null);
+            if (generated
+              && generatedResultIsPolicySafe(generated, audience)
+              && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
+              answer = generated.answer;
+              presentation = generated.presentation || null;
+              nextContinuation = generated.continuation;
+              answerSource = "model";
+            }
+          } finally {
+            await reservation.release().catch(() => undefined);
           }
-        } finally {
-          await reservation.release().catch(() => undefined);
         }
       }
     }

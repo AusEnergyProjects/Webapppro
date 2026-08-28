@@ -16,6 +16,11 @@ import {
   SURGE_ASSESSOR_EDUCATION_TOPIC_IDS,
   selectSurgeAssessorEducationForPrompt,
 } from "../src/data/surge-assessor-education.ts";
+import {
+  SURGE_INDUSTRY_LIBRARY_SUMMARY,
+  SURGE_INDUSTRY_LIBRARY_SOURCE_HASHES,
+  selectSurgeIndustryPassagesForPrompt,
+} from "../src/lib/surge-industry-library.ts";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const CURRENT_FACT_BOUNDARY = "verify_with_current_official_sources";
@@ -257,6 +262,46 @@ test("prompt selector returns a small relevant reviewed teaching set", () => {
     assert.equal(Object.hasOwn(card, "pageReferences"), false);
     assert.equal(Object.hasOwn(card, "review"), false);
     assert.equal(Object.hasOwn(card, "pdfSha256"), false);
+  }
+});
+
+test("controlled PDFs are pre-indexed once and retrieve bounded relevant passages", () => {
+  assert.deepEqual(SURGE_INDUSTRY_LIBRARY_SUMMARY, {
+    schemaVersion: 1,
+    sourceCount: 7,
+    pageCount: 465,
+    chunkCount: 1729,
+    currentFactBoundary: "verify_with_current_official_sources",
+  });
+  assert.deepEqual(
+    SURGE_INDUSTRY_LIBRARY_SOURCE_HASHES,
+    Object.fromEntries(SURGE_ASSESSOR_EDUCATION_SOURCES.map((source) => [source.id, source.pdfSha256])),
+  );
+
+  const cases = [
+    [
+      "When is a three-phase upgrade worth paying for with solar and a battery?",
+      /three-phase|three phase|3-phase|3 phase/i,
+    ],
+    [
+      "Should I seal a draughty window before buying double glazing or honeycomb blinds?",
+      /window|glazing|draught|blind/i,
+    ],
+    [
+      "What matters when comparing heat-pump hot-water quotes?",
+      /heat pump|hot water|warranty|installation/i,
+    ],
+  ];
+
+  for (const [query, expected] of cases) {
+    const passages = selectSurgeIndustryPassagesForPrompt(query, 3);
+    assert.ok(passages.length > 0, query);
+    assert.ok(passages.length <= 3, query);
+    assert.match(passages.map((passage) => passage.excerpt).join("\n"), expected, query);
+    assert.ok(passages.reduce((total, passage) => total + passage.excerpt.length, 0) <= 2_700, query);
+    assert.ok(passages.every(
+      (passage) => passage.authorityBoundary === "stable_industry_guidance_only_verify_current_facts_officially",
+    ), query);
   }
 });
 

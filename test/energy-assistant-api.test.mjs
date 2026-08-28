@@ -595,7 +595,7 @@ test("a model presentation keeps its follow-up question aligned with its quick r
   assert.doesNotMatch(payload.reply.content, /overhead or underground/i);
 });
 
-test("the three-phase worth-it quick reply answers directly without a generic model fallback", async () => {
+test("the three-phase worth-it quick reply rejects a generic model non-answer", async () => {
   let modelReservations = 0;
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
@@ -627,7 +627,7 @@ test("the three-phase worth-it quick reply answers directly without a generic mo
 
   assert.equal(response.status, 200);
   const payload = await body(response);
-  assert.equal(modelReservations, 0);
+  assert.equal(modelReservations, 1);
   assert.match(payload.reply.directAnswer, /^Usually not just for a normal home solar and battery system\./i);
   assert.match(payload.reply.directAnswer, /EV charger.*large air conditioner.*more supply capacity/i);
   assert.doesNotMatch(payload.reply.content, /related current official source|not specific enough/i);
@@ -635,6 +635,60 @@ test("the three-phase worth-it quick reply answers directly without a generic mo
     "Does it need rewiring?",
     "What should the quote include?",
   ]);
+});
+
+test("generic grounded non-answers cannot suppress a useful answer across home-energy topics", async () => {
+  const cases = [
+    {
+      id: "heating",
+      message: "Is reverse-cycle air conditioning usually cheaper to run than my old gas heater?",
+      answer: "Usually, yes. A modern reverse-cycle air conditioner can deliver several units of heat for each unit of electricity, so compare its expected electricity cost with the gas heater's delivered heat cost.",
+      expected: /Usually, yes.*reverse-cycle air conditioner/i,
+    },
+    {
+      id: "windows",
+      message: "Should I seal the window gap before buying double glazing?",
+      answer: "Yes. Seal the confirmed moving gap first because it is cheaper and directly addresses the draught. Consider glazing later if the glass itself still feels cold or summer sun remains a problem.",
+      expected: /^Yes\. Seal the confirmed moving gap first/i,
+    },
+    {
+      id: "hot-water",
+      message: "What matters most when comparing two heat-pump hot-water quotes?",
+      answer: "Start with the exact models, usable hot-water capacity, cold-weather recovery, noise, warranty and the complete installed scope. Then compare the final price after separately verified incentives.",
+      expected: /^Start with the exact models/i,
+    },
+  ];
+
+  for (const item of cases) {
+    let reservations = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `generic-grounded-${item.id}-0001`,
+      message: item.message,
+      recentTurns: [],
+      pageContext: "/surge",
+      audience: "customer",
+    }), {
+      now: () => new Date(NOW),
+      resolveGroundedAnswer: async () => fixedAnswer(
+        "I found a related current official source, but the question is not specific enough. Name the exact home-energy decision, product, programme or number you want checked.",
+      ),
+      generateAnswer: async () => ({
+        answer: fixedAnswer(item.answer),
+        continuation: continuation(),
+      }),
+      reserveModelCall: async () => {
+        reservations += 1;
+        return allowModelCall();
+      },
+    });
+
+    assert.equal(response.status, 200, item.id);
+    const payload = await body(response);
+    assert.equal(reservations, 1, item.id);
+    assert.match(payload.reply.directAnswer, item.expected, item.id);
+    assert.doesNotMatch(payload.reply.content, /related current official source|not specific enough|name the exact home-energy decision/i, item.id);
+  }
 });
 
 test("authorised trade model replies keep internal workflow names while public policy still applies", async () => {
