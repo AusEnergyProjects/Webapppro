@@ -61,6 +61,18 @@ const SURGE_QUESTION_INTENT_RULES: ReadonlyArray<{
     question: /\b(?:insulation|batts?)\b/i,
     answer: /\b(?:insulation|batts?|ceiling|roof)\b/i,
   },
+  {
+    question: /\b(?:ducted|split systems?|air conditioners?|reverse[- ]?cycle)\b/i,
+    answer: /\b(?:ducted|split systems?|air conditioners?|reverse[- ]?cycle|heating|cooling|airflow|installer)\b/i,
+  },
+  {
+    question: /\b(?:induction|cooktops?)\b/i,
+    answer: /\b(?:induction|cooktops?|circuit|electrician|cooking)\b/i,
+  },
+  {
+    question: /\b(?:EV chargers?|electric vehicle chargers?|charge (?:my |an? )?(?:EV|electric car))\b/i,
+    answer: /\b(?:EV|electric vehicle|charger|charging|vehicle)\b/i,
+  },
 ] as const;
 
 /**
@@ -144,16 +156,211 @@ export function composeSurgeSimpleAnswer(
     });
   }
 
+  if (/\bshould i call (?:the |my )?installer\b/i.test(message)
+    && /\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b[\s\S]{0,120}\b(?:noisy|blows? hard|airflow)\b|\b(?:noisy|blows? hard|airflow)\b[\s\S]{0,120}\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b/i.test(priorUserText)) {
+    return answer(base, {
+      directAnswer: "Yes. First confirm it is in heating mode, set it around 20 to 21°C, use a low or auto fan setting and open the normal outlets or zones. If it is still excessively noisy or blowing too hard, ask the installer to return and check the commissioning, minimum airflow, duct sizes, zone balance and temperature-sensor setup.",
+      practicalSteps: [],
+    });
+  }
+
   const text = conversationText(message, recentTurns);
   const solar = planFact(context, "solar");
   const tenure = planFact(context, "tenure");
   const heating = planFact(context, "heating_cooling_systems");
 
-  if (isThreePhaseSupplyUpgradeQuestion(text)) return null;
+  const alreadyHasThreePhaseForEv = /\b(?:have|has|already (?:have|has))\s+three[- ]?phase\b/i.test(text)
+    && /\bEV charger\b/i.test(text);
+  if (isThreePhaseSupplyUpgradeQuestion(text) && !alreadyHasThreePhaseForEv) return null;
 
   if (/\b(?:draughts?|drafts?|air leaks?)\b/i.test(text)) {
     return answer(base, {
       directAnswer: "Start by sealing the gaps that are actually letting air into the room. Check around opening windows, the door and obvious fixed cracks on a windy day. Use removable weather seals or a door snake, and suitable sealant only on fixed gaps. Do not block exhausts or required vents. If the glass feels cold but no air is moving, close-fitting honeycomb blinds or thermal curtains will help more than extra sealing.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:import|buy)\b[\s\S]{0,100}\b(?:export|send)\b[\s\S]{0,160}\b(?:battery|storage)\b|\b(?:battery|storage)\b[\s\S]{0,160}\b(?:import|buy)\b[\s\S]{0,100}\b(?:export|send)\b/i.test(text)
+    && /\b(?:worth|save enough|payback|pay back)\b/i.test(text)) {
+    const yearlyBill = text.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*(?:a|per|each)?\s*year/i)?.[1];
+    const billLabel = yearlyBill ? `$${Number(yearlyBill.replace(/,/g, "")).toLocaleString("en-AU")}` : "the annual grid bill";
+    return answer(base, {
+      directAnswer: `Probably not on bill savings alone unless the battery is unusually cheap. With only about ${billLabel} a year currently paid for grid electricity, ${billLabel} is close to the absolute yearly saving ceiling before allowing for the supply charge, battery losses and electricity that would still be imported. Compare the installed battery price with a conservative yearly saving and require the payback to fit comfortably inside the warranted life; value backup separately if you want it.`,
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:battery|storage)\b/i.test(text)
+    && /\b(?:finance|financed|repay|repayment|paid? off|interest[- ]?free|over\s+\w+\s+years?)\b/i.test(text)
+    && /\bsolar\b/i.test(text)) {
+    const total = text.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/)?.[1];
+    const solarSize = text.match(/\b(\d+(?:\.\d+)?)\s*kW\b/i)?.[1];
+    const batterySize = text.match(/\b(\d+(?:\.\d+)?)\s*kWh\s+battery\b/i)?.[1]
+      || text.match(/\bbattery\b[^.!?\n]{0,30}\b(\d+(?:\.\d+)?)\s*kWh\b/i)?.[1];
+    return answer(base, {
+      directAnswer: `${total ? `$${Number(total.replace(/,/g, "")).toLocaleString("en-AU")}` : "That price"} may be reasonable or poor; the finance and sizing decide it. ${solarSize ? `${solarSize} kW of solar` : "The solar system"} is much larger than ${batterySize ? `an ${batterySize} kWh battery` : "the quoted battery"}, so confirm the roof layout, export limit and expected self-use. Compare the cash price with the total of every repayment including interest and fees, then compare that total with conservative yearly bill savings and the battery warranty. A seven-year payment term is not proof of a seven-year payback.`,
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:heat[- ]?pump|hot[- ]?water)\b/i.test(text)
+    && /\$\s*[\d,]+/i.test(text)
+    && /\$\s*\d+(?:\.\d{1,2})?\s*(?:a|per)\s*month\b/i.test(text)
+    && /\b\w+\s+years?\b/i.test(text)) {
+    const prices = [...text.matchAll(/\$\s*([\d,]+(?:\.\d{1,2})?)/gi)].map((match) => Number(match[1].replace(/,/g, "")));
+    const monthly = Number(text.match(/\$\s*(\d+(?:\.\d{1,2})?)\s*(?:a|per)\s*month/i)?.[1] || 0);
+    const yearWord = text.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\b/i)?.[1]?.toLowerCase();
+    const wordYears: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    const years = yearWord ? (Number(yearWord) || wordYears[yearWord] || 0) : 0;
+    const repayments = monthly && years ? monthly * 12 * years : 0;
+    const quotedTotal = Math.max(...prices, 0);
+    return answer(base, {
+      directAnswer: `${monthly && years ? `$${monthly.toLocaleString("en-AU")} a month for ${years} years totals $${repayments.toLocaleString("en-AU")}` : "The repayment total must be calculated"}${quotedTotal ? `, which does not equal the quoted $${quotedTotal.toLocaleString("en-AU")}` : ""}, so the finance or rebate explanation is incomplete. Ask for the cash price, total financed amount, every fee and the certificate or rebate deduction in one written breakdown. Check the claimed gas saving against actual gas used for hot water, and include any gas supply charge only if removing hot water lets you disconnect gas completely.`,
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:heat[- ]?pump|hot[- ]?water)\b/i.test(text)
+    && /\b(?:same|looks? like the same)\b[^.!?\n]{0,80}\b(?:unit|model|product)\b/i.test(text)
+    && /\$\s*[\d,]+[\s\S]{0,80}\$\s*[\d,]+/i.test(text)) {
+    return answer(base, {
+      directAnswer: "A large price spread for the same heat-pump hot-water unit usually means the scopes are not actually the same. Compare an itemised final price after rebates or certificates, tank and model, removal of the old system, plumbing, valves, drainage, electrical circuit, switchboard work, access, permits, commissioning and disposal. Also compare workmanship warranty, manufacturer warranty, local parts and after-sales service. The cheapest quote is only cheaper if all of that is genuinely equivalent.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b/i.test(text)
+    && /\b(?:blows? (?:very )?hard|airflow noise|noisy|noise)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "It is worth checking, and the 16°C setting is the first clue. Confirm the system is in heating mode, set it around 20 to 21°C, use low or auto fan and open the normal outlets or zones; closing too many outlets can make airflow noisy. If it still blows excessively hard or the outdoor unit runs constantly, call the installer and request a commissioning check of airflow, duct sizing, zone balance and sensor location.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b/i.test(text)
+    && /\b(?:only raises?|barely raises?|won't heat|wont heat|not heating|struggl\w* to (?:reach|heat))\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "No, do not accept that as normal for a newly installed system without measured commissioning evidence. Ask the installer for the return-air and supply-air temperatures, airflow at the outlets, active-zone setup, refrigerant and defrost checks, and evidence that the unit and ducts match the design. Send a written performance complaint and request the commissioning report and corrective visit rather than buying another heater.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:ducted|reverse[- ]?cycle)\b/i.test(text)
+    && /\b(?:separate|individual|multiple)\s+split systems?\b|\bsplit systems?\b[\s\S]{0,60}\bducted\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "For a home that mainly uses three rooms, separate split systems are usually the cheaper and more efficient choice because you heat or cool only those rooms and avoid duct losses. Electric ducted reverse cycle is neater and can condition the whole home, but it costs more, loses energy through ducts and can be inefficient when only a small zone is open. Choose ducted for genuine whole-home use; choose splits for room-by-room use and lower running cost.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:induction|cooktop)\b/i.test(text)
+    && /\b20\s*(?:amp|a)\b/i.test(text)
+    && /\b(?:share|same|existing)\b[\s\S]{0,80}\b(?:oven|circuit)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "No—not as an ordinary unrestricted 7.4 kW cooktop sharing a 20 A oven circuit. It will usually need a dedicated circuit sized for the appliance, or a manufacturer-approved load-limited setting that a licensed electrician confirms is suitable. The electrician must check the cooktop instructions, oven load, cable, breaker, switchboard capacity and the difficult cable route before choosing the safe option.",
+      practicalSteps: [],
+      confidence: "high",
+    });
+  }
+
+  if (/\binduction\b/i.test(text)
+    && /\b(?:gas|too much power|efficient)\b/i.test(text)
+    && /\b(?:electrician|sparky|told|said|claim)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "No, that claim is not right. Induction cooking is generally more efficient at transferring energy into the pan than gas and puts less waste heat and combustion pollution into the kitchen. A high-power cooktop may still need a suitable dedicated circuit or a load-limited setting, so the electrical capacity must be checked; that wiring question does not make gas the more efficient cooking technology.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:do not|don't|dont|no)\s+suggest\s+(?:a\s+)?dehumidifier\b/i.test(text)
+    && /\b(?:condensation|window|glass|surface)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "To warm the room-side glass, start with a close-fitting honeycomb blind or thermal curtain with a pelmet while leaving enough drying space at the edges. Secondary glazing can lift the inside surface temperature more, and full double glazing with a thermally improved frame goes further. Check cold aluminium frames, spacers and installation edges because those thermal bridges can remain the first place condensation forms even after the glass improves.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\bdouble[- ]?glaz\w*\b/i.test(text)
+    && /\bcondensation\b/i.test(text)
+    && /\b(?:room side|inside|indoors?)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Not necessarily. Condensation on the room-side surface means indoor humidity has met glass that is still below the dew point; it does not automatically mean the double-glazed unit is faulty. Condensation between the sealed panes is different and can indicate a seal failure. Record indoor temperature and humidity, check exhaust and heating, and photograph the location; if moisture is between the panes, raise it with the installer under warranty.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:4|four)\s*(?:to|-)\s*(?:6|six)\s*kWh\b/i.test(text)
+    && /\bsolar\b/i.test(text)
+    && /\b(?:6\.3|8\.9|size|install)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "At only 4 to 6 kWh a day, 6.3 kW is already large for today's use. The 8.9 kW option can still be sensible if its extra cost is modest and you expect an EV, heat-pump hot water, electric heating or other electrification, but check roof shade, inverter size and the network export limit first. Compare the extra system cost with realistic extra self-use and export income; bigger is not automatically the better payback.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:50|fifty)\s*(?:cent|c)\b/i.test(text)
+    && /\bfeed[- ]?in tariff\b/i.test(text)
+    && /\b(?:broken|faulty|replace)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Do not authorise replacement until the 50 cent legacy feed-in tariff is protected. A whole-system change, inverter change or capacity increase may end the old tariff even when an insurer is paying. Ask the retailer, distributor and insurer for written confirmation of exactly what can be repaired or replaced without losing the remaining eight years, and have an accredited solar electrician document whether the failed panel can be matched or safely isolated.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:best|highest)\b[\s\S]{0,50}\bfeed[- ]?in tariff\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Do not choose a retailer from the highest feed-in tariff alone. Because you still import power at night, the night import rate, daily supply charge, time-of-use periods, export caps and any higher rates attached to the headline feed-in tariff can outweigh the extra solar credit. Compare the total yearly cost using your actual imports and exports; the best plan is the lowest annual bill, not the biggest advertised feed-in number.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\bEV charger\b/i.test(text)
+    && /\bthree[- ]?phase\b/i.test(text)
+    && /\bsolar\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Choose a smart, solar-aware EV charger rather than simply the fastest three-phase unit. It should follow solar surplus, schedule cheaper overnight charging and support site load management so the house does not exceed its supply. Check the vehicle's onboard AC charging limit because a 22 kW charger cannot make an 11 kW car charge faster. Have an electrician confirm the switchboard, protection, cable route and whether single- or three-phase charging best matches the 8 kW solar system.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b270\s*(?:litre|liter|L)\b/i.test(text)
+    && /\b(?:four|4)\s+(?:people|person|household)\b/i.test(text)
+    && /\b(?:brand|reliable|installer|service)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "A 270 litre heat-pump hot-water unit is often enough for four people, but confirm usable hot-water volume and recovery against consecutive showers, baths and morning or evening peaks. Judge reliability from the full warranty, labour coverage, local parts, qualified service network, noise and cold-weather recovery—not the brand name alone. For Melbourne, use licensed installers who service your postcode and compare itemised quotes for plumbing, electrical work, removal, drainage and commissioning; Surge can help send one enquiry to relevant local trades.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\bdehumidifier\b/i.test(text)
+    && /\b(?:instead of|replace|without)\b[\s\S]{0,50}\b(?:bathroom )?(?:exhaust|extractor) fan\b|\b(?:bathroom )?(?:exhaust|extractor) fan\b[\s\S]{0,50}\b(?:instead of|replace|without)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "No. Keep using the bathroom exhaust fan while showering and for a short time afterwards because it removes moisture from the home to outside. A dehumidifier can supplement it in winter or help dry the room, but it recirculates indoor air and should not replace a working, correctly ducted exhaust fan or required ventilation.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\baluminium frames?\b/i.test(text)
+    && /\b(?:not|without)\s+thermally broken\b|\bthermal(?:ly)? break\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "You generally cannot retrofit a true thermal break into an existing aluminium frame; it is built into the frame profile. Without replacing the windows, reduce the room-side impact with close-fitting honeycomb blinds or lined curtains and a pelmet, manage condensation at the cold frame edges, and consider properly detailed secondary glazing where the opening and drainage allow it. Do not cover weep holes or interfere with seals and hardware.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\bheat[- ]?pump\b[\s\S]{0,80}\b(?:11\s*(?:am|a\.m\.)|1\s*(?:pm|p\.m\.))\b|\b(?:11\s*(?:am|a\.m\.)|1\s*(?:pm|p\.m\.))\b[\s\S]{0,80}\bheat[- ]?pump\b/i.test(text)
+    && /\bhot[- ]?water\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "The efficiency difference between starting at 11 am and 1 pm is usually small. Use the window that captures reliable solar and still leaves enough recovery time before the household needs hot water; 11 am is safer if the tank may need a longer run, while 1 pm can suit a short top-up on a sunny day. Check the timer, boost behaviour and morning hot-water use before shifting it later.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\bdaily (?:electricity )?supply charge\b/i.test(text)
+    && /\bsolar\b/i.test(text)
+    && /\bbatter(?:y|ies)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Yes, solar can still be worthwhile because it reduces usage charges, but it does not remove the daily supply charge while the home remains grid-connected. Judge the battery separately: it only saves the difference between exporting spare solar and buying power later, and the higher supply charge is still paid either way. Recalculate solar and battery payback from the full current tariff and your actual daytime, evening and winter use.",
       practicalSteps: [],
     });
   }

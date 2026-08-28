@@ -10,9 +10,9 @@ export type SurgeCommunityBenchmarkCase = {
 
 /**
  * Anonymous, synthetic questions based on recurring household decision patterns
- * observed in a bounded 2026 MEEH community sample. They contain no member names,
- * contact details or copied posts. These cases test response behaviour, not the
- * truth of community claims.
+ * observed in a bounded 2018-2026 MEEH community sample. They contain no member
+ * names, contact details or copied posts. The wording is synthetic and tests
+ * response behaviour, not the truth of community claims.
  */
 export const SURGE_COMMUNITY_RESPONSE_BENCHMARK: SurgeCommunityBenchmarkCase[] = [
   {
@@ -122,6 +122,164 @@ export const SURGE_COMMUNITY_RESPONSE_BENCHMARK: SurgeCommunityBenchmarkCase[] =
     requiredAnswerGroups: [["saved answers"], ["condensation", "windows"], ["honeycomb blinds", "exhaust"]],
     rejectedPhrases: ["major end use", "staged whole-home diagnosis"],
     useSavedHomeContext: true,
+  },
+  {
+    id: "community-battery-low-grid-bill",
+    questionType: "battery value with household numbers",
+    question: "We import 2,750 kWh a year, export 5,100 kWh and only pay about $690 a year for electricity after our solar. Is a battery likely to save enough to be worth it?",
+    requiredAnswerGroups: [["$690"], ["maximum", "ceiling", "cannot save more"], ["battery price", "payback", "warranty"]],
+    rejectedPhrases: ["it depends", "what exact model", "staged diagnosis"],
+  },
+  {
+    id: "community-battery-finance-quote",
+    questionType: "financed solar and battery quote",
+    question: "I've been offered 20 kW of solar and an 8.3 kWh battery for $23,000, paid off over seven years. Is that a decent deal?",
+    requiredAnswerGroups: [["$23,000"], ["finance", "repayment", "interest"], ["20 kW", "8.3 kWh"], ["yearly saving", "payback"]],
+    rejectedPhrases: ["price alone", "attach the quote"],
+  },
+  {
+    id: "community-hpwh-finance-claim",
+    questionType: "hot-water finance and savings claim",
+    question: "A 270 litre heat-pump hot-water quote is $4,664 after rebates. They say it is $38 a month for six years and will save $800 a year in gas. Does that add up?",
+    requiredAnswerGroups: [["$38", "six years"], ["$2,736", "does not equal", "doesn't equal"], ["$4,664"], ["gas supply charge", "actual gas"]],
+    rejectedPhrases: ["attach the quote", "exact model before"],
+  },
+  {
+    id: "community-hpwh-quote-spread",
+    questionType: "same-product quote spread",
+    question: "I have quotes from $1,000 to $5,000 for what looks like the same heat-pump hot-water unit. Why is the difference so large?",
+    requiredAnswerGroups: [["rebate", "certificate"], ["electrical", "plumbing"], ["warranty", "after-sales"], ["same scope", "itemised"]],
+    rejectedPhrases: ["price alone", "attach the quote"],
+  },
+  {
+    id: "community-ducted-airflow-noise",
+    questionType: "ducted reverse-cycle troubleshooting",
+    question: "Our new ducted reverse-cycle system blows very hard and is noisy. It is set to 16 degrees in winter. Is that normal or should I call the installer?",
+    requiredAnswerGroups: [["heating mode"], ["20", "21"], ["open", "outlets", "zones"], ["installer", "commission"]],
+    rejectedPhrases: ["compare brands", "room load", "floor area"],
+  },
+  {
+    id: "community-ducted-not-heating",
+    questionType: "new system performance fault",
+    question: "Our new 23 kW ducted reverse-cycle system only raises the house by one degree and the air at the vents is about 30 to 35 degrees. The installer says it is fine. Is that normal?",
+    requiredAnswerGroups: [["not normal", "not accept"], ["installer", "commission"], ["return-air", "supply-air", "airflow"], ["written"]],
+    rejectedPhrases: ["buy a bigger heater", "which room"],
+  },
+  {
+    id: "community-ducted-versus-splits",
+    questionType: "heating system choice",
+    question: "Should I replace old gas ducted heating with electric ducted reverse cycle or separate split systems? We mostly use three rooms.",
+    requiredAnswerGroups: [["split systems", "separate splits"], ["three rooms", "rooms you use"], ["duct", "whole home"], ["running cost", "efficient"]],
+    rejectedPhrases: ["it depends", "compare delivered heat"],
+  },
+  {
+    id: "community-induction-shared-circuit",
+    questionType: "induction electrical capacity",
+    question: "Can a 7.4 kW induction cooktop share the existing 20 amp circuit with my oven? Rewiring would be difficult.",
+    requiredAnswerGroups: [["no", "unlikely"], ["dedicated circuit", "load-limited"], ["electrician"], ["switchboard", "cable"]],
+    rejectedPhrases: ["try it", "gas is more efficient"],
+  },
+  {
+    id: "community-induction-efficiency-myth",
+    questionType: "trade claim challenge",
+    question: "An electrician told me induction uses too much power and gas cooking is more efficient. Is that right?",
+    requiredAnswerGroups: [["no", "not right", "incorrect"], ["induction"], ["efficient", "less heat"], ["electrical capacity", "circuit"]],
+    rejectedPhrases: ["portable resistance heater", "gas may be best"],
+  },
+  {
+    id: "community-condensation-no-dehumidifier",
+    questionType: "explicitly constrained condensation advice",
+    question: "Please do not suggest a dehumidifier. I already ventilate and control moisture. How can I make the inside surface of my bedroom windows warmer to reduce condensation?",
+    requiredAnswerGroups: [["surface", "glass"], ["secondary glazing", "double glazing"], ["honeycomb", "thermal curtain", "pelmet"], ["frame", "edge"]],
+    rejectedPhrases: ["get a dehumidifier", "run a dehumidifier", "start with moisture"],
+  },
+  {
+    id: "community-double-glazing-condensation",
+    questionType: "new-window condensation diagnosis",
+    question: "Our new double-glazed windows have condensation on the room side, but not between the panes. Does that mean the windows are faulty?",
+    requiredAnswerGroups: [["not necessarily", "does not automatically"], ["room side", "room-side", "inside surface"], ["between the panes", "seal failure"], ["humidity", "surface temperature"]],
+    rejectedPhrases: ["replace every window", "installer fault"],
+  },
+  {
+    id: "community-solar-low-use-sizing",
+    questionType: "solar oversizing decision",
+    question: "We only use 4 to 6 kWh a day. Should we install 6.3 kW or 8.9 kW of solar?",
+    requiredAnswerGroups: [["4 to 6 kWh", "low use"], ["export limit"], ["future", "electrification", "EV"], ["extra cost", "payback"]],
+    rejectedPhrases: ["bigger is always better", "panel count alone"],
+  },
+  {
+    id: "community-legacy-fit-broken-panel",
+    questionType: "legacy feed-in tariff protection",
+    question: "One panel in my old 3 kW solar system is broken. We still have eight years on a 50 cent feed-in tariff. The insurer may replace the whole system. What should I watch out for?",
+    requiredAnswerGroups: [["50 cent", "legacy feed-in tariff"], ["do not", "before replacing"], ["insurer", "retailer", "distributor"], ["written confirmation"]],
+    rejectedPhrases: ["replace the whole system", "outdated panels"],
+  },
+  {
+    id: "community-free-hours-winter",
+    questionType: "free-hours tariff with battery",
+    question: "We have 10 kW solar and a 20 kWh battery, but most of our bill is winter heating. Is a three-hour free-power plan likely to help?",
+    requiredAnswerGroups: [["yes", "can help", "may help"], ["winter"], ["20 kWh", "battery"], ["whole tariff", "supply", "peak", "export"]],
+    rejectedPhrases: ["flat rate is simpler", "it depends"],
+  },
+  {
+    id: "community-high-fit-retailer",
+    questionType: "solar retailer comparison",
+    question: "Which electricity retailer has the best solar feed-in tariff? We still import power at night.",
+    requiredAnswerGroups: [["highest feed-in tariff", "headline feed-in"], ["night", "import"], ["supply charge"], ["yearly cost", "annual cost"]],
+    rejectedPhrases: ["choose the highest", "current provider list"],
+  },
+  {
+    id: "community-ev-three-phase-solar",
+    questionType: "EV charger selection",
+    question: "We have three-phase power, 8 kW of solar and no battery. What sort of home EV charger should we install?",
+    requiredAnswerGroups: [["solar-aware", "solar surplus"], ["three-phase"], ["vehicle", "onboard charger"], ["load management", "switchboard"]],
+    rejectedPhrases: ["fastest charger", "daily kilometres first"],
+  },
+  {
+    id: "community-noisy-system-follow-up",
+    questionType: "short equipment follow-up",
+    question: "So should I call the installer?",
+    requiredAnswerGroups: [["yes"], ["heating mode", "fan"], ["installer"], ["commission", "airflow"]],
+    rejectedPhrases: ["what topic", "tell me more about your home"],
+    recentTurns: [
+      { role: "user", content: "Our new ducted reverse-cycle system is very noisy and blows hard. It is set to 16 degrees in winter." },
+      { role: "assistant", content: "Check the basic controls and airflow before deciding whether it is faulty." },
+    ],
+  },
+  {
+    id: "community-hpwh-multipart",
+    questionType: "multi-part hot-water decision",
+    question: "Is a 270 litre heat-pump hot-water unit big enough for four people, how do I judge whether the brand is reliable, and how do I find an installer that services Melbourne?",
+    requiredAnswerGroups: [["270 litre", "four people"], ["recovery", "shower"], ["warranty", "parts", "service"], ["Melbourne", "installer", "trade"]],
+    rejectedPhrases: ["answer one question", "exact model only"],
+  },
+  {
+    id: "community-bathroom-fan-versus-dehumidifier",
+    questionType: "bathroom moisture control",
+    question: "Can I use a dehumidifier instead of the bathroom exhaust fan in winter?",
+    requiredAnswerGroups: [["no", "should not replace"], ["exhaust fan"], ["outside"], ["dehumidifier", "supplement"]],
+    rejectedPhrases: ["yes, permanently", "turn off the fan"],
+  },
+  {
+    id: "community-aluminium-frame-thermal-bridge",
+    questionType: "window-frame improvement",
+    question: "Our double glazing has aluminium frames that are not thermally broken. Can we fix the cold frames without replacing all the windows?",
+    requiredAnswerGroups: [["cannot", "not practical", "thermal break"], ["frame"], ["honeycomb", "curtain"], ["condensation", "secondary"]],
+    rejectedPhrases: ["replace every window now", "seal the glass"],
+  },
+  {
+    id: "community-hpwh-solar-timing",
+    questionType: "heat-pump hot-water scheduling",
+    question: "Should I start my heat-pump hot-water system at 11 am or wait until 1 pm so the outside air is warmer and solar is still producing?",
+    requiredAnswerGroups: [["11 am", "1 pm"], ["solar"], ["recovery", "hot water"], ["small", "difference"]],
+    rejectedPhrases: ["exact model", "night tariff"],
+  },
+  {
+    id: "community-daily-supply-charge",
+    questionType: "supply charge and upgrade value",
+    question: "Now the daily electricity supply charge has increased, are solar and batteries still worth it?",
+    requiredAnswerGroups: [["supply charge"], ["still pay", "does not remove"], ["solar"], ["battery", "separate"]],
+    rejectedPhrases: ["goalposts", "it depends"],
   },
   {
     id: "community-casual-quote-follow-up",

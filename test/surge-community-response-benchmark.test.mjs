@@ -69,6 +69,7 @@ function includesAny(text, terms) {
 test("community-derived questions stay direct, relevant and useful without a model call", async () => {
   assert.ok(SAVED_PLAN);
   assert.equal(SURGE_COMMUNITY_RESPONSE_BENCHMARK.length >= 12, true);
+  const failures = [];
 
   for (const entry of SURGE_COMMUNITY_RESPONSE_BENCHMARK) {
     const response = await handleEnergyAssistantRequest(requestFor(entry), {
@@ -79,16 +80,24 @@ test("community-derived questions stay direct, relevant and useful without a mod
     const payload = await response.json();
     const content = payload.reply.content;
 
-    assert.equal(surgeAnswerMatchesQuestionIntent(entry.question, content), true, entry.id);
+    if (!surgeAnswerMatchesQuestionIntent(entry.question, content)) {
+      failures.push(`${entry.id}: answer drifted from the question`);
+    }
     for (const group of entry.requiredAnswerGroups) {
-      assert.equal(includesAny(content, group), true, `${entry.id}: ${group.join(" or ")}`);
+      if (!includesAny(content, group)) {
+        failures.push(`${entry.id}: missing ${group.join(" or ")}`);
+      }
     }
     for (const rejected of entry.rejectedPhrases || []) {
-      assert.equal(content.toLowerCase().includes(rejected.toLowerCase()), false, `${entry.id}: ${rejected}`);
+      if (content.toLowerCase().includes(rejected.toLowerCase())) {
+        failures.push(`${entry.id}: included rejected phrase ${rejected}`);
+      }
     }
-    assert.equal(payload.reply.quickReplies.length, 0, entry.id);
-    assert.equal(content.split(/\s+/u).filter(Boolean).length <= 150, true, entry.id);
+    if (payload.reply.quickReplies.length) failures.push(`${entry.id}: returned quick replies`);
+    if (content.split(/\s+/u).filter(Boolean).length > 150) failures.push(`${entry.id}: exceeded 150 words`);
   }
+
+  assert.equal(failures.length, 0, failures.join("\n"));
 });
 
 test("off-topic grounded and model answers cannot replace the direct draught answer", async () => {
