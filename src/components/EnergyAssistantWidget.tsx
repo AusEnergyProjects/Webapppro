@@ -289,6 +289,15 @@ const SAFE_EXACT_ACTIONS = new Set([
   "/surge",
 ]);
 
+const RESET_LEAD_CONSENT = {
+  serviceConsent: false,
+  shareName: false,
+  sharePhone: false,
+  shareAddress: false,
+  shareKnownPlanFacts: false,
+  marketingConsent: false,
+};
+
 const EMPTY_LEAD: LeadDraft = {
   destination: "",
   name: "",
@@ -309,12 +318,7 @@ const EMPTY_LEAD: LeadDraft = {
   bestContactTime: "business-hours",
   quoteAnswers: {},
   message: "",
-  serviceConsent: false,
-  shareName: false,
-  sharePhone: false,
-  shareAddress: false,
-  shareKnownPlanFacts: false,
-  marketingConsent: false,
+  ...RESET_LEAD_CONSENT,
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1114,12 +1118,7 @@ export function EnergyAssistantWidget({
         postcode: continuingMatchedTradeDraft ? current.postcode : "",
         suburb: continuingMatchedTradeDraft ? current.suburb : "",
         state: continuingMatchedTradeDraft ? current.state : "",
-        serviceConsent: false,
-        shareName: false,
-        sharePhone: false,
-        shareAddress: false,
-        shareKnownPlanFacts: false,
-        marketingConsent: false,
+        ...RESET_LEAD_CONSENT,
       };
     });
     resetLeadAttempt();
@@ -1133,12 +1132,7 @@ export function EnergyAssistantWidget({
     updateLead((current) => ({
       ...current,
       destination,
-      serviceConsent: false,
-      shareName: false,
-      sharePhone: false,
-      shareAddress: false,
-      shareKnownPlanFacts: false,
-      marketingConsent: false,
+      ...RESET_LEAD_CONSENT,
     }));
     setLeadStage("scope");
   };
@@ -2488,6 +2482,11 @@ export function EnergyAssistantWidget({
                           {naturalFollowUpFor(message, context.audience) && (
                             <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
                           )}
+                          {message.directAnswer.includes("Get competing quotes") && !leadOpen && (
+                            <button type="button" className={styles.reviewAnswer} onClick={openMatchedTradesLeadForm}>
+                              Get competing quotes
+                            </button>
+                          )}
                           <button
                             type="button"
                             className={styles.reviewAnswer}
@@ -2568,7 +2567,7 @@ export function EnergyAssistantWidget({
                   <span>{serviceInterest ? "Independent trade matching" : "Optional human help"}</span>
                   <h3>{serviceInterest ? "Get competing quotes" : "Only if you want it"}</h3>
                   <p>{serviceInterest
-                    ? "Australian Energy Assessments does not favour trades, brands or products. Start one enquiry to every approved trade matching the service and area."
+                    ? "We do not favour trades or products. One enquiry goes to every approved trade matching the service and area."
                     : "Your chat and private plan stay private unless you deliberately choose a follow-up path."}</p>
                   <button type="button" onClick={serviceInterest ? openMatchedTradesLeadForm : openLeadForm}>
                     {serviceInterest ? "Start trade enquiry" : "See optional help paths"}

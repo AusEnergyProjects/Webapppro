@@ -846,13 +846,14 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /setLeadStage\("scope"\)/);
   assert.match(widget, /serviceInterest \? "Get competing quotes" : "See optional help paths"/);
   assert.match(widget, /serviceInterest \? "Start trade enquiry" : "See optional help paths"/);
+  assert.match(widget, /message\.directAnswer\.includes\("Get competing quotes"\)[\s\S]{0,320}onClick=\{openMatchedTradesLeadForm\}[\s\S]{0,160}Get competing quotes/);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
   assert.match(widget, /Based on your saved context/);
   assert.match(widget, /Quick guidance/);
   assert.match(widget, /className=\{styles\.guidanceRail\}/);
   assert.match(widget, /className=\{styles\.mobileGuidance\}/);
   assert.match(widget, /Your chat and private plan stay private unless you deliberately choose a follow-up path/);
-  assert.match(widget, /does not favour trades, brands or products/);
+  assert.match(widget, /We do not favour trades or products/);
   assert.match(widget, /every approved trade matching the service and area/);
   assert.match(widget, /serviceInterest \? openMatchedTradesLeadForm : openLeadForm/);
   assert.doesNotMatch(widget, /Keep exploring or change subject/);
