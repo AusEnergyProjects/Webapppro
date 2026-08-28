@@ -9,6 +9,7 @@
     "audit:customer-plan-pdf": "node scripts/audit-customer-plan-pdf.mjs",
     "audit:public-performance": "node scripts/audit-public-performance-budgets.mjs",
     "audit:surge-conversation-quality": "node --experimental-strip-types scripts/report-surge-conversation-quality.mjs",
+    "audit:surge-community-responses": "node --experimental-strip-types --test test/surge-community-response-benchmark.test.mjs",
     "audit:surge-source-approvals": "node --experimental-strip-types scripts/audit-energy-assistant-source-approvals.mjs",
     "audit:surge-source-custody": "node --experimental-strip-types scripts/audit-energy-assistant-official-source-custody.mjs",
     "audit:surge-assessor-education": "node --experimental-strip-types scripts/audit-surge-assessor-education.mjs",
@@ -25,7 +26,7 @@
     "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test",
     "test:integration": "node --experimental-strip-types --test test/australian-postcodes.test.mjs test/direct-trade-matching.test.mjs test/gas-tariff-engine.test.mjs test/home-energy-plan.test.mjs test/release-integrity.test.mjs test/trade-payment-reconciliation.test.mjs",
     "db:check": "node scripts/check-migrations.mjs",
-    "validate": "npm run typecheck && npm run lint && npm run audit:surge-source-approvals && npm run audit:surge-source-custody && npm run audit:surge-assessor-education && npm run audit:surge-conversation-quality && npm run rehearse:surge-continuity && npm run test:integration && npm test && npm run db:check && npm run audit:customer-plan-pdf && npm run build",
+    "validate": "npm run typecheck && npm run lint && npm run audit:surge-source-approvals && npm run audit:surge-source-custody && npm run audit:surge-assessor-education && npm run audit:surge-conversation-quality && npm run audit:surge-community-responses && npm run rehearse:surge-continuity && npm run test:integration && npm test && npm run db:check && npm run audit:customer-plan-pdf && npm run build",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

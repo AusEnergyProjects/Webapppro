@@ -205,7 +205,7 @@ export function isSurgeElectricSaulQuestion(value: string) {
 }
 
 const SURGE_LOCAL_SERVICE_REQUEST_PATTERNS = [
-  /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?)\b[\s\S]{0,120}\b(?:service|cover|travel\s+to|work\s+in|install\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+  /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?)\b[\s\S]{0,120}\b(?:services?|covers?|travels?\s+to|works?\s+in|installs?\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
   /\b(?:installers?|companies?|providers?|contractors?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
   /\b(?:anybody|anyone|someone|somebody|who|installers?|companies?|contractors?|tradies?|electricians?|plumbers?)\b[^.!?\n]{0,100}\b(?:install|put|fit|replace|repair|quote)\w*\b[^.!?\n]{0,100}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b/i,
   /\b(?:looking for|find|need|want)\b[^.!?\n]{0,80}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b[^.!?\n]{0,80}\b(?:installer|company|contractor|tradie|electrician|plumber|quote)\b/i,
@@ -1227,6 +1227,10 @@ function decisionPlaybookId(
   for (const prior of [...priorUserMessages].slice(-8).reverse()) {
     const priorId = directPlaybookId(prior, audience);
     if (priorId && (usePriorContext || isLikelyPlaybookFollowUp(priorId, query))) return priorId;
+  }
+  if (/\$\s*\d[\d,.]*\s+per\s+certificate\b/i.test(query)
+    && priorUserMessages.some((message) => /\b(?:solar|PV|panels?|STCs?|solar rebate)\b/i.test(message))) {
+    return "solar_stc";
   }
   return null;
 }
@@ -2967,11 +2971,14 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (/\b(?:SolarQuotes|CHOICE|Renew|Rewiring Australia|Brand[- ]?[A-Z0-9]+)\b/i.test(query)
-    && /\b(?:best|recommend|endorse|rank|pick|choose|trust|what does .* say)\b/i.test(query)) {
+  if (((/\b(?:SolarQuotes|CHOICE|Renew|Rewiring Australia|Brand[- ]?[A-Z0-9]+)\b/i.test(query)
+      && /\b(?:best|recommend|endorse|rank|pick|choose|trust|what does .* say)\b/i.test(query))
+    || (/\b(?:brand|manufacturer|make|model)\b/i.test(query)
+      && /\b(?:best|recommend|endorse|rank|pick|choose|trust)\b/i.test(query)))
+    && !/\b(?:ignore|bypass|override)\b[^.!?\n]{0,80}\b(?:scope|rules?|instructions?)\b/i.test(query)) {
     return structured("products_ratings", {
       directAnswer:
-        "I will not repeat a commercial or editorial brand endorsement or choose a product from a third party's ranking. I can compare exact user-supplied options independently using the same official eligibility, capacity, performance, site-design, safety, warranty, service and complete installed-price evidence. An approved register or favourable review proves only its stated fact, not overall quality or site suitability.",
+        "Surge AI does not recommend, rank or endorse brands or manufacturers. I will not repeat a commercial or editorial brand endorsement. I can compare exact user-supplied options independently using official eligibility, capacity, performance, site fit, safety, warranty, service and complete installed-price evidence. An approved register or favourable review proves only its stated fact, not overall quality or suitability for the home.",
       status: "needs_context",
       citations: officialCitationsById(["energy-rating-product-register", "accc-consumer-guarantees"]),
       confidence: "high",
@@ -3011,7 +3018,8 @@ export function composeEnergyAssistantAnswer(
   const ordinaryRoomHeatingChoice = /\b(?:most\s+efficient|efficient|best|cheapest|running\s+cost|cost\s+less)\b/i.test(query)
     && /\b(?:heat|heating|heaters?|reverse[- ]cycle|air\s+conditioner)\b/i.test(query)
     && /\b(?:portable|plug[- ]?in|electric\s+heaters?|reverse[- ]cycle|air\s+conditioner|gas)\b/i.test(query)
-    && !/\b(?:electricity|energy|retailer)\s+plans?\b|\btariffs?\b|\bfeed[- ]?in\b|\bFIT\b|\bdaily\s+(?:supply\s+)?(?:charge|rate)\b|\b(?:free\s+hours?|hours?\s+free)\b/i.test(query);
+    && !/\b(?:electricity|energy|retailer)\s+plans?\b|\btariffs?\b|\bfeed[- ]?in\b|\bFIT\b|\bdaily\s+(?:supply\s+)?(?:charge|rate)\b|\b(?:free\s+hours?|hours?\s+free)\b/i.test(query)
+    && !/\b(?:brand|manufacturer|model|recommend|rank|endorse)\b/i.test(query);
   if (ordinaryRoomHeatingChoice) {
     return structured("rcac", {
       directAnswer:
@@ -4853,7 +4861,43 @@ export function composeEnergyAssistantAnswer(
       : currentDomainIntent;
   const namedCertificateMatches = namedCertificatePrograms(query);
   const namedCertificateIntent = namedCertificateRequestIntent(query);
+  const duplicateStcDiscountQuestion = /\bSTCs?\b/i.test(query)
+    && (/\b(?:another|second|twice|double|duplicat(?:e|ed|ion)|two|both|again|already)\b[\s\S]{0,120}\b(?:rebate|discount|benefit|deduct|deducted|subtract|subtracts|subtracted|subtraction|line item|quote line|amount|value|GST)\b/i.test(query)
+      || /\b(?:before|pre)\s+GST\b[\s\S]{0,100}\b(?:after|post)\s+GST\b/i.test(query)
+      || /\bSTC\s+(?:rebate|discount)\b[^\n]{0,80}\bSTC\s+(?:rebate|discount)\b/i.test(query));
+  const certificateStackingQuestion = (/(?:\b(?:stack|stacking|combine|combined|both|alongside|as well as|also use|also claim|use together|claim twice|double count)\b)/i.test(query)
+      || /\bclaim\b[^\n]{0,80}\bsame\b/i.test(query)
+      || /\b(?:state|NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b[^\n]{0,80}\b(?:rebate|incentive|discount|programme|program|scheme)\b[^\n]{0,100}\b(?:federal|STCs?|SRES|battery discount)\b/i.test(query)
+      || /\b(?:two|multiple)\s+(?:state\s+)?(?:rebates?|grants?|schemes?|programmes?|programs?)\b[^\n]{0,100}\b(?:STCs?|VEECs?|ESCs?|PRCs?|certificates?)\b/i.test(query))
+    && /\b(?:STCs?|VEECs?|ESCs?|PRCs?|certificates?|rebates?|grants?|loans?|incentives?|schemes?|programmes?|programs?)\b/i.test(query);
   const stableEducationCard = reviewedStableEducationCard(retrievalQuery, options.audience);
+  if (/\b(?:stock|share) market\b|\bshare price\b/i.test(query)) {
+    return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
+      directAnswer:
+        "Surge AI only covers Australian home energy and upgrades. It cannot answer stock-market or share-price questions. Tell me the home-energy, bill, equipment, rebate, quote or trade decision you want help with.",
+      status: "needs_context",
+      citations: [],
+      confidence: "high",
+      assumptions: [],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+  if (/\b(?:price|cost)\b[^.!?\n]{0,60}\bconcrete\b|\bconcrete\b[^.!?\n]{0,60}\b(?:price|cost)\b/i.test(query)
+    && !/\b(?:home energy|insulation|thermal|heat|cool|slab performance)\b/i.test(query)) {
+    return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
+      directAnswer:
+        "Surge AI only covers Australian home energy and upgrades. A current concrete price is a general construction-market question, so I cannot give a reliable price here. I can help if the decision is about a slab's insulation, heating, cooling or effect on home comfort.",
+      status: "needs_context",
+      citations: [],
+      confidence: "high",
+      assumptions: [],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
   if (domainIntent === "out" && !namedCertificateIntent && stableEducationCard) {
     return structuredReviewedEducation(stableEducationCard, retrievalQuery);
   }
@@ -4887,7 +4931,7 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (namedCertificateIntent && namedCertificateMatches.length > 1) {
+  if (namedCertificateIntent && namedCertificateMatches.length > 1 && !certificateStackingQuestion) {
     return structured("rebates_certificates", {
       directAnswer:
         "Those names refer to separate governed programmes. I cannot combine their certificate values, counts or discounts into one generic answer. Tell me the installation state, exact product or activity, replaced equipment and which programme you want checked first.",
@@ -4905,6 +4949,7 @@ export function composeEnergyAssistantAnswer(
     });
   }
   if (namedCertificateIntent && namedCertificateMatches.length === 1
+    && !duplicateStcDiscountQuestion && !certificateStackingQuestion
     && !(namedCertificateIntent === "count" && playbookId === "solar_stc")) {
     const namedProgram = namedCertificateMatches[0];
     const locationConversation = NAMED_CERTIFICATE_PROGRAMS.reduce(
@@ -5610,11 +5655,7 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (/\bSTCs?\b/i.test(query)
-    && (/\b(?:another|second|twice|double|duplicat(?:e|ed|ion)|two|both|again|already)\b/i.test(query)
-      && /\b(?:rebate|discount|benefit|deduct|deducted|subtract|subtracts|subtracted|subtraction|line item|quote line|amount|value|GST)\b/i.test(query)
-      || /\b(?:before|pre)\s+GST\b[\s\S]{0,100}\b(?:after|post)\s+GST\b/i.test(query)
-      || /\bSTC\s+(?:rebate|discount)\b[^\n]{0,80}\bSTC\s+(?:rebate|discount)\b/i.test(query))) {
+  if (duplicateStcDiscountQuestion) {
     return structured("rebates_certificates", {
       directAnswer:
         "Do not accept two reductions as separate STC benefits without a written reconciliation. One eligible installation creates one governed certificate entitlement for that system and date. A quote may show an estimated STC value, assignment to an agent and the resulting customer discount in more than one place, but it must not subtract the same value twice. Ask for the certificate quantity, the stated value per STC, the total assigned discount and a revised subtotal that proves whether the second line is only explanatory or a duplicate.",
@@ -5655,11 +5696,7 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if ((/\b(?:stack|stacking|combine|combined|both|alongside|as well as|also use|also claim|use together|claim twice|double count)\b/i.test(query)
-      || /\bclaim\b[^\n]{0,80}\bsame\b/i.test(query)
-      || /\b(?:state|NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b[^\n]{0,80}\b(?:rebate|incentive|discount|programme|program|scheme)\b[^\n]{0,100}\b(?:federal|STCs?|SRES|battery discount)\b/i.test(query)
-      || /\b(?:two|multiple)\s+(?:state\s+)?(?:rebates?|grants?|schemes?|programmes?|programs?)\b[^\n]{0,100}\b(?:STCs?|VEECs?|ESCs?|PRCs?|certificates?)\b/i.test(query))
-    && /\b(?:STCs?|VEECs?|ESCs?|PRCs?|certificates?|rebates?|grants?|loans?|incentives?|schemes?|programmes?|programs?)\b/i.test(query)) {
+  if (certificateStackingQuestion) {
     return structured("rebates_certificates", {
       directAnswer:
         "Do not assume two schemes can be stacked or applied to the same cost, equipment or energy outcome. Each current rule must expressly allow the other benefit, and the quote must reconcile the eligible cost, certificate assignment, rebate, minimum payment and customer contribution without double counting. If either current rule or application form is missing, keep the combined claim blocked rather than treating silence as permission.",

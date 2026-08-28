@@ -17,6 +17,63 @@ type SimpleAnswer = {
   confidence?: EnergyAssistantAnswer["confidence"];
 };
 
+const SURGE_QUESTION_INTENT_RULES: ReadonlyArray<{
+  question: RegExp;
+  answer: RegExp;
+}> = [
+  {
+    question: /\b(?:draughts?|drafts?|air leaks?|weather seals?|door snakes?)\b/i,
+    answer: /\b(?:draughts?|drafts?|air leaks?|moving air|gaps?|seals?|weather strips?|door snakes?)\b/i,
+  },
+  {
+    question: /\b(?:honeycomb blinds?|cellular blinds?|thermal curtains?|pelmets?)\b/i,
+    answer: /\b(?:honeycomb|cellular|blinds?|curtains?|pelmets?|window coverings?)\b/i,
+  },
+  {
+    question: /\blow[- ]?e\b/i,
+    answer: /\b(?:low[- ]?e|coating|glass|glazing|surface)\b/i,
+  },
+  {
+    question: /\b(?:abolish(?:ment)?|disconnect(?:ion)?|remove|lock|plug)\b[^.!?\n]{0,80}\b(?:gas|meter|connection|service)\b|\b(?:gas|meter|connection|service)\b[^.!?\n]{0,80}\b(?:abolish(?:ment)?|disconnect(?:ion)?|remove|lock|plug)\b/i,
+    answer: /\b(?:gas|meter|connection|service)\b/i,
+  },
+  {
+    question: /\b(?:heat[- ]?pump hot[- ]?water|hot[- ]?water heat[- ]?pump|hot[- ]?water system|water heater)\b/i,
+    answer: /\b(?:heat[- ]?pump|hot[- ]?water|tank|water heater)\b/i,
+  },
+  {
+    question: /\b(?:flat[- ]?rate|single[- ]?rate|retailer|electricity plan|energy plan|tariffs?|feed[- ]?in|free hours?)\b/i,
+    answer: /\b(?:flat[- ]?rate|single[- ]?rate|retailer|electricity plan|energy plan|tariffs?|rates?|bill|free hours?|supply charge|export)\b/i,
+  },
+  {
+    question: /\b(?:price|cost|quote|payback)\b[^.!?\n]{0,80}\bbatter(?:y|ies)\b|\bbatter(?:y|ies)\b[^.!?\n]{0,80}\b(?:price|cost|quote|payback)\b/i,
+    answer: /\b(?:batter(?:y|ies)|storage)\b/i,
+  },
+  {
+    question: /\b(?:solar panels?|panels?)\b[^.!?\n]{0,100}\b(?:outdated|obsolete|replace|fault|poor output)\b|\b(?:outdated|obsolete|replace)\b[^.!?\n]{0,100}\b(?:solar panels?|panels?)\b/i,
+    answer: /\b(?:solar|panels?|inverter|roof|generation|export)\b/i,
+  },
+  {
+    question: /\b(?:condensation|mould|mold|humidity)\b/i,
+    answer: /\b(?:condensation|mould|mold|moisture|humidity|damp)\b/i,
+  },
+  {
+    question: /\b(?:insulation|batts?)\b/i,
+    answer: /\b(?:insulation|batts?|ceiling|roof)\b/i,
+  },
+] as const;
+
+/**
+ * Rejects answers that drift into a different home-energy category. The rules
+ * intentionally cover broad household decisions rather than individual test
+ * phrases, and every recognised material topic in a multi-part question must
+ * remain visible in the answer.
+ */
+export function surgeAnswerMatchesQuestionIntent(message: string, answerText: string) {
+  const relevantRules = SURGE_QUESTION_INTENT_RULES.filter(({ question }) => question.test(message));
+  return relevantRules.every(({ answer: expected }) => expected.test(answerText));
+}
+
 function conversationText(message: string, recentTurns: readonly RecentTurn[]) {
   const priorUserText = recentTurns
     .filter((turn) => turn.role === "user")
@@ -80,11 +137,67 @@ export function composeSurgeSimpleAnswer(
 
   if (isThreePhaseSupplyUpgradeQuestion(text)) return null;
 
+  if (/\b(?:draughts?|drafts?|air leaks?)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Start by sealing the gaps that are actually letting air into the room. Check around opening windows, the door and obvious fixed cracks on a windy day. Use removable weather seals or a door snake, and suitable sealant only on fixed gaps. Do not block exhausts or required vents. If the glass feels cold but no air is moving, close-fitting honeycomb blinds or thermal curtains will help more than extra sealing.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:flat[- ]?rate|single[- ]?rate)\b/i.test(text) && /\b(?:plan|tariff|rate|electricity|energy|pros?|cons?|good|worth|better)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "A flat-rate electricity plan is simple and predictable, but it can cost more if you can move a lot of use into cheap or free hours. For a home with solar or a battery, the daily supply charge, evening import rate and solar export rate can matter more than the headline flat rate. Compare the yearly cost using your actual electricity use, not the retailer's example household.",
+      practicalSteps: [],
+      suggestedQuestion: "Do you have a recent bill or a full year of electricity use to compare?",
+    });
+  }
+
+  if (/\b(?:abolish(?:ment)?|disconnect(?:ion)?|remove|lock|plug)\b[^.!?\n]{0,80}\b(?:gas|meter|connection|service)\b|\b(?:gas|meter|connection|service)\b[^.!?\n]{0,80}\b(?:abolish(?:ment)?|disconnect(?:ion)?|remove|lock|plug)\b/i.test(text)) {
+    const quotedPrice = text.match(/\$\s*[\d,]+(?:\.\d{1,2})?/)?.[0]?.replace(/\s+/g, "") || "";
+    return answer(base, {
+      directAnswer: quotedPrice
+        ? `${quotedPrice} is high enough that I would not accept it without an itemised explanation and another option. A commercial site can cost more than a house because the distributor may require extra work. If the goal is only to stop using gas, ask whether a meter lock or disconnection is allowed and cheaper. If gas will never be used again, compare that with permanent abolishment.`
+        : "A meter lock or disconnection can be the cheaper choice when you only need gas use to stop. Full abolishment permanently removes the service and is more appropriate when gas will never be needed again, but it can involve more distributor work and cost. Ask for both options in writing before approving the job.",
+      practicalSteps: [],
+      suggestedQuestion: "Is the price from the gas distributor or from a contractor?",
+    });
+  }
+
+  if (/\b(?:five|5)[ -]?year[- ]?old\b[^.!?\n]{0,100}\b(?:solar|panels?)\b|\b(?:solar|panels?)\b[^.!?\n]{0,100}\b(?:outdated|obsolete|too old|replace)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Five-year-old solar panels are not automatically outdated. Do not replace working panels only because a salesperson says they are old. Ask for measured evidence of a fault or poor output, and get an independent quote for any battery that can work with the existing system. A full replacement makes sense only when the evidence and itemised savings justify it.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\blow[- ]?e\b/i.test(text) && /\b(?:surface|coating|glass|glazing|window)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Surface 4 is the room-side face of the inner pane in a double-glazed unit. A suitable exposed low-E coating can be used there, but not every low-E product is designed for that position. Ask the supplier for the full glass build-up and written confirmation of cleaning limits, condensation performance and warranty. Do not approve it from the words 'surface 4' alone.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:honeycomb|cellular)\b/i.test(text)
+    && /\b(?:tilt(?:ed)?[- ]?and[- ]?turn|tilt[- ]?turn)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Yes, honeycomb blinds can work on tilt-and-turn windows or doors, but the mounting system matters. Use a no-drill or manufacturer-approved system that moves with the opening section, and check the handle, hinge and seal clearance. Do not drill into the glazing bead or frame unless the window manufacturer confirms in writing that it will not damage the glass, drainage or warranty.",
+      practicalSteps: [],
+    });
+  }
+
+  if (/\b(?:solar|battery)\b/i.test(text) && /\b(?:mortgage|offset|home loan)\b/i.test(text)) {
+    return answer(base, {
+      directAnswer: "Use the mortgage rate as the guaranteed benchmark. Solar or a battery is the better financial choice only if conservative yearly bill savings, after allowing for maintenance and replacement, beat the interest saved over the time you expect to stay. Solar often stacks up before a battery because it costs less and usually lasts longer. Run the comparison from your bills and written quotes, not the seller's headline saving.",
+      practicalSteps: [],
+      suggestedQuestion: "What are the installed price, expected yearly saving and your mortgage rate?",
+    });
+  }
+
   if (/\b(?:quotes?|quoted|quotation|proposal|invoice|cheaper one|expensive one|dearer one)\b/i.test(text)) {
     return quoteAnswer(base, text);
   }
 
-  if (/\b(?:power|electricity|energy) bill\b.*\b(?:high|huge|expensive|reduce|lower|save)\b|\b(?:reduce|lower|cut)\b.*\b(?:power|electricity|energy) bills?\b/i.test(text)) {
+  if (/\b(?:power|electricity|energy) bill\b.*\b(?:high|higher|huge|expensive|jumped|increased|gone up|reduce|lower|save)\b|\b(?:reduce|lower|cut)\b.*\b(?:power|electricity|energy) bills?\b/i.test(text)) {
     return answer(base, {
       directAnswer: "Start by finding what is using the most electricity. Do not buy equipment until you know whether the main cost is heating and cooling, hot water, a pool, an EV, or the electricity plan itself.",
       practicalSteps: [
@@ -98,10 +211,17 @@ export function composeSurgeSimpleAnswer(
 
   if (/\b(?:battery|home storage)\b/i.test(text) && /\b(?:worth|should|buy|good value|make sense|pay back|payback)\b/i.test(text)) {
     const noSolar = /no (?:rooftop )?solar/i.test(solar);
+    const quotedPrice = text.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/)?.[1];
+    const quotedCapacity = text.match(/\b(\d+(?:\.\d+)?)\s*kwh\b/i)?.[1];
+    const price = quotedPrice ? Number(quotedPrice.replace(/,/g, "")) : 0;
+    const capacity = quotedCapacity ? Number(quotedCapacity) : 0;
+    const pricePerKwh = price > 0 && capacity > 0 ? Math.round(price / capacity) : 0;
     return answer(base, {
       directAnswer: noSolar
         ? "No, a home battery is unlikely to be your best first step while you have no rooftop solar. Reduce the home's main energy costs and assess solar first."
-        : "Maybe, but a battery is usually worthwhile only when you regularly export spare solar and then buy a lot of electricity after sunset. A rebate can improve the numbers, but it does not make every battery good value.",
+        : pricePerKwh
+          ? `That works out to about $${pricePerKwh.toLocaleString("en-AU")} per quoted kWh. I would treat it as worth comparing, not an automatic yes. The deal is good only if the usable energy, full installation, warranty and realistic yearly bill saving give a payback shorter than the battery's warranted life.`
+          : "Maybe, but a battery is usually worthwhile only when you regularly export spare solar and then buy a lot of electricity after sunset. A rebate can improve the numbers, but it does not make every battery good value.",
       practicalSteps: noSolar ? [
         "Find the home's biggest electricity costs first.",
         "Check whether suitable rooftop solar is possible.",
@@ -111,7 +231,11 @@ export function composeSurgeSimpleAnswer(
         "Compare that with evening and overnight electricity use.",
         "Price backup power separately because it may add cost.",
       ],
-      suggestedQuestion: noSolar ? "Do you want help checking whether solar suits the property?" : "How much solar do you export on a typical day?",
+      suggestedQuestion: noSolar
+        ? "Do you want help checking whether solar suits the property?"
+        : pricePerKwh
+          ? "What exact battery model and installed items are included?"
+          : "How much solar do you export on a typical day?",
     });
   }
 
@@ -200,9 +324,13 @@ export function composeSurgeSimpleAnswer(
     });
   }
 
-  if (/\b(?:heat pump hot water|hot water heat pump|replace (?:my |the )?(?:gas|electric) hot water|hot water system)\b/i.test(text)) {
+  if (/\b(?:heat[- ]pump hot[- ]water|hot[- ]water heat[- ]pump|replace (?:my |the )?(?:gas|electric) hot[- ]water|hot[- ]water system)\b/i.test(text)) {
+    const warmClimate = /\b(?:darwin|tropical|hot[- ]?humid|warm climate|humid climate)\b/i.test(text);
+    const largeHousehold = /\b(?:family|household)\s+(?:of\s+)?(?:5|five|6|six|large)\b|\b(?:5|five|6|six)\s+(?:people|person household)\b/i.test(text);
     return answer(base, {
-      directAnswer: "A well-sized heat-pump hot-water system is often a strong replacement for gas or standard electric hot water, especially if it can run during sunny or cheaper electricity hours. The wrong size or location can still make it noisy or expensive.",
+      directAnswer: warmClimate
+        ? `Yes, a heat-pump hot-water system generally suits a warm, humid climate because it can draw heat from the outdoor air efficiently. ${largeHousehold ? "For a household of five, choose the tank and recovery rate for busy shower times, not the cheapest unit." : "Choose the tank and recovery rate for the household's busiest shower time."} If you have solar, schedule most heating for daylight hours. Check noise, drainage, warranty and local service before choosing the exact model.`
+        : "A well-sized heat-pump hot-water system is often a strong replacement for gas or standard electric hot water, especially if it can run during sunny or cheaper electricity hours. The wrong size or location can still make it noisy or expensive.",
       practicalSteps: [
         "Size the tank for the household and when people shower.",
         "Check outdoor-unit location, noise, drainage and electrical work.",

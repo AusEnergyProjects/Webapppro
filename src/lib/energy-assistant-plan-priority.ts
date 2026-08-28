@@ -9,20 +9,6 @@ type RecentTurn = {
 const PRIORITY_INTENT = /\b(?:where|how)\s+should\s+I\s+(?:start|begin)|\bwhat\s+should\s+I\s+(?:do|upgrade|fix|tackle)\s+first|\b(?:prioritise|prioritize|rank)\s+(?:my|the)\s+(?:home|energy|upgrade|plan)|\b(?:start|first)\b[^.!?\n]{0,45}\bbased\s+on\s+(?:my|the)\s+(?:answers|survey|plan|details)\b/i;
 const EXPLICIT_CORRECTION = /\b(?:correction|actually|instead|no longer|has changed|have changed|I now (?:rent|own|live)|my (?:new )?postcode is|not (?:an? )?(?:owner|renter|apartment|unit|house))\b/i;
 
-function lowerFirst(value: string) {
-  return value ? `${value[0].toLowerCase()}${value.slice(1)}` : "";
-}
-
-function numbered(items: readonly string[]) {
-  return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
-}
-
-function joinNatural(items: readonly string[]) {
-  if (items.length < 2) return items[0] || "";
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
-}
-
 export function composeSurgePlanPriorityAnswer(
   message: string,
   context: SurgePlanContext | null,
@@ -52,14 +38,10 @@ export function composeSurgePlanPriorityAnswer(
   const shading = fact("external_shading");
   const exhaust = fact("exhaust_fans");
   const heating = fact("heating_cooling_systems");
-  const hotWater = fact("hot_water");
-  const cooking = fact("cooking");
   const solar = fact("solar");
   const battery = fact("battery");
-  const ev = fact("ev");
   const switchboard = fact("switchboard");
 
-  const isApartment = /apartment|unit/i.test(propertyType);
   const strataApplies = /strata|owners corporation|common property/i.test(approval);
   const moisture = /condensation|damp|mould|mold/i.test(comfort);
   const hotOrCold = /too hot|too cold/i.test(comfort);
@@ -74,8 +56,6 @@ export function composeSurgePlanPriorityAnswer(
     || /no effective external shade/i.test(shading);
   const hasReverseCycle = /air-con|air conditioning|reverse-cycle/i.test(heating);
   const hasGasHeating = /gas space|ducted heating/i.test(heating);
-  const hasGasAppliances = /gas/i.test(`${hotWater} ${cooking}`);
-  const evPlanned = /owned|planned/i.test(ev) && !/no electric vehicle/i.test(ev);
   const actions: string[] = [];
 
   if (roofProblem) {
@@ -117,26 +97,6 @@ export function composeSurgePlanPriorityAnswer(
 
   const selectedActions = actions.slice(0, 3);
   if (!selectedActions.length) return null;
-  const reasons = [
-    budget ? `${/^under\b/i.test(budget) ? "an" : "a"} ${lowerFirst(budget)} first-stage budget` : "",
-    moisture ? "condensation or damp" : "",
-    /single glazed/i.test(glazing) ? "mostly single glazing" : "",
-    /basic roller|vertical|venetian/i.test(coverings) ? "basic blinds" : "",
-    /no effective external shade/i.test(shading) ? "no effective external shade" : "",
-    hasReverseCycle ? "an existing reverse-cycle system" : "",
-  ].filter(Boolean);
-  const unsuitableInsulation = ceilingUnavailable && floorUnavailable
-    ? " Generic ceiling and underfloor insulation advice does not fit because another dwelling is above and a slab or dwelling is below."
-    : ceilingUnavailable
-      ? " Generic ceiling-insulation advice does not fit because another dwelling is directly above."
-      : "";
-  const later: string[] = [];
-  if (hasGasAppliances) later.push("replace gas hot-water and cooking at end-of-life");
-  if (evPlanned) later.push(`${strataApplies ? "confirm strata approval and " : ""}scope EV charging and supply capacity with an electrician`);
-  if (isApartment && /no rooftop solar/i.test(solar) && /no home battery/i.test(battery)) {
-    later.push("treat solar and a battery as later common-property decisions");
-  }
-
   const startWith = roofProblem
     ? "the reported roof problem"
     : moisture && weakWindows
@@ -150,17 +110,25 @@ export function composeSurgePlanPriorityAnswer(
             : hasReverseCycle
               ? "the existing reverse-cycle system"
               : "the first ranked action below";
-  const homeDescription = propertyType ? `Your ${lowerFirst(propertyType)}` : "Your home";
-  const intro = `Based on your saved answers, start with ${startWith}. This fits ${lowerFirst(homeDescription)} and ${joinNatural(reasons) || "the issues you recorded"}.${unsuitableInsulation}`;
-  const laterDirection = later.length
-    ? `\n\nLater, ${later.join("; ")}.`
+  const homeDescription = propertyType ? ` for your ${propertyType.toLowerCase()}` : "";
+  const budgetDescription = budget ? ` with ${budget.toLowerCase()} to spend first` : "";
+  const intro = `Based on your saved answers${homeDescription}${budgetDescription}, start with ${startWith}.`;
+  const unsuitableInsulation = ceilingUnavailable && floorUnavailable
+    ? " Generic ceiling and underfloor insulation advice does not fit this apartment layout."
+    : ceilingUnavailable
+      ? " Generic ceiling insulation advice does not fit because another dwelling is directly above."
+      : "";
+  const laterSolar = /apartment|unit/i.test(propertyType)
+    && /no rooftop solar/i.test(solar)
+    && /no home battery/i.test(battery)
+    ? " Treat solar and a battery as later common-property decisions."
     : "";
   const followUp = moisture
     ? "Which room has the worst condensation or temperature problem: the living room, bedroom, bathroom or somewhere else?"
     : "Which room is hardest to keep comfortable?";
   return {
-    directAnswer: `${intro}\n\n${numbered(selectedActions)}${laterDirection}`,
-    practicalSteps: selectedActions,
+    directAnswer: `${intro} ${selectedActions.join(" ")}${unsuitableInsulation}${laterSolar}`,
+    practicalSteps: [],
     nextAction: selectedActions[0],
     status: "answered",
     citations: [],

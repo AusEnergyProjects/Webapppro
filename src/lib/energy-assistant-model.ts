@@ -34,6 +34,7 @@ import {
   surgePresentationText,
   type SurgeAnswerPresentation,
 } from "./surge-everyday-answer.ts";
+import { surgeAnswerMatchesQuestionIntent } from "./surge-simple-answer.ts";
 
 export type SurgeModelTurn = {
   role: "user" | "assistant";
@@ -233,6 +234,7 @@ Answer the user's actual question and continue the current decision logically. T
 Response contract:
 - Lead with the conclusion. For a yes/no, value or "does this make sense" question, begin with the verdict. For "where should I start", give the first action immediately.
 - Categories route evidence; they are not answers. Answer the specific question, and use "For [category], start here" only when asked where to start.
+- currentQuestion sets the topic; saved facts only tailor it. Never answer a draught question with heater sizing.
 - If one message contains several material questions, use questionParts as a coverage checklist and answer every part in a logical order. Do not answer only the easiest part or treat the later parts as unrelated follow-ups. The full currentQuestion remains authoritative if an automatic split is imperfect.
 - Return answerType, a short verdict, a plain reason, up to three steps, optional extraDetail and at most one followUpQuestion. quickReplies must always be empty.
 - Default to one natural 35 to 100 word paragraph. Use separate steps only for an explicit how, starting point, checklist, plan or safety sequence. Multi-part answers may reach 150 words. Keep the visible answer complete, useful and understandable. Put only optional background in extraDetail. Omit generic introductions, repeated caveats, source lists and long checklists.
@@ -252,7 +254,6 @@ Conversation contract:
 
 Advice and evidence contract:
 - Use saved-home facts only for a home-specific question or resolved follow-up. Answer general questions without survey facts. If intent remains unclear after recent turns, answer what is safe and ask one short clarification.
-- Answer the actual question and use recent turns to resolve short follow-ups. Never replace a clear question with generic source or topic language. Ask one specific missing fact only when it can change the answer.
 - Prefer the smallest practical step that fits the evidence. Relevant examples include safe door and window seals, a door snake, suitable sealant on confirmed fixed gaps, close-fitting honeycomb blinds or thermal curtains with pelmets, insulation repairs, clean filters, efficient reverse-cycle heating, humidity control, daytime solar use and cheaper tariff windows. Mention only what fits. Never block required ventilation, exhausts, chimneys or flues.
 - For ordinary room heating, a suitable fixed reverse-cycle air conditioner is normally the most efficient and best-value electric option. It usually uses less electricity than a plug-in heater and often costs less than gas. Plug-in heaters are for short, local use, not an efficient equal alternative.
 - Do not recommend, rank, promote or endorse a product, brand, model, supplier or installer. You may neutrally compare exact user-supplied options using verified attributes, practical pros and cons, site fit, warranty, service and complete installed scope.
@@ -279,12 +280,21 @@ Use industryLibrary and maintainedEvidence when relevant. deterministicReference
 
 function contextPayload(request: SurgeModelRequest) {
   const questionParts = splitSurgeQuestionFacets(request.message);
-  const retrievalText = [
-    ...(request.planContext?.facts || []).map((fact) => `${fact.key}: ${fact.value}`),
-    ...request.recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content),
-    request.continuation?.goal || "",
-    ...(request.continuation?.facts || []).map((fact) => `${fact.key}: ${fact.value}`),
+  const turnIntent = classifySurgeConversationTurn(
     request.message,
+    request.continuation,
+    request.recentTurns,
+  );
+  const recentUserContext = turnIntent === "new_question"
+    ? []
+    : request.recentTurns
+      .filter((turn) => turn.role === "user")
+      .slice(-2)
+      .map((turn) => turn.content);
+  const retrievalText = [
+    request.message,
+    ...recentUserContext,
+    turnIntent === "new_question" ? "" : request.continuation?.goal || "",
   ].filter(Boolean).join("\n");
   const evidence = searchEnergyAssistantKnowledge(retrievalText, {
     audience: request.audience,
@@ -469,6 +479,7 @@ function asksForKnownPlanFact(question: string, request: SurgeModelRequest) {
 function modelAnswerFailsConversationQuality(answer: string, request: SurgeModelRequest) {
   const wordCount = answer.split(/\s+/).filter(Boolean).length;
   if (wordCount > 180) return true;
+  if (!surgeAnswerMatchesQuestionIntent(request.message, answer)) return true;
   if (/^(?:for|based on) the supplied (?:context|home|information)|^a staged whole-home diagnosis\b/i.test(answer)) {
     return true;
   }

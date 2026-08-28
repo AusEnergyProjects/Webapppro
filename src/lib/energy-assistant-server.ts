@@ -52,7 +52,10 @@ import {
   type SurgeAnswerType,
   type SurgeQuickReply,
 } from "./surge-everyday-answer.ts";
-import { composeSurgeSimpleAnswer } from "./surge-simple-answer.ts";
+import {
+  composeSurgeSimpleAnswer,
+  surgeAnswerMatchesQuestionIntent,
+} from "./surge-simple-answer.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
 export const ENERGY_ASSISTANT_MAX_MESSAGE_CHARS = 1_200;
@@ -440,6 +443,7 @@ function policyText(answer: EnergyAssistantAnswer) {
 function generatedResultIsPolicySafe(
   generated: SurgeModelResult,
   audience: EnergyAssistantAudience,
+  message: string,
 ) {
   const continuationText = JSON.stringify(generated.continuation);
   const generatedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}\n${continuationText}`;
@@ -449,6 +453,7 @@ function generatedResultIsPolicySafe(
   ) {
     return false;
   }
+  if (!surgeAnswerMatchesQuestionIntent(message, generatedText)) return false;
   return audience === "trade" || (
     !containsSurgeNamedReference(continuationText)
     && !containsSurgeInternalPlatformName(continuationText)
@@ -461,6 +466,9 @@ const SURGE_GENERIC_NON_ANSWER_PATTERNS = [
   /\bname the exact home-energy decision\b/i,
   /\btell me the home or trade decision\b/i,
   /\bwhat topic would you like (?:covered|recreated)\b/i,
+  /\bgoverned (?:product )?evidence could not be verified\b/i,
+  /\btry again (?:later|after (?:current )?official (?:product )?evidence)\b/i,
+  /\bmatched your [a-z -]+ question\b/i,
   /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
 ] as const;
 
@@ -490,6 +498,7 @@ function groundedAnswerMatchesCurrentDecision(
   if (isSurgeServiceOrCompetingQuoteRequest(message)) {
     return /\b(?:service|cover|installer|provider|contractor|matched trades?|competing|more|additional)\b[^.\n]{0,100}\bquotes?\b|\bquotes?\b[^.\n]{0,100}\b(?:service|cover|installer|provider|contractor|matched trades?|competing|more|additional)\b/i.test(answerText);
   }
+  if (!surgeAnswerMatchesQuestionIntent(message, answerText)) return false;
   if (!RETAIL_PLAN_DECISION.test(message)) return true;
   return RETAIL_PLAN_DECISION.test(answerText)
     || /\b(?:annual bill|free window|outside-window|plan credit|electricity retailer)\b/i.test(answerText);
@@ -769,7 +778,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
             const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
             const generated = await generate(groundedModelRequest).catch(() => null);
             if (generated
-              && generatedResultIsPolicySafe(generated, audience)
+              && generatedResultIsPolicySafe(generated, audience, message)
               && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
               answer = generated.answer;
               presentation = generated.presentation || null;
