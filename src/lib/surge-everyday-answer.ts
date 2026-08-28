@@ -18,6 +18,11 @@ export type SurgeQuickReply = {
   message: string;
 };
 
+export type SurgeTopicQuickReplySet = {
+  followUpQuestion: string;
+  quickReplies: SurgeQuickReply[];
+};
+
 export type SurgeAnswerPresentation = {
   answerType: SurgeAnswerType;
   verdict: string;
@@ -155,7 +160,9 @@ export function surgePresentationPassesEverydayLanguage(
     && completeMetrics.jargonCount === 0
     && presentation.steps.length <= 3
     && presentation.quickReplies.length <= 4
-    && (!presentation.followUpQuestion || presentation.quickReplies.length >= 2);
+    && (!presentation.followUpQuestion
+      || presentation.quickReplies.length === 0
+      || presentation.quickReplies.length >= 2);
 }
 
 function answerTypeFor(message: string, answer: EnergyAssistantAnswer): SurgeAnswerType {
@@ -183,6 +190,41 @@ function uniqueQuickReplies(replies: SurgeQuickReply[]) {
     messages.add(messageKey);
     return true;
   }).slice(0, 4);
+}
+
+export function surgeQuickReplySetForTopic(message: string): SurgeTopicQuickReplySet | null {
+  const topic = clean(message, 1_200);
+  if (/\b(?:three|3)[ -]?phase\b/i.test(topic)
+    && /\b(?:single[ -]?phase|upgrad\w*|solar|battery|switchboard|mains?|supply|rewir\w*|electrician)\b/i.test(topic)) {
+    const asksRewiring = /\b(?:rewir\w*|existing (?:lights?|power points?|circuits?|wiring))\b/i.test(topic);
+    const asksValue = /\b(?:worth|necessary|need(?:ed)?|benefit|advantage)\b/i.test(topic);
+    const asksQuote = /\b(?:quote|cost|price|expensive|how much|involved)\b/i.test(topic);
+    const selectedBranches = [asksRewiring, asksValue, asksQuote].filter(Boolean).length;
+    const quickReplies = [
+      ...(!asksRewiring || selectedBranches !== 1 ? [{
+        id: "three-phase-rewiring",
+        label: "Does it need rewiring?",
+        message: "Does upgrading to three-phase require rewiring the whole house?",
+      }] : []),
+      ...(!asksValue || selectedBranches !== 1 ? [{
+        id: "three-phase-worth-it",
+        label: "When is it worth it?",
+        message: "When is a three-phase upgrade actually worth paying for?",
+      }] : []),
+      ...(!asksQuote || selectedBranches !== 1 ? [{
+        id: "three-phase-quote",
+        label: "What should the quote include?",
+        message: "What should an electrician include in a three-phase upgrade quote?",
+      }] : []),
+    ];
+    return {
+      followUpQuestion: selectedBranches === 1
+        ? "Would you like to check another part of the three-phase decision?"
+        : "What would you like to check next about the three-phase upgrade?",
+      quickReplies: uniqueQuickReplies(quickReplies),
+    };
+  }
+  return null;
 }
 
 export function surgeQuickRepliesForQuestion(question: string): SurgeQuickReply[] {
@@ -273,11 +315,7 @@ export function surgeQuickRepliesForQuestion(question: string): SurgeQuickReply[
       { id: "not-sure", label: "Not sure", message: "I am not sure" },
     ]);
   }
-  return uniqueQuickReplies([
-    { id: "tell-me-how", label: "Show me how", message: "Show me the practical next step" },
-    { id: "compare-options", label: "Compare options", message: "Compare the sensible options for me" },
-    { id: "not-sure", label: "Not sure", message: "I am not sure, help me narrow it down" },
-  ]);
+  return [];
 }
 
 function comparable(value: string) {
@@ -317,7 +355,9 @@ export function deriveSurgeAnswerPresentation(
     .map((part) => part.replace(/^\s*\d+[.)]\s*/u, "").trim())
     .filter((part) => part && !repeatsStep(part, steps));
   const extraDetail = clean(extraParts.join(" "), 1_200);
-  const followUpQuestion = toSurgePlainLanguage(answer.suggestedQuestions[0] || "", 220);
+  const topicReplySet = surgeQuickReplySetForTopic(message);
+  const followUpQuestion = topicReplySet?.followUpQuestion
+    || toSurgePlainLanguage(answer.suggestedQuestions[0] || "", 220);
   return {
     answerType: answerTypeFor(message, answer),
     verdict,
@@ -325,7 +365,7 @@ export function deriveSurgeAnswerPresentation(
     steps,
     extraDetail,
     followUpQuestion,
-    quickReplies: surgeQuickRepliesForQuestion(followUpQuestion),
+    quickReplies: topicReplySet?.quickReplies || surgeQuickRepliesForQuestion(followUpQuestion),
   };
 }
 

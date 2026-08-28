@@ -22,7 +22,11 @@ import {
 import { estimateCreditexSresQuote } from "./creditex-sres-calculator-estimator.ts";
 import type { CreditexOfficialProductKind } from "./creditex-official-product-registry.ts";
 import { searchOfficialProducts } from "./creditex-official-product-registry-server.ts";
-import type { EnergyAssistantAnswer, EnergyAssistantCitation } from "./energy-assistant.ts";
+import {
+  isThreePhaseSupplyUpgradeQuestion,
+  type EnergyAssistantAnswer,
+  type EnergyAssistantCitation,
+} from "./energy-assistant.ts";
 import type { SurgeModelRequest } from "./energy-assistant-model.ts";
 
 const CERTIFICATE_INTENT = /\b(?:rebate|discount|certificate|stc|veec|esc|prc|incentive|support)\b/i;
@@ -133,6 +137,7 @@ function conversationText(request: SurgeModelRequest) {
 
 function categoryForRequest(request: SurgeModelRequest) {
   if (BROAD_EDUCATIONAL_TOPIC_INTENT.test(request.message)) return null;
+  if (isThreePhaseSupplyUpgradeQuestion(request.message)) return null;
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
 

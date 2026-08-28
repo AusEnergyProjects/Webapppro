@@ -28,7 +28,7 @@ const CLARIFICATION_PATTERN = /(?:^|\b)(?:huh|what do you mean|what does that me
 const CORRECTION_PATTERN = /(?:^|\b)(?:actually|correction|sorry,? (?:i|it|we)|i meant|that is wrong|that's wrong|not .{0,36}(?:but|,)|i (?:do not|don't) (?:own|rent|have|use)|i (?:rent|own) rather than)(?:\b|$)/i;
 const TOPIC_CHANGE_PATTERN = /(?:(?:^|[.!?]\s*|,\s*)forget\b|\b(?:different question|new question|change (?:the )?(?:subject|topic)|switch (?:the )?(?:subject|topic)|moving on|instead,? (?:i|what|how|when|can)|anyway,? (?:i|what|how|when|can))\b)/i;
 const CONTEXT_REFERENCE_PATTERN = /\b(?:it|its|this|that|these|those|they|them|one|ones|same|other|another|former|latter|above|previous|earlier|instead|more expensive|cheaper|dearer|bigger|smaller|better|worse|the pro|the select)\b/i;
-const ELLIPTICAL_FOLLOW_UP_PATTERN = /^(?:and|but|so|also|okay|ok|right|yes|no|maybe|unsure|not sure|why|how|what about|how about|does that|is that|is it|would that|should i do that)\b/i;
+const ELLIPTICAL_FOLLOW_UP_PATTERN = /^(?:and|but|so|also|okay|ok|right|yes|no|maybe|unsure|not sure|why|how|what about|how about|does that|is that|is it|would that|should i do that|show me (?:the )?(?:practical )?next step)\b/i;
 
 export type SurgeConversationContextTurn = {
   role: "user" | "assistant";

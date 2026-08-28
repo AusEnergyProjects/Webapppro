@@ -142,6 +142,17 @@ test("context-dependent wording resolves against the newest compatible user turn
   assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up");
 });
 
+test("the practical-next-step quick reply remains tied to the current topic", () => {
+  const turns = [{ role: "user", content: "Should I upgrade this home from single phase to three phase?" }];
+  const message = "Show me the practical next step";
+  const resolution = resolveSurgeConversationReference(message, turns, null);
+
+  assert.equal(isSurgeContextDependentMessage(message), true);
+  assert.equal(resolution.status, "resolved_from_recent_context");
+  assert.deepEqual(resolution.anchorUserMessages, [turns[0].content]);
+  assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up");
+});
+
 test("explicit topic changes do not inherit an unrelated reference frame", () => {
   const turns = [{ role: "user", content: "I was comparing two hot-water systems." }];
   const message = "Different question: what about ceiling insulation?";

@@ -1,5 +1,9 @@
-import type { EnergyAssistantAnswer } from "./energy-assistant.ts";
+import {
+  isThreePhaseSupplyUpgradeQuestion,
+  type EnergyAssistantAnswer,
+} from "./energy-assistant.ts";
 import type { SurgePlanContext } from "./energy-assistant-plan-context.ts";
+import { isSurgeContextDependentMessage } from "./energy-assistant-conversation.ts";
 
 type RecentTurn = {
   role: "user" | "assistant";
@@ -13,16 +17,13 @@ type SimpleAnswer = {
   confidence?: EnergyAssistantAnswer["confidence"];
 };
 
-const SHORT_REFERENCE = /^(?:and\s+)?(?:what|how|why)?\s*(?:about\s+)?(?:it|that|that one|this|this one|the cheaper one|the expensive one|worth it|instead)[?.!\s]*$/i;
-
 function conversationText(message: string, recentTurns: readonly RecentTurn[]) {
   const priorUserText = recentTurns
     .filter((turn) => turn.role === "user")
     .slice(-5)
     .map((turn) => turn.content)
     .join("\n");
-  const needsPriorTopic = SHORT_REFERENCE.test(message.trim())
-    || /\b(?:it|that|those|them|one|cheaper|dearer|expensive|worth)\b/i.test(message);
+  const needsPriorTopic = isSurgeContextDependentMessage(message);
   return needsPriorTopic && priorUserText ? `${priorUserText}\n${message}` : message;
 }
 
@@ -76,6 +77,8 @@ export function composeSurgeSimpleAnswer(
   const solar = planFact(context, "solar");
   const tenure = planFact(context, "tenure");
   const heating = planFact(context, "heating_cooling_systems");
+
+  if (isThreePhaseSupplyUpgradeQuestion(text)) return null;
 
   if (/\b(?:quotes?|quoted|quotation|proposal|invoice|cheaper one|expensive one|dearer one)\b/i.test(text)) {
     return quoteAnswer(base, text);

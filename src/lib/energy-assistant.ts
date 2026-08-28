@@ -204,6 +204,25 @@ export function isSurgeElectricSaulQuestion(value: string) {
     && !SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN.test(value);
 }
 
+const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
+const THREE_PHASE_UPGRADE_PATTERN = /\b(?:upgrade|convert|conversion|change|move|switch|worth|need|require|get|getting|install)\w*\b/i;
+const THREE_PHASE_HOME_SUPPLY_PATTERN = /\b(?:house|home|supply|power|mains?|meter|switchboard|rewir\w*|solar|battery|inverter|electrician|network)\b/i;
+
+export function isThreePhaseSupplyUpgradeQuestion(value: string) {
+  return THREE_PHASE_SUPPLY_PATTERN.test(value)
+    && THREE_PHASE_UPGRADE_PATTERN.test(value)
+    && THREE_PHASE_HOME_SUPPLY_PATTERN.test(value)
+    && !/\binduction motor\b/i.test(value);
+}
+
+function isBatteryExpansionQuestion(value: string) {
+  if (!/\b(?:battery|storage)\b/i.test(value)) return false;
+  return /\b(?:expand|expanded|expansion)\b/i.test(value)
+    || /\b(?:existing|current|installed|already)\b[^.?!\n]{0,100}\b(?:add|adding|extra|another|additional|more)\b[^.?!\n]{0,60}\b(?:battery|storage|modules?|capacity|kWh)\b/i.test(value)
+    || /\b(?:add|adding|extra|another|additional)\b[^.?!\n]{0,60}\b(?:battery|storage|modules?|capacity|kWh)\b[^.?!\n]{0,100}\b(?:existing|current|installed|already)\b/i.test(value)
+    || /\b(?:extra|another|additional|more)\s+(?:battery|storage|modules?|capacity|kWh)\b/i.test(value);
+}
+
 export function stripSurgePublicLinksAndCitationLines(value: string) {
   return value
     .replace(/https?:\/\/\S+/gi, "")
@@ -2396,6 +2415,43 @@ export function composeEnergyAssistantAnswer(
       sourceBoundary: reviewedProductComparisonAvailable
         ? "This comparison uses the privacy-safe quote summary and the cited current manufacturer data. Confirm the exact installed model, price difference and incentive eligibility in the revised quote."
         : "This assessment uses only the privacy-safe extracted quote summary retained in the conversation.",
+    });
+  }
+
+  const threePhaseUpgradeContext = isThreePhaseSupplyUpgradeQuestion(query)
+    ? query
+    : isSurgeContextDependentMessage(query)
+      ? [...priorUserMessages].reverse().find(isThreePhaseSupplyUpgradeQuestion) || null
+      : null;
+  if (threePhaseUpgradeContext) {
+    const continuing = !isThreePhaseSupplyUpgradeQuestion(query);
+    const asksRewiring = /\b(?:rewir\w*|existing (?:lights?|power points?|circuits?|wiring))\b/i.test(query);
+    const asksValue = /\b(?:worth|necessary|need(?:ed)?|benefit|advantage)\b/i.test(query);
+    const asksQuote = /\b(?:quote|cost|price|expensive|how much|involved)\b/i.test(query);
+    const selectedBranches = [asksRewiring, asksValue, asksQuote].filter(Boolean).length;
+    const branchAnswer = selectedBranches === 1
+      ? asksRewiring
+        ? "Usually no. A three-phase upgrade normally changes the incoming supply, meter, consumer mains, main switch and switchboard. Existing light and power circuits can usually stay, although the electrician may redistribute some circuits across the phases. Old, damaged or undersized wiring can add separate repair work."
+        : asksValue
+          ? "Three-phase is worth paying for when the proposed solar or battery design, EV charging, large air conditioning, workshop equipment or other planned loads genuinely need the extra supply capacity or phase balancing. A battery or solar installation does not automatically require it, so get the designer to state the reason in writing first."
+          : "Ask for one written scope that separates distributor or metering charges from the electrician's work. It should list the service connection, meter, consumer mains, main switch, switchboard changes, circuit balancing, testing, approvals and exclusions, plus who coordinates the electricity distributor."
+      : null;
+    return structured("solar", {
+      directAnswer: branchAnswer || (continuing
+        ? "The practical next step is to confirm whether the planned solar, battery and other large loads actually need three-phase power before paying for an upgrade. Give the proposed equipment and supply details to a licensed electrician, then get one written scope covering the network connection, meter, consumer mains and switchboard."
+        : "Upgrading a home from single-phase to three-phase usually does not mean rewiring every light and power point. The existing final circuits normally stay, but the electrician may need to upgrade the network connection, meter, consumer mains, main switch and switchboard, then spread suitable circuits across the three phases. Unsafe or undersized existing wiring can add work. Many ordinary solar and battery systems can still use single-phase power. There is no standard upgrade price: underground or long cable runs, distributor work and an old switchboard can make it much more involved."),
+      status: "needs_context",
+      citations: officialCitationsById(["energy-gov-solar-consumer-guide", "energy-gov-solar-batteries"]),
+      confidence: "medium",
+      assumptions: ["The distributor connection, service type, consumer mains, switchboard condition and proposed solar and battery design have not been inspected."],
+      practicalSteps: [
+        "Ask the solar and battery designer to state in writing whether the proposed system needs three-phase power and why.",
+        "Have a licensed electrician inspect the service, meter, consumer mains and switchboard and identify what can stay.",
+        "Get a written price separating network or metering charges from electrical and switchboard work, including any underground mains, long cable runs or old-switchboard work.",
+      ],
+      toolActions: [],
+      suggestedQuestions: ["What would you like to check next about the three-phase upgrade?"],
+      sourceBoundary: "This is general Australian planning guidance. The electricity distributor and a licensed electrician must confirm the connection method, permitted phase arrangement, electrical scope and final price.",
     });
   }
 
@@ -5668,9 +5724,7 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (/\b(?:battery|storage)\b/i.test(query)
-    && /\b(?:add|adding|expand|expansion|extra|another|more)\b/i.test(query)
-    && /\b(?:module|modules|capacity|kWh|battery)\b/i.test(query)) {
+  if (isBatteryExpansionQuestion(query)) {
     return structured("battery_vpp", {
       directAnswer:
         "Do not assume an extra battery module can be mixed into an existing system or earn another certificate benefit. Expansion must be an exact manufacturer-approved configuration for the installed inverter, battery model, age, firmware, module count and capacity limits, with the current official component listing, warranty, electrical design and commissioning preserved. The current one-eligible-battery-system rule also means an added module is not automatically a second STC claim. Keep eligibility blocked until the dated rule and approved configuration are verified.",

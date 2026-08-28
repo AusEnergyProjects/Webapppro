@@ -1126,23 +1126,31 @@
 }
 
 .quickReplies button {
-  background: #e8f7f1;
-  border: 1px solid #83cbb7;
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
   color: #075f4a;
   cursor: pointer;
   font: inherit;
   font-size: 0.64rem;
   font-weight: 850;
   min-height: 44px;
-  padding: 7px 11px;
+  padding: 0;
 }
 
-.quickReplies button:hover:not(:disabled),
-.quickReplies button:focus-visible {
+.quickReplies button > span {
+  align-items: center;
+  background: #e8f7f1;
+  border: 1px solid #83cbb7;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 32px;
+  padding: 4px 10px;
+}
+
+.quickReplies button:hover:not(:disabled) > span,
+.quickReplies button:focus-visible > span {
   background: #cef0e4;
   border-color: #0eaf78;
-  outline: none;
 }
 
 .quickReplies button:disabled {
@@ -2204,6 +2212,24 @@
 .leadForm > header span {
   font-size: var(--surge-type-label);
   line-height: 1.45;
+}
+
+.panel .quickReplies {
+  gap: 6px;
+}
+
+.panel .quickReplies button {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0;
+  text-align: left;
+  width: auto;
 }
 
 .contextGroups dd,

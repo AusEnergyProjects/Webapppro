@@ -359,6 +359,34 @@ test("solar, battery, hot-water, glazing and EV decisions expose the governing m
   }
 });
 
+test("three-phase home-supply questions stay on the electrical decision across a quick follow-up", () => {
+  const question = "Hoping for a quick explainer on 3 phase upgrade in layman's terms. Is it worth getting 3 phase power to accompany a battery and solar installation, does it involve rewiring the house or is it more of a switchboard and mains upgrade, and how expensive is it likely to be?";
+  const initial = ask(question);
+  assert.match(initial.directAnswer, /does not mean rewiring every light and power point/i);
+  assert.match(initial.directAnswer, /Many ordinary solar and battery systems can still use single-phase power/i);
+  assert.doesNotMatch(initial.directAnswer, /extra battery module|second STC claim/i);
+  assertBounded(initial, question);
+
+  const followUp = composeEnergyAssistantAnswer("Show me the practical next step", {
+    asOf,
+    audience: "household",
+    priorUserMessages: [question],
+  });
+  assert.match(followUp.directAnswer, /confirm whether the planned solar, battery and other large loads actually need three-phase power/i);
+  assert.match(followUp.practicalSteps.join(" "), /licensed electrician.*written price/i);
+  assert.doesNotMatch(followUp.directAnswer, /Tell me the home or trade decision/i);
+  assertBounded(followUp, "three-phase practical next step");
+
+  const rewiring = composeEnergyAssistantAnswer("Does upgrading to three-phase require rewiring the whole house?", {
+    audience: "customer",
+    pageContext: "/surge",
+    asOf,
+  });
+  assert.match(rewiring.directAnswer, /^Usually no\./i);
+  assert.match(rewiring.directAnswer, /existing light and power circuits can usually stay/i);
+  assert.doesNotMatch(rewiring.directAnswer, /battery module|STC claim/i);
+});
+
 test("EV savings, trade evidence and sent-lead flows ask the next real fact without inventing state", () => {
   const dieselStart = ask("How much would I save each year switching my diesel SUV to an EV?");
   assert.match(dieselStart.directAnswer, /annual kilometres, fuel type.*L\/100 km.*fuel price assumption/i);

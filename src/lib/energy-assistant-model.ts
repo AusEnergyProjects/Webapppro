@@ -26,6 +26,7 @@ import {
   deriveSurgeAnswerPresentation,
   normalizeSurgeAnswerPresentation,
   SURGE_ANSWER_TYPES,
+  surgeQuickReplySetForTopic,
   surgeQuickRepliesForQuestion,
   surgePresentationPassesEverydayLanguage,
   surgePresentationText,
@@ -201,6 +202,9 @@ function quickReplyList(value: unknown): SurgeQuickReply[] {
     const id = text(record.id, 60);
     const label = text(record.label, 42);
     const message = text(record.message, 160);
+    if (/\b(?:show me how|practical next step|compare (?:the )?(?:sensible )?options|tell me more|more detail)\b/i.test(`${label} ${message}`)) {
+      return [];
+    }
     return id && label && message ? [{ id, label, message }] : [];
   }).slice(0, 4);
 }
@@ -246,7 +250,7 @@ Response contract:
 - Use plain Australian English, usually 45 to 140 words in total. Keep the immediately visible verdict, reason and steps under 120 words. Put useful secondary explanation in extraDetail so the interface can reveal it only when requested. Teach enough for the user to understand what the answer means and why it matters. Omit generic introductions, repeated caveats, source lists and long checklists.
 - Do not use unexplained technical shorthand or phrases such as building fabric, conductive heat flow, diagnostic stage, end use, interval data, load profile, measured surplus, site-sized, staged whole-home diagnosis, tariff shifting or thermal envelope. Use ordinary descriptions of what the house or equipment is doing.
 - Never use an em dash or en dash. Sound relaxed and practical, not corporate, academic or bureaucratic.
-- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question and include two to four context-specific quick replies, then keep asking one useful question at a time. If no follow-up is needed, return an empty followUpQuestion and no quickReplies. Never respond with only a question or dump a questionnaire.
+- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question and, when useful, include two to four context-specific quick replies that either answer that question or name specific useful branches of the current topic. Never use generic buttons such as "Show me how", "Practical next step", "Compare options", "Tell me more" or "More detail". If no useful fixed choices exist, return no quickReplies and let the user type. Keep asking one useful question at a time. If no follow-up is needed, return an empty followUpQuestion and no quickReplies. Never respond with only a question or dump a questionnaire.
 - Never repeat a previous answer or a question the user has already answered. For clarification, explain the previous answer in simpler and more concrete words.
 
 Conversation contract:
@@ -667,6 +671,7 @@ export async function generateSurgeModelAnswer(
         suggestedQuestions: followUp ? [followUp] : [],
       }, request.message)
       : null;
+    const topicReplySet = surgeQuickReplySetForTopic(request.message);
     const presentation = normalizeSurgeAnswerPresentation(legacyPresentation || {
       answerType: SURGE_ANSWER_TYPES.includes(record.answerType as (typeof SURGE_ANSWER_TYPES)[number])
         ? record.answerType as (typeof SURGE_ANSWER_TYPES)[number]
@@ -675,9 +680,13 @@ export async function generateSurgeModelAnswer(
       reason: publicAnswer(rawReason, request.audience, ""),
       steps: rawSteps.map((step) => publicAnswer(step, request.audience, "")),
       extraDetail: publicAnswer(rawExtraDetail, request.audience, ""),
-      followUpQuestion: followUp,
-      quickReplies: followUp
-        ? (rawQuickReplies.length ? rawQuickReplies : surgeQuickRepliesForQuestion(followUp)).map((reply) => ({
+      followUpQuestion: topicReplySet?.followUpQuestion || followUp,
+      quickReplies: topicReplySet?.quickReplies.length || followUp
+        ? (topicReplySet?.quickReplies.length
+          ? topicReplySet.quickReplies
+          : rawQuickReplies.length
+            ? rawQuickReplies
+            : surgeQuickRepliesForQuestion(followUp)).map((reply) => ({
           id: reply.id,
           label: publicAnswer(reply.label, request.audience, ""),
           message: publicAnswer(reply.message, request.audience, ""),

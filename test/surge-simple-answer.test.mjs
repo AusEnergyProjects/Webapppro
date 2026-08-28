@@ -70,6 +70,15 @@ test("casual quote follow-ups reuse the previous user topic", () => {
   }
 });
 
+test("three-phase supply questions bypass the battery-worth shortcut", () => {
+  const question = "Is it worth getting 3 phase power to accompany a battery and solar installation, or is it more of a switchboard and mains upgrade?";
+  assert.equal(simple(question), null);
+  assert.equal(simple("Show me the practical next step", [
+    { role: "user", content: question },
+    { role: "assistant", content: "A three-phase upgrade does not normally mean rewiring every circuit." },
+  ]), null);
+});
+
 test("saved no-solar context changes the battery verdict", () => {
   const answer = simple("is a home battery worth it", [], {
     version: 1,

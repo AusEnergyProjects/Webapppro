@@ -4,6 +4,7 @@ import {
   deriveSurgeAnswerPresentation,
   surgePlainLanguageMetrics,
   surgePresentationPassesEverydayLanguage,
+  surgeQuickReplySetForTopic,
   surgeQuickRepliesForQuestion,
 } from "../src/lib/surge-everyday-answer.ts";
 
@@ -45,4 +46,35 @@ test("yes or no follow-ups produce one-click everyday replies", () => {
     surgeQuickRepliesForQuestion("Do the windows feel cold when there is no wind?").map((reply) => reply.label),
     ["Yes", "No", "Not sure"],
   );
+});
+
+test("three-phase answers use small topic choices instead of generic next-step prompts", () => {
+  const message = "Is it worth upgrading my single-phase house to three-phase for solar and a battery, and will it need rewiring?";
+  const replySet = surgeQuickReplySetForTopic(message);
+  assert.ok(replySet);
+  assert.equal(replySet.followUpQuestion, "What would you like to check next about the three-phase upgrade?");
+  assert.deepEqual(replySet.quickReplies.map((reply) => reply.label), [
+    "Does it need rewiring?",
+    "When is it worth it?",
+    "What should the quote include?",
+  ]);
+  assert.doesNotMatch(JSON.stringify(replySet), /practical next step|show me how|compare options/i);
+
+  const presentation = deriveSurgeAnswerPresentation(answer({
+    suggestedQuestions: ["What equipment details are proposed?"],
+  }), message);
+  assert.equal(presentation.followUpQuestion, replySet.followUpQuestion);
+  assert.deepEqual(presentation.quickReplies, replySet.quickReplies);
+
+  const rewiringReplySet = surgeQuickReplySetForTopic("Does upgrading to three-phase require rewiring the whole house?");
+  assert.ok(rewiringReplySet);
+  assert.deepEqual(rewiringReplySet.quickReplies.map((reply) => reply.label), [
+    "When is it worth it?",
+    "What should the quote include?",
+  ]);
+  assert.doesNotMatch(JSON.stringify(rewiringReplySet), /Does it need rewiring/i);
+});
+
+test("unmapped questions do not invent generic quick replies", () => {
+  assert.deepEqual(surgeQuickRepliesForQuestion("Which part would you like explained next?"), []);
 });

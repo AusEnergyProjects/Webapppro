@@ -943,3 +943,27 @@ test("model prompt applies assessor education response guardrails without leakin
     /48260e86e921a25b4e468ed93a3b6ed754137f2c1d0c70df3addd4667aecd32c|pdfSha256|extractedTextSha256|pageStart|pageEnd|pypdf|pdfplumber|Poppler/i,
   );
 });
+
+test("three-phase model answers replace generic buttons with specific small choices", async () => {
+  const result = await generateSurgeModelAnswer(request({
+    message: "Is it worth upgrading my single-phase house to three-phase for solar and a battery, and will it need rewiring?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "A three-phase upgrade usually changes the incoming supply, meter and switchboard rather than every circuit in the house.",
+      followUpQuestion: "What would you like to do next?",
+      quickReplies: [
+        { id: "generic", label: "Practical next step", message: "Show me the practical next step" },
+      ],
+    })),
+  });
+
+  assert.ok(result);
+  assert.equal(result.presentation.followUpQuestion, "What would you like to check next about the three-phase upgrade?");
+  assert.deepEqual(result.presentation.quickReplies.map((reply) => reply.label), [
+    "Does it need rewiring?",
+    "When is it worth it?",
+    "What should the quote include?",
+  ]);
+  assert.doesNotMatch(JSON.stringify(result.presentation), /practical next step|show me how|compare options/i);
+});

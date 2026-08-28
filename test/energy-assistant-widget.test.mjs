@@ -148,6 +148,13 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /answerStatus === "source_review_required"/);
 });
 
+test("suggested replies render as compact content-sized chips", () => {
+  assert.match(widget, /className=\{styles\.quickReplies\} aria-label="Suggested replies"/);
+  assert.match(widget, /message\.quickReplies\?\.map[\s\S]{0,260}<span>\{reply\.label\}<\/span>/);
+  assert.match(styles, /\.panel \.quickReplies button \{[^}]*flex: 0 0 auto;[^}]*font-size: \.75rem;[^}]*min-height: 44px;[^}]*width: auto;/);
+  assert.match(styles, /\.quickReplies button > span \{[^}]*border-radius: 999px;[^}]*height: 32px;[^}]*padding: 4px 10px;/);
+});
+
 test("Surge stays private and low-friction without account-copy controls", () => {
   assert.equal(existsSync(new URL("../src/components/SurgeAccountContextControls.tsx", import.meta.url)), false);
   assert.equal(existsSync(new URL("../src/lib/surge-account-context-server.ts", import.meta.url)), false);

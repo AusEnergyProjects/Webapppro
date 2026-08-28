@@ -538,6 +538,23 @@ test("fails closed when a matched registry lookup throws", async () => {
   noDash(result);
 });
 
+test("three-phase supply upgrades are not hijacked by battery product matching", async () => {
+  let registryCalls = 0;
+  const resolver = createSurgeGroundedProductGuidanceResolver({}, {
+    searchProducts: async () => {
+      registryCalls += 1;
+      throw new Error("Product search should not run");
+    },
+    loadPrices: async () => prices(),
+  });
+  const result = await resolver(request(
+    "Is it worth getting 3 phase power with a battery and solar installation, or is it mainly a switchboard and mains upgrade?",
+  ));
+
+  assert.equal(result, null);
+  assert.equal(registryCalls, 0);
+});
+
 test("fails closed when registry metadata is stale", async () => {
   const resolver = createSurgeGroundedProductGuidanceResolver({}, {
     searchProducts: createRegistrySearch({}, {

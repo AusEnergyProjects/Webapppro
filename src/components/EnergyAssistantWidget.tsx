@@ -2475,7 +2475,7 @@ export function EnergyAssistantWidget({
                             <div className={styles.quickReplies} aria-label="Suggested replies">
                               {message.quickReplies?.map((reply) => (
                                 <button type="button" key={reply.id} disabled={busy} onClick={() => void ask(reply.message)}>
-                                  {reply.label}
+                                  <span>{reply.label}</span>
                                 </button>
                               ))}
                             </div>
