@@ -210,6 +210,16 @@ test("a retailer-plan decision is not hijacked by an incidental heating mention"
   assert.equal(result, null);
 });
 
+test("a service-area and competing-quotes request is not hijacked by its solar category", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({});
+  for (const message of [
+    "I'm needing solar for my container shed in the Grampians. Is there anybody who will service this area? I have one quote but want more quotes for comparisons.",
+    "Can you find installers covering regional Victoria so I can get three solar quotes?",
+  ]) {
+    assert.equal(await resolver(request(message)), null, message);
+  }
+});
+
 test("ordinary heating choices are not replaced by an exact-model comparison checklist", async () => {
   const resolver = createSurgeGroundedProductGuidanceResolver({});
   for (const message of [

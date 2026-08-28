@@ -24,6 +24,7 @@ import type { CreditexOfficialProductKind } from "./creditex-official-product-re
 import { searchOfficialProducts } from "./creditex-official-product-registry-server.ts";
 import {
   isThreePhaseSupplyUpgradeQuestion,
+  isSurgeServiceOrCompetingQuoteRequest,
   type EnergyAssistantAnswer,
   type EnergyAssistantCitation,
 } from "./energy-assistant.ts";
@@ -138,6 +139,7 @@ function conversationText(request: SurgeModelRequest) {
 }
 
 function categoryForRequest(request: SurgeModelRequest) {
+  if (isSurgeServiceOrCompetingQuoteRequest(request.message)) return null;
   if (BROAD_EDUCATIONAL_TOPIC_INTENT.test(request.message)) return null;
   if (ORDINARY_HEATING_CHOICE_INTENT.test(request.message)
     && (/\b(?:portable|plug[- ]?in)\s+(?:electric\s+)?heaters?\b/i.test(request.message)

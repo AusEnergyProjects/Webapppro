@@ -506,6 +506,19 @@ function naturalFollowUpFor(message: AssistantMessage, audience: Audience): stri
   return normalizedAnswer.includes(normalizedSuggestion) ? "" : suggestion;
 }
 
+function usesSingleParagraphAnswer(message: AssistantMessage) {
+  return message.answerType !== "starting_plan" && message.answerType !== "safety";
+}
+
+function singleParagraphAnswerFor(message: AssistantMessage, audience: Audience) {
+  return customerVisibleText([
+    message.verdict,
+    message.reason,
+    ...message.practicalSteps,
+    message.extraDetail,
+  ].filter(Boolean).join(" "), audience);
+}
+
 function parseApiError(payload: unknown, fallback: string): string {
   const record = asRecord(payload);
   const error = asRecord(record?.error);
@@ -513,7 +526,7 @@ function parseApiError(payload: unknown, fallback: string): string {
 }
 
 function signalsServiceInterest(message: string) {
-  return /\b(?:get|request|compare|review|accept|send|need|want|ready for|interested in|explore)\s+(?:a\s+|an\s+|some\s+)?(?:quote|quotes|installer|installers|trade help|tradesperson|tradespeople|service provider|service providers|site visit|assessment)\b|\b(?:book an assessment|contact (?:me|us)|talk to (?:someone|a person)|help (?:finding|me find) (?:an? )?(?:installer|trade|tradesperson|service provider))\b/i.test(message);
+  return /\b(?:get|request|compare|review|accept|send|need|want|ready for|interested in|explore)\s+(?:a\s+|an\s+|some\s+|more\s+|another\s+|additional\s+|multiple\s+|competing\s+)?(?:quote|quotes|installer|installers|trade help|tradesperson|tradespeople|service provider|service providers|site visit|assessment)\b|\b(?:book an assessment|contact (?:me|us)|talk to (?:someone|a person)|help (?:finding|me find) (?:an? )?(?:installer|trade|tradesperson|service provider))\b|\b(?:anybody|anyone|someone|who|installers?|companies?)\b[^.!?\n]{0,100}\b(?:service|cover|work in|travel to)\b[^.!?\n]{0,60}\b(?:area|region|town|postcode|location|regional)\b/i.test(message);
 }
 
 function makeRequestId(prefix: string): string {
@@ -2425,7 +2438,9 @@ export function EnergyAssistantWidget({
                           {message.answerStatus === "source_review_required" && (
                             <p className={styles.reviewRequired}>I need a current official rule check before you rely on this for a rebate or eligibility decision.</p>
                           )}
-                          {message.verdict ? (
+                          {message.verdict && usesSingleParagraphAnswer(message) ? (
+                            <p className={styles.directAnswer}>{singleParagraphAnswerFor(message, context.audience)}</p>
+                          ) : message.verdict ? (
                             <>
                               <p className={styles.verdict}>{customerVisibleText(message.verdict, context.audience)}</p>
                               {message.reason && <p className={styles.directAnswer}>{customerVisibleText(message.reason, context.audience)}</p>}

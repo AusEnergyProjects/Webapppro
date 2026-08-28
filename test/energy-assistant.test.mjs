@@ -63,6 +63,26 @@ test("a broad insulation topic continues with useful education instead of a prod
   assert.doesNotMatch(answer.directAnswer, /For insulation, glazing and draught control, start here/i);
 });
 
+test("a regional installer and competing-quotes question is answered as the job requested", () => {
+  const answer = composeEnergyAssistantAnswer(
+    "I'm needing solar for my container shed, it'll be quite a big job. I'm based in the Grampians, is there anybody who will service this area? I already have one quote but want more quotes for comparisons.",
+    {
+      asOf: "2026-08-28T00:00:00.000Z",
+      priorUserMessages: ["Saved home context: postcode: 3000; property_type: Apartment or unit; solar: No"],
+    },
+  );
+
+  assert.equal(answer.status, "needs_context");
+  assert.match(answer.directAnswer, /find businesses that service the site.*competing quotes/i);
+  assert.match(answer.directAnswer, /The Grampians.*exact town or postcode/i);
+  assert.match(answer.directAnswer, /grid-connected or off-grid.*wind loading.*STCs.*total price/i);
+  assert.match(answer.directAnswer, /optional help button.*matched trades/i);
+  assert.doesNotMatch(answer.directAnswer, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.suggestedQuestions, []);
+  assert.ok(answer.directAnswer.split(/\s+/).length <= 120);
+});
+
 test("customer output policy rejects internal assessor-method copy", () => {
   assert.equal(
     surgeOutputViolatesPublicPolicy(

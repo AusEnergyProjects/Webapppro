@@ -204,6 +204,39 @@ export function isSurgeElectricSaulQuestion(value: string) {
     && !SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN.test(value);
 }
 
+const SURGE_LOCAL_SERVICE_REQUEST_PATTERNS = [
+  /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?)\b[\s\S]{0,120}\b(?:service|cover|travel\s+to|work\s+in|install\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+  /\b(?:installers?|companies?|providers?|contractors?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+] as const;
+
+const SURGE_COMPETING_QUOTES_PATTERN =
+  /\b(?:more|another|additional|second|third|multiple|two|three|competing|comparative)\s+(?:home[- ]?energy\s+|solar\s+|battery\s+|heating\s+|cooling\s+|hot[- ]?water\s+)?quotes?\b|\bquotes?\s+for\s+comparisons?\b|\b(?:get|seek|request|want|need|find)\b[^.!?\n]{0,60}\b(?:more|another|additional|multiple|two|three|competing|comparative)\s+quotes?\b/i;
+
+export function isSurgeServiceOrCompetingQuoteRequest(value: string) {
+  return SURGE_COMPETING_QUOTES_PATTERN.test(value)
+    || SURGE_LOCAL_SERVICE_REQUEST_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function surgeServiceAndQuoteAnswer(query: string) {
+  const postcodeKnown = /\b\d{4}\b/.test(query);
+  const namedRegion = /\bGrampians\b/i.test(query) ? "The Grampians" : "A broad region";
+  const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(query);
+  const hasExistingQuote = /\b(?:already\s+have|have\s+(?:got\s+)?(?:an?|one)|got|received|existing|first)\b[^.!?\n]{0,50}\bquotes?\b/i.test(query);
+  const job = solarJob ? "solar job" : "home-energy job";
+  const comparisonPoints = solarJob
+    ? "system size, whether it is grid-connected or off-grid, mounting and wind loading, cable or trenching work, switchboard and network scope, exact panels and inverter, STCs, warranties, exclusions and total price"
+    : "the proposed equipment, sizing, complete installation scope, licences, warranties, exclusions, travel charges and total price";
+  const locationSentence = postcodeKnown
+    ? "The postcode is enough to start checking current service coverage, although each business still needs to confirm travel and site access."
+    : `${namedRegion} is not precise enough to confirm which businesses currently cover the site because service areas and travel charges vary by town, so add the exact town or postcode.`;
+
+  const comparisonSentence = hasExistingQuote
+    ? `Keep the quote you already have so every offer can be compared on ${comparisonPoints}.`
+    : `Ask each business to quote the same written brief so the offers can be compared on ${comparisonPoints}.`;
+
+  return `I can help you find businesses that service the site and get competing quotes for this ${job}. ${locationSentence} ${comparisonSentence} Use the optional help button below to send one clear job brief to Australian Energy Assessments or request matched trades.`;
+}
+
 const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
 const THREE_PHASE_UPGRADE_PATTERN = /\b(?:upgrade|convert|conversion|change|move|switch|worth|need|require|get|getting|install)\w*\b/i;
 const THREE_PHASE_HOME_SUPPLY_PATTERN = /\b(?:house|home|supply|power|mains?|meter|switchboard|rewir\w*|solar|battery|inverter|electrician|network|upgrad\w*)\b/i;
@@ -2305,6 +2338,21 @@ export function composeEnergyAssistantAnswer(
       practicalSteps: [],
       toolActions: [],
       suggestedQuestions: [SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP],
+    });
+  }
+
+  if (isSurgeServiceOrCompetingQuoteRequest(query)) {
+    const postcodeKnown = /\b\d{4}\b/.test(query);
+    return structured("products_ratings", {
+      directAnswer: surgeServiceAndQuoteAnswer(query),
+      status: postcodeKnown ? "answered" : "needs_context",
+      citations: [],
+      confidence: "high",
+      assumptions: ["Current installer coverage and travel charges have not yet been confirmed for the exact site."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+      sourceBoundary: "No supplier or installer has been ranked or endorsed. Current service coverage must be confirmed for the exact site.",
     });
   }
 
@@ -4841,7 +4889,8 @@ export function composeEnergyAssistantAnswer(
       suggestedQuestions: ["Which programme and installation state should I check first?"],
     });
   }
-  if (namedCertificateIntent && namedCertificateMatches.length === 1) {
+  if (namedCertificateIntent && namedCertificateMatches.length === 1
+    && !(namedCertificateIntent === "count" && playbookId === "solar_stc")) {
     const namedProgram = namedCertificateMatches[0];
     const locationConversation = NAMED_CERTIFICATE_PROGRAMS.reduce(
       (conversation, program) => conversation.replace(program.pattern, " "),

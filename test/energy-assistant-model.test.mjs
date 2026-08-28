@@ -915,7 +915,7 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Give the useful part of the answer before asking/i);
   assert.match(prompt, /ask exactly one short highest-value follow-up question/i);
   assert.match(prompt, /keep asking one useful question at a time/i);
-  assert.match(prompt, /understand what the answer means and why it matters/i);
+  assert.match(prompt, /Keep the visible answer complete, useful and understandable/i);
   assert.match(prompt, /Never use an em dash or en dash/i);
   assert.match(prompt, /user came for expert judgement.*Do the comparison, calculation or reasoning/i);
   assert.match(prompt, /most efficient and best-value electric option/i);
@@ -925,12 +925,14 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);
   assert.match(prompt, /Use industryLibrary first for stable technical reasoning/i);
   assert.match(prompt, /one message contains several material questions[^\n]*answer every part/i);
-  assert.match(prompt, /Always return an empty quickReplies array/i);
+  assert.match(prompt, /quickReplies must always be empty/i);
   assert.match(prompt, /Use maintainedEvidence to confirm or fill gaps involving current rules/i);
   assert.match(prompt, /reviewedEducation is never current official/i);
   assert.match(prompt, /rank the methods by evidence quality, fit, durability and verification/i);
   assert.match(prompt, /Lead with the conclusion/i);
-  assert.match(prompt, /usually 45 to 140 words/i);
+  assert.match(prompt, /Default to one natural 35 to 100 word paragraph/i);
+  assert.match(prompt, /Categories route evidence; they are not answers/i);
+  assert.match(prompt, /another property, site or job overrides conflicting saved-home facts/i);
   assert.ok(prompt.length < 8_500, `prompt length: ${prompt.length}`);
   assert.ok(Array.isArray(context.industryLibrary));
   assert.ok(context.industryLibrary.length > 0);

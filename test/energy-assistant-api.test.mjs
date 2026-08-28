@@ -355,6 +355,57 @@ test("ordinary heating efficiency questions use the reviewed expert default with
   assert.deepEqual(payload.reply.quickReplies, []);
 });
 
+test("a regional service and competing-quotes question bypasses category grounding and saved-home pollution", async () => {
+  let groundedCalls = 0;
+  let modelCalls = 0;
+  let reservationCalls = 0;
+  const message = "I'm needing solar for my container shed, it'll be quite a big job. I'm based in the Grampians, is there anybody who will service this area? I already have one quote but want more quotes for comparisons.";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "regional-solar-quotes-0001",
+    message,
+    recentTurns: [],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => {
+      groundedCalls += 1;
+      return fixedAnswer("For solar and storage, start here: review interval load, daytime use, tariff and export limits.");
+    },
+    reserveModelCall: async () => {
+      reservationCalls += 1;
+      return allowModelCall();
+    },
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.equal(groundedCalls, 0);
+  assert.equal(reservationCalls, 0);
+  assert.equal(modelCalls, 0);
+  assert.match(payload.reply.directAnswer, /find businesses that service the site.*competing quotes/i);
+  assert.match(payload.reply.directAnswer, /The Grampians.*exact town or postcode/i);
+  assert.match(payload.reply.directAnswer, /grid-connected or off-grid.*wind loading.*STCs.*total price/i);
+  assert.doesNotMatch(payload.reply.content, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
+  assert.deepEqual(payload.reply.practicalSteps, []);
+  assert.deepEqual(payload.reply.quickReplies, []);
+  assert.equal(payload.reply.followUpQuestion, "");
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),

@@ -188,6 +188,10 @@ function repeatsStep(value: string, steps: readonly string[]) {
   });
 }
 
+function wantsOrderedSteps(message: string) {
+  return /\b(?:where (?:do|should|can) i start|what (?:should i do|do i do|comes|happens) first|how (?:do|can|should) i|steps?|checklist|walk me through|give me a plan|what to check)\b/i.test(message);
+}
+
 export function deriveSurgeAnswerPresentation(
   answer: EnergyAssistantAnswer,
   message: string,
@@ -204,7 +208,9 @@ export function deriveSurgeAnswerPresentation(
           && !comparableStep.includes(comparableDirectAnswer));
     })
     .slice(0, 3);
-  if (!steps.length && answer.nextAction) steps.push(toSurgePlainLanguage(answer.nextAction, 360));
+  if (!steps.length && answer.nextAction && wantsOrderedSteps(message)) {
+    steps.push(toSurgePlainLanguage(answer.nextAction, 360));
+  }
   const directParagraphs = directAnswer.split(/\n{2,}|\n(?=\s*\d+[.)]\s+)/u).map((part) => part.trim()).filter(Boolean);
   const lead = directParagraphs[0] || directAnswer;
   const leadSentences = sentences(lead);

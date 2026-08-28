@@ -838,6 +838,8 @@ test("optional help is available after intake and routes one consented destinati
   assert.equal(signalsInterest("What insulation options suit a renter?"), false);
   assert.equal(signalsInterest("What are my hot water options?"), false);
   assert.equal(signalsInterest("I want quotes from an installer"), true);
+  assert.equal(signalsInterest("I already have one quote but want more quotes for comparisons"), true);
+  assert.equal(signalsInterest("Is there anybody who will service this regional area?"), true);
   assert.equal(signalsInterest("Help me find a service provider"), true);
   assert.match(widget, /message\.role === "user" && signalsServiceInterest\(message\.content\)/);
   assert.match(widget, /Based on your saved context/);
@@ -1010,5 +1012,7 @@ test("page navigation links are restricted and public answer cards do not expose
   const answerCards = widget.slice(answerCardStart, answerCardEnd);
   assert.match(answerCards, /message\.directAnswer \|\| message\.content/);
   assert.match(answerCards, /naturalFollowUpFor\(message, context\.audience\)/);
+  assert.match(answerCards, /usesSingleParagraphAnswer\(message\)/);
+  assert.match(answerCards, /singleParagraphAnswerFor\(message, context\.audience\)/);
   assert.doesNotMatch(answerCards, /citations|sources|sourceBoundary|toolActions|message\.actions/);
 });
