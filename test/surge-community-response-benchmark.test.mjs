@@ -137,3 +137,21 @@ test("off-topic grounded and model answers cannot replace the direct draught ans
   assert.match(payload.reply.content, /sealing the gaps|weather seals|door snake/i);
   assert.doesNotMatch(payload.reply.content, /room load|floor area need heating/i);
 });
+
+test("a topic-matched model answer cannot dilute a direct community answer", async () => {
+  const entry = SURGE_COMMUNITY_RESPONSE_BENCHMARK.find((candidate) => candidate.id === "community-hpwh-finance-claim");
+  assert.ok(entry);
+  let modelReservationAttempted = false;
+  const response = await handleEnergyAssistantRequest(requestFor(entry), {
+    now: () => NOW,
+    reserveModelCall: async () => {
+      modelReservationAttempted = true;
+      return { allowed: true, release: async () => undefined };
+    },
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.match(payload.reply.content, /\$38[^.]*6 years[^.]*\$2,736/i);
+  assert.match(payload.reply.content, /does not equal[^.]*\$4,664/i);
+  assert.equal(modelReservationAttempted, false);
+});

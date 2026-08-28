@@ -55,6 +55,7 @@ import {
 import {
   composeSurgeSimpleAnswer,
   surgeAnswerMatchesQuestionIntent,
+  surgeSimpleAnswerNeedsDirectDelivery,
 } from "./surge-simple-answer.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
@@ -725,6 +726,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     || protectedAnswer || planPriorityAnswer
     ? null
     : composeSurgeSimpleAnswer(message, composedAnswer, planContext, recentTurns);
+  const deliverSimpleAnswerDirectly = surgeSimpleAnswerNeedsDirectDelivery(simpleAnswer);
   const deterministicAnswer = protectedAnswer || planPriorityAnswer || simpleAnswer || composedAnswer;
   let answer = deterministicAnswer;
   let presentation: SurgeAnswerPresentation | null = null;
@@ -732,7 +734,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
   if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer
     && !requiresDeterministicHeatingDefault && !requiresDeterministicServiceAnswer
-    && !protectedAnswer && !planPriorityAnswer) {
+    && !protectedAnswer && !planPriorityAnswer && !deliverSimpleAnswerDirectly) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
