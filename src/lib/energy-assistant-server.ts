@@ -1,6 +1,5 @@
 import {
   ENERGY_ASSISTANT_AUDIENCES,
-  ENERGY_ASSISTANT_KNOWLEDGE,
   ENERGY_ASSISTANT_TOPICS,
   type EnergyAssistantAudience,
 } from "../data/energy-assistant-knowledge.ts";
@@ -51,6 +50,7 @@ import {
   type SurgeAnswerType,
   type SurgeQuickReply,
 } from "./surge-everyday-answer.ts";
+import { composeSurgeSimpleAnswer } from "./surge-simple-answer.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
 export const ENERGY_ASSISTANT_MAX_MESSAGE_CHARS = 1_200;
@@ -477,17 +477,32 @@ function buildReply(
   answerInput: EnergyAssistantAnswer,
   message: string,
   presentationInput: SurgeAnswerPresentation | null,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+  planContext: ReturnType<typeof parseSurgePlanContext>,
   now: Date,
   randomUUID: () => string,
 ): EnergyAssistantReply {
   const answer = boundedAnswer(answerInput);
-  const followUpQuestion = limitedText(answer.suggestedQuestions[0] || "", 220);
-  const candidatePresentation = presentationInput
+  const proposedFollowUp = limitedText(answer.suggestedQuestions[0] || "", 220);
+  const followUpQuestion = surgeFollowUpWasAlreadyAnswered(proposedFollowUp, recentTurns, planContext)
+    ? ""
+    : proposedFollowUp;
+  const rawPresentation = presentationInput
     ? normalizeSurgeAnswerPresentation({ ...presentationInput, followUpQuestion })
     : deriveSurgeAnswerPresentation(answer, message);
+  const candidatePresentation = normalizeSurgeAnswerPresentation({
+    ...rawPresentation,
+    followUpQuestion,
+    quickReplies: followUpQuestion ? rawPresentation.quickReplies : [],
+  });
+  const fallbackPresentation = deriveSurgeAnswerPresentation(answer, message);
   const presentation = surgePresentationPassesEverydayLanguage(candidatePresentation)
     ? candidatePresentation
-    : deriveSurgeAnswerPresentation(answer, message);
+    : normalizeSurgeAnswerPresentation({
+      ...fallbackPresentation,
+      followUpQuestion,
+      quickReplies: followUpQuestion ? fallbackPresentation.quickReplies : [],
+    });
   const reply: EnergyAssistantReply = {
     id: randomUUID().toLowerCase(),
     role: "assistant",
@@ -514,15 +529,39 @@ function buildReply(
   return reply;
 }
 
-const SAFETY_SOURCE_TOPICS = new Map<string, string>(
-  ENERGY_ASSISTANT_KNOWLEDGE.map((source) => [source.id, source.topic]),
-);
+function normalizedQuestionWords(value: string) {
+  return new Set(value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/u).filter((word) => word.length > 2));
+}
+
+function questionsAreSimilar(left: string, right: string) {
+  const leftWords = normalizedQuestionWords(left);
+  const rightWords = normalizedQuestionWords(right);
+  if (!leftWords.size || !rightWords.size) return false;
+  const shared = [...leftWords].filter((word) => rightWords.has(word)).length;
+  return shared / Math.min(leftWords.size, rightWords.size) >= 0.72;
+}
+
+function surgeFollowUpWasAlreadyAnswered(
+  question: string,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+  planContext: ReturnType<typeof parseSurgePlanContext>,
+) {
+  if (!question) return false;
+  const lastAssistant = [...recentTurns].reverse().find((turn) => turn.role === "assistant")?.content || "";
+  const latestUser = [...recentTurns].reverse().find((turn) => turn.role === "user")?.content || "";
+  const planText = (planContext?.facts || []).map((fact) => `${fact.key}: ${fact.value}`).join("\n");
+  const knownText = `${planText}\n${recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content).join("\n")}`;
+
+  if (lastAssistant && questionsAreSimilar(question, lastAssistant) && latestUser) return true;
+  if (/\bpostcode\b/i.test(question) && /\b\d{4}\b/.test(knownText)) return true;
+  if (/\b(?:own|rent|tenant|owner)\b/i.test(question) && /\b(?:rent|renter|tenant|owner|own the home)\b/i.test(knownText)) return true;
+  if (/\bwhich (?:room|area)|what (?:room|area)\b/i.test(question)
+    && /\b(?:bedroom|lounge|living room|bathroom|kitchen|whole home|whole house)\b/i.test(latestUser)) return true;
+  return false;
+}
 
 function needsDeterministicSafetyAnswer(message: string, answer: EnergyAssistantAnswer) {
   if (answer.status === "source_review_required") return true;
-  if (answer.citations.some((citation) => SAFETY_SOURCE_TOPICS.get(citation.id) === "safety_consumer_rights")) {
-    return true;
-  }
   return /\b(?:asbestos|vermiculite|smoke|spark|arcing|burning|hissing|swollen|battery fire|gas smell|carbon monoxide|dizzy|woozy|light-headed|live wire|electrical cable|refrigerant|wet roof|main switch|switchboard)\b/i.test(message);
 }
 
@@ -577,7 +616,11 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const planPriorityAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer || protectedAnswer
     ? null
     : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
-  const deterministicAnswer = protectedAnswer || planPriorityAnswer || composedAnswer;
+  const simpleAnswer = compose !== composeEnergyAssistantAnswer
+    || requiresDeterministicSafety || requiresDeterministicDocumentAnswer || protectedAnswer || planPriorityAnswer
+    ? null
+    : composeSurgeSimpleAnswer(message, composedAnswer, planContext, recentTurns);
+  const deterministicAnswer = protectedAnswer || planPriorityAnswer || simpleAnswer || composedAnswer;
   let answer = deterministicAnswer;
   let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
@@ -634,6 +677,8 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     safeAnswer,
     message,
     answerSource === "model" && safeAnswer.directAnswer === answer.directAnswer ? presentation : null,
+    recentTurns,
+    planContext,
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
