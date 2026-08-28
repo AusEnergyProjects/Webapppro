@@ -11,6 +11,7 @@ import {
   isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
+  isSurgeServiceLocationFollowUp,
   isSurgeServiceOrCompetingQuoteRequest,
   sanitizeSurgePublicText,
   sanitizeSurgeReferenceText,
@@ -699,7 +700,8 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
   const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
   const requiresDeterministicHeatingDefault = needsDeterministicHeatingDefault(message, composedAnswer);
-  const requiresDeterministicServiceAnswer = isSurgeServiceOrCompetingQuoteRequest(message);
+  const requiresDeterministicServiceAnswer = isSurgeServiceOrCompetingQuoteRequest(message)
+    || isSurgeServiceLocationFollowUp(message, priorUserMessages);
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     || requiresDeterministicServiceAnswer
     ? null

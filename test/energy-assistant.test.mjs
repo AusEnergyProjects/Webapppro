@@ -73,14 +73,31 @@ test("a regional installer and competing-quotes question is answered as the job 
   );
 
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /find businesses that service the site.*competing quotes/i);
+  assert.match(answer.directAnswer, /does not favour or recommend particular trades, installers, brands or products/i);
+  assert.match(answer.directAnswer, /every approved trade matching the selected service and area.*competing quotes/i);
   assert.match(answer.directAnswer, /The Grampians.*exact town or postcode/i);
-  assert.match(answer.directAnswer, /grid-connected or off-grid.*wind loading.*STCs.*total price/i);
-  assert.match(answer.directAnswer, /optional help button.*matched trades/i);
+  assert.match(answer.directAnswer, /system type and size.*exact panels and inverter.*STCs.*total price/i);
+  assert.match(answer.directAnswer, /Use the Get competing quotes button below to start/i);
   assert.doesNotMatch(answer.directAnswer, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.suggestedQuestions, []);
   assert.ok(answer.directAnswer.split(/\s+/).length <= 120);
+});
+
+test("a town supplied after the regional service answer continues trade matching", () => {
+  const serviceRequest = "I'm needing solar for my container shed in the Grampians. Is there anybody who services the area? I already have one quote but want more quotes.";
+  const answer = composeEnergyAssistantAnswer("its in halls gap", {
+    asOf: "2026-08-28T00:00:00.000Z",
+    priorUserMessages: [serviceRequest],
+  });
+
+  assert.equal(answer.status, "answered");
+  assert.match(answer.directAnswer, /That location is specific enough to start matching the service area/i);
+  assert.match(answer.directAnswer, /every approved trade matching the selected service and area/i);
+  assert.match(answer.directAnswer, /Use the Get competing quotes button below to start/i);
+  assert.doesNotMatch(answer.directAnswer, /cannot call the cheaper quote better|attach the quote|For solar and storage/i);
+  assert.deepEqual(answer.practicalSteps, []);
+  assert.deepEqual(answer.suggestedQuestions, []);
 });
 
 test("customer output policy rejects internal assessor-method copy", () => {

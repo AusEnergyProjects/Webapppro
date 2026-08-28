@@ -1105,6 +1105,30 @@ export function EnergyAssistantWidget({
     setLeadOpen(true);
   };
 
+  const openMatchedTradesLeadForm = () => {
+    setLead((current) => {
+      const continuingMatchedTradeDraft = current.destination === "matched-trades";
+      return {
+        ...current,
+        destination: "matched-trades",
+        postcode: continuingMatchedTradeDraft ? current.postcode : "",
+        suburb: continuingMatchedTradeDraft ? current.suburb : "",
+        state: continuingMatchedTradeDraft ? current.state : "",
+        serviceConsent: false,
+        shareName: false,
+        sharePhone: false,
+        shareAddress: false,
+        shareKnownPlanFacts: false,
+        marketingConsent: false,
+      };
+    });
+    resetLeadAttempt();
+    setLeadStage("scope");
+    setLeadStartedAt(Date.now());
+    leadFormScrollPendingRef.current = true;
+    setLeadOpen(true);
+  };
+
   const chooseLeadDestination = (destination: LeadDraft["destination"]) => {
     updateLead((current) => ({
       ...current,
@@ -2226,7 +2250,9 @@ export function EnergyAssistantWidget({
                     ))}
                   </ul>
                   {optionalHelpAvailable && !leadOpen && (
-                    <button type="button" onClick={openLeadForm}>See optional help paths</button>
+                    <button type="button" onClick={serviceInterest ? openMatchedTradesLeadForm : openLeadForm}>
+                      {serviceInterest ? "Get competing quotes" : "See optional help paths"}
+                    </button>
                   )}
                   {leadOpen && <p>The optional help form is open below. Your chat and private plan remain unchanged.</p>}
                 </div>
@@ -2539,10 +2565,14 @@ export function EnergyAssistantWidget({
               </section>
               {optionalHelpAvailable && !leadOpen && (
                 <section className={styles.guidanceHelp}>
-                  <span>Optional human help</span>
-                  <h3>Only if you want it</h3>
-                  <p>Your chat and private plan stay private unless you deliberately choose a follow-up path.</p>
-                  <button type="button" onClick={openLeadForm}>See optional help paths</button>
+                  <span>{serviceInterest ? "Independent trade matching" : "Optional human help"}</span>
+                  <h3>{serviceInterest ? "Get competing quotes" : "Only if you want it"}</h3>
+                  <p>{serviceInterest
+                    ? "Australian Energy Assessments does not favour trades, brands or products. Start one enquiry to every approved trade matching the service and area."
+                    : "Your chat and private plan stay private unless you deliberately choose a follow-up path."}</p>
+                  <button type="button" onClick={serviceInterest ? openMatchedTradesLeadForm : openLeadForm}>
+                    {serviceInterest ? "Start trade enquiry" : "See optional help paths"}
+                  </button>
                 </section>
               )}
               {leadOpen && (

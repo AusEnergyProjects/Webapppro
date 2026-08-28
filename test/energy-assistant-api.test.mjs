@@ -397,10 +397,62 @@ test("a regional service and competing-quotes question bypasses category groundi
   assert.equal(groundedCalls, 0);
   assert.equal(reservationCalls, 0);
   assert.equal(modelCalls, 0);
-  assert.match(payload.reply.directAnswer, /find businesses that service the site.*competing quotes/i);
+  assert.match(payload.reply.directAnswer, /does not favour or recommend particular trades, installers, brands or products/i);
+  assert.match(payload.reply.directAnswer, /every approved trade matching the selected service and area.*competing quotes/i);
   assert.match(payload.reply.directAnswer, /The Grampians.*exact town or postcode/i);
-  assert.match(payload.reply.directAnswer, /grid-connected or off-grid.*wind loading.*STCs.*total price/i);
+  assert.match(payload.reply.directAnswer, /system type and size.*exact panels and inverter.*STCs.*total price/i);
+  assert.match(payload.reply.directAnswer, /Use the Get competing quotes button below to start/i);
   assert.doesNotMatch(payload.reply.content, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
+  assert.deepEqual(payload.reply.practicalSteps, []);
+  assert.deepEqual(payload.reply.quickReplies, []);
+  assert.equal(payload.reply.followUpQuestion, "");
+});
+
+test("a locality reply continues the regional trade-matching request instead of switching to quote review", async () => {
+  let groundedCalls = 0;
+  let modelCalls = 0;
+  const serviceRequest = "I'm needing solar for my container shed in the Grampians. Is there anybody who services the area? I already have one quote but want more quotes.";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "regional-solar-location-follow-up-0001",
+    message: "its in halls gap",
+    recentTurns: [
+      { role: "user", content: serviceRequest },
+      { role: "assistant", content: "Add the exact town or postcode so I can narrow the service area." },
+    ],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => {
+      groundedCalls += 1;
+      return fixedAnswer("For solar and storage, start here.");
+    },
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.equal(groundedCalls, 0);
+  assert.equal(modelCalls, 0);
+  assert.equal(payload.reply.status, "answered");
+  assert.match(payload.reply.directAnswer, /That location is specific enough to start matching the service area/i);
+  assert.match(payload.reply.directAnswer, /every approved trade matching the selected service and area/i);
+  assert.match(payload.reply.directAnswer, /Use the Get competing quotes button below to start/i);
+  assert.doesNotMatch(payload.reply.content, /cannot call the cheaper quote better|attach the quote|Melbourne|apartment|For solar and storage/i);
   assert.deepEqual(payload.reply.practicalSteps, []);
   assert.deepEqual(payload.reply.quickReplies, []);
   assert.equal(payload.reply.followUpQuestion, "");

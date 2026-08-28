@@ -217,24 +217,37 @@ export function isSurgeServiceOrCompetingQuoteRequest(value: string) {
     || SURGE_LOCAL_SERVICE_REQUEST_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function surgeServiceAndQuoteAnswer(query: string) {
+export function isSurgeServiceLocationFollowUp(
+  value: string,
+  priorUserMessages: readonly string[],
+) {
+  const previous = [...priorUserMessages]
+    .reverse()
+    .find((message) => isSurgeServiceOrCompetingQuoteRequest(message));
+  if (!previous) return false;
+  const followUp = value.trim();
+  return /^\d{4}$/.test(followUp)
+    || /^(?:it(?:'|’)?s|it is|the (?:site|job|property) is|(?:i(?:'|’)?m|i am|we(?:'|’)?re|we are) (?:in|at)|(?:located|based) (?:in|at))\s+[a-z][a-z .'-]{1,70}[.!?]*$/i.test(followUp);
+}
+
+function surgeServiceAndQuoteAnswer(query: string, exactLocationKnown = false) {
   const postcodeKnown = /\b\d{4}\b/.test(query);
   const namedRegion = /\bGrampians\b/i.test(query) ? "The Grampians" : "A broad region";
   const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(query);
   const hasExistingQuote = /\b(?:already\s+have|have\s+(?:got\s+)?(?:an?|one)|got|received|existing|first)\b[^.!?\n]{0,50}\bquotes?\b/i.test(query);
   const job = solarJob ? "solar job" : "home-energy job";
   const comparisonPoints = solarJob
-    ? "system size, whether it is grid-connected or off-grid, mounting and wind loading, cable or trenching work, switchboard and network scope, exact panels and inverter, STCs, warranties, exclusions and total price"
-    : "the proposed equipment, sizing, complete installation scope, licences, warranties, exclusions, travel charges and total price";
-  const locationSentence = postcodeKnown
-    ? "The postcode is enough to start checking current service coverage, although each business still needs to confirm travel and site access."
+    ? "system type and size, the full installation, exact panels and inverter, STCs, warranties, exclusions and total price"
+    : "the proposed equipment, sizing, full installation, licences, warranties, exclusions, travel charges and total price";
+  const locationSentence = exactLocationKnown || postcodeKnown
+    ? "That location is specific enough to start matching the service area, although each trade still confirms availability, travel and site access."
     : `${namedRegion} is not precise enough to confirm which businesses currently cover the site because service areas and travel charges vary by town, so add the exact town or postcode.`;
 
   const comparisonSentence = hasExistingQuote
     ? `Keep the quote you already have so every offer can be compared on ${comparisonPoints}.`
     : `Ask each business to quote the same written brief so the offers can be compared on ${comparisonPoints}.`;
 
-  return `I can help you find businesses that service the site and get competing quotes for this ${job}. ${locationSentence} ${comparisonSentence} Use the optional help button below to send one clear job brief to Australian Energy Assessments or request matched trades.`;
+  return `Australian Energy Assessments does not favour or recommend particular trades, installers, brands or products. It can send one structured enquiry to every approved trade matching the selected service and area, so you can request competing quotes for this ${job}. ${locationSentence} ${comparisonSentence} Use the Get competing quotes button below to start.`;
 }
 
 const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
@@ -2341,11 +2354,16 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (isSurgeServiceOrCompetingQuoteRequest(query)) {
-    const postcodeKnown = /\b\d{4}\b/.test(query);
+  const serviceLocationFollowUp = isSurgeServiceLocationFollowUp(query, priorUserMessages);
+  if (isSurgeServiceOrCompetingQuoteRequest(query) || serviceLocationFollowUp) {
+    const priorServiceRequest = serviceLocationFollowUp
+      ? [...priorUserMessages].reverse().find(isSurgeServiceOrCompetingQuoteRequest) || ""
+      : "";
+    const serviceConversation = priorServiceRequest ? `${priorServiceRequest}\n${query}` : query;
+    const postcodeKnown = /\b\d{4}\b/.test(serviceConversation);
     return structured("products_ratings", {
-      directAnswer: surgeServiceAndQuoteAnswer(query),
-      status: postcodeKnown ? "answered" : "needs_context",
+      directAnswer: surgeServiceAndQuoteAnswer(serviceConversation, serviceLocationFollowUp),
+      status: serviceLocationFollowUp || postcodeKnown ? "answered" : "needs_context",
       citations: [],
       confidence: "high",
       assumptions: ["Current installer coverage and travel charges have not yet been confirmed for the exact site."],
