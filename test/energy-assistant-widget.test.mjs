@@ -841,11 +841,10 @@ test("optional help is available after intake and routes one consented destinati
   assert.equal(signalsInterest("I already have one quote but want more quotes for comparisons"), true);
   assert.equal(signalsInterest("Is there anybody who will service this regional area?"), true);
   assert.equal(signalsInterest("Help me find a service provider"), true);
-  assert.equal(signalsInterest("im looking for someone to put solar on my roof in 3099"), true);
   assert.match(widget, /const openMatchedTradesLeadForm = \(\) =>/);
-  assert.match(widget, /solarEnquiry = messagesRef\.current\.slice\(-4\)\.some/);
-  assert.match(widget, /services: continuingMatchedTradeDraft \? current\.services : solarEnquiry \? \["solar"\] : \[\]/);
-  assert.match(widget, /destination: "matched-trades"[\s\S]{0,180}postcode: continuingMatchedTradeDraft \? current\.postcode : ""/);
+  assert.match(widget, /enquiry = messagesRef\.current\.slice\(-4\)\.map[\s\S]{0,180}join\(" "\)/);
+  assert.match(widget, /postcode: continuingMatchedTradeDraft \? current\.postcode : enquiry\.match\(\/\\b\\d\{4\}\\b\/\)\?\.\[0\] \|\| ""/);
+  assert.match(widget, /services: continuingMatchedTradeDraft \? current\.services : \/\\bsolar\\b\/i\.test\(enquiry\) \? \["solar"\] : \[\]/);
   assert.match(widget, /setLeadStage\("scope"\)/);
   assert.match(widget, /serviceInterest \? "Get competing quotes" : "See optional help paths"/);
   assert.match(widget, /serviceInterest \? "Start trade enquiry" : "See optional help paths"/);
@@ -856,7 +855,7 @@ test("optional help is available after intake and routes one consented destinati
   assert.match(widget, /className=\{styles\.guidanceRail\}/);
   assert.match(widget, /className=\{styles\.mobileGuidance\}/);
   assert.match(widget, /Your chat and private plan stay private unless you deliberately choose a follow-up path/);
-  assert.match(widget, /One enquiry goes to approved trades for the job area/);
+  assert.match(widget, /Approved trades can quote your job/);
   assert.match(widget, /serviceInterest \? openMatchedTradesLeadForm : openLeadForm/);
   assert.doesNotMatch(widget, /Keep exploring or change subject/);
   assert.match(widget, /Back to Surge AI/);

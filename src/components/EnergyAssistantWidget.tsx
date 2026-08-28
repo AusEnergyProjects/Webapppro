@@ -530,7 +530,7 @@ function parseApiError(payload: unknown, fallback: string): string {
 }
 
 function signalsServiceInterest(message: string) {
-  return /\b(?:get|request|compare|review|accept|send|need|want|ready for|interested in|explore|looking for)\s+(?:a\s+|an\s+|some\s+|more\s+|another\s+|additional\s+|multiple\s+|competing\s+)?(?:quote|quotes|installer|installers|trade help|tradesperson|tradespeople|service provider|service providers|site visit|assessment|someone)\b|\b(?:book an assessment|contact (?:me|us)|talk to (?:someone|a person)|help (?:finding|me find) (?:an? )?(?:installer|trade|tradesperson|service provider))\b|\b(?:anybody|anyone|someone|who|installers?|companies?)\b[^.!?\n]{0,100}\b(?:service|cover|work in|travel to)\b[^.!?\n]{0,60}\b(?:area|region|town|postcode|location|regional)\b/i.test(message);
+  return /\b(?:get|request|compare|review|accept|send|need|want|ready for|interested in|explore)\s+(?:a\s+|an\s+|some\s+|more\s+|another\s+|additional\s+|multiple\s+|competing\s+)?(?:quote|quotes|installer|installers|trade help|tradesperson|tradespeople|service provider|service providers|site visit|assessment)\b|\b(?:book an assessment|contact (?:me|us)|talk to (?:someone|a person)|help (?:finding|me find) (?:an? )?(?:installer|trade|tradesperson|service provider))\b|\b(?:anybody|anyone|someone|who|installers?|companies?)\b[^.!?\n]{0,100}\b(?:service|cover|work in|travel to)\b[^.!?\n]{0,60}\b(?:area|region|town|postcode|location|regional)\b/i.test(message);
 }
 
 function makeRequestId(prefix: string): string {
@@ -1110,16 +1110,16 @@ export function EnergyAssistantWidget({
   };
 
   const openMatchedTradesLeadForm = () => {
-    const solarEnquiry = messagesRef.current.slice(-4).some((message) => /\bsolar\b/i.test(message.content));
+    const enquiry = messagesRef.current.slice(-4).map((message) => message.content).join(" ");
     setLead((current) => {
       const continuingMatchedTradeDraft = current.destination === "matched-trades";
       return {
         ...current,
         destination: "matched-trades",
-        postcode: continuingMatchedTradeDraft ? current.postcode : "",
+        postcode: continuingMatchedTradeDraft ? current.postcode : enquiry.match(/\b\d{4}\b/)?.[0] || "",
         suburb: continuingMatchedTradeDraft ? current.suburb : "",
         state: continuingMatchedTradeDraft ? current.state : "",
-        services: continuingMatchedTradeDraft ? current.services : solarEnquiry ? ["solar"] : [],
+        services: continuingMatchedTradeDraft ? current.services : /\bsolar\b/i.test(enquiry) ? ["solar"] : [],
         ...RESET_LEAD_CONSENT,
       };
     });
@@ -2569,7 +2569,7 @@ export function EnergyAssistantWidget({
                   <span>{serviceInterest ? "Independent trade matching" : "Optional human help"}</span>
                   <h3>{serviceInterest ? "Get competing quotes" : "Only if you want it"}</h3>
                   <p>{serviceInterest
-                    ? "One enquiry goes to approved trades for the job area."
+                    ? "Approved trades can quote your job."
                     : "Your chat and private plan stay private unless you deliberately choose a follow-up path."}</p>
                   <button type="button" onClick={serviceInterest ? openMatchedTradesLeadForm : openLeadForm}>
                     {serviceInterest ? "Start trade enquiry" : "See optional help paths"}
