@@ -507,7 +507,7 @@ function providerBody(request: SurgeModelRequest, context: ReturnType<typeof con
   return {
     model: SUPPORTED_MODEL,
     store: false,
-    reasoning: { effort: "low" },
+    reasoning: { effort: "medium" },
     max_output_tokens: MAX_PROVIDER_OUTPUT_TOKENS,
     text: {
       verbosity: "low",
