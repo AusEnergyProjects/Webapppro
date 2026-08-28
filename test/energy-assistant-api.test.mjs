@@ -266,6 +266,38 @@ test("registry-grounded product guidance bypasses the general model and records 
   assert.equal(qualityEvents[0].answerSource, "grounded");
 });
 
+test("broad grounded category guidance feeds Sol instead of replacing a direct answer", async () => {
+  let modelCalls = 0;
+  const groundedAnswer = fixedAnswer(
+    "For heating and cooling, start here: compare the running cost of a suitable fixed reverse-cycle air conditioner with gas or portable resistance heating.",
+  );
+  const modelAnswer = "Usually, yes. A modern reverse-cycle air conditioner is often cheaper to run than an older gas heater because it moves several units of heat for each unit of electricity. The exact result still depends on the gas heater, electricity and gas rates, and how the rooms are used.";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "grounded-category-model-0001",
+    message: "Is reverse-cycle air conditioning usually cheaper to run than my old gas heater?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => groundedAnswer,
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      modelCalls += 1;
+      assert.equal(modelRequest.deterministicAnswer.directAnswer, groundedAnswer.directAnswer);
+      return { answer: fixedAnswer(modelAnswer), continuation: continuation() };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelCalls, 1);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.equal(payload.reply.directAnswer, modelAnswer);
+  assert.deepEqual(payload.reply.quickReplies, []);
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),

@@ -518,6 +518,10 @@ test("Surge inherits the platform typography roles instead of inventing tiny var
   assert.match(styles, /--surge-type-label: var\(--type-label, \.75rem\)/);
   assert.match(styles, /\.panel button,[\s\S]{0,120}\.panel summary/);
   assert.match(styles, /\.panel small,[\s\S]{0,120}\.panel fieldset > legend/);
+  assert.match(
+    styles,
+    /\.directAnswer,\s*\.verdict,\s*\.practicalSteps,\s*\.clarifyingQuestion,\s*\.extraDetail \{[^}]*font-size: 0\.76rem;[^}]*font-weight: 500;[^}]*line-height: 1\.6;/,
+  );
 });
 
 test("mobile Surge collapses secondary context and suggestions while chat follows page scroll", () => {

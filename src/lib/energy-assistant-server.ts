@@ -438,6 +438,14 @@ function isGenericNonAnswer(
   return SURGE_GENERIC_NON_ANSWER_PATTERNS.some((pattern) => pattern.test(visibleText));
 }
 
+function groundedAnswerNeedsDirectDelivery(answer: EnergyAssistantAnswer) {
+  if (answer.status === "source_review_required") return true;
+  const text = answer.directAnswer;
+  return /(?:\$\s*\d|\b\d+(?:\.\d+)?\s*(?:STCs?|VEECs?|ESCs?|PRCs?|kW|kWh|litres?|stars?)\b)/i.test(text)
+    || /\b(?:present|listed|registered|approved|eligible)\b[^.\n]{0,120}\b(?:official|register)\b/i.test(text)
+    || /\b(?:official|register)\b[^.\n]{0,120}\b(?:present|listed|registered|approved|eligible)\b/i.test(text);
+}
+
 function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
   const clean = audience === "trade"
     ? sanitizeSurgeReferenceText(value)
@@ -662,12 +670,18 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     const groundedAnswer = groundedCandidate && !isGenericNonAnswer(groundedCandidate)
       ? groundedCandidate
       : null;
-    if (groundedAnswer) {
+    const deliverGroundedDirectly = groundedAnswer
+      ? groundedAnswerNeedsDirectDelivery(groundedAnswer)
+      : false;
+    if (deliverGroundedDirectly && groundedAnswer) {
       answer = groundedAnswer;
       answerSource = "grounded";
     }
-    if (!groundedAnswer && dependencies.reserveModelCall) {
-      const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(modelRequest);
+    if (!deliverGroundedDirectly && dependencies.reserveModelCall) {
+      const groundedModelRequest = groundedAnswer
+        ? { ...modelRequest, deterministicAnswer: groundedAnswer }
+        : modelRequest;
+      const estimatedMicroUsd = estimateSurgeModelReservationMicroUsd(groundedModelRequest);
       if (estimatedMicroUsd !== null) {
         let reservation: SurgeModelCallReservation = { allowed: false };
         try {
@@ -681,7 +695,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
         if (reservation.allowed) {
           try {
             const generate = dependencies.generateAnswer || generateSurgeModelAnswer;
-            const generated = await generate(modelRequest).catch(() => null);
+            const generated = await generate(groundedModelRequest).catch(() => null);
             if (generated
               && generatedResultIsPolicySafe(generated, audience)
               && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
@@ -695,6 +709,10 @@ async function ask(request: Request, dependencies: ServerDependencies) {
           }
         }
       }
+    }
+    if (answerSource === "deterministic" && groundedAnswer) {
+      answer = groundedAnswer;
+      answerSource = "grounded";
     }
   }
   const safeAnswer = audience === "trade"
