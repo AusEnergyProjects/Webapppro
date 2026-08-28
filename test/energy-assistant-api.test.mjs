@@ -397,14 +397,47 @@ test("a regional service and competing-quotes question bypasses category groundi
   assert.equal(groundedCalls, 0);
   assert.equal(reservationCalls, 0);
   assert.equal(modelCalls, 0);
-  assert.match(payload.reply.directAnswer, /does not favour or recommend particular trades, installers, brands or products/i);
-  assert.match(payload.reply.directAnswer, /every approved trade matching the selected service and area.*competing quotes/i);
-  assert.match(payload.reply.directAnswer, /The Grampians.*exact town or postcode/i);
-  assert.match(payload.reply.directAnswer, /system type and size.*exact panels and inverter.*STCs.*total price/i);
-  assert.match(payload.reply.directAnswer, /Use the Get competing quotes button below to start/i);
+  assert.match(payload.reply.directAnswer, /help you find solar installers for this job/i);
+  assert.match(payload.reply.directAnswer, /do not favour any company or product/i);
+  assert.match(payload.reply.directAnswer, /Get competing quotes below, enter the job postcode/i);
+  assert.match(payload.reply.directAnswer, /compare their replies with the quote you already have/i);
   assert.doesNotMatch(payload.reply.content, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
   assert.deepEqual(payload.reply.practicalSteps, []);
   assert.deepEqual(payload.reply.quickReplies, []);
+  assert.equal(payload.reply.followUpQuestion, "");
+});
+
+test("an everyday solar-installer request bypasses technical category guidance", async () => {
+  let groundedCalls = 0;
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "plain-solar-installer-0001",
+    message: "im looking for someone to put solar on my roof in 3099",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => {
+      groundedCalls += 1;
+      return fixedAnswer("For solar and storage, review interval load, tariffs and export limits.");
+    },
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => {
+      modelCalls += 1;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.equal(groundedCalls, 0);
+  assert.equal(modelCalls, 0);
+  assert.match(payload.reply.directAnswer, /^Yes, we can help you find solar installers who work in postcode 3099\./i);
+  assert.match(payload.reply.directAnswer, /Tap Get competing quotes below/i);
+  assert.doesNotMatch(payload.reply.content, /interval|load|tariff|export|battery|STCs|service area|structured enquiry|site access/i);
   assert.equal(payload.reply.followUpQuestion, "");
 });
 
@@ -449,9 +482,9 @@ test("a locality reply continues the regional trade-matching request instead of 
   assert.equal(groundedCalls, 0);
   assert.equal(modelCalls, 0);
   assert.equal(payload.reply.status, "answered");
-  assert.match(payload.reply.directAnswer, /That location is specific enough to start matching the service area/i);
-  assert.match(payload.reply.directAnswer, /every approved trade matching the selected service and area/i);
-  assert.match(payload.reply.directAnswer, /Use the Get competing quotes button below to start/i);
+  assert.match(payload.reply.directAnswer, /help you find solar installers who work in that area/i);
+  assert.match(payload.reply.directAnswer, /do not favour any company or product/i);
+  assert.match(payload.reply.directAnswer, /Tap Get competing quotes below/i);
   assert.doesNotMatch(payload.reply.content, /cannot call the cheaper quote better|attach the quote|Melbourne|apartment|For solar and storage/i);
   assert.deepEqual(payload.reply.practicalSteps, []);
   assert.deepEqual(payload.reply.quickReplies, []);

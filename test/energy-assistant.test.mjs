@@ -73,15 +73,28 @@ test("a regional installer and competing-quotes question is answered as the job 
   );
 
   assert.equal(answer.status, "needs_context");
-  assert.match(answer.directAnswer, /does not favour or recommend particular trades, installers, brands or products/i);
-  assert.match(answer.directAnswer, /every approved trade matching the selected service and area.*competing quotes/i);
-  assert.match(answer.directAnswer, /The Grampians.*exact town or postcode/i);
-  assert.match(answer.directAnswer, /system type and size.*exact panels and inverter.*STCs.*total price/i);
-  assert.match(answer.directAnswer, /Use the Get competing quotes button below to start/i);
-  assert.doesNotMatch(answer.directAnswer, /Melbourne|apartment|daytime use|tariff|export limits|For solar and storage, start here/i);
+  assert.match(answer.directAnswer, /help you find solar installers for this job/i);
+  assert.match(answer.directAnswer, /do not favour any company or product/i);
+  assert.match(answer.directAnswer, /Get competing quotes below, enter the job postcode/i);
+  assert.match(answer.directAnswer, /compare their replies with the quote you already have/i);
+  assert.doesNotMatch(answer.directAnswer, /Melbourne|apartment|daytime use|tariff|export limits|STCs|system type|selected service|structured enquiry|service area|For solar and storage, start here/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.suggestedQuestions, []);
-  assert.ok(answer.directAnswer.split(/\s+/).length <= 120);
+  assert.ok(answer.directAnswer.split(/\s+/).length <= 65);
+});
+
+test("a plain-language request for a solar installer is treated as a service request", () => {
+  const answer = composeEnergyAssistantAnswer(
+    "im looking for someone to put solar on my roof in 3099",
+    { asOf: "2026-08-28T00:00:00.000Z" },
+  );
+
+  assert.equal(answer.status, "answered");
+  assert.match(answer.directAnswer, /^Yes, we can help you find solar installers who work in postcode 3099\./i);
+  assert.match(answer.directAnswer, /do not favour any company or product/i);
+  assert.match(answer.directAnswer, /Tap Get competing quotes below/i);
+  assert.doesNotMatch(answer.directAnswer, /interval|load|tariff|export|battery|STCs|service area|structured enquiry|site access/i);
+  assert.ok(answer.directAnswer.split(/\s+/).length <= 50);
 });
 
 test("a town supplied after the regional service answer continues trade matching", () => {
@@ -92,9 +105,9 @@ test("a town supplied after the regional service answer continues trade matching
   });
 
   assert.equal(answer.status, "answered");
-  assert.match(answer.directAnswer, /That location is specific enough to start matching the service area/i);
-  assert.match(answer.directAnswer, /every approved trade matching the selected service and area/i);
-  assert.match(answer.directAnswer, /Use the Get competing quotes button below to start/i);
+  assert.match(answer.directAnswer, /help you find solar installers who work in that area/i);
+  assert.match(answer.directAnswer, /do not favour any company or product/i);
+  assert.match(answer.directAnswer, /Tap Get competing quotes below/i);
   assert.doesNotMatch(answer.directAnswer, /cannot call the cheaper quote better|attach the quote|For solar and storage/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.suggestedQuestions, []);

@@ -207,6 +207,8 @@ export function isSurgeElectricSaulQuestion(value: string) {
 const SURGE_LOCAL_SERVICE_REQUEST_PATTERNS = [
   /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?)\b[\s\S]{0,120}\b(?:service|cover|travel\s+to|work\s+in|install\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
   /\b(?:installers?|companies?|providers?|contractors?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+  /\b(?:anybody|anyone|someone|somebody|who|installers?|companies?|contractors?|tradies?|electricians?|plumbers?)\b[^.!?\n]{0,100}\b(?:install|put|fit|replace|repair|quote)\w*\b[^.!?\n]{0,100}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b/i,
+  /\b(?:looking for|find|need|want)\b[^.!?\n]{0,80}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b[^.!?\n]{0,80}\b(?:installer|company|contractor|tradie|electrician|plumber|quote)\b/i,
 ] as const;
 
 const SURGE_COMPETING_QUOTES_PATTERN =
@@ -231,23 +233,18 @@ export function isSurgeServiceLocationFollowUp(
 }
 
 function surgeServiceAndQuoteAnswer(query: string, exactLocationKnown = false) {
-  const postcodeKnown = /\b\d{4}\b/.test(query);
-  const namedRegion = /\bGrampians\b/i.test(query) ? "The Grampians" : "A broad region";
+  const postcode = query.match(/\b\d{4}\b/)?.[0] || "";
   const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(query);
   const hasExistingQuote = /\b(?:already\s+have|have\s+(?:got\s+)?(?:an?|one)|got|received|existing|first)\b[^.!?\n]{0,50}\bquotes?\b/i.test(query);
-  const job = solarJob ? "solar job" : "home-energy job";
-  const comparisonPoints = solarJob
-    ? "system type and size, the full installation, exact panels and inverter, STCs, warranties, exclusions and total price"
-    : "the proposed equipment, sizing, full installation, licences, warranties, exclusions, travel charges and total price";
-  const locationSentence = exactLocationKnown || postcodeKnown
-    ? "That location is specific enough to start matching the service area, although each trade still confirms availability, travel and site access."
-    : `${namedRegion} is not precise enough to confirm which businesses currently cover the site because service areas and travel charges vary by town, so add the exact town or postcode.`;
-
-  const comparisonSentence = hasExistingQuote
-    ? `Keep the quote you already have so every offer can be compared on ${comparisonPoints}.`
-    : `Ask each business to quote the same written brief so the offers can be compared on ${comparisonPoints}.`;
-
-  return `Australian Energy Assessments does not favour or recommend particular trades, installers, brands or products. It can send one structured enquiry to every approved trade matching the selected service and area, so you can request competing quotes for this ${job}. ${locationSentence} ${comparisonSentence} Use the Get competing quotes button below to start.`;
+  const trades = solarJob ? "solar installers" : "approved trades";
+  const place = postcode ? `postcode ${postcode}` : exactLocationKnown ? "that area" : "";
+  const opening = place
+    ? `Yes, we can help you find ${trades} who work in ${place}.`
+    : `Yes, we can help you find ${trades} for this job.`;
+  const action = place
+    ? "Tap Get competing quotes below and your enquiry can be sent to approved trades who cover the area."
+    : "Tap Get competing quotes below, enter the job postcode and your enquiry can be sent to approved trades who cover the area.";
+  return `${opening} We do not favour any company or product. ${action}${hasExistingQuote ? " You can compare their replies with the quote you already have." : ""}`;
 }
 
 const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
