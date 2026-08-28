@@ -306,6 +306,38 @@ function planContextFrom(value: unknown) {
   return context;
 }
 
+function currentQuestionUsesSavedHomeContext(
+  message: string,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+) {
+  const question = message.trim();
+  if (!question) return false;
+
+  // A newly named property, site or job is authoritative and must not inherit a
+  // different home's survey facts simply because both questions share a topic.
+  if (/\b(?:another|different|other|second|new)\s+(?:home|house|property|site|job|shed|building)\b|\bcontainer\s+shed\b/i.test(question)) {
+    return false;
+  }
+
+  if (/\b(?:based on|using|from) my (?:answers|details|survey|home context|energy plan)\b/i.test(question)
+    || /\b(?:my|our) (?:home|house|place|property|apartment|unit|bill|usage|heater|air ?con|hot water|roof|windows?|insulation|solar|battery|quote)\b/i.test(question)
+    || /\b(?:i|we) (?:have|own|rent|live|use|pay|spend|need|want|am|are|already|currently)\b/i.test(question)
+    || /\bwhere should i start\b|\bwhat should i (?:upgrade|fix|do) first\b/i.test(question)) {
+    return true;
+  }
+
+  // Short follow-ups can inherit a home-specific subject from the conversation,
+  // but a standalone general knowledge question must stay general.
+  if (/\b(?:it|that|this|they|those|the same|instead)\b/i.test(question)) {
+    return recentTurns
+      .filter((turn) => turn.role === "user")
+      .slice(-3)
+      .some((turn) => /\b(?:my|our) (?:home|house|place|property|apartment|unit|bill|usage|heater|air ?con|hot water|roof|windows?|insulation|solar|battery|quote)\b|\b(?:i|we) (?:have|own|rent|live|use|pay|spend|need|want|am|are)\b/i.test(turn.content));
+  }
+
+  return false;
+}
+
 function dateFrom(dependencies: ServerDependencies) {
   const value = dependencies.now ? dependencies.now() : new Date();
   if (!Number.isFinite(value.getTime())) throw new Error("Invalid server clock.");
@@ -652,7 +684,11 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
   const modelRecentTurns = recentTurns;
   const continuation = continuationFrom(requestBody.continuation);
-  const planContext = audience === "trade" ? null : planContextFrom(requestBody.planContext);
+  const submittedPlanContext = audience === "trade" ? null : planContextFrom(requestBody.planContext);
+  const planContext = submittedPlanContext
+    && currentQuestionUsesSavedHomeContext(message, recentTurns)
+    ? submittedPlanContext
+    : null;
   const priorUserMessages = recentTurns
     .filter((turn) => turn.role === "user")
     .map((turn) => turn.content);

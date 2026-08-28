@@ -1483,6 +1483,79 @@ test("saved-plan baseline is validated and older than explicit chat corrections"
   }
 });
 
+test("general questions do not inherit unrelated saved-home survey facts", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "solar", value: "No rooftop solar" },
+    ],
+  };
+  let deterministicContext;
+  let modelRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "general-question-no-saved-context-0001",
+    message: "How do solar panels work on cloudy days?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer(message, context) {
+      deterministicContext = { message, context };
+      return fixedAnswer("Solar panels still generate some electricity from daylight on cloudy days.");
+    },
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (value) => {
+      modelRequest = value;
+      return null;
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(deterministicContext.context.priorUserMessages, []);
+  assert.equal(modelRequest.planContext, null);
+});
+
+test("a clearly different property or job does not inherit the saved home's survey facts", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+    ],
+  };
+  let deterministicContext;
+  let modelRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "different-property-no-saved-context-0001",
+    message: "Can solar work on another shed I am considering?",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer(message, context) {
+      deterministicContext = { message, context };
+      return fixedAnswer("Yes, solar may suit the shed if its roof and electricity setup are suitable.");
+    },
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (value) => {
+      modelRequest = value;
+      return null;
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(deterministicContext.context.priorUserMessages, []);
+  assert.equal(modelRequest.planContext, null);
+});
+
 test("a completed survey returns a ranked home-specific starting plan before generic model guidance", async () => {
   const planContext = buildSurgePlanContextFromStoredAssessment(JSON.stringify({
     version: 1,
