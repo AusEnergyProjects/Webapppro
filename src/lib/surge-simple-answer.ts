@@ -168,7 +168,7 @@ export function composeSurgeSimpleAnswer(
   if (/\bshould i call (?:the |my )?installer\b/i.test(message)
     && /\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b[\s\S]{0,120}\b(?:noisy|blows? hard|airflow)\b|\b(?:noisy|blows? hard|airflow)\b[\s\S]{0,120}\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b/i.test(priorUserText)) {
     return answer(base, {
-      directAnswer: "Yes. First confirm it is in heating mode, set it around 20 to 21°C, use a low or auto fan setting and open the normal outlets or zones. If it is still excessively noisy or blowing too hard, ask the installer to return and check the commissioning, minimum airflow, duct sizes, zone balance and temperature-sensor setup.",
+      directAnswer: "Yes. First confirm it is in heating mode, set it around 20 to 21°C, use a low or auto fan setting and open the normal outlets or zones. If it is still excessively noisy or blowing too hard, ask the installer to return and check the airflow, duct sizes, zone balance and temperature-sensor setup.",
       practicalSteps: [],
       directDelivery: true,
     });
@@ -246,7 +246,7 @@ export function composeSurgeSimpleAnswer(
   if (/\b(?:ducted|reverse[- ]?cycle|air conditioner|air con)\b/i.test(text)
     && /\b(?:blows? (?:very )?hard|airflow noise|noisy|noise)\b/i.test(text)) {
     return answer(base, {
-      directAnswer: "It is worth checking, and the 16°C setting is the first clue. Confirm the system is in heating mode, set it around 20 to 21°C, use low or auto fan and open the normal outlets or zones; closing too many outlets can make airflow noisy. If it still blows excessively hard or the outdoor unit runs constantly, call the installer and request a commissioning check of airflow, duct sizing, zone balance and sensor location.",
+      directAnswer: "It is worth checking, and the 16°C setting is the first clue. Confirm the system is in heating mode, set it around 20 to 21°C, use low or auto fan and open the normal outlets or zones; closing too many outlets can make airflow noisy. If it still blows excessively hard or the outdoor unit runs constantly, call the installer and ask them to check the airflow, duct sizing, zone balance and sensor location.",
       practicalSteps: [],
       directDelivery: true,
     });
