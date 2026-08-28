@@ -90,7 +90,6 @@ type EverydayScenario = {
   steps: readonly string[];
   extraDetail: string;
   followUpQuestion?: string;
-  quickReplies?: readonly { id: string; label: string; message: string }[];
   includes: readonly string[];
   excludes?: readonly string[];
 };
@@ -142,7 +141,7 @@ const EVERYDAY_SCENARIOS: readonly EverydayScenario[] = [
   },
   {
     id: "hot-water-action", dimension: "actionability", opening: "The synthetic hot-water quote has a brand but no exact model.", question: "What do i ask the installer for?", expected: "Provide a short request list.",
-    verdict: "Ask for the exact model number and complete installed price.", reason: "Those details determine performance, eligibility and what work is included.", steps: ["Request the tank size and recovery details.", "Confirm electrical, plumbing and disposal costs in writing."], extraDetail: "Also check warranty responsibility and expected noise near bedrooms or neighbours.", followUpQuestion: "Can you see an exact model number on the quote?", quickReplies: [{ id: "yes", label: "Yes", message: "Yes, I can see the exact model number" }, { id: "no", label: "No", message: "No, the quote only shows a brand" }, { id: "not-sure", label: "Not sure", message: "I am not sure which number is the model" }], includes: ["exact model", "installed price"],
+    verdict: "Ask for the exact model number and complete installed price.", reason: "Those details determine performance, eligibility and what work is included.", steps: ["Request the tank size and recovery details.", "Confirm electrical, plumbing and disposal costs in writing."], extraDetail: "Also check warranty responsibility and expected noise near bedrooms or neighbours.", followUpQuestion: "Can you see an exact model number on the quote?", includes: ["exact model", "installed price"],
   },
   {
     id: "bedroom-context", dimension: "context_use", opening: "We were discussing a synthetic cold lounge with a confirmed window draught.", question: "What about the bedroom then?", expected: "Carry the diagnostic logic to the newly named room without restarting.",
@@ -174,7 +173,7 @@ const EVERYDAY_SCENARIOS: readonly EverydayScenario[] = [
   },
   {
     id: "noise-detail", dimension: "progressive_detail", opening: "The synthetic heat-pump unit would sit near a bedroom and boundary.", question: "How much should i care about noise?", expected: "Give a practical verdict with optional specification detail.",
-    verdict: "Care about it before choosing the model or location.", reason: "A unit cycling near a bedroom or neighbour can be annoying even when it meets a headline rating.", steps: ["Compare the exact model's published sound data and proposed placement."], extraDetail: "Ask about night modes, mounting, vibration control and whether the quoted measurement is sound pressure or sound power.", followUpQuestion: "Is the proposed outdoor unit close to a bedroom or boundary?", quickReplies: [{ id: "bedroom", label: "Near a bedroom", message: "It is close to a bedroom" }, { id: "boundary", label: "Near the boundary", message: "It is close to the property boundary" }, { id: "neither", label: "Neither", message: "It is away from bedrooms and boundaries" }], includes: ["bedroom", "exact model"],
+    verdict: "Care about it before choosing the model or location.", reason: "A unit cycling near a bedroom or neighbour can be annoying even when it meets a headline rating.", steps: ["Compare the exact model's published sound data and proposed placement."], extraDetail: "Ask about night modes, mounting, vibration control and whether the quoted measurement is sound pressure or sound power.", followUpQuestion: "Is the proposed outdoor unit close to a bedroom or boundary?", includes: ["bedroom", "exact model"],
   },
 ] as const;
 
@@ -198,7 +197,7 @@ function everydayAssertions(scenario: EverydayScenario): SurgeConversationAssert
   ];
   if (scenario.dimension === "actionability") assertions.push({ type: "min_practical_steps", minimum: 1 });
   if (scenario.dimension === "progressive_detail") assertions.push({ type: "requires_extra_detail" });
-  if (scenario.followUpQuestion) assertions.push({ type: "quick_reply_range", minimum: 2, maximum: 4 });
+  assertions.push({ type: "quick_reply_range", minimum: 0, maximum: 0 });
   return assertions;
 }
 
@@ -230,7 +229,7 @@ export const SURGE_EVERYDAY_REVIEWED_RESULTS = EVERYDAY_SCENARIOS.flatMap((scena
     practicalSteps: [...scenario.steps],
     extraDetail: scenario.extraDetail,
     followUpQuestion: scenario.followUpQuestion || "",
-    quickReplies: [...(scenario.quickReplies || [])],
+    quickReplies: [],
   }))
 ));
 

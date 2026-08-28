@@ -81,12 +81,6 @@ type AssistantAction = {
   href: string;
 };
 
-type QuickReply = {
-  id: string;
-  label: string;
-  message: string;
-};
-
 type AssistantMessage = {
   id: string;
   role: "user" | "assistant";
@@ -102,7 +96,6 @@ type AssistantMessage = {
   verdict?: string;
   reason?: string;
   extraDetail?: string;
-  quickReplies?: QuickReply[];
   sourceBoundary: string;
   citations: Citation[];
   suggestions: string[];
@@ -409,22 +402,6 @@ function parseActions(value: unknown): AssistantAction[] {
   }).slice(0, 4);
 }
 
-function parseQuickReplies(value: unknown): QuickReply[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item, index) => {
-    const record = asRecord(item);
-    if (!record) return [];
-    const label = asString(record.label, 42);
-    const message = asString(record.message, 160);
-    if (!label || !message) return [];
-    return [{
-      id: asString(record.id, 60) || `quick-reply-${index + 1}`,
-      label,
-      message,
-    }];
-  }).slice(0, 4);
-}
-
 function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assistant"): AssistantMessage | null {
   if (typeof value === "string") {
     const content = asString(value);
@@ -470,7 +447,6 @@ function parseMessage(value: unknown, fallbackRole: "user" | "assistant" = "assi
     verdict: asString(record.verdict, 360),
     reason: asString(record.reason, 700),
     extraDetail: asString(record.extraDetail ?? record.extra_detail, 1_200),
-    quickReplies: parseQuickReplies(record.quickReplies ?? record.quick_replies),
     sourceBoundary: asString(record.sourceBoundary ?? record.source_boundary, 700),
     citations: parseCitations(record.citations ?? record.sources),
     suggestions: asString(record.followUpQuestion, 180)
@@ -2470,15 +2446,6 @@ export function EnergyAssistantWidget({
                           )}
                           {naturalFollowUpFor(message, context.audience) && (
                             <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>
-                          )}
-                          {message.id === messages[messages.length - 1]?.id && (message.quickReplies?.length || 0) > 0 && (
-                            <div className={styles.quickReplies} aria-label="Suggested replies">
-                              {message.quickReplies?.map((reply) => (
-                                <button type="button" key={reply.id} disabled={busy} onClick={() => void ask(reply.message)}>
-                                  <span>{reply.label}</span>
-                                </button>
-                              ))}
-                            </div>
                           )}
                           <button
                             type="button"

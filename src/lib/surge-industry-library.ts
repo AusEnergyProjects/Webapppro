@@ -42,6 +42,9 @@ const STOP_WORDS = new Set([
   "you", "your",
 ]);
 
+const QUESTION_CLAUSE_BOUNDARY =
+  /[,;]\s+(?=(?:(?:and|also)\s+)?(?:is|are|am|do|does|did|can|could|should|would|will|what|when|where|which|who|why|how)\b)|\s+(?:and|also|plus)\s+(?=(?:is|are|am|do|does|did|can|could|should|would|will|what|when|where|which|who|why|how)\b)/gi;
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -90,14 +93,25 @@ export const SURGE_INDUSTRY_LIBRARY_SOURCE_HASHES = Object.freeze(
   Object.fromEntries(generated.sources.map((source) => [source.id, source.pdfSha256])),
 );
 
-export function selectSurgeIndustryPassagesForPrompt(
-  query: string,
-  limit = 5,
-): readonly SurgeIndustryPassage[] {
-  const safeLimit = Math.max(0, Math.min(6, Math.trunc(limit)));
-  if (!safeLimit) return Object.freeze([]);
+export function splitSurgeQuestionFacets(query: string) {
+  const cleaned = query.replace(/\s+/g, " ").trim();
+  if (!cleaned) return Object.freeze([]);
+  const facets = cleaned
+    .split(/[?!\n]+/)
+    .flatMap((part) => part.split(QUESTION_CLAUSE_BOUNDARY))
+    .map((part) =>
+      part
+        .replace(/^(?:and|also|plus)\s+/i, "")
+        .replace(/[,;]\s*$/, "")
+        .trim(),
+    )
+    .filter((part) => part.length >= 8);
+  return Object.freeze([...new Set(facets)].slice(0, 6));
+}
+
+function rankedPassages(query: string) {
   const queryTokens = [...new Set(tokens(query))].slice(-48);
-  if (!queryTokens.length) return Object.freeze([]);
+  if (!queryTokens.length) return [];
   const normalizedQuery = normalize(query);
   const phrases = normalizedQuery
     .split(" ")
@@ -106,7 +120,7 @@ export function selectSurgeIndustryPassagesForPrompt(
     .filter((phrase) => phrase.split(" ").every((word) => word.length >= 3 && !STOP_WORDS.has(word)))
     .slice(-16);
 
-  const ranked = searchableChunks
+  return searchableChunks
     .map((candidate) => {
       let score = 0;
       let matchedTerms = 0;
@@ -126,20 +140,50 @@ export function selectSurgeIndustryPassagesForPrompt(
     .sort((left, right) => right.score - left.score
       || right.matchedTerms - left.matchedTerms
       || left.chunk.id.localeCompare(right.chunk.id));
+}
 
+export function selectSurgeIndustryPassagesForPrompt(
+  query: string,
+  limit = 5,
+  conversationContext = "",
+): readonly SurgeIndustryPassage[] {
+  const safeLimit = Math.max(0, Math.min(6, Math.trunc(limit)));
+  if (!safeLimit) return Object.freeze([]);
+  const facets = splitSurgeQuestionFacets(query);
+  if (!facets.length) return Object.freeze([]);
+  const subjectContext = facets[0] || query;
+  const searchGroups = facets.length > 1
+    ? facets.map((facet) => rankedPassages(`${facet}\n${subjectContext}\n${conversationContext}`))
+    : [rankedPassages(`${query}\n${conversationContext}`)];
   const selected: SurgeIndustryPassage[] = [];
+  const selectedIds = new Set<string>();
   const perSource = new Map<string, number>();
-  for (const candidate of ranked) {
-    if (selected.length >= safeLimit) break;
+  const add = (candidate: (typeof searchableChunks)[number]) => {
+    if (selected.length >= safeLimit || selectedIds.has(candidate.chunk.id)) return;
     const sourceCount = perSource.get(candidate.chunk.sourceId) || 0;
-    if (sourceCount >= 2) continue;
+    if (sourceCount >= 2) return;
     selected.push(Object.freeze({
       sourceTitle: candidate.chunk.sourceTitle,
       page: candidate.chunk.page,
-      excerpt: candidate.chunk.text.slice(0, 900),
+      excerpt: candidate.chunk.text.slice(0, 500),
       authorityBoundary: "stable_industry_guidance_only_verify_current_facts_officially",
     }));
+    selectedIds.add(candidate.chunk.id);
     perSource.set(candidate.chunk.sourceId, sourceCount + 1);
+  };
+
+  const perFacet = facets.length > 1 ? 2 : Math.min(3, safeLimit);
+  for (let resultIndex = 0; resultIndex < perFacet; resultIndex += 1) {
+    for (const ranked of searchGroups) {
+      const candidate = ranked[resultIndex];
+      if (candidate) add(candidate);
+    }
+  }
+  if (selected.length < safeLimit) {
+    for (const candidate of rankedPassages(`${query}\n${conversationContext}`)) {
+      add(candidate);
+      if (selected.length >= safeLimit) break;
+    }
   }
   return Object.freeze(selected);
 }

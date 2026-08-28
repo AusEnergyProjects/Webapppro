@@ -18,11 +18,6 @@ export type SurgeQuickReply = {
   message: string;
 };
 
-export type SurgeTopicQuickReplySet = {
-  followUpQuestion: string;
-  quickReplies: SurgeQuickReply[];
-};
-
 export type SurgeAnswerPresentation = {
   answerType: SurgeAnswerType;
   verdict: string;
@@ -159,10 +154,7 @@ export function surgePresentationPassesEverydayLanguage(
     && completeMetrics.longestSentenceWords <= 36
     && completeMetrics.jargonCount === 0
     && presentation.steps.length <= 3
-    && presentation.quickReplies.length <= 4
-    && (!presentation.followUpQuestion
-      || presentation.quickReplies.length === 0
-      || presentation.quickReplies.length >= 2);
+    && presentation.quickReplies.length === 0;
 }
 
 function answerTypeFor(message: string, answer: EnergyAssistantAnswer): SurgeAnswerType {
@@ -175,147 +167,6 @@ function answerTypeFor(message: string, answer: EnergyAssistantAnswer): SurgeAns
   if (/\b(?:what do you mean|simpler|explain that|why did|you asked|already told)\b/i.test(message)) return "clarification";
   if (/\b(?:why|how|what is|what are|explain)\b/i.test(message)) return "explanation";
   return "general";
-}
-
-function uniqueQuickReplies(replies: SurgeQuickReply[]) {
-  const labels = new Set<string>();
-  const messages = new Set<string>();
-  return replies.filter((reply) => {
-    const label = clean(reply.label, 42);
-    const message = clean(reply.message, 160);
-    const labelKey = label.toLowerCase();
-    const messageKey = message.toLowerCase();
-    if (!label || !message || labels.has(labelKey) || messages.has(messageKey)) return false;
-    labels.add(labelKey);
-    messages.add(messageKey);
-    return true;
-  }).slice(0, 4);
-}
-
-export function surgeQuickReplySetForTopic(message: string): SurgeTopicQuickReplySet | null {
-  const topic = clean(message, 1_200);
-  if (/\b(?:three|3)[ -]?phase\b/i.test(topic)
-    && /\b(?:single[ -]?phase|upgrad\w*|solar|battery|switchboard|mains?|supply|rewir\w*|electrician)\b/i.test(topic)) {
-    const asksRewiring = /\b(?:rewir\w*|existing (?:lights?|power points?|circuits?|wiring))\b/i.test(topic);
-    const asksValue = /\b(?:worth|necessary|need(?:ed)?|benefit|advantage)\b/i.test(topic);
-    const asksQuote = /\b(?:quote|cost|price|expensive|how much|involved)\b/i.test(topic);
-    const selectedBranches = [asksRewiring, asksValue, asksQuote].filter(Boolean).length;
-    const quickReplies = [
-      ...(!asksRewiring || selectedBranches !== 1 ? [{
-        id: "three-phase-rewiring",
-        label: "Does it need rewiring?",
-        message: "Does upgrading to three-phase require rewiring the whole house?",
-      }] : []),
-      ...(!asksValue || selectedBranches !== 1 ? [{
-        id: "three-phase-worth-it",
-        label: "When is it worth it?",
-        message: "When is a three-phase upgrade actually worth paying for?",
-      }] : []),
-      ...(!asksQuote || selectedBranches !== 1 ? [{
-        id: "three-phase-quote",
-        label: "What should the quote include?",
-        message: "What should an electrician include in a three-phase upgrade quote?",
-      }] : []),
-    ];
-    return {
-      followUpQuestion: selectedBranches === 1
-        ? "Would you like to check another part of the three-phase decision?"
-        : "What would you like to check next about the three-phase upgrade?",
-      quickReplies: uniqueQuickReplies(quickReplies),
-    };
-  }
-  return null;
-}
-
-export function surgeQuickRepliesForQuestion(question: string): SurgeQuickReply[] {
-  const cleanQuestion = clean(question, 220);
-  if (!cleanQuestion) return [];
-  if (/\bwhich (?:room|area)|what (?:room|area)|rooms? (?:is|are|feel|gets?)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "lounge", label: "Lounge", message: "Mostly the lounge" },
-      { id: "bedroom", label: "Bedroom", message: "Mostly the bedroom" },
-      { id: "both", label: "Both", message: "The lounge and bedroom are both affected" },
-      { id: "another-room", label: "Another room", message: "It is another room" },
-    ]);
-  }
-  if (/\b(?:quote|model number|exact model|invoice)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "have-details", label: "I have the details", message: "I have the quote or exact model details" },
-      { id: "partial-details", label: "Only some details", message: "I only have part of the quote or model details" },
-      { id: "not-sure", label: "Not sure", message: "I am not sure where to find that" },
-    ]);
-  }
-  if (/\b(?:sudden bill|winter use|summer use|all year)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "bill-jump", label: "Sudden jump", message: "The bill jumped suddenly" },
-      { id: "winter", label: "High in winter", message: "Electricity use is highest in winter" },
-      { id: "summer", label: "High in summer", message: "Electricity use is highest in summer" },
-      { id: "all-year", label: "High all year", message: "Electricity use is high all year" },
-    ]);
-  }
-  if (/\b(?:biggest concern|bothers you most|main problem)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "bills", label: "High bills", message: "High energy bills are the main problem" },
-      { id: "cold", label: "Cold rooms", message: "Cold rooms are the main problem" },
-      { id: "hot", label: "Hot rooms", message: "Hot rooms are the main problem" },
-      { id: "condensation", label: "Condensation", message: "Condensation or damp is the main problem" },
-    ]);
-  }
-  if (/\b(?:export|spare solar)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "export-plenty", label: "Quite a lot", message: "I export quite a lot of solar most days" },
-      { id: "export-little", label: "A little", message: "I only export a little solar" },
-      { id: "export-none", label: "None", message: "I do not export solar" },
-      { id: "export-unknown", label: "Not sure", message: "I am not sure how much solar I export" },
-    ]);
-  }
-  if (/\b(?:draughty|cold windows?|both)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "draughts", label: "Draughty", message: "The room feels draughty" },
-      { id: "cold-windows", label: "Cold windows", message: "The windows feel very cold" },
-      { id: "both", label: "Both", message: "It is draughty and the windows feel cold" },
-      { id: "not-sure", label: "Not sure", message: "I am not sure which it is" },
-    ]);
-  }
-  if (/\bwhat type of gas heater\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "ducted-gas", label: "Ducted gas", message: "I have ducted gas heating" },
-      { id: "wall-heater", label: "Wall heater", message: "I have a gas wall heater" },
-      { id: "portable-gas", label: "Portable heater", message: "I use a portable gas heater" },
-      { id: "not-sure", label: "Not sure", message: "I am not sure what type it is" },
-    ]);
-  }
-  if (/\b(?:bedroom|bathroom|kitchen|several rooms)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "bedroom", label: "Bedroom", message: "It is mainly in the bedroom" },
-      { id: "bathroom", label: "Bathroom", message: "It is mainly in the bathroom" },
-      { id: "kitchen", label: "Kitchen", message: "It is mainly in the kitchen" },
-      { id: "several", label: "Several rooms", message: "It happens in several rooms" },
-    ]);
-  }
-  if (/\brenting the whole home or one room\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "whole-home", label: "Whole home", message: "I rent the whole home" },
-      { id: "one-room", label: "One room", message: "I rent one room" },
-      { id: "shared", label: "Shared rental", message: "It is a shared rental" },
-    ]);
-  }
-  if (/\bhottest in the morning, afternoon, or all day\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "morning", label: "Morning", message: "The room is hottest in the morning" },
-      { id: "afternoon", label: "Afternoon", message: "The room is hottest in the afternoon" },
-      { id: "all-day", label: "All day", message: "The room stays hot all day" },
-      { id: "not-sure", label: "Not sure", message: "I am not sure when it heats up" },
-    ]);
-  }
-  if (/^(?:do|does|did|is|are|was|were|have|has|can|could|would|will|should)\b/i.test(cleanQuestion)) {
-    return uniqueQuickReplies([
-      { id: "yes", label: "Yes", message: "Yes" },
-      { id: "no", label: "No", message: "No" },
-      { id: "not-sure", label: "Not sure", message: "I am not sure" },
-    ]);
-  }
-  return [];
 }
 
 function comparable(value: string) {
@@ -355,9 +206,7 @@ export function deriveSurgeAnswerPresentation(
     .map((part) => part.replace(/^\s*\d+[.)]\s*/u, "").trim())
     .filter((part) => part && !repeatsStep(part, steps));
   const extraDetail = clean(extraParts.join(" "), 1_200);
-  const topicReplySet = surgeQuickReplySetForTopic(message);
-  const followUpQuestion = topicReplySet?.followUpQuestion
-    || toSurgePlainLanguage(answer.suggestedQuestions[0] || "", 220);
+  const followUpQuestion = toSurgePlainLanguage(answer.suggestedQuestions[0] || "", 220);
   return {
     answerType: answerTypeFor(message, answer),
     verdict,
@@ -365,7 +214,7 @@ export function deriveSurgeAnswerPresentation(
     steps,
     extraDetail,
     followUpQuestion,
-    quickReplies: topicReplySet?.quickReplies || surgeQuickRepliesForQuestion(followUpQuestion),
+    quickReplies: [],
   };
 }
 
@@ -382,12 +231,6 @@ export function normalizeSurgeAnswerPresentation(
     steps: presentation.steps.map((step) => toSurgePlainLanguage(step, 360)).filter(Boolean).slice(0, 3),
     extraDetail: toSurgePlainLanguage(presentation.extraDetail, 1_200),
     followUpQuestion,
-    quickReplies: followUpQuestion
-      ? uniqueQuickReplies(presentation.quickReplies.map((reply) => ({
-        id: clean(reply.id, 60),
-        label: toSurgePlainLanguage(reply.label, 42),
-        message: toSurgePlainLanguage(reply.message, 160),
-      })))
-      : [],
+    quickReplies: [],
   };
 }

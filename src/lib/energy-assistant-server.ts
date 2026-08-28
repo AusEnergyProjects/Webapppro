@@ -513,7 +513,7 @@ function buildReply(
   const candidatePresentation = normalizeSurgeAnswerPresentation({
     ...rawPresentation,
     followUpQuestion,
-    quickReplies: followUpQuestion ? rawPresentation.quickReplies : [],
+    quickReplies: [],
   });
   const fallbackPresentation = deriveSurgeAnswerPresentation(answer, message);
   const presentation = surgePresentationPassesEverydayLanguage(candidatePresentation)
@@ -521,7 +521,7 @@ function buildReply(
     : normalizeSurgeAnswerPresentation({
       ...fallbackPresentation,
       followUpQuestion,
-      quickReplies: followUpQuestion ? fallbackPresentation.quickReplies : [],
+      quickReplies: [],
     });
   const reply: EnergyAssistantReply = {
     id: randomUUID().toLowerCase(),
@@ -537,7 +537,7 @@ function buildReply(
     practicalSteps: presentation.steps,
     extraDetail: presentation.extraDetail,
     followUpQuestion: presentation.followUpQuestion,
-    quickReplies: presentation.quickReplies,
+    quickReplies: [],
   };
   if (new TextEncoder().encode(JSON.stringify(reply)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(

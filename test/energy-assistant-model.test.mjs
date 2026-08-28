@@ -116,6 +116,7 @@ test("model adapter sends a stateless strict Responses request with bounded sche
     "usedSourceIds",
   ]);
   assert.equal(body.text.format.schema.properties.state.additionalProperties, false);
+  assert.equal(body.text.format.schema.properties.quickReplies.maxItems, 0);
   assert.equal(body.text.format.schema.properties.state.properties.facts.maxItems, 16);
   assert.equal(body.text.format.schema.properties.usedSourceIds.maxItems, 6);
   assert.equal(body.input.length, 2);
@@ -920,12 +921,14 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Do not recommend, rank, promote or endorse a product, brand/i);
   assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);
   assert.match(prompt, /Use industryLibrary first for stable technical reasoning/i);
+  assert.match(prompt, /one message contains several material questions[^\n]*answer every part/i);
+  assert.match(prompt, /Always return an empty quickReplies array/i);
   assert.match(prompt, /Use maintainedEvidence to confirm or fill gaps involving current rules/i);
   assert.match(prompt, /reviewedEducation is never current official/i);
   assert.match(prompt, /rank the methods by evidence quality, fit, durability and verification/i);
   assert.match(prompt, /Lead with the conclusion/i);
   assert.match(prompt, /usually 45 to 140 words/i);
-  assert.ok(prompt.length < 8_000, `prompt length: ${prompt.length}`);
+  assert.ok(prompt.length < 8_500, `prompt length: ${prompt.length}`);
   assert.ok(Array.isArray(context.industryLibrary));
   assert.ok(context.industryLibrary.length > 0);
   assert.ok(context.industryLibrary.length <= 3);
@@ -956,7 +959,40 @@ test("model prompt applies assessor education response guardrails without leakin
   );
 });
 
-test("three-phase model answers replace generic buttons with specific small choices", async () => {
+test("model context exposes every material part of a multi-part question", async () => {
+  const message = "Is three-phase worth getting with solar and a battery, does it require rewiring the house, and how involved or expensive is the upgrade?";
+  let observedBody;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    deterministicAnswer: deterministicAnswer(
+      "Three-phase is not automatically needed for solar and a battery. It normally changes the incoming supply, meter and switchboard rather than every circuit, and the price depends on the distributor work, cable run and switchboard condition.",
+    ),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Usually not unless the planned equipment needs more supply capacity. The incoming supply, meter and switchboard normally change, while sound existing household circuits can often stay. The job becomes more expensive when distributor work, long or underground mains, or an old switchboard are involved, so get those items separated in the quote.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.currentQuestion, message);
+  assert.deepEqual(context.questionParts, [
+    "Is three-phase worth getting with solar and a battery",
+    "does it require rewiring the house",
+    "how involved or expensive is the upgrade",
+  ]);
+  assert.ok(context.industryLibrary.length >= 3);
+  assert.ok(context.industryLibrary.length <= 5);
+  assert.match(observedBody.input[0].content[0].text, /questionParts as a coverage checklist/i);
+});
+
+test("model answers suppress provider-suggested question buttons", async () => {
   const result = await generateSurgeModelAnswer(request({
     message: "Is it worth upgrading my single-phase house to three-phase for solar and a battery, and will it need rewiring?",
   }), {
@@ -971,11 +1007,6 @@ test("three-phase model answers replace generic buttons with specific small choi
   });
 
   assert.ok(result);
-  assert.equal(result.presentation.followUpQuestion, "What would you like to check next about the three-phase upgrade?");
-  assert.deepEqual(result.presentation.quickReplies.map((reply) => reply.label), [
-    "Does it need rewiring?",
-    "When is it worth it?",
-    "What should the quote include?",
-  ]);
-  assert.doesNotMatch(JSON.stringify(result.presentation), /practical next step|show me how|compare options/i);
+  assert.equal(result.presentation.followUpQuestion, "What would you like to do next?");
+  assert.deepEqual(result.presentation.quickReplies, []);
 });

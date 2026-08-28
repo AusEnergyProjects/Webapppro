@@ -20,6 +20,7 @@ import {
   SURGE_INDUSTRY_LIBRARY_SUMMARY,
   SURGE_INDUSTRY_LIBRARY_SOURCE_HASHES,
   selectSurgeIndustryPassagesForPrompt,
+  splitSurgeQuestionFacets,
 } from "../src/lib/surge-industry-library.ts";
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -298,11 +299,24 @@ test("controlled PDFs are pre-indexed once and retrieve bounded relevant passage
     assert.ok(passages.length > 0, query);
     assert.ok(passages.length <= 3, query);
     assert.match(passages.map((passage) => passage.excerpt).join("\n"), expected, query);
-    assert.ok(passages.reduce((total, passage) => total + passage.excerpt.length, 0) <= 2_700, query);
+    assert.ok(passages.reduce((total, passage) => total + passage.excerpt.length, 0) <= 1_500, query);
     assert.ok(passages.every(
       (passage) => passage.authorityBoundary === "stable_industry_guidance_only_verify_current_facts_officially",
     ), query);
   }
+
+  const multiPartQuestion = "Is three-phase worth getting with solar and a battery, does it require rewiring the house, and how involved or expensive is the upgrade?";
+  assert.deepEqual(splitSurgeQuestionFacets(multiPartQuestion), [
+    "Is three-phase worth getting with solar and a battery",
+    "does it require rewiring the house",
+    "how involved or expensive is the upgrade",
+  ]);
+  const multiPartPassages = selectSurgeIndustryPassagesForPrompt(multiPartQuestion, 5);
+  assert.ok(multiPartPassages.length >= 3);
+  assert.ok(multiPartPassages.length <= 5);
+  assert.match(multiPartPassages.map((passage) => passage.excerpt).join("\n"), /three-phase|three phase|3-phase|3 phase/i);
+  assert.match(multiPartPassages.map((passage) => passage.excerpt).join("\n"), /rewir|switchboard|supply upgrade|upgrade cost/i);
+  assert.ok(multiPartPassages.reduce((total, passage) => total + passage.excerpt.length, 0) <= 2_500);
 });
 
 test("source custody audit fails closed when supplied PDFs are unavailable", () => {

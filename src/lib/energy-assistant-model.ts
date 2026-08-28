@@ -22,17 +22,17 @@ import {
   type SurgeConversationState,
 } from "./energy-assistant-conversation.ts";
 import type { SurgePlanContext } from "./energy-assistant-plan-context.ts";
-import { selectSurgeIndustryPassagesForPrompt } from "./surge-industry-library.ts";
+import {
+  selectSurgeIndustryPassagesForPrompt,
+  splitSurgeQuestionFacets,
+} from "./surge-industry-library.ts";
 import {
   deriveSurgeAnswerPresentation,
   normalizeSurgeAnswerPresentation,
   SURGE_ANSWER_TYPES,
-  surgeQuickReplySetForTopic,
-  surgeQuickRepliesForQuestion,
   surgePresentationPassesEverydayLanguage,
   surgePresentationText,
   type SurgeAnswerPresentation,
-  type SurgeQuickReply,
 } from "./surge-everyday-answer.ts";
 
 export type SurgeModelTurn = {
@@ -126,7 +126,7 @@ const RESPONSE_SCHEMA = {
     followUpQuestion: { type: ["string", "null"] },
     quickReplies: {
       type: "array",
-      maxItems: 4,
+      maxItems: 0,
       items: {
         type: "object",
         additionalProperties: false,
@@ -195,21 +195,6 @@ function textList(value: unknown, maximumItems: number, maximumChars: number) {
     .slice(0, maximumItems);
 }
 
-function quickReplyList(value: unknown): SurgeQuickReply[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const record = item as Record<string, unknown>;
-    const id = text(record.id, 60);
-    const label = text(record.label, 42);
-    const message = text(record.message, 160);
-    if (/\b(?:show me how|practical next step|compare (?:the )?(?:sensible )?options|tell me more|more detail)\b/i.test(`${label} ${message}`)) {
-      return [];
-    }
-    return id && label && message ? [{ id, label, message }] : [];
-  }).slice(0, 4);
-}
-
 function responseText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
   const source = payload as Record<string, unknown>;
@@ -247,11 +232,12 @@ Answer the user's actual question and continue the current decision logically. T
 
 Response contract:
 - Lead with the conclusion. For a yes/no, value or "does this make sense" question, begin with the verdict. For "where should I start", give the first action immediately.
-- Return a structured everyday answer: answerType, a short verdict, a plain reason, up to three practical steps, optional extraDetail, at most one followUpQuestion and two to four short quickReplies when a follow-up is asked. Each quick reply must contain the exact user message to send when selected.
-- Use plain Australian English, usually 45 to 140 words in total. Keep the immediately visible verdict, reason and steps under 120 words. Put useful secondary explanation in extraDetail so the interface can reveal it only when requested. Teach enough for the user to understand what the answer means and why it matters. Omit generic introductions, repeated caveats, source lists and long checklists.
+- If one message contains several material questions, use questionParts as a coverage checklist and answer every part in a logical order. Do not answer only the easiest part or treat the later parts as unrelated follow-ups. The full currentQuestion remains authoritative if an automatic split is imperfect.
+- Return a structured everyday answer: answerType, a short verdict, a plain reason, up to three practical steps, optional extraDetail and at most one followUpQuestion. Always return an empty quickReplies array. Users type their own follow-up instead of clicking suggested questions.
+- Use plain Australian English, usually 45 to 140 words in total. A genuinely multi-part question may use up to 180 words when that is needed to answer every part. Keep the immediately visible verdict, reason and steps concise. Put useful secondary explanation in extraDetail so the interface can reveal it only when requested. Teach enough for the user to understand what the answer means and why it matters. Omit generic introductions, repeated caveats, source lists and long checklists.
 - Do not use unexplained technical shorthand or phrases such as building fabric, conductive heat flow, diagnostic stage, end use, interval data, load profile, measured surplus, site-sized, staged whole-home diagnosis, tariff shifting or thermal envelope. Use ordinary descriptions of what the house or equipment is doing.
 - Never use an em dash or en dash. Sound relaxed and practical, not corporate, academic or bureaucratic.
-- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question and, when useful, include two to four context-specific quick replies that either answer that question or name specific useful branches of the current topic. Never use generic buttons such as "Show me how", "Practical next step", "Compare options", "Tell me more" or "More detail". If no useful fixed choices exist, return no quickReplies and let the user type. Keep asking one useful question at a time. If no follow-up is needed, return an empty followUpQuestion and no quickReplies. Never respond with only a question or dump a questionnaire.
+- Give the useful part of the answer before asking. If one material fact is missing, ask exactly one short highest-value follow-up question as plain text. Do not generate suggested-question buttons or quick replies. Keep asking one useful question at a time. If no follow-up is needed, return an empty followUpQuestion. Never respond with only a question or dump a questionnaire.
 - Never repeat a previous answer or a question the user has already answered. For clarification, explain the previous answer in simpler and more concrete words.
 
 Conversation contract:
@@ -288,6 +274,7 @@ Use industryLibrary and maintainedEvidence when relevant. deterministicReference
 }
 
 function contextPayload(request: SurgeModelRequest) {
+  const questionParts = splitSurgeQuestionFacets(request.message);
   const retrievalText = [
     ...(request.planContext?.facts || []).map((fact) => `${fact.key}: ${fact.value}`),
     ...request.recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content),
@@ -311,8 +298,9 @@ function contextPayload(request: SurgeModelRequest) {
     4,
   );
   const industryLibrary = selectSurgeIndustryPassagesForPrompt(
-    `${request.message}\n${request.message}\n${retrievalText}\n${request.deterministicAnswer.directAnswer}`,
-    3,
+    request.message,
+    Math.min(5, Math.max(3, questionParts.length * 2)),
+    `${retrievalText}\n${request.deterministicAnswer.directAnswer}`,
   );
   const lastAssistantReply = [...request.recentTurns]
     .reverse()
@@ -322,6 +310,7 @@ function contextPayload(request: SurgeModelRequest) {
     .find((turn) => turn.role === "user")?.content || "";
   const payload = {
     currentQuestion: request.message,
+    questionParts,
     audience: request.audience,
     pageContext: request.pageContext || "/",
     date: request.asOf.toISOString().slice(0, 10),
@@ -651,7 +640,6 @@ export async function generateSurgeModelAnswer(
     const rawSteps = textList(record.steps, 3, 360);
     const rawExtraDetail = text(record.extraDetail, 1_200);
     const rawFollowUp = oneFollowUp(record.followUpQuestion);
-    const rawQuickReplies = quickReplyList(record.quickReplies);
     const continuation = parseSurgeConversationState(record.state);
     const continuationText = continuation ? JSON.stringify(continuation) : "";
     const rawGeneratedText = [
@@ -661,7 +649,6 @@ export async function generateSurgeModelAnswer(
       ...rawSteps,
       rawExtraDetail,
       rawFollowUp,
-      ...rawQuickReplies.flatMap((reply) => [reply.label, reply.message]),
       continuationText,
     ].join("\n");
     const candidateFollowUp = identityQuestion
@@ -680,8 +667,7 @@ export async function generateSurgeModelAnswer(
         suggestedQuestions: followUp ? [followUp] : [],
       }, request.message)
       : null;
-    const topicReplySet = surgeQuickReplySetForTopic(request.message);
-    const presentation = normalizeSurgeAnswerPresentation(legacyPresentation || {
+    const basePresentation = legacyPresentation || {
       answerType: SURGE_ANSWER_TYPES.includes(record.answerType as (typeof SURGE_ANSWER_TYPES)[number])
         ? record.answerType as (typeof SURGE_ANSWER_TYPES)[number]
         : "general",
@@ -689,18 +675,13 @@ export async function generateSurgeModelAnswer(
       reason: publicAnswer(rawReason, request.audience, ""),
       steps: rawSteps.map((step) => publicAnswer(step, request.audience, "")),
       extraDetail: publicAnswer(rawExtraDetail, request.audience, ""),
-      followUpQuestion: topicReplySet?.followUpQuestion || followUp,
-      quickReplies: topicReplySet?.quickReplies.length || followUp
-        ? (topicReplySet?.quickReplies.length
-          ? topicReplySet.quickReplies
-          : rawQuickReplies.length
-            ? rawQuickReplies
-            : surgeQuickRepliesForQuestion(followUp)).map((reply) => ({
-          id: reply.id,
-          label: publicAnswer(reply.label, request.audience, ""),
-          message: publicAnswer(reply.message, request.audience, ""),
-        }))
-        : [],
+      followUpQuestion: followUp,
+      quickReplies: [],
+    };
+    const presentation = normalizeSurgeAnswerPresentation({
+      ...basePresentation,
+      followUpQuestion: followUp,
+      quickReplies: [],
     });
     const answerText = surgePresentationText(presentation);
     const confidence = record.confidence === "high" || record.confidence === "medium"

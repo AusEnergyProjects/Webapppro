@@ -148,11 +148,9 @@ test("Surge AI starts with a home profile, then a clean grouped roadmap and conv
   assert.match(widget, /answerStatus === "source_review_required"/);
 });
 
-test("suggested replies render as compact content-sized chips", () => {
-  assert.match(widget, /className=\{styles\.quickReplies\} aria-label="Suggested replies"/);
-  assert.match(widget, /message\.quickReplies\?\.map[\s\S]{0,260}<span>\{reply\.label\}<\/span>/);
-  assert.match(styles, /\.panel \.quickReplies button \{[^}]*flex: 0 0 auto;[^}]*font-size: \.75rem;[^}]*min-height: 44px;[^}]*width: auto;/);
-  assert.match(styles, /\.quickReplies button > span \{[^}]*border-radius: 999px;[^}]*height: 32px;[^}]*padding: 4px 10px;/);
+test("the chat does not render clickable suggested-question chips", () => {
+  assert.doesNotMatch(widget, /styles\.quickReplies|Suggested replies|message\.quickReplies/);
+  assert.doesNotMatch(styles, /\.quickReplies/);
 });
 
 test("Surge stays private and low-friction without account-copy controls", () => {
@@ -290,14 +288,12 @@ test("the model reply parser accepts one follow-up question and ignores legacy e
     "asStringList",
     "parseCitations",
     "parseActions",
-    "parseQuickReplies",
     "makeRequestId",
     `${compiled}; return parseMessage;`,
   )(
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
     (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
     (value, limit) => Array.isArray(value) ? value.filter((item) => typeof item === "string").slice(0, limit) : [],
-    () => [],
     () => [],
     () => [],
     () => "generated-message",

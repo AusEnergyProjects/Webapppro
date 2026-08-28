@@ -552,7 +552,7 @@ test("the API preserves a neutral customer-supplied option comparison", async ()
   assertPublicReplyContract(payload);
 });
 
-test("a model presentation keeps its follow-up question aligned with its quick replies", async () => {
+test("a model presentation keeps a plain follow-up but suppresses clickable quick replies", async () => {
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
     requestId: "aligned-model-quick-replies-0001",
@@ -588,14 +588,11 @@ test("a model presentation keeps its follow-up question aligned with its quick r
   assert.equal(response.status, 200);
   const payload = await body(response);
   assert.equal(payload.reply.followUpQuestion, "Would you like to check another part of the three-phase decision?");
-  assert.deepEqual(payload.reply.quickReplies.map((reply) => reply.label), [
-    "When is it worth it?",
-    "What should the quote include?",
-  ]);
+  assert.deepEqual(payload.reply.quickReplies, []);
   assert.doesNotMatch(payload.reply.content, /overhead or underground/i);
 });
 
-test("the three-phase worth-it quick reply rejects a generic model non-answer", async () => {
+test("the three-phase worth-it question rejects a generic model non-answer", async () => {
   let modelReservations = 0;
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
@@ -631,10 +628,7 @@ test("the three-phase worth-it quick reply rejects a generic model non-answer", 
   assert.match(payload.reply.directAnswer, /^Usually not just for a normal home solar and battery system\./i);
   assert.match(payload.reply.directAnswer, /EV charger.*large air conditioner.*more supply capacity/i);
   assert.doesNotMatch(payload.reply.content, /related current official source|not specific enough/i);
-  assert.deepEqual(payload.reply.quickReplies.map((reply) => reply.label), [
-    "Does it need rewiring?",
-    "What should the quote include?",
-  ]);
+  assert.deepEqual(payload.reply.quickReplies, []);
 });
 
 test("generic grounded non-answers cannot suppress a useful answer across home-energy topics", async () => {
