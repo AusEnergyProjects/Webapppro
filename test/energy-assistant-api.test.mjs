@@ -323,6 +323,38 @@ test("a tariff decision rejects off-topic grounded heating guidance even when So
   assert.deepEqual(payload.reply.quickReplies, []);
 });
 
+test("ordinary heating efficiency questions use the reviewed expert default without a model rewrite", async () => {
+  let groundedCalls = 0;
+  let reservationCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "heating-default-0001",
+    message: "Are portable electric heaters efficient?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => {
+      groundedCalls += 1;
+      return fixedAnswer("Provide exact models and compare retained capacity, COP, EER and AEER.");
+    },
+    reserveModelCall: async () => {
+      reservationCalls += 1;
+      return { allowed: true };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.match(payload.reply.directAnswer, /reverse-cycle air conditioner.*much less electricity.*not an efficient whole-room alternative/i);
+  assert.doesNotMatch(payload.reply.content, /retained capacity|COP|EER|AEER/i);
+  assert.equal(groundedCalls, 0);
+  assert.equal(reservationCalls, 0);
+  assert.deepEqual(payload.reply.quickReplies, []);
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),

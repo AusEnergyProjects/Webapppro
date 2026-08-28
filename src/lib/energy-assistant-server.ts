@@ -605,6 +605,14 @@ function needsDeterministicSafetyAnswer(message: string, answer: EnergyAssistant
   return /\b(?:asbestos|vermiculite|smoke|spark|arcing|burning|hissing|swollen|battery fire|gas smell|carbon monoxide|dizzy|woozy|light-headed|live wire|electrical cable|refrigerant|wet roof|main switch|switchboard)\b/i.test(message);
 }
 
+function needsDeterministicHeatingDefault(message: string, answer: EnergyAssistantAnswer) {
+  return answer.status === "answered"
+    && /\b(?:most\s+efficient|efficient|best|cheapest|running\s+cost|cost\s+less)\b/i.test(message)
+    && (/\b(?:portable|plug[- ]?in)\s+(?:electric\s+)?heaters?\b/i.test(message)
+      || (/\breverse[- ]cycle\b/i.test(message) && /\bgas\b/i.test(message)))
+    && /\bnormal first choice for heating a room\b/i.test(answer.directAnswer);
+}
+
 async function readBody(request: Request) {
   const contentLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > ENERGY_ASSISTANT_MAX_BODY_BYTES) {
@@ -650,14 +658,17 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
   const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
+  const requiresDeterministicHeatingDefault = needsDeterministicHeatingDefault(message, composedAnswer);
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     ? null
     : publicPolicyAnswer(message);
-  const planPriorityAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer || protectedAnswer
+  const planPriorityAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
+    || requiresDeterministicHeatingDefault || protectedAnswer
     ? null
     : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
   const simpleAnswer = compose !== composeEnergyAssistantAnswer
-    || requiresDeterministicSafety || requiresDeterministicDocumentAnswer || protectedAnswer || planPriorityAnswer
+    || requiresDeterministicSafety || requiresDeterministicDocumentAnswer
+    || requiresDeterministicHeatingDefault || protectedAnswer || planPriorityAnswer
     ? null
     : composeSurgeSimpleAnswer(message, composedAnswer, planContext, recentTurns);
   const deterministicAnswer = protectedAnswer || planPriorityAnswer || simpleAnswer || composedAnswer;
@@ -665,7 +676,8 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !protectedAnswer && !planPriorityAnswer) {
+  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer
+    && !requiresDeterministicHeatingDefault && !protectedAnswer && !planPriorityAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
