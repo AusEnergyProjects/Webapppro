@@ -1110,6 +1110,7 @@ export function EnergyAssistantWidget({
   };
 
   const openMatchedTradesLeadForm = () => {
+    const solarEnquiry = messagesRef.current.slice(-4).some((message) => /\bsolar\b/i.test(message.content));
     setLead((current) => {
       const continuingMatchedTradeDraft = current.destination === "matched-trades";
       return {
@@ -1118,6 +1119,7 @@ export function EnergyAssistantWidget({
         postcode: continuingMatchedTradeDraft ? current.postcode : "",
         suburb: continuingMatchedTradeDraft ? current.suburb : "",
         state: continuingMatchedTradeDraft ? current.state : "",
+        services: continuingMatchedTradeDraft ? current.services : solarEnquiry ? ["solar"] : [],
         ...RESET_LEAD_CONSENT,
       };
     });
@@ -2567,7 +2569,7 @@ export function EnergyAssistantWidget({
                   <span>{serviceInterest ? "Independent trade matching" : "Optional human help"}</span>
                   <h3>{serviceInterest ? "Get competing quotes" : "Only if you want it"}</h3>
                   <p>{serviceInterest
-                    ? "We do not favour trades or products. One enquiry goes to every approved trade matching the service and area."
+                    ? "One enquiry goes to approved trades matching the service and area."
                     : "Your chat and private plan stay private unless you deliberately choose a follow-up path."}</p>
                   <button type="button" onClick={serviceInterest ? openMatchedTradesLeadForm : openLeadForm}>
                     {serviceInterest ? "Start trade enquiry" : "See optional help paths"}
