@@ -210,6 +210,16 @@ test("a retailer-plan decision is not hijacked by an incidental heating mention"
   assert.equal(result, null);
 });
 
+test("ordinary heating choices are not replaced by an exact-model comparison checklist", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({});
+  for (const message of [
+    "What is the most efficient way to heat one room: reverse-cycle air conditioning, gas, or a plug-in electric heater?",
+    "Are portable electric heaters efficient?",
+  ]) {
+    assert.equal(await resolver(request(message)), null, message);
+  }
+});
+
 test("declares conservative certificate pathway coverage for every category", () => {
   const expected = {
     hot_water: ["sres_stc", "veu_veec", "nsw_ess_esc", "state_rebate_discovery"],
