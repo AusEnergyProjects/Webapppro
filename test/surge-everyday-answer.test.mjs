@@ -39,6 +39,27 @@ test("plain-language metrics detect long technical answers before release", () =
   assert.equal(metrics.wordCount > 10, true);
 });
 
+test("heating guidance removes expert-only resistance and delivered-heat wording", () => {
+  const presentation = deriveSurgeAnswerPresentation(answer({
+    directAnswer: "Compare delivered heat with portable resistance heaters before choosing resistance heating.",
+    suggestedQuestions: [],
+  }), "Which heater is the efficient choice?");
+  const rendered = JSON.stringify(presentation);
+  assert.match(rendered, /heat supplied to the room/i);
+  assert.match(rendered, /plug-in electric heaters/i);
+  assert.doesNotMatch(rendered, /delivered heat|portable resistance|resistance heating/i);
+});
+
+test("a grounded answer does not repeat the same advice as a practical step", () => {
+  const repeated = "Use reverse-cycle air conditioning as the normal first choice for room heating.";
+  const presentation = deriveSurgeAnswerPresentation(answer({
+    directAnswer: repeated,
+    practicalSteps: [repeated, "Clean the accessible filter."],
+    suggestedQuestions: [],
+  }), "What heating should I use?");
+  assert.deepEqual(presentation.steps, ["Clean the accessible filter."]);
+});
+
 test("three-phase answers keep at most a plain follow-up question", () => {
   const presentation = deriveSurgeAnswerPresentation(answer({
     suggestedQuestions: ["What equipment details are proposed?"],

@@ -227,7 +227,7 @@ export const ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE = [
     tips: [
       {
         id: "rcac-before-portable-resistance",
-        guidance: "Where a suitable fixed reverse-cycle air conditioner is available, compare its delivered heat and running cost with gas or portable resistance heaters. Avoid treating a small portable resistance heater as an efficient whole-room heating solution.",
+        guidance: "Use a suitable fixed reverse-cycle air conditioner as the normal first choice for room heating. It usually uses much less electricity than a plug-in electric heater and often costs less to run than gas. Keep plug-in heaters for short, local use rather than treating them as efficient whole-room heating.",
         sourceIds: ["energy-rating-heating-cooling"],
         safetyBoundary: "Keep required ventilation working and have fixed electrical or refrigerant work completed by licensed people.",
       },

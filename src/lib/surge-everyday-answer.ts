@@ -52,6 +52,9 @@ const JARGON_PATTERNS = [
   /\blocal design temperatures\b/gi,
   /\bretained (?:heating|cooling) capacity\b/gi,
   /\bthermal performance\b/gi,
+  /\bdelivered heat\b/gi,
+  /\bportable resistance heaters?\b/gi,
+  /\bresistance heating\b/gi,
 ] as const;
 
 const PLAIN_LANGUAGE_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -73,6 +76,9 @@ const PLAIN_LANGUAGE_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bretained heating capacity\b/gi, "heating output in very cold weather"],
   [/\bretained cooling capacity\b/gi, "cooling output in very hot weather"],
   [/\bthermal performance\b/gi, "how well the home holds a comfortable temperature"],
+  [/\bdelivered heat\b/gi, "heat supplied to the room"],
+  [/\bportable resistance heaters?\b/gi, "plug-in electric heaters"],
+  [/\bresistance heating\b/gi, "plug-in electric heating"],
 ];
 
 function clean(value: string, maximum = 1_200) {
@@ -187,9 +193,16 @@ export function deriveSurgeAnswerPresentation(
   message: string,
 ): SurgeAnswerPresentation {
   const directAnswer = toSurgePlainLanguage(answer.directAnswer, 2_400);
+  const comparableDirectAnswer = comparable(directAnswer);
   const steps = answer.practicalSteps
     .map((step) => toSurgePlainLanguage(step, 360))
     .filter(Boolean)
+    .filter((step) => {
+      const comparableStep = comparable(step);
+      return comparableStep.length < 24
+        || (!comparableDirectAnswer.includes(comparableStep)
+          && !comparableStep.includes(comparableDirectAnswer));
+    })
     .slice(0, 3);
   if (!steps.length && answer.nextAction) steps.push(toSurgePlainLanguage(answer.nextAction, 360));
   const directParagraphs = directAnswer.split(/\n{2,}|\n(?=\s*\d+[.)]\s+)/u).map((part) => part.trim()).filter(Boolean);

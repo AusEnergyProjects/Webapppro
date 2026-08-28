@@ -298,6 +298,31 @@ test("broad grounded category guidance feeds Sol instead of replacing a direct a
   assert.deepEqual(payload.reply.quickReplies, []);
 });
 
+test("a tariff decision rejects off-topic grounded heating guidance even when Sol is unavailable", async () => {
+  const message = "I am looking at plans moving into sunnier times. My winter energy use is high from ducted heating, but it will drop dramatically as it warms up. I have a 40kW battery, 13kW solar, single phase with a maximum 8.5kW grid import and an EV. Would an AGL electricity plan with three hours free, a cheaper daily rate, a 16c feed-in tariff and $150 credit suit me?";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "tariff-topic-priority-0001",
+    message,
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    resolveGroundedAnswer: async () => fixedAnswer(
+      "For heating and cooling, compare delivered heat and running cost with gas or portable resistance heaters.",
+    ),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.match(payload.reply.directAnswer, /free-hours plan.*25\.5 kWh.*16 c feed-in rate.*\$150 credit/i);
+  assert.doesNotMatch(payload.reply.content, /delivered heat|portable resistance|ducted heating/i);
+  assert.deepEqual(payload.reply.quickReplies, []);
+});
+
 test("public and customer replies never expose internal platform names or trade routes", async () => {
   const brandedAnswer = {
     ...fixedAnswer("TLink and Creditex customer guidance."),

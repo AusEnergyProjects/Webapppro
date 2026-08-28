@@ -202,6 +202,14 @@ test("publishes six approved, current categories with deterministic intent resol
   noDash(ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE);
 });
 
+test("a retailer-plan decision is not hijacked by an incidental heating mention", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({});
+  const result = await resolver(request(
+    "My winter use is high from ducted heating, but I have solar, a battery and an EV. Would a three-hours-free electricity plan suit me?",
+  ));
+  assert.equal(result, null);
+});
+
 test("declares conservative certificate pathway coverage for every category", () => {
   const expected = {
     hot_water: ["sres_stc", "veu_veec", "nsw_ess_esc", "state_rebate_discovery"],

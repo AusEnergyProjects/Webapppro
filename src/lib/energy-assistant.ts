@@ -1396,6 +1396,15 @@ function numericCapture(conversation: string, pattern: RegExp) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+};
+
 function evAnnualSavingsInputs(conversation: string) {
   const annualKm = numericCapture(
     conversation,
@@ -2936,17 +2945,102 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
-  if (/\b(?:free|zero[- ]?(?:cent|cost)|no[- ]?cost)\b[\s\S]{0,40}\b(?:midday|middle of the day|daytime|solar hours?|electricity|power)\b/i.test(query)
-    && /\b(?:offer|plan|tariff|hours?|rebate|assistance|government|deal|rate)\b/i.test(query)) {
+  const ordinaryRoomHeatingChoice = /\b(?:most\s+efficient|efficient|best|cheapest|running\s+cost|cost\s+less)\b/i.test(query)
+    && /\b(?:heat|heating|heaters?|reverse[- ]cycle|air\s+conditioner)\b/i.test(query)
+    && /\b(?:portable|plug[- ]?in|electric\s+heaters?|reverse[- ]cycle|air\s+conditioner|gas)\b/i.test(query)
+    && !/\b(?:electricity|energy|retailer)\s+plans?\b|\btariffs?\b|\bfeed[- ]?in\b|\bFIT\b|\bdaily\s+(?:supply\s+)?(?:charge|rate)\b|\b(?:free\s+hours?|hours?\s+free)\b/i.test(query);
+  if (ordinaryRoomHeatingChoice) {
+    return structured("rcac", {
+      directAnswer:
+        "Use a suitable fixed reverse-cycle air conditioner as the normal first choice for heating a room. It usually uses much less electricity than a plug-in electric heater and often costs less to run than gas. A plug-in heater can make sense for brief spot heating close to one person, but it is not an efficient whole-room alternative.",
+      status: "answered",
+      citations: officialCitationsById(["energy-rating-heating-cooling", "energy-gov-heating-cooling"]),
+      confidence: "high",
+      practicalSteps: [
+        "Heat the occupied room, shut doors to unused rooms and use a sensible temperature setting.",
+        "Keep the reverse-cycle unit's accessible filter clean and do not block indoor or outdoor airflow.",
+        "For a new unit, have the room and home assessed so it is correctly sized rather than chosen from floor area alone.",
+      ],
+      toolActions: [{ id: "open-heating-guide", label: "Open the heating guide", href: "/guides/heating" }],
+      suggestedQuestions: [],
+    });
+  }
+
+  const statedFreeHoursWord = query.match(
+    /\b(one|two|three|four|five|six)\s+hours?\s+free\b/i,
+  )?.[1].toLowerCase();
+  const statedFreeHours = numericCapture(
+    query,
+    /\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\s+free\b/i,
+  ) ?? numericCapture(
+    query,
+    /\bfree(?:\s+(?:electricity|power))?\s+(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b/i,
+  ) ?? (statedFreeHoursWord ? SMALL_NUMBER_WORDS[statedFreeHoursWord] ?? null : null);
+  const mentionsFreeRetailWindow = statedFreeHours !== null
+    || /\b(?:free|zero[- ]?(?:cent|cost)|no[- ]?cost)\b[\s\S]{0,40}\b(?:midday|middle of the day|daytime|solar hours?|electricity|power)\b/i.test(query)
+    || /\b(?:midday|daytime|solar|free)\s+(?:electricity|power|hours?)\s+(?:offer|plan|tariff|deal)\b/i.test(query);
+  if (mentionsFreeRetailWindow
+    && /\b(?:offer|plan|tariff|hours?|rebate|assistance|government|deal|rate|retailer)\b/i.test(query)) {
+    const statedImportLimitKw = numericCapture(
+      query,
+      /\b(?:max(?:imum)?\s+)?(?:grid\s+)?import(?:\s+(?:limit|capacity))?\s*(?:is|of|at|:|=|-)?\s*(\d+(?:\.\d+)?)\s*kW\b/i,
+    ) ?? numericCapture(
+      query,
+      /\b(\d+(?:\.\d+)?)\s*kW\s+(?:maximum\s+)?(?:grid\s+)?import(?:\s+limit)?\b/i,
+    );
+    const statedBatteryCapacity = numericCapture(
+      query,
+      /\b(\d+(?:\.\d+)?)\s*kW(?:h)?\s+(?:home\s+)?battery\b/i,
+    ) ?? numericCapture(
+      query,
+      /\b(?:home\s+)?battery(?:\s+(?:capacity|size))?\s*(?:is|of|at|:|=)?\s*(\d+(?:\.\d+)?)\s*kW(?:h)?\b/i,
+    );
+    const statedFeedInCents = numericCapture(
+      query,
+      /\b(?:feed[- ]?in|FIT)(?:\s+(?:rate|tariff|credit))?\s*(?:is|of|at|:|=|plus)?\s*(\d+(?:\.\d+)?)\s*(?:c|cents?)\b/i,
+    ) ?? numericCapture(
+      query,
+      /\b(\d+(?:\.\d+)?)\s*(?:c|cents?)\b[^.\n]{0,30}\b(?:feed[- ]?in|FIT)\b/i,
+    );
+    const statedPlanCredit = numericCapture(
+      query,
+      /\$\s*(\d+(?:\.\d+)?)\s*(?:sign[- ]?up|joining|plan|account|bill)?\s*credit\b/i,
+    );
+    const maximumFreeImportKwh = statedFreeHours !== null && statedImportLimitKw !== null
+      ? statedFreeHours * statedImportLimitKw
+      : null;
+    const importLimitExplanation = maximumFreeImportKwh !== null
+      && statedImportLimitKw !== null
+      && statedFreeHours !== null
+      ? ` With the supplied ${statedImportLimitKw.toLocaleString("en-AU")} kW grid-import limit, ${statedFreeHours.toLocaleString("en-AU")} free hours can bring in at most about ${maximumFreeImportKwh.toLocaleString("en-AU", { maximumFractionDigits: 2 })} kWh before normal household use and charging losses.`
+      : "";
+    const batteryExplanation = maximumFreeImportKwh !== null && statedBatteryCapacity !== null
+      ? ` Assuming the stated ${statedBatteryCapacity.toLocaleString("en-AU")} kW battery figure means about ${statedBatteryCapacity.toLocaleString("en-AU")} kWh of storage, that window cannot refill it from empty, although daytime solar can reduce how much grid charging is needed.`
+      : "";
+    const suppliedOfferExplanation = [
+      statedFeedInCents === null ? "" : `the supplied ${statedFeedInCents.toLocaleString("en-AU")} c feed-in rate`,
+      statedPlanCredit === null ? "" : `the supplied $${statedPlanCredit.toLocaleString("en-AU")} credit`,
+    ].filter(Boolean).join(" and ");
+    const asksWhetherGovernmentSupport = /\b(?:rebate|government assistance|government support)\b/i.test(query);
+    const hasFlexibleStorage = /\b(?:battery|electric vehicle|EV)\b/i.test(query);
+    const openingVerdict = asksWhetherGovernmentSupport
+      ? "No. A free-hours offer is a retail tariff feature, not a government rebate."
+      : hasFlexibleStorage
+        ? "Yes, a free-hours plan is worth checking for a home with a large battery or an EV, but the free window alone does not prove it will be the cheapest plan."
+        : "A free-hours plan can be worthwhile when enough electricity use can move into the free window, but the free period alone does not prove it is the cheapest plan.";
     return structured("bills_tariffs", {
       directAnswer:
-        "A free-midday or free-hours offer is a retail tariff feature, not a government rebate. Its value depends on how much flexible load can actually move into the free window and on the plan's supply charge, rates outside the window, demand terms, export credit, eligibility, expiry and any controlled-load treatment. Price the same interval load against the complete current offer and a suitable alternative rather than valuing only the free period.",
-      status: "needs_context",
+        `${openingVerdict}${importLimitExplanation}${batteryExplanation}${suppliedOfferExplanation ? ` ${suppliedOfferExplanation.charAt(0).toUpperCase()}${suppliedOfferExplanation.slice(1)} ${statedFeedInCents !== null && statedPlanCredit !== null ? "help" : "helps"}, but ${statedFeedInCents !== null && statedPlanCredit !== null ? "they are" : "it is"} only part of the result.` : ""} The complete current offer matters: paid import rates outside the free window and the daily supply charge decide whether the whole year is cheaper. With both current plan summaries and your usage data, I can calculate that instead of leaving you to compare it yourself.`,
+      status: "answered",
       citations: officialCitationsById(["energy-gov-solar-sharer-offer", "energy-made-easy-current-plan-comparison"]),
       confidence: "high",
-      practicalSteps: ["Record every tariff term and effective date.", "Measure load that can safely move into the free window.", "Compare the full annual bill on identical intervals."],
+      practicalSteps: [
+        "Provide both current plan summaries or bills so every rate, credit and condition is included.",
+        "Add a full year of half-hourly use and exports if available, including the winter heating season.",
+        "I will calculate both annual bills using the same battery, EV and grid-import limits.",
+      ],
       toolActions: [{ id: "compare-electricity", label: "Compare the complete plan", href: "/compare" }],
-      suggestedQuestions: ["What exact plan, free window and outside-window rates apply?"],
+      suggestedQuestions: [],
     });
   }
 

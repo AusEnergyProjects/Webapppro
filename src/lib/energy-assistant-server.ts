@@ -446,6 +446,18 @@ function groundedAnswerNeedsDirectDelivery(answer: EnergyAssistantAnswer) {
     || /\b(?:official|register)\b[^.\n]{0,120}\b(?:present|listed|registered|approved|eligible)\b/i.test(text);
 }
 
+const RETAIL_PLAN_DECISION = /\b(?:electricity|energy|retailer)\s+plans?\b|\btariffs?\b|\bfeed[- ]?in\b|\bFIT\b|\bdaily\s+(?:supply\s+)?(?:charge|rate)\b|\b(?:free\s+hours?|hours?\s+free)\b|\b(?:import|export|usage)\s+rates?\b/i;
+
+function groundedAnswerMatchesCurrentDecision(
+  message: string,
+  answer: EnergyAssistantAnswer,
+) {
+  if (!RETAIL_PLAN_DECISION.test(message)) return true;
+  const answerText = [answer.directAnswer, ...answer.practicalSteps].join("\n");
+  return RETAIL_PLAN_DECISION.test(answerText)
+    || /\b(?:annual bill|free window|outside-window|plan credit|electricity retailer)\b/i.test(answerText);
+}
+
 function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
   const clean = audience === "trade"
     ? sanitizeSurgeReferenceText(value)
@@ -667,7 +679,9 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     const groundedCandidate = dependencies.resolveGroundedAnswer
       ? await dependencies.resolveGroundedAnswer(modelRequest).catch(() => null)
       : null;
-    const groundedAnswer = groundedCandidate && !isGenericNonAnswer(groundedCandidate)
+    const groundedAnswer = groundedCandidate
+      && !isGenericNonAnswer(groundedCandidate)
+      && groundedAnswerMatchesCurrentDecision(message, groundedCandidate)
       ? groundedCandidate
       : null;
     const deliverGroundedDirectly = groundedAnswer

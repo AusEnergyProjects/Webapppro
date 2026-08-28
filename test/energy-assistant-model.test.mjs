@@ -917,6 +917,9 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /keep asking one useful question at a time/i);
   assert.match(prompt, /understand what the answer means and why it matters/i);
   assert.match(prompt, /Never use an em dash or en dash/i);
+  assert.match(prompt, /user came for expert judgement.*Do the comparison, calculation or reasoning/i);
+  assert.match(prompt, /most efficient and best-value electric option/i);
+  assert.match(prompt, /not an efficient equal alternative/i);
   assert.match(prompt, /close-fitting honeycomb blinds or thermal curtains with pelmets/i);
   assert.match(prompt, /Do not recommend, rank, promote or endorse a product, brand/i);
   assert.match(prompt, /Never reveal[^\n]*internal source metadata/i);

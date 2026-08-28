@@ -319,7 +319,7 @@ const ENERGY_ASSISTANT_KNOWLEDGE_RECORDS = [
     storagePolicy: "local_factual_summary",
     official: true,
     summary:
-      "Select reverse-cycle air conditioning from the room-by-room heat load and the unit's retained heating and cooling capacity at local design temperatures, not from floor area alone. Compare like-sized exact models using climate-zone seasonal performance, annual energy use and noise, then plan outdoor-unit airflow, condensate drainage, electrical supply, controls, refrigerant work and servicing with appropriately licensed trades.",
+      "A suitable fixed reverse-cycle air conditioner is normally the most efficient electric choice for heating a room. It usually uses much less electricity than a plug-in electric heater and often costs less to run than gas. Choose the correct size for the room and local climate, then compare annual energy use, noise, controls and the complete installation scope. Fixed electrical and refrigerant work requires appropriately licensed trades.",
     keywords: [
       "rcac",
       "reverse cycle air conditioner",
@@ -1897,7 +1897,7 @@ const ENERGY_ASSISTANT_KNOWLEDGE_RECORDS = [
     storagePolicy: "local_factual_summary",
     official: true,
     summary:
-      "Heating and cooling selection should follow the space heat load, local design temperature, zoning and hours of use. Reverse-cycle systems move heat and can provide efficient heating and cooling; compare exact models by retained capacity, climate-zone label, COP, EER or AEER where declared, annual energy, noise and controls. Site design must address outdoor airflow, condensate, electrical supply and licensed refrigerant work. Fans are low-energy personal cooling; portable resistance heaters can suit short local use, while portable air conditioners are generally noisier and less efficient than suitable fixed systems.",
+      "Use a suitable fixed reverse-cycle air conditioner as the normal first choice for room heating. It usually uses much less electricity than a plug-in electric heater and often costs less to run than gas. Plug-in heaters are only a practical choice for brief spot heating close to one person, not efficient whole-room heating. Correct sizing, airflow, drainage, electrical supply and licensed installation still matter.",
     keywords: [
       "heating cooling",
       "reverse cycle",

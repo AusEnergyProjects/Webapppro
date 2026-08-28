@@ -1073,6 +1073,8 @@ test("tariff, carbon and reversible-safety reasoning uses the supplied mechanism
     ["Can I turn off controlled-load HPHW each night and only heat from midday PV?", /support a timer.*unsupported nightly mains interruption.*unrecovered/i],
     ["My plan has free electricity from noon to 2 pm. Is that a rebate?", /tariff feature, not a government rebate.*complete current offer/i],
     ["Are a retailer's zero-cost daytime hours the same as government assistance?", /retail tariff feature.*not a government rebate.*complete current offer/i],
+    ["I have a 40kW battery, an EV and an 8.5kW grid import limit. Would a three hours free plan with a 16c feed-in tariff and $150 credit suit me?", /free-hours plan.*8\.5 kW.*25\.5 kWh.*40 kWh.*16 c feed-in rate.*\$150 credit.*calculate that instead/i],
+    ["My gas ducted heating use is high in winter. Is the three hours free electricity plan the cheapest option for my battery and EV?", /free-hours plan.*complete current offer.*calculate that instead/i],
     ["Imports cost 36c/kWh and exports earn 4c/kWh. What is one extra solar kWh used at home worth?", /32 c\/kWh.*36 c avoided import.*4 c foregone/i],
     ["Import rate 42 cents per kWh, FIT 6 cents per kWh: marginal self-use value?", /36 c\/kWh.*42 c avoided import.*6 c foregone/i],
     ["After the final gas appliance, what costs matter when disconnecting gas?", /daily supply charge multiplied by 365.*account or service is actually disconnected.*abolishment/i],
@@ -1092,6 +1094,23 @@ test("tariff, carbon and reversible-safety reasoning uses the supplied mechanism
   for (const [query, expected] of cases) {
     const answer = ask(query);
     assert.match(answer.directAnswer, expected, query);
+    if (/three hours free plan/i.test(query)) {
+      assert.doesNotMatch(answer.directAnswer, /delivered heat|portable resistance|ducted heating/i);
+    }
+    assertBounded(answer, query);
+  }
+});
+
+test("ordinary heating choices give the expert default without treating plug-in heaters as efficient", () => {
+  for (const query of [
+    "What is the most efficient way to heat one room: reverse-cycle air conditioning, gas, or a plug-in electric heater?",
+    "Are portable electric heaters efficient?",
+  ]) {
+    const answer = ask(query);
+    assert.match(answer.directAnswer, /Use a suitable fixed reverse-cycle air conditioner as the normal first choice/i, query);
+    assert.match(answer.directAnswer, /much less electricity than a plug-in electric heater/i, query);
+    assert.match(answer.directAnswer, /not an efficient whole-room alternative/i, query);
+    assert.doesNotMatch(answer.directAnswer, /compare its delivered heat|retained capacity|COP|EER|AEER/i, query);
     assertBounded(answer, query);
   }
 });
