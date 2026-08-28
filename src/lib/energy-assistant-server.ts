@@ -483,7 +483,10 @@ function buildReply(
   randomUUID: () => string,
 ): EnergyAssistantReply {
   const answer = boundedAnswer(answerInput);
-  const proposedFollowUp = limitedText(answer.suggestedQuestions[0] || "", 220);
+  const proposedFollowUp = limitedText(
+    presentationInput?.followUpQuestion || answer.suggestedQuestions[0] || "",
+    220,
+  );
   const followUpQuestion = surgeFollowUpWasAlreadyAnswered(proposedFollowUp, recentTurns, planContext)
     ? ""
     : proposedFollowUp;

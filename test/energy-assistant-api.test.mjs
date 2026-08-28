@@ -552,6 +552,49 @@ test("the API preserves a neutral customer-supplied option comparison", async ()
   assertPublicReplyContract(payload);
 });
 
+test("a model presentation keeps its follow-up question aligned with its quick replies", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "aligned-model-quick-replies-0001",
+    message: "Does upgrading to three-phase require rewiring the whole house?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    generateAnswer: async () => ({
+      answer: {
+        ...fixedAnswer("Usually no. Existing final circuits can normally stay."),
+        suggestedQuestions: ["Is the existing supply overhead or underground?"],
+      },
+      presentation: {
+        answerType: "explanation",
+        verdict: "Usually no. Existing final circuits can normally stay.",
+        reason: "The incoming supply, meter and switchboard are the main parts that change.",
+        steps: [],
+        extraDetail: "Old or undersized wiring can still require separate repairs.",
+        followUpQuestion: "Would you like to check another part of the three-phase decision?",
+        quickReplies: [
+          { id: "worth", label: "When is it worth it?", message: "When is a three-phase upgrade actually worth paying for?" },
+          { id: "quote", label: "What should the quote include?", message: "What should an electrician include in a three-phase upgrade quote?" },
+        ],
+      },
+      continuation: continuation(),
+    }),
+    reserveModelCall: allowModelCall,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.reply.followUpQuestion, "Would you like to check another part of the three-phase decision?");
+  assert.deepEqual(payload.reply.quickReplies.map((reply) => reply.label), [
+    "When is it worth it?",
+    "What should the quote include?",
+  ]);
+  assert.doesNotMatch(payload.reply.content, /overhead or underground/i);
+});
+
 test("authorised trade model replies keep internal workflow names while public policy still applies", async () => {
   const tradeAnswer = "In TLink, open the assigned job and record the evidence gap before the authorised Creditex review. Do not mark the activity complete until that review is recorded.";
   const response = await handleEnergyAssistantRequest(request({
