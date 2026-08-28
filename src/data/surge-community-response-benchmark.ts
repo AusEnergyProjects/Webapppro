@@ -24,6 +24,17 @@ export const SURGE_COMMUNITY_RESPONSE_BENCHMARK: SurgeCommunityBenchmarkCase[] =
     useSavedHomeContext: true,
   },
   {
+    id: "community-bedroom-draught-windy-follow-up",
+    questionType: "short draught follow-up",
+    question: "What if it only happens when it's windy?",
+    requiredAnswerGroups: [["air leak"], ["windy day"], ["weather seal", "door snake"]],
+    rejectedPhrases: ["room load", "floor area", "start by sealing the gaps that are actually letting air"],
+    recentTurns: [
+      { role: "user", content: "What's a good way to reduce draughts in my bedroom?" },
+      { role: "assistant", content: "Start by finding and sealing the gaps that are letting air into the room." },
+    ],
+  },
+  {
     id: "community-regional-solar-trade",
     questionType: "regional installer search",
     question: "Does anyone know a company that services the Grampians area for a solar install on a container shed?",

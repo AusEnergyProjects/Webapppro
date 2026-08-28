@@ -130,6 +130,20 @@ export function composeSurgeSimpleAnswer(
   context: SurgePlanContext | null,
   recentTurns: readonly RecentTurn[] = [],
 ): EnergyAssistantAnswer | null {
+  const priorUserText = recentTurns
+    .filter((turn) => turn.role === "user")
+    .slice(-5)
+    .map((turn) => turn.content)
+    .join("\n");
+
+  if (/\b(?:only|just|mainly)?\s*(?:happens?|noticeable)?\s*(?:when|while|on)?\s*(?:it(?:'s| is)\s*)?(?:windy|the wind(?: is blowing)?)\b/i.test(message)
+    && /\b(?:draughts?|drafts?|air leaks?)\b/i.test(priorUserText)) {
+    return answer(base, {
+      directAnswer: "That strongly points to an air leak rather than just cold glass. On the next windy day, feel around the opening window, frame and bedroom door to find the moving air. Use a removable weather seal on an opening gap or a door snake under the door; use suitable sealant only on a fixed crack, and keep required vents open.",
+      practicalSteps: [],
+    });
+  }
+
   const text = conversationText(message, recentTurns);
   const solar = planFact(context, "solar");
   const tenure = planFact(context, "tenure");
