@@ -206,7 +206,7 @@ export function isSurgeElectricSaulQuestion(value: string) {
 
 const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
 const THREE_PHASE_UPGRADE_PATTERN = /\b(?:upgrade|convert|conversion|change|move|switch|worth|need|require|get|getting|install)\w*\b/i;
-const THREE_PHASE_HOME_SUPPLY_PATTERN = /\b(?:house|home|supply|power|mains?|meter|switchboard|rewir\w*|solar|battery|inverter|electrician|network)\b/i;
+const THREE_PHASE_HOME_SUPPLY_PATTERN = /\b(?:house|home|supply|power|mains?|meter|switchboard|rewir\w*|solar|battery|inverter|electrician|network|upgrad\w*)\b/i;
 
 export function isThreePhaseSupplyUpgradeQuestion(value: string) {
   return THREE_PHASE_SUPPLY_PATTERN.test(value)
@@ -2433,7 +2433,7 @@ export function composeEnergyAssistantAnswer(
       ? asksRewiring
         ? "Usually no. A three-phase upgrade normally changes the incoming supply, meter, consumer mains, main switch and switchboard. Existing light and power circuits can usually stay, although the electrician may redistribute some circuits across the phases. Old, damaged or undersized wiring can add separate repair work."
         : asksValue
-          ? "Three-phase is worth paying for when the proposed solar or battery design, EV charging, large air conditioning, workshop equipment or other planned loads genuinely need the extra supply capacity or phase balancing. A battery or solar installation does not automatically require it, so get the designer to state the reason in writing first."
+          ? "Usually not just for a normal home solar and battery system. Three-phase is worth paying for when the proposed solar or battery design, EV charger, large air conditioner, workshop equipment or other planned loads genuinely need more supply capacity or better load sharing. Ask the designer to state the reason in writing before paying for the upgrade."
           : "Ask for one written scope that separates distributor or metering charges from the electrician's work. It should list the service connection, meter, consumer mains, main switch, switchboard changes, circuit balancing, testing, approvals and exclusions, plus who coordinates the electricity distributor."
       : null;
     return structured("solar", {

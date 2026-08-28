@@ -595,6 +595,48 @@ test("a model presentation keeps its follow-up question aligned with its quick r
   assert.doesNotMatch(payload.reply.content, /overhead or underground/i);
 });
 
+test("the three-phase worth-it quick reply answers directly without a generic model fallback", async () => {
+  let modelReservations = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "three-phase-worth-it-quick-reply-0001",
+    message: "When is a three-phase upgrade actually worth paying for?",
+    recentTurns: [
+      {
+        role: "user",
+        content: "Is three-phase worth getting with solar and a battery, and does it require rewiring the house?",
+      },
+      {
+        role: "assistant",
+        content: "It usually changes the incoming supply, meter and switchboard rather than every circuit.",
+      },
+    ],
+    pageContext: "/surge",
+    audience: "customer",
+  }), {
+    now: () => new Date(NOW),
+    generateAnswer: async () => ({
+      answer: fixedAnswer("I found a related current official source, but the question is not specific enough."),
+      continuation: continuation(),
+    }),
+    reserveModelCall: async () => {
+      modelReservations += 1;
+      return allowModelCall();
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(modelReservations, 0);
+  assert.match(payload.reply.directAnswer, /^Usually not just for a normal home solar and battery system\./i);
+  assert.match(payload.reply.directAnswer, /EV charger.*large air conditioner.*more supply capacity/i);
+  assert.doesNotMatch(payload.reply.content, /related current official source|not specific enough/i);
+  assert.deepEqual(payload.reply.quickReplies.map((reply) => reply.label), [
+    "Does it need rewiring?",
+    "What should the quote include?",
+  ]);
+});
+
 test("authorised trade model replies keep internal workflow names while public policy still applies", async () => {
   const tradeAnswer = "In TLink, open the assigned job and record the evidence gap before the authorised Creditex review. Do not mark the activity complete until that review is recorded.";
   const response = await handleEnergyAssistantRequest(request({

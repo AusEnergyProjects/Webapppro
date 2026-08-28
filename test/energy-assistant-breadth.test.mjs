@@ -385,6 +385,26 @@ test("three-phase home-supply questions stay on the electrical decision across a
   assert.match(rewiring.directAnswer, /^Usually no\./i);
   assert.match(rewiring.directAnswer, /existing light and power circuits can usually stay/i);
   assert.doesNotMatch(rewiring.directAnswer, /battery module|STC claim/i);
+
+  const worthIt = composeEnergyAssistantAnswer("When is a three-phase upgrade actually worth paying for?", {
+    audience: "customer",
+    pageContext: "/surge",
+    asOf,
+  });
+  assert.match(worthIt.directAnswer, /^Usually not just for a normal home solar and battery system\./i);
+  assert.match(worthIt.directAnswer, /EV charger.*large air conditioner.*more supply capacity/i);
+  assert.doesNotMatch(worthIt.directAnswer, /related current official source|not specific enough|battery module|STC claim/i);
+  assertBounded(worthIt, "three-phase worth-it quick reply");
+
+  const quote = composeEnergyAssistantAnswer("What should an electrician include in a three-phase upgrade quote?", {
+    audience: "customer",
+    pageContext: "/surge",
+    asOf,
+  });
+  assert.match(quote.directAnswer, /^Ask for one written scope/i);
+  assert.match(quote.directAnswer, /distributor or metering charges.*electrician's work/i);
+  assert.doesNotMatch(quote.directAnswer, /related current official source|not specific enough|battery module|STC claim/i);
+  assertBounded(quote, "three-phase quote quick reply");
 });
 
 test("EV savings, trade evidence and sent-lead flows ask the next real fact without inventing state", () => {

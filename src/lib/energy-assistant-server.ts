@@ -8,6 +8,7 @@ import {
   containsSurgeNamedReference,
   composeEnergyAssistantAnswer,
   isEnergyDocumentQuoteConversationRequest,
+  isThreePhaseSupplyUpgradeQuestion,
   isSurgeElectricSaulQuestion,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
@@ -613,6 +614,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const composedAnswer = compose(message, { audience, pageContext, asOf: now, priorUserMessages });
   const requiresDeterministicSafety = needsDeterministicSafetyAnswer(message, composedAnswer);
   const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
+  const requiresDeterministicThreePhaseAnswer = isThreePhaseSupplyUpgradeQuestion(message);
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     ? null
     : publicPolicyAnswer(message);
@@ -628,7 +630,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
-  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !protectedAnswer && !planPriorityAnswer) {
+  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer && !requiresDeterministicThreePhaseAnswer && !protectedAnswer && !planPriorityAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
