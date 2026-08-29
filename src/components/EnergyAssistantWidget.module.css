@@ -1154,6 +1154,38 @@
   padding: 9px;
 }
 
+.officialSources {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin: -2px 0 0;
+}
+
+.officialSources span,
+.officialSources a {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.officialSources span {
+  color: #53736c;
+  font-weight: 750;
+}
+
+.officialSources a {
+  color: #087757;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.officialSources a:hover,
+.officialSources a:focus-visible {
+  color: #054d3d;
+}
+
 .clarifyingQuestion {
   margin: 0;
 }

@@ -106,17 +106,17 @@ const SURGE_INTERNAL_IMPLEMENTATION_PATTERN =
   /\b(?:ChatGPT|OpenAI|Anthropic|Claude|Gemini|Vertex\s+AI|Google(?:'s)?\s+AI\s+models?|Responses\s+API|large\s+language\s+model|LLM|GPT(?:[-\s]?(?:3|4|5|\d)[A-Za-z0-9.\-]*)?)\b/i;
 
 const SURGE_NAMED_REFERENCE_PATTERN =
-  /\b(?:Electric\s+Saul|Saul\s+Griffith|Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Rewiring\s+Australia|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
+  /\b(?:Electric\s+Saul|Saul\s+Griffith|Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|SolarQuotes(?:\.com\.au)?|Rewiring\s+Australia|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
 
 const SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN =
-  /\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?)\b/;
+  /\b(?:CHOICE|Renew(?:\s+Magazine|\.org\.au)?|Solar\s+Quotes(?:\s+Australia|\.com\.au)?)\b/;
 
 const SURGE_OTHER_NAMED_REFERENCE_PATTERN =
-  /\b(?:Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|Solar\s*Quotes|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
+  /\b(?:Tim\s+Forcey|Dr\.?\s+Karl|Karl\s+Kruszelnicki|Richard\s+Keech|Eco\s*Master|SolarQuotes(?:\.com\.au)?|Australian\s+Consumers'?\s+Association|Alternative\s+Technology\s+Association)\b/i;
 
 const SURGE_GENERIC_IMPLEMENTATION_QUESTION_PATTERNS = [
   /\b(?:what|which|who|name|identify|reveal|disclose|confirm)\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|company)\b[^\n?]{0,100}\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
-  /\b(?:you|your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|neural\s+network|language\s+model|foundation\s+model)\b/i,
+  /\b(?:your|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,100}\b(?:AI\s+)?(?:model|provider|vendor|platform|API|backend|engine|runtime|host(?:ing)?|infrastructure|technology|tech\s+stack|neural\s+network|language\s+model|foundation\s+model)\b/i,
   /\b(?:who|what)\s+(?:hosts?|powers?|runs?|built|made|trained|supplies?)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
   /\b(?:are|is)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b[^\n?]{0,60}\b(?:neural\s+network|language\s+model|foundation\s+model|generative\s+AI|hosted|powered|built|trained|running)\b/i,
   /\b(?:company|vendor|provider|model|engine|platform|backend|runtime|API)\b[^\n?]{0,80}\b(?:behind|hosting|powering|running|used\s+by)\s+(?:you|Surge\s+AI|this\s+(?:assistant|chat\s*bot|chatbot|guide))\b/i,
@@ -138,7 +138,7 @@ const SURGE_INTERNAL_EDITORIAL_OUTPUT_PATTERNS = [
 ] as const;
 
 const SURGE_PRODUCT_ENDORSEMENT_PATTERNS = [
-  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing))\b)/i,
+  /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?!(?:(?:that\s+)?you\s+)?(?:compar(?:e|ing)|check(?:ing)?|confirm(?:ing)?|ask(?:ing)?|review(?:ing)?|measur(?:e|ing)|contact(?:ing)?|verif(?:y|ying)|visit(?:ing)?|read(?:ing)?|appl(?:y|ying)|obtain(?:ing)?|wait(?:ing)?)\b)/i,
   /\b(?:I|Surge\s+AI)\s+(?:strongly\s+)?recommend(?:s|ed)?\s+(?:buying|choosing|using|hiring)\b/i,
   /\b(?:I|Surge\s+AI)\s+(?:suggest|advise)\s+(?:buying|choosing|picking|selecting|using|hiring)\b/i,
   /\b(?:you\s+should|I\s+would|I'd|my\s+advice\s+is\s+to|I\s+suggest(?:\s+that)?\s+you)\s+(?:buy|choose|pick|select|use|hire|order|purchase|go\s+with)\b/i,
@@ -204,19 +204,50 @@ export function isSurgeElectricSaulQuestion(value: string) {
     && !SURGE_CASE_SENSITIVE_NAMED_REFERENCE_PATTERN.test(value);
 }
 
+const SURGE_LOCATION_ONLY_SERVICE_REQUEST_PATTERN =
+  /^\s*who\s+(?:services?|covers?|works?\s+in)\s+(?!(?:my|the|a|an|this|that|your|our|solar|battery|heat|hot|air|EV)\b)[a-z][a-z'’.-]*(?:\s+[a-z][a-z'’.-]*){0,4}\s*[?!.]*\s*$/i;
+
 const SURGE_LOCAL_SERVICE_REQUEST_PATTERNS = [
-  /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?)\b[\s\S]{0,120}\b(?:services?|covers?|travels?\s+to|works?\s+in|installs?\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
-  /\b(?:installers?|companies?|providers?|contractors?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+  SURGE_LOCATION_ONLY_SERVICE_REQUEST_PATTERN,
+  /\b(?:can|could|would)\s+you\b[^.!?\n]{0,35}\b(?:recommend|suggest|find|connect\s+me\s+with)\b[^.!?\n]{0,45}\b(?:a\s+)?(?:good|reliable|qualified|licensed|local)?\s*(?:installer|contractor|tradie|electrician|plumber|provider)\b/i,
+  /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?|trades?|tradies?)\b[\s\S]{0,120}\b(?:will\s+)?(?:services?|covers?|travels?\s+to|works?\s+in|installs?\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
+  /\b(?:installers?|companies?|providers?|contractors?|trades?|tradies?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
   /\b(?:anybody|anyone|someone|somebody|who|installers?|companies?|contractors?|tradies?|electricians?|plumbers?)\b[^.!?\n]{0,100}\b(?:install|put|fit|replace|repair|quote)\w*\b[^.!?\n]{0,100}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b/i,
   /\b(?:looking for|find|need|want)\b[^.!?\n]{0,80}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b[^.!?\n]{0,80}\b(?:installer|company|contractor|tradie|electrician|plumber|quote)\b/i,
 ] as const;
 
-const SURGE_COMPETING_QUOTES_PATTERN =
-  /\b(?:more|another|additional|second|third|multiple|two|three|competing|comparative)\s+(?:home[- ]?energy\s+|solar\s+|battery\s+|heating\s+|cooling\s+|hot[- ]?water\s+)?quotes?\b|\bquotes?\s+for\s+comparisons?\b|\b(?:get|seek|request|want|need|find)\b[^.!?\n]{0,60}\b(?:more|another|additional|multiple|two|three|competing|comparative)\s+quotes?\b/i;
+const SURGE_QUOTE_SERVICE_PATTERN =
+  /(?:home[- ]?energy|solar|PV|battery|heating|cooling|heat[- ]?pump|hot[- ]?water|air[- ]?con(?:ditioning)?|insulation|window|glazing|EV charger)\s+/i;
+
+const SURGE_COMPETING_QUOTES_PATTERN = new RegExp(
+  [
+    String.raw`\b(?:get|seek|request|want|find|source|arrange|obtain)\s+(?:me\s+)?(?:(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative)\s+)?(?:an?\s+)?(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
+    String.raw`\bneed\s+(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative|an?)\s+(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
+    String.raw`\b(?:can|could|would|will)\s+(?:you|surge)\b[^.!?\n]{0,80}\b(?:find|send|source|arrange|obtain|get)\b[^.!?\n]{0,80}\bquotes?\b`,
+    String.raw`\b(?:can|could|would)\s+i\s+(?:get|have|request|arrange|obtain)\s+(?:(?:some|more|another|additional|second|third|multiple|two|three|competing|comparative)\s+)?(?:an?\s+)?(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?\b`,
+    String.raw`^(?:please\s+)?(?:another|one|two|three|some|more|multiple|competing|comparative)\s+(?:${SURGE_QUOTE_SERVICE_PATTERN.source})?quotes?(?:\s+please)?[.!?]*$`,
+    String.raw`\b(?:send|submit|share|forward|put)\s+(?:my|our|the)\s+(?:(?:${SURGE_QUOTE_SERVICE_PATTERN.source}))?(?:enquiry|inquiry|request|details?)\b[^.!?\n]{0,80}\b(?:to|with)\s+(?:local\s+|approved\s+|licensed\s+)?(?:installers?|companies?|providers?|contractors?|trades?|tradies?|electricians?|plumbers?)\b`,
+  ].join("|"),
+  "i",
+);
 
 export function isSurgeServiceOrCompetingQuoteRequest(value: string) {
+  const reviewingExistingQuote = /\b(?:compar(?:e|ing)|review(?:ing)?|check(?:ing)?|analys(?:e|ing)|analyz(?:e|ing)|assess(?:ing)?|is|are|which)\b[^.!?\n]{0,100}\b(?:my|this|these|the|two|three|existing|received|attached|cheaper|dearer)?\s*quotes?\b|\b(?:have|got|received|attached)\b[^.!?\n]{0,80}\bquotes?\b[^.!?\n]{0,80}\b(?:compare|review|check|better|best|good|fair|worth|choose)\b|\bquotes?\b[^.!?\n]{0,45}\b(?:reviewed|checked|analysed|analyzed|assessed|compared)\b|\bquotes?\s+for\s+comparisons?\b/i.test(value);
+  const separatelyRequestsAnotherQuote = /\b(?:and|but|also|then|plus)\b[^.!?\n]{0,80}\b(?:get|find|source|arrange|obtain|request|want|need)\b[^.!?\n]{0,55}\b(?:another|more|additional|second|third|competing|comparative)\s+(?:\w+[ -]?){0,4}quotes?\b/i.test(value);
+  if (reviewingExistingQuote && !separatelyRequestsAnotherQuote) return false;
   return SURGE_COMPETING_QUOTES_PATTERN.test(value)
     || SURGE_LOCAL_SERVICE_REQUEST_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+export function surgeServiceRequestAlsoAsksEnergyDecision(value: string) {
+  if (!isSurgeServiceOrCompetingQuoteRequest(value)) return false;
+  const decisionText = value.replace(
+    /\b(?:reliable|efficient|experienced|qualified|licensed|local|nearby|recommended|good)\s+(?:(?:solar|PV|battery|heat[- ]?pump|hot[- ]?water|air ?con(?:ditioning)?|insulation|window|glazing|EV charger)\s+)?(?:installer|company|contractor|tradie|electrician|plumber|provider)s?\b/gi,
+    "service provider",
+  );
+  const equipmentDecision = /\b(?:unit|system|equipment|appliance|battery|solar|panels?|inverter|heater|heat[- ]?pump|hot[- ]?water|air ?con(?:ditioner|ditioning)?|insulation|windows?|glazing|EV charger)\b[^.!?\n]{0,100}\b(?:enough|suit(?:able)?|size|sizing|reliable|reliability|worth|value|cheaper|efficient|safe|normal|warranty|payback|running cost|rebates?|eligibility)\b|\b(?:enough|suit(?:able)?|size|sizing|reliable|reliability|worth|value|cheaper|efficient|safe|normal|warranty|payback|running cost|rebates?|eligibility)\b[^.!?\n]{0,100}\b(?:unit|system|equipment|appliance|battery|solar|panels?|inverter|heater|heat[- ]?pump|hot[- ]?water|air ?con(?:ditioner|ditioning)?|insulation|windows?|glazing|EV charger)\b/i.test(decisionText);
+  const brandDecision = /\bbrand\b[^.!?\n]{0,80}\b(?:reliable|reliability|warranty|parts|service support|good value)\b|\b(?:reliable|reliability|warranty|parts|service support|good value)\b[^.!?\n]{0,80}\bbrand\b/i.test(value);
+  return equipmentDecision || brandDecision;
 }
 
 export function isSurgeServiceLocationFollowUp(
@@ -228,12 +259,29 @@ export function isSurgeServiceLocationFollowUp(
     .find((message) => isSurgeServiceOrCompetingQuoteRequest(message));
   if (!previous) return false;
   const followUp = value.trim();
-  return /^\d{4}$/.test(followUp)
-    || /^(?:it(?:'|’)?s|it is|the (?:site|job|property) is|(?:i(?:'|’)?m|i am|we(?:'|’)?re|we are) (?:in|at)|(?:located|based) (?:in|at))\s+[a-z][a-z .'-]{1,70}[.!?]*$/i.test(followUp);
+  if (!followUp || followUp.length > 80 || /\?/.test(followUp)) return false;
+  if (/^(?:please|wait|nope|why|urgent|weekend|soon|whatever|home|local)[.!]*$/i.test(followUp)) return false;
+  if (/\b(?:quote|price|cost|compare|review|install|system|product|rebate|solar|battery|heat[- ]?pump|hot[- ]?water|explain|cancel|changed?\s+my\s+mind|not\s+sure|don(?:'|’)t\s+know|thanks?|yes|yeah|yep|okay|sure|maybe|unsure|fine|great|hello|somewhere|anywhere|unknown|rush|tomorrow|later)\b/i.test(followUp)) {
+    return false;
+  }
+  const locality = String.raw`[a-z][a-z'’.-]*(?:\s+[a-z][a-z'’.-]*){0,4}`;
+  const state = String.raw`(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA|Victoria|New South Wales|Northern Territory|Queensland|South Australia|Tasmania|Western Australia)`;
+  if (new RegExp(String.raw`^\d{4}(?:\s+${locality})?[.!]*$`, "i").test(followUp)) return true;
+  if (new RegExp(String.raw`^(?:it(?:'|’)?s|it is|the (?:site|job|property) is|(?:i(?:'|’)?m|i am|we(?:'|’)?re|we are) (?:in|at)|(?:located|based) (?:in|at)|in|at|near|around)\s+${locality}[.!]*$`, "i").test(followUp)) {
+    return true;
+  }
+  if (new RegExp(String.raw`^(?:regional\s+)?${state}[.!]*$`, "i").test(followUp)) return true;
+  if (new RegExp(String.raw`^${locality}\s+${state}[.!]*$`, "i").test(followUp)) return true;
+  return /^[A-Z][a-z'’.-]{2,}(?:\s+[A-Z][a-z'’.-]{1,}){0,3}[.!]*$/.test(followUp)
+    || /^[a-z][a-z'’.-]{2,}[.!]*$/.test(followUp);
 }
 
 function surgeServiceAndQuoteAnswer(query: string, exactLocationKnown = false) {
-  const postcode = query.match(/\b\d{4}\b/)?.[0] || "";
+  const locationOnlyRequest = SURGE_LOCATION_ONLY_SERVICE_REQUEST_PATTERN.test(query);
+  if (locationOnlyRequest) {
+    return "Which home-energy service do you need there: solar, a battery, heat-pump hot water, air conditioning, insulation, windows, an EV charger or a home-energy assessment? Once you choose, tap Get competing quotes below and enter the job postcode so we can connect you with relevant local trades. We do not favour or endorse any company or product.";
+  }
+  const postcode = queryAustralianPostcode(query) || "";
   const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(query);
   const hasExistingQuote = /\b(?:already\s+have|have\s+(?:got\s+)?(?:an?|one)|got|received|existing|first)\b[^.!?\n]{0,50}\bquotes?\b/i.test(query);
   const trades = solarJob ? "solar installers" : "approved trades";
@@ -268,8 +316,11 @@ function isBatteryExpansionQuestion(value: string) {
 
 export function stripSurgePublicLinksAndCitationLines(value: string) {
   return value
+    .replace(/\[([^\]\r\n]{0,200})\]\(\s*https?:\/\/[^)\s]+\s*\)/gi, "$1")
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\b(?:www\.)?[a-z0-9](?:[a-z0-9-]*\.)+(?:com|org|net|gov|edu|asn)(?:\.au)?(?:\/[^\s]*)?/gi, "")
+    .replace(/\(?\s*\[\s*\]\s*\(\s*/g, "")
+    .replace(/\(\s*\)/g, "")
     .replace(/^\s*(?:sources?|references?|citations?)\s*:.*$/gim, "");
 }
 
@@ -1657,7 +1708,7 @@ function assistantDomainIntent(query: string) {
     && /\b(?:checker|quote|scanned|scan|image[ -]only|OCR|local)\b/i.test(query)) return "in" as const;
   if (/\b(?:raw (?:file )?bytes?|extracted (?:text|lines?)|bounded (?:derived )?summary)\b/i.test(query)
     && /\b(?:local|device|browser|chat|lead|privacy|stays?|leaves?|difference|plain English)\b/i.test(query)) return "in" as const;
-  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulat(?:e|ed|ing|ion)|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|window|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|thermal shell|building envelope|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
+  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulat(?:e|ed|ing|ion)|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|windows?|window coverings?|honeycomb(?: blinds?)?|cellular (?:blinds?|shades?)|blinds?|curtains?|shutters?|pelmets?|door snakes?|door gaps?|seal(?:ing)? gaps?|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|thermal shell|building envelope|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
   if (/\b(?:bedroom|room|upstairs|upper floor|top floor|home|house|unit|apartment)\b/i.test(query)
     && /\b(?:hot|warm)\b/i.test(query)
     && /\b(?:outdoor|outside|night|evening|sunset)\b/i.test(query)) return "in" as const;
@@ -1698,7 +1749,7 @@ const PROGRAM_CITY_JURISDICTION_SIGNALS: ReadonlyArray<readonly [
   ["WA", "Western Australia", /\b(?:Perth|Fremantle|Bunbury|Geraldton|Albany|Broome)\b/i],
 ];
 
-function queryAustralianPostcode(query: string) {
+export function queryAustralianPostcode(query: string) {
   const explicitMatches = [...query.matchAll(/\b(?:postcode|post code)\s*(?:is|:|=)?\s*(\d{4})\b/gi)];
   const bareMatches = [...query.matchAll(/(?<![$\d])\b(?!20\d{2}\b)(\d{4})\b(?!\s*(?:kWh|MJ)\b)(?!\d)/gi)];
   return explicitMatches.at(-1)?.[1] || bareMatches.at(-1)?.[1] || null;
@@ -2356,12 +2407,13 @@ export function composeEnergyAssistantAnswer(
   }
 
   const serviceLocationFollowUp = isSurgeServiceLocationFollowUp(query, priorUserMessages);
-  if (isSurgeServiceOrCompetingQuoteRequest(query) || serviceLocationFollowUp) {
+  if ((isSurgeServiceOrCompetingQuoteRequest(query)
+    && !surgeServiceRequestAlsoAsksEnergyDecision(query)) || serviceLocationFollowUp) {
     const priorServiceRequest = serviceLocationFollowUp
       ? [...priorUserMessages].reverse().find(isSurgeServiceOrCompetingQuoteRequest) || ""
       : "";
     const serviceConversation = priorServiceRequest ? `${priorServiceRequest}\n${query}` : query;
-    const postcodeKnown = /\b\d{4}\b/.test(serviceConversation);
+    const postcodeKnown = Boolean(queryAustralianPostcode(serviceConversation));
     return structured("products_ratings", {
       directAnswer: surgeServiceAndQuoteAnswer(serviceConversation, serviceLocationFollowUp),
       status: serviceLocationFollowUp || postcodeKnown ? "answered" : "needs_context",

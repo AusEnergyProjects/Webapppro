@@ -5,7 +5,6 @@ import ts from "typescript";
 import {
   EMPTY_SURGE_STARTER_PROFILE,
   parseSurgeStarterProfile,
-  surgeStarterProfileContext,
 } from "../src/lib/surge-assessor-profile.ts";
 import { SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER } from "../src/lib/energy-assistant.ts";
 
@@ -162,7 +161,8 @@ test("Surge stays private and low-friction without account-copy controls", () =>
 
 test("the widget uses the canonical stateless assistant contract and never sends page records", () => {
   assert.match(widget, /action:\s*"ask"[\s\S]*requestId,[\s\S]*message,[\s\S]*recentTurns,[\s\S]*planContext,[\s\S]*pageContext:\s*context\.apiPath[\s\S]*audience:\s*context\.audience/);
-  assert.match(widget, /const recentTurns = recentTurnsForRequest\(\s*messagesRef\.current,\s*profileRef\.current,\s*profileUpdatedAtRef\.current,\s*\)/);
+  assert.match(widget, /const recentTurns = recentTurnsForRequest\(messagesRef\.current\)/);
+  assert.doesNotMatch(widget, /Customer supplied home context/);
   assert.doesNotMatch(widget, /action:\s*"history"|action:\s*"delete"/);
   assert.doesNotMatch(widget, /sessionId|accessKey|type Credentials/);
   assert.match(widget, /type Audience = "public" \| "customer" \| "trade"/);
@@ -594,7 +594,6 @@ test("local continuation caps messages and recent API context and expires after 
   const helperSource = [
     functionSource(widget, "boundedLocalMessages"),
     functionSource(widget, "starterProfile"),
-    functionSource(widget, "starterProfileContext"),
     functionSource(widget, "localSessionLastActive"),
     functionSource(widget, "recentTurnsForRequest"),
     functionSource(widget, "savedConversation"),
@@ -615,7 +614,6 @@ test("local continuation caps messages and recent API context and expires after 
     "parseSurgeConversationState",
     "EMPTY_STARTER_PROFILE",
     "parseSurgeStarterProfile",
-    "surgeStarterProfileContext",
     "surgeProfileKnownAnswerCount",
     `${compiled}; return { boundedLocalMessages, localSessionLastActive, recentTurnsForRequest, savedConversation };`,
   )(
@@ -631,7 +629,6 @@ test("local continuation caps messages and recent API context and expires after 
     (value) => value && typeof value === "object" && value.version === 1 ? value : null,
     EMPTY_SURGE_STARTER_PROFILE,
     parseSurgeStarterProfile,
-    surgeStarterProfileContext,
     (profile) => Object.entries(profile).filter(([key, value]) => (
       !["version", "completed", "reviewed"].includes(key)
       && value !== ""
@@ -710,71 +707,9 @@ test("local continuation caps messages and recent API context and expires after 
 
   const profiled = helpers.recentTurnsForRequest([
     { role: "user", content: "What should I upgrade first?" },
-  ], active.profile);
-  assert.equal(profiled[0].role, "user");
-  assert.match(profiled[0].content, /Customer supplied home context/);
-  assert.match(profiled[0].content, /postcode=3006/);
-  assert.match(profiled[0].content, /situation=owner/);
-  assert.match(profiled[0].content, /propertyType=house/);
-  assert.match(profiled[0].content, /occupants=three_four/);
-  assert.match(profiled[0].content, /goals=lower-bills/);
-  assert.match(profiled[0].content, /What should I upgrade first\?/);
-
-  const staleChat = [
-    {
-      role: "user",
-      content: "I own the home.",
-      createdAt: "2026-08-20T01:00:00.000Z",
-    },
-    {
-      role: "assistant",
-      content: "I will use owner context.",
-      createdAt: "2026-08-20T01:01:00.000Z",
-    },
-  ];
-  const olderProfileContext = helpers.recentTurnsForRequest(
-    staleChat,
-    { ...active.profile, situation: "renter", completed: true },
-    "2026-08-20T00:59:00.000Z",
-  );
-  assert.match(olderProfileContext[0].content, /Customer supplied home context/);
-  assert.equal(olderProfileContext.at(-1).role, "assistant");
-
-  const correctedProfileContext = helpers.recentTurnsForRequest(
-    staleChat,
-    { ...active.profile, situation: "renter", completed: true },
-    "2026-08-20T01:02:00.000Z",
-  );
-  assert.equal(correctedProfileContext.at(-1).role, "user");
-  assert.match(correctedProfileContext.at(-1).content, /Customer supplied home context/);
-  assert.match(correctedProfileContext.at(-1).content, /situation=renter/);
-  assert.ok(correctedProfileContext.length <= 8);
-  assert.ok(correctedProfileContext.reduce((total, turn) => total + turn.content.length, 0) <= 6_000);
-
-  const longProfiledConversation = helpers.recentTurnsForRequest(
-    Array.from({ length: 14 }, (_, index) => ({
-      role: index % 2 === 0 ? "user" : "assistant",
-      content: `long-profile-turn-${index}`,
-    })),
-    {
-      ...active.profile,
-      goals: ["improve-comfort"],
-      budgetRange: "2_10k",
-      timing: "within_3_months",
-      reviewed: [
-        ...active.profile.reviewed,
-        "goals",
-        "budgetRange",
-        "supplemental:timing",
-      ],
-      completed: true,
-    },
-  );
-  assert.ok(longProfiledConversation.length <= 8);
-  assert.match(longProfiledConversation[0].content, /Customer supplied home context/);
-  assert.match(longProfiledConversation[0].content, /goals=improve-comfort/);
-  assert.match(longProfiledConversation[0].content, /budgetRange=2_10k/);
-  assert.match(longProfiledConversation[0].content, /timing=within_3_months/);
+  ], active.profile, "2026-08-20T01:02:00.000Z");
+  assert.deepEqual(profiled, [{ role: "user", content: "What should I upgrade first?" }]);
+  assert.doesNotMatch(JSON.stringify(profiled), /Customer supplied home context|postcode=3006|situation=owner/);
 
   const compactConversation = Array.from({ length: 12 }, (_, index) => ({
     role: index % 2 === 0 ? "user" : "assistant",
@@ -1008,13 +943,14 @@ test("the floating guide remains modal while the dedicated page is non-modal", (
   assert.doesNotMatch(styles, /min-height:\s*(?:[0-3]?\d|4[0-3])px/);
 });
 
-test("page navigation links are restricted and public answer cards do not expose source metadata", () => {
+test("page navigation stays restricted and validated official citations render as compact links", () => {
   assert.match(widget, /const SAFE_EXACT_ACTIONS = new Set/);
   assert.match(widget, /candidate\.includes\("\\\\"\)/);
   assert.match(widget, /candidate\.includes\("\?"\)/);
   assert.match(widget, /SAFE_EXACT_ACTIONS\.has\(pathname\)/);
   assert.ok(widget.includes("if (/^\\/guides\\/[a-z0-9-]{1,80}$/.test(pathname))"));
-  assert.doesNotMatch(widget, /target="_blank" rel="noreferrer"/);
+  assert.match(widget, /url\.protocol === "https:" \? url\.href : ""/);
+  assert.match(widget, /target="_blank"[\s\S]{0,100}rel="noreferrer"/);
   const answerCardStart = widget.indexOf("{messages.length > 0 && (");
   const answerCardEnd = widget.indexOf("{busy &&", answerCardStart);
   assert.notEqual(answerCardStart, -1);
@@ -1024,5 +960,17 @@ test("page navigation links are restricted and public answer cards do not expose
   assert.match(answerCards, /naturalFollowUpFor\(message, context\.audience\)/);
   assert.match(answerCards, /usesSingleParagraphAnswer\(message\)/);
   assert.match(answerCards, /singleParagraphAnswerFor\(message, context\.audience\)/);
-  assert.doesNotMatch(answerCards, /citations|sources|sourceBoundary|toolActions|message\.actions/);
+  assert.match(answerCards, /message\.citations\.length > 0/);
+  assert.match(answerCards, /className=\{styles\.officialSources\}/);
+  assert.match(answerCards, /aria-label="Official sources"/);
+  assert.match(answerCards, /href=\{citation\.url\}/);
+  assert.match(answerCards, /message\.answerStatus === "source_review_required" && \(/);
+  assert.doesNotMatch(answerCards, /message\.answerStatus === "source_review_required" && message\.citations\.length/);
+  assert.ok(
+    answerCards.indexOf("className={styles.officialSources}")
+      < answerCards.indexOf("naturalFollowUpFor(message, context.audience)"),
+  );
+  assert.match(styles, /\.officialSources\s*\{[\s\S]*flex-wrap:\s*wrap/);
+  assert.match(styles, /\.officialSources span,[\s\S]*font-size:\s*0\.72rem/);
+  assert.doesNotMatch(answerCards, /sourceBoundary|toolActions|message\.actions/);
 });

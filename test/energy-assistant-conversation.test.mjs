@@ -142,6 +142,82 @@ test("context-dependent wording resolves against the newest compatible user turn
   assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up");
 });
 
+test("a topic noun with an explicit reference still uses the recent decision context", () => {
+  const turns = [
+    { role: "user", content: "The battery quote is $12,000 for 10 kWh and claims $700 yearly savings." },
+    { role: "assistant", content: "That implies a long simple payback." },
+  ];
+  const message = "Is that battery worth it?";
+  const resolution = resolveSurgeConversationReference(message, turns, null);
+
+  assert.equal(isSurgeContextDependentMessage(message), true);
+  assert.equal(resolution.status, "resolved_from_recent_context");
+  assert.equal(resolution.basis, "recent_user_turns");
+  assert.deepEqual(resolution.anchorUserMessages, [turns[0].content]);
+  assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up");
+  assert.equal(isSurgeContextDependentMessage("what about the battery instead?"), false);
+});
+
+test("natural named-topic pronouns keep the immediately relevant conversation", () => {
+  const cases = [
+    ["Are those solar panels worth it?", "I was quoted for twelve solar panels."],
+    ["Is that inverter any good?", "The quote includes an ABC-5000 inverter."],
+    ["Are those blinds worth it?", "The installer suggested honeycomb blinds."],
+    ["Does the battery do that too?", "The solar system can charge the car during the day."],
+  ];
+
+  for (const [message, prior] of cases) {
+    const turns = [{ role: "user", content: prior }];
+    const resolution = resolveSurgeConversationReference(message, turns, null);
+    assert.equal(isSurgeContextDependentMessage(message), true, message);
+    assert.equal(resolution.status, "resolved_from_recent_context", message);
+    assert.deepEqual(resolution.anchorUserMessages, [prior], message);
+    assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up", message);
+  }
+});
+
+test("natural named-topic ellipses retain the immediately relevant conversation", () => {
+  const prior = "Based on my survey, help me decide which home upgrades should come first.";
+  const turns = [{ role: "user", content: prior }];
+  for (const message of [
+    "What about solar?",
+    "And a battery?",
+    "Could insulation help too?",
+    "Would honeycomb blinds help?",
+  ]) {
+    const resolution = resolveSurgeConversationReference(message, turns, null);
+    assert.equal(isSurgeContextDependentMessage(message), true, message);
+    assert.equal(resolution.status, "resolved_from_recent_context", message);
+    assert.deepEqual(resolution.anchorUserMessages, [prior], message);
+    assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up", message);
+  }
+  assert.equal(isSurgeContextDependentMessage("What about solar instead?"), false);
+});
+
+test("definite named references keep compatible recent context", () => {
+  const cases = [
+    ["Are the solar panels worth it?", "The quote includes twelve solar panels."],
+    ["Is the inverter any good?", "The solar quote includes an ABC-5000 inverter."],
+    ["Does the system make sense?", "I was quoted for a 6.6 kW solar system."],
+  ];
+  for (const [message, prior] of cases) {
+    const turns = [{ role: "user", content: prior }];
+    const resolution = resolveSurgeConversationReference(message, turns, null);
+    assert.equal(resolution.contextDependent, true, message);
+    assert.equal(resolution.status, "resolved_from_recent_context", message);
+    assert.deepEqual(resolution.anchorUserMessages, [prior], message);
+    assert.equal(classifySurgeConversationTurn(message, null, turns), "contextual_follow_up", message);
+  }
+});
+
+test("a clear named request changes topic even when no question is pending", () => {
+  const current = state({
+    activeTopic: "rcac",
+    pendingQuestion: "",
+  });
+  assert.equal(classifySurgeConversationTurn("Tell me about solar instead", current), "topic_change");
+});
+
 test("the practical-next-step quick reply remains tied to the current topic", () => {
   const turns = [{ role: "user", content: "Should I upgrade this home from single phase to three phase?" }];
   const message = "Show me the practical next step";
@@ -171,4 +247,84 @@ test("a context-dependent question without any usable context asks for clarifica
   assert.equal(resolution.basis, "none");
   assert.deepEqual(resolution.anchorUserMessages, []);
   assert.equal(classifySurgeConversationTurn("is that one better?", null, []), "new_question");
+});
+
+test("an explicit topic question overrides a stale pending question", () => {
+  const current = state({
+    activeTopic: "glazing_shading",
+    pendingQuestion: "Do the windows feel cold when there is no wind?",
+  });
+  for (const message of [
+    "Is solar worth it?",
+    "what about the battery instead?",
+    "and insulation?",
+  ]) {
+    assert.equal(classifySurgeConversationTurn(message, current), "topic_change", message);
+  }
+});
+
+test("short natural statements still answer the pending question", () => {
+  for (const [pendingQuestion, message] of [
+    ["Which room feels coldest?", "lounge and bedroom"],
+    ["How many people live there?", "two people"],
+    ["When do you use most electricity?", "mostly evenings"],
+    ["Do the windows feel cold?", "yeah freezing"],
+    ["Do you already have solar?", "we have solar"],
+  ]) {
+    const current = state({ pendingQuestion });
+    assert.equal(classifySurgeConversationTurn(message, current), "answer_to_follow_up", message);
+  }
+});
+
+test("tentative short replies still answer the pending question", () => {
+  for (const [pendingQuestion, message] of [
+    ["How many people live there?", "Two people?"],
+    ["Which room feels coldest?", "The bedroom?"],
+    ["When do you use most electricity?", "Mostly evenings?"],
+  ]) {
+    const current = state({ pendingQuestion });
+    assert.equal(classifySurgeConversationTurn(message, current), "answer_to_follow_up", message);
+  }
+});
+
+test("short explicit facts answer a pending question even when they contain another energy topic", () => {
+  const cases = [
+    ["What heating do you use?", "Gas ducted heating"],
+    ["Do you have solar?", "No, but I have a battery"],
+    ["Which room is coldest?", "The bedroom windows are freezing"],
+  ];
+
+  for (const [pendingQuestion, message] of cases) {
+    assert.equal(classifySurgeConversationTurn(message, {
+      ...emptySurgeConversationState(),
+      pendingQuestion,
+    }), "answer_to_follow_up", `${pendingQuestion} / ${message}`);
+  }
+});
+
+test("a clear new question or request can still override a pending question", () => {
+  const continuation = {
+    ...emptySurgeConversationState(),
+    pendingQuestion: "Which room is coldest?",
+  };
+  assert.equal(classifySurgeConversationTurn("Is solar worth it?", continuation), "topic_change");
+  assert.equal(classifySurgeConversationTurn("Tell me about solar instead", continuation), "topic_change");
+});
+
+test("bare named-topic requests override an unrelated pending room question", () => {
+  const continuation = {
+    ...emptySurgeConversationState(),
+    activeTopic: "comfort_fabric",
+    pendingQuestion: "Which room is hardest to keep comfortable?",
+  };
+  for (const message of [
+    "solar panels cost",
+    "battery prices",
+    "insulation options",
+    "solar",
+  ]) {
+    assert.equal(classifySurgeConversationTurn(message, continuation), "topic_change", message);
+  }
+  assert.equal(classifySurgeConversationTurn("bedroom", continuation), "answer_to_follow_up");
+  assert.equal(classifySurgeConversationTurn("The bedroom windows are freezing", continuation), "answer_to_follow_up");
 });

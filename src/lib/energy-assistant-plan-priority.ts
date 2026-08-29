@@ -6,15 +6,19 @@ type RecentTurn = {
   content: string;
 };
 
-const PRIORITY_INTENT = /\b(?:where|how)\s+should\s+I\s+(?:start|begin)|\bwhat\s+should\s+I\s+(?:do|upgrade|fix|tackle)\s+first|\b(?:prioritise|prioritize|rank)\s+(?:my|the)\s+(?:home|energy|upgrade|plan)|\b(?:start|first)\b[^.!?\n]{0,45}\bbased\s+on\s+(?:my|the)\s+(?:answers|survey|plan|details)\b/i;
+const PRIORITY_INTENT = /\b(?:where|how)\s+(?:(?:should|do|can|could)\s+)(?:I|we)\s+(?:start|begin)|\bwhat\s+(?:do|should|can|could)\s+(?:I|we)\s+(?:do|upgrade|fix|tackle|spend)(?:\s+on)?\s+first|\bwhat\s+should\s+be\s+(?:my|our|the)\s+first\s+priority|\bwhat\s+(?:is|comes)\s+(?:the\s+)?first(?:\s+(?:thing|priority|step))?(?:\s+to\s+(?:do|fix|upgrade|tackle))?|\bwhat\s+to\s+(?:do|fix|upgrade|tackle)\s+first|\b(?:prioritise|prioritize|rank)\s+(?:my|our|the)\s+(?:home|energy|upgrade|plan)|\b(?:start|begin|first|spend|priority)\b[^.!?\n]{0,90}\b(?:based\s+on|using|use|given|from)\s+(?:my|our|the)\s+(?:saved\s+)?(?:answers|survey|plan|details|home details|home context)\b|\b(?:based\s+on|using|use|given|from)\s+(?:my|our|the)\s+(?:saved\s+)?(?:answers|survey|plan|details|home details|home context)\b[^.!?\n]{0,110}\b(?:start|begin|first|spend|budget|priority|comfort|bills?)\b/i;
 const EXPLICIT_CORRECTION = /\b(?:correction|actually|instead|no longer|has changed|have changed|I now (?:rent|own|live)|my (?:new )?postcode is|not (?:an? )?(?:owner|renter|apartment|unit|house))\b/i;
+
+export function isSurgePlanPriorityIntent(message: string) {
+  return PRIORITY_INTENT.test(message);
+}
 
 export function composeSurgePlanPriorityAnswer(
   message: string,
   context: SurgePlanContext | null,
   recentTurns: readonly RecentTurn[] = [],
 ): EnergyAssistantAnswer | null {
-  if (!context || !PRIORITY_INTENT.test(message)) return null;
+  if (!context || !isSurgePlanPriorityIntent(message)) return null;
   const newerCorrection = [message, ...recentTurns
     .filter((turn) => turn.role === "user" && !turn.content.startsWith("Customer supplied home context:"))
     .map((turn) => turn.content)]
@@ -42,7 +46,13 @@ export function composeSurgePlanPriorityAnswer(
   const battery = fact("battery");
   const switchboard = fact("switchboard");
 
-  const strataApplies = /strata|owners corporation|common property/i.test(approval);
+  const messageBudget = message.match(/\b(?:budget|spend(?:ing)?|afford|put)\b[^.!?\n$]{0,55}\$\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1]
+    || message.match(/\$\s*([\d,]+(?:\.\d{1,2})?)[^.!?\n]{0,45}\b(?:budget|to spend|available|first)\b/i)?.[1];
+  const formattedMessageBudget = messageBudget
+    ? `$${Number(messageBudget.replace(/,/g, "")).toLocaleString("en-AU")}`
+    : "";
+  const strataApplies = /strata|owners corporation|common property/i.test(approval)
+    || /apartment|unit/i.test(propertyType);
   const moisture = /condensation|damp|mould|mold/i.test(comfort);
   const hotOrCold = /too hot|too cold/i.test(comfort);
   const roofProblem = /leak|damage|major deterioration/i.test(roofCondition)
@@ -111,7 +121,11 @@ export function composeSurgePlanPriorityAnswer(
               ? "the existing reverse-cycle system"
               : "the first ranked action below";
   const homeDescription = propertyType ? ` for your ${propertyType.toLowerCase()}` : "";
-  const budgetDescription = budget ? ` with ${budget.toLowerCase()} to spend first` : "";
+  const budgetDescription = formattedMessageBudget
+    ? ` with ${formattedMessageBudget} to spend first`
+    : budget
+      ? ` with ${budget.toLowerCase()} to spend first`
+      : "";
   const intro = `Based on your saved answers${homeDescription}${budgetDescription}, start with ${startWith}.`;
   const unsuitableInsulation = ceilingUnavailable && floorUnavailable
     ? " Generic ceiling and underfloor insulation advice does not fit this apartment layout."
@@ -123,9 +137,6 @@ export function composeSurgePlanPriorityAnswer(
     && /no home battery/i.test(battery)
     ? " Treat solar and a battery as later common-property decisions."
     : "";
-  const followUp = moisture
-    ? "Which room has the worst condensation or temperature problem: the living room, bedroom, bathroom or somewhere else?"
-    : "Which room is hardest to keep comfortable?";
   return {
     directAnswer: `${intro} ${selectedActions.join(" ")}${unsuitableInsulation}${laterSolar}`,
     practicalSteps: [],
@@ -134,7 +145,7 @@ export function composeSurgePlanPriorityAnswer(
     citations: [],
     assumptions: ["The saved answers are household-reported and have not been confirmed by a site inspection."],
     confidence: "medium",
-    suggestedQuestions: [followUp],
+    suggestedQuestions: [],
     toolActions: [],
     sourceBoundary: "This priority order uses the confirmed home-plan facts supplied on this device. Site condition, safety, approvals and regulated work still require appropriate inspection or licensed advice.",
   };

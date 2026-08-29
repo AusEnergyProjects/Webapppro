@@ -34,7 +34,6 @@ import {
   surgeProfileKnownAnswerCount,
   surgeProfileReviewedAnswerCount,
   surgePlannerProfileAdapter,
-  surgeStarterProfileContext,
   updateSurgeProfileField,
   type SurgeProfileField,
   type SurgeStarterProfile,
@@ -348,7 +347,7 @@ function safeCitationUrl(value: unknown): string {
   if (!candidate) return "";
   try {
     const url = new URL(candidate);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    return url.protocol === "https:" ? url.href : "";
   } catch {
     return "";
   }
@@ -653,10 +652,6 @@ function starterProfile(value: unknown): SurgeStarterProfile {
   return parseSurgeStarterProfile(value);
 }
 
-function starterProfileContext(profile: SurgeStarterProfile) {
-  return surgeStarterProfileContext(profile);
-}
-
 function localSessionLastActive(
   messages: readonly AssistantMessage[],
   profile: SurgeStarterProfile,
@@ -678,11 +673,7 @@ function localSessionLastActive(
     : "";
 }
 
-function recentTurnsForRequest(
-  messages: readonly AssistantMessage[],
-  profile: SurgeStarterProfile = EMPTY_STARTER_PROFILE,
-  profileUpdatedAt = "",
-) {
+function recentTurnsForRequest(messages: readonly AssistantMessage[]) {
   const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const message of messages) {
     const content = message.content.trim().slice(0, MAX_MESSAGE_LENGTH);
@@ -700,44 +691,6 @@ function recentTurnsForRequest(
   ) turns.shift();
   if (turns[0]?.role === "assistant") turns.shift();
 
-  const profileContext = starterProfileContext(profile);
-  if (profileContext) {
-    const profileTime = new Date(profileUpdatedAt).getTime();
-    const newestMessageTime = messages.reduce((latest, message) => {
-      const timestamp = new Date(message.createdAt || "").getTime();
-      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
-    }, Number.NEGATIVE_INFINITY);
-    const profileIsNewest = Number.isFinite(profileTime) && profileTime > newestMessageTime;
-    if (profileIsNewest && turns.at(-1)?.role === "user") {
-      const lastIndex = turns.length - 1;
-      const availableForPriorTurn = Math.max(0, MAX_MESSAGE_LENGTH - profileContext.length - 1);
-      turns[lastIndex] = {
-        role: "user",
-        content: availableForPriorTurn > 0
-          ? `${turns[lastIndex].content.slice(0, availableForPriorTurn)}\n${profileContext}`
-          : profileContext,
-      };
-    } else if (profileIsNewest) {
-      if (turns.length >= MAX_RECENT_TURNS) turns.shift();
-      turns.push({ role: "user", content: profileContext });
-    } else if (turns[0]?.role === "user") {
-      const availableForPriorTurn = Math.max(0, MAX_MESSAGE_LENGTH - profileContext.length - 1);
-      turns[0] = {
-        role: "user",
-        content: availableForPriorTurn > 0
-          ? `${profileContext}\n${turns[0].content.slice(-availableForPriorTurn)}`
-          : profileContext,
-      };
-    } else {
-      if (turns.length >= MAX_RECENT_TURNS) turns.shift();
-      turns.unshift({ role: "user", content: profileContext });
-    }
-  }
-  while (
-    turns.length > MAX_RECENT_TURNS
-    || turns.reduce((total, turn) => total + turn.content.length, 0) > MAX_RECENT_CONTEXT_CHARACTERS
-  ) turns.shift();
-  if (turns[0]?.role === "assistant") turns.shift();
   return turns;
 }
 
@@ -1498,11 +1451,7 @@ export function EnergyAssistantWidget({
       setLeadError("");
       setLeadStatus("");
     }
-    const recentTurns = recentTurnsForRequest(
-      messagesRef.current,
-      profileRef.current,
-      profileUpdatedAtRef.current,
-    );
+    const recentTurns = recentTurnsForRequest(messagesRef.current);
     const requestId = makeRequestId("ask");
     const userMessage: AssistantMessage = {
       id: requestId,
@@ -2480,6 +2429,22 @@ export function EnergyAssistantWidget({
                             </>
                           ) : (
                             <p className={styles.directAnswer}>{customerVisibleText(message.directAnswer || message.content, context.audience)}</p>
+                          )}
+                          {message.citations.length > 0 && (
+                            <nav className={styles.officialSources} aria-label="Official sources">
+                              <span>Official {message.citations.length === 1 ? "source" : "sources"}:</span>
+                              {message.citations.map((citation) => (
+                                <a
+                                  key={citation.id}
+                                  href={citation.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={citation.title}
+                                >
+                                  {citation.publisher}
+                                </a>
+                              ))}
+                            </nav>
                           )}
                           {naturalFollowUpFor(message, context.audience) && (
                             <p className={styles.clarifyingQuestion}>{naturalFollowUpFor(message, context.audience)}</p>

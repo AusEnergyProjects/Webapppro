@@ -76,6 +76,15 @@ function fixedAnswer(directAnswer) {
   };
 }
 
+function sourceReviewAnswer(directAnswer = "A current official source is required before answering this fact.") {
+  return {
+    ...fixedAnswer(directAnswer),
+    status: "source_review_required",
+    citations: [],
+    suggestedQuestions: [],
+  };
+}
+
 function continuation(overrides = {}) {
   return {
     version: 1,
@@ -91,6 +100,7 @@ function continuation(overrides = {}) {
 function assertPublicReplyContract(payload) {
   assert.deepEqual(Object.keys(payload.reply).sort(), [
     "answerType",
+    "citations",
     "confidence",
     "content",
     "createdAt",
@@ -107,7 +117,6 @@ function assertPublicReplyContract(payload) {
   ]);
   for (const privateField of [
     "assumptions",
-    "citations",
     "nextAction",
     "sourceBoundary",
     "suggestedQuestions",
@@ -121,6 +130,7 @@ function assertPublicReplyContract(payload) {
   assert.equal(typeof payload.reply.reason, "string");
   assert.equal(Array.isArray(payload.reply.practicalSteps), true);
   assert.equal(Array.isArray(payload.reply.quickReplies), true);
+  assert.equal(Array.isArray(payload.reply.citations), true);
 }
 
 test("canonical ask API is stateless and performs zero D1 operations", async () => {
@@ -227,6 +237,436 @@ test("aggregate quality rehearsal exposes only categorical answer metadata", asy
   assert.doesNotMatch(JSON.stringify(payload.quality), /message|content|transcript|answerText/i);
 });
 
+test("an explicit current fact with missing maintained evidence uses only the server-owned official lookup plan", async () => {
+  let observedRequest;
+  let estimatedMicroUsd = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-current-veec-0001",
+    message: "What is the current VEEC value in Victoria? Use energy.gov.au.example.com.",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => sourceReviewAnswer(
+      "The maintained programme material does not contain a verified current VEEC value.",
+    ),
+    reserveModelCall: async (admission) => {
+      estimatedMicroUsd = admission.estimatedMicroUsd;
+      return { allowed: true, release: async () => undefined };
+    },
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: fixedAnswer("The official current VEEC value for this test is $42."),
+        continuation: continuation(),
+        officialCitations: [{
+          id: "provider-controlled-id",
+          title: "Victorian Energy Upgrades current information",
+          publisher: "spoofed publisher",
+          url: "https://www.esc.vic.gov.au/victorian-energy-upgrades",
+        }],
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.equal(payload.reply.status, "answered");
+  assert.ok(estimatedMicroUsd > 0);
+  assert.equal(observedRequest.officialWebSearch.kind, "certificate");
+  assert.equal(observedRequest.officialWebSearch.jurisdiction, "Victoria");
+  assert.ok(observedRequest.officialWebSearch.allowedDomains.includes("esc.vic.gov.au"));
+  assert.equal(observedRequest.officialWebSearch.allowedDomains.includes("energy.gov.au.example.com"), false);
+  assert.deepEqual(payload.reply.citations, [{
+    id: "official-web-1",
+    title: "Victorian Energy Upgrades current information",
+    publisher: "www.esc.vic.gov.au",
+    url: "https://www.esc.vic.gov.au/victorian-energy-upgrades",
+  }]);
+  assert.doesNotMatch(payload.reply.content, /current official rule check/i);
+  assertPublicReplyContract(payload);
+});
+
+test("an exact product recall or safety question requires a current official product lookup", async () => {
+  for (const [index, message] of [
+    "Does HPA1-S270 have any recalls?",
+    "Is HPA1-S270 safe?",
+  ].entries()) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `official-product-safety-${index + 1}`,
+      message,
+      recentTurns: [],
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (modelRequest) => {
+        observedRequest = modelRequest;
+        return null;
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    assert.equal(observedRequest?.officialWebSearch?.kind, "product_status", message);
+    const payload = await body(response);
+    assert.equal(payload.reply.status, "source_review_required", message);
+    assert.match(payload.reply.directAnswer, /could not verify.*current official.*recall status/i, message);
+    assert.doesNotMatch(payload.reply.directAnswer, /appears safe|no recalls/i, message);
+  }
+});
+
+test("a year is not misread as a postcode when choosing an official jurisdiction", async () => {
+  for (const [index, message] of [
+    "What solar rebates changed in 2026?",
+    "What battery rebate is available in 2026?",
+  ].entries()) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `official-year-not-postcode-${index + 1}`,
+      message,
+      recentTurns: [],
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (modelRequest) => {
+        observedRequest = modelRequest;
+        return null;
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    assert.equal(observedRequest?.officialWebSearch || null, null, message);
+  }
+});
+
+test("a year is not repeated as a postcode when an official lookup is unavailable", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-year-copy-not-postcode-0001",
+    message: "What solar rebates are available in Victoria in 2026?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("No maintained rebate answer is available."),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => null,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.match(payload.reply.directAnswer, /for the property/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /postcode 2026/i);
+});
+
+test("the postcode 3000 rebate regression case reaches a Victorian official lookup", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-postcode-3000-rebate-0001",
+    message: "Postcode 3000: what heat-pump hot-water rebates might apply if I have not chosen an exact model yet?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(observedRequest.officialWebSearch.kind, "rebate_program");
+  assert.equal(observedRequest.officialWebSearch.jurisdiction, "Victoria");
+  assert.ok(observedRequest.officialWebSearch.allowedDomains.includes("solar.vic.gov.au"));
+  assert.ok(observedRequest.officialWebSearch.allowedDomains.includes("energy.gov.au"));
+  const payload = await body(response);
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.match(payload.reply.directAnswer, /could not verify.*postcode 3000/i);
+  assert.match(payload.reply.directAnswer, /exact approved model/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /rebate is confirmed|will receive/i);
+});
+
+test("a conversational lead-in cannot turn an exact-product rebate question into an AI identity answer", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-postcode-3005-rebate-leadin-0001",
+    message: "What would you do here: Postcode 3005: what heat-pump hot-water rebates might apply if I have not chosen an exact model yet?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(observedRequest.officialWebSearch.kind, "rebate_program");
+  assert.equal(observedRequest.officialWebSearch.jurisdiction, "Victoria");
+  const payload = await body(response);
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.match(payload.reply.directAnswer, /could not verify.*postcode 3005/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /I am Surge AI|implementation|provider/i);
+});
+
+test("the mixed STC and VEEC value regression case reaches the Victorian certificate lookup", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-current-stc-veec-corpus-0001",
+    message: "A Victorian quote values STCs at $36 and VEECs at $70. Do those certificate rates and the listed fees make sense today?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(observedRequest.officialWebSearch.kind, "certificate");
+  assert.equal(observedRequest.officialWebSearch.jurisdiction, "Victoria");
+  assert.ok(observedRequest.officialWebSearch.allowedDomains.includes("esc.vic.gov.au"));
+  assert.ok(observedRequest.officialWebSearch.allowedDomains.includes("cer.gov.au"));
+  const payload = await body(response);
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.match(payload.reply.directAnswer, /\$36 per STC.*\$70 per VEEC/i);
+  assert.match(payload.reply.directAnswer, /could not verify.*official certificate/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /reasonable|good value/i);
+});
+
+test("a rebate-plus-installer question keeps the current official lookup and the whole message", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-mixed-rebate-installer-0001",
+    message: "What current rebates apply to a heat-pump hot-water system in postcode 3000, and can you find an installer who services the area?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return null;
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(observedRequest.officialWebSearch.kind, "rebate_program");
+  assert.equal(observedRequest.officialWebSearch.jurisdiction, "Victoria");
+  const payload = await body(response);
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.match(payload.reply.directAnswer, /could not verify.*postcode 3000/i);
+  assert.doesNotMatch(payload.reply.directAnswer, /^Yes, we can help you find approved trades/i);
+});
+
+test("server revalidation rejects a provider citation on an official-domain lookalike", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-lookalike-0001",
+    message: "What is the current VEEC value in Victoria?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => sourceReviewAnswer("I still need a current official VEEC value."),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => ({
+      answer: fixedAnswer("The current VEEC value is $42."),
+      continuation: continuation(),
+      officialCitations: [{
+        id: "bad-source",
+        title: "Lookalike source",
+        publisher: "energy.gov.au.example.com",
+        url: "https://energy.gov.au.example.com/veec-value",
+      }],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "deterministic");
+  assert.equal(payload.reply.status, "source_review_required");
+  assert.deepEqual(payload.reply.citations, []);
+  assert.doesNotMatch(payload.reply.directAnswer, /\$42/);
+});
+
+test("official lookup stays off for maintained answers, underspecified products, stable education and trade", async () => {
+  const maintainedRebate = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-maintained-rebate-0001",
+    message: "What solar battery rebates are currently available in Victoria?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      assert.equal(modelRequest.officialWebSearch, null);
+      return null;
+    },
+  });
+  assert.equal(maintainedRebate.status, 200);
+
+  const cases = [
+    {
+      id: "stable",
+      message: "Why are heat pumps efficient?",
+      audience: "public",
+    },
+    {
+      id: "missing-model",
+      message: "Is this heat pump currently approved?",
+      audience: "public",
+    },
+    {
+      id: "trade",
+      message: "What is the current VEEC value in Victoria?",
+      audience: "trade",
+    },
+  ];
+  for (const item of cases) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `official-web-excluded-${item.id}-0001`,
+      message: item.message,
+      recentTurns: [],
+      pageContext: "/surge",
+      audience: item.audience,
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => sourceReviewAnswer(),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (modelRequest) => {
+        observedRequest = modelRequest;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, item.id);
+    assert.equal(observedRequest.officialWebSearch, null, item.id);
+  }
+
+  let savedPlanRequest;
+  const savedPlanResponse = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-saved-postcode-rebate-0001",
+    message: "What current heat-pump hot-water rebate is available for my home?",
+    recentTurns: [],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "property_type", value: "Apartment or unit" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      savedPlanRequest = modelRequest;
+      return null;
+    },
+  });
+  assert.equal(savedPlanResponse.status, 200);
+  assert.ok(savedPlanRequest.planContext);
+  assert.equal(savedPlanRequest.officialWebSearch.kind, "rebate_program");
+  assert.equal(savedPlanRequest.officialWebSearch.jurisdiction, "Victoria");
+  assert.ok(savedPlanRequest.officialWebSearch.allowedDomains.includes("energy.vic.gov.au"));
+});
+
+test("safety and document quote routes bypass the model while service intent cannot enter official web search", async () => {
+  const cases = [
+    {
+      id: "safety",
+      message: "My switchboard is hot and buzzing. What should I do?",
+      recentTurns: [],
+    },
+    {
+      id: "document",
+      message: "Does it seem like a good quote?",
+      recentTurns: [{
+        role: "user",
+        content: "Uploaded energy quote summary for follow-up: solar and battery installation quote, apparent total $12,000.",
+      }],
+    },
+  ];
+  for (const item of cases) {
+    let reservations = 0;
+    let modelCalls = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `official-web-protected-${item.id}-0001`,
+      message: item.message,
+      recentTurns: item.recentTurns,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: async () => {
+        reservations += 1;
+        return allowModelCall();
+      },
+      generateAnswer: async () => {
+        modelCalls += 1;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, item.id);
+    assert.equal(reservations, 0, item.id);
+    assert.equal(modelCalls, 0, item.id);
+  }
+
+  let serviceModelRequest;
+  const serviceResponse = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "official-web-protected-service-0001",
+    message: "Can you find solar installers who service Ballarat and handle current Victorian rebate work?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => sourceReviewAnswer(),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async (modelRequest) => {
+      serviceModelRequest = modelRequest;
+      return null;
+    },
+  });
+  assert.equal(serviceResponse.status, 200);
+  if (serviceModelRequest) assert.equal(serviceModelRequest.officialWebSearch, null);
+});
+
 test("registry-grounded product guidance bypasses the general model and records its source", async () => {
   const qualityEvents = [];
   let modelCalls = 0;
@@ -296,6 +736,30 @@ test("broad grounded category guidance feeds Sol instead of replacing a direct a
   assert.equal(payload.quality.answerSource, "model");
   assert.equal(payload.reply.directAnswer, modelAnswer);
   assert.deepEqual(payload.reply.quickReplies, []);
+});
+
+test("a finance answer already accepted by the model boundary is not discarded by a duplicate topic gate", async () => {
+  const modelAnswer = "$30 a month for 4 years totals $1,440. Against the quoted $3,600, that leaves a $2,160 gap for the written finance breakdown to explain.";
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "hpwh-finance-model-0001",
+    message: "A heat-pump hot-water quote is $3,600 after rebates and $30 a month for 4 years. Does that add up?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "customer",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    generateAnswer: async () => ({
+      answer: fixedAnswer(modelAnswer),
+      continuation: continuation(),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.equal(payload.reply.directAnswer, modelAnswer);
 });
 
 test("a tariff decision rejects off-topic grounded heating guidance even when Sol is unavailable", async () => {
@@ -441,6 +905,42 @@ test("an everyday solar-installer request bypasses technical category guidance",
   assert.equal(payload.reply.followUpQuestion, "");
 });
 
+test("natural competing-quote and installer-enquiry wording takes the one-click service route", async () => {
+  for (const [index, message] of [
+    "Two solar quotes please",
+    "Can I have two solar quotes?",
+    "I want solar quotes",
+    "Get me some solar quotes",
+    "Another heat pump quote please",
+    "Can Surge send my enquiry to installers?",
+  ].entries()) {
+    let modelCalls = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `natural-service-route-${index + 1}`,
+      message,
+      recentTurns: [],
+      pageContext: "/surge",
+      audience: "public",
+    }, { qualityRehearsal: true }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => {
+        modelCalls += 1;
+        return null;
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    const payload = await body(response);
+    assert.equal(payload.quality.answerSource, "deterministic", message);
+    assert.equal(modelCalls, 0, message);
+    assert.match(payload.reply.directAnswer, /help you find|send one enquiry/i, message);
+    assert.match(payload.reply.directAnswer, /Get competing quotes below/i, message);
+    assert.equal(payload.reply.followUpQuestion, "", message);
+  }
+});
+
 test("a locality reply continues the regional trade-matching request instead of switching to quote review", async () => {
   let groundedCalls = 0;
   let modelCalls = 0;
@@ -489,6 +989,46 @@ test("a locality reply continues the regional trade-matching request instead of 
   assert.deepEqual(payload.reply.practicalSteps, []);
   assert.deepEqual(payload.reply.quickReplies, []);
   assert.equal(payload.reply.followUpQuestion, "");
+});
+
+test("natural town, state and postcode replies continue a pending installer request", async () => {
+  const serviceRequest = "Can you send my solar enquiry to installers?";
+  for (const [index, message] of [
+    "Ballarat",
+    "Ballarat VIC",
+    "in Ballarat",
+    "regional Victoria",
+    "Wendouree",
+    "3000 Melbourne",
+  ].entries()) {
+    let modelCalls = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `service-location-natural-${index + 1}`,
+      message,
+      recentTurns: [
+        { role: "user", content: serviceRequest },
+        { role: "assistant", content: "What is the job postcode or town?" },
+      ],
+      pageContext: "/surge",
+      audience: "public",
+    }, { qualityRehearsal: true }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => {
+        modelCalls += 1;
+        return null;
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    const payload = await body(response);
+    assert.equal(payload.quality.answerSource, "deterministic", message);
+    assert.equal(modelCalls, 0, message);
+    assert.equal(payload.reply.status, "answered", message);
+    assert.match(payload.reply.directAnswer, /help you find solar installers/i, message);
+    assert.match(payload.reply.directAnswer, /Get competing quotes below/i, message);
+  }
 });
 
 test("public and customer replies never expose internal platform names or trade routes", async () => {
@@ -777,7 +1317,7 @@ test("the API preserves a neutral customer-supplied option comparison", async ()
   assertPublicReplyContract(payload);
 });
 
-test("a model presentation keeps a plain follow-up but suppresses clickable quick replies", async () => {
+test("a model presentation suppresses optional follow-ups and clickable quick replies", async () => {
   const response = await handleEnergyAssistantRequest(request({
     action: "ask",
     requestId: "aligned-model-quick-replies-0001",
@@ -812,9 +1352,454 @@ test("a model presentation keeps a plain follow-up but suppresses clickable quic
 
   assert.equal(response.status, 200);
   const payload = await body(response);
-  assert.equal(payload.reply.followUpQuestion, "Would you like to check another part of the three-phase decision?");
+  assert.equal(payload.reply.followUpQuestion, "");
   assert.deepEqual(payload.reply.quickReplies, []);
-  assert.doesNotMatch(payload.reply.content, /overhead or underground/i);
+  assert.doesNotMatch(payload.reply.content, /overhead or underground|Would you like/i);
+});
+
+test("a model presentation keeps one concrete missing-input question without quick replies", async () => {
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "material-model-follow-up-0001",
+    message: "Would a battery help me use more of my solar?",
+    recentTurns: [],
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    generateAnswer: async () => ({
+      answer: fixedAnswer("It can, especially when much of your electricity use happens after sunset."),
+      presentation: {
+        answerType: "explanation",
+        verdict: "It can, especially when much of your electricity use happens after sunset.",
+        reason: "The value depends on how much spare solar you export and later buy back.",
+        steps: [],
+        extraDetail: "",
+        followUpQuestion: "How much electricity do you usually use after sunset?",
+        quickReplies: [
+          { id: "low", label: "Not much", message: "I do not use much after sunset." },
+        ],
+      },
+      continuation: continuation(),
+    }),
+    reserveModelCall: allowModelCall,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.reply.followUpQuestion, "How much electricity do you usually use after sunset?");
+  assert.deepEqual(payload.reply.quickReplies, []);
+  assert.match(payload.reply.content, /How much electricity do you usually use after sunset\?/);
+});
+
+test("model follow-ups keep only decision-material missing facts", async () => {
+  const scenarios = [
+    {
+      id: "cold-room-system-type",
+      message: "The reverse-cycle unit warms the lounge but bedroom 2 stays cold. Why?",
+      answer: "The bedroom may have weaker airflow or greater heat loss than the lounge.",
+      followUp: "Is the system a lounge wall unit or a ducted system with a bedroom outlet?",
+      expected: true,
+    },
+    {
+      id: "finance-deposit",
+      message: "A hot-water quote is $3,880 after rebates and $34 a month for 5 years. Does that add up?",
+      answer: "No. The repayments total $2,040, leaving part of the quoted price unexplained.",
+      followUp: "Does the quote show an upfront deposit or final balloon payment?",
+      expected: true,
+    },
+    {
+      id: "solar-future-load",
+      message: "We use 3 to 5 kWh a day. Should we install 5 kW or 7.2 kW of solar?",
+      answer: "The 5 kW option better matches current use unless a major new electric load is planned.",
+      followUp: "Are you planning an electric vehicle or other major electric upgrade?",
+      expected: true,
+    },
+    {
+      id: "solar-oversize-already-answered",
+      message: "An installer recommends 10 kW of solar although we use about 3500 kWh a year. Is that oversized?",
+      answer: "Yes, it is likely oversized for current use, although future electrification can change that.",
+      followUp: "Are you planning any major new electric loads, such as an electric vehicle, hot water or heating?",
+      expected: false,
+    },
+    {
+      id: "solar-oversize-planning-list-already-answered",
+      message: "An installer recommends 10 kW of solar although we use about 3500 kWh a year. Is that oversized?",
+      answer: "Yes, it is likely oversized for current use, although future electrification can change that.",
+      followUp: "Are you planning an EV, battery, electric hot water or more electric heating soon?",
+      expected: false,
+    },
+    {
+      id: "hot-water-household-size",
+      message: "What size heat-pump hot-water system do I need?",
+      answer: "Tank size should cover the household's busiest shower period and the model's cold-weather recovery.",
+      followUp: "How many people live in the home?",
+      expected: true,
+    },
+    {
+      id: "portable-room-size",
+      message: "For bedroom 9, is a plug-in electric heater or a reverse-cycle split cheaper to run?",
+      answer: "A suitable reverse-cycle split is normally cheaper to run.",
+      followUp: "What is bedroom 9's floor area?",
+      expected: false,
+    },
+    {
+      id: "sealed-pane-repeat",
+      message: "There is moisture trapped between the panes of double-glazed window 8. Can ventilation fix it?",
+      answer: "No. Moisture between sealed panes usually means the sealed glass unit has failed.",
+      followUp: "Can the moisture be wiped from either side of the glass?",
+      expected: false,
+    },
+    {
+      id: "synthetic-frame-number",
+      message: "Our double glazing has cold aluminium frame 8 with no thermal break. Can we improve it?",
+      answer: "Yes, coverings can improve comfort, but a true thermal break cannot be retrofitted into the frame.",
+      followUp: "Can you share the exact wording or a photo showing 'frame 8'?",
+      expected: false,
+    },
+    {
+      id: "aluminium-frame-redundant-symptom-choice",
+      message: "Our double glazing has cold aluminium frame 8 with no thermal break. Can we improve it without replacing every window?",
+      answer: "Yes. Improve seals and coverings first; the existing frame cannot economically be converted into a true thermal break.",
+      followUp: "Is the main problem draughts, condensation, or feeling cold?",
+      expected: false,
+    },
+    {
+      id: "conversation-extension",
+      message: "Yeah, really cold.",
+      recentTurns: [
+        { role: "assistant", content: "Do the windows feel cold even when there is no wind?" },
+        { role: "user", content: "Yes, they feel freezing on still nights." },
+      ],
+      answer: "Cold glass on still nights points to heat loss through the window rather than a moving draught.",
+      followUp: "Which rooms are hardest to keep comfortable?",
+      expected: false,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: "material-follow-up-" + scenario.id + "-0001",
+      message: scenario.message,
+      recentTurns: scenario.recentTurns || [],
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("deterministic fallback"),
+      generateAnswer: async () => ({
+        answer: fixedAnswer(scenario.answer),
+        presentation: {
+          answerType: "explanation",
+          verdict: scenario.answer,
+          reason: "",
+          steps: [],
+          extraDetail: "",
+          followUpQuestion: scenario.followUp,
+          quickReplies: [],
+        },
+        continuation: continuation(),
+      }),
+      reserveModelCall: allowModelCall,
+    });
+
+    assert.equal(response.status, 200, scenario.id);
+    const payload = await body(response);
+    assert.equal(
+      payload.reply.followUpQuestion,
+      scenario.expected ? scenario.followUp : "",
+      scenario.id,
+    );
+  }
+});
+
+test("a pronoun follow-up retains saved home context from a personal prior question", async () => {
+  let observedRequest;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "saved-plan-pronoun-follow-up-0001",
+    message: "Would that fit?",
+    recentTurns: [
+      { role: "user", content: "Should I get a battery?" },
+      { role: "assistant", content: "A smaller battery may suit your evening use better than a large one." },
+    ],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "state_or_territory", value: "VIC" },
+        { key: "property_type", value: "Apartment or unit" },
+        { key: "battery", value: "No home battery" },
+      ],
+    },
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("deterministic fallback"),
+    generateAnswer: async (modelRequest) => {
+      observedRequest = modelRequest;
+      return {
+        answer: fixedAnswer("It could, but the saved apartment details and evening use should determine the size."),
+        continuation: continuation(),
+      };
+    },
+    reserveModelCall: allowModelCall,
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(observedRequest?.planContext);
+  assert.equal(observedRequest.planContext.facts.find((fact) => fact.key === "property_type")?.value, "Apartment or unit");
+});
+
+test("named-topic follow-ups retain the saved survey used by the prior home decision", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "glazing", value: "Mostly single glazed" },
+      { key: "battery", value: "No home battery" },
+    ],
+  };
+  for (const [index, message] of [
+    "What about solar?",
+    "And a battery?",
+    "Could insulation help too?",
+    "Would honeycomb blinds help?",
+  ].entries()) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `saved-plan-named-follow-up-${index + 1}`,
+      message,
+      recentTurns: [
+        { role: "user", content: "Based on my survey, what should I do first?" },
+        { role: "assistant", content: "Start with the comfort problems identified in your saved answers." },
+      ],
+      continuation: continuation({
+        activeTopic: "comfort_fabric",
+        goal: "Prioritise this home's upgrades",
+        pendingQuestion: "",
+      }),
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("deterministic fallback"),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (value) => {
+        observedRequest = value;
+        return {
+          answer: fixedAnswer("Here is how that option fits the home details you already supplied."),
+          continuation: continuation(),
+        };
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    assert.deepEqual(observedRequest?.planContext, planContext, message);
+  }
+});
+
+test("natural personal questions use the submitted home survey without making general explainers personal", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "household_size", value: "Two people" },
+    ],
+  };
+  const scenarios = [
+    ["Would solar work for me?", true],
+    ["Is a battery a good idea for me?", true],
+    ["Is heat-pump hot water okay for us?", true],
+    ["Can we put in a battery?", true],
+    ["What would suit our household?", true],
+    ["Where should we start?", true],
+    ["What should we do first?", true],
+    ["I have solar panels.", true],
+    ["I use gas heating.", true],
+    ["I currently live in an apartment.", true],
+    ["I pay $500 a quarter for electricity.", true],
+    ["Explain how solar panels work for me.", false],
+    ["Explain STCs for me.", false],
+  ];
+
+  for (const [index, [message, shouldUsePlan]] of scenarios.entries()) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `natural-personal-plan-${index + 1}`,
+      message,
+      recentTurns: [],
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("deterministic fallback"),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (value) => {
+        observedRequest = value;
+        return {
+          answer: fixedAnswer("Here is the direct answer."),
+          continuation: continuation(),
+        };
+      },
+    });
+
+    assert.equal(response.status, 200, message);
+    assert.equal(Boolean(observedRequest?.planContext), shouldUsePlan, message);
+  }
+});
+
+test("plain answers to a saved-home follow-up retain the submitted plan context", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "glazing", value: "Mostly single glazed" },
+    ],
+  };
+  for (const [index, message] of [
+    "lounge and bedroom",
+    "the lounge and bedroom",
+    "Mostly the lounge",
+  ].entries()) {
+    let observedRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `saved-plan-plain-follow-up-${index + 1}`,
+      message,
+      recentTurns: [
+        { role: "user", content: "Based on my answers, where should I start?" },
+        { role: "assistant", content: "Start with the coldest rooms. Which rooms are hardest to keep comfortable?" },
+      ],
+      continuation: continuation({
+        activeTopic: "comfort_fabric",
+        goal: "Prioritise this home's upgrades",
+        pendingQuestion: "Which rooms are hardest to keep comfortable?",
+      }),
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("Focus first on the rooms that are hardest to keep comfortable."),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (value) => {
+        observedRequest = value;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, message);
+    assert.deepEqual(observedRequest.planContext, planContext, message);
+  }
+});
+
+test("model-denied plain follow-up answers stay tied to Surge's pending question", async () => {
+  const scenarios = [
+    {
+      message: "yeah freezing",
+      recentTurns: [
+        { role: "user", content: "My bedroom windows feel cold and draughty." },
+        { role: "assistant", content: "Do the windows feel cold even when there is no wind?" },
+      ],
+      continuation: continuation({
+        activeTopic: "glazing_shading",
+        goal: "Improve bedroom comfort",
+        pendingQuestion: "Do the windows feel cold even when there is no wind?",
+      }),
+      expected: /cold windows|heat.*(?:glass|frame)|honeycomb blinds/i,
+      forbidden: /passive heating|solar system/i,
+    },
+    {
+      message: "lounge and bedroom",
+      recentTurns: [
+        { role: "user", content: "Based on my answers, where should I start?" },
+        { role: "assistant", content: "Which rooms are hardest to keep comfortable?" },
+      ],
+      continuation: continuation({
+        activeTopic: "comfort_fabric",
+        goal: "Prioritise this home's upgrades",
+        pendingQuestion: "Which rooms are hardest to keep comfortable?",
+      }),
+      planContext: {
+        version: 1,
+        source: "home_energy_plan",
+        facts: [
+          { key: "postcode", value: "3000" },
+          { key: "glazing", value: "Mostly single glazed" },
+        ],
+      },
+      expected: /start with the lounge and bedroom/i,
+      forbidden: /outside.*scope|Surge AI is here/i,
+    },
+  ];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `model-denied-pending-answer-${index + 1}`,
+      message: scenario.message,
+      recentTurns: scenario.recentTurns,
+      continuation: scenario.continuation,
+      ...(scenario.planContext ? { planContext: scenario.planContext } : {}),
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: async () => ({ allowed: false }),
+    });
+    assert.equal(response.status, 200, scenario.message);
+    const payload = await body(response);
+    assert.match(payload.reply.directAnswer, scenario.expected, scenario.message);
+    assert.doesNotMatch(payload.reply.directAnswer, scenario.forbidden, scenario.message);
+  }
+});
+
+test("bare energy-topic requests replace an unrelated pending room question", async () => {
+  for (const [index, message, expected, forbidden] of [
+    [0, "solar panels cost", /solar|installed price|quotes?/i, /which room|floor area/i],
+    [1, "battery prices", /battery|installed price|capacity/i, /which room|reverse-cycle heating/i],
+    [2, "insulation options", /insulation|ceiling|walls?|floor/i, /which room|reverse-cycle heating/i],
+    [3, "solar", /solar|panels?|inverter/i, /which room|floor area/i],
+  ]) {
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `bare-topic-overrides-pending-${index + 1}`,
+      message,
+      recentTurns: [
+        { role: "user", content: "My lounge is difficult to keep comfortable." },
+        { role: "assistant", content: "Which room is hardest to keep comfortable?" },
+      ],
+      continuation: continuation({
+        activeTopic: "comfort_fabric",
+        goal: "Improve room comfort",
+        pendingQuestion: "Which room is hardest to keep comfortable?",
+      }),
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: async () => ({ allowed: false }),
+    });
+
+    assert.equal(response.status, 200, message);
+    const payload = await body(response);
+    assert.match(payload.reply.directAnswer, expected, message);
+    assert.doesNotMatch(payload.reply.content, forbidden, message);
+  }
 });
 
 test("the three-phase worth-it question rejects a generic model non-answer", async () => {
@@ -1192,7 +2177,7 @@ test("continuation carries corrections and a topic change without retaining the 
   assert.match(payload.reply.directAnswer, /renter.*battery/i);
 });
 
-test("null model result falls back to the deterministic answer and preserves accepted continuation", async () => {
+test("null model result falls back and updates continuation from the delivered answer", async () => {
   const priorContinuation = continuation({
     activeTopic: "insulation",
     goal: "Improve winter comfort",
@@ -1227,8 +2212,45 @@ test("null model result falls back to the deterministic answer and preserves acc
   assert.equal(modelCalls, 1);
   assert.match(payload.reply.directAnswer, /obvious draughts/i);
   assert.equal(payload.reply.followUpQuestion, "Is the room cold even when the heater is running?");
-  assert.deepEqual(payload.continuation, priorContinuation);
+  assert.equal(payload.continuation.activeTopic, "insulation");
+  assert.equal(payload.continuation.goal, priorContinuation.goal);
+  assert.deepEqual(payload.continuation.facts, priorContinuation.facts);
+  assert.equal(payload.continuation.pendingQuestion, "Is the room cold even when the heater is running?");
+  assert.match(payload.continuation.lastAnswerSummary, /obvious draughts/i);
   assertPublicReplyContract(payload);
+});
+
+test("a denied-model topic change clears stale goal and facts from deterministic continuation", async () => {
+  const priorContinuation = continuation({
+    activeTopic: "rcac",
+    goal: "Choose a replacement air conditioner",
+    facts: [
+      { key: "aircon_size", value: "8 kW" },
+      { key: "coldest_room", value: "bedroom" },
+    ],
+    pendingQuestion: "",
+    lastAnswerSummary: "Compared replacement air conditioners.",
+  });
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "deterministic-topic-reset-0001",
+    message: "Tell me about solar instead",
+    recentTurns: [{ role: "user", content: "I need to replace my air conditioner." }],
+    continuation: priorContinuation,
+    pageContext: "/surge",
+    audience: "public",
+  }), {
+    now: () => new Date(NOW),
+    composeAnswer: () => fixedAnswer("Solar panels turn daylight into electricity for the home."),
+    reserveModelCall: async () => ({ allowed: false }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await body(response);
+  assert.equal(payload.continuation.activeTopic, "solar");
+  assert.equal(payload.continuation.goal, "");
+  assert.deepEqual(payload.continuation.facts, []);
+  assert.doesNotMatch(JSON.stringify(payload.continuation), /aircon_size|coldest_room|8 kW|bedroom/i);
 });
 
 test("missing, denied or failed admission never reaches the paid model", async (t) => {
@@ -1324,7 +2346,7 @@ test("dangerous questions bypass the model and keep the deterministic safety ans
   const payload = await body(response);
   assert.equal(modelCalls, 0);
   assert.equal(admissionCalls, 0);
-  assert.match(payload.reply.directAnswer, /Move away.*avoid flames.*licensed professional/i);
+  assert.match(payload.reply.directAnswer, /Move everyone.*Do not operate electrical switches.*licensed gasfitter/i);
   assert.doesNotMatch(payload.reply.directAnswer, /unsafe model answer/i);
 });
 
@@ -1578,31 +2600,86 @@ test("general questions do not inherit unrelated saved-home survey facts", async
       { key: "solar", value: "No rooftop solar" },
     ],
   };
-  let deterministicContext;
-  let modelRequest;
-  const response = await handleEnergyAssistantRequest(request({
-    action: "ask",
-    requestId: "general-question-no-saved-context-0001",
-    message: "How do solar panels work on cloudy days?",
-    recentTurns: [],
-    planContext,
-    pageContext: "/surge",
-    audience: "public",
-  }), {
-    now: () => new Date(NOW),
-    composeAnswer(message, context) {
-      deterministicContext = { message, context };
-      return fixedAnswer("Solar panels still generate some electricity from daylight on cloudy days.");
-    },
-    reserveModelCall: allowModelCall,
-    generateAnswer: async (value) => {
-      modelRequest = value;
-      return null;
-    },
-  });
-  assert.equal(response.status, 200);
-  assert.deepEqual(deterministicContext.context.priorUserMessages, []);
-  assert.equal(modelRequest.planContext, null);
+  const questions = [
+    "How do solar panels work on cloudy days?",
+    "I want to understand how solar panels work on cloudy days.",
+    "I need an explanation of how solar panels work.",
+    "Can you explain how solar panels work for me?",
+    "Explain STCs for me.",
+    "I have heard solar can lower bills. Is that true?",
+    "I use the words heat pump a lot. What is one?",
+    "I currently want to understand how batteries work.",
+  ];
+  for (const [index, message] of questions.entries()) {
+    let deterministicContext;
+    let modelRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `general-question-no-saved-context-${String(index + 1).padStart(4, "0")}`,
+      message,
+      recentTurns: [],
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer(question, context) {
+        deterministicContext = { message: question, context };
+        return fixedAnswer("Solar panels still generate some electricity from daylight on cloudy days.");
+      },
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (value) => {
+        modelRequest = value;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, message);
+    assert.deepEqual(deterministicContext.context.priorUserMessages, [], message);
+    assert.equal(modelRequest.planContext, null, message);
+  }
+});
+
+test("personal decision wording uses the saved survey without requiring magic phrases", async () => {
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "property_type", value: "Apartment or unit" },
+      { key: "solar", value: "No rooftop solar" },
+      { key: "battery", value: "No home battery" },
+    ],
+  };
+  const questions = [
+    "Is solar worth it for me?",
+    "Should I get a battery?",
+    "Should I get solar for my house?",
+    "What size solar system should I get?",
+    "Can I add solar?",
+    "Would a heat pump suit me?",
+  ];
+  for (const [index, message] of questions.entries()) {
+    let modelRequest;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `personal-plan-context-${String(index + 1).padStart(4, "0")}`,
+      message,
+      recentTurns: [],
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      composeAnswer: () => fixedAnswer("Use the saved home details to tailor this decision."),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async (value) => {
+        modelRequest = value;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, message);
+    assert.deepEqual(modelRequest.planContext, planContext, message);
+  }
 });
 
 test("a clearly different property or job does not inherit the saved home's survey facts", async () => {
@@ -1678,32 +2755,46 @@ test("a completed survey returns a ranked home-specific starting plan before gen
     },
   }));
   assert.ok(planContext);
-  let modelCalled = false;
-  const response = await handleEnergyAssistantRequest(request({
-    action: "ask",
-    requestId: "completed-survey-priority-0001",
-    message: "where should i start",
-    recentTurns: [],
-    planContext,
-    pageContext: "/surge",
-    audience: "public",
-  }), {
-    now: () => new Date(NOW),
-    reserveModelCall: allowModelCall,
-    generateAnswer: async () => {
-      modelCalled = true;
-      return null;
-    },
-  });
-  assert.equal(response.status, 200);
-  const payload = await body(response);
-  assert.equal(modelCalled, false);
-  assert.match(payload.reply.directAnswer, /saved answers/i);
-  assert.match(payload.reply.directAnswer, /honeycomb blinds|thermal curtains/i);
-  assert.match(payload.reply.directAnswer, /reverse-cycle air conditioner/i);
-  assert.doesNotMatch(payload.reply.directAnswer, /staged whole-home diagnosis/i);
-  assert.ok(payload.reply.directAnswer.split(/\s+/).length <= 180);
-  assert.match(payload.reply.followUpQuestion, /Which room has the worst condensation/i);
+  const priorityQuestions = [
+    "where should i start",
+    "What do I do first?",
+    "What should be my first priority?",
+    "Where should we begin?",
+    "Use my survey and tell me what to do first.",
+    "What should we fix first?",
+    "Given my home details, what is the first thing to fix?",
+    "Where do I start?",
+    "What comes first?",
+    "Based on my answers, where do I begin?",
+  ];
+  for (const [index, message] of priorityQuestions.entries()) {
+    let modelCalled = false;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `completed-survey-priority-${index + 1}`,
+      message,
+      recentTurns: [],
+      planContext,
+      pageContext: "/surge",
+      audience: "public",
+    }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      generateAnswer: async () => {
+        modelCalled = true;
+        return null;
+      },
+    });
+    assert.equal(response.status, 200, message);
+    const payload = await body(response);
+    assert.equal(modelCalled, true, message);
+    assert.match(payload.reply.directAnswer, /saved answers/i, message);
+    assert.match(payload.reply.directAnswer, /honeycomb blinds|thermal curtains/i, message);
+    assert.match(payload.reply.directAnswer, /reverse-cycle air conditioner/i, message);
+    assert.doesNotMatch(payload.reply.directAnswer, /staged whole-home diagnosis|related current official source/i, message);
+    assert.ok(payload.reply.directAnswer.split(/\s+/).length <= 180, message);
+    assert.equal(payload.reply.followUpQuestion, "", message);
+  }
 });
 
 test("deterministic fallback gives a newer explicit correction priority over the saved plan", async () => {

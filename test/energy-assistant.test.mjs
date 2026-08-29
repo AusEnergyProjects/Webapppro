@@ -7,6 +7,9 @@ import {
 import {
   composeEnergyAssistantAnswer,
   energyAssistantKnowledgeHealth,
+  isSurgeImplementationIdentityQuestion,
+  isSurgeServiceLocationFollowUp,
+  sanitizeSurgePublicText,
   sanitizeSurgeReferenceText,
   searchEnergyAssistantKnowledge,
   surgeOutputViolatesPublicPolicy,
@@ -17,6 +20,24 @@ test("Surge reference answers never expose en or em dashes", () => {
     sanitizeSurgeReferenceText("Seal gaps — keep ventilation – then recheck."),
     "Seal gaps, keep ventilation, then recheck.",
   );
+});
+
+test("public text removes complete links and malformed empty citation remnants cleanly", () => {
+  const value = sanitizeSurgePublicText(
+    "Solar Homes may apply. ([Solar Victoria](https://www.solar.vic.gov.au/example)) Another programme may apply. ([](",
+  );
+  assert.equal(value, "Solar Homes may apply. (Solar Victoria) Another programme may apply.");
+  assert.doesNotMatch(value, /https?:|\[\s*\]\s*\(|\(\s*\[\s*\]\s*\(/i);
+});
+
+test("an energy question containing you and an exact product model is not treated as an AI identity question", () => {
+  assert.equal(
+    isSurgeImplementationIdentityQuestion(
+      "What would you do here: Postcode 3005: what heat-pump hot-water rebates might apply if I have not chosen an exact model yet?",
+    ),
+    false,
+  );
+  assert.equal(isSurgeImplementationIdentityQuestion("Which model are you using?"), true);
 });
 
 test("cold-window guidance recommends honeycomb blinds alongside thermal curtains", () => {
@@ -97,6 +118,18 @@ test("a plain-language request for a solar installer is treated as a service req
   assert.ok(answer.directAnswer.split(/\s+/).length <= 50);
 });
 
+test("trade-quality adjectives do not turn a pure installer request into an equipment decision", () => {
+  for (const message of [
+    "I need a reliable solar installer in postcode 3000.",
+    "I want an efficient heat pump installer in my area.",
+  ]) {
+    const answer = composeEnergyAssistantAnswer(message, { asOf: "2026-08-28T00:00:00.000Z" });
+    assert.match(answer.directAnswer, /^Yes, we can help you find/i, message);
+    assert.match(answer.directAnswer, /Get competing quotes below/i, message);
+    assert.doesNotMatch(answer.directAnswer, /For solar and storage|compare.*performance|running cost/i, message);
+  }
+});
+
 test("a town supplied after the regional service answer continues trade matching", () => {
   const serviceRequest = "I'm needing solar for my container shed in the Grampians. Is there anybody who services the area? I already have one quote but want more quotes.";
   const answer = composeEnergyAssistantAnswer("its in halls gap", {
@@ -111,6 +144,46 @@ test("a town supplied after the regional service answer continues trade matching
   assert.doesNotMatch(answer.directAnswer, /cannot call the cheaper quote better|attach the quote|For solar and storage/i);
   assert.deepEqual(answer.practicalSteps, []);
   assert.deepEqual(answer.suggestedQuestions, []);
+});
+
+test("short discourse replies are not mistaken for service locations", () => {
+  const prior = ["Can you find a heat-pump hot-water installer near me?"];
+  for (const reply of ["please", "wait", "nope", "why", "urgent", "weekend", "soon", "whatever", "home", "local"]) {
+    assert.equal(isSurgeServiceLocationFollowUp(reply, prior), false, reply);
+  }
+  assert.equal(isSurgeServiceLocationFollowUp("ballarat", prior), true);
+  assert.equal(isSurgeServiceLocationFollowUp("its in halls gap", prior), true);
+});
+
+test("underspecified installer searches stay neutral and ask for the missing service", () => {
+  const locationOnly = composeEnergyAssistantAnswer("Who services Ballarat?", {
+    asOf: "2026-08-28T00:00:00.000Z",
+  });
+  assert.match(locationOnly.directAnswer, /Which home-energy service do you need there/i);
+  assert.match(locationOnly.directAnswer, /Get competing quotes below/i);
+  assert.match(locationOnly.directAnswer, /relevant local trades/i);
+  assert.doesNotMatch(locationOnly.directAnswer, /only covers Australian home energy|who built|model/i);
+
+  const recommendation = composeEnergyAssistantAnswer("Can you recommend a good installer?", {
+    asOf: "2026-08-28T00:00:00.000Z",
+  });
+  assert.match(recommendation.directAnswer, /help you find/i);
+  assert.match(recommendation.directAnswer, /do not favour any company or product/i);
+  assert.match(recommendation.directAnswer, /Get competing quotes below/i);
+});
+
+test("everyday covering plurals remain inside the home-energy domain", () => {
+  for (const message of [
+    "Do honeycomb blinds actually work?",
+    "Do curtains help?",
+    "Are cellular shades effective?",
+    "Can window coverings reduce heat loss?",
+    "Should I use a door snake?",
+    "Can I seal gaps around my doors?",
+  ]) {
+    const result = composeEnergyAssistantAnswer(message, { asOf: "2026-08-28T00:00:00.000Z" });
+    assert.doesNotMatch(result.directAnswer, /Surge AI is here for Australian home energy|only covers Australian home energy/i, message);
+  }
 });
 
 test("customer output policy rejects internal assessor-method copy", () => {

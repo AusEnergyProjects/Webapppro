@@ -224,7 +224,48 @@ test("a completed apartment survey produces a specific ranked starting plan", ()
   assert.match(answer.directAnswer, /reverse-cycle air conditioner/i);
   assert.match(answer.directAnswer, /ceiling and underfloor insulation advice does not fit/i);
   assert.match(answer.directAnswer, /solar and a battery as later/i);
-  assert.equal(answer.suggestedQuestions.length, 1);
+  assert.equal(answer.suggestedQuestions.length, 0);
+});
+
+test("saved-plan priority recognises a first-budget question", () => {
+  const context = buildSurgePlanContextFromStoredAssessment(storedAssessment(4, {
+    propertyType: "apartment",
+    approvalContext: "strata",
+    features: [
+      "comfort-too-cold",
+      "condensation-moisture",
+      "single-glazing",
+      "window-coverings-basic",
+      "kitchen-exhaust-fan",
+      "bathroom-exhaust-fan",
+      "reverse-cycle",
+      "solar-none",
+      "battery-none",
+    ],
+  }));
+  assert.ok(context);
+  const answer = composeSurgePlanPriorityAnswer(
+    "Based on my saved survey, what should I spend the first $1000 on for comfort and lower bills?",
+    context,
+  );
+  assert.ok(answer);
+  assert.match(answer.directAnswer, /based on your saved answers/i);
+  assert.match(answer.directAnswer, /\$1,000 to spend first/i);
+  assert.match(answer.directAnswer, /condensation|honeycomb|reverse-cycle/i);
+  assert.match(answer.directAnswer, /strata approval/i);
+  assert.deepEqual(answer.suggestedQuestions, []);
+});
+
+test("a yearly electricity bill is not mistaken for the upgrade budget", () => {
+  const context = buildSurgePlanContextFromStoredAssessment(storedAssessment(4));
+  assert.ok(context);
+  const answer = composeSurgePlanPriorityAnswer(
+    "Based on my answers, where should I start? My electricity bill is $600 a year.",
+    context,
+  );
+  assert.ok(answer);
+  assert.match(answer.directAnswer, /\$2,000 to \$10,000 to spend first/i);
+  assert.doesNotMatch(answer.directAnswer, /\$600 to spend first/i);
 });
 
 test("a newer chat correction prevents the saved-plan priority shortcut", () => {

@@ -1202,7 +1202,10 @@ test("empty assigned work-pack listing installs all guards before returning", as
     scope(),
   );
   assert.deepEqual(result, []);
-  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  assert.equal(
+    installedWorkPackGuardCount(sqlite),
+    workPackSchemaGuards.CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length,
+  );
   sqlite.close();
 });
 
@@ -1228,7 +1231,10 @@ test("empty guided auto-open installs all work-pack guards before its first read
     }
   }
   assert.deepEqual(result, []);
-  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  assert.equal(
+    installedWorkPackGuardCount(sqlite),
+    workPackSchemaGuards.CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length,
+  );
   sqlite.close();
 });
 
@@ -2508,7 +2514,10 @@ test("SRES activation binds eight current reviewed gates and invalidates stale s
   assert.equal(ready.ready, true);
   assert.equal(ready.gates.filter((gate) => gate.status === "approved").length, 8);
   assert.equal(ready.snapshotSha256, frozen.snapshotSha256);
-  assert.equal(installedWorkPackGuardCount(sqlite), 63);
+  assert.equal(
+    installedWorkPackGuardCount(sqlite),
+    workPackSchemaGuards.CREDITEX_WORK_PACK_SCHEMA_GUARD_DEFINITIONS.length,
+  );
   assert.throws(() => sqlite.prepare(`UPDATE compliance_activity_work_pack_versions
       SET activity_version_id = 'forged-activity-version'
       WHERE id = 'sres-work-pack-version'`).run(),

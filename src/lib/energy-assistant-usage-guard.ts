@@ -24,7 +24,7 @@ export const SURGE_USAGE_GUARD_DEFAULTS = {
   networkDailyLimit: 600,
   globalMinuteLimit: 20,
   globalInFlightLimit: 5,
-  globalDailyMicroUsdLimit: 2_000_000,
+  globalDailyMicroUsdLimit: 20_000_000,
   inFlightLeaseMs: 30_000,
   requestIdempotencyMs: REQUEST_IDEMPOTENCY_MS,
 } as const;
@@ -116,6 +116,11 @@ type CounterLimits = {
   day: number;
   minuteReason: SurgeUsageDenialReason;
   dayReason: SurgeUsageDenialReason;
+};
+
+type CounterAdmission = {
+  allowed: true;
+  rollback: () => Promise<void>;
 };
 
 type StateWrite = {
@@ -385,7 +390,7 @@ async function incrementCounter(
   scopeHash: string,
   limits: CounterLimits,
   now: number,
-): Promise<SurgeUsageDenial | null> {
+): Promise<CounterAdmission | SurgeUsageDenial> {
   for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
     const row = await readState(database, scopeHash);
     const parsed = row ? parseCounterState(row.state_json) : initialCounterState(now);
@@ -411,7 +416,32 @@ async function incrementCounter(
       dayCount: state.dayCount + 1,
     };
     if (await writeState(database, scopeHash, { state: next, version: row?.version ?? null }, now)) {
-      return null;
+      let rolledBack = false;
+      return {
+        allowed: true,
+        async rollback() {
+          if (rolledBack) return;
+          rolledBack = true;
+          for (let rollbackAttempt = 0; rollbackAttempt < MAX_CAS_ATTEMPTS; rollbackAttempt += 1) {
+            const rollbackRow = await readState(database, scopeHash);
+            if (!rollbackRow) return;
+            const rollbackState = parseCounterState(rollbackRow.state_json);
+            if (!rollbackState) return;
+            if (rollbackState.minuteStart !== next.minuteStart || rollbackState.dayStart !== next.dayStart) return;
+            const restored: CounterState = {
+              ...rollbackState,
+              minuteCount: Math.max(0, rollbackState.minuteCount - 1),
+              dayCount: Math.max(0, rollbackState.dayCount - 1),
+            };
+            if (await writeState(
+              database,
+              scopeHash,
+              { state: restored, version: rollbackRow.version },
+              now,
+            )) return;
+          }
+        },
+      };
     }
   }
   throw new Error("SURGE_USAGE_CAS_EXHAUSTED");
@@ -582,28 +612,51 @@ export function createSharedSurgeUsageGuard({
           hashIdentifier("request", requestKey),
           hashIdentifier("lease", `${randomUUID()}\u0000${currentTime}`),
         ]);
-        const clientDenial = await incrementCounter(database, clientScopeHash, {
+        const clientAdmission = await incrementCounter(database, clientScopeHash, {
           minute: configuration.clientMinuteLimit,
           day: configuration.clientDailyLimit,
           minuteReason: "client_minute",
           dayReason: "client_day",
         }, currentTime);
-        if (clientDenial) return clientDenial;
-        const networkDenial = await incrementCounter(database, networkScopeHash, {
-          minute: configuration.networkMinuteLimit,
-          day: configuration.networkDailyLimit,
-          minuteReason: "network_minute",
-          dayReason: "network_day",
-        }, currentTime);
-        if (networkDenial) return networkDenial;
-        return await reserveGlobal(
-          database,
-          globalScopeHash,
-          requestHash,
-          leaseHash,
-          currentTime,
-          estimatedMicroUsd,
-        );
+        if (!clientAdmission.allowed) return clientAdmission;
+        try {
+          const networkAdmission = await incrementCounter(database, networkScopeHash, {
+            minute: configuration.networkMinuteLimit,
+            day: configuration.networkDailyLimit,
+            minuteReason: "network_minute",
+            dayReason: "network_day",
+          }, currentTime);
+          if (!networkAdmission.allowed) {
+            await clientAdmission.rollback();
+            return networkAdmission;
+          }
+          try {
+            const globalReservation = await reserveGlobal(
+              database,
+              globalScopeHash,
+              requestHash,
+              leaseHash,
+              currentTime,
+              estimatedMicroUsd,
+            );
+            if (!globalReservation.allowed) {
+              await Promise.all([
+                clientAdmission.rollback(),
+                networkAdmission.rollback(),
+              ]);
+            }
+            return globalReservation;
+          } catch (error) {
+            await Promise.all([
+              clientAdmission.rollback(),
+              networkAdmission.rollback(),
+            ]);
+            throw error;
+          }
+        } catch (error) {
+          await clientAdmission.rollback();
+          throw error;
+        }
       } catch {
         return { allowed: false, reason: "unavailable" };
       }

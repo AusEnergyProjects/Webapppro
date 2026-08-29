@@ -138,7 +138,7 @@ test("production configuration exposes the exact fixed default ceilings", () => 
     networkDailyLimit: 600,
     globalMinuteLimit: 20,
     globalInFlightLimit: 5,
-    globalDailyMicroUsdLimit: 2_000_000,
+    globalDailyMicroUsdLimit: 20_000_000,
     inFlightLeaseMs: 30_000,
     requestIdempotencyMs: 600_000,
   });
@@ -280,6 +280,39 @@ test("request idempotency admits one concurrent request and survives release for
   assert.equal(replay.allowed, false);
   assert.equal(replay.reason, "duplicate_request");
   assert.ok(replay.retryAfterSeconds > 0 && replay.retryAfterSeconds <= 600);
+});
+
+test("global in-flight denial does not consume client or network quota", async () => {
+  const { database, guard } = fixture({ env: {
+    SURGE_CLIENT_MINUTE_LIMIT: "1",
+    SURGE_CLIENT_DAILY_LIMIT: "1",
+    SURGE_NETWORK_MINUTE_LIMIT: "1",
+    SURGE_NETWORK_DAILY_LIMIT: "1",
+    SURGE_GLOBAL_MINUTE_LIMIT: "10",
+    SURGE_GLOBAL_INFLIGHT_LIMIT: "1",
+    SURGE_GLOBAL_DAILY_MICRO_USD: "1000",
+  } });
+  const blocking = await guard.reserve(reservation(1));
+  assert.equal(blocking.allowed, true);
+
+  const deniedInput = reservation(2);
+  const denied = await guard.reserve(deniedInput);
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.reason, "global_in_flight");
+
+  const counterStates = database.parsedStates()
+    .filter((row) => row.state.kind === "counter")
+    .map((row) => row.state);
+  assert.equal(counterStates.length, 4);
+  assert.equal(counterStates.filter((state) => state.minuteCount === 0 && state.dayCount === 0).length, 2);
+
+  await blocking.release();
+  const retry = await guard.reserve(reservation(3, {
+    clientKey: deniedInput.clientKey,
+    networkKey: deniedInput.networkKey,
+  }));
+  assert.equal(retry.allowed, true);
+  await retry.release();
 });
 
 test("fixed UTC minute and day buckets reset only at their exact boundaries", async () => {

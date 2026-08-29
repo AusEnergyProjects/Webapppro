@@ -138,7 +138,7 @@ test("off-topic grounded and model answers cannot replace the direct draught ans
   assert.doesNotMatch(payload.reply.content, /room load|floor area need heating/i);
 });
 
-test("a topic-matched model answer cannot dilute a direct community answer", async () => {
+test("a direct community answer survives when model refinement is unavailable", async () => {
   const entry = SURGE_COMMUNITY_RESPONSE_BENCHMARK.find((candidate) => candidate.id === "community-hpwh-finance-claim");
   assert.ok(entry);
   let modelReservationAttempted = false;
@@ -148,10 +148,11 @@ test("a topic-matched model answer cannot dilute a direct community answer", asy
       modelReservationAttempted = true;
       return { allowed: true, release: async () => undefined };
     },
+    generateAnswer: async () => null,
   });
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.match(payload.reply.content, /\$38[^.]*6 years[^.]*\$2,736/i);
   assert.match(payload.reply.content, /does not equal[^.]*\$4,664/i);
-  assert.equal(modelReservationAttempted, false);
+  assert.equal(modelReservationAttempted, true);
 });
