@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   SURGE_RESPONSE_REGRESSION_CORPUS,
   SURGE_RESPONSE_REGRESSION_FAMILIES,
 } from "../src/data/surge-response-regression-corpus.ts";
 import { generateSurgeModelAnswer } from "../src/lib/energy-assistant-model.ts";
+import { parseSurgePlanContext } from "../src/lib/energy-assistant-plan-context.ts";
 import { handleEnergyAssistantRequest } from "../src/lib/energy-assistant-server.ts";
 import {
   evaluateSurgeResponseRegression,
@@ -21,6 +22,10 @@ const DEFAULT_BUDGET_MICRO_USD = 60_000_000;
 const LOCAL_ORIGIN = "https://surge-regression.local";
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL_ENV_PATH = join(REPOSITORY_ROOT, ".env.local");
+const HELDOUT_FIXTURE_ROOT = join(REPOSITORY_ROOT, "test", "fixtures");
+const HELDOUT_FIXTURE_VERSION = 1;
+const MAX_HELDOUT_FIXTURE_BYTES = 256_000;
+const MAX_HELDOUT_CASES = 50;
 const DEFAULT_MODEL = "gpt-5.6-sol";
 const FINGERPRINT_STANDALONE_PATHS = [
   "scripts/run-surge-response-regression.mjs",
@@ -36,12 +41,14 @@ function usage(message = "") {
     "  npm run eval:surge-response-regression -- --run-label <immutable-label> --one-per-family --confirm-paid",
     "  npm run eval:surge-response-regression -- --run-label <immutable-label> --all --confirm-paid",
     "  npm run eval:surge-response-regression -- --run-label <immutable-label> --case-id <case-id> [--case-id <case-id>] --confirm-paid",
+    "  npm run eval:surge-response-regression -- --fixture test/fixtures/<fixture>.json --run-label <immutable-label> --all --confirm-paid",
     "  npm run eval:surge-response-regression -- --run-label <label> --one-per-family --dry-run",
     "Options:",
     "  --sample one-per-family       Alias for --one-per-family.",
     "  --budget-micro-usd <integer>  Hard estimated-spend ceiling; default 60000000.",
     "  --concurrency 1..5            Default 3.",
     "  --checkpoint <path>           Override the run-scoped temp checkpoint.",
+    "  --fixture <path>              Load an immutable JSON suite from test/fixtures.",
     "  --case-id <case-id>           Run one named case; repeat for a bounded repair sample.",
     "  --confirm-paid                Required for real API calls.",
     "  --dry-run                     Exercise the local handler with model admission denied.",
@@ -59,6 +66,202 @@ function safeText(value) {
     .replace(/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/gi, "[REDACTED]")
     .replace(/\bBearer\s+[A-Za-z0-9._~-]{8,}\b/gi, "Bearer [REDACTED]")
     .replace(/\b(?:OPENAI_)?API_KEY\s*[:=]\s*\S+/gi, "API_KEY=[REDACTED]");
+}
+
+const HELDOUT_TAGS = new Set([
+  "context",
+  "multi_part",
+  "numeric",
+  "safety",
+  "urgent_safety",
+  "saved_context",
+  "volatile_fact",
+]);
+const HELDOUT_MODEL_POLICIES = new Set(["allowed", "forbidden", "official_lookup"]);
+
+function exactObjectKeys(value, keys) {
+  return Boolean(value)
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.keys(value).length === keys.length
+    && keys.every((key) => Object.hasOwn(value, key));
+}
+
+function boundedFixtureText(value, maximum, { allowEmpty = false } = {}) {
+  return typeof value === "string"
+    && (allowEmpty || value.length > 0)
+    && value.length <= maximum
+    && !/[\u0000-\u001F\u007F]/u.test(value)
+    && !secretShaped(value);
+}
+
+function validFixturePattern(value) {
+  if (!boundedFixtureText(value, 500)) return false;
+  try {
+    new RegExp(value, "iu");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validFixturePatternList(value, { allowEmpty = true } = {}) {
+  return Array.isArray(value)
+    && (allowEmpty || value.length > 0)
+    && value.length <= 24
+    && value.every(validFixturePattern);
+}
+
+function validFixtureAssertions(value, { allowEmpty = true } = {}) {
+  if (!Array.isArray(value) || (!allowEmpty && !value.length) || value.length > 16) return false;
+  const ids = new Set();
+  for (const item of value) {
+    if (!exactObjectKeys(item, ["id", "anyOf"])
+      || !boundedFixtureText(item.id, 80)
+      || ids.has(item.id)
+      || !validFixturePatternList(item.anyOf, { allowEmpty: false })) {
+      return false;
+    }
+    ids.add(item.id);
+  }
+  return true;
+}
+
+function validFixtureRecentTurns(value) {
+  return Array.isArray(value)
+    && value.length <= 12
+    && value.every((turn) => (
+      exactObjectKeys(turn, ["role", "content"])
+      && (turn.role === "user" || turn.role === "assistant")
+      && boundedFixtureText(turn.content, 2_600)
+    ));
+}
+
+function validFixturePlanContext(value) {
+  if (value === null) return true;
+  if (!exactObjectKeys(value, ["version", "source", "facts"])
+    || !Array.isArray(value.facts)
+    || !value.facts.every((fact) => (
+      exactObjectKeys(fact, ["key", "value"])
+      && boundedFixtureText(fact.key, 48)
+      && boundedFixtureText(fact.value, 180)
+    ))) {
+    return false;
+  }
+  return parseSurgePlanContext(value) !== null;
+}
+
+function validHeldoutCase(value) {
+  const keys = [
+    "id",
+    "family",
+    "variant",
+    "question",
+    "tags",
+    "clauses",
+    "requiredNumbers",
+    "forbiddenPatterns",
+    "recentTurns",
+    "planContext",
+    "maxQuestions",
+    "maxWords",
+    "maxParagraphs",
+    "modelPolicy",
+    "safetyLeadAnyOf",
+    "similarityGroup",
+  ];
+  return exactObjectKeys(value, keys)
+    && typeof value.id === "string"
+    && /^[a-z0-9][a-z0-9_-]{2,79}$/u.test(value.id)
+    && !SURGE_RESPONSE_REGRESSION_CORPUS.some((entry) => entry.id === value.id)
+    && !SURGE_RESPONSE_REGRESSION_CORPUS.some((entry) => entry.question === value.question)
+    && SURGE_RESPONSE_REGRESSION_FAMILIES.includes(value.family)
+    && Number.isSafeInteger(value.variant)
+    && value.variant >= 1
+    && value.variant <= 10_000
+    && boundedFixtureText(value.question, 2_000)
+    && Array.isArray(value.tags)
+    && value.tags.length <= HELDOUT_TAGS.size
+    && new Set(value.tags).size === value.tags.length
+    && value.tags.every((tag) => HELDOUT_TAGS.has(tag))
+    && validFixtureAssertions(value.clauses, { allowEmpty: false })
+    && validFixtureAssertions(value.requiredNumbers)
+    && validFixturePatternList(value.forbiddenPatterns)
+    && validFixtureRecentTurns(value.recentTurns)
+    && validFixturePlanContext(value.planContext)
+    && (value.maxQuestions === 0 || value.maxQuestions === 1)
+    && Number.isSafeInteger(value.maxWords)
+    && value.maxWords >= 1
+    && value.maxWords <= 300
+    && Number.isSafeInteger(value.maxParagraphs)
+    && value.maxParagraphs >= 1
+    && value.maxParagraphs <= 8
+    && HELDOUT_MODEL_POLICIES.has(value.modelPolicy)
+    && validFixturePatternList(value.safetyLeadAnyOf)
+    && boundedFixtureText(value.similarityGroup, 80, { allowEmpty: true })
+    && (!value.tags.includes("urgent_safety") || value.safetyLeadAnyOf.length > 0);
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+export function validateSurgeRegressionFixture(value) {
+  if (!exactObjectKeys(value, ["version", "cases"])
+    || value.version !== HELDOUT_FIXTURE_VERSION
+    || !Array.isArray(value.cases)
+    || value.cases.length < 1
+    || value.cases.length > MAX_HELDOUT_CASES
+    || !value.cases.every(validHeldoutCase)) {
+    throw new Error("The held-out fixture does not match the reviewed schema.");
+  }
+  const ids = value.cases.map((entry) => entry.id);
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Held-out fixture case IDs must be unique.");
+  }
+  return deepFreeze(value.cases);
+}
+
+function pathIsContained(root, candidate) {
+  const relativePath = relative(root, candidate);
+  return Boolean(relativePath)
+    && relativePath !== ".."
+    && !relativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    && !isAbsolute(relativePath);
+}
+
+export async function loadSurgeRegressionFixture(pathValue) {
+  if (!boundedFixtureText(pathValue, 500) || extname(pathValue).toLowerCase() !== ".json") {
+    throw new Error("Held-out fixture path must name a JSON file under test/fixtures.");
+  }
+  const lexicalPath = resolve(REPOSITORY_ROOT, pathValue);
+  if (!pathIsContained(HELDOUT_FIXTURE_ROOT, lexicalPath)) {
+    throw new Error("Held-out fixture path must stay under test/fixtures.");
+  }
+
+  const [fixtureRoot, details] = await Promise.all([
+    realpath(HELDOUT_FIXTURE_ROOT),
+    lstat(lexicalPath),
+  ]);
+  if (!details.isFile() || details.isSymbolicLink() || details.size > MAX_HELDOUT_FIXTURE_BYTES) {
+    throw new Error("Held-out fixture must be a bounded regular file.");
+  }
+  const fixturePath = await realpath(lexicalPath);
+  if (!pathIsContained(fixtureRoot, fixturePath)) {
+    throw new Error("Held-out fixture resolved outside test/fixtures.");
+  }
+
+  const source = await readFile(fixturePath, "utf8");
+  if (secretShaped(source)) throw new Error("Held-out fixture must not contain a credential.");
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error("Held-out fixture must contain valid JSON.");
+  }
+  return { path: fixturePath, cases: validateSurgeRegressionFixture(parsed) };
 }
 
 export function sanitizeSurgeRegressionRejectionDiagnostic(value) {
@@ -112,7 +315,7 @@ function parsePositiveInteger(value, label) {
   return parsed;
 }
 
-function parseArgs(values) {
+export function parseSurgeRegressionArgs(values) {
   const args = {
     runLabel: "",
     mode: "",
@@ -120,6 +323,7 @@ function parseArgs(values) {
     concurrency: DEFAULT_CONCURRENCY,
     budgetMicroUsd: DEFAULT_BUDGET_MICRO_USD,
     checkpoint: "",
+    fixture: "",
     confirmPaid: false,
     dryRun: false,
     help: false,
@@ -130,6 +334,11 @@ function parseArgs(values) {
     else if (value === "--concurrency") args.concurrency = parsePositiveInteger(values[++index], "Concurrency");
     else if (value === "--budget-micro-usd") args.budgetMicroUsd = parsePositiveInteger(values[++index], "Budget");
     else if (value === "--checkpoint") args.checkpoint = values[++index] || "";
+    else if (value === "--fixture") {
+      if (args.fixture) throw new Error("Fixture must not be repeated.");
+      args.fixture = values[++index] || "";
+      if (!args.fixture) throw new Error("Fixture path is required after --fixture.");
+    }
     else if (value === "--confirm-paid") args.confirmPaid = true;
     else if (value === "--dry-run") args.dryRun = true;
     else if (value === "--help" || value === "-h") args.help = true;
@@ -162,8 +371,12 @@ function parseArgs(values) {
   }
   if (secretShaped(args.runLabel)) throw new Error("Run label must not contain a credential.");
   if (new Set(args.caseIds).size !== args.caseIds.length) throw new Error("Case IDs must not be repeated.");
-  if (args.caseIds.some((caseId) => !SURGE_RESPONSE_REGRESSION_CORPUS.some((entry) => entry.id === caseId))) {
+  if (!args.fixture
+    && args.caseIds.some((caseId) => !SURGE_RESPONSE_REGRESSION_CORPUS.some((entry) => entry.id === caseId))) {
     throw new Error("An unknown regression case ID was supplied.");
+  }
+  if (args.fixture && args.mode === "one-per-family") {
+    throw new Error("Fixture runs support only --all or explicit --case-id selection.");
   }
   if (!args.dryRun && !args.confirmPaid) throw new Error("Real model execution requires --confirm-paid.");
   if (args.dryRun && args.confirmPaid) throw new Error("Choose either --dry-run or --confirm-paid, not both.");
@@ -201,7 +414,7 @@ export function createSurgeRegressionCacheKey(runIdentity, entry) {
   }));
 }
 
-async function surgeRegressionSourceFingerprint() {
+async function surgeRegressionSourceFingerprint(fixturePath = "") {
   async function sourcePathsUnder(relativeDirectory) {
     const entries = await readdir(join(REPOSITORY_ROOT, relativeDirectory), { withFileTypes: true });
     const paths = [];
@@ -224,6 +437,12 @@ async function surgeRegressionSourceFingerprint() {
     source.update(await readFile(join(REPOSITORY_ROOT, relativePath)));
     source.update("\0");
   }
+  if (fixturePath) {
+    source.update(`heldout:${relative(REPOSITORY_ROOT, fixturePath)}`);
+    source.update("\0");
+    source.update(await readFile(fixturePath));
+    source.update("\0");
+  }
   return source.digest("hex");
 }
 
@@ -231,17 +450,22 @@ function defaultCheckpoint(runIdentity) {
   return join(tmpdir(), "surge-response-regression", `${runIdentity.slice(0, 20)}.json`);
 }
 
-export function selectSurgeRegressionCases(mode, caseIds = []) {
-  if (mode === "all") return [...SURGE_RESPONSE_REGRESSION_CORPUS];
+export function selectSurgeRegressionCases(
+  mode,
+  caseIds = [],
+  sourceCases = SURGE_RESPONSE_REGRESSION_CORPUS,
+  familyOrder = SURGE_RESPONSE_REGRESSION_FAMILIES,
+) {
+  if (mode === "all") return [...sourceCases];
   if (mode === "case-ids") {
     return caseIds.map((caseId) => {
-      const entry = SURGE_RESPONSE_REGRESSION_CORPUS.find((candidate) => candidate.id === caseId);
+      const entry = sourceCases.find((candidate) => candidate.id === caseId);
       if (!entry) throw new Error(`Unknown regression case ID: ${caseId}`);
       return entry;
     });
   }
-  return SURGE_RESPONSE_REGRESSION_FAMILIES.map((family) => {
-    const entry = SURGE_RESPONSE_REGRESSION_CORPUS.find((candidate) => candidate.family === family);
+  return familyOrder.map((family) => {
+    const entry = sourceCases.find((candidate) => candidate.family === family);
     if (!entry) throw new Error(`Corpus family is empty: ${family}`);
     return entry;
   });
@@ -399,6 +623,7 @@ async function runCase(entry, options) {
   const startedAt = performance.now();
   const response = await handleEnergyAssistantRequest(requestFor(entry), {
     now: options.now,
+    requireValidatedModelForOrdinaryAdvice: true,
     reserveModelCall: async ({ estimatedMicroUsd: estimate }) => {
       modelReservations += 1;
       estimatedMicroUsd = estimate;
@@ -495,7 +720,7 @@ function countBy(values) {
 async function main() {
   let args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseSurgeRegressionArgs(process.argv.slice(2));
   } catch (error) {
     usage(error instanceof Error ? error.message : "Arguments were not accepted.");
     process.exitCode = 2;
@@ -506,16 +731,18 @@ async function main() {
     return;
   }
 
+  const fixture = args.fixture ? await loadSurgeRegressionFixture(args.fixture) : null;
+  const sourceCases = fixture?.cases || SURGE_RESPONSE_REGRESSION_CORPUS;
+  const cases = selectSurgeRegressionCases(args.mode, args.caseIds, sourceCases);
   const configuration = args.dryRun ? { apiKey: "", model: DEFAULT_MODEL } : await loadLocalApiConfiguration();
   const effectiveModel = configuration.model || DEFAULT_MODEL;
-  const sourceFingerprint = await surgeRegressionSourceFingerprint();
+  const sourceFingerprint = await surgeRegressionSourceFingerprint(fixture?.path || "");
   const runIdentity = createSurgeRegressionRunIdentity({
     runLabel: args.runLabel,
     execution: executionName(args),
     sourceFingerprint,
     model: effectiveModel,
   });
-  const cases = selectSurgeRegressionCases(args.mode, args.caseIds);
   const checkpointPath = args.checkpoint ? resolve(args.checkpoint) : defaultCheckpoint(runIdentity);
   const checkpoint = await loadCheckpoint(
     checkpointPath,

@@ -29,6 +29,10 @@ import {
   type EnergyAssistantCitation,
 } from "./energy-assistant.ts";
 import type { SurgeModelRequest } from "./energy-assistant-model.ts";
+import {
+  classifySurgeConversationTurn,
+  surgeConversationDecisionContext,
+} from "./energy-assistant-conversation.ts";
 
 const CERTIFICATE_INTENT = /\b(?:rebate|discount|certificate|stc|veec|esc|prc|incentive|support)\b/i;
 const COMPARISON_INTENT = /\b(?:compare|comparison|versus|vs\.?|better|best|quieter|faster|efficien(?:t|cy)|specification|specs?)\b/i;
@@ -47,7 +51,7 @@ const PRODUCT_KIND_ALIASES: readonly [CreditexOfficialProductKind, RegExp][] = [
   ["inverter", /\b(?:solar\s+)?inverter\b/i],
   ["cec_battery", /\b(?:home\s+)?(?:battery|energy\s+storage)\b/i],
   ["close_control_air_conditioner", /\bclose\s+control\s+air\s*conditioner\b/i],
-  ["air_conditioner", /\b(?:air\s*conditioner|reverse\s*cycle|split\s+system|rcac)\b/i],
+  ["air_conditioner", /\b(?:air\s*conditioner|reverse\s*cycle|split\s+system|multi[- ]?(?:head|split)|wall[- ]?mounted split|rcac)\b/i],
   ["refrigerator_freezer", /\b(?:refrigerator|fridge|freezer)\b/i],
   ["clothes_dryer", /\b(?:clothes|heat\s*pump)\s+dryer\b/i],
   ["television", /\b(?:television|tv)\b/i],
@@ -156,28 +160,19 @@ function categoryForRequest(request: SurgeModelRequest) {
   }
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
-
-  const lastAssistantReply = [...request.recentTurns]
-    .reverse()
-    .find((turn) => turn.role === "assistant")?.content || "";
-  const continuesColdHomeQuestion = COMBINATION_FOLLOW_UP.test(request.message)
-    && /\b(?:cold|draught|doors?|windows?|ceiling insulation|heat loss)\b/i.test(lastAssistantReply);
-  if (continuesColdHomeQuestion) {
-    return resolveReviewedProductGuidanceIntent("cold home draught insulation");
-  }
-  const continuingGroundedLookup = /\b(?:property's postcode|exact brand and model number|verified specification sheet|existing equipment and exact proposed product)\b/i
-    .test(lastAssistantReply)
-    || /\bwhat (?:system|existing heater|existing equipment)[^?]{0,100}\breplac/i
-      .test(lastAssistantReply);
-  if (!continuingGroundedLookup) return null;
-
-  for (let index = request.recentTurns.length - 1; index >= 0; index -= 1) {
-    const turn = request.recentTurns[index];
-    if (turn.role !== "user") continue;
-    const previous = resolveReviewedProductGuidanceIntent(turn.content);
-    if (previous) return previous;
-  }
-  return null;
+  const turnIntent = classifySurgeConversationTurn(
+    request.message,
+    request.continuation,
+    request.recentTurns,
+  );
+  if (turnIntent === "new_question"
+    || turnIntent === "topic_change"
+    || turnIntent === "correction_and_topic_change") return null;
+  return resolveReviewedProductGuidanceIntent(surgeConversationDecisionContext(
+    request.message,
+    request.continuation,
+    request.recentTurns,
+  ));
 }
 
 function productKindForText(
@@ -547,9 +542,14 @@ async function resolveMatchedGuidance(
   }
 
   const text = conversationText(request);
+  const decisionText = surgeConversationDecisionContext(
+    request.message,
+    request.continuation,
+    request.recentTurns,
+  );
   const installationDate = request.asOf.toISOString().slice(0, 10);
-  const certificateIntent = CERTIFICATE_INTENT.test(request.message);
-  const comparisonIntent = COMPARISON_INTENT.test(request.message);
+  const certificateIntent = CERTIFICATE_INTENT.test(decisionText);
+  const comparisonIntent = COMPARISON_INTENT.test(decisionText);
   const postcode = postcodeFor(request, text);
   const state = stateFor(request, postcode);
   const kind = productKindForRequest(request, category);
@@ -755,6 +755,35 @@ async function resolveMatchedGuidance(
       || "What existing equipment and exact proposed product are involved?";
     status = "needs_context";
     confidence = "medium";
+  }
+
+  if (certificateIntent && status === "needs_context") {
+    const jurisdictionNames: Readonly<Record<string, string>> = {
+      ACT: "the ACT",
+      NSW: "New South Wales",
+      NT: "the Northern Territory",
+      QLD: "Queensland",
+      SA: "South Australia",
+      TAS: "Tasmania",
+      VIC: "Victoria",
+      WA: "Western Australia",
+    };
+    const certificateCodes = pathwayCodes.filter((code) => code !== "REBATE");
+    const place = jurisdictionNames[state] || state || "the property's jurisdiction";
+    const concise: string[] = certificateCodes.length
+      ? [`Yes, ${category.consumerLabel.toLowerCase()} may qualify for ${certificateCodes.join(" and ")} support in ${place}, but the amount is not fixed.`]
+      : [`For ${category.consumerLabel.toLowerCase()} in ${place}, directory coverage alone does not establish that a rebate is available or that the household qualifies. Current programme availability and eligibility still need checking against the live official rules.`];
+    if (candidates.length && !allNamedModelsResolved) {
+      concise.push(`Possible current registry candidates are ${candidates.map(productLabel).join(", ")}. Brand and capacity are candidate filters only, not exact model identification.`);
+    } else if (allNamedModelsResolved) {
+      concise.push(`Exact current registry matches are ${exactProducts.map(productLabel).join(", ")}.`);
+    }
+    const currentMarket = direct.match(/\b(?:STC|VEEC|ESC|PRC) last reported at \$\d+(?:\.\d{2})? on \d{4}-\d{2}-\d{2}(?:; (?:STC|VEEC|ESC|PRC) last reported at \$\d+(?:\.\d{2})? on \d{4}-\d{2}-\d{2})*\./)?.[0];
+    if (currentMarket) concise.push(`${currentMarket} This is a gross market reference before provider costs, not the customer's discount.`);
+    concise.push("I will not infer STCs, VEECs, ESCs or PRCs from a brand, capacity or product family.");
+    concise.push(`To check the amount, ${question.replace(/^[A-Z]/, (letter) => letter.toLowerCase()).replace(/\?$/, ".")}`);
+    direct = concise.join(" ");
+    practicalSteps.length = 0;
   }
 
   const registryBoundary = initial

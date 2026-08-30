@@ -1,0 +1,373 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "heldout-wall-rattler-bill-01",
+      "family": "rcac_bill_jump",
+      "variant": 1,
+      "question": "Power bill's gone bananas whenever I run the old wall rattler. Is the unit cactus, or are those things just dear to run?",
+      "tags": ["context"],
+      "clauses": [
+        { "id": "interpret-equipment", "anyOf": ["wall air con", "window air con", "through-wall", "older air conditioner"] },
+        { "id": "no-false-fault-verdict", "anyOf": ["bill alone", "does not prove", "doesn't prove", "not necessarily broken", "cannot tell.*fault"] },
+        { "id": "useful-check", "anyOf": ["filter", "temperature setting", "thermostat", "meter", "hourly use", "energy use"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\b(?:replace|bin) it immediately\\b", "\\bdefinitely (?:broken|faulty)\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "This place has an old box air conditioner pushed through the lounge wall." },
+        { "role": "assistant", "content": "I can help separate a fault from normal running cost." }
+      ],
+      "planContext": null,
+      "maxQuestions": 1,
+      "maxWords": 95,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-mums-unit-compound-01",
+      "family": "messy_compound",
+      "variant": 1,
+      "question": "Mum owns a small Melbourne unit. The windows drip in winter, the gas heater costs a bomb, and body corporate approval is a pain. What should she do first, can the split system heat the place, and what might need approval?",
+      "tags": ["context", "multi_part"],
+      "clauses": [
+        { "id": "first-priority", "anyOf": ["start", "first", "priority"] },
+        { "id": "condensation", "anyOf": ["condensation", "window.*drip", "moisture", "exhaust"] },
+        { "id": "split-heating", "anyOf": ["split system", "reverse-cycle", "heat the unit", "heating"] },
+        { "id": "approval", "anyOf": ["body corporate", "owners corporation", "strata", "approval", "common property"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bstaged whole-home diagnosis\\b", "\\bsolar should be first\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "It is for my mum's unit in Melbourne." },
+        { "role": "assistant", "content": "What problems is she trying to solve?" }
+      ],
+      "planContext": null,
+      "maxQuestions": 1,
+      "maxWords": 130,
+      "maxParagraphs": 4,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-terse-first-step-01",
+      "family": "short_followup",
+      "variant": 1,
+      "question": "so what would you do first then?",
+      "tags": ["context"],
+      "clauses": [
+        { "id": "solar-first", "anyOf": ["solar.*first", "start with solar", "do solar first"] },
+        { "id": "battery-separate", "anyOf": ["battery.*(?:later|separate|evening|tariff)", "then assess.*battery"] },
+        { "id": "use-timing-context", "anyOf": ["daytime", "after sunset", "evening use"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bneed more context\\b", "\\baffected room or major end use\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "We use roughly 8 kWh in the day and 12 kWh after sunset." },
+        { "role": "assistant", "content": "Solar can cover daytime use, while a battery is mainly an evening-use decision." }
+      ],
+      "planContext": null,
+      "maxQuestions": 0,
+      "maxWords": 85,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-renter-solar-correction-01",
+      "family": "renter_actions",
+      "variant": 1,
+      "question": "Nah sorry, we're renting and the 6.6 kW solar is next door's. We just have a portable heater. What can we actually change?",
+      "tags": ["context", "multi_part"],
+      "clauses": [
+        { "id": "accept-correction", "anyOf": ["you rent", "as renters", "tenant", "renting"] },
+        { "id": "remove-solar-fact", "anyOf": ["do not have solar", "don't have solar", "next door", "neighbour"] },
+        { "id": "portable-heater", "anyOf": ["portable heater", "reverse-cycle", "costly to run"] },
+        { "id": "renter-actions", "anyOf": ["landlord", "permission", "draught", "door seal", "curtains"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\byour 6\\.6\\s*kW solar\\b", "\\bbecause you own\\b", "\\badd a battery\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "We own the house and have 6.6 kW solar." },
+        { "role": "assistant", "content": "That ownership and solar system would affect the upgrade order." }
+      ],
+      "planContext": null,
+      "maxQuestions": 1,
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-hpwh-document-finance-01",
+      "family": "hpwh_finance",
+      "variant": 1,
+      "question": "It says $5,900 after rebates, $58 a month for 7 years, and 'switchboard work extra'. Is the finance total actually the same as the quote, and is this a complete installed price?",
+      "tags": ["context", "multi_part", "numeric"],
+      "clauses": [
+        { "id": "calculate-total", "anyOf": ["\\$\\s*4,?872", "repayments.*total"] },
+        { "id": "identify-gap", "anyOf": ["\\$\\s*1,?028", "short.*quoted", "does not equal", "doesn't equal"] },
+        { "id": "scope-not-complete", "anyOf": ["switchboard.*extra", "not a complete", "not fixed", "excluded", "written breakdown"] }
+      ],
+      "requiredNumbers": [
+        { "id": "cash-price", "anyOf": ["\\$\\s*5,?900\\b"] },
+        { "id": "monthly-payment", "anyOf": ["\\$\\s*58\\b"] },
+        { "id": "term", "anyOf": ["\\b7\\s*years?\\b", "\\bseven years?\\b"] },
+        { "id": "repayment-total", "anyOf": ["\\$\\s*4,?872\\b"] },
+        { "id": "unexplained-gap", "anyOf": ["\\$\\s*1,?028\\b"] }
+      ],
+      "forbiddenPatterns": ["\\bfinance total is \\$?5,?900\\b", "\\bcomplete fixed price\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "I've attached the hot-water quote." },
+        { "role": "assistant", "content": "I can check the extracted price, finance and excluded work." }
+      ],
+      "planContext": null,
+      "maxQuestions": 0,
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-solar-document-zero-export-01",
+      "family": "solar_size_usage",
+      "variant": 1,
+      "question": "On page 3 it says 6.6 kW of panels, a 5 kW inverter and zero export. Is the inverter undersized, and does zero export mean the solar is pointless?",
+      "tags": ["context", "multi_part", "numeric"],
+      "clauses": [
+        { "id": "dc-ac-sizing", "anyOf": ["panel capacity.*(?:higher|larger).*inverter", "DC.*AC", "oversiz.*inverter", "can be (?:a )?normal"] },
+        { "id": "zero-export", "anyOf": ["zero export.*(?:does not|doesn't)", "use the solar.*home", "self-consumption", "still reduce.*imports", "export limit[\\s\\S]{0,180}home may use solar"] },
+        { "id": "design-check", "anyOf": ["clipping", "generation estimate", "network", "written design", "inverter limit"] }
+      ],
+      "requiredNumbers": [
+        { "id": "panel-capacity", "anyOf": ["\\b6\\.6\\s*kW\\b"] },
+        { "id": "inverter-capacity", "anyOf": ["\\b5\\s*kW\\b"] }
+      ],
+      "forbiddenPatterns": ["\\bsolar is pointless\\b", "\\bmust use a 6\\.6\\s*kW inverter\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "The solar proposal PDF lists 15 panels and a 5 kW inverter." },
+        { "role": "assistant", "content": "The panel wattage, array capacity and export settings decide whether that pairing makes sense." }
+      ],
+      "planContext": null,
+      "maxQuestions": 0,
+      "maxWords": 120,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-saved-context-budget-01",
+      "family": "upgrade_priority",
+      "variant": 1,
+      "question": "I've got $1,500. Based on my answers, should it go toward a solar deposit, honeycomb blinds for the lounge, or replacing the split system that still works?",
+      "tags": ["saved_context", "multi_part", "numeric"],
+      "clauses": [
+        { "id": "use-saved-context", "anyOf": ["single glaz", "basic roller", "apartment", "cold lounge"] },
+        { "id": "covering-priority", "anyOf": ["honeycomb.*first", "blinds.*first", "window covering.*priority", "put[^.]{0,50}honeycomb blinds"] },
+        { "id": "retain-working-system", "anyOf": ["split system.*still works", "do not replace", "don't replace", "service.*split", "keep[^.]{0,40}(?:working )?split"] },
+        { "id": "solar-lower-priority", "anyOf": ["solar deposit.*later", "solar.*approval", "solar.*lower priority", "roof.*strata"] }
+      ],
+      "requiredNumbers": [
+        { "id": "budget", "anyOf": ["\\$\\s*1,?500\\b"] }
+      ],
+      "forbiddenPatterns": ["\\breplace the split system first\\b", "\\bput the \\$?1,?500 toward solar first\\b"],
+      "recentTurns": [],
+      "planContext": {
+        "version": 1,
+        "source": "home_energy_plan",
+        "facts": [
+          { "key": "postcode", "value": "3068" },
+          { "key": "state_or_territory", "value": "VIC" },
+          { "key": "tenure", "value": "I own the home" },
+          { "key": "property_type", "value": "Apartment or unit" },
+          { "key": "household_size", "value": "Two people" },
+          { "key": "comfort_concerns", "value": "Too cold in cool weather, Condensation, damp or mould" },
+          { "key": "glazing", "value": "Mostly single glazed" },
+          { "key": "window_coverings", "value": "Basic roller, vertical or Venetian blinds" },
+          { "key": "heating_cooling_systems", "value": "Air-con, including reverse-cycle air-con" },
+          { "key": "solar", "value": "No rooftop solar" }
+        ]
+      },
+      "maxQuestions": 0,
+      "maxWords": 120,
+      "maxParagraphs": 3,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-ignore-irrelevant-plan-01",
+      "family": "fit_plan",
+      "variant": 1,
+      "question": "General question, not about my place: does a heat-pump clothes dryer need a vent to outside?",
+      "tags": ["saved_context"],
+      "clauses": [
+        { "id": "direct-answer", "anyOf": ["does not (?:usually|normally) need", "doesn't (?:usually|normally) need", "ventless", "closed-loop"] },
+        { "id": "water-handling", "anyOf": ["condens", "water tank", "drain"] },
+        { "id": "installation-boundary", "anyOf": ["manufacturer", "installation instructions", "model[^.]{0,30}instructions", "room ventilation", "room[^.]{0,30}airflow"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bpostcode 3068\\b", "\\byour apartment\\b", "\\byour saved survey\\b", "\\bhot-water system\\b"],
+      "recentTurns": [],
+      "planContext": {
+        "version": 1,
+        "source": "home_energy_plan",
+        "facts": [
+          { "key": "postcode", "value": "3068" },
+          { "key": "state_or_territory", "value": "VIC" },
+          { "key": "tenure", "value": "I own the home" },
+          { "key": "property_type", "value": "Apartment or unit" },
+          { "key": "household_size", "value": "Two people" },
+          { "key": "comfort_concerns", "value": "Too cold in cool weather, Condensation, damp or mould" },
+          { "key": "glazing", "value": "Mostly single glazed" },
+          { "key": "window_coverings", "value": "Basic roller, vertical or Venetian blinds" },
+          { "key": "heating_cooling_systems", "value": "Air-con, including reverse-cycle air-con" },
+          { "key": "solar", "value": "No rooftop solar" }
+        ]
+      },
+      "maxQuestions": 0,
+      "maxWords": 75,
+      "maxParagraphs": 2,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-battery-to-bathroom-switch-01",
+      "family": "bathroom_fan",
+      "variant": 1,
+      "question": "Different question: the bathroom fan only runs with the light and the mirror stays fogged for ages. What should I check?",
+      "tags": ["context"],
+      "clauses": [
+        { "id": "fan-performance", "anyOf": ["airflow", "grille", "duct", "outside", "run-on", "timer"] },
+        { "id": "moisture-removal", "anyOf": ["fog", "moisture", "steam", "after the shower"] },
+        { "id": "trade-boundary", "anyOf": ["electrician", "wiring", "licensed"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bbattery\\b", "\\$\\s*11,?800", "\\b10\\s*kWh\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "The battery quote is $11,800 for 10 kWh." },
+        { "role": "assistant", "content": "That battery needs a price, usable-capacity and payback check." }
+      ],
+      "planContext": null,
+      "maxQuestions": 1,
+      "maxWords": 110,
+      "maxParagraphs": 4,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-yeah-nah-door-draught-01",
+      "family": "draught_vs_glass",
+      "variant": 1,
+      "question": "Yeah nah, the glass isn't the issue. It's a breeze under the front door. What's the cheap fix?",
+      "tags": ["context"],
+      "clauses": [
+        { "id": "accept-correction", "anyOf": ["under the door", "door draught", "door draft", "not the glass"] },
+        { "id": "cheap-fix", "anyOf": ["door snake", "draught seal", "draft seal", "door sweep", "weather strip"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bbuy double glazing\\b", "\\breplace the windows\\b", "\\bwindow film first\\b"],
+      "recentTurns": [
+        { "role": "assistant", "content": "Do the windows feel cold even when there is no wind?" }
+      ],
+      "planContext": null,
+      "maxQuestions": 0,
+      "maxWords": 75,
+      "maxParagraphs": 2,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-rebate-terse-current-01",
+      "family": "rebate_eligibility",
+      "variant": 1,
+      "question": "Is that Victorian heat-pump hot-water rebate still open today, or has it wrapped up?",
+      "tags": ["context", "volatile_fact"],
+      "clauses": [
+        { "id": "current-status", "anyOf": ["current", "still", "available", "open", "closed", "ended", "could not verify"] },
+        { "id": "scheme-specific-status", "anyOf": ["Victorian Energy Upgrades[\\s\\S]{0,180}Solar Homes", "Solar Homes[\\s\\S]{0,180}Victorian Energy Upgrades", "\\bVEU\\b[\\s\\S]{0,180}Solar Homes", "Solar Homes[\\s\\S]{0,180}\\bVEU\\b"] },
+        { "id": "no-guarantee", "anyOf": ["cannot guarantee", "can't guarantee", "subject to", "confirm", "could not verify"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\byou will receive\\b", "\\bguaranteed rebate\\b", "\\bdefinitely ended\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "I'm looking at a heat-pump hot-water unit in Victoria and the salesperson mentioned rebates." },
+        { "role": "assistant", "content": "Eligibility depends on the current programme and exact approved model." }
+      ],
+      "planContext": null,
+      "maxQuestions": 1,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "modelPolicy": "official_lookup",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-outside-scope-recipe-01",
+      "family": "surge_vs_saul",
+      "variant": 1,
+      "question": "Unrelated: can you read this attachment and tell me whether the scone recipe needs more flour?",
+      "tags": ["context"],
+      "clauses": [
+        { "id": "outside-scope", "anyOf": ["does not appear.*related", "doesn't appear.*related", "outside.*home energy", "can only help.*home energy", "cannot (?:assess|adjust)[^.]{0,40}recipe"] }
+      ],
+      "requiredNumbers": [],
+      "forbiddenPatterns": ["\\bsolar\\b", "\\bbattery\\b", "\\binsulation\\b", "\\bheat pump\\b", "\\btariff\\b", "\\brebate\\b"],
+      "recentTurns": [
+        { "role": "user", "content": "Earlier we were talking about my electricity bill." },
+        { "role": "assistant", "content": "I can help with home-energy decisions and related documents." }
+      ],
+      "planContext": null,
+      "maxQuestions": 0,
+      "maxWords": 45,
+      "maxParagraphs": 2,
+      "modelPolicy": "allowed",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    },
+    {
+      "id": "heldout-local-tradie-enquiry-01",
+      "family": "trade_referral",
+      "variant": 1,
+      "question": "Know anyone decent round Preston who can quote draught sealing and honeycomb blinds? I don't care which brand, I just want someone local. Can you send it to the right tradies?",
+      "tags": ["saved_context", "multi_part", "numeric"],
+      "clauses": [
+        { "id": "neutrality", "anyOf": ["do not prefer", "don't prefer", "no preference", "do not endorse", "do not favou?r", "compare"] },
+        { "id": "enquiry-path", "anyOf": ["enquiry", "send.*trad", "relevant trades", "local trades"] },
+        { "id": "draught-scope", "anyOf": ["draught", "draft"] },
+        { "id": "honeycomb-scope", "anyOf": ["honeycomb"] },
+        { "id": "location", "anyOf": ["Preston", "3072", "your area"] }
+      ],
+      "requiredNumbers": [
+        { "id": "postcode", "anyOf": ["\\b3072\\b"] }
+      ],
+      "forbiddenPatterns": ["\\bapproved trad", "\\bbest installer", "\\bpreferred supplier"],
+      "recentTurns": [],
+      "planContext": {
+        "version": 1,
+        "source": "home_energy_plan",
+        "facts": [
+          { "key": "postcode", "value": "3072" },
+          { "key": "state_or_territory", "value": "VIC" },
+          { "key": "tenure", "value": "I own the home" }
+        ]
+      },
+      "maxQuestions": 0,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "modelPolicy": "forbidden",
+      "safetyLeadAnyOf": [],
+      "similarityGroup": ""
+    }
+  ]
+}

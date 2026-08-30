@@ -317,6 +317,47 @@ test("controlled PDFs are pre-indexed once and retrieve bounded relevant passage
   assert.match(multiPartPassages.map((passage) => passage.excerpt).join("\n"), /three-phase|three phase|3-phase|3 phase/i);
   assert.match(multiPartPassages.map((passage) => passage.excerpt).join("\n"), /rewir|switchboard|supply upgrade|upgrade cost/i);
   assert.ok(multiPartPassages.reduce((total, passage) => total + passage.excerpt.length, 0) <= 2_500);
+
+  const coldBedroom = selectSurgeIndustryPassagesForPrompt(
+    "One bedroom is freezing and draughty near the window. What should I do?",
+    5,
+  );
+  assert.ok(coldBedroom.length > 0);
+  assert.match(coldBedroom.map((passage) => passage.excerpt).join("\n"), /draught|draft|air leak|seal|weatherstrip/i);
+  assert.ok(coldBedroom.every((passage) => !/heat[- ]?pump hot[- ]?water|water tank|anode|refrigerant|compressor unit|\d{3}[- ]litre/i.test(passage.excerpt)));
+  assert.ok(coldBedroom.every((passage) => /draught|draft|air leak|seal|weatherstrip|window|glazing/i.test(passage.excerpt)));
+
+  const compoundDecision = selectSurgeIndustryPassagesForPrompt(
+    "Does a rebate make double glazing worthwhile on my tariff?",
+    5,
+  );
+  assert.ok(compoundDecision.length > 0);
+  const compoundText = compoundDecision.map((passage) => passage.excerpt).join("\n");
+  assert.match(compoundText, /window|glazing|glass|double[- ]glazed/i);
+  assert.match(compoundText, /tariff|retailer|feed[- ]in|import rate|export rate/i);
+  assert.doesNotMatch(compoundText, /rebate depth/i);
+  assert.doesNotMatch(compoundText, /water tank|anode|refrigerant|compressor unit/i);
+
+  const insulationRebate = selectSurgeIndustryPassagesForPrompt(
+    "What rebate applies to ceiling insulation?",
+    5,
+  );
+  assert.ok(insulationRebate.length > 0);
+  assert.match(
+    insulationRebate.map((passage) => passage.excerpt).join("\n"),
+    /insulation|insulated|batts?|R[- ]?value/i,
+  );
+  assert.ok(insulationRebate.every((passage) => !/rebate depth/i.test(passage.excerpt)));
+  assert.ok(insulationRebate.every((passage) => !/building energy certificate/i.test(passage.excerpt)));
+
+  const tariffPayback = selectSurgeIndustryPassagesForPrompt(
+    "How do tariff changes affect rebate payback?",
+    5,
+  );
+  assert.ok(tariffPayback.length > 0);
+  const tariffPaybackText = tariffPayback.map((passage) => passage.excerpt).join("\n");
+  assert.match(tariffPaybackText, /tariff|retailer|import rate|export rate/i);
+  assert.doesNotMatch(tariffPaybackText, /water tank|anode|refrigerant|compressor unit/i);
 });
 
 test("source custody audit fails closed when supplied PDFs are unavailable", () => {

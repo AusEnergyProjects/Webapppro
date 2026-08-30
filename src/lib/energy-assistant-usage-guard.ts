@@ -19,13 +19,13 @@ export const SURGE_USAGE_GUARD_ENV = {
 
 export const SURGE_USAGE_GUARD_DEFAULTS = {
   clientMinuteLimit: 6,
-  clientDailyLimit: 30,
+  clientDailyLimit: 60,
   networkMinuteLimit: 60,
   networkDailyLimit: 600,
   globalMinuteLimit: 20,
   globalInFlightLimit: 5,
   globalDailyMicroUsdLimit: 20_000_000,
-  inFlightLeaseMs: 30_000,
+  inFlightLeaseMs: 70_000,
   requestIdempotencyMs: REQUEST_IDEMPOTENCY_MS,
 } as const;
 

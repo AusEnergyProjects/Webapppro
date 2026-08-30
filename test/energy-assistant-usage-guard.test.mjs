@@ -133,13 +133,13 @@ async function concurrentBurst(guard, count, makeReservation) {
 test("production configuration exposes the exact fixed default ceilings", () => {
   assert.deepEqual(SURGE_USAGE_GUARD_DEFAULTS, {
     clientMinuteLimit: 6,
-    clientDailyLimit: 30,
+    clientDailyLimit: 60,
     networkMinuteLimit: 60,
     networkDailyLimit: 600,
     globalMinuteLimit: 20,
     globalInFlightLimit: 5,
     globalDailyMicroUsdLimit: 20_000_000,
-    inFlightLeaseMs: 30_000,
+    inFlightLeaseMs: 70_000,
     requestIdempotencyMs: 600_000,
   });
   assert.equal(SURGE_USAGE_GUARD_ENV.globalInFlightLimit, "SURGE_GLOBAL_INFLIGHT_LIMIT");
@@ -163,7 +163,7 @@ test("1000 concurrent reservations cannot cross any configured client, network o
     assert.ok(admitted(results).length <= 6);
   });
 
-  await t.test("client day 30", async () => {
+  await t.test("client day 60", async () => {
     const { guard } = fixture({ env: {
       SURGE_CLIENT_MINUTE_LIMIT: "1000",
       SURGE_NETWORK_MINUTE_LIMIT: "1000",
@@ -176,7 +176,7 @@ test("1000 concurrent reservations cannot cross any configured client, network o
       clientKey: opaqueKey("same-client"),
     }));
     assert.ok(admitted(results).length > 0);
-    assert.ok(admitted(results).length <= 30);
+    assert.ok(admitted(results).length <= 60);
   });
 
   await t.test("network minute 60", async () => {
@@ -313,6 +313,30 @@ test("global in-flight denial does not consume client or network quota", async (
   }));
   assert.equal(retry.allowed, true);
   await retry.release();
+});
+
+test("the default in-flight lease covers a slow call plus its one permitted repair", async () => {
+  const { clock, guard } = fixture({ env: {
+    SURGE_CLIENT_MINUTE_LIMIT: "1000",
+    SURGE_CLIENT_DAILY_LIMIT: "1000",
+    SURGE_NETWORK_MINUTE_LIMIT: "1000",
+    SURGE_NETWORK_DAILY_LIMIT: "1000",
+    SURGE_GLOBAL_MINUTE_LIMIT: "1000",
+    SURGE_GLOBAL_INFLIGHT_LIMIT: "1",
+    SURGE_GLOBAL_DAILY_MICRO_USD: "1000000000",
+  } });
+  const slow = await guard.reserve(reservation(1));
+  assert.equal(slow.allowed, true);
+
+  clock.value += 60_001;
+  const duringRepairWindow = await guard.reserve(reservation(2));
+  assert.equal(duringRepairWindow.allowed, false);
+  assert.equal(duringRepairWindow.reason, "global_in_flight");
+
+  clock.value += 10_000;
+  const afterLease = await guard.reserve(reservation(3));
+  assert.equal(afterLease.allowed, true);
+  await afterLease.release();
 });
 
 test("fixed UTC minute and day buckets reset only at their exact boundaries", async () => {

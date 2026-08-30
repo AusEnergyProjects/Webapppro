@@ -138,7 +138,7 @@ test("off-topic grounded and model answers cannot replace the direct draught ans
   assert.doesNotMatch(payload.reply.content, /room load|floor area need heating/i);
 });
 
-test("a direct community answer survives when model refinement is unavailable", async () => {
+test("exact community finance arithmetic stays deterministic without model refinement", async () => {
   const entry = SURGE_COMMUNITY_RESPONSE_BENCHMARK.find((candidate) => candidate.id === "community-hpwh-finance-claim");
   assert.ok(entry);
   let modelReservationAttempted = false;
@@ -154,5 +154,5 @@ test("a direct community answer survives when model refinement is unavailable", 
   const payload = await response.json();
   assert.match(payload.reply.content, /\$38[^.]*6 years[^.]*\$2,736/i);
   assert.match(payload.reply.content, /does not equal[^.]*\$4,664/i);
-  assert.equal(modelReservationAttempted, true);
+  assert.equal(modelReservationAttempted, false);
 });

@@ -17,6 +17,7 @@
     "audit:surge-assessor-education": "node --experimental-strip-types scripts/audit-surge-assessor-education.mjs",
     "capture:surge-official-sources": "node --experimental-strip-types scripts/capture-energy-assistant-official-sources.mjs",
     "eval:surge-response-regression": "node --experimental-strip-types scripts/run-surge-response-regression.mjs",
+    "eval:surge-conversation-trajectory": "node --experimental-strip-types scripts/run-surge-conversation-trajectory.mjs",
     "audit:sites-server-bundle": "node scripts/audit-sites-server-bundle.mjs",
     "benchmark:scale": "node scripts/benchmark-scale-100k.mjs",
     "rehearse:surge-continuity": "node --experimental-strip-types scripts/rehearse-surge-context-continuity.mjs",

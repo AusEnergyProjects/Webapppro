@@ -122,7 +122,7 @@ function hostedBoolean(value: string | undefined) {
 }
 
 function reportModelFailure(failure: SurgeModelFailure) {
-  console.warn("Surge model used deterministic fallback.", {
+  console.warn("Surge model answer was unavailable.", {
     code: failure.code,
     ...(failure.providerStatus ? { providerStatus: failure.providerStatus } : {}),
   });
@@ -154,6 +154,7 @@ function handleEnergyAssistantRequest(
     ...dependencies,
     generateAnswer: generateHostedModelAnswer,
     qualityMetadata: hostedQualityMetadata(),
+    requireValidatedModelForOrdinaryAdvice: true,
   });
 }
 

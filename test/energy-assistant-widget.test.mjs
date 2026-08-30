@@ -7,6 +7,10 @@ import {
   parseSurgeStarterProfile,
 } from "../src/lib/surge-assessor-profile.ts";
 import { SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER } from "../src/lib/energy-assistant.ts";
+import {
+  buildEnergyAssistantAskRequestBody,
+  ENERGY_ASSISTANT_MAX_BODY_BYTES,
+} from "../src/lib/energy-assistant-request-budget.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const widget = read("../src/components/EnergyAssistantWidget.tsx");
@@ -257,6 +261,8 @@ test("only bounded local transcript, home profile, continuation, last activity a
   assert.match(widget, /saved && savedConversationIsPreferred\(saved, currentSession\(\)\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, userMessage\]\)/);
   assert.match(widget, /replaceMessages\(\[\.\.\.messagesRef\.current, reply\]\)/);
+  assert.match(widget, /const priorMessages = messagesRef\.current/);
+  assert.match(widget, /catch \(caught\) \{\s*replaceMessages\(priorMessages\);\s*setDraft\(message\)/);
   assert.doesNotMatch(widget, /setOpen\(saved\.open\)/);
   assert.match(widget, /const \[openPathname, setOpenPathname\] = useState\(initialOpen \? pathname : ""\)/);
   assert.match(widget, /const effectiveOpen = dedicated \|\| \(open && openPathname === pathname && !hidden\)/);
@@ -269,6 +275,7 @@ test("same-browser local continuation is explicit and does not create tracking i
   assert.match(widget, /const continuationRef = useRef<SurgeConversationState \| null>\(null\)/);
   assert.match(widget, /continuation:\s*continuationRef\.current,[\s\S]*pageContext:/);
   assert.match(widget, /const nextContinuation = parseSurgeConversationState\(record\.continuation\)/);
+  assert.match(widget, /if \(!nextContinuation\) \{[\s\S]*could not preserve this conversation/);
   assert.match(widget, /continuationRef\.current = nextContinuation/);
   assert.match(widget, /setContinuation\(nextContinuation\)/);
   assert.match(privacy, /kept in that browser for up to 30 days/);
@@ -619,9 +626,9 @@ test("local continuation caps messages and recent API context and expires after 
   )(
     40,
     160_000,
-    8,
+    12,
     1_200,
-    6_000,
+    9_000,
     30 * 24 * 60 * 60 * 1000,
     (value) => value && typeof value === "object" && !Array.isArray(value) ? value : null,
     (value, maximum = 4_000) => typeof value === "string" ? value.trim().slice(0, maximum) : "",
@@ -696,14 +703,14 @@ test("local continuation caps messages and recent API context and expires after 
   );
 
   const recent = helpers.recentTurnsForRequest(active.messages);
-  assert.ok(recent.length <= 8);
+  assert.ok(recent.length <= 12);
   assert.ok(recent.length > 0);
   assert.equal(recent[0].role, "user");
   assert.ok(recent.some((turn) => turn.role === "assistant"));
   assert.ok(recent.every((turn, index) => index === 0 || turn.role !== recent[index - 1].role));
   assert.ok(recent.every((turn) =>
     turn.role === (Number.parseInt(turn.content, 10) % 2 === 0 ? "user" : "assistant")));
-  assert.ok(recent.reduce((total, turn) => total + turn.content.length, 0) <= 6_000);
+  assert.ok(recent.reduce((total, turn) => total + turn.content.length, 0) <= 9_000);
 
   const profiled = helpers.recentTurnsForRequest([
     { role: "user", content: "What should I upgrade first?" },
@@ -717,7 +724,7 @@ test("local continuation caps messages and recent API context and expires after 
   }));
   assert.deepEqual(
     helpers.recentTurnsForRequest(compactConversation).map((turn) => turn.content),
-    compactConversation.slice(-8).map((turn) => turn.content),
+    compactConversation.slice(-12).map((turn) => turn.content),
   );
   assert.deepEqual(
     helpers.recentTurnsForRequest([
@@ -742,6 +749,68 @@ test("local continuation caps messages and recent API context and expires after 
   assert.equal(expired.continuation, null);
   assert.equal(expired.profile.completed, false);
   assert.equal(expired.profileUpdatedAt, "");
+});
+
+test("ask request budgeting preserves the complete ledger and trims only oldest raw exchanges", () => {
+  const continuation = {
+    version: 1,
+    activeTopic: "whole-home",
+    ledger: {
+      version: 1,
+      subjects: [],
+      decisions: [],
+      retainedConversationEvidence: "x".repeat(31_000),
+    },
+  };
+  const planContext = {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [{ key: "notes", value: "家".repeat(2_600) }],
+  };
+  const recentTurns = Array.from({ length: 12 }, (_, index) => ({
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `${index}-${"問".repeat(1_198)}`,
+  }));
+  const request = {
+    action: "ask",
+    requestId: "ask-full-context-budget-0001",
+    message: "答".repeat(1_200),
+    recentTurns,
+    continuation,
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  };
+
+  assert.ok(Buffer.byteLength(JSON.stringify(request), "utf8") > ENERGY_ASSISTANT_MAX_BODY_BYTES);
+  const body = buildEnergyAssistantAskRequestBody(request);
+  const parsed = JSON.parse(body);
+
+  assert.ok(Buffer.byteLength(body, "utf8") <= ENERGY_ASSISTANT_MAX_BODY_BYTES);
+  assert.deepEqual(parsed.continuation, continuation, "the complete semantic conversation ledger must survive");
+  assert.deepEqual(parsed.planContext, planContext, "saved home context must survive");
+  assert.equal(parsed.message, request.message, "the current question must survive");
+  assert.ok(parsed.recentTurns.length < recentTurns.length);
+  assert.deepEqual(parsed.recentTurns, recentTurns.slice(-parsed.recentTurns.length));
+  assert.equal(parsed.recentTurns[0]?.role, "user");
+  assert.deepEqual(request.recentTurns, recentTurns, "request budgeting must not mutate stored chat turns");
+});
+
+test("ask request budgeting fails locally instead of dropping continuation state", () => {
+  const continuation = { version: 1, retainedConversationEvidence: "問".repeat(30_000) };
+  assert.throws(
+    () => buildEnergyAssistantAskRequestBody({
+      action: "ask",
+      requestId: "ask-unshrinkable-budget-0001",
+      message: "Continue",
+      recentTurns: [],
+      continuation,
+      planContext: null,
+      pageContext: "/surge",
+      audience: "public",
+    }),
+    /kept your conversation intact/,
+  );
 });
 
 test("Surge AI keeps compact chat and bounded document tools at the bottom", () => {
@@ -949,8 +1018,11 @@ test("page navigation stays restricted and validated official citations render a
   assert.match(widget, /candidate\.includes\("\?"\)/);
   assert.match(widget, /SAFE_EXACT_ACTIONS\.has\(pathname\)/);
   assert.ok(widget.includes("if (/^\\/guides\\/[a-z0-9-]{1,80}$/.test(pathname))"));
-  assert.match(widget, /url\.protocol === "https:" \? url\.href : ""/);
-  assert.match(widget, /target="_blank"[\s\S]{0,100}rel="noreferrer"/);
+  assert.match(widget, /safeOfficialCitationHref\(record\.url\)/);
+  assert.match(widget, /aemo\\\.com\\\.au/);
+  assert.match(widget, /standards\\\.org\\\.au/);
+  assert.doesNotMatch(widget, /function safeCitationUrl/);
+  assert.match(widget, /target="_blank"[\s\S]{0,100}rel="noopener noreferrer"/);
   const answerCardStart = widget.indexOf("{messages.length > 0 && (");
   const answerCardEnd = widget.indexOf("{busy &&", answerCardStart);
   assert.notEqual(answerCardStart, -1);
@@ -973,4 +1045,28 @@ test("page navigation stays restricted and validated official citations render a
   assert.match(styles, /\.officialSources\s*\{[\s\S]*flex-wrap:\s*wrap/);
   assert.match(styles, /\.officialSources span,[\s\S]*font-size:\s*0\.72rem/);
   assert.doesNotMatch(answerCards, /sourceBoundary|toolActions|message\.actions/);
+});
+
+test("the browser citation boundary keeps reviewed non-government official hosts and rejects lookalikes", () => {
+  const compiled = ts.transpileModule(functionSource(widget, "safeOfficialCitationHref"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const safeOfficialCitationHref = Function(
+    "asString",
+    `${compiled}; return safeOfficialCitationHref;`,
+  )((value, maximum = 4_000) => (
+    typeof value === "string" ? value.trim().slice(0, maximum) : ""
+  ));
+
+  assert.equal(
+    safeOfficialCitationHref("https://www.aemo.com.au/energy-systems"),
+    "https://www.aemo.com.au/energy-systems",
+  );
+  assert.equal(
+    safeOfficialCitationHref("https://www.standards.org.au/standards-catalogue"),
+    "https://www.standards.org.au/standards-catalogue",
+  );
+  assert.equal(safeOfficialCitationHref("https://www.energy.gov.au/households"), "https://www.energy.gov.au/households");
+  assert.equal(safeOfficialCitationHref("https://aemo.com.au.example.com/claim"), "");
+  assert.equal(safeOfficialCitationHref("https://example.com/claim"), "");
 });

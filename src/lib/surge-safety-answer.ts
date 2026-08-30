@@ -105,12 +105,14 @@ function affirmedEquipmentSignal(
 function isEducationalHazardQuestion(message: string) {
   if (reportsResolvedHazard(message)) return true;
   const explicitlyCurrent = /\b(?:now|right now|currently|at the moment|today|i can (?:see|smell|hear)|we can (?:see|smell|hear)|there(?:'s| is| are))\b/i.test(message);
+  const hasHazardSignal = HAZARD_WORDING.test(message);
+  const asksAboutElectricalFlooding = /\b(?:water|rainwater|floodwater|flood)\b[^.!?]{0,80}\b(?:switchboard|meter box|electrical panel|main switch|power point|socket|outlet|wiring|cables?)\b|\b(?:switchboard|meter box|electrical panel|main switch|power point|socket|outlet|wiring|cables?)\b[^.!?]{0,80}\b(?:water|rainwater|floodwater|flood)\b/i.test(message);
   const describesMediaExample = /\b(?:in|from|shown\s+in)\s+(?:(?:this|that|a|the)\s+)?(?:(?:training|demonstration|example|online|youtube)\s+)?(?:video|clip|photo|image|article|manual)\b/i.test(message);
-  if (describesMediaExample && !explicitlyCurrent) return true;
+  if (describesMediaExample && hasHazardSignal && !explicitlyCurrent) return true;
   const asksConditionalScenario = /^\s*(?:can|could|would|might|will|does|is)\b[^?]{0,100}\b(?:during|if|in\s+the\s+event\s+of)\b/i.test(message);
-  if (asksConditionalScenario && !explicitlyCurrent) return true;
+  if (asksConditionalScenario && (hasHazardSignal || asksAboutElectricalFlooding) && !explicitlyCurrent) return true;
   const asksHypotheticalAction = /\bwhat\s+(?:should|do|can)\s+(?:i|we)\s+do\b[^.!?]{0,45}\bif\b|\bif\b[^.!?]{0,70}\b(?:what\s+(?:should|do|can)\s+(?:i|we)\s+do|(?:should|can|could|would|do)\s+(?:i|we)\b)|\b(?:should|can|could|would|do)\s+(?:i|we)\b[^.!?]{0,55}\bif\b|\b(?:what|why|how|when|is|are|can|could|would|should|do|does)\b[^.!?]{0,70}\bif\b|\bwhat\s+if\b/i.test(message);
-  if (asksHypotheticalAction && !explicitlyCurrent) return true;
+  if (asksHypotheticalAction && (hasHazardSignal || asksAboutElectricalFlooding) && !explicitlyCurrent) return true;
 
   const reportsOnlyPastCondition = new RegExp(
     `(?:\\b(?:my|our|the|this|that)\\s+${EQUIPMENT_SOURCE}\\b[^.!?]{0,45}\\b(?:was|were|had\\s+been|did|sparked|smoked|hissed)\\b[^.!?]{0,45}(?:${HAZARD_WORDING.source})?|(?:${HAZARD_WORDING.source})[^.!?]{0,55}\\b(?:yesterday|last\\s+(?:night|week|month|year)|previously|earlier|once|before\\s+(?:being|it was)|was\\s+(?:removed|replaced|repaired|checked)))`,
@@ -235,6 +237,28 @@ export function composeSurgeSafetyAnswer(
     ? message
     : [...priorUserMessages].reverse().find((turn) => equipmentPattern.test(turn)) || message;
   const hasPriorEquipmentAnchor = equipmentAnchor !== message;
+  const recentSafetyContext = priorUserMessages.slice(-2).join("\n");
+  const currentAndRecentSafetyContext = `${recentSafetyContext}\n${message}`;
+  const qualifiedHelpConfirmedSafe = /\b(?:licensed gasfitter|licensed electrician|gas (?:network|distributor)|electricity (?:network|distributor)|emergency services?)\b[^.!?\n]{0,90}\b(?:confirmed|declared|made|left|found|said)\b[^.!?\n]{0,35}\bsafe\b|\bmade safe\b[^.!?\n]{0,55}\b(?:licensed gasfitter|licensed electrician|gas (?:network|distributor)|electricity (?:network|distributor)|emergency services?)\b/i.test(currentAndRecentSafetyContext);
+  const unresolvedRecentGasIncident = !qualifiedHelpConfirmedSafe
+    && /\b(?:gas\s+(?:smell|odou?r)|smell(?:s|ed|ing)?\s+(?:of\s+|like\s+)?gas|carbon[- ]?monoxide|\bCO alarm)\b/i.test(recentSafetyContext)
+    && /\b(?:heater|cooktop|stove|oven|boiler|gas appliance)\b/i.test(recentSafetyContext);
+  const asksToRestartGasAppliance = /\b(?:relight|re-light|restart|turn\s+(?:it|the\s+(?:heater|appliance))\s+back\s+on|use\s+(?:it|the\s+(?:heater|appliance))\s+again)\b/i.test(message);
+  if (unresolvedRecentGasIncident && asksToRestartGasAppliance) {
+    return safetyAnswer("No. Do not relight or use the heater, even if the smell fades. Stay in fresh outdoor air and keep the appliance off until the gas network or a licensed gasfitter has checked the incident and confirmed it is safe.");
+  }
+  const unresolvedRecentElectricalIncident = !qualifiedHelpConfirmedSafe
+    && /\b(?:switchboard|meter box|electrical panel|main switch|main breaker)\b/i.test(recentSafetyContext)
+    && /\b(?:crackl(?:ed|ing)?|sparking|arcing|burning smell|smell(?:s|ed|ing)? burnt|smoke|smoking|scorched|melting)\b/i.test(recentSafetyContext);
+  const asksToResetElectricalEquipment = /\b(?:reset|turn\s+(?:the\s+)?(?:main\s+)?(?:breaker|switch)\s+back\s+on)\b/i.test(message);
+  if (unresolvedRecentElectricalIncident && asksToResetElectricalEquipment) {
+    return safetyAnswer("No. Do not reset the main breaker or approach the switchboard. Keep people away and call the electricity network or an urgent licensed electrician from a safe place.");
+  }
+  const asksWhetherElectricalIncidentChangesPurchase = /\b(?:solar|battery|upgrade|quote|proposal|installation)\b/i.test(message)
+    && /\b(?:bad idea|mean|proceed|go ahead|continue|still suitable|still worth)\b/i.test(message);
+  if (unresolvedRecentElectricalIncident && asksWhetherElectricalIncidentChangesPurchase) {
+    return safetyAnswer("First, keep away from the switchboard and have the electricity network or an urgent licensed electrician make the fault safe. The incident does not by itself mean the solar quote is a bad idea; assess the quote separately after the electrical inspection confirms what work is required.");
+  }
   const activeMessage = activeHazardMessage(message);
   const scopedEquipmentSmokeOrFire = affirmedEquipmentSignal(
     activeMessage,

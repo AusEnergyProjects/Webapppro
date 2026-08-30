@@ -1,0 +1,1169 @@
+{
+  "version": 1,
+  "id": "surge-everyday-long-conversation-2026-08-29",
+  "reviewedBy": "AEA conversation quality review",
+  "reviewedOn": "2026-08-29",
+  "planContext": {
+    "version": 1,
+    "source": "home_energy_plan",
+    "facts": [
+      { "key": "postcode", "value": "3072" },
+      { "key": "state_or_territory", "value": "VIC" },
+      { "key": "tenure", "value": "I own the home" },
+      { "key": "shared_property_approval", "value": "Strata, owners corporation or common property may apply" },
+      { "key": "property_type", "value": "Apartment or unit" },
+      { "key": "household_size", "value": "Two people" },
+      { "key": "storeys", "value": "Single storey" },
+      { "key": "home_age", "value": "Built from 1960 to 1999" },
+      { "key": "floor_area", "value": "Under 100 m2" },
+      { "key": "shared_walls", "value": "Two or more sides shared with other dwellings" },
+      { "key": "priorities", "value": "Lower energy bills, Feel warmer in winter and cooler in summer, Improve indoor air quality and moisture control" },
+      { "key": "first_stage_budget", "value": "Under $2,000" },
+      { "key": "comfort_concerns", "value": "Too cold in cool weather, Condensation, damp or mould" },
+      { "key": "glazing", "value": "Mostly single glazed" },
+      { "key": "window_coverings", "value": "Basic roller, vertical or Venetian blinds" },
+      { "key": "exhaust_fans", "value": "Bathroom exhaust fan" },
+      { "key": "heating_cooling_systems", "value": "Air-con, including reverse-cycle air-con" },
+      { "key": "hot_water", "value": "Gas storage hot water" },
+      { "key": "solar", "value": "No rooftop solar" }
+    ]
+  },
+  "execution": {
+    "userTurns": 50,
+    "recentTurnLimit": 12,
+    "recentCharacterLimit": 9000,
+    "persistContinuation": true,
+    "requireValidatedModelForOrdinaryAdvice": true
+  },
+  "turns": [
+    {
+      "id": "t01-saved-home-start",
+      "message": "Where should I start based on the answers I already gave you?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-priority", "anyOf": ["\\bstart\\b", "\\bfirst\\b", "\\bpriority\\b"] },
+        { "id": "uses-home-context", "anyOf": ["condensation|moisture", "draught|draft", "single[- ]glaz|window", "blind|curtain", "cold|warm"] }
+      ],
+      "forbiddenPatterns": ["staged whole-home diagnosis", "affected room or major end use", "what(?: is|'s) your postcode", "do you own or rent"],
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general", "comfort_fabric", "glazing_shading", "draughts_ventilation"],
+        "goalAnyOf": ["start|first|priority"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t02-resolve-that",
+      "message": "Why that first?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "explains-prior-recommendation", "anyOf": ["because|means|helps|targets|reduces|stops|protects|avoids|prevents|comes first|can affect|damage|low-cost"] },
+        { "id": "stays-on-home-problem", "anyOf": ["condensation|moisture|draught|draft|window|blind|curtain|cold|warm"] }
+      ],
+      "forbiddenPatterns": ["tell me about your home", "what are you referring to", "staged whole-home diagnosis"],
+      "maxWords": 80,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general", "comfort_fabric", "glazing_shading", "draughts_ventilation"],
+        "goalAnyOf": ["start|first|priority"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t03-plain-heat-loss",
+      "message": "I don't get what you mean by heat loss. Say it normally.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "plain-meaning", "anyOf": ["warmth.*(?:escap|leav|lost)", "heat.*(?:escap|leav|lost)", "room.*(?:gets|feels).*cold"] }
+      ],
+      "forbiddenPatterns": ["conductive heat flow", "thermal envelope", "building fabric", "staged diagnosis"],
+      "maxWords": 65,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general", "comfort_fabric", "glazing_shading", "draughts_ventilation"],
+        "goalAnyOf": ["start|first|priority|heat loss"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t04-correct-to-door-draught",
+      "message": "Actually, it isn't the whole lounge. I can feel a breeze under the front door.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "accepts-correction", "anyOf": ["front[- ]door|under the door|door draught|door draft|door snake[^.!?]{0,40}gap|local draught"] },
+        { "id": "reframes-problem", "anyOf": ["breeze|moving air|draught|draft|gap"] }
+      ],
+      "forbiddenPatterns": ["whole lounge is", "replace the windows", "double glazing first"],
+      "maxWords": 75,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation"],
+        "goalAnyOf": ["door|breeze|draught|draft"],
+        "factsExclude": ["whole lounge"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t05-cheapest-tonight",
+      "message": "What's the cheapest thing I can do tonight?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "cheap-door-action", "anyOf": ["door snake", "roll(?:ed| up).*towel", "temporary.*seal", "removable.*seal", "draught.*seal", "draft.*seal"] }
+      ],
+      "forbiddenPatterns": ["double glazing", "replace the door", "whole-home diagnosis", "affected room or major end use"],
+      "maxWords": 65,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation"],
+        "goalAnyOf": ["door|breeze|draught|draft"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t06-door-snake-vs-seal",
+      "message": "Will a door snake do, or do I need one of those stick-on seals too?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "covers-door-snake", "anyOf": ["door snake|bottom gap|under the door"] },
+        { "id": "covers-edge-seal", "anyOf": ["stick[- ]on|adhesive|weather strip|edge|sides|top"] }
+      ],
+      "forbiddenPatterns": ["buy both regardless", "replace the door", "double glazing"],
+      "maxWords": 85,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation"],
+        "goalAnyOf": ["door|seal|snake|draught|draft"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t07-find-other-air-leaks",
+      "message": "How can I tell where the rest of the air is getting in?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "safe-check", "anyOf": ["tissue|paper|hand|feel|visible gap|moving air"] },
+        { "id": "checks-openings", "anyOf": ["door|window|frame|edge|gap"] }
+      ],
+      "forbiddenPatterns": [
+        "lit candle",
+        "open flame",
+        "(?:(?:^|[.!?]\\s+)(?:please\\s+)?(?:block|seal)\\b|\\b(?:you (?:can|should|must|need to)|go ahead and)\\b[^.!?]{0,50}\\b(?:block|seal)\\b)(?:(?!\\b(?:not|never|do not|don't)\\b)[^.!?]){0,80}\\b(?:vent|flue|chimney)"
+      ],
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation"],
+        "goalAnyOf": ["air|draught|draft|door|gap"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t08-cold-glass-without-wind",
+      "message": "Yeah, the windows feel freezing even when there's no wind.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "uses-still-air-evidence", "anyOf": ["no wind|without wind|still|cold glass|window.*cold|glaz(?:ing|ed).*cold|cold.*glaz(?:ing|ed)|without moving air"] },
+        { "id": "distinguishes-from-draught", "anyOf": ["not (?:just )?(?:a )?draught", "as well as.*draught", "different from.*draught", "heat.*through.*(?:window|glass|glazing)", "rather than.*(?:a )?draught", "not (?:just )?(?:an? )?air leak", "cold.*rather than.*air leak"] },
+        {
+          "id": "covering-option",
+          "anyOf": [
+            "honeycomb|cellular blind|thermal curtain|close[- ]fitting.*(?:blind|curtain)",
+            "(?:close|use|add|fit|install|choose)[^.!?]{0,50}(?:blind|curtain|window covering)"
+          ]
+        }
+      ],
+      "forbiddenPatterns": ["do the windows feel cold", "buy double glazing immediately"],
+      "maxWords": 80,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "comfort_fabric"],
+        "goalAnyOf": ["window|cold|draught|draft"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t09-blinds-before-double-glazing",
+      "message": "So honeycomb blinds before double glazing?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-qualified-verdict", "anyOf": ["^Yes", "usually.*yes", "start with.*honeycomb", "honeycomb.*first"] },
+        { "id": "lower-cost-first", "anyOf": ["lower[- ]cost|cheaper|before replacing|first step|smaller[^.!?]{0,30}(?:reversible|step)|costs more|avoid[^.!?]{0,30}cost|first[- ]stage budget"] }
+      ],
+      "forbiddenPatterns": ["same as double glazing", "guaranteed", "replace the windows first"],
+      "maxWords": 90,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "comfort_fabric"],
+        "goalAnyOf": ["honeycomb|double glazing|window|cold"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t10-curtains-with-pelmet",
+      "message": "Would curtains with a pelmet work too?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-curtain-answer", "anyOf": ["^Yes", "can help", "work too"] },
+        { "id": "fit-explanation", "anyOf": ["pelmet|close.*window|edge gaps|floor|wall"] }
+      ],
+      "forbiddenPatterns": ["best brand", "guaranteed", "do not work"],
+      "maxWords": 90,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "comfort_fabric"],
+        "goalAnyOf": ["curtain|pelmet|window|cold"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t11-switch-to-bathroom-fan",
+      "message": "Different question: the bathroom fan only runs with the light and the mirror stays fogged. What should I check?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "fan-performance", "anyOf": ["airflow|grille|duct|outside|run[- ]on|timer"] },
+        { "id": "moisture-removal", "anyOf": ["fog|steam|moisture|after the shower"] }
+      ],
+      "forbiddenPatterns": ["door snake", "honeycomb", "double glazing", "solar|battery"],
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation", "comfort_fabric"],
+        "goalAnyOf": ["bathroom|fan|mirror|fog"],
+        "factsExclude": ["door snake", "honeycomb"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t12-fog-clears-after-20",
+      "message": "It clears after about 20 minutes. Is that normal?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-duration", "anyOf": ["20 minutes", "twenty minutes"] },
+        { "id": "qualified-interpretation", "anyOf": ["does not.*prove|not enough.*tell|can be|depends|useful sign|performance|usually acceptable|generally acceptable|generally reasonable|likely[^.!?]{0,30}not[^.!?]{0,20}fault|normal.*if|usually[^.!?]{0,20}if"] }
+      ],
+      "forbiddenPatterns": ["definitely normal", "definitely faulty", "emergency services"],
+      "maxWords": 90,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation", "comfort_fabric"],
+        "goalAnyOf": ["bathroom|fan|mirror|fog"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t13-noisy-low-airflow",
+      "message": "The fan is noisy but I can barely feel air at the grille. What does that point to?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "likely-causes", "anyOf": ["block|clog|duct|grille|weak fan|poor airflow|restriction"] },
+        { "id": "appropriate-trade-boundary", "anyOf": ["electrician|licensed|wiring|(?:fan|duct).*(?:checked|inspect)|professional|common property|building manager|owners corporation"] }
+      ],
+      "forbiddenPatterns": ["battery|solar|window", "call emergency services", "definitely.*(?:blocked|broken)"] ,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["draughts_ventilation", "comfort_fabric"],
+        "goalAnyOf": ["bathroom|fan|airflow|grille"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t14-mould-question",
+      "message": "Does this mean we have a mould problem?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "not-automatic", "anyOf": ["^No,? not necessarily", "^Not necessarily", "does not.*mean", "doesn't.*mean", "not by itself"] },
+        { "id": "relevant-signs", "anyOf": ["visible mould|musty|persistent|damp|spots|smell"] }
+      ],
+      "forbiddenPatterns": ["definitely mould", "emergency services", "solar|battery"],
+      "maxWords": 85,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["comfort_fabric", "draughts_ventilation"],
+        "goalAnyOf": ["mould|bathroom|fan|moisture"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t15-general-dryer-vent",
+      "message": "General question, not about my apartment: does a heat-pump clothes dryer need a vent outside?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-vent-answer", "anyOf": ["does not.*(?:usually|normally) need", "doesn't.*(?:usually|normally) need", "(?:usually|normally).*does not need", "ventless", "closed[- ]loop"] },
+        { "id": "water-handling", "anyOf": ["condens|water tank|drain"] }
+      ],
+      "forbiddenPatterns": ["postcode 3072", "your apartment", "your strata", "saved survey", "bathroom fan"],
+      "maxWords": 75,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general"],
+        "goalAnyOf": ["dryer|vent"],
+        "factsExclude": ["3072", "apartment", "strata"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t16-dryer-running-cost",
+      "message": "And are they actually cheaper to run than a normal vented dryer?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-comparison", "anyOf": ["uses?[^.!?]{0,25}less electricity", "usually.*cheaper to run", "generally.*cheaper to run", "normally.*cheaper to run", "more efficient"] },
+        { "id": "bounded-caveat", "anyOf": ["model|usage|how often|tariff|purchase price|cycle"] }
+      ],
+      "forbiddenPatterns": ["your apartment", "bathroom fan", "guaranteed saving", "exactly.*percent"] ,
+      "maxWords": 80,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general"],
+        "goalAnyOf": ["dryer|run|cost"],
+        "factsExclude": ["3072", "apartment", "strata"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t17-back-home-split-bill",
+      "message": "Back to my place: the reverse-cycle split still heats fine, but the bill jumps when I use it. Is it faulty?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "no-false-fault", "anyOf": ["bill.*(?:does not|doesn't).*prove", "not necessarily(?: faulty)?", "^probably not\\b", "probably not faulty", "cannot tell.*fault", "does not mean.*fault"] },
+        { "id": "uses-working-fact", "anyOf": ["still heats|heats fine|heats normally|heating properly|working|heating runs|weak airflow|fault.*more likely.*heating.*weakened"] },
+        { "id": "useful-check", "anyOf": ["electricity use|kilowatt-hours|kWh|running time|tariff|weather|temperature setting|smart[- ]meter|compare.*usage.*(?:on|off)"] }
+      ],
+      "forbiddenPatterns": ["definitely faulty", "replace it immediately", "dryer|bathroom fan"],
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["bills_tariffs", "rcac"],
+        "goalAnyOf": ["bill|split|fault|run"],
+        "factsExclude": ["dryer"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t18-filter-clean-24",
+      "message": "Filter is clean and I set it to 24. What should I check next?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "advances-from-setting", "anyOf": ["24", "temperature setting", "outdoor unit|airflow|kWh", "running time|electricity use|similar[- ]weather|runs? almost continuously|room feels warm"] },
+        { "id": "next-check", "anyOf": ["kilowatt-hours|kWh|running time|tariff|weather|meter|usage|electricity use|reaches? 24|cycles? off|outdoor unit|obstruction|ice|airflow|unusual noise|short cycling"] }
+      ],
+      "forbiddenPatterns": ["clean the filter first", "what temperature", "replace it immediately", "dryer"] ,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["bills_tariffs", "rcac"],
+        "goalAnyOf": ["bill|split|fault|run"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t19-replace-working-split",
+      "message": "Should I replace it anyway?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-no-replacement", "anyOf": ["^No", "not yet", "not just", "do not replace", "don't replace"] },
+        { "id": "preserves-working-evidence", "anyOf": ["still heats|heats fine|working|bill alone|produces?[^.!?]{0,30}heat|strong[^.!?]{0,20}heat|without[^.!?]{0,30}icing"] }
+      ],
+      "forbiddenPatterns": ["replace it now", "definitely old", "guaranteed payback", "new split will save"] ,
+      "maxWords": 75,
+      "maxParagraphs": 2,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["bills_tariffs", "rcac"],
+        "goalAnyOf": ["bill|split|replace|fault"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t20-budget-three-options",
+      "message": "Ok, I have $1,500. Blinds, a solar deposit, or a new split?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-budget", "anyOf": ["\\$\\s*1,?500"] },
+        { "id": "covers-blinds", "anyOf": ["blind|window covering"] },
+        { "id": "covers-solar", "anyOf": ["solar.*(?:later|approval|strata|roof|deposit)", "deposit.*solar"] },
+        { "id": "covers-working-split", "anyOf": ["keep.*split", "do not replace.*split", "don't replace.*split", "split.*still works", "split.*still heats", "existing (?:unit|split).*(?:heat|working)", "existing reverse[- ]cycle air conditioner works", "replacing a working split"] }
+      ],
+      "forbiddenPatterns": ["replace the split first", "solar first", "affected room or major end use"],
+      "maxWords": 120,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "rcac", "solar", "general"],
+        "goalAnyOf": ["1,500|blinds|solar|split"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t21-why-not-solar",
+      "message": "Why not the solar deposit?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "approval-boundary", "anyOf": ["strata|owners corporation|roof|approval|common property"] },
+        { "id": "comfort-priority", "anyOf": ["comfort|cold|blind|window|immediate|now"] }
+      ],
+      "forbiddenPatterns": ["solar is bad", "guaranteed payback", "your solar system", "install solar immediately"],
+      "maxWords": 85,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["solar", "glazing_shading", "general"],
+        "goalAnyOf": ["solar|deposit|1,500|blinds"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t22-general-solar-sizing",
+      "message": "General question: is 6.6 kW of panels on a 5 kW inverter undersized?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-panel-size", "anyOf": ["6\\.6\\s*kW"] },
+        { "id": "preserves-inverter-size", "anyOf": ["5\\s*kW"] },
+        { "id": "normal-pairing", "anyOf": ["can be.*normal", "normal pairing", "common", "not necessarily undersized", "not undersized", "well[- ]matched", "panel capacity.*(?:higher|larger).*inverter"] }
+      ],
+      "forbiddenPatterns": ["must use a 6\\.6\\s*kW inverter", "definitely undersized", "postcode 3072", "your apartment"],
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["solar"],
+        "goalAnyOf": ["6.6|5 kW|inverter|panel"],
+        "factsExclude": ["3072", "apartment"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t23-zero-export",
+      "message": "And what if the quote says zero export?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "zero-export-meaning", "anyOf": ["zero export|cannot send|can't send|does not send|doesn't send"] },
+        { "id": "solar-still-useful", "anyOf": ["home.*use.*solar", "home(?:['’]s)? immediate use", "power(?:ing|s)?.*home.*direct", "solar.*(?:supply|power).*home", "solar.*(?:beyond|above).*household use.*(?:reduced|curtailed)", "home.*(?:supplied|powered).*solar", "self[- ]consumption", "reduce.*imports", "still.*useful", "use it directly"] }
+      ],
+      "forbiddenPatterns": ["solar is pointless", "must export", "battery required", "your apartment"],
+      "maxWords": 90,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["solar"],
+        "goalAnyOf": ["zero export|solar|quote|inverter"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t24-plain-clipping",
+      "message": "What does clipping mean in normal words?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "plain-clipping", "anyOf": ["inverter.*(?:limit|can handle|capacity)", "panels.*(?:make|produce).*more.*inverter", "extra.*(?:power.*)?(?:not used|cut off)", "output.*capped"] }
+      ],
+      "forbiddenPatterns": ["DC/AC ratio", "nameplate capacity ratio", "staged diagnosis", "thermal envelope"],
+      "maxWords": 65,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["solar"],
+        "goalAnyOf": ["clipping|solar|inverter|panel"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t25-zero-export-yes-no",
+      "message": "So is zero-export solar pointless, yes or no?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-no", "anyOf": ["^No", "No,"] },
+        { "id": "self-use", "anyOf": ["use.*solar.*home", "self[- ]consumption", "reduce.*grid", "reduce.*imports", "supplying.*electricity.*(?:home|house)", "power(?:ing|s)?.*home.*direct"] }
+      ],
+      "forbiddenPatterns": ["solar is pointless", "it depends on your postcode", "affected room or major end use"],
+      "maxWords": 90,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["solar"],
+        "goalAnyOf": ["zero export|solar|pointless"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t26-separate-mums-home",
+      "message": "New topic. This is for Mum's small unit, not my apartment. Can we keep her place separate from mine?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "confirms-separate-property", "anyOf": ["^Yes", "keep.*separate", "Mum.*unit", "her place"] }
+      ],
+      "forbiddenPatterns": ["postcode 3072", "your Mum lives in Preston", "same home", "your apartment details apply"] ,
+      "maxWords": 55,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["general", "renters_strata"],
+        "goalAnyOf": ["Mum|unit|separate"],
+        "factsExclude": ["3072"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t27-mums-compound-question",
+      "message": "Her windows drip in winter, the gas heater costs a bomb, and body corporate is difficult. What should she do first, can a split system heat it, and what might need approval?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "first-action", "anyOf": ["first|start|priority"] },
+        { "id": "condensation", "anyOf": ["condensation|window.*drip|moisture|exhaust"] },
+        { "id": "split-can-heat", "anyOf": ["split system.*(?:can|could).*heat", "reverse[- ]cycle.*(?:can|could).*heat", "suitable.*split"] },
+        { "id": "approval", "anyOf": ["body corporate|owners corporation|strata|approval|common property|outdoor unit"] }
+      ],
+      "forbiddenPatterns": ["postcode 3072", "your saved apartment", "solar should be first", "staged whole-home diagnosis"],
+      "maxWords": 150,
+      "maxParagraphs": 4,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "comfort_fabric", "rcac", "renters_strata", "general"],
+        "goalAnyOf": ["Mum|window|gas heater|split|approval"],
+        "factsExclude": ["3072"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t28-stop-repeating-exhaust",
+      "message": "She already uses the exhaust fans. Stop telling me that and tell me the next check.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "accepts-known-fact", "anyOf": ["already uses|given.*exhaust|since.*exhaust|next check|instead|^Next,?\\s+check"] },
+        { "id": "concrete-next-check", "anyOf": ["window|bedroom|fan.*outside|airflow|humidity|heating|gas heater|flued|unflued|cold glass|where.*forms"] }
+      ],
+      "forbiddenPatterns": ["use the exhaust fan during", "turn on the exhaust fan", "postcode 3072", "staged diagnosis"],
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["comfort_fabric", "glazing_shading", "draughts_ventilation", "general"],
+        "goalAnyOf": ["Mum|window|condensation|next check"],
+        "factsExclude": ["3072"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t29-localised-bedroom-condensation",
+      "message": "Only the bedroom window drips; the rest are dry. Does that change it?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-qualified-yes", "anyOf": ["^Yes", "does change", "points more to", "makes it more likely"] },
+        { "id": "localised-bedroom", "anyOf": ["bedroom|that window|local|one room"] }
+      ],
+      "forbiddenPatterns": ["whole home.*moisture", "all windows", "postcode 3072", "your apartment"],
+      "maxWords": 90,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["comfort_fabric", "glazing_shading", "general"],
+        "goalAnyOf": ["Mum|bedroom|window|drip|condensation"],
+        "factsExclude": ["3072"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t30-mums-honeycomb-moisture",
+      "message": "Would honeycomb blinds help her, or could they trap moisture?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "warmth-benefit", "anyOf": ["help|reduce.*cold|slow.*heat|warmer|improve.*comfort"] },
+        { "id": "moisture-risk", "anyOf": ["trap.*moisture|worsen.*condensation|hold.*humid.*(?:air|glass)|humid.*(?:air|bedroom).*cold glass|condensation.*behind|wet glass|air.*behind|check.*moisture"] }
+      ],
+      "forbiddenPatterns": ["guaranteed to stop condensation", "postcode 3072", "your apartment", "no moisture risk"] ,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "comfort_fabric", "general"],
+        "goalAnyOf": ["Mum|honeycomb|moisture|bedroom|window"],
+        "factsExclude": ["3072"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t31-return-own-apartment-budget",
+      "message": "Back to my apartment now. Do you still think blinds are the best use of my $1,500?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-budget", "anyOf": ["\\$\\s*1,?500"] },
+        { "id": "own-home-verdict", "anyOf": ["blind|window covering|single[- ]glaz|cold"] },
+        { "id": "working-system-context", "anyOf": ["working split|split.*works|split.*heats properly|keep.*split|not replace.*split|replacing.*not justified|existing.*(?:still )?(?:heats|works)|new split.*(?:only|lower priority).*existing.*(?:cannot|can't|faulty|poorly sized)"] }
+      ],
+      "forbiddenPatterns": ["Mum's", "her bedroom", "gas heater", "postcode 3073"],
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "general"],
+        "goalAnyOf": ["apartment|1,500|blinds"],
+        "factsExclude": ["Mum", "3073", "gas heater"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t32-two-window-quotes",
+      "message": "I got two quotes: honeycomb blinds are $1,400 and thermal curtains are $900, both installed. Which one makes more sense?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-honeycomb-price", "anyOf": ["honeycomb[^.]{0,80}\\$\\s*1,?400", "\\$\\s*1,?400[^.]{0,80}honeycomb"] },
+        { "id": "preserves-curtain-price", "anyOf": ["curtain[^.]{0,80}\\$\\s*900", "\\$\\s*900[^.]{0,80}curtain"] },
+        { "id": "fit-or-comfort-comparison", "anyOf": ["fit|edge gap|pelmet|winter|cold|warmth|coverage"] }
+      ],
+      "forbiddenPatterns": ["guaranteed", "best brand", "exact R-value", "replace the split"],
+      "maxWords": 120,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "products_ratings"],
+        "goalAnyOf": ["honeycomb|curtain|1,400|900|quote"],
+        "factsExclude": ["Mum", "3073"],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t33-same-warranty-winter-priority",
+      "message": "Same five-year warranty. I mostly care about winter cold, not looks.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "uses-winter-priority", "anyOf": ["winter|cold|warmth|thermal"] },
+        { "id": "does-not-repeat-warranty-question", "anyOf": ["same warranty|warranty.*equal|five[- ]year|5[- ]year|fit.*matters"] }
+      ],
+      "forbiddenPatterns": ["what is the warranty", "which looks better", "Mum's", "postcode 3073"],
+      "maxWords": 95,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "products_ratings"],
+        "goalAnyOf": ["honeycomb|curtain|winter|cold|quote"],
+        "factsExclude": ["Mum", "3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t34-terse-window-verdict",
+      "message": "So which would you pick?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "one-clear-verdict", "anyOf": ["honeycomb", "thermal curtain"] },
+        { "id": "uses-winter-or-fit", "anyOf": ["winter|cold|warmth|fit|gap|pelmet"] },
+        { "id": "retains-cost-tradeoff", "anyOf": ["\\$\\s*1,?400|\\$\\s*900|\\$\\s*500|cost|cheaper"] }
+      ],
+      "forbiddenPatterns": ["I cannot choose", "I won't choose", "provide more context", "what are you referring to"],
+      "maxWords": 80,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["glazing_shading", "products_ratings"],
+        "goalAnyOf": ["honeycomb|curtain|winter|quote"],
+        "factsExclude": ["Mum", "3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t35-hot-water-finance-compound",
+      "message": "Different quote: heat-pump hot water is $5,900 after rebates, $58 a month for seven years, and switchboard work is extra. Is the finance the same total, and is that a complete installed price?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "repayment-total", "anyOf": ["\\$\\s*4,?872", "58[^.]{0,40}84"] },
+        { "id": "price-gap", "anyOf": ["\\$\\s*1,?028", "does not equal|doesn't equal|short.*quote"] },
+        { "id": "incomplete-scope", "anyOf": ["switchboard.*extra", "not.*complete", "not.*fixed", "excluded"] }
+      ],
+      "forbiddenPatterns": ["finance total is \\$?5,?900", "complete fixed price", "seven payments", "guaranteed rebate"],
+      "maxWords": 120,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["heat_pump_hot_water", "products_ratings", "rebates_certificates"],
+        "goalAnyOf": ["quote|finance|5,900|58|switchboard"],
+        "factsExclude": ["Mum", "3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t36-finance-yes-no",
+      "message": "Just answer yes or no: is the finance total the same?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "direct-no", "anyOf": ["^No\\.$", "^No$"] }
+      ],
+      "forbiddenPatterns": ["yes", "same total", "complete fixed price"],
+      "maxWords": 60,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["heat_pump_hot_water", "products_ratings", "rebates_certificates"],
+        "goalAnyOf": ["finance|quote|5,900|58"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t37-correct-monthly-payment",
+      "message": "Sorry, I read it wrong. It's $68 a month, not $58.",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "accepts-corrected-payment", "anyOf": ["\\$\\s*68"] },
+        { "id": "new-total", "anyOf": ["\\$\\s*5,?712", "68[^.]{0,40}84"] },
+        { "id": "new-gap", "anyOf": ["\\$\\s*188"] }
+      ],
+      "forbiddenPatterns": ["\\$\\s*4,?872", "\\$\\s*1,?028", "\\$\\s*58.*(?:is|now|current).*month"],
+      "maxWords": 85,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["heat_pump_hot_water", "products_ratings", "rebates_certificates"],
+        "goalAnyOf": ["finance|quote|5,900|68"],
+        "factsExclude": ["$58", "$4,872", "$1,028"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t38-switchboard-still-extra",
+      "message": "So it's only $188 short now, but the switchboard could still push the final price up?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "direct-yes", "anyOf": ["^Yes", "Yes,"] },
+        { "id": "preserves-gap", "anyOf": ["\\$\\s*188"] },
+        { "id": "switchboard-exclusion", "anyOf": ["switchboard.*(?:extra|increase|add|excluded)", "final price.*(?:higher|increase)"] }
+      ],
+      "forbiddenPatterns": ["\\$\\s*1,?028", "complete fixed price", "switchboard will cost \\$"],
+      "maxWords": 80,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["heat_pump_hot_water", "products_ratings", "rebates_certificates"],
+        "goalAnyOf": ["quote|finance|188|switchboard"],
+        "factsExclude": ["$58", "$1,028"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t39-plain-stcs-veecs",
+      "message": "What are STCs and VEECs in normal words?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "stc-explanation", "anyOf": ["STC|small-scale technology certificate|federal.*certificate|renewable.*certificate"] },
+        { "id": "veec-explanation", "anyOf": ["Victorian Energy Efficiency Certificate|VEEC|Victorian.*certificate"] },
+        { "id": "discount-meaning", "anyOf": ["discount|reduce.*price|certificate.*value"] }
+      ],
+      "forbiddenPatterns": ["guaranteed eligibility", "guaranteed value", "you will receive", "staged diagnosis"],
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["rebates_certificates"],
+        "goalAnyOf": ["STC|VEEC|certificate"],
+        "factsExclude": ["Mum", "3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t40-current-certificate-values",
+      "message": "What are they worth today?",
+      "sourcePolicy": "official_lookup",
+      "clauses": [
+        { "id": "current-status", "anyOf": ["today|current|latest|could not confirm|couldn't confirm|unable to confirm"] },
+        { "id": "gross-vs-customer", "anyOf": ["gross.*market|gross rate.*net credit|before.*fees|provider.*cost|customer discount|not the same as.*(?:discount|net credit)"] },
+        { "id": "both-certificates", "anyOf": ["STC.*VEEC|VEEC.*STC"] }
+      ],
+      "forbiddenPatterns": ["guaranteed value", "you will receive", "definitely worth", "from the supplied PDF"] ,
+      "maxWords": 110,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["rebates_certificates"],
+        "goalAnyOf": ["STC|VEEC|worth|today|certificate"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t41-reframe-to-admin-fees",
+      "message": "Forget the exact price. Do the admin fees in that quote sound normal?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "structure-can-be-normal", "anyOf": ["can be normal|common|not unusual|may be reasonable|structure.*normal"] },
+        { "id": "needs-fee-amount", "anyOf": ["amount|how much|fee line|cannot judge|can't judge|need.*fee"] }
+      ],
+      "forbiddenPatterns": ["STCs are worth \\$", "VEECs are worth \\$", "current market price is", "staged diagnosis"],
+      "maxWords": 80,
+      "maxParagraphs": 2,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["products_ratings", "rebates_certificates", "heat_pump_hot_water"],
+        "goalAnyOf": ["admin fee|quote|normal|reasonable"],
+        "factsExclude": [],
+        "pendingQuestion": "optional_material"
+      }
+    },
+    {
+      "id": "t42-fee-330",
+      "message": "The fee line is $330 total. Does that sound reasonable?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "preserves-fee", "anyOf": ["\\$\\s*330"] },
+        { "id": "direct-qualified-verdict", "anyOf": ["reasonable|plausible|not obviously unreasonable|not unusual|within.*normal"] },
+        { "id": "bounded-caveat", "anyOf": ["eligibility|complete quote|scope|certificate|breakdown|what it covers"] }
+      ],
+      "forbiddenPatterns": ["guaranteed reasonable", "proves eligibility", "complete fixed price", "what is the fee amount"] ,
+      "maxWords": 85,
+      "maxParagraphs": 3,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["products_ratings", "rebates_certificates", "heat_pump_hot_water"],
+        "goalAnyOf": ["330|admin fee|quote|reasonable"],
+        "factsExclude": [],
+        "pendingQuestion": "required_material"
+      }
+    },
+    {
+      "id": "t43-off-scope-recipe",
+      "message": "Unrelated: can you tell me if my scone recipe needs more flour?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "polite-scope-boundary", "anyOf": ["does not appear.*related", "doesn't appear.*related", "focuses on.*home energy", "can only help.*home energy", "cannot.*recipe"] }
+      ],
+      "forbiddenPatterns": ["solar|battery|insulation|rebate|tariff|add more flour|less flour"],
+      "maxWords": 35,
+      "maxParagraphs": 2,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["products_ratings", "rebates_certificates", "heat_pump_hot_water"],
+        "goalAnyOf": ["330|admin fee|quote|reasonable"],
+        "factsExclude": [],
+        "pendingQuestion": "required_material"
+      }
+    },
+    {
+      "id": "t44-return-overall-quote-verdict",
+      "message": "Right, back to the hot-water quote. Overall, is it a good deal?",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "direct-quote-verdict", "anyOf": ["good deal|reasonable|fair|plausible|not complete|cannot call it complete|conditional"] },
+        { "id": "corrected-finance", "anyOf": ["\\$\\s*5,?712|\\$\\s*188|finance.*short"] },
+        { "id": "fee", "anyOf": ["\\$\\s*330|admin fee"] },
+        { "id": "switchboard", "anyOf": ["switchboard.*extra|switchboard.*excluded|final price.*increase"] }
+      ],
+      "forbiddenPatterns": ["which quote", "what are you referring to", "scone|flour|recipe", "\\$\\s*58", "\\$\\s*1,?028"] ,
+      "maxWords": 130,
+      "maxParagraphs": 4,
+      "maxQuestions": 1,
+      "state": {
+        "activeTopicAnyOf": ["heat_pump_hot_water", "products_ratings", "rebates_certificates"],
+        "goalAnyOf": ["hot-water quote|good deal|quote|5,900"],
+        "factsExclude": ["recipe", "flour", "$58", "$1,028"],
+        "pendingQuestion": "required_material"
+      }
+    },
+    {
+      "id": "t45-local-two-scope-enquiry",
+      "message": "Know anyone around Preston who can quote heat-pump hot water and honeycomb blinds? Can you send it to the right trades?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "location", "anyOf": ["Preston|3072|your area"] },
+        { "id": "hot-water-scope", "anyOf": ["heat[- ]pump hot water|hot-water"] },
+        { "id": "blind-scope", "anyOf": ["honeycomb|blind|window covering"] },
+        { "id": "enquiry-path", "anyOf": ["enquiry|send.*trade|relevant trades|local trades|start"] },
+        { "id": "neutrality", "anyOf": ["do not prefer|don't prefer|no preference|do not endorse|do not favour|don't favour|neutral"] }
+      ],
+      "forbiddenPatterns": ["approved trad", "preferred supplier", "best installer", "enquiry has been sent", "submitted your enquiry"] ,
+      "maxWords": 100,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["service_enquiry"],
+        "goalAnyOf": ["trade|enquiry|Preston|hot water|honeycomb"],
+        "factsExclude": ["3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t46-no-preferred-supplier",
+      "message": "I don't want a preferred supplier. I want all relevant local trades.",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "accepts-neutrality", "anyOf": ["no preferred|do not prefer|don't prefer|do not endorse|don't endorse|all relevant"] },
+        { "id": "keeps-local-route", "anyOf": ["local trades|relevant trades|enquiry|Preston|3072"] },
+        { "id": "keeps-both-scopes", "anyOf": ["heat[- ]pump hot water.*honeycomb|honeycomb.*heat[- ]pump hot water", "hot-water.*blind|blind.*hot-water"] }
+      ],
+      "forbiddenPatterns": ["approved installer", "preferred supplier", "best installer", "already sent"] ,
+      "maxWords": 80,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["service_enquiry"],
+        "goalAnyOf": ["trade|enquiry|local|hot water|honeycomb"],
+        "factsExclude": ["3073"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t47-correct-service-property-postcode",
+      "message": "Actually this job is at Mum's place in 3073, not my 3072 apartment.",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "uses-service-postcode", "anyOf": ["3073"] },
+        { "id": "keeps-properties-separate", "anyOf": ["Mum|this job|enquiry|not.*your.*apartment|saved home.*3072|3072.*home"] }
+      ],
+      "forbiddenPatterns": ["update.*saved.*postcode.*3073", "your home is now 3073", "enquiry.*3072", "already sent"] ,
+      "maxWords": 75,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["service_enquiry"],
+        "goalAnyOf": ["(?:enquir(?:y|ies)|trade|job).*(?:Mum|3073)|(?:Mum|3073).*(?:enquir(?:y|ies)|trade|job)"],
+        "factsExclude": ["service postcode 3072"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t48-send-enquiry-now",
+      "message": "Can I send the enquiry now?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "direct-action", "anyOf": ["^Yes", "start.*enquiry|send.*enquiry|enquiry.*button|open.*enquiry"] },
+        { "id": "correct-location", "anyOf": ["3073|Mum"] },
+        { "id": "both-scopes", "anyOf": ["heat[- ]pump hot water.*honeycomb|honeycomb.*heat[- ]pump hot water", "hot-water.*blind|blind.*hot-water"] }
+      ],
+      "forbiddenPatterns": ["enquiry has been sent", "submitted your enquiry", "postcode 3072", "preferred supplier"] ,
+      "maxWords": 75,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["service_enquiry"],
+        "goalAnyOf": ["(?:send|review|submit).*(?:enquiry|trade)|(?:enquiry|trade).*(?:send|review|submit)|Arrange.*(?:Mum|3073)"],
+        "factsExclude": ["service postcode 3072"],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t49-best-installer-neutrality",
+      "message": "Before I do, why don't you just tell me who the best installer is?",
+      "sourcePolicy": "deterministic",
+      "clauses": [
+        { "id": "no-unverified-best", "anyOf": ["cannot verify.*best|can't verify.*best|no single.*best|do not rank|does not rank|don't rank|not enough.*best"] },
+        { "id": "useful-alternative", "anyOf": ["compare.*quote|relevant trades|local trades|installed scope|warranty|service"] }
+      ],
+      "forbiddenPatterns": ["best installer is", "approved installer", "preferred supplier", "I recommend.*installer", "enquiry has been sent"] ,
+      "maxWords": 90,
+      "maxParagraphs": 3,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["service_enquiry"],
+        "goalAnyOf": ["installer|best|enquiry|trade"],
+        "factsExclude": [],
+        "pendingQuestion": "empty"
+      }
+    },
+    {
+      "id": "t50-long-range-home-synthesis",
+      "message": "Back to my home, not Mum's: based on my saved answers and what I told you earlier, give me the top three things to do in order. No jargon and no more questions.",
+      "sourcePolicy": "model_required",
+      "clauses": [
+        { "id": "door-draught-memory", "anyOf": ["front door|door snake|door seal|under the door|door draught|door draft"] },
+        { "id": "cold-window-memory", "anyOf": ["honeycomb|thermal curtain|window covering|single[- ]glaz"] },
+        { "id": "working-split-or-moisture-memory", "anyOf": ["keep.*split|working split|split.*works|bathroom fan|airflow|condensation|moisture"] }
+      ],
+      "forbiddenPatterns": ["Mum|3073|gas heater|her bedroom|replace the split|solar first|staged diagnosis|affected room or major end use"],
+      "maxWords": 120,
+      "maxParagraphs": 5,
+      "maxQuestions": 0,
+      "state": {
+        "activeTopicAnyOf": ["comfort_fabric", "glazing_shading", "draughts_ventilation", "general"],
+        "goalAnyOf": ["top three|home|saved answers|order"],
+        "factsExclude": ["Mum", "3073", "gas heater"],
+        "pendingQuestion": "empty"
+      }
+    }
+  ],
+  "conversationAssertions": [
+    {
+      "id": "exact-user-turn-count",
+      "type": "turn_count",
+      "expected": 50
+    },
+    {
+      "id": "all-turns-successful",
+      "type": "all_http_status",
+      "expected": 200
+    },
+    {
+      "id": "valid-continuation-every-turn",
+      "type": "valid_continuation_every_turn",
+      "version": 1,
+      "maximumFacts": 16
+    },
+    {
+      "id": "production-history-window",
+      "type": "request_history_bounds",
+      "maximumTurns": 12,
+      "maximumCharacters": 9000,
+      "requireAlternatingRoles": true
+    },
+    {
+      "id": "ordinary-advice-uses-model",
+      "type": "source_policy_enforced",
+      "policy": "model_required",
+      "allowedAnswerSources": ["model"]
+    },
+    {
+      "id": "deterministic-only-for-protected-routes",
+      "type": "source_policy_enforced",
+      "policy": "deterministic",
+      "allowedAnswerSources": ["deterministic", "grounded"]
+    },
+    {
+      "id": "current-fact-uses-official-lookup",
+      "type": "source_policy_enforced",
+      "policy": "official_lookup",
+      "allowedAnswerSources": ["model"],
+      "requireOfficialCitationsOrExplicitUnavailability": true
+    },
+    {
+      "id": "never-surface-generic-fallback",
+      "type": "forbid_patterns_all_responses",
+      "patterns": [
+        "staged whole-home diagnosis",
+        "affected room or major end use",
+        "Name the exact home-energy decision",
+        "I found a related current official source",
+        "For the supplied Victoria owner context",
+        "Surge AI provides general home-energy guidance"
+      ]
+    },
+    {
+      "id": "no-adjacent-answer-repeat",
+      "type": "maximum_adjacent_normalized_similarity",
+      "maximum": 0.82,
+      "ignoreNumbers": true
+    },
+    {
+      "id": "no-quick-replies",
+      "type": "quick_reply_count_all_turns",
+      "maximum": 0
+    },
+    {
+      "id": "one-material-question-maximum",
+      "type": "question_count_matches_turn_limit"
+    },
+    {
+      "id": "known-facts-not-reasked",
+      "type": "forbid_reasking_known_facts",
+      "patterns": [
+        "what(?: is|'s) your postcode",
+        "do you own or rent",
+        "what type of home",
+        "how many people",
+        "do you have solar"
+      ]
+    },
+    {
+      "id": "corrections-replace-stale-context",
+      "type": "cross_turn_correction",
+      "checkpoints": [
+        { "correctionTurn": "t04-correct-to-door-draught", "throughTurn": "t10-curtains-with-pelmet", "forbidAsCurrent": ["whole lounge is the problem"] },
+        { "correctionTurn": "t28-stop-repeating-exhaust", "throughTurn": "t30-mums-honeycomb-moisture", "forbidAsCurrent": ["she is not using the exhaust fan"] },
+        { "correctionTurn": "t37-correct-monthly-payment", "throughTurn": "t44-return-overall-quote-verdict", "forbidAsCurrent": ["\\$\\s*58", "\\$\\s*4,?872", "\\$\\s*1,?028"] },
+        { "correctionTurn": "t47-correct-service-property-postcode", "throughTurn": "t49-best-installer-neutrality", "forbidAsCurrent": ["service postcode 3072"] }
+      ]
+    },
+    {
+      "id": "topic-switches-drop-stale-subjects",
+      "type": "cross_turn_topic_isolation",
+      "checkpoints": [
+        { "turn": "t11-switch-to-bathroom-fan", "forbid": ["door snake", "honeycomb", "double glazing"] },
+        { "turn": "t15-general-dryer-vent", "forbid": ["bathroom fan", "postcode 3072", "your apartment"] },
+        { "turn": "t17-back-home-split-bill", "forbid": ["dryer", "vented dryer"] },
+        { "turn": "t22-general-solar-sizing", "forbid": ["your apartment", "postcode 3072", "new split"] },
+        { "turn": "t26-separate-mums-home", "forbid": ["postcode 3072", "your saved apartment"] },
+        { "turn": "t31-return-own-apartment-budget", "forbid": ["Mum", "her bedroom", "gas heater"] },
+        { "turn": "t43-off-scope-recipe", "forbid": ["solar", "battery", "insulation", "rebate", "tariff"] }
+      ]
+    },
+    {
+      "id": "off-scope-interruption-does-not-erase-quote",
+      "type": "return_after_interruption",
+      "interruptionTurn": "t43-off-scope-recipe",
+      "returnTurn": "t44-return-overall-quote-verdict",
+      "preserveStateAcrossInterruption": true,
+      "requiredAtReturn": ["\\$\\s*188", "\\$\\s*330", "switchboard"],
+      "forbiddenAtReturn": ["which quote", "what are you referring to", "recipe", "scone"]
+    },
+    {
+      "id": "no-false-enquiry-submission",
+      "type": "forbid_patterns_turn_range",
+      "fromTurn": "t45-local-two-scope-enquiry",
+      "throughTurn": "t49-best-installer-neutrality",
+      "patterns": ["enquiry has been sent", "submitted your enquiry", "trades have been contacted"]
+    },
+    {
+      "id": "service-location-is-scoped-not-global",
+      "type": "property_boundary",
+      "servicePropertyTurn": "t47-correct-service-property-postcode",
+      "servicePostcode": "3073",
+      "savedHomePostcode": "3072",
+      "savedHomeReturnTurn": "t50-long-range-home-synthesis"
+    },
+    {
+      "id": "final-long-range-home-memory",
+      "type": "long_range_recall",
+      "turn": "t50-long-range-home-synthesis",
+      "requiredSemanticGroups": [
+        ["front door", "door snake", "door seal", "door draught", "door draft"],
+        ["honeycomb", "thermal curtain", "window covering", "single glazed"],
+        ["working split", "keep the split", "bathroom fan", "condensation", "moisture"]
+      ],
+      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first"],
+      "exactActionCount": 3,
+      "maximumQuestions": 0
+    },
+    {
+      "id": "no-invented-quantities",
+      "type": "quantity_grounding_all_turns",
+      "allowDerivedArithmetic": true
+    },
+    {
+      "id": "all-semantic-clauses-pass",
+      "type": "all_turn_clauses_pass"
+    }
+  ]
+}
