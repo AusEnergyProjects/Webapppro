@@ -160,6 +160,14 @@ function categoryForRequest(request: SurgeModelRequest) {
   }
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
+  const lastAssistantReply = [...request.recentTurns]
+    .reverse()
+    .find((turn) => turn.role === "assistant")?.content || "";
+  const continuesColdHomeQuestion = COMBINATION_FOLLOW_UP.test(request.message)
+    && /\b(?:cold|draught|doors?|windows?|ceiling insulation|heat loss)\b/i.test(lastAssistantReply);
+  if (continuesColdHomeQuestion) {
+    return resolveReviewedProductGuidanceIntent("cold home draught insulation");
+  }
   const turnIntent = classifySurgeConversationTurn(
     request.message,
     request.continuation,
