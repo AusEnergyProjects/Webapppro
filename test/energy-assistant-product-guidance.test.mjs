@@ -102,13 +102,13 @@ function createRegistrySearch(productsByKind, options = {}) {
   };
 }
 
-function request(message, facts = []) {
+function request(message, facts = [], recentTurns = []) {
   return {
     message,
     audience: "public",
     pageContext: "/surge",
     asOf: NOW,
-    recentTurns: [],
+    recentTurns,
     continuation: null,
     planContext: {
       version: 1,
@@ -302,6 +302,36 @@ test("returns reviewed practical guidance for all six live categories", async ()
     assert.equal(result.status, "answered");
     noDash(result);
   }
+});
+
+test("answers a cold-home question plainly and advances a combination follow-up", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({}, {
+    searchProducts: createRegistrySearch({}),
+    loadPrices: async () => prices(),
+  });
+  const firstMessage = "the home is really cold in winter not sure what to do";
+  const first = await resolver(request(firstMessage));
+
+  assert.ok(first);
+  assert.match(first.directAnswer, /Cold homes usually lose heat/i);
+  assert.match(first.directAnswer, /door snake/i);
+  assert.match(first.directAnswer, /ceiling insulation/i);
+  assert.match(first.nextAction, /cold air around doors and windows|whole house stay cold/i);
+  assert.doesNotMatch(first.directAnswer, /ask for exact model|reviewed comparison|conductive heat flow|pathway coverage/i);
+
+  const second = await resolver(request("i think its a combination", [], [
+    { role: "user", content: firstMessage },
+    { role: "assistant", content: `${first.directAnswer}\n\n${first.nextAction}` },
+  ]));
+
+  assert.ok(second);
+  assert.match(second.directAnswer, /two biggest heat-loss paths: draughts and the ceiling/i);
+  assert.match(second.nextAction, /Which feels worse/i);
+  assert.notEqual(second.directAnswer, first.directAnswer);
+  assert.notEqual(second.nextAction, first.nextAction);
+  assert.doesNotMatch(second.directAnswer, /ask for exact model|reviewed comparison|conductive heat flow|pathway coverage/i);
+  noDash(first);
+  noDash(second);
 });
 
 test("does not hijack a short answer to Surge's room-comfort follow-up", async () => {
