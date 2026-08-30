@@ -9,26 +9,40 @@ import {
   composeEnergyAssistantAnswer,
   isEnergyDocumentQuoteConversationRequest,
   isSurgeElectricSaulQuestion,
+  isSurgeExplicitlyOutsideScope,
   isSurgeImplementationIdentityQuestion,
   isSurgeNamedReferenceQuestion,
+  isSurgeServiceConversationFollowUp,
   isSurgeServiceLocationFollowUp,
   isSurgeServiceOrCompetingQuoteRequest,
   queryAustralianPostcode,
   sanitizeSurgePublicText,
   sanitizeSurgeReferenceText,
   surgeServiceRequestAlsoAsksEnergyDecision,
+  surgeRecurringFinanceConversationFacts,
   SURGE_ELECTRIC_SAUL_COMPARISON_ANSWER,
   SURGE_PUBLIC_IDENTITY_ANSWER,
   SURGE_PUBLIC_REFERENCE_BOUNDARY_ANSWER,
   SURGE_PUBLIC_REFERENCE_BOUNDARY_FOLLOW_UP,
   surgeOutputViolatesPublicPolicy,
+  surgeServiceConversationContext,
   type EnergyAssistantAnswer,
+  type SurgeServiceConversationContext,
 } from "./energy-assistant.ts";
 import {
   classifySurgeConversationTurn,
   emptySurgeConversationState,
+  mergeSurgeConversationFacts,
   parseSurgeConversationState,
+  projectSurgeConversationStateToFrame,
+  selectSurgeConversationFrame,
+  surgeConversationDecisionContext,
+  surgeConversationCorrectionReframesDecision,
+  surgeConversationFactsFromMessage,
+  surgeMessageAnswersPendingQuestion,
   surgeConversationTopicFor,
+  surgeConversationTopicsAreCompatible,
+  updateSurgeConversationLedger,
   type SurgeConversationState,
   type SurgeConversationTurnIntent,
 } from "./energy-assistant-conversation.ts";
@@ -73,14 +87,17 @@ import {
   composeSurgeNonCurrentHazardAnswer,
   composeSurgeSafetyAnswer,
 } from "./surge-safety-answer.ts";
+import { sanitizeSurgeCustomerOfficialCitation } from "./surge-official-citation.ts";
+import { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
+
+export { ENERGY_ASSISTANT_MAX_BODY_BYTES } from "./energy-assistant-request-budget.ts";
 
 export const ENERGY_ASSISTANT_RETENTION_DAYS = 30;
 export const ENERGY_ASSISTANT_MAX_MESSAGE_CHARS = 1_200;
-export const ENERGY_ASSISTANT_MAX_RECENT_TURNS = 8;
+export const ENERGY_ASSISTANT_MAX_RECENT_TURNS = 12;
 export const ENERGY_ASSISTANT_MAX_RECENT_TURN_CHARS = 1_200;
-export const ENERGY_ASSISTANT_MAX_RECENT_CONTENT_CHARS = 6_000;
-export const ENERGY_ASSISTANT_MAX_BODY_BYTES = 16_384;
-export const ENERGY_ASSISTANT_MAX_RESPONSE_BYTES = 32_768;
+export const ENERGY_ASSISTANT_MAX_RECENT_CONTENT_CHARS = 9_000;
+export const ENERGY_ASSISTANT_MAX_RESPONSE_BYTES = 65_536;
 
 export type EnergyAssistantRecentTurn = {
   role: "user" | "assistant";
@@ -126,6 +143,7 @@ export type ServerDependencies = {
   recordQuality?: (event: SurgeConversationQualityEvent) => Promise<void>;
   qualityMetadata?: Partial<SurgeConversationQualityMetadata>;
   monotonicNow?: () => number;
+  requireValidatedModelForOrdinaryAdvice?: boolean;
 };
 
 export class EnergyAssistantServerError extends Error {
@@ -304,6 +322,7 @@ function continuationFrom(value: unknown) {
   if (
     !continuation
     || (continuation.activeTopic !== "general"
+      && continuation.activeTopic !== "service_enquiry"
       && !(ENERGY_ASSISTANT_TOPICS as readonly string[]).includes(continuation.activeTopic))
   ) {
     throw new EnergyAssistantServerError(
@@ -332,9 +351,11 @@ function explicitlyUsesSavedHomeContext(value: string) {
   const generalHowExplainer = /\b(?:explain|describe|tell\s+me)\b[^?]{0,35}\bhow\b/i.test(value);
   const firstPersonHomeFact = /\b(?:i|we)\s+(?:(?:(?:currently|already)\s+)?have(?!\s+(?:heard|read|been\s+told|a\s+question)\b)[^.!?\n]{0,55}\b(?:home|house|property|apartment|unit|electricity|energy|gas|solar|panels?|battery|heat pump|heater|heating|air ?con(?:ditioner)?|hot water|roof|windows?|glazing|insulation|draughts?|drafts?|switchboard|cooktop|stove|EV|charger)\b|(?:(?:currently|already)\s+)?use(?!\s+(?:the\s+)?(?:word|words|term|phrase)\b)[^.!?\n]{0,55}\b(?:electricity|energy|gas|solar|battery|heat pump|heater|heating|air ?con(?:ditioner)?|hot water|cooktop|stove|EV|charger|kWh|MJ)\b|(?:currently\s+)?(?:own|rent)\b|(?:currently\s+)?live\s+(?:in|at)\b|(?:currently\s+)?(?:pay|spend)\b[^.!?\n]{0,55}(?:\$\s*\d|\b\d+(?:\.\d+)?\s*(?:cents?|dollars?|kWh|MJ)\b|\b(?:electricity|energy|gas|bill|heating|cooling)\b)|already\s+(?:installed|added|replaced|upgraded|bought)\b[^.!?\n]{0,55}\b(?:solar|panels?|battery|heat pump|heater|heating|air ?con(?:ditioner)?|hot water|windows?|glazing|insulation|switchboard|cooktop|stove|EV|charger)\b)/i.test(value);
   return /\b(?:based on|using|use|given|from) (?:my|our) (?:answers|details|survey|home details|home context|energy plan)\b/i.test(value)
-    || /\b(?:my|our) (?:home|house|place|property|apartment|unit|bill|usage|heater|air ?con|hot water|roof|windows?|insulation|solar|battery|quote)\b/i.test(value)
+    || /\b(?:my|our)\s+(?:(?:saved|current|own)\s+)?(?:\d{4}\s+)?(?:home|house|place|property|apartment|unit|bill|usage|heater|air ?con|hot water|roof|windows?|insulation|solar|battery|quote)\b/i.test(value)
     || firstPersonHomeFact
     || /\b(?:i|we) (?:need|want)\s+(?:an?\s+)?(?:solar system|battery|heater|air ?con(?:ditioner)?|heat pump|hot water system|EV charger|quote|installer)\b/i.test(value)
+    || /\b(?:i am|i'm|we are|we're)\s+(?:looking at|planning|about|due|booked)\s+(?:to\s+)?(?:get|have|install|replace|upgrade)\b/i.test(value)
+    || /\b(?:my|our)\s+(?:quote|installation|installer|replacement|upgrade)\b/i.test(value)
     || /\b(?:i am|we are)\s+(?:an?\s+)?(?:owner|homeowner|renter|tenant|cold|freezing|hot|uncomfortable)\b/i.test(value)
     || /\b(?:worth|suitable|right|best|recommended|make sense|good idea|ok(?:ay)?)\b[^?]{0,35}\bfor\s+(?:me|us)\b/i.test(value)
     || (!generalHowExplainer && /\bwork(?:s)?\b[^?]{0,35}\bfor\s+(?:me|us)\b/i.test(value))
@@ -346,6 +367,30 @@ function explicitlyUsesSavedHomeContext(value: string) {
     || isSurgePlanPriorityIntent(value);
 }
 
+const EXPLICIT_NON_SAVED_PERSON_CONTEXT = /\b(?:mum|mom|mother|dad|father|parent|sister|brother|aunt|aunty|uncle|grandmother|grandma|nan|nanna|grandfather|granddad|grandpa|daughter|son|cousin|niece|nephew|friend|neighbou?r|client|customer|tenant|landlord)(?:['’]s)\b[^.!?\n]{0,120}\b(?:home|house|place|property|apartment|unit|site|quote|bill|electricity|energy|solar|panels?|battery|heat pump|hot water|heater|heating|air ?con(?:ditioner|ditioning)?|cooling|windows?|glazing|insulation|draughts?|drafts?|switchboard|cooktop|stove|EV|charger)\b/i;
+const EXPLICIT_NON_SAVED_PERSON_DECISION = /\b(?:(?:my|our|a|the)\s+)?(?:mum|mom|mother|dad|father|parent|sister|brother|aunt|aunty|uncle|grandmother|grandma|nan|nanna|grandfather|granddad|grandpa|daughter|son|cousin|niece|nephew|friend|neighbou?r|client|customer|tenant|landlord)\s+(?:has|needs|owns|rents|lives|got|received|was quoted|is (?:considering|looking at))\b[^.!?\n]{0,120}\b(?:home|house|place|property|apartment|unit|site|quote|bill|electricity|energy|solar|panels?|battery|heat pump|hot water|heater|heating|air ?con(?:ditioner|ditioning)?|cooling|windows?|glazing|insulation|draughts?|drafts?|switchboard|cooktop|stove|EV|charger)\b/i;
+const EXPLICIT_NON_SAVED_PERSON_BENEFICIARY = /\b(?:for|help(?:ing)?|advise|advising)\s+(?:(?:my|our|a|the)\s+)?(?:mum|mom|mother|dad|father|parent|sister|brother|aunt|aunty|uncle|grandmother|grandma|nan|nanna|grandfather|granddad|grandpa|daughter|son|cousin|niece|nephew|friend|neighbou?r|client|customer|tenant|landlord)\b/i;
+const EXPLICIT_SEPARATE_PROPERTY_CONTEXT = /\b(?:another|different|other|second|new|investment|rental|holiday|vacation|weekend|secondary)\s+(?:home|house|place|property|apartment|unit|site|job|shed|building)\b|\bcontainer\s+shed\b/i;
+
+function questionExcludesSavedHomeContext(value: string) {
+  const explicitlyNamesAnotherSubject = EXPLICIT_NON_SAVED_PERSON_CONTEXT.test(value)
+    || EXPLICIT_NON_SAVED_PERSON_DECISION.test(value)
+    || EXPLICIT_NON_SAVED_PERSON_BENEFICIARY.test(value)
+    || EXPLICIT_SEPARATE_PROPERTY_CONTEXT.test(value);
+  if (!explicitlyNamesAnotherSubject) return false;
+
+  // A direct comparison can legitimately need both the saved home's facts and
+  // the separately named subject. Otherwise the named subject is authoritative.
+  return !(explicitlyUsesSavedHomeContext(value)
+    && /\b(?:compare|comparison|both|between|versus|vs\.?|against)\b/i.test(value));
+}
+
+function savedHomeContextCanResolveDecision(value: string) {
+  return /\b(?:rebate|discount|certificate|eligible|eligibility|qualify|quote)\b/i.test(value)
+    && /\b(?:install|replace|upgrade|remove|decommission|buy|get|quote|system|heater|heating|air ?con|hot water|solar|battery|insulation|glazing)\w*\b/i.test(value)
+    && !/\b(?:generally|in general|what does|what is|define|meaning of)\b/i.test(value);
+}
+
 function currentQuestionUsesSavedHomeContext(
   message: string,
   recentTurns: readonly EnergyAssistantRecentTurn[],
@@ -355,26 +400,31 @@ function currentQuestionUsesSavedHomeContext(
   const question = message.trim();
   if (!question) return false;
 
-  // A newly named property, site or job is authoritative and must not inherit a
-  // different home's survey facts simply because both questions share a topic.
-  if (/\b(?:another|different|other|second|new)\s+(?:home|house|property|site|job|shed|building)\b|\bcontainer\s+shed\b/i.test(question)) {
-    return false;
-  }
+  // A newly named person, property, site or job is authoritative and must not
+  // inherit a different home's survey facts simply because the topics match.
+  if (questionExcludesSavedHomeContext(question)) return false;
 
   if (explicitlyUsesSavedHomeContext(question)) {
     return true;
   }
 
+  if (savedHomeContextCanResolveDecision(question)) return true;
+
   const recentPersonalQuestion = recentTurns
     .filter((turn) => turn.role === "user")
-    .slice(-4)
+    .slice(-6)
     .some((turn) => explicitlyUsesSavedHomeContext(turn.content));
+  const activeSavedHomeDecision = recentTurns
+    .filter((turn) => turn.role === "user")
+    .slice(-6)
+    .some((turn) => savedHomeContextCanResolveDecision(turn.content))
+    || savedHomeContextCanResolveDecision(continuation?.goal || "");
 
-  if (recentPersonalQuestion
-    && continuation
+  if ((recentPersonalQuestion || activeSavedHomeDecision)
     && (intent === "answer_to_follow_up"
       || intent === "contextual_follow_up"
-      || intent === "clarification")) {
+      || intent === "clarification"
+      || intent === "correction")) {
     return true;
   }
 
@@ -387,13 +437,108 @@ function currentQuestionUsesSavedHomeContext(
   return false;
 }
 
+function recentTurnsForActiveDecision(
+  message: string,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+  continuation: SurgeConversationState | null,
+  intent: SurgeConversationTurnIntent,
+) {
+  if (continuation?.ledger) {
+    const frame = selectSurgeConversationFrame(message, continuation, false);
+    if (!frame.decision || frame.decision.id !== continuation.ledger.activeDecisionId) {
+      return /\b(?:too|as well)\s*[?.!]*$/i.test(message) ? recentTurns.slice(-2) : [];
+    }
+  }
+  const currentTopic = surgeConversationTopicFor(message);
+  const priorNamedUserTurn = [...recentTurns].reverse().find((turn) => (
+    turn.role === "user" && Boolean(surgeConversationTopicFor(turn.content))
+  ));
+  const priorNamedTopic = continuation?.activeTopic && continuation.activeTopic !== "general"
+    ? continuation.activeTopic
+    : surgeConversationTopicFor(priorNamedUserTurn?.content || "");
+  const carriesPriorComparison = /\b(?:too|as well)\s*[?.!]*$/i.test(message);
+  const namesDifferentDecision = Boolean(currentTopic)
+    && Boolean(priorNamedTopic)
+    && currentTopic !== priorNamedTopic
+    && !surgeConversationTopicsAreCompatible(currentTopic, priorNamedTopic);
+  if (namesDifferentDecision
+    && !carriesPriorComparison
+    && intent !== "answer_to_follow_up"
+    && intent !== "contextual_follow_up"
+    && intent !== "clarification"
+    && intent !== "correction") return [];
+  const continuesSameNamedTopic = intent === "new_question"
+    && Boolean(currentTopic)
+    && currentTopic === continuation?.activeTopic;
+  const startsNewDecision = intent === "topic_change"
+    || intent === "correction_and_topic_change"
+    || (intent === "correction" && surgeConversationCorrectionReframesDecision(message))
+    || (intent === "new_question" && !continuesSameNamedTopic);
+  if (startsNewDecision) {
+    const latestSubjectCorrection = !continuation?.ledger
+      ? [...recentTurns].reverse().find((turn) => turn.role === "user"
+        && /\b(?:correction|actually|sorry|I meant|not\s+(?:postcode|an?\s+owner|renting|a renter))\b/i.test(turn.content)
+        && surgeConversationFactsFromMessage(turn.content).some((fact) => (
+          /^(?:postcode|state_or_territory|tenure|ownership|property_type|household_size)$/.test(fact.key)
+        )))
+      : undefined;
+    const explicitlyStartsAnotherSubject = /\b(?:another|different|other|second|new)\s+(?:home|house|property|site|job|shed|building)\b|\bcontainer\s+shed\b/i.test(message);
+    if (latestSubjectCorrection && !explicitlyStartsAnotherSubject) {
+      return [latestSubjectCorrection];
+    }
+    return [];
+  }
+
+  const goal = continuation?.goal.trim();
+  if (!goal) return [...recentTurns];
+  let goalTurnIndex = -1;
+  for (let index = recentTurns.length - 1; index >= 0; index -= 1) {
+    const turn = recentTurns[index];
+    if (turn.role === "user" && turn.content.trim() === goal) {
+      goalTurnIndex = index;
+      break;
+    }
+  }
+  if (goalTurnIndex >= 0) return recentTurns.slice(goalTurnIndex);
+  return continuation?.ledger ? recentTurns.slice(-4) : [...recentTurns];
+}
+
+function currentReplyDecisionContext(
+  message: string,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
+  decisionRecentTurns: readonly EnergyAssistantRecentTurn[],
+  continuation: SurgeConversationState | null,
+) {
+  const currentTopic = surgeConversationTopicFor(message);
+  const priorNamedUserTurn = [...recentTurns].reverse().find((turn) => (
+    turn.role === "user" && Boolean(surgeConversationTopicFor(turn.content))
+  ));
+  const priorTopic = continuation?.activeTopic && continuation.activeTopic !== "general"
+    ? continuation.activeTopic
+    : surgeConversationTopicFor(priorNamedUserTurn?.content || "");
+  if (currentTopic
+    && priorTopic
+    && currentTopic !== priorTopic
+    && !surgeConversationTopicsAreCompatible(currentTopic, priorTopic)) {
+    return message.trim();
+  }
+  return surgeConversationDecisionContext(message, continuation, decisionRecentTurns);
+}
+
 function pendingQuestionContextMessage(
   message: string,
   continuation: SurgeConversationState | null,
   intent: SurgeConversationTurnIntent,
+  recentTurns: readonly EnergyAssistantRecentTurn[],
 ) {
-  if (intent !== "answer_to_follow_up" || !continuation?.pendingQuestion) return message;
-  return `${continuation.pendingQuestion}\nCustomer answer: ${message}`;
+  if (intent === "answer_to_follow_up" && continuation?.pendingQuestion) {
+    return `${continuation.goal ? `Customer's decision: ${continuation.goal}\n` : ""}${continuation.pendingQuestion}\nCustomer answer: ${message}`;
+  }
+  if ((intent === "contextual_follow_up" || intent === "clarification" || intent === "correction")
+    && (continuation?.goal || recentTurns.length)) {
+    return surgeConversationDecisionContext(message, continuation, recentTurns);
+  }
+  return message;
 }
 
 function pendingRoomAnswer(
@@ -459,12 +604,20 @@ function boundedAnswer(answer: EnergyAssistantAnswer) {
 
 function modelFollowUpIsRequired(
   message: string,
-  recentTurns: readonly EnergyAssistantRecentTurn[],
+  decisionContext: string,
   followUpQuestion: string,
 ) {
   const candidate = followUpQuestion.trim();
   if (!candidate || !candidate.includes("?")) return false;
-  const conversation = `${recentTurns.map((turn) => turn.content).join("\n")}\n${message}`;
+  if (/\byes\s*(?:\/|or)\s*no\b/i.test(message)) return false;
+  if (OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message)) return false;
+  if (/^(?:so\s+)?why\s+(?:not|isn['’]?t|is not|wasn['’]?t|was not|wouldn['’]?t|would not)\b/i.test(message.trim())) {
+    return false;
+  }
+  const selfContainedDefinition = /^(?:what\s+(?:is|are)\b|what\s+does\b[^?]{0,80}\bmean\b|explain\b|can you explain\b)/i.test(message.trim())
+    && !/\b(?:current|currently|today|now|latest|worth|value|price|rate|eligible|eligibility|available|open|closed|applies?\s+to\s+(?:me|my|our))\b/i.test(message);
+  if (selfContainedDefinition) return false;
+  const conversation = `${decisionContext}\n${message}`;
   const missingEligibilityDetail = /\b(?:rebates?|grants?|incentives?|subsid(?:y|ies)|programmes?|programs?|schemes?|eligibility|discount)\b/i.test(conversation)
     && /\b(?:model|product|system|equipment|heating|heater|postcode|owner|rent|property)\b/i.test(candidate);
   const asksForClarification = /\b(?:huh|what do you mean|can you explain|explain that|I don(?:'|’)t understand)\b/i.test(message);
@@ -609,16 +762,19 @@ function generatedResultIsPolicySafe(
   generated: SurgeModelResult,
   audience: EnergyAssistantAudience,
   message: string,
+  decisionContext: string,
 ) {
   const continuationText = JSON.stringify(generated.continuation);
-  const generatedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}\n${continuationText}`;
+  const visibleGeneratedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}`;
+  const generatedText = `${visibleGeneratedText}\n${continuationText}`;
   if (
-    surgeOutputViolatesPublicPolicy(generatedText)
+    surgeOutputViolatesPublicPolicy(visibleGeneratedText)
     || containsSurgeNamedReference(generatedText)
   ) {
     return false;
   }
-  if (!surgeAnswerSharesQuestionIntent(message, generatedText)) return false;
+  if (!surgeAnswerSharesQuestionIntent(message, generatedText)
+    && !surgeAnswerSharesQuestionIntent(decisionContext, generatedText)) return false;
   return audience === "trade" || (
     !containsSurgeNamedReference(continuationText)
     && !containsSurgeInternalPlatformName(continuationText)
@@ -635,6 +791,8 @@ const SURGE_GENERIC_NON_ANSWER_PATTERNS = [
   /\btry again (?:later|after (?:current )?official (?:product )?evidence)\b/i,
   /\bmatched your [a-z -]+ question\b/i,
   /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
+  /^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i,
+  /^\s*(?:this|that) (?:does not|doesn't) (?:appear to )?(?:be|relate to) (?:an? )?(?:Australian )?home[- ]energy\b/i,
 ] as const;
 
 function isGenericNonAnswer(
@@ -739,7 +897,7 @@ function mutableQuestionJurisdiction(
   message: string,
   planContext: ReturnType<typeof parseSurgePlanContext>,
 ): OfficialJurisdiction | null {
-  if (/\b(?:VEECs?|VEU|Victorian Energy Upgrades?|Victoria|VIC)\b/i.test(message)) {
+  if (/\b(?:VEECs?|VEU|Victorian Energy Upgrades?|Victorian|Victoria|VIC)\b/i.test(message)) {
     return OFFICIAL_JURISDICTIONS.vic;
   }
   if (/\b(?:ESCs?|PRCs?|ESS|PDRS|New South Wales|NSW)\b/i.test(message)) {
@@ -772,6 +930,8 @@ function hasExactProductDetail(message: string) {
     || /\b[a-z][a-z0-9-]{1,30}\s+\d+[a-z0-9-]*\b/i.test(message);
 }
 
+const OFFICIAL_SOURCE_DIRECTORY_REQUEST = /\b(?:official|government|scheme administrator)\b[^?]{0,55}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b|\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b[^?]{0,55}\b(?:official|government|scheme administrator)\b/i;
+
 function maintainedEvidenceAnswersMutableQuestion(
   kind: SurgeOfficialWebSearchPlan["kind"],
   message: string,
@@ -779,6 +939,11 @@ function maintainedEvidenceAnswersMutableQuestion(
 ) {
   if (answer.status === "source_review_required" || !answer.citations.some((citation) => !citation.stale)) {
     return false;
+  }
+  const asksForSourceDirectory = OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message);
+  const asksForMutableFact = /\b(?:current|currently|today|right now|as of now|latest|eligible|eligibility|available|availability|open|closed|worth|value|price|rate|rules?|changed|approved|registered|listed|recalled|safe|unsafe|in force|edition|version)\b/i.test(message);
+  if (asksForSourceDirectory && !asksForMutableFact) {
+    return true;
   }
   const value = answer.directAnswer;
   if (kind === "certificate") {
@@ -791,7 +956,7 @@ function maintainedEvidenceAnswersMutableQuestion(
     return /\b\d+(?:\.\d+)?\s*(?:c|cents?|dollars?)\s*(?:\/|per)\s*kWh\b|\$\s*\d|\b(?:no (?:regulated )?minimum|retailer[- ]set|set by (?:the )?retailer)\b/i.test(value);
   }
   if (kind === "rebate_program") {
-    return /\b(?:listed current|currently (?:available|open|closed)|is (?:available|open|closed)|may (?:provide|reduce)|not currently available)\b/i.test(value);
+    return /\b(?:listed current|currently (?:available|open|closed)|is (?:available|open|closed)|may (?:provide|reduce|apply|qualify)|can get (?:a )?discount|not currently available)\b/i.test(value);
   }
   if (kind === "product_status") {
     return /\b(?:present|not present|listed|not listed|registered|not registered|approved|not approved|recalled|not recalled)\b/i.test(value);
@@ -802,6 +967,7 @@ function maintainedEvidenceAnswersMutableQuestion(
 
 function officialWebSearchPlanFor(
   message: string,
+  decisionContext: string,
   audience: EnergyAssistantAudience,
   planContext: ReturnType<typeof parseSurgePlanContext>,
   referenceAnswer: EnergyAssistantAnswer,
@@ -812,13 +978,16 @@ function officialWebSearchPlanFor(
     && !surgeServiceRequestAlsoAsksEnergyDecision(message);
   if (audience === "trade" || serviceIntent) return null;
 
+  const entityContext = decisionContext || message;
   const whenMaintainedEvidenceIsMissing = (plan: SurgeOfficialWebSearchPlan) => (
     maintainedEvidenceAnswersMutableQuestion(plan.kind, message, referenceAnswer) ? null : plan
   );
 
-  const jurisdiction = mutableQuestionJurisdiction(message, planContext);
-  const currentIntent = /\b(?:current|currently|today|now|latest|still|available|availability|eligible|eligibility|open|closed|worth|value|price|rate|rules?|changed|approved|registered|listed|recalled|recalls?|safe|unsafe|safety|in force|edition|version)\b/i.test(message);
-  const exactStandard = /\b(?:AS(?:\s*\/\s*NZS)?|NCC)\s*\d{3,4}(?:[.:]\d+)?\b/i.test(message);
+  const jurisdiction = mutableQuestionJurisdiction(entityContext, planContext);
+  const currentIntent = /\b(?:current|currently|today|right now|as of now|latest|available|availability|eligible|eligibility|open|closed|worth|value|price|rate|rules?|changed|approved|registered|listed|recalled|recalls?|safe|unsafe|safety|in force|edition|version)\b/i.test(message)
+    || /\bstill\s+(?:available|eligible|open|closed|approved|registered|listed|recalled|safe|unsafe|current|in force)\b/i.test(message);
+  const officialSourceIntent = /\b(?:which|what|give|show|open|use|check|verify)\b[^?]{0,80}\b(?:official|government|scheme administrator)\b[^?]{0,45}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b|\b(?:official|government|scheme administrator)\b[^?]{0,45}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b/i.test(message);
+  const exactStandard = /\b(?:AS(?:\s*\/\s*NZS)?|NCC)\s*\d{3,4}(?:[.:]\d+)?\b/i.test(entityContext);
   if (
     exactStandard
     && /\b(?:standard|code|edition|version|current|latest|applies?|in force)\b/i.test(message)
@@ -831,7 +1000,7 @@ function officialWebSearchPlanFor(
   }
 
   const productStatus = /\b(?:approved|registered|listed|recalled|recalls?|safe|unsafe|safety (?:alert|notice|status|issue)|fault (?:alert|notice|status)|product register|approved list)\b/i.test(message);
-  if (productStatus && hasExactProductDetail(message)) {
+  if (productStatus && hasExactProductDetail(entityContext)) {
     return whenMaintainedEvidenceIsMissing({
       kind: "product_status",
       jurisdiction: jurisdiction?.name || "Australia",
@@ -839,8 +1008,8 @@ function officialWebSearchPlanFor(
     });
   }
 
-  const certificate = /\b(?:STCs?|VEECs?|ESCs?|PRCs?|Small-scale Technology Certificates?)\b/i.test(message);
-  if (certificate && currentIntent && jurisdiction) {
+  const certificate = /\b(?:STCs?|VEECs?|ESCs?|PRCs?|Small-scale Technology Certificates?)\b/i.test(entityContext);
+  if (certificate && (currentIntent || officialSourceIntent) && jurisdiction) {
     return whenMaintainedEvidenceIsMissing({
       kind: "certificate",
       jurisdiction: jurisdiction.name,
@@ -848,7 +1017,7 @@ function officialWebSearchPlanFor(
     });
   }
 
-  const tariff = /\b(?:tariffs?|feed[- ]?in tariffs?|FIT|supply charge|usage rate|import rate|export rate|default market offer|reference price)\b/i.test(message);
+  const tariff = /\b(?:tariffs?|feed[- ]?in tariffs?|FIT|supply charge|usage rate|import rate|export rate|default market offer|reference price)\b/i.test(entityContext);
   if (tariff && jurisdiction && (currentIntent || /\b(?:what|which|how much)\b/i.test(message))) {
     return whenMaintainedEvidenceIsMissing({
       kind: "tariff",
@@ -857,11 +1026,13 @@ function officialWebSearchPlanFor(
     });
   }
 
-  const rebateOrProgram = /\b(?:rebates?|grants?|incentives?|subsid(?:y|ies)|programmes?|programs?|schemes?)\b/i.test(message);
-  const energyCategory = /\b(?:solar|battery|batteries|hot[- ]?water|heat[- ]?pumps?|heating|air ?con(?:ditioning)?|cooling|insulation|draught|windows?|glazing|EV chargers?|electric vehicle chargers?|electrification|appliances?)\b/i.test(message);
-  const namedProgram = /\b(?:Solar Homes|Victorian Energy Upgrades?|VEU|ESS|PDRS|Home Energy Support|Sustainable Household Scheme)\b/i.test(message);
+  const rebateOrProgram = /\b(?:rebates?|grants?|incentives?|subsid(?:y|ies)|programmes?|programs?|schemes?|government support|financial support|Victorian support|support (?:may|might|could|can) apply)\b/i.test(entityContext);
+  const energyCategory = /\b(?:solar|battery|batteries|hot[- ]?water|heat[- ]?pumps?|heating|air ?con(?:ditioning)?|cooling|insulation|draught|windows?|glazing|EV chargers?|electric vehicle chargers?|electrification|appliances?)\b/i.test(entityContext);
+  const namedProgram = /\b(?:Solar Homes|Victorian Energy Upgrades?|VEU|ESS|PDRS|Home Energy Support|Sustainable Household Scheme)\b/i.test(entityContext);
   const asksAvailability = currentIntent
-    || /\b(?:what|which|any|does|do|can)\b[^?]{0,80}\b(?:rebates?|grants?|incentives?|programmes?|programs?|schemes?)\b/i.test(message);
+    || officialSourceIntent
+    || /\b(?:what|which|any)\b[^?]{0,80}\b(?:rebates?|grants?|incentives?|programmes?|programs?|schemes?)\b/i.test(message)
+    || /\b(?:does|do|can)\b[^?]{0,60}\b(?:rebates?|grants?|incentives?|programmes?|programs?|schemes?|support)\b[^?]{0,30}\b(?:apply|cover|help|available)\b/i.test(message);
   if (rebateOrProgram && jurisdiction && asksAvailability && (energyCategory || namedProgram)) {
     return whenMaintainedEvidenceIsMissing({
       kind: "rebate_program",
@@ -875,6 +1046,7 @@ function officialWebSearchPlanFor(
 function officialSearchUnavailableAnswer(
   message: string,
   plan: SurgeOfficialWebSearchPlan,
+  referenceAnswer: EnergyAssistantAnswer,
 ): EnergyAssistantAnswer {
   const postcode = queryAustralianPostcode(message);
   const stcRate = message.match(/\bSTCs?\b\s*(?:at|=|worth|valued at)?\s*\$\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1];
@@ -883,7 +1055,7 @@ function officialSearchUnavailableAnswer(
     ? `the quoted $${stcRate} per STC and $${veecRate} per VEEC`
     : "the quoted certificate rates";
   const directAnswer = plan.kind === "certificate"
-    ? `I could not verify today's official certificate information, so I cannot confirm whether ${certificateRates} are current. STC and VEEC values can move, and the quote should separately show each quantity, gross rate, registration, compliance or brokerage fees and the net credit taken off the price.`
+    ? `I could not verify today's official certificate information, so I cannot confirm whether ${certificateRates} are current. STC and VEEC values can move. The gross market value before provider fees is not the same as the customer's net discount, so the quote should separately show each quantity, gross rate, registration, compliance or brokerage fees and the net credit taken off the price.`
     : plan.kind === "rebate_program"
       ? `I could not verify the current rebate and programme information${postcode ? ` for postcode ${postcode}` : " for the property"}, so do not treat a discount as confirmed yet. Eligibility depends on the exact approved model, installation date, customer and property rules, installer requirements and any previous claim.`
       : plan.kind === "tariff"
@@ -891,19 +1063,23 @@ function officialSearchUnavailableAnswer(
         : plan.kind === "product_status"
           ? "I could not verify the product's current official registration, approval or recall status, so do not rely on a sales claim yet. Check the exact brand and model against the relevant official register before buying or installing it."
           : "I could not verify the current official standard or code information, so I cannot confirm the applicable edition or requirement. Check the exact standard number, jurisdiction and effective date against the official publisher before relying on it.";
+  const maintainedReferenceCitations = referenceAnswer.citations
+    .filter((citation) => !citation.stale
+      && surgeOfficialUrlIsAllowed(citation.url, plan.allowedDomains))
+    .slice(0, 4);
   return {
     directAnswer,
     practicalSteps: [],
     nextAction: "",
     status: "source_review_required",
-    citations: [],
+    citations: maintainedReferenceCitations,
     assumptions: [],
     confidence: "low",
     suggestedQuestions: plan.kind === "rebate_program"
       ? ["What exact model and installed price are you considering?"]
       : [],
     toolActions: [],
-    sourceBoundary: `The current ${plan.kind.replaceAll("_", " ")} lookup did not produce validated official evidence.`,
+    sourceBoundary: `The current ${plan.kind.replaceAll("_", " ")} lookup did not produce validated official evidence. Any attached maintained official links are reference pages only and do not verify the unavailable live value or status.`,
   };
 }
 
@@ -918,22 +1094,39 @@ function validatedOfficialCitationsForReply(
     if (!item || typeof item !== "object") return null;
     const record = item as Record<string, unknown>;
     if (typeof record.url !== "string" || typeof record.title !== "string") return null;
-    if (!surgeOfficialUrlIsAllowed(record.url, plan.allowedDomains)) return null;
-    const url = new URL(record.url);
-    const title = record.title.trim().slice(0, 260);
-    if (!title) return null;
-    url.hash = "";
-    const canonicalUrl = url.href;
+    const publicCitation = sanitizeSurgeCustomerOfficialCitation({
+      ...record,
+      sourceTier: "primary_official",
+    }, citations.length);
+    if (!publicCitation
+      || !surgeOfficialUrlIsAllowed(publicCitation.url, plan.allowedDomains)) return null;
+    const canonicalUrl = publicCitation.url;
     if (seen.has(canonicalUrl)) continue;
     seen.add(canonicalUrl);
     citations.push({
       id: `official-web-${citations.length + 1}`,
-      title,
-      publisher: url.hostname.toLowerCase(),
+      title: publicCitation.title,
+      publisher: publicCitation.publisher,
       url: canonicalUrl,
     });
   }
   return citations.length ? citations : null;
+}
+
+function customerFacingOfficialCitations(
+  liveCitations: readonly SurgeOfficialWebCitation[],
+  maintainedCitations: readonly unknown[],
+) {
+  const citations: SurgeOfficialWebCitation[] = [];
+  const seen = new Set<string>();
+  for (const candidate of [...liveCitations, ...maintainedCitations]) {
+    const citation = sanitizeSurgeCustomerOfficialCitation(candidate, citations.length);
+    if (!citation || seen.has(citation.url)) continue;
+    seen.add(citation.url);
+    citations.push(citation);
+    if (citations.length >= 4) break;
+  }
+  return citations;
 }
 
 function safeContinuationText(value: string, audience: EnergyAssistantAudience) {
@@ -943,17 +1136,56 @@ function safeContinuationText(value: string, audience: EnergyAssistantAudience) 
   return surgeOutputViolatesPublicPolicy(clean) ? "" : clean;
 }
 
+function safeUserContinuationText(value: string, audience: EnergyAssistantAudience) {
+  const clean = audience === "trade"
+    ? sanitizeSurgeReferenceText(value)
+    : sanitizeSurgePublicText(value);
+  const attributed = clean.replace(
+    /\bI(?:\s+am|'m)\s+((?:(?:fully|formally|officially|accredited|certified|licensed|registered)\s+){0,3}(?:(?:home[- ]?energy|energy)\s+)?assessor)\b/gi,
+    "User role: $1",
+  );
+  return surgeOutputViolatesPublicPolicy(attributed) ? "" : attributed;
+}
+
 function publicSafeContinuation(
   state: SurgeConversationState,
   audience: EnergyAssistantAudience,
 ): SurgeConversationState {
   return {
     ...state,
-    goal: safeContinuationText(state.goal, audience),
+    goal: safeUserContinuationText(state.goal, audience),
     facts: state.facts.map((fact) => ({
       ...fact,
-      value: safeContinuationText(fact.value, audience),
+      value: safeUserContinuationText(fact.value, audience),
     })),
+    ...(state.ledger ? {
+      ledger: {
+        ...state.ledger,
+        subjects: state.ledger.subjects.map((subject) => ({
+          ...subject,
+          label: safeContinuationText(subject.label, audience) || "Conversation subject",
+          facts: subject.facts.map((fact) => ({
+            ...fact,
+            value: fact.source === "chat" || fact.source === "plan"
+              ? safeUserContinuationText(fact.value, audience)
+              : safeContinuationText(fact.value, audience),
+          })).filter((fact) => fact.value),
+        })),
+        decisions: state.ledger.decisions.map((decision) => ({
+          ...decision,
+          goal: safeUserContinuationText(decision.goal, audience),
+          facts: decision.facts.map((fact) => ({
+            ...fact,
+            value: fact.source === "chat" || fact.source === "plan"
+              ? safeUserContinuationText(fact.value, audience)
+              : safeContinuationText(fact.value, audience),
+          })).filter((fact) => fact.value),
+          outcomeSummary: safeContinuationText(decision.outcomeSummary, audience),
+          openItems: decision.openItems.map((item) => safeContinuationText(item, audience)).filter(Boolean),
+          pendingQuestion: safeContinuationText(decision.pendingQuestion, audience),
+        })),
+      },
+    } : {}),
     pendingQuestion: safeContinuationText(state.pendingQuestion, audience),
     lastAnswerSummary: safeContinuationText(state.lastAnswerSummary, audience),
   };
@@ -967,16 +1199,89 @@ function continuationAfterDeliveredReply(
   intent: SurgeConversationTurnIntent,
 ): SurgeConversationState {
   const topic = surgeConversationTopicFor(message);
+  const incompatibleNamedTopicChange = Boolean(topic)
+    && state.activeTopic !== "general"
+    && topic !== state.activeTopic
+    && !surgeConversationTopicsAreCompatible(topic, state.activeTopic);
   const resetPriorTopicState = !preserveModelSummary
-    && (intent === "topic_change" || intent === "correction_and_topic_change");
-  const baseState = resetPriorTopicState ? emptySurgeConversationState() : state;
+    && (intent === "topic_change"
+      || intent === "correction_and_topic_change"
+      || incompatibleNamedTopicChange
+      || (intent === "new_question" && (!topic || topic !== state.activeTopic)));
+  const baseState = resetPriorTopicState
+    ? {
+        ...emptySurgeConversationState(),
+        facts: state.facts.filter((fact) => /^(?:postcode|state_or_territory|tenure|ownership|property_type|household_size|situation)$/.test(fact.key)),
+        ...(state.ledger ? { ledger: state.ledger } : {}),
+      }
+    : state;
+  const correctionReframesDecision = intent === "correction"
+    && surgeConversationCorrectionReframesDecision(message);
+  const continuingDecision = intent === "answer_to_follow_up"
+    || intent === "contextual_follow_up"
+    || intent === "clarification"
+    || (intent === "correction" && !correctionReframesDecision);
+  const preservesPriorDecision = continuingDecision && !incompatibleNamedTopicChange;
+  const activeTopic = continuingDecision
+    && baseState.activeTopic !== "general"
+    && topic
+    && surgeConversationTopicsAreCompatible(baseState.activeTopic, topic)
+    ? baseState.activeTopic
+    : topic || baseState.activeTopic || "general";
+  const priorLedgerDecision = baseState.ledger?.decisions.find(
+    (decision) => decision.id === baseState.ledger?.activeDecisionId,
+  );
+  const priorDecisionTopic = priorLedgerDecision?.topic || baseState.activeTopic;
+  const compatibleTopicExpansion = Boolean(topic)
+    && priorDecisionTopic !== "general"
+    && topic !== priorDecisionTopic
+    && surgeConversationTopicsAreCompatible(topic, priorDecisionTopic);
+  const goal = compatibleTopicExpansion
+    ? limitedText([baseState.goal, message].filter(Boolean).join(" | "), 240)
+    : preserveModelSummary && baseState.goal
+    ? baseState.goal
+    : preservesPriorDecision && baseState.goal
+    ? baseState.goal
+    : limitedText(message, 240);
   return {
     ...baseState,
-    activeTopic: topic || baseState.activeTopic || "general",
+    activeTopic,
+    goal,
+    facts: mergeSurgeConversationFacts(
+      baseState.facts,
+      surgeConversationFactsFromMessage(message, activeTopic),
+    ),
     pendingQuestion: reply.followUpQuestion,
     lastAnswerSummary: preserveModelSummary && state.lastAnswerSummary
       ? state.lastAnswerSummary
       : limitedText(reply.directAnswer, 300),
+  };
+}
+
+function continuationForServiceEnquiry(
+  state: SurgeConversationState,
+  context: SurgeServiceConversationContext,
+  reply: EnergyAssistantReply,
+) {
+  const scope = context.services.length
+    ? context.services.join(", ")
+    : "home-energy work";
+  const location = context.postcode || context.locality || "location required";
+  const serviceFacts = [
+    { key: "service_scope", value: scope },
+    { key: "service_subject", value: context.jobSubject },
+    { key: "service_location", value: context.postcode ? `postcode ${context.postcode}` : context.locality || location },
+    ...(context.postcode ? [{ key: "service_postcode", value: context.postcode }] : []),
+    { key: "service_matching", value: "all relevant local trades; no preferred supplier" },
+    { key: "service_sent", value: "false" },
+  ];
+  return {
+    ...state,
+    activeTopic: "service_enquiry",
+    goal: limitedText(`Arrange ${scope} enquiries for ${context.jobSubject} at ${location}`, 240),
+    facts: mergeSurgeConversationFacts(state.facts, serviceFacts),
+    pendingQuestion: "",
+    lastAnswerSummary: limitedText(reply.directAnswer, 300),
   };
 }
 
@@ -1015,24 +1320,41 @@ function buildReply(
   presentationInput: SurgeAnswerPresentation | null,
   recentTurns: readonly EnergyAssistantRecentTurn[],
   planContext: ReturnType<typeof parseSurgePlanContext>,
+  continuation: SurgeConversationState | null,
+  requiredPendingQuestion: string,
   officialCitations: SurgeOfficialWebCitation[],
   now: Date,
   randomUUID: () => string,
 ): EnergyAssistantReply {
   const answer = boundedAnswer(answerInput);
+  const publicOfficialCitations = customerFacingOfficialCitations(
+    officialCitations,
+    answer.citations,
+  );
   const candidateFollowUp = limitedText(
-    presentationInput?.followUpQuestion || answer.suggestedQuestions[0] || "",
+    requiredPendingQuestion || presentationInput?.followUpQuestion || answer.suggestedQuestions[0] || "",
     220,
   );
-  const proposedFollowUp = presentationInput
-    && !modelFollowUpIsRequired(message, recentTurns, candidateFollowUp)
+  const followUpDecisionContext = surgeConversationDecisionContext(
+    message,
+    continuation,
+    recentTurns,
+  );
+  const proposedFollowUp = OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message)
+    || (presentationInput
+      && !modelFollowUpIsRequired(message, followUpDecisionContext, candidateFollowUp))
     ? ""
     : candidateFollowUp;
-  const followUpQuestion = surgeFollowUpWasAlreadyAnswered(
+  const asksForCurrentVerdict = /\b(?:which|what)\b[^?]{0,50}\b(?:choose|pick|prefer)\b|\b(?:would|should)\s+(?:you|I|we)\s+(?:choose|pick|prefer)\b|\bworth\b[^?]{0,45}\b(?:extra|premium|money|price|cost)\b/i.test(message);
+  const repeatsUnansweredPending = (!requiredPendingQuestion || asksForCurrentVerdict)
+    && Boolean(continuation?.pendingQuestion)
+    && questionsAreSimilar(proposedFollowUp, continuation?.pendingQuestion || "");
+  const followUpQuestion = repeatsUnansweredPending || surgeFollowUpWasAlreadyAnswered(
     proposedFollowUp,
     message,
     recentTurns,
     planContext,
+    continuation,
   )
     ? ""
     : proposedFollowUp;
@@ -1069,7 +1391,7 @@ function buildReply(
     extraDetail: presentation.extraDetail,
     followUpQuestion: presentation.followUpQuestion,
     quickReplies: [],
-    citations: officialCitations,
+    citations: publicOfficialCitations,
   };
   if (new TextEncoder().encode(JSON.stringify(reply)).byteLength > ENERGY_ASSISTANT_MAX_RESPONSE_BYTES) {
     throw new EnergyAssistantServerError(
@@ -1098,19 +1420,44 @@ function surgeFollowUpWasAlreadyAnswered(
   currentMessage: string,
   recentTurns: readonly EnergyAssistantRecentTurn[],
   planContext: ReturnType<typeof parseSurgePlanContext>,
+  continuation: SurgeConversationState | null,
 ) {
   if (!question) return false;
   const lastAssistant = [...recentTurns].reverse().find((turn) => turn.role === "assistant")?.content || "";
   const latestUser = [...recentTurns].reverse().find((turn) => turn.role === "user")?.content || "";
   const planText = (planContext?.facts || []).map((fact) => `${fact.key}: ${fact.value}`).join("\n");
-  const knownText = `${planText}\n${recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content).join("\n")}\n${currentMessage}`;
+  const frame = selectSurgeConversationFrame(currentMessage, continuation, Boolean(planContext));
+  const ledgerText = [
+    ...frame.subjects.flatMap((subject) => subject.facts.map((fact) => `${fact.key}: ${fact.value}`)),
+    ...frame.relatedDecisions.flatMap((decision) => [
+      decision.goal,
+      ...decision.facts.map((fact) => `${fact.key}: ${fact.value}`),
+      decision.outcomeSummary,
+    ]),
+  ].join("\n");
+  const knownLedgerKeys = new Set([
+    ...frame.subjects.flatMap((subject) => subject.facts.map((fact) => fact.key)),
+    ...frame.relatedDecisions.flatMap((decision) => decision.facts.map((fact) => fact.key)),
+  ]);
+  const knownText = `${planText}\n${ledgerText}\n${recentTurns.filter((turn) => turn.role === "user").map((turn) => turn.content).join("\n")}\n${currentMessage}`;
   const knownPlanKeys = new Set((planContext?.facts || []).map((fact) => fact.key));
 
-  if (lastAssistant && questionsAreSimilar(question, lastAssistant) && latestUser) return true;
-  if (/\bpostcode\b/i.test(question) && /\b\d{4}\b/.test(knownText)) return true;
+  if (lastAssistant
+    && questionsAreSimilar(question, lastAssistant)
+    && /^(?:yes|yeah|yep|correct|no|nah|nope|not really|not sure|unsure|maybe)\b/i.test(currentMessage.trim())) {
+    return true;
+  }
+  if (/\bpostcode\b/i.test(question)
+    && (knownPlanKeys.has("postcode")
+      || knownLedgerKeys.has("postcode")
+      || recentTurns.some((turn) => turn.role === "user"
+        && surgeMessageAnswersPendingQuestion(turn.content, question))
+      || surgeMessageAnswersPendingQuestion(currentMessage, question))) return true;
   if (/\b(?:own|rent|tenant|owner)\b/i.test(question) && /\b(?:rent|renter|tenant|owner|own the home)\b/i.test(knownText)) return true;
   if (/\bwhich (?:room|area)|what (?:room|area)\b/i.test(question)
     && /\b(?:bedroom|lounge|living room|bathroom|kitchen|whole home|whole house)\b/i.test(`${latestUser}\n${currentMessage}`)) return true;
+  if (/\b(?:does|can|is)\b[^?]{0,70}\b(?:split|reverse[- ]?cycle|air ?con(?:ditioner)?|unit|system)\b[^?]{0,70}\b(?:heat|warm|work|adequate)/i.test(question)
+    && /\b(?:split|reverse[- ]?cycle|air ?con(?:ditioner)?|unit|system)\b[^.\n]{0,80}\b(?:still\s+heats?|heats?\s+(?:fine|properly|well|adequately)|keeps?[^.\n]{0,30}\bwarm)\b/i.test(knownText)) return true;
   const knownFactQuestions = [
     {
       keys: ["household_size"],
@@ -1165,6 +1512,29 @@ function surgeFollowUpWasAlreadyAnswered(
   return false;
 }
 
+function pendingQuestionIsRequiredDecisionInput(question: string) {
+  return /\bpostcode\b|\b(?:state|territory)\b|\b(?:own|owner|rent|renter|tenant)\b|\b(?:how many people|household size)\b|\bwhat\b[^?]{0,55}\b(?:heating system|heater|hot water|water heater)\b[^?]{0,35}\breplac(?:e|ing)\b|\b(?:exact )?(?:brand|model|capacity|equipment details?)\b/i.test(question);
+}
+
+function requiredPendingQuestionForTurn(
+  message: string,
+  continuation: SurgeConversationState | null,
+  intent: SurgeConversationTurnIntent,
+) {
+  const pendingQuestion = continuation?.pendingQuestion || "";
+  if (!pendingQuestion) return "";
+  const asksForOfficialDirectory = OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message);
+  const asksHowToCollectEquipmentDetails = /\b(?:what|which|how)\b[^?]{0,90}\b(?:equipment|product|model|installation|quote)\b[^?]{0,70}\b(?:details?|information)\b|\b(?:what|which)\s+(?:exact\s+)?(?:equipment|product|model|installation|quote)\s+details?\b/i.test(message);
+  if (asksForOfficialDirectory || asksHowToCollectEquipmentDetails) return "";
+  if (intent === "clarification") return pendingQuestion;
+  if ((intent === "contextual_follow_up" || intent === "answer_to_follow_up")
+    && pendingQuestionIsRequiredDecisionInput(pendingQuestion)
+    && !surgeMessageAnswersPendingQuestion(message, pendingQuestion)) {
+    return pendingQuestion;
+  }
+  return "";
+}
+
 function needsDeterministicHeatingDefault(message: string, answer: EnergyAssistantAnswer) {
   return answer.status === "answered"
     && /\b(?:most\s+efficient|efficient|best|cheapest|running\s+cost|cost\s+less)\b/i.test(message)
@@ -1206,73 +1576,158 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const pageContext = pageContextFrom(requestBody.pageContext);
   const audience = publicAudienceFrom(requestBody.audience);
   const recentTurns = recentTurnsFrom(requestBody.recentTurns);
-  const modelRecentTurns = recentTurns;
   const continuation = continuationFrom(requestBody.continuation);
-  const conversationIntent = classifySurgeConversationTurn(message, continuation, recentTurns);
   const submittedPlanContext = audience === "trade" ? null : planContextFrom(requestBody.planContext);
+  const framedContinuation = projectSurgeConversationStateToFrame(
+    message,
+    continuation,
+    Boolean(submittedPlanContext),
+  );
+  const conversationIntent = classifySurgeConversationTurn(message, framedContinuation, recentTurns);
+  const decisionRecentTurns = recentTurnsForActiveDecision(
+    message,
+    recentTurns,
+    framedContinuation,
+    conversationIntent,
+  );
+  const decisionContext = currentReplyDecisionContext(
+    message,
+    recentTurns,
+    decisionRecentTurns,
+    framedContinuation,
+  );
+  const modelRecentTurns = decisionRecentTurns;
+  const fullRecentUserMessages = recentTurns
+    .filter((turn) => turn.role === "user")
+    .map((turn) => turn.content);
+  const documentQuoteConversation = isEnergyDocumentQuoteConversationRequest(
+    message,
+    fullRecentUserMessages,
+  );
+  const serviceLocationFollowUp = isSurgeServiceLocationFollowUp(
+    message,
+    fullRecentUserMessages,
+  );
+  const initialServiceRequest = isSurgeServiceOrCompetingQuoteRequest(message)
+    && !surgeServiceRequestAlsoAsksEnergyDecision(message);
+  const serviceConversationFollowUp = isSurgeServiceConversationFollowUp(
+    message,
+    fullRecentUserMessages,
+  );
+  const serviceContext = surgeServiceConversationContext(message, fullRecentUserMessages);
+  const needsFullDeterministicHistory = documentQuoteConversation
+    || initialServiceRequest
+    || serviceConversationFollowUp;
+  const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
+  const selectedFrame = selectSurgeConversationFrame(
+    message,
+    continuation,
+    Boolean(submittedPlanContext),
+  );
+  const selectedLedgerSubjectUsesSavedHome = selectedFrame.subjects.some((subject) => subject.id === "saved_home");
   const planContext = submittedPlanContext
-    && currentQuestionUsesSavedHomeContext(message, recentTurns, continuation, conversationIntent)
+    && !questionExcludesSavedHomeContext(message)
+    && (selectedLedgerSubjectUsesSavedHome
+      || explicitlyUsesSavedHomeContext(message)
+      || (!selectedFrame.subject && currentQuestionUsesSavedHomeContext(
+        message,
+        recentTurns,
+        framedContinuation,
+        conversationIntent,
+      )))
     ? submittedPlanContext
     : null;
-  const priorUserMessages = recentTurns
+  const deterministicContextTurns = needsFullDeterministicHistory
+    || compose !== composeEnergyAssistantAnswer
+    ? recentTurns
+    : decisionRecentTurns;
+  const priorUserMessages = deterministicContextTurns
     .filter((turn) => turn.role === "user")
+    .map((turn) => turn.content);
+  const priorAssistantMessages = deterministicContextTurns
+    .filter((turn) => turn.role === "assistant")
     .map((turn) => turn.content);
   if (planContext) priorUserMessages.unshift(surgePlanContextSummary(planContext));
   const now = dateFrom(dependencies);
-  const compose = dependencies.composeAnswer || composeEnergyAssistantAnswer;
   const deterministicMessage = compose === composeEnergyAssistantAnswer
-    ? pendingQuestionContextMessage(message, continuation, conversationIntent)
+    ? needsFullDeterministicHistory
+      ? message
+      : pendingQuestionContextMessage(message, framedContinuation, conversationIntent, decisionRecentTurns)
     : message;
-  const composedAnswer = compose(deterministicMessage, { audience, pageContext, asOf: now, priorUserMessages });
+  const composedAnswer = compose(deterministicMessage, {
+    audience,
+    pageContext,
+    asOf: now,
+    priorUserMessages,
+    priorAssistantMessages,
+  });
   const pendingAnswer = compose === composeEnergyAssistantAnswer
-    ? pendingRoomAnswer(message, continuation, conversationIntent, composedAnswer)
+    ? pendingRoomAnswer(message, framedContinuation, conversationIntent, composedAnswer)
     : null;
   const safetyAnswer = composeSurgeSafetyAnswer(message, priorUserMessages);
   const nonCurrentHazardAnswer = safetyAnswer
     ? null
     : composeSurgeNonCurrentHazardAnswer(message, priorUserMessages);
   const requiresDeterministicSafety = Boolean(safetyAnswer);
-  const requiresDeterministicDocumentAnswer = isEnergyDocumentQuoteConversationRequest(message, priorUserMessages);
+  const requiresDeterministicDocumentAnswer = documentQuoteConversation;
+  const requiresDeterministicScopeBoundary = isSurgeExplicitlyOutsideScope(message);
   const requiresDeterministicHeatingDefault = needsDeterministicHeatingDefault(message, composedAnswer);
-  const serviceLocationFollowUp = isSurgeServiceLocationFollowUp(message, priorUserMessages);
-  const requiresDeterministicServiceAnswer = serviceLocationFollowUp
-    || (isSurgeServiceOrCompetingQuoteRequest(message)
-      && !surgeServiceRequestAlsoAsksEnergyDecision(message));
+  const requiresDeterministicServiceAnswer = initialServiceRequest
+    || serviceLocationFollowUp
+    || serviceConversationFollowUp;
   const protectedAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
     || requiresDeterministicServiceAnswer
     ? null
     : publicPolicyAnswer(message);
   const planPriorityAnswer = requiresDeterministicSafety || requiresDeterministicDocumentAnswer
-    || requiresDeterministicHeatingDefault || requiresDeterministicServiceAnswer || protectedAnswer
+    || requiresDeterministicScopeBoundary || requiresDeterministicHeatingDefault
+    || requiresDeterministicServiceAnswer || protectedAnswer
     ? null
-    : composeSurgePlanPriorityAnswer(message, planContext, recentTurns);
+    : composeSurgePlanPriorityAnswer(message, planContext, decisionRecentTurns);
   const simpleAnswer = compose !== composeEnergyAssistantAnswer
     || requiresDeterministicSafety || requiresDeterministicDocumentAnswer
-    || requiresDeterministicHeatingDefault || requiresDeterministicServiceAnswer
+    || requiresDeterministicScopeBoundary || requiresDeterministicHeatingDefault
+    || requiresDeterministicServiceAnswer
     || protectedAnswer || planPriorityAnswer || pendingAnswer
+    || (OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message)
+      && composedAnswer.citations.some((citation) => !citation.stale))
     ? null
-    : composeSurgeSimpleAnswer(deterministicMessage, composedAnswer, planContext, recentTurns);
-  const deterministicAnswer = safetyAnswer
+    : composeSurgeSimpleAnswer(message, composedAnswer, planContext, decisionRecentTurns);
+  let deterministicAnswer = safetyAnswer
     || protectedAnswer
     || planPriorityAnswer
     || nonCurrentHazardAnswer
     || pendingAnswer
     || simpleAnswer
     || composedAnswer;
+  const inheritedDecision = conversationIntent === "answer_to_follow_up"
+    || conversationIntent === "contextual_follow_up"
+    || conversationIntent === "clarification"
+    || conversationIntent === "correction";
+  if (inheritedDecision && !requiresDeterministicSafety && !protectedAnswer) {
+    const selectedText = policyText(deterministicAnswer);
+    const composedText = policyText(composedAnswer);
+    const selectedFailedDecision = isGenericNonAnswer(deterministicAnswer)
+      || !surgeAnswerMatchesQuestionIntent(decisionContext, selectedText);
+    const composedFitsDecision = !isGenericNonAnswer(composedAnswer)
+      && surgeAnswerMatchesQuestionIntent(decisionContext, composedText);
+    if (selectedFailedDecision && composedFitsDecision) deterministicAnswer = composedAnswer;
+  }
   let answer = deterministicAnswer;
   let presentation: SurgeAnswerPresentation | null = null;
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
-  let nextContinuation: SurgeConversationState = continuation || emptySurgeConversationState();
+  let nextContinuation: SurgeConversationState = framedContinuation || emptySurgeConversationState();
   let officialCitations: SurgeOfficialWebCitation[] = [];
   if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer
-    && !requiresDeterministicHeatingDefault && !requiresDeterministicServiceAnswer && !protectedAnswer) {
+    && !requiresDeterministicScopeBoundary
+    && !requiresDeterministicServiceAnswer && !protectedAnswer) {
     const modelRequest: SurgeModelRequest = {
       message,
       audience,
       pageContext,
       asOf: now,
       recentTurns: modelRecentTurns,
-      continuation,
+      continuation: framedContinuation,
       planContext,
       deterministicAnswer,
     };
@@ -1287,6 +1742,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     const referenceAnswer = groundedAnswer || deterministicAnswer;
     const officialWebSearch = officialWebSearchPlanFor(
       message,
+      decisionContext,
       audience,
       planContext,
       referenceAnswer,
@@ -1324,9 +1780,28 @@ async function ask(request: Request, dependencies: ServerDependencies) {
               : null;
             if (generated
               && (!officialWebSearch || generatedOfficialCitations)
-              && generatedResultIsPolicySafe(generated, audience, message)
+              && generatedResultIsPolicySafe(
+                 generated,
+                 audience,
+                 message,
+                 decisionContext,
+              )
               && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
-              answer = generated.answer;
+              const maintainedDirectoryCitations = !officialWebSearch
+                && OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message)
+                ? referenceAnswer.citations.filter((citation) => (
+                    citation.sourceTier === "primary_official" && !citation.stale
+                  ))
+                : [];
+              answer = maintainedDirectoryCitations.length
+                ? {
+                    ...generated.answer,
+                    citations: [
+                      ...generated.answer.citations,
+                      ...maintainedDirectoryCitations,
+                    ].slice(0, 8),
+                  }
+                : generated.answer;
               presentation = generated.presentation || null;
               nextContinuation = generated.continuation;
               officialCitations = generatedOfficialCitations || [];
@@ -1339,12 +1814,22 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       }
     }
     if (officialWebSearch && answerSource !== "model") {
-      answer = officialSearchUnavailableAnswer(message, officialWebSearch);
+      answer = officialSearchUnavailableAnswer(message, officialWebSearch, referenceAnswer);
       presentation = null;
       officialCitations = [];
     } else if (answerSource === "deterministic" && groundedAnswer) {
       answer = groundedAnswer;
       answerSource = "grounded";
+    }
+    if (dependencies.requireValidatedModelForOrdinaryAdvice
+      && !deliverGroundedDirectly
+      && !officialWebSearch
+      && answerSource !== "model") {
+      throw new EnergyAssistantServerError(
+        503,
+        "SURGE_AI_TEMPORARILY_UNAVAILABLE",
+        "I could not complete a reliable answer just now. Your question is ready to retry in a moment.",
+      );
     }
   }
   const publicAnswer = requiresDeterministicSafety
@@ -1356,28 +1841,68 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   const safeAnswer = audience === "trade"
     ? answer
     : enforceCustomerPolicy(publicAnswer, publicDeterministicAnswer, protectedAnswer);
+  const requiredPendingQuestion = requiresDeterministicSafety
+    || requiresDeterministicDocumentAnswer
+    || requiresDeterministicScopeBoundary
+    || requiresDeterministicServiceAnswer
+    || protectedAnswer
+    ? ""
+    : requiredPendingQuestionForTurn(
+        message,
+        framedContinuation,
+        conversationIntent,
+      );
   const reply = buildReply(
     safeAnswer,
     message,
     answerSource === "model" && safeAnswer.directAnswer === answer.directAnswer ? presentation : null,
     recentTurns,
     planContext,
+    framedContinuation,
+    requiredPendingQuestion,
     answerSource === "model" && safeAnswer.directAnswer === answer.directAnswer
       ? officialCitations
       : [],
     now,
     dependencies.randomUUID || (() => crypto.randomUUID()),
   );
-  const safeContinuation = publicSafeContinuation(
-    continuationAfterDeliveredReply(
-      nextContinuation,
-      message,
-      reply,
-      answerSource === "model",
-      conversationIntent,
-    ),
-    audience,
-  );
+  const modelStateWithLedger = continuation?.ledger && !nextContinuation.ledger
+    ? { ...nextContinuation, ledger: continuation.ledger }
+    : nextContinuation;
+  const baseDeliveredState = requiresDeterministicScopeBoundary
+    ? continuation || emptySurgeConversationState()
+    : continuationAfterDeliveredReply(
+        modelStateWithLedger,
+        message,
+        reply,
+        answerSource === "model",
+        conversationIntent,
+      );
+  const deliveredState = serviceContext && requiresDeterministicServiceAnswer
+    ? continuationForServiceEnquiry(baseDeliveredState, serviceContext, reply)
+    : baseDeliveredState;
+  const ledgerIntent = serviceConversationFollowUp
+    ? serviceContext?.correctionRequested
+      ? "correction"
+      : "contextual_follow_up"
+    : initialServiceRequest
+      ? "topic_change"
+    : conversationIntent;
+  const derivedFacts = answerSource === "deterministic"
+    ? surgeRecurringFinanceConversationFacts(message, priorUserMessages)
+    : [];
+  const ledgerState = requiresDeterministicScopeBoundary
+    ? deliveredState
+    : updateSurgeConversationLedger(deliveredState, {
+        message,
+        answerSummary: reply.content,
+        followUpQuestion: reply.followUpQuestion,
+        intent: ledgerIntent,
+        planFacts: planContext?.facts || [],
+        modelState: deliveredState,
+        derivedFacts,
+      });
+  const safeContinuation = publicSafeContinuation(ledgerState, audience);
   const publicPolicyPassed = audience === "trade" || (
     !surgeOutputViolatesPublicPolicy(`${reply.content}\n${JSON.stringify(safeContinuation)}`)
     && !containsSurgeNamedReference(JSON.stringify(safeContinuation))

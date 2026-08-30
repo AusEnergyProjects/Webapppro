@@ -77,26 +77,45 @@ const PLAIN_LANGUAGE_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bretained cooling capacity\b/gi, "cooling output in very hot weather"],
   [/\bthermal performance\b/gi, "how well the home holds a comfortable temperature"],
   [/\bdelivered heat\b/gi, "heat supplied to the room"],
-  [/\bportable resistance heaters?\b/gi, "plug-in electric heaters"],
+  [/\bportable resistance heaters\b/gi, "plug-in electric heaters"],
+  [/\bportable resistance heater\b/gi, "plug-in electric heater"],
   [/\bresistance heating\b/gi, "plug-in electric heating"],
 ];
 
-function clean(value: string, maximum = 1_200) {
+function normalizedText(value: string) {
   return value
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .replace(/\s*[\u2013\u2014]\s*/gu, ", ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, maximum)
     .trim();
 }
 
+export function clipSurgeTextAtBoundary(value: string, maximum: number) {
+  if (value.length <= maximum) return value;
+  const prefix = value.slice(0, Math.max(1, maximum - 3)).trimEnd();
+  const sentenceEnds = [...prefix.matchAll(/[.!?](?=\s|$)/gu)];
+  const lastSentenceEnd = sentenceEnds.at(-1)?.index;
+  if (lastSentenceEnd !== undefined && lastSentenceEnd + 1 >= Math.min(80, maximum / 3)) {
+    return prefix.slice(0, lastSentenceEnd + 1).trim();
+  }
+  const lastWordEnd = prefix.lastIndexOf(" ");
+  const completeWords = (lastWordEnd > 0 ? prefix.slice(0, lastWordEnd) : prefix)
+    .replace(/[,:;]+$/u, "")
+    .trimEnd();
+  return `${completeWords}...`;
+}
+
+function clean(value: string, maximum = 1_200) {
+  return clipSurgeTextAtBoundary(normalizedText(value), maximum);
+}
+
 export function toSurgePlainLanguage(value: string, maximum = 1_200) {
-  return PLAIN_LANGUAGE_REPLACEMENTS.reduce(
+  const plain = PLAIN_LANGUAGE_REPLACEMENTS.reduce(
     (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    clean(value, maximum),
+    normalizedText(value),
   );
+  return clipSurgeTextAtBoundary(plain, maximum);
 }
 
 function words(value: string) {
@@ -132,13 +151,16 @@ export function surgePresentationText(
   presentation: SurgeAnswerPresentation,
   includeFollowUp = false,
 ) {
-  return [
+  const sections = [
     presentation.verdict,
     presentation.reason,
     ...presentation.steps,
     presentation.extraDetail,
     includeFollowUp ? presentation.followUpQuestion : "",
-  ].filter(Boolean).join("\n\n");
+  ].filter(Boolean);
+  const structured = presentation.answerType === "safety"
+    || (presentation.answerType === "starting_plan" && presentation.steps.length >= 2);
+  return sections.join(structured ? "\n\n" : " ");
 }
 
 export function surgePresentationPassesEverydayLanguage(
@@ -152,9 +174,16 @@ export function surgePresentationPassesEverydayLanguage(
   const completeText = surgePresentationText(presentation, true);
   const visibleMetrics = surgePlainLanguageMetrics(visibleText);
   const completeMetrics = surgePlainLanguageMetrics(completeText);
+  const visibleWordLimit = presentation.answerType === "starting_plan" ? 150 : 120;
   return Boolean(presentation.verdict)
-    && words(presentation.verdict).length <= 28
-    && visibleMetrics.wordCount <= 120
+    && ![
+      presentation.verdict,
+      presentation.reason,
+      ...presentation.steps,
+      presentation.extraDetail,
+    ].some(surgeTextHasIncompleteTrailingFragment)
+    && words(presentation.verdict).length <= 32
+    && visibleMetrics.wordCount <= visibleWordLimit
     && completeMetrics.wordCount <= 180
     && completeMetrics.averageSentenceWords <= 24
     && completeMetrics.longestSentenceWords <= 36
@@ -163,11 +192,26 @@ export function surgePresentationPassesEverydayLanguage(
     && presentation.quickReplies.length === 0;
 }
 
+export function surgeTextHasIncompleteTrailingFragment(value: string) {
+  return value.split(/\n+/u).some((block) => {
+    const candidate = block.trim();
+    if (!candidate) return false;
+    if (candidate.endsWith("...")) return true;
+    if (/\b(?:a|an|and|as|at|because|but|by|for|from|if|in|into|of|on|or|the|to|with)\s*$/iu.test(candidate)) {
+      return true;
+    }
+    if (/(?:^|[.!?]\s+)(?:although|because|if|unless|when|while)\b[^,.!?]*$/iu.test(candidate)) {
+      return true;
+    }
+    return candidate.length >= 80 && !/[.!?)\]"'\u2019\u201D]$/u.test(candidate);
+  });
+}
+
 function answerTypeFor(message: string, answer: EnergyAssistantAnswer): SurgeAnswerType {
   if (answer.status === "source_review_required" || /\b(?:smoke|spark|arcing|burning|gas smell|asbestos|live wire|battery fire)\b/i.test(message)) {
     return "safety";
   }
-  if (/\b(?:where|how) (?:do|should|can) i start\b|\bwhat first\b/i.test(message)) return "starting_plan";
+  if (/\b(?:where|how) (?:do|should|can) [^.!?]{1,40}\bstart\b|\bwhat (?:should|can) [^.!?]{1,40}\bdo first\b|\bwhat first\b/i.test(message)) return "starting_plan";
   if (/\b(?:yes or no|is it|is this|worth it|good quote|make sense|should i|can i)\b/i.test(message)) return "decision";
   if (/\b(?:difference|compare|versus|\bvs\b|better than)\b/i.test(message)) return "comparison";
   if (/\b(?:what do you mean|simpler|explain that|why did|you asked|already told)\b/i.test(message)) return "clarification";

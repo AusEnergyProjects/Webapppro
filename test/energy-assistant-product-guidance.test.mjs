@@ -373,6 +373,47 @@ test("does not hijack a broad topic requested in response to Surge's guide promp
   assert.equal(await resolver(broadTopic), null);
 });
 
+test("system details continue the existing Victorian rebate decision", async () => {
+  const product = officialProduct({
+    kind: "air_conditioner",
+    key: "emerald-mh18",
+    brand: "Emerald",
+    model: "MH18-OUT",
+    attributes: { ratedPowerKw: 18 },
+  });
+  const resolver = createSurgeGroundedProductGuidanceResolver({}, {
+    searchProducts: createRegistrySearch({ air_conditioner: [product] }),
+    loadPrices: async () => prices(),
+  });
+  const followUp = request(
+    "I am installing next Friday, an Emerald 18 kW multi-head system with three heads",
+    [
+      { key: "postcode", value: "3000" },
+      { key: "state_or_territory", value: "VIC" },
+      { key: "tenure", value: "I own the home" },
+    ],
+  );
+  followUp.recentTurns = [
+    { role: "user", content: "How much rebate can I get for replacing ducted gas heating?" },
+    { role: "assistant", content: "The amount depends on the exact proposed system. What system are you installing?" },
+  ];
+  followUp.continuation = {
+    version: 1,
+    activeTopic: "rebates_certificates",
+    goal: "Work out the rebate for replacing ducted gas heating",
+    facts: [{ key: "existing_heating", value: "ducted gas heating" }],
+    pendingQuestion: "What exact proposed system and installation date apply?",
+    lastAnswerSummary: "Explained that the discount is not a fixed amount.",
+  };
+
+  const result = await resolver(followUp);
+  assert.ok(result);
+  assert.match(result.directAnswer, /VEEC|Victori/i);
+  assert.match(result.directAnswer, /exact brand and model|exact model/i);
+  assert.doesNotMatch(result.directAnswer, /SRES|solar panel|inverter|roof layout/i);
+  assert.equal(result.status, "needs_context");
+});
+
 test("compares exact models only on the same reviewed unit and test condition", async () => {
   const products = [
     officialProduct({
@@ -561,6 +602,24 @@ test("does not treat an approved inverter model as a complete STC calculation", 
   assert.match(result.directAnswer, /will not infer STCs, VEECs, ESCs or PRCs/i);
   assert.doesNotMatch(result.directAnswer, /\b\d+ STCs for postcode/i);
   assert.equal(estimateCalls, 0);
+  assert.equal(result.status, "needs_context");
+  noDash(result);
+});
+
+test("does not imply WA dishwasher rebate qualification from generic directory coverage", async () => {
+  const resolver = createSurgeGroundedProductGuidanceResolver({});
+  const result = await resolver(request(
+    "Can I get a rebate for a dishwasher in WA?",
+    [
+      { key: "postcode", value: "6000" },
+      { key: "state_or_territory", value: "WA" },
+    ],
+  ));
+
+  assert.ok(result);
+  assert.match(result.directAnswer, /directory coverage alone does not establish that a rebate is available/i);
+  assert.match(result.directAnswer, /current programme availability and eligibility still need checking/i);
+  assert.doesNotMatch(result.directAnswer, /^Yes\b|\bmay qualify\b/i);
   assert.equal(result.status, "needs_context");
   noDash(result);
 });

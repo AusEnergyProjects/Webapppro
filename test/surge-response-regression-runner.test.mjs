@@ -3,10 +3,15 @@ import test from "node:test";
 import {
   createSurgeRegressionCacheKey,
   createSurgeRegressionRunIdentity,
+  loadSurgeRegressionFixture,
+  parseSurgeRegressionArgs,
   sanitizeSurgeRegressionRejectionDiagnostic,
   selectSurgeRegressionCases,
   surgeRegressionObservationIsValid,
+  validateSurgeRegressionFixture,
 } from "../scripts/run-surge-response-regression.mjs";
+
+const HELDOUT_FIXTURE_PATH = "test/fixtures/surge-heldout-customer-2026-08-29.json";
 
 const CASE = {
   id: "case-1",
@@ -153,4 +158,126 @@ test("a bounded repair sample selects only explicit unique corpus cases in order
     () => selectSurgeRegressionCases("case-ids", ["not-a-real-case"]),
     /Unknown regression case ID/,
   );
+});
+
+test("the held-out fixture flag is explicit and cannot use family sampling", () => {
+  const args = parseSurgeRegressionArgs([
+    "--fixture",
+    HELDOUT_FIXTURE_PATH,
+    "--run-label",
+    "heldout-test",
+    "--all",
+    "--dry-run",
+  ]);
+  assert.equal(args.fixture, HELDOUT_FIXTURE_PATH);
+  assert.equal(args.mode, "all");
+  assert.throws(() => parseSurgeRegressionArgs([
+    "--fixture",
+    HELDOUT_FIXTURE_PATH,
+    "--run-label",
+    "heldout-test",
+    "--one-per-family",
+    "--dry-run",
+  ]), /support only --all or explicit --case-id/);
+  assert.throws(() => parseSurgeRegressionArgs([
+    "--fixture",
+    HELDOUT_FIXTURE_PATH,
+    "--fixture",
+    HELDOUT_FIXTURE_PATH,
+    "--run-label",
+    "heldout-test",
+    "--all",
+    "--dry-run",
+  ]), /must not be repeated/);
+  assert.throws(() => parseSurgeRegressionArgs([
+    "--run-label",
+    "corpus-test",
+    "--case-id",
+    "not-a-corpus-case",
+    "--dry-run",
+  ]), /unknown regression case ID/);
+});
+
+test("the immutable held-out fixture loads all fresh cases and keeps exact ID selection", async () => {
+  const fixture = await loadSurgeRegressionFixture(HELDOUT_FIXTURE_PATH);
+  assert.equal(fixture.cases.length, 13);
+  assert.equal(Object.isFrozen(fixture.cases), true);
+  assert.equal(Object.isFrozen(fixture.cases[0]), true);
+  assert.equal(new Set(fixture.cases.map((entry) => entry.id)).size, 13);
+
+  const selected = selectSurgeRegressionCases("case-ids", [
+    "heldout-hpwh-document-finance-01",
+    "heldout-outside-scope-recipe-01",
+  ], fixture.cases);
+  assert.deepEqual(selected.map((entry) => entry.id), [
+    "heldout-hpwh-document-finance-01",
+    "heldout-outside-scope-recipe-01",
+  ]);
+  assert.equal(selectSurgeRegressionCases("all", [], fixture.cases).length, 13);
+  assert.throws(
+    () => selectSurgeRegressionCases("case-ids", ["heldout-not-present"], fixture.cases),
+    /Unknown regression case ID/,
+  );
+});
+
+test("held-out fixture paths fail closed outside the reviewed JSON directory", async () => {
+  await assert.rejects(
+    loadSurgeRegressionFixture("package.json"),
+    /under test\/fixtures/,
+  );
+  await assert.rejects(
+    loadSurgeRegressionFixture("test/fixtures/../surge-response-regression-runner.test.mjs"),
+    /JSON file under test\/fixtures/,
+  );
+  await assert.rejects(
+    loadSurgeRegressionFixture("../outside.json"),
+    /under test\/fixtures/,
+  );
+});
+
+test("held-out fixture schema rejects extra fields, invalid regexes, duplicate and corpus IDs", async () => {
+  const fixture = await loadSurgeRegressionFixture(HELDOUT_FIXTURE_PATH);
+  const example = structuredClone(fixture.cases[0]);
+
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{ ...example, unexpected: true }],
+  }), /reviewed schema/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{
+      ...example,
+      forbiddenPatterns: ["("],
+    }],
+  }), /reviewed schema/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [example, structuredClone(example)],
+  }), /IDs must be unique/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{ ...example, id: "hpwh_timing-02" }],
+  }), /reviewed schema/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{
+      ...example,
+      question: selectSurgeRegressionCases("case-ids", ["hpwh_timing-02"])[0].question,
+    }],
+  }), /reviewed schema/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{ ...example, question: "OPENAI_API_KEY=not-allowed" }],
+  }), /reviewed schema/);
+  assert.throws(() => validateSurgeRegressionFixture({
+    version: 1,
+    cases: [{
+      ...example,
+      planContext: {
+        version: 1,
+        source: "home_energy_plan",
+        facts: [{ key: "glazing", value: "An invented glazing option" }],
+      },
+    }],
+  }), /reviewed schema/);
 });

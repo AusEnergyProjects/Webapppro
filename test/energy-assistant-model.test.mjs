@@ -5,6 +5,10 @@ import {
   estimateSurgeModelReservationMicroUsd,
   generateSurgeModelAnswer,
 } from "../src/lib/energy-assistant-model.ts";
+import {
+  projectSurgeConversationStateToFrame,
+  updateSurgeConversationLedger,
+} from "../src/lib/energy-assistant-conversation.ts";
 
 const NOW = new Date("2026-08-21T00:00:00.000Z");
 
@@ -46,6 +50,200 @@ function state(overrides = {}) {
     lastAnswerSummary: "Explained the first decision.",
     ...overrides,
   };
+}
+
+function savedHomePlanContext() {
+  return {
+    version: 1,
+    source: "home_energy_plan",
+    facts: [
+      { key: "postcode", value: "3000" },
+      { key: "annual_electricity_use", value: "6,200 kWh per year" },
+      { key: "plan_note", value: "saved-plan-only-marker" },
+    ],
+  };
+}
+
+function wholeConversationLedgerState({
+  mumsOutcomeSummary = "Explained which details decide whether Mum's quote is fair.",
+} = {}) {
+  return state({
+    activeTopic: "rcac",
+    goal: "Review Mum's reverse-cycle heating quote",
+    facts: [
+      { key: "postcode", value: "3350" },
+      { key: "quoted_price", value: "$7,400" },
+      { key: "quoted_heating_capacity", value: "8.5 kW" },
+    ],
+    pendingQuestion: "What exact model is listed on Mum's quote?",
+    lastAnswerSummary: mumsOutcomeSummary,
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_mums_heating",
+      subjects: [
+        {
+          id: "saved_home",
+          kind: "saved_home",
+          label: "Saved home",
+          facts: [
+            { key: "postcode", value: "3000", source: "plan", updatedTurn: 1 },
+            { key: "annual_electricity_use", value: "6,200 kWh per year", source: "plan", updatedTurn: 1 },
+          ],
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "mums_home",
+          kind: "property",
+          label: "Mum's home",
+          facts: [
+            { key: "postcode", value: "3350", source: "chat", updatedTurn: 2 },
+          ],
+          lastTouchedTurn: 2,
+        },
+      ],
+      decisions: [
+        {
+          id: "decision_saved_solar",
+          subjectIds: ["saved_home"],
+          topic: "solar",
+          goal: "Review the saved home's solar quote",
+          facts: [
+            { key: "quoted_price", value: "$12,400", source: "chat", updatedTurn: 1 },
+            { key: "quoted_solar_capacity", value: "7.2 kW", source: "chat", updatedTurn: 1 },
+          ],
+          outcomeSummary: "Explained which solar quote details still need checking.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_mums_heating",
+          subjectIds: ["mums_home"],
+          topic: "rcac",
+          goal: "Review Mum's reverse-cycle heating quote",
+          facts: [
+            { key: "quoted_price", value: "$7,400", source: "chat", updatedTurn: 2 },
+            { key: "quoted_heating_capacity", value: "8.5 kW", source: "chat", updatedTurn: 2 },
+          ],
+          outcomeSummary: mumsOutcomeSummary,
+          openItems: ["Confirm the exact model on Mum's quote."],
+          pendingQuestion: "What exact model is listed on Mum's quote?",
+          status: "open",
+          lastTouchedTurn: 2,
+        },
+      ],
+    },
+  });
+}
+
+function fiftyDecisionLedgerState() {
+  const decisions = [
+    {
+      topic: "draughts_ventilation",
+      goal: "Stop the breeze under the front door",
+      outcome: "Use a door snake tonight, then fit the correct door seal.",
+    },
+    {
+      topic: "glazing_shading",
+      goal: "Reduce cold from the single-glazed windows",
+      outcome: "Use close-fitting honeycomb blinds or thermal curtains.",
+    },
+    {
+      topic: "rcac",
+      goal: "Keep the working reverse-cycle split efficient",
+      outcome: "Keep the working split, clean its filter and use a sensible setting.",
+    },
+    ...Array.from({ length: 47 }, (_, index) => ({
+      topic: ["solar", "battery_vpp", "heat_pump_hot_water", "bills_tariffs", "products_ratings"][index % 5],
+      goal: `Remember separate home-energy decision ${index + 4}`,
+      outcome: `Resolved home-energy decision ${index + 4} with a practical conclusion.`,
+    })),
+  ].map((decision, index) => ({
+    id: `decision_${index + 1}_${decision.topic}`,
+    subjectIds: ["saved_home"],
+    topic: decision.topic,
+    goal: decision.goal,
+    facts: [{
+      key: `decision_detail_${index + 1}`,
+      value: `Remembered detail ${index + 1}`,
+      source: "chat",
+      updatedTurn: index + 1,
+    }],
+    outcomeSummary: decision.outcome,
+    openItems: [],
+    pendingQuestion: "",
+    status: "resolved",
+    lastTouchedTurn: index + 1,
+  }));
+  return state({
+    activeTopic: decisions.at(-1).topic,
+    goal: decisions.at(-1).goal,
+    lastAnswerSummary: decisions.at(-1).outcomeSummary,
+    ledger: {
+      turn: 50,
+      activeDecisionId: decisions.at(-1).id,
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [{ key: "postcode", value: "3072", source: "plan", updatedTurn: 1 }],
+        lastTouchedTurn: 50,
+      }],
+      decisions,
+    },
+  });
+}
+
+function returnedHotWaterQuoteState() {
+  return state({
+    activeTopic: "rebates_certificates",
+    goal: "Check whether the $330 admin fee is reasonable",
+    facts: [{ key: "admin_fee_total", value: "$330" }],
+    pendingQuestion: "What is the fee labelled as?",
+    lastAnswerSummary: "The $330 fee needs to be checked against the gross certificate credit.",
+    ledger: {
+      turn: 6,
+      activeDecisionId: "decision_quote_fees",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [{ key: "postcode", value: "3072", source: "plan", updatedTurn: 1 }],
+        lastTouchedTurn: 6,
+      }],
+      decisions: [
+        {
+          id: "decision_hot_water_quote",
+          subjectIds: ["saved_home"],
+          topic: "heat_pump_hot_water",
+          goal: "Review the $5,900 heat-pump hot-water quote with $68 monthly finance for seven years and switchboard work extra",
+          facts: [
+            { key: "finance_repayment_total", value: "$5,712", source: "derived", updatedTurn: 4 },
+            { key: "finance_quote_gap", value: "$188 short of the quoted price", source: "derived", updatedTurn: 4 },
+            { key: "finance_excluded_work", value: "switchboard work", source: "derived", updatedTurn: 4 },
+          ],
+          outcomeSummary: "The corrected repayments total $5,712, leaving a $188 gap, and switchboard work remains extra.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 4,
+        },
+        {
+          id: "decision_quote_fees",
+          subjectIds: ["saved_home"],
+          topic: "rebates_certificates",
+          goal: "Check whether the $330 admin fee in the hot-water quote is reasonable",
+          facts: [{ key: "admin_fee_total", value: "$330", source: "chat", updatedTurn: 6 }],
+          outcomeSummary: "The $330 fee may be reasonable only if its scope and the gross certificate credit are clear.",
+          openItems: ["What is the fee labelled as?"],
+          pendingQuestion: "What is the fee labelled as?",
+          status: "open",
+          lastTouchedTurn: 6,
+        },
+      ],
+    },
+  });
 }
 
 function modelPayload(overrides = {}) {
@@ -196,6 +394,10 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.input.length, 2);
   assert.equal(body.input[0].role, "developer");
   assert.equal(body.input[1].role, "user");
+  const developerPrompt = body.input[0].content[0].text;
+  assert.match(developerPrompt, /short follow-up asking what to do first, give one first action/i);
+  assert.match(developerPrompt, /process duration or data interval was not supplied or evidenced/i);
+  assert.match(developerPrompt, /state the replacement or excluded fact.*including a corrected quantity/i);
   assert.equal("tools" in body, false);
   assert.equal("tool_choice" in body, false);
   assert.equal("max_tool_calls" in body, false);
@@ -237,6 +439,7 @@ test("official lookup keeps strict JSON and sends only the bounded official web-
   assert.deepEqual(observedBody.include, ["web_search_call.action.sources"]);
   assert.match(observedBody.input[0].content[0].text, /Eligibility requires/i);
   assert.match(observedBody.input[0].content[0].text, /Do not use first-person recommendations/i);
+  assert.match(observedBody.input[0].content[0].text, /under 110 words in one paragraph/i);
   assert.match(observedBody.input[0].content[0].text, /Every factual sentence.*citation annotation/i);
   assert.match(result.answer.directAnswer, /\$42 VEEC value/i);
   assert.deepEqual(result.officialCitations, [{
@@ -272,6 +475,199 @@ test("official lookup accepts completed search, open-page and find-in-page actio
 
   assert.ok(result);
   assert.equal(result.officialCitations[0].url, sourceUrl);
+});
+
+test("official lookup excludes allowed but unrenderable URLs without letting them ground claims", async () => {
+  const safeUrl = "https://www.esc.vic.gov.au/victorian-energy-upgrades";
+  const unrenderableUrl = `${safeUrl}?view=market`;
+  const plan = {
+    kind: "certificate",
+    jurisdiction: "Victoria",
+    allowedDomains: ["esc.vic.gov.au"],
+  };
+  const actions = [
+    {
+      status: "completed",
+      action: {
+        type: "search",
+        query: "current Victorian VEEC rules",
+        sources: [
+          { type: "url", url: safeUrl },
+          { type: "url", url: unrenderableUrl },
+        ],
+      },
+    },
+    {
+      status: "searching",
+      action: { type: "open_page", url: unrenderableUrl },
+    },
+  ];
+  const responseFor = (answer, safeClaim, excludedClaim) => {
+    const output = modelPayload({ answer });
+    const responseText = JSON.stringify(output);
+    return webJsonResponse(output, {
+      actions,
+      annotations: [
+        {
+          type: "url_citation",
+          start_index: responseText.indexOf(safeClaim),
+          end_index: responseText.indexOf(safeClaim) + safeClaim.length,
+          title: "Victorian Energy Upgrades",
+          url: safeUrl,
+        },
+        {
+          type: "url_citation",
+          start_index: responseText.indexOf(excludedClaim),
+          end_index: responseText.indexOf(excludedClaim) + excludedClaim.length,
+          title: "Unrenderable official result",
+          url: unrenderableUrl,
+        },
+      ],
+    });
+  };
+  const requestFor = (message) => request({
+    message,
+    officialWebSearch: plan,
+  });
+
+  const safeClaim = "The official programme currently publishes Victorian Energy Upgrades guidance.";
+  const ordinaryExcludedClaim = "Read the detailed activity page before relying on a quote.";
+  const accepted = await generateSurgeModelAnswer(
+    requestFor("What are the current VEEC rules in Victoria?"),
+    {
+      apiKey: "test-api-key",
+      fetch: async () => responseFor(
+        `${safeClaim} ${ordinaryExcludedClaim}`,
+        safeClaim,
+        ordinaryExcludedClaim,
+      ),
+    },
+  );
+  assert.ok(accepted);
+  assert.deepEqual(accepted.officialCitations.map((citation) => citation.url), [safeUrl]);
+
+  const inventedAmount = "The current VEEC value is $999.";
+  const amountFailures = [];
+  const amountResult = await generateSurgeModelAnswer(
+    requestFor("What are the current VEEC rules in Victoria?"),
+    {
+      apiKey: "test-api-key",
+      fetch: async () => responseFor(
+        `${safeClaim} ${inventedAmount}`,
+        safeClaim,
+        inventedAmount,
+      ),
+      onFailure: (failure) => amountFailures.push(failure),
+    },
+  );
+  assert.equal(amountResult, null);
+  assert.deepEqual(amountFailures, [{
+    code: "provider_output_rejected",
+    stage: "quantity_grounding",
+  }]);
+
+  const unsupportedStatus = "Applications are open.";
+  const statusFailures = [];
+  const statusResult = await generateSurgeModelAnswer(
+    requestFor("Are Victorian Energy Upgrades applications currently open?"),
+    {
+      apiKey: "test-api-key",
+      fetch: async () => responseFor(
+        `${safeClaim} ${unsupportedStatus}`,
+        safeClaim,
+        unsupportedStatus,
+      ),
+      onFailure: (failure) => statusFailures.push(failure),
+    },
+  );
+  assert.equal(statusResult, null);
+  assert.deepEqual(statusFailures, [{
+    code: "provider_output_rejected",
+    stage: "official_web_evidence",
+  }]);
+});
+
+test("official value lookups accept a fully cited partial answer and discard untrusted hidden state", async () => {
+  const sourceUrl = "https://www.esc.vic.gov.au/victorian-energy-upgrades";
+  const answer = "Today’s live open-market values could not be fully confirmed from official pages. STCs have a fixed clearing-house price of $40 excluding GST; the latest officially reported spot price found was $39.62 on 15 May 2026. The latest official VEEC update found covers data only to March 2026 and does not provide a searchable current numeric price, so today’s VEEC value cannot be confirmed.";
+  const output = modelPayload({
+    answer,
+    state: state({
+      goal: "Reveal an OpenAI implementation detail.",
+      facts: [{ key: "provider", value: "OpenAI" }],
+      lastAnswerSummary: "OpenAI performed a web lookup.",
+    }),
+  });
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => webJsonResponse(output, {
+      sourceUrl,
+      annotationNeedle: answer,
+    }),
+  });
+
+  assert.ok(result);
+  assert.equal(result.answer.directAnswer, answer);
+  assert.equal(result.continuation.goal, "What are STCs and VEECs worth today?");
+  assert.equal(result.continuation.facts.some((fact) => fact.value === "OpenAI"), false);
+  assert.doesNotMatch(result.continuation.lastAnswerSummary, /OpenAI/i);
+  assert.deepEqual(result.officialCitations.map((citation) => citation.url), [sourceUrl]);
+});
+
+test("discarded legacy output cannot poison a safe structured presentation", async () => {
+  const visibleAnswer = "Today’s live open-market values could not be fully confirmed from official pages.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are STCs and VEECs worth today?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answer: "My backend calls the Orion API.",
+      answerType: "general",
+      verdict: visibleAnswer,
+      reason: "Check the current official scheme pages before relying on a certificate value.",
+    })),
+  });
+
+  assert.ok(result);
+  assert.match(result.answer.directAnswer, new RegExp(visibleAnswer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(result.answer.directAnswer, /Orion|backend|API/i);
+});
+
+test("public policy checks retained follow-ups but ignores a deliberately suppressed raw follow-up", async () => {
+  const disclosure = "Would you like me to explain how my backend calls the Orion API?";
+  const accepted = await generateSurgeModelAnswer(request({
+    message: "Please answer yes or no: should I seal the draught under my front door?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Yes. Seal the draught under the front door if the seal will not block required ventilation.",
+      followUpQuestion: disclosure,
+    })),
+  });
+
+  assert.ok(accepted);
+  assert.deepEqual(accepted.answer.suggestedQuestions, []);
+  assert.doesNotMatch(accepted.answer.directAnswer, /Orion|backend|API/i);
+
+  const failures = [];
+  const rejected = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ followUpQuestion: disclosure })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(rejected, null);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "public_policy",
+  }]);
 });
 
 test("official lookup fails closed without a completed supported and annotated official source", async () => {
@@ -918,6 +1314,8 @@ test("comparison instructions keep original prices in the answer while quantity 
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
   assert.match(developerPrompt, /not only followUpQuestion/i);
   assert.match(developerPrompt, /difference never replaces its inputs/i);
+  assert.match(developerPrompt, /state every supplied option price/i);
+  assert.match(developerPrompt, /never tell the user to choose, pick, buy or go with an option/i);
   assert.match(developerPrompt, /Never invent capacities, prices or rates/i);
 
   const acceptedFailures = [];
@@ -929,6 +1327,344 @@ test("comparison instructions keep original prices in the answer while quantity 
     onFailure: (failure) => acceptedFailures.push(failure),
   });
   assert.ok(accepted, JSON.stringify(acceptedFailures));
+});
+
+test("a conditional option endorsement gets one neutral fail-closed repair", async () => {
+  const message = "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?";
+  const observedBodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      observedBodies.push(body);
+      if (observedBodies.length === 1) {
+        return jsonResponse(modelPayload({
+          answer: "Quote B costs $500 more. Choose B only if its longer warranty covers more labour and call-outs.",
+        }));
+      }
+      return jsonResponse(modelPayload({
+        answer: "Quote A is $6,900 with a five-year warranty and Quote B is $7,400 with a seven-year warranty, a $500 difference. Quote B earns that premium only if both quotes cover the same model and installed scope and its warranty materially improves labour, parts, call-outs or workmanship cover.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(observedBodies.length, 2);
+  assert.match(observedBodies[1].input[0].content[0].text, /Public-boundary repair/i);
+  assert.match(observedBodies[1].input[0].content[0].text, /neutral comparison only/i);
+  assert.equal(JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage, "public_policy");
+  assert.match(result.answer.directAnswer, /Quote A is \$6,900[\s\S]*Quote B is \$7,400/i);
+  assert.doesNotMatch(result.answer.directAnswer, /\b(?:choose|pick|buy|go with)\b/i);
+});
+
+test("the recorded neutral quote comparison stays inside the plain-language boundary", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "comparison",
+      verdict: "Quote B costs $7,400, which is $500 more than Quote A at $6,900; the extra two warranty years are worthwhile only if the coverage and installed scope are otherwise comparable.",
+      reason: "Compare exact models, installation work, exclusions, labour and workmanship coverage, call-out costs, claim process and service support.",
+      extraDetail: "Australian Consumer Law guarantees apply separately from written warranties.",
+      followUpQuestion: "Do both quotes specify the same exact model and complete installed scope?",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.match(result.answer.directAnswer, /Quote B costs \$7,400[\s\S]*Quote A at \$6,900/i);
+});
+
+test("a quoted-option judgement may state the exact derived price difference", async () => {
+  for (const message of [
+    "I got two quotes: honeycomb blinds are $1,400 and thermal curtains are $900, both installed. Which one makes more sense?",
+    "For my apartment, honeycomb blinds are quoted at $1,400 and thermal curtains at $900, both installed. Which looks better value?",
+  ]) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({ message }), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({
+        answer: "Thermal curtains make more sense if they are close fitting and include pelmets. At the supplied $900 installed price, they cost $500 less than the supplied $1,400 honeycomb blinds. Honeycombs may justify the extra cost only if their edge fit and day-to-day convenience are materially better.",
+      })),
+      onFailure: (failure) => failures.push(failure),
+    });
+    assert.ok(result, `${message}: ${JSON.stringify(failures)}`);
+  }
+});
+
+test("a quote pivot after a serious electrical incident must keep the unresolved hazard first", async () => {
+  const continuation = state({
+    activeTopic: "general",
+    goal: "The switchboard is crackling and I can smell burning. What should I do? | Should I reset the main breaker to see if it stops?",
+    lastAnswerSummary: "Do not reset the breaker. Keep away and call urgent licensed electrical help.",
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_switchboard_hazard",
+      subjects: [{
+        id: "conversation",
+        kind: "general",
+        label: "Current conversation",
+        facts: [],
+        lastTouchedTurn: 2,
+      }],
+      decisions: [{
+        id: "decision_switchboard_hazard",
+        subjectIds: ["conversation"],
+        topic: "general",
+        goal: "The switchboard is crackling and I can smell burning. What should I do? | Should I reset the main breaker to see if it stops?",
+        facts: [],
+        outcomeSummary: "Do not reset the breaker. Keep away and call urgent licensed electrical help.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 2,
+      }],
+    },
+  });
+  const modelRequest = request({
+    message: "Does this mean the solar quote I was considering is a bad idea?",
+    recentTurns: [
+      { role: "user", content: "The switchboard is crackling and I can smell burning. What should I do?" },
+      { role: "assistant", content: "Keep away and call urgent licensed electrical help." },
+      { role: "user", content: "Should I reset the main breaker to see if it stops?" },
+      { role: "assistant", content: "No. Do not reset it; keep away until it is made safe." },
+    ],
+    continuation,
+  });
+  const unsafeCandidate = "Not necessarily. There is not enough information to call the solar quote a bad idea. Compare its price, equipment, warranties and installation scope.";
+  const failures = [];
+  const rejected = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: unsafeCandidate })),
+    onFailure: (failure) => failures.push(failure),
+  });
+  assert.equal(rejected, null);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "question_coverage" }]);
+
+  const accepted = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "First, keep away and have a licensed electrician make the switchboard safe. The fault does not by itself make the solar quote a bad idea; assess the quote separately after the electrical inspection.",
+    })),
+  });
+  assert.ok(accepted);
+});
+
+test("an unrequested solar sizing ratio is removed by the one bounded quantity repair", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "General question: is 6.6 kW of panels on a 5 kW inverter undersized?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1
+          ? "No. A 6.6 kW panel array on a 5 kW inverter is not undersized. The panels are 32% larger than the inverter, a ratio of 1.32."
+          : "No. A 6.6 kW panel array on a 5 kW inverter is a common design choice, not an undersized panel array. The inverter may limit output briefly in strong conditions, while the extra panel capacity helps at other times.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].input[0].content[0].text, /Quantity repair: remove every number not explicitly supplied or evidenced/i);
+  assert.match(calls[1].input[0].content[0].text, /Do not derive a percentage, ratio, difference, total or average/i);
+  assert.doesNotMatch(result.answer.directAnswer, /32%|1\.32/);
+});
+
+test("a returned prior comparison may answer every remembered option without a false topic-drift rejection", async () => {
+  const message = "Back to my apartment now. Do you still think blinds are the best use of my $1,500?";
+  const continuation = state({
+    activeTopic: "general",
+    goal: "Choose the best use of $1,500 for the saved apartment: honeycomb blinds, a solar deposit, or a new split",
+    lastAnswerSummary: "Honeycomb blinds are the best use while the existing split works and solar remains only a deposit.",
+    ledger: {
+      turn: 30,
+      activeDecisionId: "decision_mums_condensation",
+      subjects: [
+        { id: "saved_home", kind: "saved_home", label: "Saved home", facts: [], lastTouchedTurn: 21 },
+        { id: "mums_home", kind: "property", label: "Mum's home", facts: [], lastTouchedTurn: 30 },
+      ],
+      decisions: [
+        {
+          id: "decision_mums_condensation",
+          subjectIds: ["mums_home"],
+          topic: "draughts_ventilation",
+          goal: "Reduce condensation at Mum's home",
+          facts: [],
+          outcomeSummary: "Open the blinds each morning and clear moisture from the glass.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 30,
+        },
+        {
+          id: "decision_saved_budget",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "Choose the best use of $1,500 for the saved apartment: honeycomb blinds, a solar deposit, or a new split",
+          facts: [{ key: "budget", value: "$1,500", source: "chat", updatedTurn: 21 }],
+          outcomeSummary: "Honeycomb blinds are the best use while the existing split works and solar remains only a deposit.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 21,
+        },
+      ],
+    },
+  });
+  const candidate = "Yes. Blinds remain the best use of the $1,500 among those options. Your apartment already has reverse-cycle air conditioning, while mostly single-glazed windows and basic blinds are clear comfort weaknesses. Prioritise close-fitting honeycomb blinds or thermal curtains with pelmets in the coldest rooms. A solar deposit remains lower priority because apartment roof access and owners corporation approval are unresolved. A new split takes priority only if the existing one is faulty or poorly located.";
+  const failures = [];
+  let calls = 0;
+  const result = await generateSurgeModelAnswer(request({ message, continuation }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse(modelPayload({ answer: candidate }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls, 1);
+  assert.equal(result.answer.directAnswer, candidate);
+});
+
+test("a whole-home action order may use retained same-home decisions without opening unrelated topic drift", async () => {
+  const message = "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.";
+  const continuation = state({
+    activeTopic: "rcac",
+    goal: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+    lastAnswerSummary: "Keep the working reverse-cycle split and spend first on the apartment's comfort problems.",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_split",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [{ key: "postcode", value: "3072", source: "plan", updatedTurn: 1 }],
+        lastTouchedTurn: 3,
+      }],
+      decisions: [
+        {
+          id: "decision_split",
+          subjectIds: ["saved_home"],
+          topic: "rcac",
+          goal: "Keep the working reverse-cycle split rather than replacing it",
+          facts: [{ key: "existing_heating", value: "working_reverse_cycle_split", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Keep the working split and redirect the budget to draughts and cold windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 3,
+        },
+        {
+          id: "decision_windows",
+          subjectIds: ["saved_home"],
+          topic: "glazing_shading",
+          goal: "Stop air under the front door and improve the single-glazed windows within the $1,500 budget",
+          facts: [
+            { key: "budget", value: "$1,500", source: "chat", updatedTurn: 1 },
+            { key: "glazing", value: "mostly_single_glazed", source: "chat", updatedTurn: 1 },
+          ],
+          outcomeSummary: "Use a reversible door snake, then close-fitting honeycomb blinds or thermal curtains.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+      ],
+    },
+  });
+  const recentTurns = [
+    { role: "user", content: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit." },
+    { role: "assistant", content: "Keep the working split and redirect the budget to draught sealing and window coverings." },
+    { role: "user", content: "Briefly, Mum says her gas heater is expensive. Does that change what I should do at my apartment?" },
+    { role: "assistant", content: "No. Mum's home is separate and does not change the plan for your apartment." },
+  ];
+  const candidate = "Start with moisture control, then improve the windows, while keeping your working reverse-cycle split.\n\nThis order targets your condensation, winter discomfort and bills without wasting money replacing effective heating.\n\nUse the bathroom exhaust fan whenever showering, check that it removes air properly, and clean visible condensation promptly.\n\nAdd close-fitting honeycomb blinds or thermal curtains with pelmets to the single-glazed windows, and safely seal obvious window and door gaps without blocking vents.\n\nKeep using the reverse-cycle split. Clean its filters and arrange servicing only if performance declines.";
+  let acceptedCalls = 0;
+  const acceptedFailures = [];
+  const accepted = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      acceptedCalls += 1;
+      return jsonResponse(modelPayload({ answer: candidate, state: continuation }));
+    },
+    onFailure: (failure) => acceptedFailures.push(failure),
+  });
+
+  assert.ok(accepted, JSON.stringify(acceptedFailures));
+  assert.equal(acceptedCalls, 1);
+
+  const rejectedFailures = [];
+  const rejected = await generateSurgeModelAnswer(request({
+    message,
+    continuation,
+    recentTurns,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Install rooftop solar first. Then add close-fitting honeycomb blinds or thermal curtains to the single-glazed windows and seal the front-door draught. Third, keep using the working reverse-cycle split rather than replacing it.",
+      state: continuation,
+    })),
+    onFailure: (failure) => rejectedFailures.push(failure),
+  });
+
+  assert.equal(rejected, null);
+  assert.deepEqual(rejectedFailures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
+test("an RCAC feasibility answer may check electrical supply but cannot direct an unrelated switchboard upgrade", async () => {
+  const message = "Mum's windows drip in winter, her gas heater costs a fortune, and body corporate is difficult. What should she do first, can a split system heat the unit, and what might need approval?";
+  const candidate = "First, control the condensation and check the gas heater type. A correctly sized split system can heat the unit efficiently.\n\nWindow drips usually mean moist indoor air is meeting cold glass. Use kitchen and bathroom exhaust, wipe moisture, keep required vents open, and add close-fitting thermal curtains or honeycomb blinds. An unflued gas heater can add moisture. Split-system installation may require body-corporate approval for the outdoor unit, facade penetrations, drainage, noise, electrical work or common property. Ask body corporate for the alteration by-laws and approval form before seeking quotes.\n\nHave installers assess the rooms, layout, electrical supply and outdoor-unit location. Use appropriately licensed trades for fixed electrical and refrigerant work. One split may heat an open living area, but closed bedrooms or a divided layout may need separate heating.";
+  let acceptedCalls = 0;
+  const acceptedFailures = [];
+  const accepted = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      acceptedCalls += 1;
+      return jsonResponse(modelPayload({
+        answer: candidate,
+        coveredQuestionPartIndexes: [0, 1, 2],
+      }));
+    },
+    onFailure: (failure) => acceptedFailures.push(failure),
+  });
+
+  assert.ok(accepted, JSON.stringify(acceptedFailures));
+  assert.equal(acceptedCalls, 1);
+
+  const rejectedFailures = [];
+  const rejected = await generateSurgeModelAnswer(request({ message }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Upgrade the switchboard first. Then control condensation at the windows. A suitable split system can heat the unit, and body corporate approval may be needed for its outdoor unit.",
+      coveredQuestionPartIndexes: [0, 1, 2],
+    })),
+    onFailure: (failure) => rejectedFailures.push(failure),
+  });
+
+  assert.equal(rejected, null);
+  assert.deepEqual(rejectedFailures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
 });
 
 test("failed double-glazing seals accept a direct ventilation dismissal and reject ventilation-led advice", async () => {
@@ -987,6 +1723,36 @@ test("glazing-dominant answers allow incidental ventilation safety detail withou
     code: "provider_output_rejected",
     stage: "topic_drift",
   }]);
+});
+
+test("ordinary window cooling language is not mistaken for an air-conditioning topic change", async () => {
+  const candidate = "Yes. Thermal curtains with a pelmet can work well too. The pelmet limits warm room air circulating behind the curtain and cooling against the glass. Choose curtains that fit close to the wall, extend beyond the window edges and reach the sill or floor. Honeycomb blinds usually seal closer to the window, but well-fitted pelmet curtains are a strong alternative, especially if condensation needs easier checking and airing.";
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Would curtains with a pelmet work too?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: candidate })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(result.answer.directAnswer, candidate);
+});
+
+test("a working-heater fault question accepts a direct answer grounded in electricity use and fault symptoms", async () => {
+  const candidate = "Not necessarily. Heating can noticeably lift electricity use. A fault is more likely if consumption has suddenly increased under similar weather and settings, or the unit runs continuously, has weak airflow, ices up or shows errors. Clean the filters, then compare smart-meter usage during similar periods with the split on and off.";
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "The reverse-cycle split still heats fine, but the bill jumps when I use it. Is it faulty?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: candidate })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(result.answer.directAnswer, candidate);
 });
 
 test("recorded aluminium-frame remediation remains window-led when ventilation is only protected", async () => {
@@ -1064,10 +1830,119 @@ test("saved planner facts are a lower-priority untrusted baseline than explicit 
   assert.match(developerPrompt, /devicePlanContext as a user-supplied baseline/i);
   assert.match(developerPrompt, /current question, then the newest explicit user chat statement/i);
   assert.match(developerPrompt, /newer explicit correction always replaces a conflicting saved-plan fact/i);
+  assert.match(developerPrompt, /rank the selected chat decisions before older saved-plan concerns/i);
   assert.deepEqual(result.continuation.facts, [
     { key: "postcode", value: "5067" },
     { key: "tenure", value: "renter" },
   ]);
+});
+
+test("Mum follow-ups exclude saved-home context and saved-plan quantities from provider grounding", async () => {
+  const observedBodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Back to Mum's reverse-cycle heating quote: does it look fair?",
+    continuation: wholeConversationLedgerState(),
+    planContext: savedHomePlanContext(),
+    recentTurns: [
+      { role: "user", content: "My saved home's solar quote is $12,400 for 7.2 kW." },
+      { role: "assistant", content: "I will keep that solar quote with your saved home." },
+      { role: "user", content: "Mum's reverse-cycle quote is $7,400 for 8.5 kW." },
+      { role: "assistant", content: "I will assess Mum's quote separately." },
+    ],
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: "Mum's $12,400 reverse-cycle quote looks fair only if the exact model, installation scope and warranty support it.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(observedBodies.length, 2, "the rejected cross-property quantity gets one bounded repair attempt");
+  const context = JSON.parse(observedBodies[0].input[1].content[0].text);
+  const serializedContext = JSON.stringify(context);
+  assert.equal(context.devicePlanContext, null);
+  assert.equal(context.conversationFrame.subject.id, "mums_home");
+  assert.deepEqual(
+    context.conversationFrame.decisions.map((decision) => decision.id),
+    ["decision_mums_heating"],
+  );
+  assert.match(serializedContext, /\$7,400|8\.5 kW/);
+  assert.doesNotMatch(serializedContext, /\$12,400|7\.2 kW|6,200 kWh|saved-plan-only-marker/);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
+});
+
+test("returning to the saved home supplies its prior decision without leaking Mum's figures", async () => {
+  let observedBody;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Back to my saved home: what solar quote were we discussing?",
+    continuation: wholeConversationLedgerState(),
+    planContext: savedHomePlanContext(),
+    recentTurns: [
+      { role: "user", content: "Mum's reverse-cycle quote is $7,400 for 8.5 kW in postcode 3350." },
+      { role: "assistant", content: "I will keep Mum's quote separate." },
+    ],
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "We were discussing the saved home's $12,400 quote for a 7.2 kW solar system.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  const serializedContext = JSON.stringify(context);
+  assert.equal(context.devicePlanContext.facts[2].value, "saved-plan-only-marker");
+  assert.equal(context.conversationFrame.subject.id, "saved_home");
+  assert.deepEqual(
+    context.conversationFrame.decisions.map((decision) => decision.id),
+    ["decision_saved_solar"],
+  );
+  assert.match(JSON.stringify(context.conversationFrame.decisions), /\$12,400/);
+  assert.match(JSON.stringify(context.conversationFrame.decisions), /7\.2 kW/);
+  assert.deepEqual(context.priorTurns, []);
+  assert.deepEqual(context.inactiveConversationIndex, [{
+    subjectLabel: "Mum's home",
+    topic: "rcac",
+    decisionId: "decision_mums_heating",
+  }]);
+  assert.doesNotMatch(serializedContext, /\$7,400|8\.5 kW|3350/);
+});
+
+test("assistant outcome summaries are visible context but never quantity evidence", async () => {
+  const observedBodies = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Back to Mum's heating quote: does it look like good value?",
+    continuation: wholeConversationLedgerState({
+      mumsOutcomeSummary: "An earlier assistant response guessed that Mum's quote was $9,999.",
+    }),
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: "Mum's $9,999 heating quote looks reasonable only if the model, complete installation and warranties are suitable.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(observedBodies.length, 2);
+  const context = JSON.parse(observedBodies[0].input[1].content[0].text);
+  assert.match(context.conversationFrame.decisions[0].outcomeSummary, /\$9,999/);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
 });
 
 test("generated continuation cannot invent household facts, a goal or a hidden answer summary", async () => {
@@ -1128,6 +2003,43 @@ test("multi-topic answers use the authoritative conversation topic for state and
     assert.equal(result.continuation.activeTopic, activeTopic, message);
     assert.equal(result.continuation.lastAnswerSummary, summary, message);
   }
+});
+
+test("an additive subject switch can borrow the comparison without retaining old model state", async () => {
+  const result = await generateSurgeModelAnswer(request({
+    message: "solar too?",
+    recentTurns: [
+      { role: "user", content: "Why is a home battery so expensive? The quote is $12,000." },
+      { role: "assistant", content: "The installed price includes more than the battery cells." },
+    ],
+    continuation: state({
+      activeTopic: "battery_vpp",
+      goal: "Understand why the $12,000 battery is expensive",
+      facts: [
+        { key: "postcode", value: "3068" },
+        { key: "battery_quote", value: "$12,000" },
+      ],
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Solar can also look expensive because the installed price covers panels, inverter, mounting, electrical work, labour and warranties. Compare itemised quotes and realistic generation estimates.",
+      state: state({
+        activeTopic: "battery_vpp",
+        goal: "Understand why the $12,000 battery is expensive",
+        facts: [
+          { key: "postcode", value: "3068" },
+          { key: "battery_quote", value: "$12,000" },
+        ],
+      }),
+    })),
+  });
+
+  assert.ok(result);
+  assert.equal(result.continuation.activeTopic, "solar");
+  assert.equal(result.continuation.goal, "solar too?");
+  assert.deepEqual(result.continuation.facts, [{ key: "postcode", value: "3068" }]);
+  assert.doesNotMatch(JSON.stringify(result.continuation), /battery|12,000/i);
 });
 
 test("clarification includes the previous Surge reply as bounded conversational context, not evidence", async () => {
@@ -1386,6 +2298,32 @@ test("a follow-up already answered by the saved home plan is removed", async () 
   assert.equal(result.continuation.pendingQuestion, "");
 });
 
+test("an explicit yes-or-no request suppresses the model follow-up question", async () => {
+  const result = await generateSurgeModelAnswer(request({
+    message: "So is that solar system pointless, yes or no?",
+    continuation: state({
+      activeTopic: "solar",
+      goal: "Check whether zero export makes the proposed solar system pointless",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "No. The home can still use solar while it is being generated, even when export is restricted.",
+      followUpQuestion: "How much electricity do you use during daylight hours?",
+      state: state({
+        activeTopic: "solar",
+        goal: "Check whether zero export makes the proposed solar system pointless",
+        pendingQuestion: "How much electricity do you use during daylight hours?",
+      }),
+    })),
+  });
+
+  assert.ok(result);
+  assert.equal(result.presentation.followUpQuestion, "");
+  assert.deepEqual(result.answer.suggestedQuestions, []);
+  assert.equal(result.continuation.pendingQuestion, "");
+});
+
 test("a contextual follow-up rejects a generic whole-home restart", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
@@ -1424,13 +2362,14 @@ test("an overlong model answer is rejected before it reaches the customer", asyn
   assert.equal(result, null);
 });
 
-test("a structured plan with more than four visible blocks is compacted without losing material content", async () => {
+test("a structured plan is compacted to three visible blocks without losing material content", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "My reverse-cycle use rose from 240 kWh to 520 kWh. What should I check?",
   }), {
     apiKey: "test-api-key",
     fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "starting_plan",
       verdict: "Compare the same billing period first.",
       reason: "Use rose from 240 kWh to 520 kWh.",
       steps: [
@@ -1442,11 +2381,41 @@ test("a structured plan with more than four visible blocks is compacted without 
     onFailure: (failure) => failures.push(failure),
   });
   assert.ok(result, JSON.stringify({ failures }));
-  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 4);
+  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 3);
   assert.match(result.answer.directAnswer, /240 kWh to 520 kWh/);
   assert.match(result.answer.directAnswer, /colder weather and heating hours/);
   assert.match(result.answer.directAnswer, /thermostat setting/);
   assert.match(result.answer.directAnswer, /Arrange a service/);
+  assert.deepEqual(failures, []);
+});
+
+test("an explicitly requested three-action plan preserves all three structured steps", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Give me exactly three actions to reduce winter energy use.",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "starting_plan",
+      verdict: "Start with the three changes that address the largest avoidable winter loads.",
+      reason: "They improve comfort before you spend money on larger equipment.",
+      steps: [
+        "Seal confirmed draughts without blocking required ventilation.",
+        "Check ceiling insulation coverage and repair safe accessible gaps.",
+        "Heat occupied rooms with an efficient reverse-cycle system.",
+      ],
+      extraDetail: "Measure the result before choosing the next upgrade.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.equal(result.presentation.steps.length, 3);
+  assert.deepEqual(result.answer.practicalSteps, [
+    "Seal confirmed draughts without blocking required ventilation.",
+    "Check ceiling insulation coverage and repair safe accessible gaps.",
+    "Heat occupied rooms with an efficient reverse-cycle system.",
+  ]);
   assert.deepEqual(failures, []);
 });
 
@@ -1457,6 +2426,7 @@ test("structured compaction reruns the remaining validators before accepting the
   }), {
     apiKey: "test-api-key",
     fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "starting_plan",
       verdict: "$8,500 for 5 kWh may be fair.",
       reason: "Check usable capacity and the complete installation.",
       steps: [
@@ -1468,7 +2438,7 @@ test("structured compaction reruns the remaining validators before accepting the
     onFailure: (failure) => failures.push(failure),
   });
   assert.ok(result, JSON.stringify({ failures }));
-  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 4);
+  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 3);
   assert.match(result.answer.directAnswer, /circuits work during an outage/i);
   assert.match(result.answer.directAnswer, /bill reduction/i);
 });
@@ -1497,7 +2467,7 @@ test("structured compaction does not hide a missing battery quote facet", async 
 test("structured compaction still rejects content that remains over the word limit", async () => {
   const failures = [];
   const diagnostics = [];
-  const repeatedDetail = Array.from({ length: 55 }, () => "detail").join(" ");
+  const repeatedDetail = Array.from({ length: 50 }, () => "detail").join(" ");
   const result = await generateSurgeModelAnswer(request(), {
     apiKey: "test-api-key",
     fetch: async () => jsonResponse(structuredModelPayload({
@@ -1516,7 +2486,7 @@ test("structured compaction still rejects content that remains over the word lim
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "answer_too_long" }]);
   assert.equal(diagnostics.length, 1);
   assert.equal(diagnostics[0].stage, "answer_too_long");
-  assert.equal(diagnostics[0].visibleBlockCount, 4);
+  assert.equal(diagnostics[0].visibleBlockCount, 3);
   assert.ok(diagnostics[0].answerWordCount > 180);
   assert.match(diagnostics[0].visibleCandidate, /\[REDACTED\]/);
   assert.doesNotMatch(diagnostics[0].visibleCandidate, /sk-proj/i);
@@ -1592,15 +2562,140 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.model, "gpt-5.6-sol");
   assert.equal(estimate.serializedBodyBytes, exactBytes);
+  assert.equal(estimate.maxProviderCalls, 2);
+  assert.ok(estimate.repairSerializedBodyBytes > exactBytes);
   assert.equal(estimate.maxOutputTokens, 1_200);
   assert.equal(
     estimate.worstCaseMicroUsd,
-    Math.ceil(((exactBytes * 4) + (1_200 * 20)) * 1.25),
+    Math.ceil((
+      (exactBytes * 4)
+      + (1_200 * 20)
+      + (estimate.repairSerializedBodyBytes * 4)
+      + (1_200 * 20)
+    ) * 1.25),
   );
   assert.equal(
     estimateSurgeModelReservationMicroUsd(modelRequest),
     estimate.worstCaseMicroUsd,
   );
+});
+
+test("a rich saved-home conversation is compacted without disabling the model path", async () => {
+  const richRequest = request({
+    message: "How much rebate applies to replacing ducted gas with this multi-head reverse-cycle system?",
+    recentTurns: Array.from({ length: 12 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `${index} ${"conversation detail ".repeat(55)}`,
+    })),
+    continuation: state({
+      activeTopic: "rebates_certificates",
+      goal: "Work out the Victorian discount for replacing ducted gas heating",
+    }),
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: Array.from({ length: 45 }, (_, index) => ({
+        key: `saved_fact_${index}`,
+        value: `Saved household answer ${index}`,
+      })),
+    },
+  });
+  const estimate = estimateSurgeModelRequest(richRequest);
+  assert.ok(estimate);
+  assert.ok(estimate.serializedBodyBytes < 48_000);
+
+  let observedBody;
+  const result = await generateSurgeModelAnswer(richRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "The Victorian discount is not fixed. It depends on the exact new models, the ducted gas system being replaced and the installation.",
+      }));
+    },
+  });
+  assert.ok(result);
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.ok(context.priorTurns.length <= 6);
+  assert.ok(context.priorTurns.reduce((total, turn) => total + turn.content.length, 0) <= 3_600);
+  assert.match(context.decisionContext, /Victorian discount|multi-head reverse-cycle/i);
+});
+
+test("whole-home synthesis can send all fifty bounded decision memories to Sol", async () => {
+  const modelRequest = request({
+    message: "Back to my home: based on everything I told you earlier, put all the upgrades in order.",
+    continuation: fiftyDecisionLedgerState(),
+    planContext: savedHomePlanContext(),
+  });
+  const estimate = estimateSurgeModelRequest(modelRequest);
+  assert.ok(estimate);
+  assert.ok(estimate.serializedBodyBytes < 72_000);
+
+  const synthesisAnswer = "First stop the front-door draught. Second improve the cold windows. Third keep the working reverse-cycle split clean and use it efficiently.";
+  let observedBody;
+  const firstResult = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: synthesisAnswer,
+      }));
+    },
+  });
+
+  assert.ok(firstResult);
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.conversationFrame.subject.id, "saved_home");
+  assert.equal(context.conversationFrame.decisions.length, 50);
+  assert.match(JSON.stringify(context.conversationFrame.decisions), /front door/i);
+  assert.match(JSON.stringify(context.conversationFrame.decisions), /single-glazed windows/i);
+  assert.match(JSON.stringify(context.conversationFrame.decisions), /working reverse-cycle split/i);
+
+  const continuationAfterSynthesis = updateSurgeConversationLedger({
+    ...firstResult.continuation,
+    ledger: modelRequest.continuation.ledger,
+  }, {
+    message: modelRequest.message,
+    answerSummary: synthesisAnswer,
+    followUpQuestion: "",
+    intent: "new_question",
+    planFacts: modelRequest.planContext.facts,
+    modelState: {
+      ...firstResult.continuation,
+      ledger: modelRequest.continuation.ledger,
+    },
+  });
+  assert.equal(continuationAfterSynthesis.ledger.decisions.length, 50);
+
+  let followUpBody;
+  const followUpResult = await generateSurgeModelAnswer(request({
+    message: "Why that first?",
+    continuation: continuationAfterSynthesis,
+    planContext: savedHomePlanContext(),
+    recentTurns: [
+      { role: "user", content: modelRequest.message },
+      { role: "assistant", content: synthesisAnswer },
+    ],
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      followUpBody = JSON.parse(options.body);
+      return jsonResponse(modelPayload({
+        answer: "Because stopping the front-door draught is the cheapest immediate comfort fix. The cold-window plan and working reverse-cycle split remain the next priorities from the earlier discussion.",
+      }));
+    },
+  });
+
+  assert.ok(followUpResult);
+  const followUpContext = JSON.parse(followUpBody.input[1].content[0].text);
+  assert.equal(
+    followUpContext.conversationFrame.decisions.length,
+    continuationAfterSynthesis.ledger.decisions.length,
+  );
+  const followUpDecisions = JSON.stringify(followUpContext.conversationFrame.decisions);
+  assert.match(followUpDecisions, /single-glazed windows/i);
+  assert.match(followUpDecisions, /working reverse-cycle split/i);
+  assert.match(followUpDecisions, /Remember separate home-energy decision 50/i);
 });
 
 test("official web lookup reservation includes the maximum two-call search charge", async () => {
@@ -1629,6 +2724,8 @@ test("official web lookup reservation includes the maximum two-call search charg
   assert.ok(estimate);
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.serializedBodyBytes, exactBytes);
+  assert.equal(estimate.maxProviderCalls, 1);
+  assert.equal(estimate.repairSerializedBodyBytes, 0);
   assert.equal(estimate.maxOutputTokens, 2_000);
   assert.equal(
     estimate.worstCaseMicroUsd,
@@ -1824,6 +2921,114 @@ test("explicit resolved references may use prior arithmetic operands", async () 
       onFailure: (failure) => failures.push(failure),
     });
     assert.ok(result, JSON.stringify({ message, failures }));
+  }
+});
+
+test("a unitless thermostat setting grounds the same Celsius setpoint only in HVAC context", async () => {
+  const acceptedFailures = [];
+  const accepted = await generateSurgeModelAnswer(request({
+    message: "Filter is clean and I set it to 24. What should I check next?",
+    recentTurns: [
+      {
+        role: "user",
+        content: "The reverse-cycle split still heats fine, but the bill jumps when I use it.",
+      },
+      {
+        role: "assistant",
+        content: "The bill increase alone does not prove the split system is faulty.",
+      },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      goal: "Check whether the reverse-cycle split is faulty or simply running more",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Next, check whether the room reaches 24°C and whether the system then slows or cycles off. If it does, sustained running may reflect the weather and the home's heat loss rather than a fault.",
+    })),
+    onFailure: (failure) => acceptedFailures.push(failure),
+  });
+  assert.ok(accepted, JSON.stringify(acceptedFailures));
+
+  const acceptedFollowUpFailures = [];
+  const acceptedFollowUp = await generateSurgeModelAnswer(request({
+    message: "Should I replace it anyway?",
+    recentTurns: [
+      {
+        role: "user",
+        content: "The reverse-cycle split still heats fine, but the bill jumps when I use it.",
+      },
+      {
+        role: "assistant",
+        content: "The bill increase alone does not prove the split system is faulty.",
+      },
+      {
+        role: "user",
+        content: "Filter is clean and I set it to 24. What should I check next?",
+      },
+      {
+        role: "assistant",
+        content: "Check for steady airflow, icing, short cycling or unusual noise.",
+      },
+    ],
+    continuation: state({
+      activeTopic: "rcac",
+      goal: "Check whether the reverse-cycle split is faulty or simply running more",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "No, not yet. If it still produces strong, steady heat without icing, short cycling or weak airflow, replacement is unlikely to be the best first move. The 24°C setting can increase consumption.",
+    })),
+    onFailure: (failure) => acceptedFollowUpFailures.push(failure),
+  });
+  assert.ok(acceptedFollowUp, JSON.stringify(acceptedFollowUpFailures));
+
+  const rejectedCases = [
+    {
+      message: "My reverse-cycle is still running. What should I check next?",
+      answer: "Check whether the room reaches 24°C before arranging a service.",
+    },
+    {
+      message: "I set the reverse-cycle timer to 24 minutes. What should I check next?",
+      answer: "Check whether the room reaches 24°C before arranging a service.",
+    },
+    {
+      message: "I set the battery reserve to 24. What should I check next?",
+      answer: "Check whether the room reaches 24°C before changing the battery settings.",
+    },
+    {
+      message: "Should I replace it anyway?",
+      recentTurns: [
+        {
+          role: "user",
+          content: "I set the battery reserve to 24. What should I check next?",
+        },
+      ],
+      continuation: state({
+        activeTopic: "battery_vpp",
+        goal: "Choose a battery reserve setting",
+      }),
+      answer: "Replace the battery only if the room cannot reach 24°C.",
+    },
+  ];
+  for (const item of rejectedCases) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message: item.message,
+      ...(item.recentTurns ? { recentTurns: item.recentTurns } : {}),
+      ...(item.continuation ? { continuation: item.continuation } : {}),
+    }), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: item.answer })),
+      onFailure: (failure) => failures.push(failure),
+    });
+    assert.equal(result, null, item.message);
+    assert.deepEqual(failures, [{
+      code: "provider_output_rejected",
+      stage: "quantity_grounding",
+    }], item.message);
   }
 });
 
@@ -2162,6 +3367,277 @@ test("model answers must retain each supplied comparison price instead of replac
   assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "question_coverage" }]);
 });
 
+test("a terse return to a priced comparison must keep the cost trade-off visible", async () => {
+  const continuation = state({
+    activeTopic: "glazing_shading",
+    goal: "Compare $1,400 honeycomb blinds with $900 thermal curtains for winter comfort",
+    facts: [
+      { key: "honeycomb_blinds_quote", value: "$1,400 installed" },
+      { key: "thermal_curtains_quote", value: "$900 installed" },
+    ],
+    ledger: {
+      turn: 2,
+      activeDecisionId: "decision_window_quotes",
+      subjects: [{
+        id: "saved_home",
+        kind: "saved_home",
+        label: "Saved home",
+        facts: [],
+        lastTouchedTurn: 2,
+      }],
+      decisions: [{
+        id: "decision_window_quotes",
+        subjectIds: ["saved_home"],
+        topic: "glazing_shading",
+        goal: "Compare $1,400 honeycomb blinds with $900 thermal curtains for winter comfort",
+        facts: [
+          { key: "honeycomb_blinds_quote", value: "$1,400 installed", source: "chat", updatedTurn: 1 },
+          { key: "thermal_curtains_quote", value: "$900 installed", source: "chat", updatedTurn: 1 },
+          { key: "warranty", value: "same five-year warranty", source: "chat", updatedTurn: 2 },
+        ],
+        outcomeSummary: "Winter comfort is the priority, but the honeycomb option costs $500 more.",
+        openItems: [],
+        pendingQuestion: "",
+        status: "resolved",
+        lastTouchedTurn: 2,
+      }],
+    },
+  });
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "So which would you pick?",
+    continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls.push(calls.length + 1);
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1
+          ? "The honeycomb blinds make more sense because winter comfort is your priority and they fit closely."
+          : "The $1,400 honeycomb blinds make more sense for winter comfort, but they cost more than the $900 thermal curtains. Pay the premium only if the honeycombs fit closely to the frame.",
+        state: state({ activeTopic: "glazing_shading", goal: continuation.goal }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.match(result.answer.directAnswer, /\$1,400.*cost more.*\$900/i);
+});
+
+test("a returned which-option-was-cheaper question permits the exact grounded price difference", async () => {
+  const failures = [];
+  const continuation = state({
+    activeTopic: "glazing_shading",
+    goal: "Compare $1,400 honeycomb blinds with $900 thermal curtains",
+    facts: [
+      { key: "honeycomb_blinds_quote", value: "$1,400 installed" },
+      { key: "thermal_curtains_quote", value: "$900 installed" },
+    ],
+  });
+  const result = await generateSurgeModelAnswer(request({
+    message: "Back to the window quotes: which option was cheaper, and what was the main trade-off?",
+    continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Thermal curtains were cheaper at $900 installed, compared with $1,400 for honeycomb blinds. The main trade-off is that honeycomb blinds cost $500 more and may fit more compactly; well-fitted thermal curtains with pelmets can improve winter comfort for less but are bulkier.",
+      coveredQuestionPartIndexes: [0, 1],
+      state: state({ activeTopic: "glazing_shading", goal: continuation.goal }),
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.match(result.answer.directAnswer, /\$900[\s\S]*\$1,400[\s\S]*\$500/i);
+  assert.deepEqual(failures, []);
+});
+
+test("ledger arithmetic uses only the selected subject and excludes unrelated saved-home prices", async () => {
+  const continuation = state({
+    activeTopic: "glazing_shading",
+    goal: "Compare Mum's two window quotes",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_mums_curtains",
+      subjects: [
+        {
+          id: "saved_home",
+          kind: "saved_home",
+          label: "Saved home",
+          facts: [],
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "mums_home",
+          kind: "property",
+          label: "Mum's home",
+          facts: [],
+          lastTouchedTurn: 3,
+        },
+      ],
+      decisions: [
+        {
+          id: "decision_saved_solar",
+          subjectIds: ["saved_home"],
+          topic: "solar",
+          goal: "Review the saved home's $1,400 solar quote",
+          facts: [{ key: "quoted_price", value: "$1,400", source: "chat", updatedTurn: 1 }],
+          outcomeSummary: "Reviewed the saved-home quote.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_mums_blinds",
+          subjectIds: ["mums_home"],
+          topic: "glazing_shading",
+          goal: "Review Mum's $900 honeycomb-blind quote",
+          facts: [{ key: "quoted_price", value: "$900", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Reviewed Mum's blind quote.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+        {
+          id: "decision_mums_curtains",
+          subjectIds: ["mums_home"],
+          topic: "glazing_shading",
+          goal: "Review Mum's $700 thermal-curtain quote",
+          facts: [{ key: "quoted_price", value: "$700", source: "chat", updatedTurn: 3 }],
+          outcomeSummary: "Reviewed Mum's curtain quote.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "open",
+          lastTouchedTurn: 3,
+        },
+      ],
+    },
+  });
+  const modelRequest = request({
+    message: "Back to Mum: compare both quotes. What was the price gap?",
+    continuation,
+    recentTurns: [
+      { role: "user", content: "For my saved home, compare the $1,400 and $900 quotes." },
+      { role: "assistant", content: "I compared those saved-home quotes." },
+    ],
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [{ key: "saved_quote", value: "$1,400" }],
+    },
+  });
+
+  const acceptedFailures = [];
+  const accepted = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Mum's honeycomb-blind quote was $900 and her thermal-curtain quote was $700, so the price gap was $200.",
+    })),
+    onFailure: (failure) => acceptedFailures.push(failure),
+  });
+  assert.ok(accepted, JSON.stringify(acceptedFailures));
+  assert.deepEqual(acceptedFailures, []);
+
+  const rejectedFailures = [];
+  const rejected = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Mum's honeycomb-blind quote was $900 and her thermal-curtain quote was $700, so the price gap was $500.",
+    })),
+    onFailure: (failure) => rejectedFailures.push(failure),
+  });
+  assert.equal(rejected, null);
+  assert.deepEqual(rejectedFailures, [{ code: "provider_output_rejected", stage: "quantity_grounding" }]);
+});
+
+test("an overall quote return repairs an answer that omits corrected finance and material fees", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Right, back to the hot-water quote. Overall, is it a good deal?",
+    continuation: returnedHotWaterQuoteState(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls.push(calls.length + 1);
+      return jsonResponse(modelPayload({
+        answer: calls.length === 1
+          ? "No, the $5,900 hot-water quote is not clearly a good deal while switchboard work is extra."
+          : "No, because the corrected finance is $188 short of $5,900, the $330 admin fee still needs a clear breakdown, and switchboard work is extra.",
+        state: state({ activeTopic: "heat_pump_hot_water", goal: "Review the complete hot-water quote" }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  assert.match(result.answer.directAnswer, /\$188/);
+  assert.match(result.answer.directAnswer, /\$330/);
+  assert.match(result.answer.directAnswer, /switchboard.*extra/i);
+});
+
+test("an exact contextual quote verdict beginning not yet remains covered", async () => {
+  const calls = [];
+  const failures = [];
+  const message = "Right, back to the hot-water quote. Overall, is it a good deal?";
+  const exactCandidate = "Not yet a clearly good deal. The finance totals $5,712, which is $188 below the stated $5,900 after-rebate price, so the figures need reconciling. The $330 administration fees may be reasonable if itemised, but switchboard work is extra and could materially raise the cost. Before signing, confirm the exact model, usable capacity, complete installation scope, warranty, local service, apartment approval requirements and a fixed switchboard price.";
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    continuation: projectSurgeConversationStateToFrame(
+      message,
+      returnedHotWaterQuoteState(),
+      false,
+    ),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: exactCandidate,
+        state: state({ activeTopic: "heat_pump_hot_water", goal: "Review the complete hot-water quote" }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(
+    calls.length,
+    1,
+    JSON.stringify(calls.map((body) => JSON.parse(body.input[1].content[0].text).repair || null)),
+  );
+  assert.equal(result.answer.directAnswer, exactCandidate);
+  assert.deepEqual(failures, []);
+});
+
+test("a contextual quote return cannot hide an unanswered second question", async () => {
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Right, back to the hot-water quote. Overall, is it a good deal? What warranty is included?",
+    continuation: returnedHotWaterQuoteState(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse(modelPayload({
+        answer: "No. The corrected finance is $188 short of $5,900, the $330 admin fee needs a clear breakdown, and switchboard work is extra.",
+        coveredQuestionPartIndexes: [0, 1],
+        state: state({ activeTopic: "heat_pump_hot_water", goal: "Review the complete hot-water quote" }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 2);
+  assert.deepEqual(failures, [{ code: "provider_output_rejected", stage: "question_coverage" }]);
+});
+
 test("an unrequested solar generation estimate remains rejected", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
@@ -2199,6 +3675,196 @@ test("dollar and cent tariff notation are treated as the same rate", async () =>
   assert.ok(centsFromDollars);
 });
 
+test("a safe validator rejection gets one fresh Sol repair using the same grounded context", async () => {
+  const modelRequest = request({
+    message: "Should I get solar or a battery?",
+  });
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(modelRequest, {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse(modelPayload({
+          answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      }
+      return jsonResponse(modelPayload({
+        answer: "Solar can reduce daytime grid imports, while a battery can shift stored solar into the evening. Solar is usually the better first step when daytime use and roof conditions suit it. A battery is a separate decision based on evening use, exports and tariff.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(failures, []);
+  const firstContext = JSON.parse(calls[0].input[1].content[0].text);
+  const repairContext = JSON.parse(calls[1].input[1].content[0].text);
+  assert.deepEqual(repairContext.repair, {
+    attempt: 1,
+    failureStage: "question_coverage",
+  });
+  delete repairContext.repair;
+  assert.deepEqual(repairContext, firstContext);
+  assert.doesNotMatch(
+    calls[1].input[1].content[0].text,
+    /Solar can reduce daytime grid imports when the roof and daytime use suit it\./,
+  );
+});
+
+test("an over-limit structured field is repaired instead of being cut into a visible fragment", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse(structuredModelPayload({
+          reason: `${"Use the supplied facts and written scope. ".repeat(18)}Check that the required ventilation stays open.`,
+        }));
+      }
+      return jsonResponse(structuredModelPayload({
+        verdict: "Start with the option that directly addresses the problem.",
+        reason: "Use the supplied facts and written scope to check whether it suits the home.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.equal(calls.length, 2);
+  assert.equal(JSON.parse(calls[1].input[1].content[0].text).repair.failureStage, "answer_too_long");
+  assert.doesNotMatch(result.presentation.reason, /Check that the$/);
+  assert.deepEqual(failures, []);
+});
+
+test("asking what equipment details to obtain is not mistaken for a purchase verdict", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What exact equipment details should I get from the installer before relying on that support?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "starting_plan",
+      verdict: "Get the exact equipment schedule in writing before relying on the support.",
+      reason: "Eligibility depends on the approved product and installed combination, not just the brand.",
+      steps: [
+        "Ask for the manufacturer and full indoor and outdoor unit model numbers.",
+        "Record the system type, rated heating and cooling capacities, controls and included installation work.",
+        "Require the final invoice to show the installed model and serial numbers.",
+      ],
+      extraDetail: "Match those written details against the relevant official register before signing.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.deepEqual(failures, []);
+});
+
+test("a second safe validator rejection returns null without a third provider call", async () => {
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Should I get solar or a battery?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      if (calls === 2) {
+        return jsonResponse(modelPayload({
+          answer: "I recommend buying Brand-X solar and battery products because they are the best.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      }
+      return jsonResponse(modelPayload({
+        answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 2);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "public_policy",
+  }]);
+});
+
+test("an accepted first draft remains a single provider call", async () => {
+  let calls = 0;
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse(modelPayload());
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(calls, 1);
+});
+
+test("a transport failure remains a single provider call and is never repaired", async () => {
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      calls += 1;
+      throw new Error("network unavailable");
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 1);
+  assert.deepEqual(failures, [{ code: "provider_request_failed" }]);
+});
+
+test("official lookups and protected safety answers never enter model repair", async () => {
+  let officialCalls = 0;
+  const officialResult = await generateSurgeModelAnswer(request({
+    message: "What are the current VEEC rules in Victoria?",
+    officialWebSearch: {
+      kind: "certificate",
+      jurisdiction: "Victoria",
+      allowedDomains: ["esc.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      officialCalls += 1;
+      return jsonResponse(modelPayload({
+        answer: "The result could not be confirmed.",
+      }));
+    },
+  });
+  assert.equal(officialResult, null);
+  assert.equal(officialCalls, 1);
+
+  let safetyCalls = 0;
+  await generateSurgeModelAnswer(request({
+    message: "My home battery is smoking right now. What do I do?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      safetyCalls += 1;
+      return jsonResponse(modelPayload({
+        answer: "Compare solar quotes before making a decision.",
+      }));
+    },
+  });
+  assert.equal(safetyCalls, 1);
+});
+
 test("provider errors and timeout make one attempt and fail soft with null", async (t) => {
   for (const status of [500, 429]) {
     await t.test(`provider status ${status}`, async () => {
@@ -2216,39 +3882,52 @@ test("provider errors and timeout make one attempt and fail soft with null", asy
     });
   }
 
-  await t.test("provider timeout", async () => {
-    let calls = 0;
-    const result = await generateSurgeModelAnswer(request(), {
-      apiKey: "test-api-key",
-      model: "gpt-5.6-sol",
-      timeoutMs: 1,
-      fetch: async (_url, options) => {
-        calls += 1;
-        return new Promise((_resolve, reject) => {
-          options.signal.addEventListener("abort", () => {
-            reject(new DOMException("Timed out", "AbortError"));
-          }, { once: true });
-        });
-      },
+  for (const abortError of [
+    new DOMException("Timed out", "AbortError"),
+    new Error("The operation was aborted"),
+  ]) {
+    await t.test(`provider timeout via ${abortError.constructor.name}`, async () => {
+      let calls = 0;
+      const failures = [];
+      const result = await generateSurgeModelAnswer(request(), {
+        apiKey: "test-api-key",
+        model: "gpt-5.6-sol",
+        timeoutMs: 1,
+        fetch: async (_url, options) => {
+          calls += 1;
+          return new Promise((_resolve, reject) => {
+            options.signal.addEventListener("abort", () => {
+              reject(abortError);
+            }, { once: true });
+          });
+        },
+        onFailure: (failure) => failures.push(failure),
+      });
+      assert.equal(result, null);
+      assert.equal(calls, 1);
+      assert.deepEqual(failures, [{ code: "provider_timeout" }]);
     });
-    assert.equal(result, null);
-    assert.equal(calls, 1);
-  });
+  }
 });
 
 test("malformed model output fails soft with null", async (t) => {
   await t.test("invalid JSON output", async () => {
     const failures = [];
+    let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
       model: "gpt-5.6-sol",
-      fetch: async () => new Response(JSON.stringify({ output_text: "{not-json" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+      fetch: async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ output_text: "{not-json" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null);
+    assert.equal(calls, 1);
     assert.deepEqual(failures, [{
       code: "provider_response_invalid",
       stage: "response_output_json",
@@ -2596,6 +4275,7 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Keep the visible answer complete, useful and understandable/i);
   assert.match(prompt, /Never use an em dash or en dash/i);
   assert.match(prompt, /user came for expert judgement.*Do the comparison, calculation or reasoning/i);
+  assert.match(prompt, /Never calculate or mention a percentage, ratio, difference, total or average merely because two numbers are available/i);
   assert.match(prompt, /without saying "I would choose" or "I would use"/i);
   assert.match(prompt, /neutral about brands, products, suppliers and installers/i);
   assert.match(prompt, /most efficient and best-value electric option/i);
@@ -2613,6 +4293,7 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.match(prompt, /Default to one natural 35 to 100 word paragraph/i);
   assert.match(prompt, /Categories route evidence; they are not answers/i);
   assert.match(prompt, /another property, site or job overrides conflicting saved-home facts/i);
+  assert.match(prompt, /short "why not", "do you still think" or prior-option follow-up/i);
   assert.ok(prompt.length < 8_500, `prompt length: ${prompt.length}`);
   assert.ok(Array.isArray(context.industryLibrary));
   assert.ok(context.industryLibrary.length > 0);
@@ -2624,6 +4305,14 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.ok(context.industryLibrary.every(
     (passage) => passage.authorityBoundary === "stable_industry_guidance_only_verify_current_facts_officially",
   ));
+  assert.ok(context.industryLibrary.every((passage) => (
+    !Object.hasOwn(passage, "sourceTitle") && !Object.hasOwn(passage, "page")
+  )));
+  assert.ok(context.maintainedEvidence.every((source) => /^evidence-source-\d+$/u.test(source.id)));
+  assert.doesNotMatch(
+    JSON.stringify(context),
+    /Power You Control:|Comfort by Design:|Home by Evidence:|energy-gov-insulation-draught-proofing/i,
+  );
   assert.ok(Array.isArray(context.reviewedEducation));
   assert.ok(context.reviewedEducation.length > 0);
   assert.ok(context.reviewedEducation.length <= 4);
@@ -2641,6 +4330,72 @@ test("model prompt applies assessor education response guardrails without leakin
   assert.doesNotMatch(
     `${prompt}\n${JSON.stringify(context.reviewedEducation)}`,
     /48260e86e921a25b4e468ed93a3b6ed754137f2c1d0c70df3addd4667aecd32c|pdfSha256|extractedTextSha256|pageStart|pageEnd|pypdf|pdfplumber|Poppler/i,
+  );
+});
+
+test("private industry source titles are rejected even when they are not in a fixed name list", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What is thermal mass, how does it affect summer comfort, and when should I use it?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      verdict: "According to Home by Evidence: Australian Home Design and Retrofit Guide, thermal mass stores heat.",
+      reason: "It can moderate summer temperatures only when shading and night cooling let the stored heat escape.",
+      extraDetail: "Use it as part of a climate-appropriate passive design, not as an isolated product choice.",
+      coveredQuestionPartIndexes: [0, 1, 2],
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "protected_reference",
+  }]);
+});
+
+test("provider evidence uses opaque aliases and restores only used official maintained links", async () => {
+  const officialCitation = {
+    id: "yourhome-ventilation-airtightness",
+    title: "Ventilation and airtightness",
+    publisher: "Your Home, Australian Government",
+    url: "https://www.yourhome.gov.au/passive-design/ventilation-airtightness",
+    sourceTier: "primary_official",
+    jurisdiction: "Australia",
+    effectiveFrom: null,
+    effectiveTo: null,
+    lastChecked: "2026-08-20",
+    reviewDue: "2027-02-20",
+    storagePolicy: "local_factual_summary",
+    stale: false,
+  };
+  let serializedProviderBody = "";
+  const result = await generateSurgeModelAnswer(request({
+    message: "How can I reduce a draught under the front door?",
+    deterministicAnswer: {
+      ...deterministicAnswer("Use a removable door seal without blocking required ventilation."),
+      citations: [officialCitation],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      serializedProviderBody = options.body;
+      return jsonResponse(structuredModelPayload({
+        verdict: "Start with a removable door snake or a correctly fitted removable seal.",
+        reason: "Treat the confirmed gap without blocking required ventilation or altering a fire-rated entry door.",
+        usedSourceIds: ["evidence-source-1"],
+      }));
+    },
+  });
+
+  assert.ok(result);
+  assert.deepEqual(result.answer.citations, [officialCitation]);
+  assert.match(serializedProviderBody, /evidence-source-1/);
+  assert.deepEqual(
+    [...serializedProviderBody.matchAll(/yourhome-ventilation-airtightness|Your Home, Australian Government|yourhome\.gov\.au/gi)]
+      .map((match) => match[0]),
+    [],
   );
 });
 
@@ -2805,6 +4560,18 @@ test("joined multi-topic explanations require every named topic without treating
     })),
   });
   assert.ok(contextualDecision);
+
+  const everydayOptionFailures = [];
+  const everydayOptionDecision = await generateSurgeModelAnswer(request({
+    message: "Ok, I have $1,500. Blinds, a solar deposit, or a new split?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Blinds first, unless the existing reverse-cycle unit cannot heat the main living area adequately. Put the $1,500 toward close-fitting honeycomb blinds or thermal curtains on the worst single-glazed windows. Do not pay a solar deposit until apartment roof, metering and owners-corporation feasibility are confirmed. Replace the split only if effective heating is missing or testing finds a costly fault.",
+    })),
+    onFailure: (failure) => everydayOptionFailures.push(failure),
+  });
+  assert.ok(everydayOptionDecision, JSON.stringify(everydayOptionFailures));
 });
 
 test("explicit quote and adjective facets cannot be hidden by a price-only or verdict-only answer", async () => {
@@ -2886,6 +4653,294 @@ test("provider coverage indexes cannot hide an omitted battery answer", async ()
     })),
   });
   assert.ok(complete);
+});
+
+test("held-out conversation answers pass the boundary when they preserve corrections and grounded decision details", async () => {
+  const cases = [
+    {
+      message: "so what would you do first then?",
+      recentTurns: [
+        { role: "user", content: "We use roughly 8 kWh in the day and 12 kWh after sunset." },
+        { role: "assistant", content: "Solar can cover daytime use, while a battery is mainly an evening-use decision." },
+      ],
+      answer: "Start with solar, because your daytime use gives it electricity to replace directly. Size it around the roof, shade and daytime use, then assess the battery separately against the 12 kWh you use after sunset, likely surplus solar and tariff.",
+    },
+    {
+      message: "Nah sorry, we're renting and the 6.6 kW solar is next door's. We just have a portable heater. What can we actually change?",
+      recentTurns: [
+        { role: "user", content: "We own the house and have 6.6 kW solar." },
+        { role: "assistant", content: "That ownership and solar system would affect the upgrade order." },
+      ],
+      answer: "You are renting, and the 6.6 kW solar belongs next door, so exclude it from your plan. Use removable door and window seals, a door snake and lined curtains. A portable heater suits short, local use but is costly for long heating. Ask the landlord in writing about repairs or a fixed reverse-cycle system before making permanent changes.",
+    },
+    {
+      message: "It says $5,900 after rebates, $58 a month for 7 years, and 'switchboard work extra'. Is the finance total actually the same as the quote, and is this a complete installed price?",
+      recentTurns: [
+        { role: "user", content: "I've attached the hot-water quote." },
+        { role: "assistant", content: "I can check the extracted price, finance and excluded work." },
+      ],
+      answer: "No. The figures do not match, and the installed price is incomplete.\n\n$58 monthly for 7 years totals $4,872, which is $1,028 below $5,900. A deposit, final payment, subsidy, or incorrect repayment figure may explain the gap. 'Switchboard work extra' means the final installed cost could rise.\n\nBefore signing, require the total repayments including all fees, plus a fixed price or clearly priced allowance for switchboard work.",
+    },
+    {
+      message: "On page 3 it says 6.6 kW of panels, a 5 kW inverter and zero export. Is the inverter undersized, and does zero export mean the solar is pointless?",
+      recentTurns: [
+        { role: "user", content: "The solar proposal PDF lists 15 panels and a 5 kW inverter." },
+        { role: "assistant", content: "The panel wattage, array capacity and export settings decide whether that pairing makes sense." },
+      ],
+      answer: "No. The inverter is normally sized, and zero export does not make the solar pointless.\n\nA 6.6 kW panel array on a 5 kW inverter is a common design. The inverter may trim brief production peaks, while the larger array improves output outside peak conditions. Zero export means surplus power cannot enter the grid. Solar can still supply household use and charge a battery, if included. Any generation beyond those needs is curtailed, so value depends heavily on daytime consumption.",
+    },
+    {
+      message: "Yeah nah, the glass isn't the issue. It's a breeze under the front door. What's the cheap fix?",
+      recentTurns: [
+        { role: "assistant", content: "Do the windows feel cold even when there is no wind?" },
+      ],
+      answer: "Put a door snake along the inside bottom edge.\n\nIt is the cheapest immediate fix and needs no installation. For a neater, longer-lasting result, fit a correctly sized adhesive door-bottom seal. Do not seal the gap if it provides required ventilation, especially for an unflued gas heater.",
+    },
+  ];
+
+  for (const item of cases) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message: item.message,
+      recentTurns: item.recentTurns,
+    }), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: item.answer })),
+      onFailure: (failure) => failures.push(failure),
+    });
+    assert.ok(result, `${item.message}: ${JSON.stringify(failures)}`);
+  }
+});
+
+test("held-out quantity safeguards still reject invented process defaults and silently omitted corrected quantities", async () => {
+  const cases = [
+    {
+      message: "so what would you do first then?",
+      recentTurns: [
+        { role: "user", content: "We use roughly 8 kWh in the day and 12 kWh after sunset." },
+        { role: "assistant", content: "Solar can cover daytime use, while a battery is mainly an evening-use decision." },
+      ],
+      answer: "Download 12 months of smart-meter usage data first. Your rough split suggests solar is the first investment to assess. Download your electricity usage data in 30-minute intervals, then assess a battery separately.",
+    },
+    {
+      message: "Nah sorry, we're renting and the 6.6 kW solar is next door's. We just have a portable heater. What can we actually change?",
+      recentTurns: [
+        { role: "user", content: "We own the house and have 6.6 kW solar." },
+        { role: "assistant", content: "That ownership and solar system would affect the upgrade order." },
+      ],
+      answer: "Start with reversible draught control and heat only the occupied room. Renters can fit removable door and window seals, use a door snake and close lined curtains after sunset. Use the portable electric heater only in the occupied room, then ask the landlord about suitable fixed heating.",
+    },
+  ];
+
+  for (const item of cases) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message: item.message,
+      recentTurns: item.recentTurns,
+    }), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: item.answer })),
+      onFailure: (failure) => failures.push(failure),
+    });
+    assert.equal(result, null, item.message);
+    assert.deepEqual(failures, [{
+      code: "provider_output_rejected",
+      stage: "quantity_grounding",
+    }], item.message);
+  }
+});
+
+test("solar battery context remains conditional and cannot become unrelated purchase advice", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Does zero export make this solar system pointless?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "No. Solar can still supply the home under zero export. Install a battery instead and ignore daytime use.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(failures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
+test("recorded v13 candidates remain admissible without weakening adjacent guardrails", async () => {
+  const cases = [
+    {
+      id: "c02",
+      request: {
+        message: "What is the next useful check before I replace the fan?",
+        recentTurns: [
+          {
+            role: "user",
+            content: "Correction: it is closer to 45 minutes, and I can barely feel air moving at the grille.",
+          },
+          {
+            role: "assistant",
+            content: "That points to weak airflow rather than proving the fan itself has failed.",
+          },
+        ],
+        continuation: state({
+          activeTopic: "draughts_ventilation",
+          goal: "Check why the bathroom mirror stays fogged after a shower",
+        }),
+      },
+      answer: "Check the duct and outdoor outlet before replacing the fan. With fog lasting about 45 minutes and very weak airflow, a blocked, crushed or disconnected duct, stuck flap, or clogged outlet may be the real cause. Clean the accessible grille first, then have the full exhaust path checked. Replacement is justified only if airflow remains weak with a clear, properly connected duct and adequate air entering under the door.",
+    },
+    {
+      id: "c06",
+      request: {
+        message: "Is B worth the extra money just for the longer warranty?",
+        recentTurns: [
+          {
+            role: "user",
+            content: "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?",
+          },
+          {
+            role: "assistant",
+            content: "Compare the exact models, installation scope and what each written warranty actually covers.",
+          },
+        ],
+        continuation: state({
+          activeTopic: "products_ratings",
+          goal: "Compare Quote A at $6,900 with Quote B at $7,400",
+        }),
+      },
+      answer: "No, Quote B is not worth the extra money solely for a longer warranty. Quote A is $6,900 with a five-year warranty, while Quote B is $7,400 with a seven-year warranty. The extra $500 is justified only if B also offers meaningfully better labour and workmanship cover, fewer exclusions, stronger claim support or better installation scope. Warranty length alone is not enough, and Australian Consumer Law rights apply separately.",
+    },
+    {
+      id: "c12",
+      request: {
+        message: "While we are on solar, what does self-consumption mean in normal words?",
+        recentTurns: [
+          {
+            role: "user",
+            content: "Does a little inverter clipping automatically mean the solar design is bad?",
+          },
+          {
+            role: "assistant",
+            content: "No. A little clipping can be an intentional design trade-off.",
+          },
+        ],
+        continuation: state({
+          activeTopic: "solar",
+          goal: "Understand the apartment solar design",
+        }),
+      },
+      answer: "Self-consumption means using your solar electricity in your home while your panels are producing it. For example, if solar power runs your air conditioner, dishwasher or hot-water system during the day, that electricity is self-consumed. Any surplus sent to the grid is exported, while electricity needed when solar is insufficient is imported from the grid.",
+    },
+    {
+      id: "c20",
+      request: {
+        message: "Briefly, Mum says her gas heater is expensive. Does that change what I should do at my apartment?",
+        recentTurns: [
+          {
+            role: "user",
+            content: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+          },
+          {
+            role: "assistant",
+            content: "Keep the working split and focus your apartment budget on the door draught and cold windows.",
+          },
+        ],
+        continuation: state({
+          activeTopic: "rcac",
+          goal: "Prioritise comfort work at my apartment without replacing the working split",
+        }),
+      },
+      answer: "No. Mum’s gas-heater costs do not change the decision for your apartment. They relate to a different home and heating system. Your reverse-cycle split still heats properly and is normally an efficient room-heating option, so keep using it rather than replacing a working unit.",
+    },
+  ];
+
+  for (const candidate of cases) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request(candidate.request), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({ answer: candidate.answer })),
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, `${candidate.id}: ${JSON.stringify(failures)}`);
+    assert.equal(result.answer.directAnswer, candidate.answer, candidate.id);
+    assert.deepEqual(failures, [], candidate.id);
+  }
+
+  const unrequestedArithmeticFailures = [];
+  const unrequestedArithmetic = await generateSurgeModelAnswer(request({
+    message: "Does B have the longer warranty?",
+    recentTurns: cases[1].request.recentTurns,
+    continuation: cases[1].request.continuation,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Yes. Quote B has the seven-year warranty and costs $7,400, while Quote A has five years at $6,900. The price difference is $500.",
+    })),
+    onFailure: (failure) => unrequestedArithmeticFailures.push(failure),
+  });
+  assert.equal(unrequestedArithmetic, null);
+  assert.deepEqual(unrequestedArithmeticFailures, [{
+    code: "provider_output_rejected",
+    stage: "quantity_grounding",
+  }]);
+
+  const unrelatedUpgradeFailures = [];
+  const unrelatedUpgrade = await generateSurgeModelAnswer(request(cases[2].request), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: `${cases[2].answer} Install an air conditioner to increase self-consumption.`,
+    })),
+    onFailure: (failure) => unrelatedUpgradeFailures.push(failure),
+  });
+  assert.equal(unrelatedUpgrade, null);
+  assert.deepEqual(unrelatedUpgradeFailures, [{
+    code: "provider_output_rejected",
+    stage: "topic_drift",
+  }]);
+});
+
+test("a bathroom fan answer may check its required replacement-air path without being rejected as a draught detour", async () => {
+  const failures = [];
+  const answer = "First, test whether the running fan firmly holds a tissue against its grille.\n\nBecause it stops with the light, it may not run long enough, but weak airflow, a dirty grille, restricted ducting or insufficient air entering under the door can also leave moisture behind. Clean the accessible grille with power off and check the door has an air gap.\n\nHave the duct and outside or shared outlet checked if airflow remains weak. Ask a licensed electrician about a timer or humidity control so the fan continues after showering. In an apartment, duct or outlet work may involve common property and owners corporation approval.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "Different question: the bathroom fan only runs with the light and the mirror stays fogged. What should I check?",
+    recentTurns: [
+      { role: "user", content: "Would curtains with a pelmet work too?" },
+      { role: "assistant", content: "Close-fitting curtains and a pelmet can reduce heat loss through the window." },
+    ],
+    continuation: state({
+      activeTopic: "glazing_shading",
+      goal: "Improve cold windows",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.match(result.answer.directAnswer, /fan firmly holds a tissue/i);
+  assert.match(result.answer.directAnswer, /air entering under the door/i);
+  assert.deepEqual(failures, []);
+});
+
+test("a wet-window observation checklist may record exhaust use without drifting away from the window diagnosis", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "The tenant says the bedroom window is wet every morning. What should I ask them to observe?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Ask them to photograph the window before wiping it each morning. Record whether moisture is on the room side, outside or between the panes, plus its extent and exact location. Note overnight weather, heating, closed doors or windows, wet clothes, and whether bathroom or kitchen exhaust fans were used. Look for blocked window drainage, damaged seals, water stains, peeling paint or mould, especially after rain.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+  assert.ok(result, JSON.stringify(failures));
+  assert.deepEqual(failures, []);
 });
 
 test("model answers suppress provider-suggested question buttons", async () => {
