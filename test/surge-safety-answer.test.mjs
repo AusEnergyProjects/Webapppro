@@ -631,3 +631,55 @@ test("uncertainty wording does not negate a real smoke hazard", () => {
   assert.ok(answer);
   assert.match(answer.directAnswer, /fresh outdoor air/i);
 });
+
+test("an unrelated if-question cannot inherit an old equipment hazard", () => {
+  const message = "Unrelated: can you tell me if my scone recipe needs more flour?";
+  assert.equal(composeSurgeSafetyAnswer(message, ["My old gas heater was hissing."]), null);
+  assert.equal(composeSurgeNonCurrentHazardAnswer(message, ["My old gas heater was hissing."]), null);
+});
+
+test("unresolved gas and electrical incidents keep immediate follow-ups deterministic", () => {
+  const gas = composeSurgeSafetyAnswer(
+    "Can I relight the heater once the smell fades?",
+    ["I smell gas near the heater and I have a headache. What should I do right now?"],
+  );
+  assert.ok(gas);
+  assert.match(gas.directAnswer, /^No\./i);
+  assert.match(gas.directAnswer, /do not relight[\s\S]*licensed gasfitter[\s\S]*safe/i);
+
+  const electricalHistory = [
+    "The switchboard is crackling and I can smell burning. What should I do?",
+  ];
+  const reset = composeSurgeSafetyAnswer(
+    "Should I reset the main breaker to see if it stops?",
+    electricalHistory,
+  );
+  assert.ok(reset);
+  assert.match(reset.directAnswer, /^No\./i);
+  assert.match(reset.directAnswer, /do not reset[\s\S]*(?:electricity network|licensed electrician)/i);
+
+  const solar = composeSurgeSafetyAnswer(
+    "Does this mean the solar quote I was considering is a bad idea?",
+    [...electricalHistory, "Should I reset the main breaker to see if it stops?"],
+  );
+  assert.ok(solar);
+  assert.match(solar.directAnswer, /^First,[\s\S]*make the fault safe/i);
+  assert.match(solar.directAnswer, /does not by itself mean the solar quote is a bad idea/i);
+});
+
+test("qualified safe clearance stops an old incident from controlling later decisions", () => {
+  assert.equal(composeSurgeSafetyAnswer(
+    "Does this mean the solar quote I was considering is a bad idea?",
+    [
+      "The switchboard was crackling and I could smell burning.",
+      "A licensed electrician inspected it and confirmed it is safe.",
+    ],
+  ), null);
+  assert.equal(composeSurgeSafetyAnswer(
+    "Can I relight the heater?",
+    [
+      "There was a gas smell near the heater.",
+      "A licensed gasfitter checked it and confirmed it is safe.",
+    ],
+  ), null);
+});

@@ -14,10 +14,7 @@ import {
 } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  parseSurgeConversationState,
-  type SurgeConversationState,
-} from "@/lib/energy-assistant-conversation";
+import type { SurgeConversationState } from "@/lib/energy-assistant-conversation";
 import {
   EMPTY_SURGE_STARTER_PROFILE,
   markSurgeProfileStepReviewed,
@@ -55,6 +52,7 @@ import {
 import { ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
 import { publicPlanQuoteQuestionsForSnapshot } from "@/lib/public-plan-quote-preparation.mjs";
 import type { DocumentConversationMessage } from "@/lib/energy-assistant-document-client";
+import { buildEnergyAssistantAskRequestBody } from "@/lib/energy-assistant-request-budget";
 import styles from "./EnergyAssistantWidget.module.css";
 
 const EnergyAssistantDocumentTools = lazy(() => import("./EnergyAssistantDocumentTools"));
@@ -161,8 +159,8 @@ const DISPLAY_PREFERENCE_TUCKED = "tucked";
 const MAX_MESSAGE_LENGTH = 1200;
 const MAX_LOCAL_MESSAGES = 40;
 const MAX_LOCAL_STORAGE_CHARACTERS = 160_000;
-const MAX_RECENT_TURNS = 8;
-const MAX_RECENT_CONTEXT_CHARACTERS = 6_000;
+const MAX_RECENT_TURNS = 12;
+const MAX_RECENT_CONTEXT_CHARACTERS = 9_000;
 const LOCAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const EMPTY_STARTER_PROFILE = EMPTY_SURGE_STARTER_PROFILE;
@@ -330,6 +328,50 @@ function asString(value: unknown, maxLength = 4000): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+// The API performs the authoritative deep validation. The browser only needs a
+// bounded pass-through parser so local storage cannot inflate the request or UI
+// bundle with the server's full ledger validator.
+function parseSurgeConversationState(value: unknown): SurgeConversationState | null {
+  const source = asRecord(value);
+  const boundedText = (candidate: unknown, maximum: number) => (
+    typeof candidate === "string"
+    && candidate.length <= maximum
+    && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(candidate)
+      ? candidate.trim()
+      : null
+  );
+  if (source?.version !== 1 || !Array.isArray(source.facts) || source.facts.length > 16) return null;
+  const activeTopic = boundedText(source.activeTopic, 48);
+  const goal = boundedText(source.goal, 240);
+  const pendingQuestion = boundedText(source.pendingQuestion, 220);
+  const lastAnswerSummary = boundedText(source.lastAnswerSummary, 320);
+  if (activeTopic === null || !/^[a-z][a-z0-9_]*$/.test(activeTopic || "general")
+    || goal === null || pendingQuestion === null || lastAnswerSummary === null) return null;
+  const facts = source.facts.map((item) => {
+    const fact = asRecord(item);
+    const key = boundedText(fact?.key, 48);
+    const factValue = boundedText(fact?.value, 240);
+    return key && factValue !== null && /^[a-z][a-z0-9_]*$/.test(key)
+      ? { key, value: factValue }
+      : null;
+  });
+  if (facts.some((fact) => !fact)) return null;
+  const ledger = source.ledger === undefined ? undefined : asRecord(source.ledger);
+  if (source.ledger !== undefined && (!ledger
+    || !Array.isArray(ledger.subjects) || ledger.subjects.length > 150
+    || !Array.isArray(ledger.decisions) || ledger.decisions.length > 50
+    || new TextEncoder().encode(JSON.stringify(ledger)).byteLength > 32_768)) return null;
+  return {
+    version: 1,
+    activeTopic: activeTopic || "general",
+    goal,
+    facts: facts as SurgeConversationState["facts"],
+    pendingQuestion,
+    lastAnswerSummary,
+    ...(ledger ? { ledger: ledger as SurgeConversationState["ledger"] } : {}),
+  };
+}
+
 function asStringList(value: unknown, limit: number, itemLength = 500): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -342,17 +384,6 @@ function asStringList(value: unknown, limit: number, itemLength = 500): string[]
     .slice(0, limit);
 }
 
-function safeCitationUrl(value: unknown): string {
-  const candidate = asString(value, 1000);
-  if (!candidate) return "";
-  try {
-    const url = new URL(candidate);
-    return url.protocol === "https:" ? url.href : "";
-  } catch {
-    return "";
-  }
-}
-
 function safeActionHref(value: unknown): string {
   const candidate = asString(value, 180);
   if (!candidate || candidate.includes("\\") || candidate.includes("?")) return "";
@@ -363,19 +394,38 @@ function safeActionHref(value: unknown): string {
   return "";
 }
 
+// The API applies the exact reviewed source allowlist. This smaller independent
+// browser boundary prevents a malformed stored or intercepted response from
+// rendering a commercial or non-HTTPS link without duplicating the full list.
+function safeOfficialCitationHref(value: unknown): string {
+  const candidate = asString(value, 1_000);
+  if (!candidate || candidate.includes("\\")) return "";
+  try {
+    const url = new URL(candidate);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.search) return "";
+    if (!/(?:\.gov\.au|^(?:www\.)?(?:aemo\.com\.au|csiro\.au|erawa\.com\.au|qca\.org\.au|standards\.org\.au))$/.test(hostname)) return "";
+    url.hostname = hostname;
+    url.hash = "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
 function parseCitations(value: unknown): Citation[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item, index) => {
     const record = asRecord(item);
     if (!record) return [];
+    const url = safeOfficialCitationHref(record.url);
     const title = asString(record.title, 260);
-    const publisher = asString(record.publisher ?? record.source, 160);
-    const url = safeCitationUrl(record.url);
-    if (!title || !publisher || !url) return [];
+    if (!url || !title || record.stale === true
+      || (record.sourceTier !== undefined && record.sourceTier !== "primary_official")) return [];
     return [{
-      id: asString(record.id, 100) || `source-${index + 1}`,
+      id: `official-source-${index + 1}`,
       title,
-      publisher,
+      publisher: new URL(url).hostname,
       url,
       jurisdiction: asString(record.jurisdiction, 120),
       effectiveDate: asString(
@@ -510,7 +560,8 @@ function naturalFollowUpFor(message: AssistantMessage, audience: Audience): stri
 }
 
 function usesSingleParagraphAnswer(message: AssistantMessage) {
-  return message.answerType !== "starting_plan" && message.answerType !== "safety";
+  return message.answerType !== "safety"
+    && !(message.answerType === "starting_plan" && message.practicalSteps.length >= 2);
 }
 
 function singleParagraphAnswerFor(message: AssistantMessage, audience: Audience) {
@@ -1446,6 +1497,7 @@ export function EnergyAssistantWidget({
   const ask = async (question: string) => {
     const message = question.trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!message || busy) return;
+    const priorMessages = messagesRef.current;
     if (leadOpen) {
       setLeadOpen(false);
       setLeadError("");
@@ -1480,19 +1532,20 @@ export function EnergyAssistantWidget({
       const planContext = context.audience === "trade"
         ? null
         : await readStoredPlanContext(JSON.stringify(plannerProfile.session));
+      const requestBody = buildEnergyAssistantAskRequestBody({
+        action: "ask",
+        requestId,
+        message,
+        recentTurns,
+        continuation: continuationRef.current,
+        planContext,
+        pageContext: context.apiPath,
+        audience: context.audience,
+      });
       const response = await fetch("/api/energy-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "ask",
-          requestId,
-          message,
-          recentTurns,
-          continuation: continuationRef.current,
-          planContext,
-          pageContext: context.apiPath,
-          audience: context.audience,
-        }),
+        body: requestBody,
       });
       const payload: unknown = await response.json().catch(() => null);
       const record = asRecord(payload);
@@ -1503,12 +1556,17 @@ export function EnergyAssistantWidget({
       const reply = parseMessage(replySource, "assistant");
       if (!reply) throw new Error("The guide returned an empty answer. Please try again.");
       const nextContinuation = parseSurgeConversationState(record.continuation);
+      if (!nextContinuation) {
+        throw new Error("The guide could not preserve this conversation. Please retry.");
+      }
       continuationRef.current = nextContinuation;
       setContinuation(nextContinuation);
       conversationScrollPendingRef.current = true;
       replaceMessages([...messagesRef.current, reply]);
       setHasUsefulAnswer(true);
     } catch (caught) {
+      replaceMessages(priorMessages);
+      setDraft(message);
       setError(caught instanceof Error ? caught.message : "The guide could not answer that question.");
     } finally {
       setBusy(false);
@@ -2438,7 +2496,7 @@ export function EnergyAssistantWidget({
                                   key={citation.id}
                                   href={citation.url}
                                   target="_blank"
-                                  rel="noreferrer"
+                                  rel="noopener noreferrer"
                                   title={citation.title}
                                 >
                                   {citation.publisher}

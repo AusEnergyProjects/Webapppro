@@ -285,17 +285,37 @@ function answer(base: EnergyAssistantAnswer, value: SimpleAnswer): EnergyAssista
 }
 
 function quoteAnswer(base: EnergyAssistantAnswer, text: string) {
-  const mentionsComparedPrices = /\$\s*\d|cheaper|dearer|expensive|price|cost/i.test(text);
+  const quotedPrices = moneyMentions(text);
+  const comparesQuotes = quotedPrices.length >= 2
+    || /\b(?:cheaper|dearer|expensive one|compare(?:d|s|ing)?\s+(?:the\s+)?quotes?|quote\s*A|quote\s*B)\b/i.test(text);
+  const excludesIncentives = /\b(?:not|isn't|is not|don't|do not)\b[^.!?\n]{0,45}\b(?:rebate|discount|certificate|incentive)s?\b/i.test(text)
+    || /\b(?:quote|price|cost)\b[^.!?\n]{0,70}\bnot\s+(?:the\s+)?(?:rebate|discount|certificate|incentive)s?\b/i.test(text);
+  const exactModel = text.match(
+    /\bmodel\s+(?:is\s+)?((?:[A-Z][A-Z0-9-]*\s+){0,2}[A-Z0-9-]*\d[A-Z0-9-]*)\b/i,
+  )?.[1]?.trim();
+  const singlePrice = quotedPrices.length === 1
+    ? Number(quotedPrices[0].value.replaceAll(",", ""))
+    : null;
+  const suppliedDetail = [
+    singlePrice && Number.isFinite(singlePrice) ? `$${singlePrice.toLocaleString("en-AU")}` : "",
+    exactModel ? `model ${exactModel}` : "",
+  ].filter(Boolean).join(" and ");
   return answer(base, {
-    directAnswer: mentionsComparedPrices
+    directAnswer: comparesQuotes
       ? "I cannot call the cheaper quote better from price alone. It is good value only if it covers the same job, suitable equipment and warranty without important exclusions."
-      : "Yes, I can check whether the quote looks fair and complete. I need the quote or its main details before I can give you an honest verdict.",
+      : suppliedDetail
+        ? `I have ${suppliedDetail}, but that is not enough to call the quote fair yet. The price is reasonable only if the equipment suits the job and the installed scope includes every required part, with no costly exclusions.`
+        : "Yes, I can check whether the quote looks fair and complete. I need the quote or its main details before I can give you an honest verdict.",
     practicalSteps: [
-      "Check the final amount after rebates or certificate discounts.",
+      excludesIncentives
+        ? "Check the final installed total, including GST and every required part of the job."
+        : "Check the final amount after rebates or certificate discounts.",
       "Compare the exact model, size and everything included in installation.",
       "Check exclusions, electrical work, warranty and who handles problems after installation.",
     ],
-    suggestedQuestion: "Can you attach the quote, or type its total price and exact model?",
+    suggestedQuestion: suppliedDetail
+      ? "What equipment is being installed, and what work and warranty does the quote include?"
+      : "Can you attach the quote, or type its total price and exact model?",
   });
 }
 
@@ -320,6 +340,13 @@ export function composeSurgeSimpleAnswer(
     .slice(-3)
     .map((turn) => turn.content)
     .join("\n");
+
+  if (/\bdishwashers?\b/i.test(message)) {
+    return answer(base, {
+      directAnswer: "For a dishwasher, first confirm it fits the cabinet and that the quote includes delivery, connection, testing and removal of the old unit if needed. Compare models of a similar size using both the Energy Rating and Water Rating labels, then check the annual energy use, water use, noise, cycle length, warranty and local service. A licensed plumber or electrician may be needed if the existing connections are unsuitable.",
+      practicalSteps: [],
+    });
+  }
 
   if (/\b(?:what if )?(?:it is|it's) calm(?: tonight)?\b|\bcalm tonight\b/i.test(message)
     && /\b(?:window|draught|draft|air leak|opening gap|wind blows?)\b/i.test(`${priorUserText}\n${priorAssistantText}`)) {

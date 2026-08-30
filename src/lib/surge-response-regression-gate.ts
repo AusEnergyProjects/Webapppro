@@ -14,6 +14,7 @@ export const SURGE_RESPONSE_GENERIC_FALLBACK_PATTERNS = [
   "\\bwhat topic would you like (?:covered|recreated)\\b",
   "\\bgoverned (?:product )?evidence could not be verified\\b",
   "\\bFor the supplied Victoria owner context\\b",
+  "^\\s*Surge AI (?:is here|focuses on) (?:for\\s+)?Australian home energy(?: and upgrades)?\\b",
   "^\\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\\s*$",
 ] as const;
 
@@ -110,7 +111,8 @@ export function surgeVisibleAnswerFromReply(value: unknown) {
     ...stringValues(reply.practicalSteps ?? reply.practical_steps ?? reply.steps),
     stringValue(reply.extraDetail ?? reply.extra_detail),
   ].filter(Boolean);
-  return answerType === "starting_plan" || answerType === "safety"
+  const stepCount = stringValues(reply.practicalSteps ?? reply.practical_steps ?? reply.steps).length;
+  return answerType === "safety" || (answerType === "starting_plan" && stepCount >= 2)
     ? sections.join("\n\n")
     : sections.join(" ");
 }

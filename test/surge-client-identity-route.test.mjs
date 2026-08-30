@@ -22,6 +22,7 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /networkKey: identity\.networkKey/);
   assert.match(source, /requestKey: requestId/);
   assert.match(source, /estimatedMicroUsd/);
+  assert.match(source, /requireValidatedModelForOrdinaryAdvice: true/);
   assert.match(source, /return deniedReservation\(\)/);
   assert.match(source, /headers\.append\("Set-Cookie", setCookie\)/);
   assert.doesNotMatch(source, /x-forwarded-for|cf-connecting-ip|clientIp/);

@@ -212,7 +212,7 @@ const SURGE_LOCAL_SERVICE_REQUEST_PATTERNS = [
   /\b(?:can|could|would)\s+you\b[^.!?\n]{0,35}\b(?:recommend|suggest|find|connect\s+me\s+with)\b[^.!?\n]{0,45}\b(?:a\s+)?(?:good|reliable|qualified|licensed|local)?\s*(?:installer|contractor|tradie|electrician|plumber|provider)\b/i,
   /\b(?:anybody|anyone|someone|who|companies?|installers?|providers?|contractors?|trades?|tradies?)\b[\s\S]{0,120}\b(?:will\s+)?(?:services?|covers?|travels?\s+to|works?\s+in|installs?\s+in)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
   /\b(?:installers?|companies?|providers?|contractors?|trades?|tradies?)\b[\s\S]{0,80}\b(?:servicing|covering|working\s+in|available\s+in|near)\b[\s\S]{0,80}\b(?:area|region|town|postcode|location|regional|Grampians)\b/i,
-  /\b(?:anybody|anyone|someone|somebody|who|installers?|companies?|contractors?|tradies?|electricians?|plumbers?)\b[^.!?\n]{0,100}\b(?:install|put|fit|replace|repair|quote)\w*\b[^.!?\n]{0,100}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b/i,
+  /\b(?:anybody|anyone|someone|somebody|who|installers?|companies?|contractors?|trades?|tradies?|electricians?|plumbers?)\b[^.!?\n]{0,100}\b(?:install|put|fit|replace|repair|quote)\w*\b[^.!?\n]{0,100}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b/i,
   /\b(?:looking for|find|need|want)\b[^.!?\n]{0,80}\b(?:solar|PV|panels?|battery|heat[- ]?pump|hot[- ]?water|air[- ]?con|heating|cooling|insulation|draught|glazing|windows?|blinds?|shutters?|EV charger|energy assessment)\b[^.!?\n]{0,80}\b(?:installer|company|contractor|tradie|electrician|plumber|quote)\b/i,
 ] as const;
 
@@ -276,23 +276,212 @@ export function isSurgeServiceLocationFollowUp(
     || /^[a-z][a-z'’.-]{2,}[.!]*$/.test(followUp);
 }
 
-function surgeServiceAndQuoteAnswer(query: string, exactLocationKnown = false) {
-  const locationOnlyRequest = SURGE_LOCATION_ONLY_SERVICE_REQUEST_PATTERN.test(query);
-  if (locationOnlyRequest) {
-    return "Which home-energy service do you need there: solar, a battery, heat-pump hot water, air conditioning, insulation, windows, an EV charger or a home-energy assessment? Once you choose, tap Get competing quotes below and enter the job postcode so we can connect you with relevant local trades. We do not favour or endorse any company or product.";
+export type SurgeServiceConversationContext = {
+  messages: string[];
+  originalRequest: string;
+  services: string[];
+  locality: string;
+  postcode: string;
+  jobSubject: string;
+  wantsAllRelevant: boolean;
+  sendRequested: boolean;
+  bestInstallerAsked: boolean;
+  correctionRequested: boolean;
+  locationFollowUp: boolean;
+  unresolvedGasSafety: boolean;
+};
+
+const SURGE_SERVICE_FOLLOW_UP_PATTERN = /\b(?:preferred supplier|preferred installer|all relevant|local trades?|right trades?|send (?:it|the enquiry|my enquiry)|submit (?:it|the enquiry|my enquiry)|open (?:it|the enquiry)|start (?:it|the enquiry)|enquiry now|inquiry now|best installer|best tradie|rank(?:ing)? installers?|who (?:is|are) the best)\b/i;
+const SURGE_SERVICE_PROPERTY_CORRECTION_PATTERN = /\b(?:actually|correction|not my|not our|instead|job is at|job is for|this is at|this is for)\b[\s\S]{0,100}\b(?:place|home|house|property|apartment|unit|job|site|postcode|\d{4})\b/i;
+
+function surgeServiceScopes(value: string) {
+  const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(value);
+  return [
+    /\bdraught|draft|weather\s*seal/i.test(value) ? "draught sealing" : "",
+    /\bhoneycomb|cellular\s+(?:blind|shade)|\bblinds?\b/i.test(value) ? "honeycomb blinds" : "",
+    /\binsulat/i.test(value) ? "insulation" : "",
+    /\bheat[- ]?pump\b[^.!?\n]{0,30}\bhot[- ]?water|\bhot[- ]?water\b[^.!?\n]{0,30}\bheat[- ]?pump/i.test(value) ? "heat-pump hot water" : "",
+    /\bheaters?\b/i.test(value) ? "heater replacement" : "",
+    /\bair ?con|reverse[- ]?cycle|heating|cooling/i.test(value) ? "heating and cooling" : "",
+    /\bEV charger|electric vehicle charger/i.test(value) ? "an EV charger" : "",
+    solarJob ? "solar" : "",
+    /\bbattery|storage\b/i.test(value) ? "a battery" : "",
+    /\bwindows?|glazing|double[- ]?glaz/i.test(value) ? "windows and glazing" : "",
+    /\bhome[- ]?energy assessment|energy assessment/i.test(value) ? "a home-energy assessment" : "",
+  ].filter((service, index, services) => service && services.indexOf(service) === index);
+}
+
+function serviceLocality(value: string) {
+  const matches = [...value.matchAll(
+    /\b(?:around|round|near|in|at)\s+(?:the\s+)?([A-Za-z][A-Za-z'’.-]*(?:\s+[A-Za-z][A-Za-z'’.-]*){0,3}?)(?=\s+(?:who|that|which|can|could|would|quotes?|to|for|and|but|is|are|has|have|with)\b|[,.!?]|$)/gi,
+  )];
+  const rejected = /^(?:normal words?|plain (?:english|words?)|simple words?|the area|this area|that area|my place|our place|mum['’]?s place|dad['’]?s place|(?:the )?(?:heater|switchboard|meter box|inverter|battery|appliance|equipment))$/i;
+  const raw = matches.map((match) => match[1]?.trim() || "").filter((candidate) => candidate && !rejected.test(candidate)).at(-1) || "";
+  return raw.replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("en-AU"));
+}
+
+function serviceJobSubject(messages: readonly string[]) {
+  for (const message of [...messages].reverse()) {
+    const relationship = message.match(/\b(mum|mom|mother|dad|father|parent|sister|brother|daughter|son|aunt|uncle|grandma|grandmother|grandpa|grandfather|friend|neighbou?r)(?:['’]s)?\s+(?:place|home|house|property|apartment|unit|job|site)\b/i)?.[1]?.toLowerCase();
+    if (relationship) {
+      const labels: Record<string, string> = {
+        mum: "Mum's place",
+        mom: "Mum's place",
+        mother: "Mum's place",
+        dad: "Dad's place",
+        father: "Dad's place",
+        parent: "your parent's place",
+        sister: "your sister's place",
+        brother: "your brother's place",
+        daughter: "your daughter's place",
+        son: "your son's place",
+        aunt: "your aunt's place",
+        uncle: "your uncle's place",
+        grandma: "your grandmother's place",
+        grandmother: "your grandmother's place",
+        grandpa: "your grandfather's place",
+        grandfather: "your grandfather's place",
+        friend: "your friend's place",
+        neighbor: "your neighbour's place",
+        neighbour: "your neighbour's place",
+      };
+      return labels[relationship] || "that property";
+    }
+    if (/\b(?:my|our)\s+(?:place|home|house|property|apartment|unit)\b/i.test(message)
+      && !/\bnot\s+(?:my|our)\s+(?:place|home|house|property|apartment|unit)\b/i.test(message)) {
+      return "your home";
+    }
   }
-  const postcode = queryAustralianPostcode(query) || "";
-  const solarJob = /\b(?:solar|PV|panels?|inverter)\b/i.test(query);
+  return "the property";
+}
+
+function latestServiceRequestIndex(messages: readonly string[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isSurgeServiceOrCompetingQuoteRequest(messages[index]) && surgeServiceScopes(messages[index]).length) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function unresolvedGasSafetyContext(priorUserMessages: readonly string[]) {
+  const recent = priorUserMessages.slice(-6);
+  const incidentIndex = recent.findLastIndex((message) => (
+    /\b(?:gas|LPG|gas heater|heater)\b/i.test(message)
+    && /\b(?:gas smell|smell(?:s|ed|ing)?\s+(?:of\s+)?gas|carbon[- ]?monoxide alarm|CO alarm)\b/i.test(message)
+  ));
+  if (incidentIndex < 0) return false;
+  return !recent.slice(incidentIndex + 1).some((message) => (
+    /\b(?:gas emergency service|licensed gasfitter|emergency service)\b/i.test(message)
+    && /\b(?:checked|cleared|confirmed|declared|made)\b[^.!?]{0,35}\bsafe\b|\bsafe\b[^.!?]{0,35}\b(?:checked|cleared|confirmed|declared)\b/i.test(message)
+  ));
+}
+
+export function isSurgeServiceConversationFollowUp(
+  value: string,
+  priorUserMessages: readonly string[],
+) {
+  if (isSurgeServiceLocationFollowUp(value, priorUserMessages)) return true;
+  const priorStart = latestServiceRequestIndex(priorUserMessages);
+  if (priorStart < 0) return false;
+  if (SURGE_SERVICE_FOLLOW_UP_PATTERN.test(value)) return true;
+  const turnsSinceRequest = priorUserMessages.length - priorStart;
+  return turnsSinceRequest <= 6 && SURGE_SERVICE_PROPERTY_CORRECTION_PATTERN.test(value);
+}
+
+export function surgeServiceConversationContext(
+  value: string,
+  priorUserMessages: readonly string[],
+): SurgeServiceConversationContext | null {
+  const currentIsServiceRequest = isSurgeServiceOrCompetingQuoteRequest(value)
+    && !surgeServiceRequestAlsoAsksEnergyDecision(value);
+  const followsServiceRequest = isSurgeServiceConversationFollowUp(value, priorUserMessages);
+  if (!currentIsServiceRequest && !followsServiceRequest) return null;
+
+  const allMessages = [...priorUserMessages, value];
+  const priorStart = latestServiceRequestIndex(priorUserMessages);
+  const currentHasScope = surgeServiceScopes(value).length > 0;
+  const start = followsServiceRequest && priorStart >= 0
+    ? priorStart
+    : currentHasScope
+      ? allMessages.length - 1
+      : Math.max(0, priorStart);
+  const messages = allMessages.slice(start);
+  const services = messages.flatMap(surgeServiceScopes)
+    .filter((service, index, all) => all.indexOf(service) === index);
+  const postcode = [...messages].reverse().map(queryAustralianPostcode).find(Boolean) || "";
+  const locality = [...messages].reverse().map(serviceLocality).find(Boolean) || "";
+  return {
+    messages,
+    originalRequest: messages[0] || value,
+    services,
+    locality,
+    postcode,
+    jobSubject: serviceJobSubject(messages),
+    wantsAllRelevant: /\b(?:all relevant|no preferred|don['’]?t want (?:a )?preferred|do not want (?:a )?preferred)\b/i.test(messages.join("\n")),
+    sendRequested: /\b(?:can|could|may)\s+i\s+(?:send|submit|open|start)\b|\b(?:send|submit|open|start)\s+(?:it|the enquiry|my enquiry|this enquiry)\s*(?:now)?\b/i.test(value),
+    bestInstallerAsked: /\b(?:best installer|best tradie|who (?:is|are) the best|tell me who the best|rank(?:ing)? installers?)\b/i.test(value),
+    correctionRequested: SURGE_SERVICE_PROPERTY_CORRECTION_PATTERN.test(value),
+    locationFollowUp: isSurgeServiceLocationFollowUp(value, priorUserMessages),
+    unresolvedGasSafety: unresolvedGasSafetyContext(priorUserMessages),
+  };
+}
+
+function naturalServiceList(services: readonly string[]) {
+  if (!services.length) return "the selected home-energy work";
+  if (services.length === 1) return services[0];
+  return `${services.slice(0, -1).join(", ")} and ${services.at(-1)}`;
+}
+
+function surgeServiceAndQuoteAnswer(context: SurgeServiceConversationContext) {
+  const query = context.messages.join("\n");
+  const locationOnlyRequest = !context.services.length && SURGE_LOCATION_ONLY_SERVICE_REQUEST_PATTERN.test(context.originalRequest);
+  if (locationOnlyRequest) {
+    return "Which home-energy service do you need there: solar, a battery, heat-pump hot water, air conditioning, insulation, windows, an EV charger or a home-energy assessment? Once you choose, tap Get competing quotes below and enter the job postcode so we can connect you with relevant local trades. We do not favour any company or product, and we do not endorse particular brands.";
+  }
   const hasExistingQuote = /\b(?:already\s+have|have\s+(?:got\s+)?(?:an?|one)|got|received|existing|first)\b[^.!?\n]{0,50}\bquotes?\b/i.test(query);
-  const trades = solarJob ? "solar installers" : "approved trades";
-  const place = postcode ? `postcode ${postcode}` : exactLocationKnown ? "that area" : "";
-  const opening = place
-    ? `Yes, we can help you find ${trades} who work in ${place}.`
-    : `Yes, we can help you find ${trades} for this job.`;
-  const action = place
-    ? "Tap Get competing quotes below and your enquiry can be sent to approved trades who cover the area."
-    : "Tap Get competing quotes below, enter the job postcode and your enquiry can be sent to approved trades who cover the area.";
-  return `${opening} We do not favour any company or product. ${action}${hasExistingQuote ? " You can compare their replies with the quote you already have." : ""}`;
+  const scope = naturalServiceList(context.services);
+  const location = context.postcode
+    ? `postcode ${context.postcode}`
+    : context.locality
+      ? context.locality
+      : "the job area";
+  const site = context.postcode
+    ? `${context.jobSubject} (postcode ${context.postcode})`
+      : context.locality
+        ? `${context.jobSubject} in ${context.locality}`
+        : context.jobSubject;
+  if (context.unresolvedGasSafety && context.services.some((service) => (
+    service === "heater replacement" || service === "heating and cooling"
+  ))) {
+    return `Safety comes first: stay outside and do not relight or use the heater until the gas emergency service and a licensed gasfitter have confirmed the property is safe. After that, tap Get competing quotes below to review an enquiry for ${scope} at ${site}; it can go to all relevant local trades, and nothing is sent until you submit it.`;
+  }
+  if (context.bestInstallerAsked) {
+    return `I do not rank or claim that one installer is the best. I can send the enquiry for ${scope} at ${site} to all relevant local trades covering ${location}, so you can compare the full installed price, inclusions, warranty and service. Tap Get competing quotes below to review it; nothing is sent until you submit it.`;
+  }
+  if (context.correctionRequested) {
+    return `Got it — the enquiry is for ${site}, not the previously discussed property. It still covers ${scope}. Tap Get competing quotes below to review it and send it to all relevant local trades; nothing has been sent yet.`;
+  }
+  if (context.sendRequested) {
+    const locationStep = context.postcode ? "" : " and enter the job postcode";
+    return `Yes. We can help you send one enquiry for ${scope} at ${site} to all relevant local trades that cover the area. We do not prefer or endorse a company, product or installer. Tap Get competing quotes below${locationStep} to review the details; nothing is sent until you submit it.`;
+  }
+  if (context.wantsAllRelevant) {
+    return `That is how it should work: Surge does not prefer a company, product or installer. The enquiry for ${scope} at ${site} can go to all relevant local trades that cover the area. Tap Get competing quotes below to review it; nothing is sent until you submit it.`;
+  }
+  const existingQuoteNote = hasExistingQuote ? " You can compare their replies with the quote you already have." : "";
+  const trades = context.services.length === 1 && context.services[0] === "solar"
+    ? "solar installers"
+    : "relevant local trades";
+  const coverage = context.postcode
+    ? `who work in postcode ${context.postcode}`
+    : context.locality
+      ? context.locationFollowUp
+        ? "who work in that area"
+        : `for this job in ${context.locality}`
+      : "for this job";
+  const locationStep = context.postcode ? "" : ", enter the job postcode";
+  return `Yes, we can help you find ${trades} ${coverage}. We do not favour any company or product. Tap Get competing quotes below${locationStep} to review one enquiry for ${scope}; it can go to all relevant local trades and nothing is sent until you submit it.${existingQuoteNote}`;
 }
 
 const THREE_PHASE_SUPPLY_PATTERN = /\b(?:3|three)[ -]?phase\b/i;
@@ -1235,7 +1424,7 @@ function directPlaybookId(
 }
 
 function isStandaloneAssistanceQuestion(message: string) {
-  const assistance = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|VEU|VEECs?|NSW[- ]?ESS|ESCs?|NSW[- ]?PDRS|PDRS|PRCs?|SRES|STCs?|ACT[- ]?EEIS|SA[- ]?REPS|Victorian Energy Upgrades?|Energy Savings Scheme|Peak Demand Reduction Scheme|Small-scale Renewable Energy Scheme|Energy Efficiency Improvement Scheme|Retailer Energy Productivity Scheme)\b/i.test(message);
+  const assistance = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|government support|financial support|Victorian support|support (?:may|might|could|can) apply|VEU|VEECs?|NSW[- ]?ESS|ESCs?|NSW[- ]?PDRS|PDRS|PRCs?|SRES|STCs?|ACT[- ]?EEIS|SA[- ]?REPS|Victorian Energy Upgrades?|Energy Savings Scheme|Peak Demand Reduction Scheme|Small-scale Renewable Energy Scheme|Energy Efficiency Improvement Scheme|Retailer Energy Productivity Scheme)\b/i.test(message);
   const technology = /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|hot[- ]?water|heat[- ]?pump|solar|battery|insulation|glazing|draught|induction|EV|charger)\b/i.test(message);
   if (!assistance || !technology) return false;
   return Boolean(
@@ -1245,13 +1434,14 @@ function isStandaloneAssistanceQuestion(message: string) {
 }
 
 function isClarificationRequest(message: string) {
-  const clean = message.trim();
+  const clean = message.trim().split(/\n+/u).at(-1)?.replace(/^Customer answer:\s*/i, "").trim() || "";
   return /^(?:huh|sorry|wait)\b/i.test(clean)
     || /\bwhat (?:do you mean|does that mean)\b/i.test(clean)
     || /\b(?:can|could|would) you explain\b/i.test(clean)
     || /\bexplain (?:that|this|it)\b/i.test(clean)
-    || /\b(?:I|we) (?:do not|don't|did not|didn't) understand\b/i.test(clean)
-    || /\bsay (?:that|this|it) (?:more )?simply\b/i.test(clean);
+    || /\b(?:I|we) (?:do not|don't|dont|did not|didn't|didnt) understand\b/i.test(clean)
+    || /\bsay (?:that|this|it) (?:more )?simply\b/i.test(clean)
+    || /\b(?:useless|unhelpful|irrelevant|confusing|rubbish|garbage)\s+(?:answer|reply|response)\b|\bnot what i asked\b/i.test(clean);
 }
 
 function isBatteryTimingQuestion(message: string) {
@@ -1374,7 +1564,7 @@ function isLikelyPlaybookFollowUp(playbook: EnergyAssistantPlaybookId, message: 
 
 function missingSolarStcSlots(conversation: string): SolarStcSlot[] {
   const present = new Set<SolarStcSlot>();
-  if (/\b\d{4}\b/.test(conversation) || /\bSTC\s*zone\s*[1-4]\b/i.test(conversation)) {
+  if (queryAustralianPostcode(conversation) || /\bSTC\s*zone\s*[1-4]\b/i.test(conversation)) {
     present.add("location");
   }
   if (
@@ -1458,7 +1648,7 @@ function missingHeatPumpSelectionSlots(conversation: string): HeatPumpSelectionS
       && /^[A-Z][A-Za-z' .-]{2,45}(?:,\s*(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA))?$/.test(clean)
       && !/^(?:yes|no|maybe|unsure|not sure|heat pump|hot water|space heating)$/i.test(clean);
   });
-  if (/\b(?:postcode\s*)?\d{4}\b/i.test(conversation)
+  if (queryAustralianPostcode(conversation)
     || explicitProgramJurisdiction(conversation)
     || hasNamedLocationReply) {
     present.add("climate");
@@ -1494,6 +1684,88 @@ function numericCapture(conversation: string, pattern: RegExp) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function latestNumericCapture(conversation: string, patterns: readonly RegExp[]) {
+  const matches = patterns.flatMap((pattern) => [...conversation.matchAll(pattern)].map((match) => ({
+    index: match.index ?? -1,
+    value: match[1] || "",
+  })));
+  const latest = matches.sort((left, right) => right.index - left.index)[0];
+  if (!latest?.value) return null;
+  const value = Number(latest.value.replaceAll(",", ""));
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function recurringFinanceCalculation(query: string) {
+  const monthlyMatch = [...query.matchAll(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:a|per|\/)?\s*months?\b/gi)].at(-1);
+  const yearMatch = [
+    ...query.matchAll(/\b(\d+(?:\.\d+)?)\s*years?\b/gi),
+    ...query.matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\b/gi),
+  ].sort((left, right) => (right.index ?? -1) - (left.index ?? -1))[0];
+  const years = yearMatch?.[1]
+    ? Number.isFinite(Number(yearMatch[1]))
+      ? Number(yearMatch[1])
+      : SMALL_NUMBER_WORDS[yearMatch[1].toLowerCase()] ?? null
+    : null;
+  const quotedPrice = latestNumericCapture(query, [
+    /\$\s*([\d,]+(?:\.\d+)?)(?=\s*(?:after\s+(?:rebates?|discounts?)|installed|cash|quote|price|total)\b)/gi,
+    /\b(?:quote|quoted|installed price|cash price|price|total)\b[^$\n]{0,30}\$\s*([\d,]+(?:\.\d+)?)/gi,
+  ]);
+  const monthlyPayment = monthlyMatch?.[1]
+    ? Number(monthlyMatch[1].replaceAll(",", ""))
+    : null;
+  if (monthlyPayment === null || !Number.isFinite(monthlyPayment)
+    || years === null || quotedPrice === null
+    || !/\b(?:finance|repayments?|quote|installed price|add up|same as|complete)\b/i.test(query)) {
+    return null;
+  }
+  const repaymentMonths = Math.round(years * 12);
+  if (monthlyPayment < 0 || repaymentMonths <= 0) return null;
+  const repaymentTotal = monthlyPayment * repaymentMonths;
+  const difference = quotedPrice - repaymentTotal;
+  const exclusionMatch = query.match(/['“"]?([A-Za-z][A-Za-z -]{1,55}\s+extra)['”"]?/i)?.[1];
+  const exclusion = exclusionMatch
+    ? exclusionMatch
+        .trim()
+        .replace(/^(?:and|with)\s+/i, "")
+        .replace(/\s+(?:is\s+)?extra$/i, "")
+    : null;
+  return { monthlyPayment, years, quotedPrice, repaymentTotal, difference, exclusion };
+}
+
+function recurringFinanceCalculationForTurn(
+  query: string,
+  priorUserMessages: readonly string[],
+) {
+  const direct = recurringFinanceCalculation(query);
+  if (direct) return direct;
+  const continuesFinanceDecision = /\b(?:finance|repayments?|same total|add up|read it wrong|monthly|a month|short|gap|extra|excluded|not included|complete (?:fixed )?installed|final price)\b/i.test(query);
+  if (!continuesFinanceDecision) return null;
+  return recurringFinanceCalculation([...priorUserMessages.slice(-6), query].join("\n"));
+}
+
+export function surgeRecurringFinanceConversationFacts(
+  query: string,
+  priorUserMessages: readonly string[],
+) {
+  const calculation = recurringFinanceCalculationForTurn(query, priorUserMessages);
+  if (!calculation) return [];
+  const { monthlyPayment, years, quotedPrice, repaymentTotal, difference, exclusion } = calculation;
+  const formatMoney = (value: number) => `$${value.toLocaleString("en-AU", { maximumFractionDigits: 2 })}`;
+  return [
+    { key: "finance_repayment_total", value: formatMoney(repaymentTotal) },
+    {
+      key: "finance_quote_gap",
+      value: difference === 0
+        ? "$0; the stated repayments match the quoted price"
+        : `${formatMoney(Math.abs(difference))} ${difference > 0 ? "short of" : "above"} the quoted price`,
+    },
+    ...(exclusion ? [{ key: "finance_excluded_work", value: exclusion }] : []),
+    { key: "finance_quote_price", value: formatMoney(quotedPrice) },
+    { key: "finance_monthly_payment", value: `${formatMoney(monthlyPayment)} a month` },
+    { key: "finance_term", value: `${years.toLocaleString("en-AU")} years` },
+  ];
+}
+
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = {
   one: 1,
   two: 2,
@@ -1501,6 +1773,10 @@ const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = {
   four: 4,
   five: 5,
   six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
 };
 
 function evAnnualSavingsInputs(conversation: string) {
@@ -1693,6 +1969,7 @@ function assistantDomainIntent(query: string) {
     return "blocked" as const;
   }
   if (/\b(?:recipe|beef stew|bake a cake|cook (?:chicken|pasta|dinner)|ingredients?)\b/i.test(query)) return "blocked" as const;
+  if (/\b(?:install(?:ing|ed|ation)?|build(?:ing|built)?|repair(?:ing|ed)?|paint(?:ing|ed)?)\b[^.!?]{0,45}\b(?:fence|letterbox|garden shed)\b|\b(?:fence|letterbox)\b[^.!?]{0,45}\b(?:install(?:ing|ed|ation)?|build(?:ing|built)?|repair(?:ing|ed)?|paint(?:ing|ed)?)\b/i.test(query)) return "blocked" as const;
   if (/\b(?:write|debug|compile|typescript|javascript|python|react|database|algorithm)\b/i.test(query)
     && /\b(?:code|function|component|query|program|app)\b/i.test(query)) return "blocked" as const;
   if (/\b(?:vote|election|political party|prime minister|parliamentary politics)\b/i.test(query)) return "blocked" as const;
@@ -1708,7 +1985,7 @@ function assistantDomainIntent(query: string) {
     && /\b(?:checker|quote|scanned|scan|image[ -]only|OCR|local)\b/i.test(query)) return "in" as const;
   if (/\b(?:raw (?:file )?bytes?|extracted (?:text|lines?)|bounded (?:derived )?summary)\b/i.test(query)
     && /\b(?:local|device|browser|chat|lead|privacy|stays?|leaves?|difference|plain English)\b/i.test(query)) return "in" as const;
-  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulat(?:e|ed|ing|ion)|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|windows?|window coverings?|honeycomb(?: blinds?)?|cellular (?:blinds?|shades?)|blinds?|curtains?|shutters?|pelmets?|door snakes?|door gaps?|seal(?:ing)? gaps?|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|thermal shell|building envelope|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
+  const specific = /\b(?:NatHERS|NCC|STCs?|VEU|VEECs?|ESS|ESCs?|PDRS|PRCs?|Creditex|TLink|SEC|State Electricity Commission|electricity|electrical safety|tariff|bill|meter|NEM12|NMI|solar|PV|inverter|battery|storage|blackout|V2H|V2G|EV|electric vehicle|charger|charging|charging cable|power ?board|WLTP|certified range|range|mileage|petrol|diesel|fuel|heater|heating|cooling|cold|freezing|icy|warm|roasting|baking|boiling|heatwave|overheat(?:ing|s)?|air con|multi[- ]?(?:head|split)|indoor units?|outdoor units?|RCAC|COP|coefficient of performance|hot[- ]?water|HWS|HPWH|HPHW|heat[- ]?pump|induction|cooktop|cooking|laundry|washing|dryer|fridge|freezer|refrigerator|usage|habits?|baseload|insulat(?:e|ed|ing|ion)|uninsulated|downlights?|roof space|roof foil|foil|sarking|cool roof|ceiling fan|portable fan|fibre[ -]?cement|fiber[ -]?cement|slab|glazing|secondary glazing|windows?|window coverings?|honeycomb(?: blinds?)?|cellular (?:blinds?|shades?)|blinds?|curtains?|shutters?|pelmets?|door snakes?|door gaps?|seal(?:ing)? gaps?|bubble wrap|shading|draught|draft|weatherstripp?ing|weatherseal(?:ed|ing)?|airtight|airtightness|tighter|fresh air|stuffy|stale air|CO2|carbon dioxide|ppm|fumes?|humidity|ventilation|vents?|flues?|HRV|MVHR|heat recovery ventilation|mechanical heat recovery|condensation|mould|mold|moisture|damp|thermal|thermal shell|building envelope|radiant|surface|comfort|comfortable|healthier|cheaper|Passive House|Passivhaus|passive design|appliance|electrification|electrify|electrifying|upgrad(?:e|es|ing)|whole[- ]home|payback|annual saving|upfront cost|how many years|gas|carbon|emissions?|rebates?|grants?|funding|loans?|mortgage|finance|assistance|incentives?|discounts?|programmes?|programs?|schemes?|certificates?|energy rating|home energy|building fabric|rent|rental|renter|tenant|bond|portable|temporary|no drilling|strata|body corporate|owners corporation|installer|quotes?|proposals?|PDF|photo|image|installation date|signed installation|customer signature|lead|referral|Word|Excel|DOCX|XLSX|asbestos|bushfire smoke|air purifier|registry|submission)\b/i.test(query);
   if (/\b(?:bedroom|room|upstairs|upper floor|top floor|home|house|unit|apartment)\b/i.test(query)
     && /\b(?:hot|warm)\b/i.test(query)
     && /\b(?:outdoor|outside|night|evening|sunset)\b/i.test(query)) return "in" as const;
@@ -1716,6 +1993,10 @@ function assistantDomainIntent(query: string) {
   if (/\benergy\b/i.test(query) && /\b(?:suppliers?|vendors?|compan(?:y|ies)|exhibitors?|trade shows?|events?)\b/i.test(query)) return "in" as const;
   if (/\benergy\b/i.test(query)) return "ambiguous" as const;
   return "out" as const;
+}
+
+export function isSurgeExplicitlyOutsideScope(query: string) {
+  return assistantDomainIntent(query) === "blocked";
 }
 
 const PROGRAM_JURISDICTION_SIGNALS: ReadonlyArray<readonly [
@@ -1751,8 +2032,40 @@ const PROGRAM_CITY_JURISDICTION_SIGNALS: ReadonlyArray<readonly [
 
 export function queryAustralianPostcode(query: string) {
   const explicitMatches = [...query.matchAll(/\b(?:postcode|post code)\s*(?:is|:|=)?\s*(\d{4})\b/gi)];
-  const bareMatches = [...query.matchAll(/(?<![$\d])\b(?!20\d{2}\b)(\d{4})\b(?!\s*(?:kWh|MJ)\b)(?!\d)/gi)];
-  return explicitMatches.at(-1)?.[1] || bareMatches.at(-1)?.[1] || null;
+  if (explicitMatches.length) return explicitMatches.at(-1)?.[1] || null;
+
+  const bareMatches = [...query.matchAll(/(?<![$\d])\b(\d{4})\b(?!\d)/g)];
+  const validStateCodes = new Set(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]);
+  const valid = bareMatches.filter((match) => {
+    const value = match[1];
+    const index = match.index || 0;
+    const before = query.slice(Math.max(0, index - 64), index);
+    const after = query.slice(index + value.length, index + value.length + 40);
+    const lineStart = query.lastIndexOf("\n", index - 1) + 1;
+    const nextLineBreak = query.indexOf("\n", index + value.length);
+    const lineEnd = nextLineBreak < 0 ? query.length : nextLineBreak;
+    const line = query.slice(lineStart, lineEnd).trim();
+
+    if (/^20\d{2}$/.test(value)) return false;
+    if (/\b(?:model|serial|sku|part(?:\s+(?:number|no))?|quote|quoted|price|cost|costs|budget|paid|pay|worth|value|uses?|draws?|rated|output|input|capacity|wattage)\s*(?:is|was|of|:|=)?\s*(?:[A-Z][A-Z0-9-]*\s+)?$/i.test(before)) {
+      return false;
+    }
+    if (/^\s*(?:watts?|W|kW|kWh|Wh|MJ|litres?|liters?|amps?|A|mm|cm|dollars?|AUD)\b/i.test(after)) {
+      return false;
+    }
+    const precedingCode = before.match(/\b([A-Z]{2,}[A-Z0-9-]*)\s+$/)?.[1] || "";
+    if (precedingCode && !validStateCodes.has(precedingCode)) return false;
+
+    if (line === value) return true;
+    if (precedingCode && validStateCodes.has(precedingCode)) return true;
+    if (/\b(?:in|at|near|around|located(?:\s+in)?|property|home|house|unit|site|address|suburb|town)\s*$/i.test(before)) {
+      return true;
+    }
+    if (/^\s*(?:ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i.test(after)) return true;
+    if (PROGRAM_CITY_JURISDICTION_SIGNALS.some(([, , signal]) => signal.test(before.slice(-48)))) return true;
+    return false;
+  });
+  return valid.at(-1)?.[1] || null;
 }
 
 function postcodeProgramJurisdiction(query: string): readonly [
@@ -1972,7 +2285,7 @@ function catalogueProgramAnswer(query: string): {
     && /\b(?:only|relevant|available|current|do not show|don't show|exclude|without)\b/i.test(query);
   if (!namedProgram
     && !scopedRenterHelp
-    && !/\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|STCs?|VEECs?|ESCs?|PRCs?|Home Energy Saver|Household Energy Upgrades Fund|HEUF|Solar Sharer Offer)\b/i.test(query)) {
+    && !/\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|programs?|programmes?|schemes?|certificates?|government support|financial support|Victorian support|support (?:may|might|could|can) apply|STCs?|VEECs?|ESCs?|PRCs?|Home Energy Saver|Household Energy Upgrades Fund|HEUF|Solar Sharer Offer)\b/i.test(query)) {
     return null;
   }
   const jurisdiction = namedProgram
@@ -1982,7 +2295,7 @@ function catalogueProgramAnswer(query: string): {
   const [jurisdictionCode, jurisdictionLabel] = jurisdiction;
   const certificateIntent = Boolean(namedProgram)
     || /\b(?:certificates?|STCs?|VEECs?|ESCs?|PRCs?|credit schemes?)\b/i.test(query);
-  const financialIntent = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?)\b/i.test(query);
+  const financialIntent = /\b(?:rebates?|grants?|loans?|finance|assistance|incentives?|discounts?|government support|financial support|Victorian support|support (?:may|might|could|can) apply)\b/i.test(query);
   const financialOutcomes = new Set(["rebate", "grant", "loan", "tradable_certificate", "retailer_obligation_credit"]);
   const certificateOutcomes = new Set(["tradable_certificate", "retailer_obligation_credit"]);
   const queryTokens = queryTerms(query).terms;
@@ -2217,7 +2530,8 @@ export function isEnergyDocumentQuoteConversationRequest(
   query: string,
   priorUserMessages: readonly string[],
 ) {
-  return attachedEnergyQuoteIntent(query, priorUserMessages) !== null;
+  return attachedEnergyQuoteIntent(query, priorUserMessages) !== null
+    || recurringFinanceCalculationForTurn(query, priorUserMessages) !== null;
 }
 
 export function composeEnergyAssistantAnswer(
@@ -2228,6 +2542,7 @@ export function composeEnergyAssistantAnswer(
     asOf?: Date | string;
     sources?: readonly EnergyAssistantKnowledgeSource[];
     priorUserMessages?: readonly string[];
+    priorAssistantMessages?: readonly string[];
   } = {},
 ): EnergyAssistantAnswer {
   const answerDay = isoDay(options.asOf || new Date());
@@ -2263,7 +2578,11 @@ export function composeEnergyAssistantAnswer(
     ? currentResults
     : searchEnergyAssistantKnowledge(retrievalQuery, searchOptions);
   const priorUserMessages = [...(options.priorUserMessages || [])].slice(-8);
+  const priorAssistantMessages = [...(options.priorAssistantMessages || [])].slice(-4);
   const userConversation = [...priorUserMessages, query].join("\n");
+  // Assistant prose is never evidence or a household fact. It is used only as
+  // a bounded topic hint when the current user message is elliptical.
+  const topicResolutionConversation = [...priorAssistantMessages, userConversation].join("\n");
   const playbookId = decisionPlaybookId(
     query,
     priorUserMessages,
@@ -2407,16 +2726,16 @@ export function composeEnergyAssistantAnswer(
   }
 
   const serviceLocationFollowUp = isSurgeServiceLocationFollowUp(query, priorUserMessages);
+  const serviceConversationFollowUp = isSurgeServiceConversationFollowUp(query, priorUserMessages);
   if ((isSurgeServiceOrCompetingQuoteRequest(query)
-    && !surgeServiceRequestAlsoAsksEnergyDecision(query)) || serviceLocationFollowUp) {
-    const priorServiceRequest = serviceLocationFollowUp
-      ? [...priorUserMessages].reverse().find(isSurgeServiceOrCompetingQuoteRequest) || ""
-      : "";
-    const serviceConversation = priorServiceRequest ? `${priorServiceRequest}\n${query}` : query;
-    const postcodeKnown = Boolean(queryAustralianPostcode(serviceConversation));
+    && !surgeServiceRequestAlsoAsksEnergyDecision(query)) || serviceConversationFollowUp) {
+    const serviceContext = surgeServiceConversationContext(query, priorUserMessages);
+    const postcodeKnown = Boolean(serviceContext?.postcode || serviceLocationFollowUp);
     return structured("products_ratings", {
-      directAnswer: surgeServiceAndQuoteAnswer(serviceConversation, serviceLocationFollowUp),
-      status: serviceLocationFollowUp || postcodeKnown ? "answered" : "needs_context",
+      directAnswer: serviceContext
+        ? surgeServiceAndQuoteAnswer(serviceContext)
+        : "Tell me which home-energy work you need and the job postcode, then tap Get competing quotes to contact relevant local trades.",
+      status: postcodeKnown ? "answered" : "needs_context",
       citations: [],
       confidence: "high",
       assumptions: ["Current installer coverage and travel charges have not yet been confirmed for the exact site."],
@@ -2424,6 +2743,102 @@ export function composeEnergyAssistantAnswer(
       toolActions: [],
       suggestedQuestions: [],
       sourceBoundary: "No supplier or installer has been ranked or endorsed. Current service coverage must be confirmed for the exact site.",
+    });
+  }
+
+  const financeCalculation = recurringFinanceCalculationForTurn(query, priorUserMessages);
+  if (financeCalculation) {
+    const { monthlyPayment, years, quotedPrice, repaymentTotal, difference, exclusion } = financeCalculation;
+    const financeConversation = [...priorUserMessages.slice(-6), query].join("\n");
+    const gasSavingClaim = latestNumericCapture(financeConversation, [
+      /\$\s*([\d,]+(?:\.\d+)?)[^.!?\n]{0,30}(?:a|per)\s*year[^.!?\n]{0,50}\bgas\b/gi,
+      /\bgas\b[^.!?\n]{0,50}\$\s*([\d,]+(?:\.\d+)?)[^.!?\n]{0,30}(?:a|per)\s*year/gi,
+    ]);
+    const asksAboutGasSaving = /\bgas\b/i.test(query)
+      || (/\b(?:add up|good deal|worth it|reasonable|overall|make sense)\b/i.test(query)
+        && /\bgas\b[^.!?\n]{0,80}\b(?:sav\w*|cost|bill)\b|\b(?:sav\w*|cost|bill)\b[^.!?\n]{0,80}\bgas\b/i.test(financeConversation));
+    const gasSavingVerdict = asksAboutGasSaving
+      ? ` The ${gasSavingClaim === null ? "gas-saving" : `$${gasSavingClaim.toLocaleString("en-AU")}-a-year gas-saving`} claim also needs evidence: compare it with the home's actual gas used for hot water. Count the gas supply charge as a saving only if hot water is the last gas use and the gas account can actually be closed.`
+      : "";
+    const rebateBreakdown = /\b(?:rebates?|discounts?|certificates?|STCs?|VEECs?)\b/i.test(financeConversation)
+      ? " The written breakdown should also show the rebate or certificate deduction separately."
+      : "";
+    if (/^\s*(?:please\s+)?just\s+(?:answer\s+)?(?:yes\s+or\s+no|yes\/no)\b/i.test(query)) {
+      return structured("bills_tariffs", {
+        directAnswer: difference === 0 ? "Yes." : "No.",
+        status: "answered",
+        citations: [],
+        confidence: "high",
+        assumptions: ["The repayment amount, frequency, term and quoted price are the figures already supplied in this conversation."],
+        practicalSteps: [],
+        toolActions: [],
+        suggestedQuestions: [],
+      });
+    }
+    const asksWhetherFinanceMatchesQuote = /\b(?:finance|repayments?|payments?|total)\b[^?]{0,60}\b(?:equal|same as|same total|match(?:es)?)\b|\b(?:equal|same as|same total|match(?:es)?)\b[^?]{0,60}\b(?:quote|price|total)\b/i.test(query);
+    const asksWhetherPriceIsComplete = /\b(?:complete|fixed)\b[^?]{0,45}\b(?:installed\s+)?price\b|\b(?:installed\s+)?price\b[^?]{0,45}\b(?:complete|fixed)\b|\bis\s+(?:that|this|it)\s+the\s+final\s+(?:installed\s+)?price\b/i.test(query);
+    if (asksWhetherPriceIsComplete) {
+      const gap = difference === 0
+        ? `$${monthlyPayment.toLocaleString("en-AU")} a month for ${years.toLocaleString("en-AU")} years totals $${repaymentTotal.toLocaleString("en-AU")}, matching the $${quotedPrice.toLocaleString("en-AU")} quote`
+        : `$${monthlyPayment.toLocaleString("en-AU")} a month for ${years.toLocaleString("en-AU")} years totals $${repaymentTotal.toLocaleString("en-AU")}, which is $${Math.abs(difference).toLocaleString("en-AU")} ${difference > 0 ? "less than" : "more than"} the $${quotedPrice.toLocaleString("en-AU")} quote`;
+      return structured("bills_tariffs", {
+        directAnswer: `${difference === 0 && !exclusion ? "Yes." : "No."} ${gap}.${exclusion ? ` ${exclusion[0].toUpperCase()}${exclusion.slice(1)} remains extra, so this is not a complete installed price yet and is not fixed.` : " Confirm there are no omitted fees, deposits, final payments or exclusions."}`,
+        status: "answered",
+        citations: officialCitationsById(["asic-moneysmart-personal-loans"]),
+        confidence: "high",
+        assumptions: ["The latest repayment, term, quote and exclusion details all refer to the same installation."],
+        practicalSteps: [],
+        toolActions: [],
+        suggestedQuestions: [],
+      });
+    }
+    const asksWhetherExcludedWorkRaisesPrice = Boolean(exclusion)
+      && /\b(?:extra|excluded|not included|outside|push|raise|increase|higher|complete installed|final price)\b/i.test(query)
+      && /\b(?:could|would|will|does|mean|still|so)\b/i.test(query)
+      && !asksWhetherFinanceMatchesQuote;
+    if (asksWhetherExcludedWorkRaisesPrice) {
+      return structured("bills_tariffs", {
+        directAnswer:
+          `Yes. The $${Math.abs(difference).toLocaleString("en-AU")} gap only compares the stated repayments with the $${quotedPrice.toLocaleString("en-AU")} quote. Because ${exclusion} is separate, that cost is added on top and can push the final installed price higher. Get one written total that includes the equipment, installation, switchboard work, fees and any final payment before signing.`,
+        status: "answered",
+        citations: officialCitationsById(["asic-moneysmart-personal-loans"]),
+        confidence: "high",
+        assumptions: ["The corrected repayment and term apply to the same quoted installation, and the stated excluded work remains outside that price."],
+        practicalSteps: [],
+        toolActions: [],
+        suggestedQuestions: [],
+      });
+    }
+    const relationship = difference === 0
+      ? `matches the $${quotedPrice.toLocaleString("en-AU")} quote before any fee, deposit or final payment`
+      : `does not equal the $${quotedPrice.toLocaleString("en-AU")} quote; it is $${Math.abs(difference).toLocaleString("en-AU")} ${difference > 0 ? "less than" : "more than"} the $${quotedPrice.toLocaleString("en-AU")} quote`;
+    const correctionLead = /\b(?:sorry|correction|read it wrong|not\s+\$)\b/i.test(query)
+      ? "Updated."
+      : difference === 0
+        ? "On those figures, yes."
+        : "No.";
+    if (correctionLead === "Updated.") {
+      return structured("bills_tariffs", {
+        directAnswer: `Updated. $${monthlyPayment.toLocaleString("en-AU")} a month for ${years.toLocaleString("en-AU")} years totals $${repaymentTotal.toLocaleString("en-AU")}, which is $${Math.abs(difference).toLocaleString("en-AU")} ${difference > 0 ? "less than" : "more than"} the $${quotedPrice.toLocaleString("en-AU")} quote.${exclusion ? ` ${exclusion[0].toUpperCase()}${exclusion.slice(1)} remains extra, so the complete installed price is still unknown.` : ""}`,
+        status: "answered",
+        citations: officialCitationsById(["asic-moneysmart-personal-loans"]),
+        confidence: "high",
+        assumptions: ["The corrected repayment and term apply to the same quoted installation."],
+        practicalSteps: [],
+        toolActions: [],
+        suggestedQuestions: [],
+      });
+    }
+    return structured("bills_tariffs", {
+      directAnswer:
+        `${correctionLead} $${monthlyPayment.toLocaleString("en-AU")} a month for ${years.toLocaleString("en-AU")} years totals $${repaymentTotal.toLocaleString("en-AU")}, which ${relationship}. ${difference === 0 ? "Confirm there are no extra charges." : "The written finance breakdown must explain that gap, including any deposit, fees or final payment."}${rebateBreakdown}${exclusion ? ` It is not a complete installed price while ${exclusion} is outside the stated total.` : ""}${gasSavingVerdict} Ask for the total repayments${exclusion ? " and a fixed installed-price breakdown" : ""} before signing.`,
+      status: "answered",
+      citations: officialCitationsById(["asic-moneysmart-personal-loans"]),
+      confidence: "high",
+      assumptions: ["The monthly repayment continues for the full stated term and no omitted repayment frequency or term condition changes the arithmetic."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
     });
   }
 
@@ -2546,6 +2961,88 @@ export function composeEnergyAssistantAnswer(
     });
   }
 
+  const correctedRenterSituation = /\b(?:we(?:'|’)re|we are|i(?:'|’)m|i am)\s+(?:renting|renters?)|\b(?:renting|renter|tenant)\b/i.test(query)
+    && (/\b(?:next door|neighbou?r(?:'s)?)\b/i.test(query)
+      || /\bportable\s+(?:electric\s+)?heater\b/i.test(query)
+      || /\bwhat can (?:we|i) (?:actually )?change\b/i.test(query));
+  if (correctedRenterSituation) {
+    const solarCorrection = /\b(?:next door|neighbou?r(?:'s)?)\b/i.test(query)
+      ? "The solar you mentioned belongs to the neighbouring home, so do not plan around it as your system. "
+      : "";
+    return structured("comfort_fabric", {
+      directAnswer:
+        `As renters, start with safe, removable measures and use the current official tenancy process for repairs or changes the landlord must approve. ${solarCorrection}Use a door snake, removable draught seals and close-fitting curtains or honeycomb blinds. A portable resistance heater can be costly for long heating periods, so heat only the occupied room. If the home lacks suitable fixed heating, ask the landlord in writing about a reverse-cycle system. Get permission before drilling or changing fixed equipment.`,
+      status: "answered",
+      citations: officialCitationsById(["vic-rental-minimum-energy-standards", "energy-gov-heating-cooling"]),
+      confidence: "medium",
+      assumptions: ["The rental jurisdiction, lease conditions and condition of the existing heater have not been checked."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
+  const asksFirstSolarBatteryStep = /\b(?:what|which|where|how)\b[^?\n]{0,45}\bfirst\b|\bwhat would you do first\b/i.test(query)
+    && /\bsolar\b/i.test(topicResolutionConversation)
+    && /\bbatter(?:y|ies)\b/i.test(topicResolutionConversation)
+    && /\b(?:daytime|during the day|in the day)\b/i.test(userConversation)
+    && /\b(?:after sunset|evening|overnight|at night)\b/i.test(userConversation);
+  if (asksFirstSolarBatteryStep) {
+    const daytimeUse = userConversation.match(/\b(\d+(?:\.\d+)?)\s*kWh\s*(?:in|during)\s+the\s+day\b/i)?.[1]
+      || userConversation.match(/\b(\d+(?:\.\d+)?)\s*kWh\b[^.!?\n]{0,35}\b(?:daytime|during the day|in the day)\b/i)?.[1]
+      || userConversation.match(/\b(?:daytime|during the day|in the day)\b[^.!?\n]{0,35}\b(\d+(?:\.\d+)?)\s*kWh\b/i)?.[1]
+      || "";
+    const eveningUse = userConversation.match(/\b(\d+(?:\.\d+)?)\s*kWh\s*(?:after sunset|in the evening|overnight|at night)\b/i)?.[1]
+      || userConversation.match(/\b(\d+(?:\.\d+)?)\s*kWh\b[^.!?\n]{0,35}\b(?:after sunset|evening|overnight|at night)\b/i)?.[1]
+      || userConversation.match(/\b(?:after sunset|evening|overnight|at night)\b[^.!?\n]{0,35}\b(\d+(?:\.\d+)?)\s*kWh\b/i)?.[1]
+      || "";
+    return structured("solar", {
+      directAnswer:
+        `Start with solar first, sized around the home's daytime use${daytimeUse ? ` of about ${daytimeUse} kWh` : ""}. Assess a battery separately after you know how much solar is still exported and how much of the${eveningUse ? ` ${eveningUse} kWh` : ""} after-sunset use can realistically be shifted. The battery is an evening-use and tariff decision, not the first purchase.`,
+      status: "answered",
+      citations: officialCitationsById(["energy-gov-solar-batteries", "energy-gov-batteries"]),
+      confidence: "medium",
+      assumptions: ["The solar size, roof, tariff, export limit and installed prices have not been checked."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
+  const panelCapacity = numericCapture(query, /\b(\d+(?:\.\d+)?)\s*kW\s+(?:of\s+)?(?:solar\s+)?(?:panels?|array)\b/i)
+    ?? numericCapture(query, /\b(?:panels?|array)\b[^.!?\n]{0,30}\b(\d+(?:\.\d+)?)\s*kW\b/i);
+  const inverterCapacity = numericCapture(query, /\b(\d+(?:\.\d+)?)\s*kW\s+inverter\b/i)
+    ?? numericCapture(query, /\binverter\b[^.!?\n]{0,30}\b(\d+(?:\.\d+)?)\s*kW\b/i);
+  if (panelCapacity !== null && inverterCapacity !== null && /\bzero[ -]?export\b/i.test(query)) {
+    return structured("solar", {
+      directAnswer:
+        `A ${panelCapacity.toLocaleString("en-AU")} kW panel array on a ${inverterCapacity.toLocaleString("en-AU")} kW inverter can be a normal design, not proof that the inverter is undersized. The inverter may trim brief peaks, while the larger array improves output at other times. Zero export does not make the solar pointless: the home can still use solar directly and reduce grid imports, but unused surplus is curtailed. Check the written generation estimate, expected clipping and the network-approved export-control setting.`,
+      status: "answered",
+      citations: officialCitationsById(["energy-gov-solar-consumer-guide", "energy-gov-solar-batteries"]),
+      confidence: "medium",
+      assumptions: ["The quoted capacities are DC panel capacity and AC inverter capacity, and no battery or unusual network condition has been confirmed."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
+  const cheapDoorGapFix = /\b(?:breeze|draught|draft|air)\b[^.!?\n]{0,45}\b(?:under|beneath|bottom of|door gap)\b[^.!?\n]{0,30}\bdoor\b|\bdoor\b[^.!?\n]{0,40}\b(?:breeze|draught|draft|gap)\b/i.test(query)
+    && /\b(?:cheap|quick|easy|first|fix|what should)\b/i.test(query);
+  if (cheapDoorGapFix) {
+    return structured("draughts_ventilation", {
+      directAnswer:
+        `The glass is not the issue if you can feel a breeze under the door. Start with a door snake, the cheapest no-install fix. For a neater, longer-lasting result, fit a correctly sized adhesive draught seal or door sweep. Do not seal a gap that provides required ventilation for an unflued gas heater.`,
+      status: "answered",
+      citations: officialCitationsById(["energy-gov-insulation-draught-proofing", "yourhome-ventilation-airtightness"]),
+      confidence: "high",
+      assumptions: ["The air movement is entering under the door rather than through the frame or a required ventilation opening."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
+    });
+  }
+
   const threePhaseUpgradeContext = isThreePhaseSupplyUpgradeQuestion(query)
     ? query
     : isSurgeContextDependentMessage(query)
@@ -2634,7 +3131,7 @@ export function composeEnergyAssistantAnswer(
       /\b(?:high|large|expensive|rising)?\s*(?:power|electricity|energy)?\s*bills?\b|\b(?:bleeds money|costs? a fortune|bills? (?:are )?savage)\b/i.test(wholeHomeConversation) ? "energy bills" : null,
       /\b(?:cold|freezing|hard to heat|winter comfort|cold living room)\b/i.test(wholeHomeConversation) ? "winter comfort" : null,
     ].filter(Boolean);
-    const hasPostcode = /\b(?:postcode\s*)?\d{4}\b/i.test(wholeHomeConversation);
+    const hasPostcode = Boolean(queryAustralianPostcode(wholeHomeConversation));
     const hasPropertyType = /\b(?:detached(?:\s+house)?|house|townhouse|terrace|apartment|unit|duplex)\b/i.test(wholeHomeConversation);
     const nextQuestion = focus.length > 0
       ? "Which room or appliance is causing the biggest problem?"
@@ -4913,6 +5410,9 @@ export function composeEnergyAssistantAnswer(
       : currentDomainIntent;
   const namedCertificateMatches = namedCertificatePrograms(query);
   const namedCertificateIntent = namedCertificateRequestIntent(query);
+  const asksForOfficialCertificateSources = /\b(?:official|government|scheme administrator)\b[^?]{0,55}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b|\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b[^?]{0,55}\b(?:official|government|scheme administrator)\b/i.test(query)
+    && /\bSTCs?\b/i.test(userConversation)
+    && /\b(?:VEECs?|Victorian Energy Upgrades?|VEU)\b/i.test(userConversation);
   const duplicateStcDiscountQuestion = /\bSTCs?\b/i.test(query)
     && (/\b(?:another|second|twice|double|duplicat(?:e|ed|ion)|two|both|again|already)\b[\s\S]{0,120}\b(?:rebate|discount|benefit|deduct|deducted|subtract|subtracts|subtracted|subtraction|line item|quote line|amount|value|GST)\b/i.test(query)
       || /\b(?:before|pre)\s+GST\b[\s\S]{0,100}\b(?:after|post)\s+GST\b/i.test(query)
@@ -4956,7 +5456,7 @@ export function composeEnergyAssistantAnswer(
   if (domainIntent === "out" && !namedCertificateIntent) {
     return structured(options.audience === "trade" ? "trades" : "comfort_fabric", {
       directAnswer:
-        "Surge AI is here for Australian home energy and upgrades. It only covers Australian home energy and upgrade questions, including comfort, bills, appliances, solar, batteries, EVs, rebates, quotes and authorised trade workspace tasks.",
+        "Sorry, that does not appear to be related to Australian home energy. Surge only covers Australian home energy questions, so I cannot assess it here.",
       status: "needs_context",
       citations: [],
       confidence: "low",
@@ -4980,6 +5480,27 @@ export function composeEnergyAssistantAnswer(
         "Which appliance or tariff is driving my bill?",
         "What do I need before requesting an upgrade quote?",
       ],
+    });
+  }
+
+  if (asksForOfficialCertificateSources) {
+    return structured("rebates_certificates", {
+      directAnswer:
+        "Use the Clean Energy Regulator for the Small-scale Renewable Energy Scheme and STC entitlement rules. Use the Essential Services Commission for Victorian Energy Upgrades and VEEC requirements. These official programme pages verify the rules and pathways; they do not establish a live certificate trading price or the net discount in a quote.",
+      status: "answered",
+      citations: officialCitationsById([
+        "cer-stc-entitlement-calculation",
+        "veu-water-space-activity-guide-v3-19",
+      ]),
+      confidence: "high",
+      assumptions: ["The request is for official programme sources, not a verified live certificate market value."],
+      practicalSteps: [
+        "Check the STC entitlement and product pathway with the Clean Energy Regulator.",
+        "Check the applicable Victorian activity and evidence rules with the Essential Services Commission.",
+        "Reconcile certificate quantities, commercial rates, provider fees and the net customer credit separately in the quote.",
+      ],
+      toolActions: [{ id: "open-rebates", label: "Open the official programme sources", href: "/rebates" }],
+      suggestedQuestions: [],
     });
   }
 
@@ -7780,7 +8301,7 @@ export function composeEnergyAssistantAnswer(
             ? "Next, compare delivered capacity retention and efficiency at the relevant outdoor temperature, not only the mild-test COP."
             : "";
     const hotWaterKnownFacts = hotWaterPurpose ? [
-      /\b(?:postcode\s*)?\d{4}\b|\bBallarat\b/i.test(playbookConversation)
+      Boolean(queryAustralianPostcode(playbookConversation)) || /\bBallarat\b/i.test(playbookConversation)
         ? "Use the supplied postcode and Ballarat winter conditions for cold-weather recovery and efficiency, not a mild-climate headline COP."
         : null,
       /\b(?:people|persons?|occupants?|showers?|baths?)\b/i.test(playbookConversation)
@@ -8058,10 +8579,16 @@ export function composeEnergyAssistantAnswer(
       && /\b(?:rebates?|grants?|assistance|incentives?|discounts?|how much|support)\b/i.test(userConversation)
       && programmeAnswer.programs.some((program) => program.templateId === "vic-veu");
     if (asksAboutVictorianAirConditioningSupport) {
-      const postcode = userConversation.match(/\b\d{4}\b/)?.[0] || null;
-      const applicant = userConversation.match(/\b(owner-occupier|owner|renter|tenant|landlord|strata|owners corporation|business)\b/i)?.[0] || null;
+      const postcode = queryAustralianPostcode(userConversation);
+      const applicantMatch = userConversation.match(/\b(owner-occupier|homeowner|owner|renter|tenant|landlord|strata|owners corporation|business|i own the home)\b/i)?.[0] || null;
+      const applicant = applicantMatch
+        ? (/i own the home/i.test(applicantMatch) ? "owner" : applicantMatch)
+        : null;
       const existingSystem = userConversation.match(/\b(ducted gas(?: heating)?|gas ducted heating|gas heater|electric heater|no fixed heater)\b/i)?.[0] || null;
-      const proposedSystem = userConversation.match(/\b(ducted reverse[ -]cycle|ducted air ?con(?:ditioner)?|multi[ -]?split|separate split systems?|individual split systems?)\b/i)?.[0] || null;
+      const proposedSystem = userConversation.match(/\b(ducted reverse[ -]cycle|ducted air ?con(?:ditioner)?|multi[ -]?(?:split|head)(?: system)?|separate split systems?|individual split systems?)\b/i)?.[0] || null;
+      const proposedCapacity = [...userConversation.matchAll(/\b\d+(?:\.\d+)?\s*kW\b/gi)].at(-1)?.[0] || "";
+      const proposedHeadCount = [...userConversation.matchAll(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+heads?\b/gi)].at(-1)?.[0] || "";
+      const suppliedSystemDetails = [proposedCapacity, proposedHeadCount].filter(Boolean).join(" and ");
       const question = !postcode
         ? "What is the property postcode?"
         : !applicant
@@ -8072,28 +8599,24 @@ export function composeEnergyAssistantAnswer(
               ? "Are you considering ducted reverse-cycle or separate split systems?"
               : "Do you have a quote or the exact proposed model numbers?";
       const clarificationRequested = isClarificationRequest(query);
-      const directAnswer = clarificationRequested && existingSystem && !proposedSystem
-        ? `Reverse-cycle air conditioning is electric heating and cooling. Replacing ${existingSystem.toLowerCase()} could mean one ducted electric system serving several rooms, or separate split systems serving only the rooms you use. Ducted systems can provide familiar whole-home zoning but lose some heat through ducts; separate splits avoid those duct losses but need an indoor unit in each chosen area. The exact Victorian Energy Upgrades discount still depends on the proposed models and installation.`
+      const directAnswer = clarificationRequested
+        ? `In plain English: reverse-cycle air conditioning is electric heating and cooling. It can be a ducted electric system or separate split systems for rooms. The Victorian Energy Upgrades discount is not fixed; an approved provider calculates it from the old heater, exact new models and installation. ${existingSystem ? `You said the old system is ${existingSystem.toLowerCase()}. ` : ""}${proposedSystem ? `The proposed system is a ${proposedSystem.toLowerCase()}. ` : ""}${!proposedSystem ? "The next useful detail is which replacement type you mean." : "The next useful detail is the exact outdoor and indoor model numbers."}`
         : !postcode
         ? "In Victoria, some high-efficiency air conditioners can get a discount through Victorian Energy Upgrades. There is no set amount: it depends on the exact air conditioner, what it is replacing and how it is installed. Ask for the discount to be shown separately in the quote, so you can see the real installed price. A reverse-cycle air conditioner can be cheaper to run because it moves heat instead of making it directly."
         : !applicant
           ? `Thanks. ${postcode} is in Victoria. The next thing that changes the support and approval checks is whether you own the home, rent it, or need strata approval.`
           : !existingSystem
-            ? `Thanks. As an ${applicant.toLowerCase()} in ${postcode}, Victorian Energy Upgrades may reduce the upfront cost of an eligible reverse-cycle air conditioner. It is not a fixed rebate: the amount depends on the exact unit, the system being replaced and the installation. The important comparison is the final installed price, room comfort and running cost, not just the advertised discount.`
+          ? `Thanks. As an ${applicant.toLowerCase()} in ${postcode}, Victorian Energy Upgrades may reduce the upfront cost of an eligible reverse-cycle air conditioner. It is not a fixed rebate: the amount depends on the exact unit, the system being replaced and the installation. The important comparison is the final installed price, room comfort and running cost, not just the advertised discount.`
             : !proposedSystem
-              ? `That helps. Replacing ${existingSystem.toLowerCase()} with reverse-cycle air conditioning may qualify for a Victorian Energy Upgrades discount. The amount still depends on the proposed equipment and installation. Ducted reverse-cycle can reuse the idea of whole-home zoning but ducts can lose heat; separate split systems can target the rooms you use most and avoid duct losses.`
-              : `Good, that is enough to assess the next layer. A ${proposedSystem.toLowerCase()} replacement for ${existingSystem.toLowerCase()} should be compared on room-by-room sizing, cold-weather output, zoning, noise, electrical work, gas decommissioning and the final price after any discount. The exact model numbers are needed before the Victorian Energy Upgrades amount can be checked.`;
+              ? `That helps. Replacing ${existingSystem.toLowerCase()} with reverse-cycle air conditioning may qualify for a Victorian Energy Upgrades discount. The amount still depends on the proposed equipment and installation. Ducted reverse-cycle can provide familiar whole-home zoning but ducts can lose heat; separate split systems can target the rooms you use most and avoid duct losses.`
+              : `Good, that is enough to assess the next layer. ${suppliedSystemDetails ? `For the ${proposedSystem.toLowerCase()} replacement of ${existingSystem.toLowerCase()}, the supplied ${suppliedSystemDetails} are useful inputs, but you still need ` : `A ${proposedSystem.toLowerCase()} replacement for ${existingSystem.toLowerCase()} still needs `}room-by-room sizing, cold-weather output, zoning, noise, electrical work, gas decommissioning and the final price after any discount. The exact model numbers for the outdoor and indoor units are needed before the Victorian Energy Upgrades amount can be checked.`;
       return structured("rebates_certificates", {
         directAnswer,
         status: "needs_context",
         citations: officialCitationsById(["veu-water-space-activity-guide-v3-19"]),
         confidence: "medium",
         assumptions: ["The existing system, exact proposed model, property postcode, installer, installation date and current activity conditions have not been checked."],
-        practicalSteps: [
-          "Ask for the quoted support amount to be shown separately from the equipment and installation price.",
-          "Check the exact unit, replaced equipment and full installed scope before treating the discount as available.",
-          "Compare room sizing, noise, electrical work, warranty and running cost as well as the upfront price.",
-        ],
+        practicalSteps: [],
         toolActions: [{ id: "open-rebates", label: "Check Victorian support", href: "/rebates" }],
         suggestedQuestions: [question],
       });
@@ -8161,7 +8684,7 @@ export function composeEnergyAssistantAnswer(
       || /\b(?:gas|electric|heat pump|solar|storage|continuous flow|instantaneous|resistance)\b[\s\S]{0,55}\b(?:hot water|water heater|HWS)\b/i.test(userConversation);
     const proposedHotWaterSystemKnown = /\b(?:proposed|planning|quoted|considering|replace with|replacing with|install|installing)\b[\s\S]{0,100}\b(?:heat pump|solar|electric|gas|storage|continuous flow|instantaneous|model|capacity|litres?)\b/i.test(userConversation);
     const generalMissingFacts = [
-      !/\b\d{4}\b/.test(userConversation) ? "What is the property postcode?" : "",
+      !queryAustralianPostcode(userConversation) ? "What is the property postcode?" : "",
       !/\b(?:owner|owner-occupier|rent|renter|tenant|landlord|strata|owners corporation|business|community housing)\b/i.test(userConversation)
         ? "Is the applicant an owner-occupier, renter, landlord, strata body or business?"
         : "",
@@ -8176,7 +8699,7 @@ export function composeEnergyAssistantAnswer(
         : "",
     ];
     const hotWaterMissingFacts = [
-      !/\b\d{4}\b/.test(userConversation) ? "What is the property postcode?" : "",
+      !queryAustralianPostcode(userConversation) ? "What is the property postcode?" : "",
       !currentHotWaterSystemKnown
         ? "What type of hot-water system do you have now, what fuel does it use, and roughly how old is it?"
         : "",
