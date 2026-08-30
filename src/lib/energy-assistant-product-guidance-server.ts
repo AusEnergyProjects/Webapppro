@@ -35,6 +35,8 @@ const COMPARISON_INTENT = /\b(?:compare|comparison|versus|vs\.?|better|best|quie
 const BROAD_EDUCATIONAL_TOPIC_INTENT = /^\s*(?:ok(?:ay)?[,.]?\s*)?(?:(?:tell|teach)\s+me\s+about|explain(?:\s+to\s+me)?|help\s+me\s+understand)\s+(?:home\s+)?(?:insulation|glazing|draughts?|draught\s+(?:proofing|control)|hot\s+water|heat\s+pumps?|heating(?:\s+and\s+cooling)?|air\s+conditioning|solar|home\s+batter(?:y|ies)|ev\s+charging|electric\s+vehicle\s+charging|induction\s+cooking|electric\s+cooking|appliances?)\s*(?:please)?[?.!]*\s*$/i;
 const RETAIL_PLAN_DECISION_INTENT = /\b(?:electricity|energy|retailer)\s+plans?\b|\btariffs?\b|\bfeed[- ]?in\b|\bFIT\b|\bdaily\s+(?:supply\s+)?(?:charge|rate)\b|\b(?:free\s+hours?|hours?\s+free)\b|\b(?:import|export|usage)\s+rates?\b/i;
 const ORDINARY_HEATING_CHOICE_INTENT = /\b(?:most\s+efficient|efficient|best|cheapest|running\s+cost|cost\s+less)\b/i;
+const COLD_HOME_INTENT = /\b(?:cold|freez(?:e|ing)|chilly)\b/i;
+const COMBINATION_FOLLOW_UP = /^\s*(?:i\s+(?:think|feel|reckon)\s+)?(?:it(?:'?s|\s+is)\s+)?(?:a\s+)?(?:combination|mix|both)(?:\s+of\s+(?:them|those))?[.!?]*\s*$/i;
 
 const PRODUCT_KIND_ALIASES: readonly [CreditexOfficialProductKind, RegExp][] = [
   ["sres_solar_water_heater", /\bsolar\s+(?:hot\s+water|water\s+heater)\b/i],
@@ -148,12 +150,21 @@ function categoryForRequest(request: SurgeModelRequest) {
   // For example, "ducted heating" can explain seasonal use without making heating the topic.
   if (RETAIL_PLAN_DECISION_INTENT.test(request.message)) return null;
   if (isThreePhaseSupplyUpgradeQuestion(request.message)) return null;
+  if (COLD_HOME_INTENT.test(request.message)
+    && /\b(?:home|house|room|winter|warm)\b/i.test(request.message)) {
+    return resolveReviewedProductGuidanceIntent("cold home draught insulation");
+  }
   const current = resolveReviewedProductGuidanceIntent(request.message);
   if (current) return current;
 
   const lastAssistantReply = [...request.recentTurns]
     .reverse()
     .find((turn) => turn.role === "assistant")?.content || "";
+  const continuesColdHomeQuestion = COMBINATION_FOLLOW_UP.test(request.message)
+    && /\b(?:cold|draught|doors?|windows?|ceiling insulation|heat loss)\b/i.test(lastAssistantReply);
+  if (continuesColdHomeQuestion) {
+    return resolveReviewedProductGuidanceIntent("cold home draught insulation");
+  }
   const continuingGroundedLookup = /\b(?:property's postcode|exact brand and model number|verified specification sheet|existing equipment and exact proposed product)\b/i
     .test(lastAssistantReply)
     || /\bwhat (?:system|existing heater|existing equipment)[^?]{0,100}\breplac/i
@@ -561,8 +572,15 @@ async function resolveMatchedGuidance(
   ));
   const comparisonMethod = reviewedProductComparisonMethod();
   const dimensions = category.comparisonDimensions.map((dimension) => dimension.consumerLabel);
+  const coldHomeIntent = category.id === "insulation_glazing_draughts"
+    && COLD_HOME_INTENT.test(text);
+  const combinationFollowUp = coldHomeIntent && COMBINATION_FOLLOW_UP.test(request.message);
 
-  let direct = comparisonIntent
+  let direct = combinationFollowUp
+    ? "If it feels like a combination, start with the two biggest heat-loss paths: draughts and the ceiling. Use a door snake and removable seals on obvious gaps, then have the ceiling insulation checked for thin, missing or disturbed sections and safe clearances. Keep using reverse-cycle heating in occupied rooms while you work through those fixes. If the home is still cold after that, look at close-fitting window coverings and whether the heater is sized and positioned well."
+    : coldHomeIntent
+      ? "Cold homes usually lose heat through a mix of draughts, thin or patchy ceiling insulation and poorly insulated windows. Start with the cheap checks: use a door snake and removable seals on obvious gaps, then check whether the ceiling insulation is continuous and in good condition. If you have reverse-cycle heating, use it in occupied rooms and clean the filters. Fixing the largest heat-loss paths before buying a bigger heater often improves comfort and lowers running costs."
+      : comparisonIntent
     ? `To compare ${category.consumerLabel.toLowerCase()} properly, provide the exact model number and complete installed scope for each option. The useful comparison points are ${dimensions.join(", ")}. A brand name, price or headline specification alone does not establish which option fits the home.`
     : certificateIntent
       ? `For ${category.consumerLabel.toLowerCase()}, rebates and certificates depend on the location, existing equipment, exact proposed product and installation details. I will only give an exact quantity when every required input is verified.`
@@ -711,7 +729,11 @@ async function resolveMatchedGuidance(
     }
   }
 
-  let question = comparisonIntent
+  let question = combinationFollowUp
+    ? "Which feels worse: cold air near doors and windows, or rooms that stay cold even when the heater is running?"
+    : coldHomeIntent
+      ? "Do you notice more cold air around doors and windows, or does the whole house stay cold?"
+      : comparisonIntent
     ? comparisonMethod.decisionQuestions[1]
     : category.contextQuestions[0] || comparisonMethod.decisionQuestions[0];
   let status: EnergyAssistantAnswer["status"] = "answered";
