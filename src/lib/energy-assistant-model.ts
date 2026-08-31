@@ -1334,7 +1334,7 @@ const SUPPORTING_ANSWER_TOPICS: Partial<
   rcac: ["gas", "insulation", "windows", "draught", "ventilation", "phase"],
   solar: ["battery"],
   ventilation: ["condensation", "windows", "draught"],
-  windows: ["draught", "condensation", "insulation", "comfort"],
+  windows: ["draught", "condensation", "insulation", "comfort", "rcac"],
 };
 
 const ACTIONABLE_SUPPORTING_ANSWER_TOPICS: Partial<

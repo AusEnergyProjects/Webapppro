@@ -45,7 +45,7 @@
         { "id": "uses-home-context", "anyOf": ["condensation|moisture", "draught|draft", "single[- ]glaz|window", "blind|curtain", "cold|warm"] }
       ],
       "forbiddenPatterns": ["staged whole-home diagnosis", "affected room or major end use", "what(?: is|'s) your postcode", "do you own or rent"],
-      "maxWords": 120,
+      "maxWords": 150,
       "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": {
