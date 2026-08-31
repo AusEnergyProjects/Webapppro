@@ -63,6 +63,7 @@ import { residentialStateFromPostcode } from "./australian-postcodes.mjs";
 import {
   composeSurgePlanPriorityAnswer,
   isSurgePlanPriorityIntent,
+  surgeAnswerPreservesPlanPriority,
   applySurgePlanContextCorrections,
   applySurgePlanContextCorrectionsToConversationState,
   surgeSavedPlanCorrectionFactsForMessage,
@@ -376,8 +377,7 @@ function explicitlyUsesSavedHomeContext(value: string) {
     || /\b(?:should|can|could|would|do)\s+(?:i|we)\s+(?:get|add|install|put\s+in|replace|upgrade|choose|buy|use|switch|size)\b/i.test(value)
     || /\bwhat\s+size\b[^?]{0,80}\bshould\s+(?:i|we)\b/i.test(value)
     || /\bwould\b[^?]{0,80}\bsuit\s+(?:me|us)\b/i.test(value)
-    || /\bwhat\b[^?]{0,50}\b(?:suit|fit)s?\s+our\s+household\b/i.test(value)
-    || isSurgePlanPriorityIntent(value);
+    || /\bwhat\b[^?]{0,50}\b(?:suit|fit)s?\s+our\s+household\b/i.test(value);
 }
 
 const EXPLICIT_NON_SAVED_PERSON_CONTEXT = /\b(?:mum|mom|mother|dad|father|parent|sister|brother|aunt|aunty|uncle|grandmother|grandma|nan|nanna|grandfather|granddad|grandpa|daughter|son|cousin|niece|nephew|friend|neighbou?r|client|customer|tenant|landlord)(?:['’]s)\b[^.!?\n]{0,120}\b(?:home|house|place|property|apartment|unit|site|quote|bill|electricity|energy|solar|panels?|battery|heat pump|hot water|heater|heating|air ?con(?:ditioner|ditioning)?|cooling|windows?|glazing|insulation|draughts?|drafts?|switchboard|cooktop|stove|EV|charger)\b/i;
@@ -824,6 +824,7 @@ function generatedResultIsPolicySafe(
   audience: EnergyAssistantAudience,
   message: string,
   decisionContext: string,
+  planPriorityAnswer: EnergyAssistantAnswer | null,
 ) {
   const continuationText = JSON.stringify(generated.continuation);
   const visibleGeneratedText = `${policyText(generated.answer)}\n${generated.presentation ? surgePresentationText(generated.presentation, true) : ""}`;
@@ -836,6 +837,8 @@ function generatedResultIsPolicySafe(
   }
   if (!surgeAnswerSharesQuestionIntent(message, generatedText)
     && !surgeAnswerSharesQuestionIntent(decisionContext, generatedText)) return false;
+  if (planPriorityAnswer
+    && !surgeAnswerPreservesPlanPriority(planPriorityAnswer, visibleGeneratedText)) return false;
   return audience === "trade" || (
     !containsSurgeNamedReference(continuationText)
     && !containsSurgeInternalPlatformName(continuationText)
@@ -1808,6 +1811,8 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       || affirmedSavedPlanCorrections.length > 0
       || directSavedPlanUpdate
       || explicitlyUsesSavedHomeContext(message)
+      || (isSurgePlanPriorityIntent(message)
+        && (!selectedFrame.subject || selectedFrame.subject.kind === "general"))
       || (!selectedFrame.subject && currentQuestionUsesSavedHomeContext(
         message,
         recentTurns,
@@ -1934,7 +1939,9 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       && groundedAnswerMatchesCurrentDecision(message, groundedCandidate)
       ? groundedCandidate
       : null;
-    const referenceAnswer = groundedAnswer || deterministicAnswer;
+    const referenceAnswer = groundedAnswer && planPriorityAnswer
+      ? mergePlanPriorityWithEvidenceAnswer(planPriorityAnswer, groundedAnswer)
+      : groundedAnswer || deterministicAnswer;
     const officialWebSearch = officialWebSearchPlanFor(
       message,
       decisionContext,
@@ -1980,6 +1987,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
                  audience,
                  message,
                  decisionContext,
+                 planPriorityAnswer,
               )
               && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
               const maintainedDirectoryCitations = !officialWebSearch

@@ -24,7 +24,13 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /estimatedMicroUsd/);
   assert.doesNotMatch(source, /requireValidatedModelForOrdinaryAdvice:\s*true/);
   assert.match(source, /failure\.stage \? \{ stage: failure\.stage \}/);
-  assert.match(source, /requestIdForLog\(request\)/);
+  assert.match(source, /prepareBoundedRequest\(request\)/);
+  assert.match(source, /byteLength > ENERGY_ASSISTANT_MAX_BODY_BYTES/);
+  assert.match(source, /if \(!preparedRequest\) return requestTooLarge\(\)/);
+  assert.ok(
+    source.indexOf("await prepareBoundedRequest(request)")
+      < source.indexOf("database = getD1()"),
+  );
   for (const reason of [
     "database_unavailable",
     "reservation_unavailable",

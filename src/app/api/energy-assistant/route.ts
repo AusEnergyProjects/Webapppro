@@ -1,6 +1,7 @@
 import { env, waitUntil } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import {
+  ENERGY_ASSISTANT_MAX_BODY_BYTES,
   handleEnergyAssistantRequest as handleEnergyAssistantServerRequest,
   type ServerDependencies,
   type SurgeModelAdmissionRequest,
@@ -54,6 +55,19 @@ function unsupportedMediaType() {
   });
 }
 
+function requestTooLarge() {
+  return Response.json({
+    ok: false,
+    error: {
+      code: "REQUEST_TOO_LARGE",
+      message: "The assistant request is too large.",
+    },
+  }, {
+    status: 413,
+    headers: securityHeaders,
+  });
+}
+
 function isJsonRequest(request: Request) {
   return request.headers.get("content-type")
     ?.split(";", 1)[0]
@@ -61,9 +75,9 @@ function isJsonRequest(request: Request) {
     .toLowerCase() === "application/json";
 }
 
-async function requestIdForLog(request: Request) {
+function boundedRequestId(source: string) {
   try {
-    const body = await request.clone().json() as Record<string, unknown>;
+    const body = JSON.parse(source) as Record<string, unknown>;
     const value = body.requestId ?? body.clientRequestId;
     return typeof value === "string" && /^[A-Za-z0-9:_-]{16,80}$/.test(value)
       ? value
@@ -71,6 +85,38 @@ async function requestIdForLog(request: Request) {
   } catch {
     return undefined;
   }
+}
+
+async function prepareBoundedRequest(request: Request) {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > ENERGY_ASSISTANT_MAX_BODY_BYTES) return null;
+
+  const reader = request.clone().body?.getReader();
+  if (!reader) return { request, requestId: undefined };
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > ENERGY_ASSISTANT_MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const source = new TextDecoder().decode(bytes);
+  return {
+    request: new Request(request, { body: bytes }),
+    requestId: boundedRequestId(source),
+  };
 }
 
 function requestLogContext(requestId: string | undefined) {
@@ -180,7 +226,10 @@ function handleEnergyAssistantRequest(
 async function handle(request: Request) {
   if (!isJsonRequest(request)) return unsupportedMediaType();
 
-  const requestId = await requestIdForLog(request);
+  const preparedRequest = await prepareBoundedRequest(request);
+  if (!preparedRequest) return requestTooLarge();
+  request = preparedRequest.request;
+  const requestId = preparedRequest.requestId;
   let setCookie: string | null = null;
   let database: D1Database | null = null;
   try {

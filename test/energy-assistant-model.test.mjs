@@ -9,6 +9,7 @@ import {
   projectSurgeConversationStateToFrame,
   updateSurgeConversationLedger,
 } from "../src/lib/energy-assistant-conversation.ts";
+import { surgeAnswerPreservesPlanPriority } from "../src/lib/energy-assistant-plan-priority.ts";
 
 const NOW = new Date("2026-08-21T00:00:00.000Z");
 
@@ -1835,6 +1836,165 @@ test("saved planner facts are a lower-priority untrusted baseline than explicit 
     { key: "postcode", value: "5067" },
     { key: "tenure", value: "renter" },
   ]);
+});
+
+test("saved-plan priorities survive a general ledger frame and repair a bills-first model answer", async () => {
+  const observedBodies = [];
+  const failures = [];
+  const priorityAnswer = deterministicAnswer(
+    "Based on your saved answers, start with moisture control: find and stop the source of condensation, damp or mould before sealing or insulating. Then improve the coldest single-glazed windows and use the existing reverse-cycle system efficiently.",
+  );
+  priorityAnswer.nextAction = "Inspect the moisture source before spending on another upgrade.";
+  const result = await generateSurgeModelAnswer(request({
+    message: "where is the best place to star",
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [
+        { key: "postcode", value: "3000" },
+        { key: "comfort_concerns", value: "Too cold; Condensation, damp or mould" },
+        { key: "roof_condition", value: "No known leaks, damage or major deterioration" },
+        { key: "glazing", value: "Mostly single glazed" },
+        { key: "heating_system", value: "Reverse-cycle air conditioner; Gas heating" },
+        { key: "budget", value: "Under $2,000" },
+      ],
+    },
+    continuation: state({
+      activeTopic: "draughts_ventilation",
+      goal: "Stop the breeze under the front door",
+      ledger: {
+        turn: 2,
+        activeDecisionId: "decision_general_draught",
+        subjects: [{
+          id: "general_advice",
+          kind: "general",
+          label: "General advice",
+          facts: [],
+          lastTouchedTurn: 2,
+        }],
+        decisions: [{
+          id: "decision_general_draught",
+          subjectIds: ["general_advice"],
+          topic: "draughts_ventilation",
+          goal: "Stop the breeze under the front door",
+          facts: [],
+          outcomeSummary: "Suggested a temporary door snake and a correctly sized seal.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        }],
+      },
+    }),
+    deterministicAnswer: priorityAnswer,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBodies.push(JSON.parse(options.body));
+      const answer = observedBodies.length === 1
+        ? "The best first step is to find your latest electricity and gas bills, then name the main problem you want to solve. After that, address the condensation and damp before improving the single-glazed windows and heating."
+        : "Start with moisture control: inspect and stop the source of condensation, damp or mould before spending on other upgrades. Then improve the coldest single-glazed windows and use the existing reverse-cycle system efficiently.";
+      return jsonResponse(modelPayload({
+        answer,
+        state: state({
+          activeTopic: "comfort_fabric",
+          goal: "Prioritise the saved home plan",
+          lastAnswerSummary: "Put moisture control ahead of windows and heating.",
+        }),
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(observedBodies.length, 2);
+  const initialContext = JSON.parse(observedBodies[0].input[1].content[0].text);
+  const repairContext = JSON.parse(observedBodies[1].input[1].content[0].text);
+  assert.equal(initialContext.devicePlanContext.facts.length, 6);
+  assert.match(initialContext.deterministicReference.answer, /start with moisture control/i);
+  assert.match(observedBodies[0].input[0].content[0].text, /plan starts obey deterministicReference\.answer/i);
+  assert.equal(repairContext.repair.failureStage, "priority_drift");
+  assert.match(observedBodies[1].input[0].content[0].text, /Priority repair/i);
+  assert.match(result.answer.directAnswer, /^Start with moisture control/i);
+  assert.deepEqual(failures, []);
+});
+
+test("plan-priority validation rejects negation and semantic reordering but accepts resolved context", () => {
+  const moisturePriority = deterministicAnswer(
+    "Based on your saved answers, start with moisture control. Control condensation first, then improve the windows.",
+  );
+  moisturePriority.nextAction = "Control condensation first.";
+  for (const contradiction of [
+    "Do not start with moisture control; compare your electricity bills first.",
+    "Start with moisture control only after you compare your bills first.",
+    "Start with moisture control after you compare your bills first.",
+    "Start with moisture control once you have compared your bills.",
+    "Moisture control can wait until after you compare your bills.",
+    "Start with moisture control, but the real first step is comparing your bills.",
+  ]) {
+    assert.equal(surgeAnswerPreservesPlanPriority(moisturePriority, contradiction), false, contradiction);
+  }
+
+  const roofPriority = deterministicAnswer(
+    "Based on your saved answers, start with the reported roof problem.",
+  );
+  roofPriority.nextAction = "Fix the reported roof leak before other upgrades.";
+  assert.equal(
+    surgeAnswerPreservesPlanPriority(
+      roofPriority,
+      "Fix the leak after you install insulation first.",
+    ),
+    false,
+  );
+
+  const ceilingPriority = deterministicAnswer(
+    "Based on your saved answers, start with the accessible ceiling insulation. Check it before sizing new heating.",
+  );
+  ceilingPriority.nextAction = "Check accessible ceiling insulation for safe, confirmed gaps.";
+  assert.equal(
+    surgeAnswerPreservesPlanPriority(
+      ceilingPriority,
+      "Since you said the condensation is now fixed, start with the accessible ceiling insulation, then check the coldest windows.",
+    ),
+    true,
+  );
+
+  const unknownRankedPriority = deterministicAnswer(
+    "Based on your saved answers, start with an unrecognised future priority.",
+  );
+  unknownRankedPriority.nextAction = "Do the unrecognised action first.";
+  assert.equal(
+    surgeAnswerPreservesPlanPriority(unknownRankedPriority, "Start by comparing electricity bills."),
+    false,
+  );
+
+  const acceptedSynonyms = [
+    [
+      "Based on your saved answers, start with the source of the moisture. Treat the reported roof issue as a possible moisture source.",
+      "Fix the leak first, then dry the affected materials.",
+    ],
+    [
+      "Based on your saved answers, start with moisture control.",
+      "Start by finding and stopping the humidity source.",
+    ],
+    [
+      "Based on your saved answers, start with the worst windows.",
+      "Start with the coldest single glazing.",
+    ],
+    [
+      "Based on your saved answers, start with the accessible ceiling insulation.",
+      "Check the roof-space batts first.",
+    ],
+    [
+      "Based on your saved answers, start with the existing reverse-cycle system.",
+      "Use the existing split system first.",
+    ],
+  ];
+  for (const [directAnswer, candidate] of acceptedSynonyms) {
+    const priority = deterministicAnswer(directAnswer);
+    priority.nextAction = directAnswer;
+    assert.equal(surgeAnswerPreservesPlanPriority(priority, candidate), true, candidate);
+  }
 });
 
 test("Mum follow-ups exclude saved-home context and saved-plan quantities from provider grounding", async () => {
