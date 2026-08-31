@@ -100,7 +100,10 @@ async function prepareBoundedRequest(request: Request) {
     if (done) break;
     byteLength += value.byteLength;
     if (byteLength > ENERGY_ASSISTANT_MAX_BODY_BYTES) {
-      await reader.cancel().catch(() => undefined);
+      await Promise.allSettled([
+        reader.cancel(),
+        request.body?.cancel() ?? Promise.resolve(),
+      ]);
       return null;
     }
     chunks.push(value);
@@ -114,7 +117,7 @@ async function prepareBoundedRequest(request: Request) {
   }
   const source = new TextDecoder().decode(bytes);
   return {
-    request: new Request(request, { body: bytes }),
+    request,
     requestId: boundedRequestId(source),
   };
 }
