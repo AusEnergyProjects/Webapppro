@@ -174,7 +174,10 @@ export function surgePresentationPassesEverydayLanguage(
   const completeText = surgePresentationText(presentation, true);
   const visibleMetrics = surgePlainLanguageMetrics(visibleText);
   const completeMetrics = surgePlainLanguageMetrics(completeText);
-  const visibleWordLimit = presentation.answerType === "starting_plan" ? 150 : 120;
+  const visibleWordLimit = presentation.answerType === "starting_plan"
+    || presentation.steps.length >= 2
+    ? 150
+    : 120;
   return Boolean(presentation.verdict)
     && ![
       presentation.verdict,

@@ -82,6 +82,47 @@ test("a compound starting plan can cover several requested decisions without bec
   assert.equal(surgePresentationPassesEverydayLanguage(conciseCompoundPlan), true);
 });
 
+test("a clear 127-word comparison is not rejected only for crossing the old 120-word limit", () => {
+  const comparison = {
+    answerType: "comparison",
+    verdict: "Put the $1,500 into window coverings first.",
+    reason: "Your split still heats properly, while mostly single-glazed windows are the clearer comfort problem. A solar deposit provides no immediate benefit and may be premature for an apartment with possible owners corporation approval. Because condensation is already an issue, keep using the bathroom exhaust and regularly check behind new coverings for moisture.",
+    steps: [
+      "Prioritise close-fitting honeycomb blinds or thick thermal curtains with pelmets in the coldest occupied rooms. They reduce window heat loss within this budget.",
+      "Keep the existing split and use a lower comfortable setting. Replacement is not justified unless testing finds a fault or its performance declines.",
+      "Hold off on a solar deposit until roof rights, owners corporation approval, full installed cost and the exact system proposal are confirmed.",
+    ],
+    extraDetail: "",
+    followUpQuestion: "",
+    quickReplies: [],
+  };
+
+  assert.equal(surgePlainLanguageMetrics([
+    comparison.verdict,
+    comparison.reason,
+    ...comparison.steps,
+  ].join(" ")).wordCount, 127);
+  assert.equal(surgePresentationPassesEverydayLanguage(comparison), true);
+});
+
+test("ordinary unstructured prose above the tighter 120-word limit is still rejected", () => {
+  const unstructured = {
+    answerType: "general",
+    verdict: "Start with the practical issue in front of you.",
+    reason: Array.from({ length: 113 }, () => "detail").join(" "),
+    steps: [],
+    extraDetail: "",
+    followUpQuestion: "",
+    quickReplies: [],
+  };
+
+  assert.equal(surgePlainLanguageMetrics([
+    unstructured.verdict,
+    unstructured.reason,
+  ].join(" ")).wordCount, 122);
+  assert.equal(surgePresentationPassesEverydayLanguage(unstructured), false);
+});
+
 test("a clear thirty-word comparison verdict is accepted while an overlong verdict is rejected", () => {
   const comparison = {
     answerType: "comparison",

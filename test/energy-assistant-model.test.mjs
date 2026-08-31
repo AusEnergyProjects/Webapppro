@@ -3570,6 +3570,32 @@ test("structured multi-step layout still runs remaining validators before accept
   assert.match(result.answer.directAnswer, /bill reduction/i);
 });
 
+test("a useful 127-word budget comparison is accepted instead of returning a validation 503", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Ok, I have $1,500. Blinds, a solar deposit, or a new split?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "comparison",
+      verdict: "Put the $1,500 into window coverings first.",
+      reason: "Your split still heats properly, while mostly single-glazed windows are the clearer comfort problem. A solar deposit provides no immediate benefit and may be premature for an apartment with possible owners corporation approval. Because condensation is already an issue, keep using the bathroom exhaust and regularly check behind new coverings for moisture.",
+      steps: [
+        "Prioritise close-fitting honeycomb blinds or thick thermal curtains with pelmets in the coldest occupied rooms. They reduce window heat loss within this budget.",
+        "Keep the existing split and use a lower comfortable setting. Replacement is not justified unless testing finds a fault or its performance declines.",
+        "Hold off on a solar deposit until roof rights, owners corporation approval, full installed cost and the exact system proposal are confirmed.",
+      ],
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.match(result.answer.directAnswer, /Put the \$1,500 into window coverings first/i);
+  assert.match(result.answer.directAnswer, /existing split/i);
+  assert.match(result.answer.directAnswer, /solar deposit/i);
+  assert.deepEqual(failures, []);
+});
+
 test("structured compaction does not hide a missing battery quote facet", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
