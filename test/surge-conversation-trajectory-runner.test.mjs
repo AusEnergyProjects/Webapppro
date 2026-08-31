@@ -236,6 +236,45 @@ test("durability fixture contains twenty isolated conversations with one transcr
   assert.equal(loaded.fixture.execution.persistContinuationWithinConversation, true);
 });
 
+test("zero-export durability clauses require affirmative home self-use", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const turn = loaded.fixture.turns.find((item) => item.id === "c04t02");
+  const affirmative = "Zero export means the system cannot send surplus solar electricity to the grid. Your home can still use the 6.6 kW array output as it is generated.";
+  const opposites = [
+    "Zero export means the system cannot send surplus solar electricity to the grid. Your home cannot use the array output.",
+    "Zero export means the system cannot send surplus solar electricity to the grid. Your home can never use the array output.",
+    "Zero export means the system cannot send surplus solar electricity to the grid. Your home may not use the solar generation.",
+  ];
+
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: affirmative,
+    directAnswer: affirmative,
+    assistant: affirmative,
+  }), "paid"), []);
+  for (const opposite of opposites) {
+    assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: opposite,
+      directAnswer: opposite,
+      assistant: opposite,
+    }), "paid").some((failure) => failure === "clause:self-use-remains" || failure.startsWith("forbidden:")), opposite);
+  }
+});
+
+test("unresolved switchboard scope cannot pass with an affirmative fixed price", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const turn = loaded.fixture.turns.find((item) => item.id === "c13t03");
+  const opposite = "The finance gap is $188 and the admin fee is $330. The switchboard has a fixed price or cap.";
+  assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: opposite,
+    directAnswer: opposite,
+    assistant: opposite,
+  }), "paid").some((failure) => failure === "clause:returns-switchboard" || failure.startsWith("forbidden:")));
+});
+
 test("trajectory tail preserves quote state and uses structured action counting", async () => {
   const loaded = await loadSurgeConversationTrajectoryFixture(
     "test/fixtures/surge-conversation-trajectory-50.json",
@@ -513,6 +552,37 @@ test("quantity grounding accepts disclosed finance arithmetic but rejects invent
   grounded.visibleAnswer += " The unrelated fee is $777.";
   assert.deepEqual(
     evaluateSurgeConversationAssertions(fixture, [grounded]).map((item) => item.code),
+    ["quantity_not_grounded"],
+  );
+});
+
+test("quantity grounding treats hyphenated number-word durations as supplied values", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-durability-20.json",
+  );
+  const assertion = loaded.fixture.conversationAssertions.find((item) => (
+    item.id === "no-invented-quantities"
+  ));
+  const turns = loaded.fixture.turns.filter((item) => ["c06t01", "c06t02"].includes(item.id));
+  const fixture = { ...loaded.fixture, turns, conversationAssertions: [assertion] };
+  const observations = [
+    trajectoryObservation("c06t01", {
+      conversationId: "c06",
+      message: turns[0].message,
+      visibleAnswer: "Quote A is $6,900 with a five-year warranty and Quote B is $7,400 with a seven-year warranty.",
+    }),
+    trajectoryObservation("c06t02", {
+      conversationId: "c06",
+      message: turns[1].message,
+      visibleAnswer: "The seven-year warranty is two years longer than the five-year warranty, but that alone does not justify the $500 difference.",
+    }),
+  ];
+
+  assert.deepEqual(evaluateSurgeConversationAssertions(fixture, observations), []);
+
+  observations[1].visibleAnswer += " There is also a $5 processing fee.";
+  assert.deepEqual(
+    evaluateSurgeConversationAssertions(fixture, observations).map((item) => item.code),
     ["quantity_not_grounded"],
   );
 });

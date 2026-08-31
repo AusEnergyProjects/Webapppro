@@ -11,6 +11,7 @@ import {
   buildEnergyAssistantEnquirySubmission,
 } from "../src/lib/energy-assistant-enquiry-adapter.mjs";
 import {
+  HOME_ENERGY_PLANNER_APPROVAL_CHOICES,
   HOME_ENERGY_PLANNER_DIRECT_QUESTIONS,
   HOME_ENERGY_PLANNER_QUESTIONS,
   HOME_ENERGY_PLANNER_SESSION_VERSION,
@@ -47,7 +48,7 @@ const directQuestionOptions = new Map([
   ["postcode", []],
   ["situation", customerProjectOptions.situations],
   ["propertyType", customerProjectOptions.propertyTypes],
-  ["approvalContext", customerProjectOptions.approvalContexts],
+  ["approvalContext", HOME_ENERGY_PLANNER_APPROVAL_CHOICES],
   ["occupants", customerProjectOptions.occupants],
   ["goals", customerProjectOptions.goals],
   ["pace", customerProjectOptions.paces],
@@ -63,6 +64,13 @@ const directQuestionOptions = new Map([
   ["roofForm", customerProjectOptions.roofForms],
   ["roofCondition", customerProjectOptions.roofConditions],
   ["switchboard", customerProjectOptions.switchboards],
+  ["supplemental:timing", customerProjectOptions.timings],
+  ["supplemental:occupancyPattern", customerProjectOptions.occupancyPatterns],
+  ["supplemental:energyUsePattern", customerProjectOptions.energyUsePatterns],
+  ["supplemental:billPressure", customerProjectOptions.billPressures],
+  ["supplemental:gasConnection", customerProjectOptions.gasConnections],
+  ["supplemental:disruption", customerProjectOptions.disruptionLevels],
+  ["supplemental:plannedWorks", customerProjectOptions.plannedWorks],
 ]);
 
 function minimalPlanSnapshot(overrides = {}) {

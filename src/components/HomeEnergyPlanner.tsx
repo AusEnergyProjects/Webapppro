@@ -10,11 +10,13 @@ import {
   HOME_ENERGY_PLANNER_COMFORT_QUESTION_IDS,
   HOME_ENERGY_PLANNER_CONSTRUCTION_QUESTIONS,
   HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS,
+  HOME_ENERGY_PLANNER_APPROVAL_CHOICES,
   HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS,
   HOME_ENERGY_PLANNER_OPTIONS,
   HOME_ENERGY_PLANNER_STAGE_COUNT,
   HOME_ENERGY_PLANNER_STAGE_NAMES,
   HOME_ENERGY_PLANNER_SYSTEM_QUESTION_IDS,
+  HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS,
   createHomeEnergyPlannerSession,
   createHomeEnergyPlannerPlan,
   defaultHomeEnergyPlannerDraft,
@@ -22,11 +24,13 @@ import {
   firstIncompleteHomeEnergyPlannerStage,
   hasExplicitHomeEnergyPlannerSelection,
   homeEnergyPlannerQuestionAnswered,
+  homeEnergyPlannerSupplementalQuestionsForStage,
   parseHomeEnergyPlannerSession,
   type HomeEnergyPlannerDraft,
   type HomeEnergyPlannerOption,
   type HomeEnergyPlannerPropertyKey,
   type HomeEnergyPlannerPropertyQuestion,
+  type HomeEnergyPlannerQuestionBinding,
 } from "@/lib/home-energy-planner-schema";
 import { HomeFeatureIntake } from "@/components/HomeFeatureIntake";
 import { SurgeOpenButton } from "@/components/SurgeOpenButton";
@@ -96,7 +100,6 @@ type OptionalPropertyQuestion = HomeEnergyPlannerPropertyQuestion;
 const homeBasicsQuestions = HOME_ENERGY_PLANNER_HOME_BASIC_QUESTIONS;
 const constructionQuestions = HOME_ENERGY_PLANNER_CONSTRUCTION_QUESTIONS;
 const electricalQuestions = HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS;
-
 function suggestedPlanInterests(items: CustomerPlanItem[]) {
   const interests: PublicPlanUpgradeInterest[] = [];
   for (const item of items) {
@@ -220,6 +223,35 @@ function PropertySelectGrid({
   );
 }
 
+function PlannerSelectGrid({
+  questions,
+  draft,
+  onSelect,
+}: {
+  questions: HomeEnergyPlannerQuestionBinding[];
+  draft: PlannerDraft;
+  onSelect: (key: keyof PlannerDraft, value: string) => void;
+}) {
+  return (
+    <div className={styles.selectGrid}>
+      {questions.map((question) => (
+        <label className={styles.selectField} key={question.id}>
+          <span>{question.label}</span>
+          <select
+            value={String(draft[question.draftKey] || "")}
+            onChange={(event) => onSelect(question.draftKey, event.target.value)}
+          >
+            {!draft[question.draftKey] ? <option value="" disabled>Choose an answer</option> : null}
+            {question.options.map(([value, label]) => (
+              <option value={value} key={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function HomeEnergyPlanner({ initialSelection }: { initialSelection: HomeEnergyPlannerDraft }) {
   const initialDraft = useMemo(
     () => hasExplicitHomeEnergyPlannerSelection(initialSelection)
@@ -286,7 +318,11 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
     appendValues(params, "goal", draft.goals);
     appendValues(params, "feature", draft.features);
     for (const [key, value] of Object.entries(draft)) {
-      if (["goals", "features", "pace", "situation", "approvalContext", "budgetRange"].includes(key)) continue;
+      if ([
+        "goals", "features", "pace", "situation", "approvalContext", "budgetRange",
+        "timing", "occupancyPattern", "energyUsePattern", "billPressure", "gasConnection",
+        "disruption", "plannedWorks",
+      ].includes(key)) continue;
       if (typeof value === "string" && value) params.set(key, value);
     }
     return params;
@@ -351,6 +387,10 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
     }));
   }
 
+  function setPlannerTextAnswer(key: keyof PlannerDraft, value: string) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
   function validationErrors(currentStage: number) {
     if (currentStage === 0) {
       const errors: string[] = [];
@@ -395,7 +435,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
       goals: [],
       pace: "staged",
       situation: "",
-      approvalContext: "none",
+      approvalContext: "not_sure",
       budgetRange: "not_set",
       postcode: "",
       addressState: "",
@@ -413,6 +453,13 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
       switchboard: "",
       wallConstruction: "",
       floorConstruction: "",
+      timing: "not-sure",
+      occupancyPattern: "not-sure",
+      energyUsePattern: "not-sure",
+      billPressure: "not-sure",
+      gasConnection: "not-sure",
+      disruption: "not-sure",
+      plannedWorks: "not-sure",
     }));
     setStage(0);
     setAttemptedStage(null);
@@ -471,8 +518,9 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
                 </div>
                 <ChoiceTiles legend="I am planning for" name="assessment-situation" options={customerProjectOptions.situations.map(([value, label]) => [value, value === "owner" ? "A home I own or manage" : label])} selected={draft.situation ? [draft.situation] : []} onSelect={(value) => setField("situation", value)} />
                 <ChoiceTiles legend="Home type" name="assessment-property" options={customerProjectOptions.propertyTypes} selected={draft.propertyType ? [draft.propertyType] : []} onSelect={(value) => setField("propertyType", value)} />
-                <ChoiceTiles legend="Shared property or approval" name="assessment-approval" options={customerProjectOptions.approvalContexts} selected={[draft.approvalContext]} onSelect={(value) => setField("approvalContext", value)} />
+                <ChoiceTiles legend="Is this home part of a strata or body corporate?" name="assessment-approval" options={HOME_ENERGY_PLANNER_APPROVAL_CHOICES} selected={[draft.approvalContext]} onSelect={(value) => setField("approvalContext", value)} />
                 <ChoiceTiles legend="People usually living here" name="assessment-occupants" options={customerProjectOptions.occupants} selected={draft.occupants ? [draft.occupants] : []} onSelect={(value) => setField("occupants", value)} />
+                <PlannerSelectGrid questions={homeEnergyPlannerSupplementalQuestionsForStage(0)} draft={draft} onSelect={setPlannerTextAnswer} />
                 <ChoiceTiles legend="What matters most? Choose one or more." name="assessment-goals" options={customerProjectOptions.goals} selected={draft.goals} onSelect={toggleGoal} multiple />
                 <details className={styles.detailGroup}>
                   <summary>
@@ -550,6 +598,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
                 <HomeFeatureIntake idPrefix="quick-solar" sectionId="solar-storage-transport" questionId="solar" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-battery" sectionId="solar-storage-transport" questionId="battery" selected={draft.features} onChange={(features) => setField("features", features)} />
                 <HomeFeatureIntake idPrefix="quick-ev" sectionId="solar-storage-transport" questionId="ev" selected={draft.features} onChange={(features) => setField("features", features)} />
+                <PlannerSelectGrid questions={homeEnergyPlannerSupplementalQuestionsForStage(2)} draft={draft} onSelect={setPlannerTextAnswer} />
                 <details className={styles.detailGroup}>
                   <summary>
                     <span>Electricity supply and other loads</span>
@@ -573,12 +622,19 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
                 </div>
                 <ChoiceTiles legend="How should improvements be staged?" name="assessment-pace" options={customerProjectOptions.paces} selected={[draft.pace]} onSelect={(value) => setField("pace", value)} />
                 <ChoiceTiles legend="Comfortable first-stage budget" name="assessment-budget" options={customerProjectOptions.budgets} selected={[draft.budgetRange]} onSelect={(value) => setField("budgetRange", value)} />
+                <PlannerSelectGrid questions={homeEnergyPlannerSupplementalQuestionsForStage(3)} draft={draft} onSelect={setPlannerTextAnswer} />
                 <section className={styles.review} aria-label="Assessment review">
                   <h3>Review</h3>
                   <dl>
                     <div><dt>Location</dt><dd>{draft.postcode}, {draft.addressState}</dd></div>
                     <div><dt>Household</dt><dd>{customerProjectOptions.occupants.find(([value]) => value === draft.occupants)?.[1] || "Not sure"}</dd></div>
                     <div><dt>Home</dt><dd>{customerProjectOptions.propertyTypes.find(([value]) => value === draft.propertyType)?.[1] || "Not sure"}</dd></div>
+                    {HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS.map((question) => (
+                      <div key={question.id}>
+                        <dt>{question.label}</dt>
+                        <dd>{question.options.find(([value]) => value === draft[question.draftKey])?.[1] || "Not sure"}</dd>
+                      </div>
+                    ))}
                     <div><dt>Priorities</dt><dd>{draft.goals.map((goal) => customerProjectOptions.goals.find(([value]) => value === goal)?.[1]).filter(Boolean).join(", ")}</dd></div>
                     <div><dt>Core system answers</dt><dd>{systemQuestionIds.filter((id) => homeEnergyPlannerQuestionAnswered(draft.features, id)).length} of {systemQuestionIds.length}</dd></div>
                   </dl>

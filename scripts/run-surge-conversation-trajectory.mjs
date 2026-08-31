@@ -1102,41 +1102,79 @@ function activeDecisionSubjectIds(continuation) {
 
 function numericValues(value) {
   const text = String(value || "");
-  const digits = [...text.matchAll(/(?:^|[^A-Za-z])(?:\$\s*)?(\d[\d,]*(?:\.\d+)?)/gu)]
-    .map((item) => Number(item[1].replaceAll(",", "")))
-    .filter((item) => Number.isFinite(item));
+  const quantities = [];
+  const quantityKind = (currency, unit = "") => {
+    if (currency) return "currency";
+    const normalizedUnit = unit.toLowerCase().replaceAll(/\s+/gu, "");
+    if (/^kwh$/u.test(normalizedUnit)) return "energy_kwh";
+    if (/^kw$/u.test(normalizedUnit)) return "power_kw";
+    if (/^years?$/u.test(normalizedUnit)) return "duration_year";
+    if (/^months?$/u.test(normalizedUnit)) return "duration_month";
+    if (/^weeks?$/u.test(normalizedUnit)) return "duration_week";
+    if (/^days?$/u.test(normalizedUnit)) return "duration_day";
+    if (/^hours?$/u.test(normalizedUnit)) return "duration_hour";
+    if (/^minutes?$/u.test(normalizedUnit)) return "duration_minute";
+    if (/^seconds?$/u.test(normalizedUnit)) return "duration_second";
+    if (/^times?$/u.test(normalizedUnit)) return "count_times";
+    if (/^(?:%|percent)$/u.test(normalizedUnit)) return "percentage";
+    if (/^(?:degrees?(?:c|celsius)?|°c)$/u.test(normalizedUnit)) return "temperature_c";
+    if (/^amps?$/u.test(normalizedUnit)) return "current_amp";
+    if (/^volts?$/u.test(normalizedUnit)) return "voltage_volt";
+    if (/^(?:litres?|liters?)$/u.test(normalizedUnit)) return "volume_litre";
+    return "bare";
+  };
+  const digitPattern = /(?:^|[^A-Za-z0-9])(\$\s*)?(\d[\d,]*(?:\.\d+)?)(?:\s+|[-‑–—])?(kWh|kW|years?|months?|weeks?|days?|hours?|minutes?|seconds?|times?|%|percent|degrees?(?:\s*C(?:elsius)?)?|°\s*C|amps?|volts?|litres?|liters?)?/giu;
+  for (const item of text.matchAll(digitPattern)) {
+    const numericValue = Number(item[2].replaceAll(",", ""));
+    if (Number.isFinite(numericValue)) {
+      quantities.push({
+        value: numericValue,
+        kind: quantityKind(Boolean(item[1]), item[3]),
+      });
+    }
+  }
   const numberWords = new Map([
     ["one", 1], ["two", 2], ["three", 3], ["four", 4], ["five", 5], ["six", 6],
     ["seven", 7], ["eight", 8], ["nine", 9], ["ten", 10], ["eleven", 11], ["twelve", 12],
   ]);
-  for (const item of text.toLowerCase().matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:years?|months?|weeks?|days?|hours?|minutes?|times?)\b/gu)) {
-    digits.push(numberWords.get(item[1]));
+  for (const item of text.toLowerCase().matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+|[-‑–—])(years?|months?|weeks?|days?|hours?|minutes?|seconds?|times?)\b/gu)) {
+    quantities.push({
+      value: numberWords.get(item[1]),
+      kind: quantityKind(false, item[2]),
+    });
   }
-  return digits;
+  return quantities;
 }
 
 function approximatelyIncludes(values, candidate) {
-  return values.some((value) => Math.abs(value - candidate) <= Math.max(0.01, Math.abs(candidate) * 0.0001));
+  return values.some((quantity) => quantity.kind === candidate.kind
+    && Math.abs(quantity.value - candidate.value) <= Math.max(0.01, Math.abs(candidate.value) * 0.0001));
 }
 
 function derivedFromKnownQuantities(known, candidate) {
-  for (let leftIndex = 0; leftIndex < known.length; leftIndex += 1) {
-    for (let rightIndex = 0; rightIndex < known.length; rightIndex += 1) {
-      const left = known[leftIndex];
-      const right = known[rightIndex];
-      if (approximatelyIncludes([
-        left + right,
-        Math.abs(left - right),
-        left * right,
-        left * 12 * right,
-      ], candidate)) return true;
-      for (let thirdIndex = 0; thirdIndex < known.length; thirdIndex += 1) {
-        const third = known[thirdIndex];
-        if (approximatelyIncludes([
-          Math.abs(left - (right * 12 * third)),
-          Math.abs((left * 12 * right) - third),
-        ], candidate)) return true;
-      }
+  const approximatelyDerived = (value) => (
+    Math.abs(value - candidate.value) <= Math.max(0.01, Math.abs(candidate.value) * 0.0001)
+  );
+  const sameKind = known.filter((quantity) => quantity.kind === candidate.kind);
+  for (let leftIndex = 0; leftIndex < sameKind.length; leftIndex += 1) {
+    for (let rightIndex = 0; rightIndex < sameKind.length; rightIndex += 1) {
+      const left = sameKind[leftIndex].value;
+      const right = sameKind[rightIndex].value;
+      if (approximatelyDerived(left + right) || approximatelyDerived(Math.abs(left - right))) return true;
+    }
+  }
+  if (candidate.kind === "duration_month") {
+    if (known.some((quantity) => quantity.kind === "duration_year"
+      && approximatelyDerived(quantity.value * 12))) return true;
+  }
+  if (candidate.kind !== "currency") return false;
+  const currencies = known.filter((quantity) => quantity.kind === "currency");
+  const years = known.filter((quantity) => quantity.kind === "duration_year");
+  for (const recurring of currencies) {
+    for (const duration of years) {
+      const repaymentTotal = recurring.value * 12 * duration.value;
+      if (approximatelyDerived(repaymentTotal)) return true;
+      if (currencies.some((quoted) => approximatelyDerived(Math.abs(quoted.value - repaymentTotal)))) return true;
     }
   }
   return false;

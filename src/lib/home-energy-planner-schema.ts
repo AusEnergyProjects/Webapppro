@@ -52,6 +52,13 @@ export type HomeEnergyPlannerDraft = {
   switchboard: string;
   wallConstruction: string;
   floorConstruction: string;
+  timing: string;
+  occupancyPattern: string;
+  energyUsePattern: string;
+  billPressure: string;
+  gasConnection: string;
+  disruption: string;
+  plannedWorks: string;
 };
 
 export type HomeEnergyPlannerPropertyKey =
@@ -89,6 +96,15 @@ export type HomeEnergyPlannerQuestionBinding = {
   unknownValue?: string;
   noneValue?: string;
   featureQuestionId?: string;
+  plannerStage?: 0 | 1 | 2 | 3;
+  contextKey?: string;
+};
+
+export type HomeEnergyPlannerSupplementalQuestion = HomeEnergyPlannerQuestionBinding & {
+  draftKey: "timing" | "occupancyPattern" | "energyUsePattern" | "billPressure"
+    | "gasConnection" | "disruption" | "plannedWorks";
+  plannerStage: 0 | 2 | 3;
+  contextKey: string;
 };
 
 export const HOME_ENERGY_PLANNER_OPTIONS = rawCustomerProjectOptions as unknown as {
@@ -111,6 +127,12 @@ export const HOME_ENERGY_PLANNER_OPTIONS = rawCustomerProjectOptions as unknown 
   wallConstructions: HomeEnergyPlannerOption[];
   floorConstructions: HomeEnergyPlannerOption[];
   timings: HomeEnergyPlannerOption[];
+  occupancyPatterns: HomeEnergyPlannerOption[];
+  energyUsePatterns: HomeEnergyPlannerOption[];
+  billPressures: HomeEnergyPlannerOption[];
+  gasConnections: HomeEnergyPlannerOption[];
+  disruptionLevels: HomeEnergyPlannerOption[];
+  plannedWorks: HomeEnergyPlannerOption[];
   states: string[];
 };
 
@@ -178,13 +200,92 @@ const plannerDirectQuestion = (
   kind: HomeEnergyPlannerQuestionBinding["kind"],
   options: HomeEnergyPlannerOption[] = [],
   help = "",
-): HomeEnergyPlannerQuestionBinding => ({ id, draftKey, label, help, kind, options });
+  metadata: Pick<HomeEnergyPlannerQuestionBinding, "plannerStage" | "contextKey"> = {},
+): HomeEnergyPlannerQuestionBinding => ({ id, draftKey, label, help, kind, options, ...metadata });
+
+export const HOME_ENERGY_PLANNER_APPROVAL_CHOICES: HomeEnergyPlannerOption[] = [
+  ["strata", "Yes"],
+  ["none", "No"],
+  ["not_sure", "Don't know"],
+];
+
+export const HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS: HomeEnergyPlannerSupplementalQuestion[] = [
+  plannerDirectQuestion(
+    "supplemental:timing",
+    "timing",
+    "When would you like to act?",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.timings,
+    "",
+    { plannerStage: 3, contextKey: "upgrade_timing" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:occupancyPattern",
+    "occupancyPattern",
+    "When is the home usually occupied?",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.occupancyPatterns,
+    "",
+    { plannerStage: 0, contextKey: "occupancy_pattern" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:energyUsePattern",
+    "energyUsePattern",
+    "When is most energy used?",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.energyUsePatterns,
+    "",
+    { plannerStage: 2, contextKey: "energy_use_pattern" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:billPressure",
+    "billPressure",
+    "How do energy bills feel?",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.billPressures,
+    "",
+    { plannerStage: 3, contextKey: "bill_pressure" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:gasConnection",
+    "gasConnection",
+    "Gas connection",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.gasConnections,
+    "",
+    { plannerStage: 2, contextKey: "gas_connection" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:disruption",
+    "disruption",
+    "How much installation disruption is acceptable?",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.disruptionLevels,
+    "",
+    { plannerStage: 3, contextKey: "acceptable_disruption" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+  plannerDirectQuestion(
+    "supplemental:plannedWorks",
+    "plannedWorks",
+    "Other work already planned",
+    "select",
+    HOME_ENERGY_PLANNER_OPTIONS.plannedWorks,
+    "",
+    { plannerStage: 3, contextKey: "planned_work" },
+  ) as HomeEnergyPlannerSupplementalQuestion,
+];
+
+export function homeEnergyPlannerSupplementalQuestionsForStage(stage: 0 | 1 | 2 | 3) {
+  return HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS.filter(
+    (question) => question.plannerStage === stage,
+  );
+}
 
 export const HOME_ENERGY_PLANNER_DIRECT_QUESTIONS: HomeEnergyPlannerQuestionBinding[] = [
   plannerDirectQuestion("postcode", "postcode", "Property postcode", "postcode", [], "Four digits only."),
   plannerDirectQuestion("situation", "situation", "Your relationship to the home", "select", HOME_ENERGY_PLANNER_OPTIONS.situations),
   plannerDirectQuestion("propertyType", "propertyType", "Home type", "select", HOME_ENERGY_PLANNER_OPTIONS.propertyTypes),
-  plannerDirectQuestion("approvalContext", "approvalContext", "Shared property or approval", "select", HOME_ENERGY_PLANNER_OPTIONS.approvalContexts),
+  plannerDirectQuestion("approvalContext", "approvalContext", "Is this home part of a strata or body corporate?", "select", HOME_ENERGY_PLANNER_APPROVAL_CHOICES),
   plannerDirectQuestion("occupants", "occupants", "People usually living here", "select", HOME_ENERGY_PLANNER_OPTIONS.occupants),
   plannerDirectQuestion("goals", "goals", "What matters most?", "multiselect", HOME_ENERGY_PLANNER_OPTIONS.goals, "Choose one or more."),
   plannerDirectQuestion("pace", "pace", "How should improvements be staged?", "select", HOME_ENERGY_PLANNER_OPTIONS.paces),
@@ -195,6 +296,7 @@ export const HOME_ENERGY_PLANNER_DIRECT_QUESTIONS: HomeEnergyPlannerQuestionBind
     plannerDirectQuestion(question.key, question.key, question.label, "select", question.options)),
   ...HOME_ENERGY_PLANNER_ELECTRICAL_QUESTIONS.map((question) =>
     plannerDirectQuestion(question.key, question.key, question.label, "select", question.options)),
+  ...HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS,
 ];
 
 export const HOME_ENERGY_PLANNER_QUESTIONS: HomeEnergyPlannerQuestionBinding[] = [
@@ -256,11 +358,18 @@ export function defaultHomeEnergyPlannerDraft(initialSelection: HomeEnergyPlanne
     goals: initialSelection.goals.length ? initialSelection.goals : ["lower-bills", "improve-comfort"],
     pace: initialSelection.pace || "staged",
     situation: initialSelection.situation || "owner",
-    approvalContext: initialSelection.approvalContext || "none",
+    approvalContext: initialSelection.approvalContext || "not_sure",
     budgetRange: initialSelection.budgetRange || "not_set",
     features: withCommonHomeEnergyPlannerFeatureDefaults(initialSelection.features),
     propertyType: initialSelection.propertyType || "house",
     occupants: initialSelection.occupants || "three_four",
+    timing: initialSelection.timing || "not-sure",
+    occupancyPattern: initialSelection.occupancyPattern || "not-sure",
+    energyUsePattern: initialSelection.energyUsePattern || "not-sure",
+    billPressure: initialSelection.billPressure || "not-sure",
+    gasConnection: initialSelection.gasConnection || "not-sure",
+    disruption: initialSelection.disruption || "not-sure",
+    plannedWorks: initialSelection.plannedWorks || "not-sure",
     addressState: postcodeState || "",
   });
 }
@@ -308,6 +417,17 @@ function storedOption(options: HomeEnergyPlannerOption[], value: unknown, fallba
     : fallback;
 }
 
+function storedSupplementalOption(
+  draftKey: keyof HomeEnergyPlannerDraft,
+  value: unknown,
+  fallback: string,
+) {
+  const question = HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS.find(
+    (candidate) => candidate.draftKey === draftKey,
+  );
+  return question ? storedOption(question.options, value, fallback) : fallback;
+}
+
 export function sanitizeHomeEnergyPlannerDraft(candidate: Partial<HomeEnergyPlannerDraft>) {
   const postcode = typeof candidate.postcode === "string"
     ? candidate.postcode.replace(/\D/g, "").slice(0, 4)
@@ -343,6 +463,13 @@ export function sanitizeHomeEnergyPlannerDraft(candidate: Partial<HomeEnergyPlan
     switchboard: storedOption(HOME_ENERGY_PLANNER_OPTIONS.switchboards, candidate.switchboard),
     wallConstruction: storedOption(HOME_ENERGY_PLANNER_OPTIONS.wallConstructions, candidate.wallConstruction),
     floorConstruction: storedOption(HOME_ENERGY_PLANNER_OPTIONS.floorConstructions, candidate.floorConstruction),
+    timing: storedSupplementalOption("timing", candidate.timing, ""),
+    occupancyPattern: storedSupplementalOption("occupancyPattern", candidate.occupancyPattern, ""),
+    energyUsePattern: storedSupplementalOption("energyUsePattern", candidate.energyUsePattern, ""),
+    billPressure: storedSupplementalOption("billPressure", candidate.billPressure, ""),
+    gasConnection: storedSupplementalOption("gasConnection", candidate.gasConnection, ""),
+    disruption: storedSupplementalOption("disruption", candidate.disruption, ""),
+    plannedWorks: storedSupplementalOption("plannedWorks", candidate.plannedWorks, ""),
   });
 }
 
@@ -436,6 +563,12 @@ export function createHomeEnergyPlannerPlanInput(draft: HomeEnergyPlannerDraft) 
     postcode: draft.postcode,
     addressState: draft.addressState,
     features: draft.features,
+    privatePlanningContext: Object.fromEntries(
+      HOME_ENERGY_PLANNER_SUPPLEMENTAL_QUESTIONS.map((question) => [
+        question.draftKey,
+        draft[question.draftKey],
+      ]),
+    ),
     propertyContext: {
       propertyType: draft.propertyType,
       storeys: draft.storeys,

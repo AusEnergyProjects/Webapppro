@@ -578,6 +578,51 @@ export const customerProjectOptions = {
     ["within_3_months", "Within three months"],
     ["within_30_days", "Within 30 days"],
     ["urgent", "Urgent"],
+    ["not-sure", "Don't know yet"],
+  ],
+  occupancyPatterns: [
+    ["mostly-home", "Someone is home most days"],
+    ["mostly-away", "Mostly empty on weekdays"],
+    ["mixed", "It changes through the week"],
+    ["weekends", "Mostly used on weekends"],
+    ["not-sure", "Not sure yet"],
+  ],
+  energyUsePatterns: [
+    ["morning", "Mostly mornings"],
+    ["evening", "Mostly late afternoon and evening"],
+    ["all-day", "Steady use through the day"],
+    ["overnight", "A lot of overnight use"],
+    ["varies", "It changes a lot"],
+    ["not-sure", "Not sure yet"],
+  ],
+  billPressures: [
+    ["comfortable", "Generally manageable"],
+    ["higher-than-expected", "Higher than expected"],
+    ["hard-to-manage", "Hard to manage"],
+    ["not-sure", "Not sure yet"],
+  ],
+  gasConnections: [
+    ["connected", "Mains gas connection"],
+    ["bottled-lpg", "Bottled gas or LPG"],
+    ["not-connected", "No gas supply"],
+    ["disconnecting", "Planning to disconnect mains gas"],
+    ["not-sure", "Not sure yet"],
+  ],
+  disruptionLevels: [
+    ["minimal", "Keep disruption minimal"],
+    ["some-work", "Some building work is acceptable"],
+    ["major-work", "Major work is acceptable for the right result"],
+    ["staged", "Prefer work in stages"],
+    ["not-sure", "Not sure yet"],
+  ],
+  plannedWorks: [
+    ["none", "No other work planned"],
+    ["maintenance", "General repairs or maintenance"],
+    ["renovation", "Renovation or extension"],
+    ["equipment-replacement", "Replacing major equipment"],
+    ["solar-battery", "Solar or battery work"],
+    ["new-build", "New build or major rebuild"],
+    ["not-sure", "Not sure yet"],
   ],
   budgets: [
     ["not_set", "Skip this for now"],
@@ -775,6 +820,12 @@ const serviceCategories = new Set([
 const priorities = new Set(customerProjectOptions.priorities.map(([value]) => value));
 const stages = new Set(customerProjectOptions.stages.map(([value]) => value));
 const timings = new Set(customerProjectOptions.timings.map(([value]) => value));
+const occupancyPatterns = new Set(customerProjectOptions.occupancyPatterns.map(([value]) => value));
+const energyUsePatterns = new Set(customerProjectOptions.energyUsePatterns.map(([value]) => value));
+const billPressures = new Set(customerProjectOptions.billPressures.map(([value]) => value));
+const gasConnections = new Set(customerProjectOptions.gasConnections.map(([value]) => value));
+const disruptionLevels = new Set(customerProjectOptions.disruptionLevels.map(([value]) => value));
+const plannedWorks = new Set(customerProjectOptions.plannedWorks.map(([value]) => value));
 const budgets = new Set(customerProjectOptions.budgets.map(([value]) => value));
 const storeys = new Set(customerProjectOptions.storeys.map(([value]) => value));
 const ageBands = new Set(customerProjectOptions.ageBands.map(([value]) => value));
@@ -803,6 +854,20 @@ const quoteInclusions = new Set(platformQuoteOptions.inclusions.map(([value]) =>
 const quoteStartWindows = new Set(platformQuoteOptions.startWindows.map(([value]) => value));
 
 const label = (options, value, fallback = value) => options.find(([key]) => key === value)?.[1] || fallback;
+
+function normalizePrivatePlanningContext(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const selected = (key, allowed) => allowed.has(source[key]) ? source[key] : "";
+  return {
+    timing: selected("timing", timings),
+    occupancyPattern: selected("occupancyPattern", occupancyPatterns),
+    energyUsePattern: selected("energyUsePattern", energyUsePatterns),
+    billPressure: selected("billPressure", billPressures),
+    gasConnection: selected("gasConnection", gasConnections),
+    disruption: selected("disruption", disruptionLevels),
+    plannedWorks: selected("plannedWorks", plannedWorks),
+  };
+}
 
 function text(value, maximum) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, maximum) : "";
@@ -2605,6 +2670,64 @@ function roomComfortPlanning(rooms = []) {
   };
 }
 
+function privatePlanningContextRecommendation(context, features) {
+  const known = context && typeof context === "object" ? context : {};
+  const values = [
+    ["Timing", customerProjectOptions.timings, known.timing],
+    ["Occupancy", customerProjectOptions.occupancyPatterns, known.occupancyPattern],
+    ["Energy use", customerProjectOptions.energyUsePatterns, known.energyUsePattern],
+    ["Bills", customerProjectOptions.billPressures, known.billPressure],
+    ["Gas", customerProjectOptions.gasConnections, known.gasConnection],
+    ["Disruption", customerProjectOptions.disruptionLevels, known.disruption],
+    ["Planned work", customerProjectOptions.plannedWorks, known.plannedWorks],
+  ].filter(([, , value]) => value && value !== "not-sure");
+  if (!values.length) return null;
+
+  const recorded = values
+    .map(([name, options, value]) => `${name}: ${label(options, value)}`)
+    .join("; ");
+  const directions = [];
+  if (["higher-than-expected", "hard-to-manage"].includes(known.billPressure)) {
+    directions.push("check the bill, tariff and low-cost causes before major capital work without assuming a saving");
+  }
+  if (known.occupancyPattern && known.occupancyPattern !== "not-sure") {
+    directions.push("schedule comfort and controls around occupied periods");
+  }
+  if (known.energyUsePattern && known.energyUsePattern !== "not-sure") {
+    directions.push("compare flexible-load timing with the tariff and any daytime solar");
+  }
+  const gasEquipmentRecorded = features.some((feature) => /(?:^|-)gas(?:-|$)|gas-heating|gas-cooking/i.test(feature));
+  if (known.gasConnection === "not-connected" && gasEquipmentRecorded) {
+    directions.push("confirm the gas answer because recorded gas equipment conflicts with no gas supply");
+  } else if (["connected", "bottled-lpg", "disconnecting"].includes(known.gasConnection)) {
+    directions.push("coordinate appliance replacement, electrical capacity and any gas disconnection");
+  }
+  if (known.disruption && known.disruption !== "not-sure") {
+    directions.push("shape the scope around the stated disruption limit");
+  }
+  if (known.plannedWorks && !["none", "not-sure"].includes(known.plannedWorks)) {
+    directions.push("coordinate with the planned work to avoid rework");
+  }
+  if (known.timing && !["planning", "not-sure"].includes(known.timing)) {
+    directions.push("use the stated time horizon for sequencing, not as proof that work is urgent");
+  }
+  const includedDirections = [];
+  for (const direction of directions) {
+    const candidate = `${recorded}. ${[...includedDirections, direction].join("; ")}.`;
+    if (candidate.length > 600) break;
+    includedDirections.push(direction);
+  }
+  const fallbackDirection = "Use these answers to sequence occupied-zone comfort, flexible loads and future work without inventing urgency or savings.";
+  return {
+    id: "household-routines-and-constraints",
+    stage: "Coordinate scope and timing",
+    title: "Align upgrades with household routines and planned work",
+    text: `${recorded}. ${includedDirections.length ? `${includedDirections.join("; ")}.` : fallbackDirection}`,
+    href: "/guides/project-preparation",
+    action: "Review project preparation guidance",
+  };
+}
+
 function createAdvisorPlan({
   selectedGoals,
   pace,
@@ -2615,6 +2738,7 @@ function createAdvisorPlan({
   budgetRange,
   propertyContext,
   advisorProfile,
+  privatePlanningContext,
 }) {
   const plannerFeatures = features.filter((item) => legacyPlannerFeatures.has(item));
   if (
@@ -2705,6 +2829,7 @@ function createAdvisorPlan({
   }
   if (situation === "renter" || selectedGoals.includes("renter-friendly")) addContext(advisorRecommendations.renter);
   if (features.includes("condensation-moisture") || selectedGoals.includes("healthier-home")) addContext(advisorRecommendations.moisture);
+  addContext(privatePlanningContextRecommendation(privatePlanningContext, features));
   if (
     selectedGoals.includes("improve-comfort")
     || features.some((item) => [
@@ -2774,6 +2899,7 @@ function createAdvisorPlan({
         "room-comfort-profile",
         "climate-sequence",
         "moisture-ventilation",
+        "household-routines-and-constraints",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2783,9 +2909,10 @@ function createAdvisorPlan({
       ? [
           "home-planning-context",
           "electrical-supply-check",
-          "room-comfort-profile",
-          "moisture-ventilation",
-          "draught-proofing",
+           "room-comfort-profile",
+           "moisture-ventilation",
+           "household-routines-and-constraints",
+           "draught-proofing",
           "insulation-review",
           "windows-glazing",
           "climate-sequence",
@@ -2800,6 +2927,7 @@ function createAdvisorPlan({
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
+        "household-routines-and-constraints",
         "window-shading",
         "windows-glazing",
         "draught-proofing",
@@ -2811,6 +2939,7 @@ function createAdvisorPlan({
         "climate-sequence",
         "room-comfort-profile",
         "moisture-ventilation",
+        "household-routines-and-constraints",
         "draught-proofing",
         "insulation-review",
         "windows-glazing",
@@ -3026,6 +3155,7 @@ function prepareCustomerProjectPlan(input = {}) {
     approvalContext,
   });
   const budgetRange = budgets.has(input.budgetRange) ? input.budgetRange : "not_set";
+  const privatePlanningContext = normalizePrivatePlanningContext(input.privatePlanningContext);
   const baseAdvisorProfile = normalizeCustomerAdvisorProfile(input.advisorProfile, {
     postcode: input.postcode,
     addressState: input.addressState,
@@ -3044,6 +3174,7 @@ function prepareCustomerProjectPlan(input = {}) {
     budgetRange,
     propertyContext,
     advisorProfile: baseAdvisorProfile,
+    privatePlanningContext,
   });
   const snapshot = normalisePlanSnapshot(input.planSnapshot, generatedPlan);
   const advisorProfile = normalizeCustomerAdvisorProfile(baseAdvisorProfile, {

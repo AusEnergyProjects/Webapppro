@@ -61,6 +61,22 @@ function isJsonRequest(request: Request) {
     .toLowerCase() === "application/json";
 }
 
+async function requestIdForLog(request: Request) {
+  try {
+    const body = await request.clone().json() as Record<string, unknown>;
+    const value = body.requestId ?? body.clientRequestId;
+    return typeof value === "string" && /^[A-Za-z0-9:_-]{16,80}$/.test(value)
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestLogContext(requestId: string | undefined) {
+  return requestId ? { requestId } : {};
+}
+
 function withSetCookie(response: Response, setCookie: string | null) {
   if (!setCookie) return response;
   const headers = new Headers(response.headers);
@@ -84,8 +100,8 @@ function usageGuardEnvironment() {
   return guardEnvironment;
 }
 
-function deniedReservation(): SurgeModelCallReservation {
-  return { allowed: false };
+function deniedReservation(reason = "unavailable"): SurgeModelCallReservation {
+  return { allowed: false, reason };
 }
 
 function hostedString(source: Record<string, unknown>, key: string) {
@@ -121,22 +137,25 @@ function hostedBoolean(value: string | undefined) {
   return false;
 }
 
-function reportModelFailure(failure: SurgeModelFailure) {
+function reportModelFailure(failure: SurgeModelFailure, requestId?: string) {
   console.warn("Surge model answer was unavailable.", {
+    ...requestLogContext(requestId),
     code: failure.code,
+    ...(failure.stage ? { stage: failure.stage } : {}),
     ...(failure.providerStatus ? { providerStatus: failure.providerStatus } : {}),
   });
 }
 
 function generateHostedModelAnswer(
   modelRequest: Parameters<typeof generateSurgeModelAnswer>[0],
+  requestId?: string,
 ) {
   const source = env as unknown as Record<string, unknown>;
   return generateSurgeModelAnswer(modelRequest, {
     apiKey: hostedString(source, "OPENAI_API_KEY"),
     model: hostedString(source, "SURGE_MODEL"),
     enabled: hostedBoolean(hostedString(source, "SURGE_AI_ENABLED")),
-    onFailure: reportModelFailure,
+    onFailure: (failure) => reportModelFailure(failure, requestId),
   });
 }
 
@@ -149,23 +168,28 @@ function handleEnergyAssistantRequest(
     recordQuality: (event: SurgeConversationQualityEvent) => Promise<void>;
     resolveGroundedAnswer?: ServerDependencies["resolveGroundedAnswer"];
   },
+  requestId?: string,
 ) {
   return handleEnergyAssistantServerRequest(request, {
     ...dependencies,
-    generateAnswer: generateHostedModelAnswer,
+    generateAnswer: (modelRequest) => generateHostedModelAnswer(modelRequest, requestId),
     qualityMetadata: hostedQualityMetadata(),
-    requireValidatedModelForOrdinaryAdvice: true,
   });
 }
 
 async function handle(request: Request) {
   if (!isJsonRequest(request)) return unsupportedMediaType();
 
+  const requestId = await requestIdForLog(request);
   let setCookie: string | null = null;
   let database: D1Database | null = null;
   try {
     database = getD1();
   } catch {
+    console.warn("Surge model admission was unavailable.", {
+      ...requestLogContext(requestId),
+      reason: "database_unavailable",
+    });
     database = null;
   }
   const recordQuality = async (event: SurgeConversationQualityEvent) => {
@@ -196,21 +220,48 @@ async function handle(request: Request) {
         });
         reserveModelCall = async ({ requestId, estimatedMicroUsd }) => {
           try {
-            return await usageGuard.reserve({
+            const reservation = await usageGuard.reserve({
               clientKey: identity.clientKey,
               networkKey: identity.networkKey,
               requestKey: requestId,
               estimatedMicroUsd,
             });
+            if (!reservation.allowed) {
+              console.warn("Surge model admission was denied.", {
+                ...requestLogContext(requestId),
+                reason: reservation.reason,
+                ...(reservation.retryAfterSeconds
+                  ? { retryAfterSeconds: reservation.retryAfterSeconds }
+                  : {}),
+              });
+            }
+            return reservation;
           } catch {
-            return deniedReservation();
+            console.warn("Surge model admission was unavailable.", {
+              ...requestLogContext(requestId),
+              reason: "reservation_unavailable",
+            });
+            return deniedReservation("unavailable");
           }
         };
       } catch {
+        console.warn("Surge model admission was unavailable.", {
+          ...requestLogContext(requestId),
+          reason: "guard_setup_failed",
+        });
         reserveModelCall = async () => deniedReservation();
       }
+    } else {
+      console.warn("Surge model admission was unavailable.", {
+        ...requestLogContext(requestId),
+        reason: "identity_not_ready",
+      });
     }
   } catch {
+    console.warn("Surge model admission was unavailable.", {
+      ...requestLogContext(requestId),
+      reason: "identity_resolution_failed",
+    });
     reserveModelCall = async () => deniedReservation();
   }
 
@@ -220,10 +271,14 @@ async function handle(request: Request) {
         reserveModelCall,
         recordQuality,
         resolveGroundedAnswer,
-      }),
+      }, requestId),
       setCookie,
     );
   } catch {
+    console.warn("Surge request failed before a customer answer was returned.", {
+      ...requestLogContext(requestId),
+      reason: "request_handler_failed",
+    });
     return withSetCookie(unavailable(), setCookie);
   }
 }

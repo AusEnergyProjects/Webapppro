@@ -10,6 +10,25 @@ export const SURGE_MAX_LEDGER_OPEN_ITEMS = 16;
 export const SURGE_MAX_LEDGER_BYTES = 32_768;
 const SURGE_MAX_USER_CONTEXT_CHARS = 640;
 
+export const SURGE_PLAN_CONTEXT_CORRECTION_VALUES = [
+  "comfort_moisture_resolved",
+  "comfort_draught_resolved",
+  "roof_condition_changed",
+  "glazing_changed",
+  "ceiling_insulation_changed",
+  "wall_insulation_changed",
+  "floor_insulation_changed",
+  "insulation_changed",
+  "switchboard_changed",
+  "heating_cooling_changed",
+  "exhaust_changed",
+  "solar_changed",
+  "battery_changed",
+  "hot_water_changed",
+] as const;
+
+export type SurgePlanContextCorrection = typeof SURGE_PLAN_CONTEXT_CORRECTION_VALUES[number];
+
 export type SurgeConversationFact = {
   key: string;
   value: string;
@@ -55,6 +74,8 @@ export type SurgeConversationState = {
   facts: SurgeConversationFact[];
   pendingQuestion: string;
   lastAnswerSummary: string;
+  /** Bounded saved-plan corrections that must outlive the rolling raw-turn window. */
+  planContextCorrections?: SurgePlanContextCorrection[];
   /** Optional for backward compatibility with already stored version-one sessions. */
   ledger?: SurgeConversationLedger;
 };
@@ -169,6 +190,16 @@ export function surgeConversationTopicsAreCompatible(left: string, right: string
   return compatiblePairs.has(pair);
 }
 
+const SURGE_HOME_COMFORT_SPACE = String.raw`(?:(?:(?:my|our|the|this|that)\s+)?(?:home|house|bedroom|lounge)|(?:my|our|the|this|that)\s+(?:living\s+)?room)`;
+
+export const SURGE_HOME_COMFORT_INTENT_PATTERN = new RegExp([
+  String.raw`\b(?:(?:keep|get|make)\s+${SURGE_HOME_COMFORT_SPACE}\s+warm|heat\s+${SURGE_HOME_COMFORT_SPACE}(?=\s*(?:[?.!,;]|$|\b(?:in|during|through|when|because|without|with|efficiently|cheaply|properly|enough)\b)))`,
+  String.raw`\b${SURGE_HOME_COMFORT_SPACE}\s+(?:(?:always|often|sometimes|usually)\s+)?(?:(?:is|gets?|stays?|feels?)\s+(?:(?:very|too|really|quite)\s+)?(?:cold|freez\w*)|freez\w*|(?:won(?:['’]?t)|doesn(?:['’]?t)|does\s+not|can(?:not|['’]?t))\s+(?:(?:get|stay|feel|keep)\s+warm|warm\s+up))\b`,
+  String.raw`\b(?:is|does)\s+${SURGE_HOME_COMFORT_SPACE}\s+(?:feel\s+|get\s+|stay\s+)?(?:(?:very|too|really|quite)\s+)?(?:cold|freez\w*)\b`,
+].join("|"), "i");
+
+export const SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN = /\b(?:another|different|other|second|new|investment|rental|holiday|vacation|weekend|secondary|old|previous|former|prior)\s+(?:home(?!\s+(?:battery|storage)\b)|house|place|property|apartment|unit|residence|site|job|shed|building)\b|\b(?:my|our|the)\s+(?:beach\s+house|weekender|airbnb)\b|\b(?:at|in|for|on)\s+(?:my|our|the|a|an)\s+(?:rental|investment)(?:\s+property)?\b|\bcontainer\s+shed\b/i;
+
 const SURGE_CONVERSATION_TOPIC_RULES: ReadonlyArray<readonly [string, RegExp]> = [
     // The decision being made is more useful than the product noun. For
     // example, "rebate for replacing ducted gas" must stay a rebate decision
@@ -180,7 +211,7 @@ const SURGE_CONVERSATION_TOPIC_RULES: ReadonlyArray<readonly [string, RegExp]> =
     ["battery_vpp", /\b(?:home )?batter(?:y|ies)|\bVPP\b|energy storage/i],
     ["glazing_shading", /\b(?:windows?|glazing|glass|blinds?|curtains?|shading)\b/i],
     ["draughts_ventilation", /\b(?:draughts?|drafts?|air leaks?|breeze|wind coming (?:in|through)|gap(?:s)? (?:around|under) (?:the )?(?:door|window)|ventilation|(?:exhaust|extractor|extraction|bathroom) fan)\b/i],
-    ["comfort_fabric", /\b(?:condensation|mould|mold|humidity|comfort)\b/i],
+    ["comfort_fabric", new RegExp(`\\b(?:condensation|mould|mold|humidity|comfort)\\b|${SURGE_HOME_COMFORT_INTENT_PATTERN.source}`, "i")],
     ["insulation", /\b(?:insulation|batts?)\b/i],
     ["rcac", /\b(?:air ?con(?:ditioner)?|reverse[- ]?cycle|split systems?|(?:new|old|existing|current|working|replacement) split|multi[- ]?(?:head|split)(?: system)?|ducted heating|gas heater)\b/i],
     ["induction", /\b(?:induction|cooktop|electric cooking)\b/i],
@@ -217,7 +248,7 @@ function surgeConversationTechnologyTopicFor(message: string) {
     ["battery_vpp", /\b(?:home )?batter(?:y|ies)|\bVPP\b|energy storage/i],
     ["glazing_shading", /\b(?:windows?|glazing|glass|blinds?|curtains?|shading)\b/i],
     ["draughts_ventilation", /\b(?:draughts?|drafts?|air leaks?|breeze|wind coming (?:in|through)|gap(?:s)? (?:around|under) (?:the )?(?:door|window)|ventilation|(?:exhaust|extractor|extraction|bathroom) fan)\b/i],
-    ["comfort_fabric", /\b(?:condensation|mould|mold|humidity|comfort)\b/i],
+    ["comfort_fabric", new RegExp(`\\b(?:condensation|mould|mold|humidity|comfort)\\b|${SURGE_HOME_COMFORT_INTENT_PATTERN.source}`, "i")],
     ["insulation", /\b(?:insulation|batts?)\b/i],
     ["rcac", /\b(?:air ?con(?:ditioner)?|reverse[- ]?cycle|split systems?|(?:new|old|existing|current|working|replacement) split|multi[- ]?(?:head|split)(?: system)?|ducted heating|ducted gas|gas heater)\b/i],
     ["induction", /\b(?:induction|cooktop|electric cooking)\b/i],
@@ -732,6 +763,19 @@ export function parseSurgeConversationState(value: unknown): SurgeConversationSt
     }
   }
 
+  const correctionValues = new Set<string>(SURGE_PLAN_CONTEXT_CORRECTION_VALUES);
+  const planContextCorrections = source.planContextCorrections === undefined
+    ? undefined
+    : Array.isArray(source.planContextCorrections)
+      && source.planContextCorrections.length <= SURGE_PLAN_CONTEXT_CORRECTION_VALUES.length
+      && source.planContextCorrections.every((value) => (
+        typeof value === "string" && correctionValues.has(value)
+      ))
+      && new Set(source.planContextCorrections).size === source.planContextCorrections.length
+        ? source.planContextCorrections as SurgePlanContextCorrection[]
+        : null;
+  if (planContextCorrections === null) return null;
+
   const ledger = source.ledger === undefined ? undefined : parseConversationLedger(source.ledger);
   if (source.ledger !== undefined && !ledger) return null;
 
@@ -742,6 +786,7 @@ export function parseSurgeConversationState(value: unknown): SurgeConversationSt
     facts,
     pendingQuestion,
     lastAnswerSummary,
+    ...(planContextCorrections?.length ? { planContextCorrections } : {}),
     ...(ledger ? { ledger } : {}),
   };
 }
@@ -773,6 +818,8 @@ export type SurgeConversationLedgerUpdate = {
   planFacts: readonly SurgeConversationFact[];
   modelState: SurgeConversationState;
   derivedFacts?: readonly SurgeConversationFact[];
+  savedHomeCorrectionFacts?: readonly SurgeConversationFact[];
+  forceSavedHomeSubject?: boolean;
   recordTurn?: boolean;
 };
 
@@ -1176,6 +1223,30 @@ function ledgerSubjectIdentity(
   if (numberedOtherProperty) {
     return { id: numberedOtherProperty.id, kind: numberedOtherProperty.kind, label: numberedOtherProperty.label };
   }
+  const lifecycleProperty = clean.match(
+    /\b(new|old|previous|former|prior|vacation|weekend|secondary)\s+(home|house|place|property|apartment|unit|residence)\b/i,
+  );
+  if (lifecycleProperty) {
+    const descriptor = lifecycleProperty[1].toLowerCase();
+    const normalizedDescriptor = /^(?:old|previous|former|prior)$/.test(descriptor)
+      ? "previous"
+      : descriptor;
+    const id = `${normalizedDescriptor}_home`;
+    const label = `${normalizedDescriptor[0].toUpperCase()}${normalizedDescriptor.slice(1)} home`;
+    return { id, kind: "property" as const, label };
+  }
+  const specialProperty = clean.match(
+    /\b(?:my|our|the)\s+(beach\s+house|weekender|airbnb)\b/i,
+  )?.[1]?.toLowerCase();
+  if (specialProperty) {
+    const id = specialProperty === "beach house" ? "beach_house" : `${specialProperty}_property`;
+    const label = specialProperty === "airbnb"
+      ? "Airbnb property"
+      : specialProperty === "weekender"
+        ? "Weekender"
+        : "Beach house";
+    return { id, kind: "property" as const, label };
+  }
   const activeClientJob = activeLedgerSubject(state);
   if (
     activeClientJob?.id.startsWith("client_job_")
@@ -1366,6 +1437,16 @@ function explicitlySelectedPriorDecision(
 function suppliesActiveComparisonAddendum(message: string) {
   return /\b(?:same|equal|identical|both)\b[^.!?]{0,90}\b(?:warrant(?:y|ies)|price|cost|installed|scope|inclusions?|exclusions?|brand|model|size|capacity)\b/i.test(message)
     || /\b(?:priority|prioritise|prioritize|prefer|preference|matters? most|most important)\b/i.test(message);
+}
+
+export function surgeMessageSuppliesSameSubjectConstraint(message: string) {
+  if (message.includes("?")) return false;
+  if (SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN.test(message)) return false;
+  const firstPersonHomeContext = /\b(?:I|we|my|our)\b/i.test(message);
+  const existingStateOrConstraint = /\b(?:still|already|existing|current|working|no longer|keep|installed|replaced|upgraded|fixed|repaired|added)\b/i.test(message)
+    || /\b(?:do not|don['’]?t|does not|doesn['’]?t)\b[^.!?]{0,45}\b(?:want|need|plan|intend|replace|remove|change|upgrade)\b/i.test(message);
+  const homeAsset = /\b(?:doors?|windows?|glazing|insulation|solar|panels?|batter(?:y|ies)|hot[- ]?water|heaters?|heating|reverse[- ]?cycle|splits?|air ?con(?:dition(?:er|ing))?|switchboard|exhaust|fans?|draught|draft)\b/i.test(message);
+  return firstPersonHomeContext && existingStateOrConstraint && homeAsset;
 }
 
 function explicitlyIntroducesSeparateQuote(
@@ -1583,6 +1664,15 @@ export function selectSurgeConversationFrame(
   let decision = crossSubjectDecision
     ? null
     : selectedLedgerDecision(message, state, identity.id, intent);
+  if (!decision
+    && identity.kind !== "general"
+    && surgeMessageSuppliesSameSubjectConstraint(message)) {
+    const activeDecision = state.ledger.decisions.find((candidate) => (
+      candidate.id === state.ledger?.activeDecisionId
+      && candidate.subjectIds.includes(identity.id)
+    ));
+    decision = activeDecision || null;
+  }
   const asksForWholeConversation = surgeConversationAsksForWholeConversation(message);
   const asksForWholeSubject = surgeConversationAsksForWholeSubject(message);
   const asksForWholeDecision = surgeConversationAsksForWholeDecision(message);
@@ -1659,6 +1749,74 @@ export function selectSurgeConversationFrame(
       decisionId: candidate.id,
     }));
   return { subject, subjects, decision, relatedDecisions, inactiveIndex };
+}
+
+export function filterSurgeRecentTurnsForFrame<
+  T extends { role: "user" | "assistant"; content: string },
+>(
+  message: string,
+  state: SurgeConversationState | null,
+  hasPlanContext: boolean,
+  recentTurns: readonly T[],
+): T[] {
+  if (!state?.ledger || !recentTurns.length) return [...recentTurns];
+  const targetFrame = selectSurgeConversationFrame(message, state, hasPlanContext);
+  if (targetFrame.subjects.length !== 1 || !targetFrame.decision) return [...recentTurns];
+  const targetSubjectId = targetFrame.subjects[0].id;
+  const targetDecisionId = targetFrame.decision.id;
+  let segmentMatchesTarget = true;
+  const filtered: T[] = [];
+  const nonTargetSubjectMentioned = (content: string) => {
+    const aliasesByPrefix: ReadonlyArray<readonly [string, string]> = [
+      ["mums_home", "mum|mom|mother"],
+      ["dads_home", "dad|father"],
+      ["parents_home", "parents?"],
+      ["sisters_home", "sister"],
+      ["brothers_home", "brother"],
+      ["daughters_home", "daughter"],
+      ["sons_home", "son"],
+      ["aunts_home", "aunt"],
+      ["uncles_home", "uncle"],
+      ["grandmothers_home", "grandmother|grandma|nan|nanna"],
+      ["grandfathers_home", "grandfather|grandpa|grandad|pop"],
+      ["friends_home", "friend"],
+      ["neighbours_home", "neighbou?r"],
+      ["landlords_home", "landlord"],
+      ["tenants_home", "tenant"],
+    ];
+    return state.ledger?.subjects.some((subject) => {
+      if (subject.id === targetSubjectId || subject.kind === "general") return false;
+      const aliases = aliasesByPrefix.find(([prefix]) => subjectMatchesPrefix(subject, prefix))?.[1];
+      if (aliases) {
+        return new RegExp(`\\b(?:${aliases})(?:['’]s)?\\b`, "i").test(content)
+          && !namedSubjectIsNegated(content, aliases);
+      }
+      const labelWords = [...normalizedLedgerWords(subject.label)];
+      return labelWords.length > 0
+        && labelWords.every((word) => normalizedLedgerWords(content).has(word));
+    }) || false;
+  };
+
+  for (const turn of recentTurns) {
+    if (turn.role === "user") {
+      const explicitSubjectIds = explicitlyNamedSubjectIdentities(turn.content, state)
+        .map((identity) => identity.id);
+      if (nonTargetSubjectMentioned(turn.content)) {
+        segmentMatchesTarget = false;
+      } else if (explicitSubjectIds.length) {
+        segmentMatchesTarget = explicitSubjectIds.length === 1
+          && explicitSubjectIds[0] === targetSubjectId;
+      } else if (SURGE_EXPLICIT_SEPARATE_PROPERTY_CONTEXT_PATTERN.test(turn.content)) {
+        const separateFrame = selectSurgeConversationFrame(turn.content, state, hasPlanContext);
+        segmentMatchesTarget = separateFrame.subjects.some((subject) => subject.id === targetSubjectId);
+      } else if (PRIOR_DECISION_REVISIT_PATTERN.test(turn.content)) {
+        const revisitFrame = selectSurgeConversationFrame(turn.content, state, hasPlanContext);
+        if (revisitFrame.decision?.id === targetDecisionId) segmentMatchesTarget = true;
+      }
+    }
+    if (segmentMatchesTarget) filtered.push(turn);
+  }
+  return filtered;
 }
 
 export function projectSurgeConversationStateToFrame(
@@ -1904,6 +2062,16 @@ function compactLedger(ledger: SurgeConversationLedger) {
       ? Math.max(0, Math.min(turn, fact.updatedTurn))
       : turn,
   });
+  const durableSavedPlanFactKeys = new Set(
+    SURGE_PLAN_CONTEXT_CORRECTION_VALUES.map((correction) => `saved_plan_update_${correction}`),
+  );
+  const isDurableSavedPlanFact = (
+    subject: Pick<SurgeConversationSubject, "id">,
+    fact: SurgeConversationLedgerFact,
+  ) => subject.id === "saved_home" && durableSavedPlanFactKeys.has(fact.key);
+  const durableSavedPlanFacts = (subject: SurgeConversationSubject) => subject.facts
+    .filter((fact) => isDurableSavedPlanFact(subject, fact))
+    .sort((left, right) => right.updatedTurn - left.updatedTurn);
   const normalizedLedger: SurgeConversationLedger = {
     turn,
     activeDecisionId: compactText(ledger.activeDecisionId, 64),
@@ -1946,8 +2114,12 @@ function compactLedger(ledger: SurgeConversationLedger) {
   let decisions = rankedDecisions.slice(0, SURGE_MAX_LEDGER_DECISIONS);
   let subjectIds = new Set(decisions.flatMap((decision) => decision.subjectIds));
   let subjects = normalizedLedger.subjects
-    .filter((subject) => subjectIds.has(subject.id))
-    .sort((left, right) => right.lastTouchedTurn - left.lastTouchedTurn)
+    .filter((subject) => subjectIds.has(subject.id) || durableSavedPlanFacts(subject).length > 0)
+    .sort((left, right) => (
+      Number(durableSavedPlanFacts(right).length > 0)
+      - Number(durableSavedPlanFacts(left).length > 0)
+      || right.lastTouchedTurn - left.lastTouchedTurn
+    ))
     .slice(0, SURGE_MAX_LEDGER_SUBJECTS);
   subjectIds = new Set(subjects.map((subject) => subject.id));
   decisions = decisions.filter((decision) => decision.subjectIds.every((subjectId) => subjectIds.has(subjectId)));
@@ -2001,11 +2173,22 @@ function compactLedger(ledger: SurgeConversationLedger) {
   const retainedContextFacts = decisions.filter((decision) => (
     decision.facts.some((fact) => fact.key === "user_context")
   )).length;
-  let remainingFacts = Math.max(0, SURGE_MAX_LEDGER_FACTS - retainedContextFacts);
+  const retainedDurableSavedPlanFacts = subjects.reduce(
+    (count, subject) => count + durableSavedPlanFacts(subject).length,
+    0,
+  );
+  let remainingFacts = Math.max(
+    0,
+    SURGE_MAX_LEDGER_FACTS - retainedContextFacts - retainedDurableSavedPlanFacts,
+  );
   subjects = subjects.map((subject) => {
-    const facts = [...subject.facts].sort((left, right) => right.updatedTurn - left.updatedTurn).slice(0, remainingFacts);
-    remainingFacts -= facts.length;
-    return { ...subject, facts };
+    const durableFacts = durableSavedPlanFacts(subject);
+    const ordinaryFacts = [...subject.facts]
+      .filter((fact) => !isDurableSavedPlanFact(subject, fact))
+      .sort((left, right) => right.updatedTurn - left.updatedTurn)
+      .slice(0, remainingFacts);
+    remainingFacts -= ordinaryFacts.length;
+    return { ...subject, facts: [...durableFacts, ...ordinaryFacts] };
   });
   decisions = decisions.map((decision) => {
     const contextFacts = decision.facts.filter((fact) => fact.key === "user_context").slice(0, 1);
@@ -2100,10 +2283,11 @@ function compactLedger(ledger: SurgeConversationLedger) {
       continue;
     }
     const oldestSubjectWithFacts = [...compacted.subjects]
-      .filter((subject) => subject.facts.length > 1)
+      .filter((subject) => subject.facts.some((fact) => !isDurableSavedPlanFact(subject, fact)))
       .sort((left, right) => left.lastTouchedTurn - right.lastTouchedTurn)[0];
     if (oldestSubjectWithFacts) {
       const removableFact = [...oldestSubjectWithFacts.facts]
+        .filter((fact) => !isDurableSavedPlanFact(oldestSubjectWithFacts, fact))
         .sort((left, right) => left.updatedTurn - right.updatedTurn)[0];
       compacted = {
         ...compacted,
@@ -2121,7 +2305,7 @@ function compactLedger(ledger: SurgeConversationLedger) {
       subjects: compacted.subjects.map((subject) => ({
         ...subject,
         label: subject.label.slice(0, 80),
-        facts: [],
+        facts: durableSavedPlanFacts(subject),
       })),
       decisions: compacted.decisions.map((decision) => ({
         ...decision,
@@ -2147,7 +2331,9 @@ function compactLedger(ledger: SurgeConversationLedger) {
     compacted = {
       ...compacted,
       decisions,
-      subjects: compacted.subjects.filter((subject) => referencedSubjectIds.has(subject.id)),
+      subjects: compacted.subjects.filter((subject) => (
+        referencedSubjectIds.has(subject.id) || durableSavedPlanFacts(subject).length > 0
+      )),
     };
   };
   while (new TextEncoder().encode(JSON.stringify(compacted)).byteLength > SURGE_MAX_LEDGER_BYTES) {
@@ -2165,7 +2351,11 @@ function compactLedger(ledger: SurgeConversationLedger) {
   if (new TextEncoder().encode(JSON.stringify(compacted)).byteLength > SURGE_MAX_LEDGER_BYTES) {
     compacted = {
       ...compacted,
-      subjects: compacted.subjects.map((subject) => ({ ...subject, label: "Context", facts: [] })),
+      subjects: compacted.subjects.map((subject) => ({
+        ...subject,
+        label: "Context",
+        facts: durableSavedPlanFacts(subject),
+      })),
       decisions: compacted.decisions.map((decision) => ({
         ...decision,
         goal: decision.goal.slice(0, 48),
@@ -2217,7 +2407,11 @@ export function updateSurgeConversationLedger(
   const crossSubjectIdentities = explicitlyNamedSubjects.length > 1
     ? explicitlyNamedSubjects
     : [];
+  const forcedSavedHomeIdentity = update.forceSavedHomeSubject || update.savedHomeCorrectionFacts?.length
+    ? { id: "saved_home", kind: "saved_home" as const, label: "Saved home" }
+    : null;
   const identity = crossSubjectIdentities[0]
+    || forcedSavedHomeIdentity
     || ledgerSubjectIdentity(update.message, state, update.planFacts.length > 0);
   let subjects = [...ledger.subjects];
   for (const namedIdentity of crossSubjectIdentities) {
@@ -2230,6 +2424,14 @@ export function updateSurgeConversationLedger(
     ? update.planFacts
       .filter((fact) => /^(?:postcode|state_or_territory|tenure|ownership|property_type|household_size)$/.test(fact.key))
       .map((fact) => ({ ...fact, source: "plan" as const, updatedTurn: turn }))
+    : [];
+  const savedHomeCorrectionFacts = identity.kind === "saved_home"
+    ? (update.savedHomeCorrectionFacts || []).map((fact) => ({
+        ...fact,
+        value: fact.value.slice(0, 220),
+        source: "chat" as const,
+        updatedTurn: turn,
+      }))
     : [];
   const exactPlanFacts = new Set(planFacts.map((fact) => `${fact.key}\u0000${fact.value}`));
   const priorActiveDecision = ledger.decisions.find((decision) => decision.id === ledger.activeDecisionId);
@@ -2269,14 +2471,18 @@ export function updateSurgeConversationLedger(
   if (!subject) {
     subject = {
       ...identity,
-      facts: mergeLedgerFacts(planFacts, subjectChatFacts),
+      facts: mergeLedgerFacts(planFacts, [...subjectChatFacts, ...savedHomeCorrectionFacts]),
       lastTouchedTurn: turn,
     };
     subjects.push(subject);
   } else {
     subject = {
       ...subject,
-      facts: mergeLedgerFacts(subject.facts, [...planFacts, ...subjectChatFacts]),
+      facts: mergeLedgerFacts(subject.facts, [
+        ...planFacts,
+        ...subjectChatFacts,
+        ...savedHomeCorrectionFacts,
+      ]),
       lastTouchedTurn: turn,
     };
     subjects = subjects.map((candidate) => candidate.id === subject?.id ? subject : candidate);

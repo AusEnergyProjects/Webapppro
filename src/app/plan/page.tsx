@@ -132,6 +132,13 @@ export default async function HomeEnergyPlanPage({
           floorConstruction: value(params.floorConstruction)
             ? plan.propertyContext.floorConstruction || ""
             : "",
+          timing: "not-sure",
+          occupancyPattern: "not-sure",
+          energyUsePattern: "not-sure",
+          billPressure: "not-sure",
+          gasConnection: "not-sure",
+          disruption: "not-sure",
+          plannedWorks: "not-sure",
         }}
       />
       <SiteFooter>
