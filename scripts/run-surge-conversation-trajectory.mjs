@@ -19,8 +19,14 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseSurgeConversationState } from "../src/lib/energy-assistant-conversation.ts";
-import { generateSurgeModelAnswer } from "../src/lib/energy-assistant-model.ts";
+import {
+  parseSurgeConversationState,
+  surgeConversationTopicFor,
+} from "../src/lib/energy-assistant-conversation.ts";
+import {
+  generateSurgeModelAnswer,
+  surgeTextsSupplyImplicitCelsiusSetpoint,
+} from "../src/lib/energy-assistant-model.ts";
 import { parseSurgePlanContext } from "../src/lib/energy-assistant-plan-context.ts";
 import { handleEnergyAssistantRequest } from "../src/lib/energy-assistant-server.ts";
 import { sanitizeSurgeCustomerOfficialUrl } from "../src/lib/surge-official-citation.ts";
@@ -1185,13 +1191,21 @@ function quantityGroundingFailures(assertion, fixture, observations) {
   const turnsById = new Map(fixture.turns.map((turn) => [turn.id, turn]));
   let currentConversationId = "";
   let known = numericValues(JSON.stringify(fixture.planContext));
+  let recentUserMessages = [];
   for (const observation of observations) {
     if (observation.conversationId && observation.conversationId !== currentConversationId) {
       currentConversationId = observation.conversationId;
       known = numericValues(JSON.stringify(fixture.planContext));
+      recentUserMessages = [];
     }
+    recentUserMessages.push(observation.message);
+    recentUserMessages = recentUserMessages.slice(-3);
     known.push(...numericValues(observation.message));
     const turn = turnsById.get(observation.turnId);
+    const latestExplicitUserTopic = [...recentUserMessages]
+      .reverse()
+      .map((message) => surgeConversationTopicFor(message))
+      .find(Boolean) || "";
     const groundedByCurrentOfficialLookup = turn?.sourcePolicy === "official_lookup"
       && observation.officialWebLookupRequested === true
       && officialCitationEvidenceSatisfied(observation);
@@ -1199,6 +1213,15 @@ function quantityGroundingFailures(assertion, fixture, observations) {
     let answerQuantitiesGrounded = true;
     for (const candidate of answerQuantities) {
       if (approximatelyIncludes(known, candidate)) continue;
+      if (
+        candidate.kind === "temperature_c"
+        && latestExplicitUserTopic === "rcac"
+        && surgeTextsSupplyImplicitCelsiusSetpoint(
+          recentUserMessages,
+          "rcac heating or cooling",
+          candidate.value,
+        )
+      ) continue;
       if (assertion.allowDerivedArithmetic === true && derivedFromKnownQuantities(known, candidate)) continue;
       if (groundedByCurrentOfficialLookup) continue;
       failures.push(conversationAssertionFailure(assertion, "quantity_not_grounded", observation.turnId));

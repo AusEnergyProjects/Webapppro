@@ -247,18 +247,59 @@ test("zero-export durability clauses require affirmative home self-use", async (
     "Zero export means the system cannot send surplus solar electricity to the grid. Your home can never use the array output.",
     "Zero export means the system cannot send surplus solar electricity to the grid. Your home may not use the solar generation.",
   ];
+  const solarContinuation = {
+    ...trajectoryObservation("context").continuation,
+    activeTopic: "solar",
+    goal: "Check what zero export changes for the solar quote",
+  };
 
   assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
     visibleAnswer: affirmative,
     directAnswer: affirmative,
     assistant: affirmative,
+    continuation: solarContinuation,
   }), "paid"), []);
   for (const opposite of opposites) {
     assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
       visibleAnswer: opposite,
       directAnswer: opposite,
       assistant: opposite,
+      continuation: solarContinuation,
     }), "paid").some((failure) => failure === "clause:self-use-remains" || failure.startsWith("forbidden:")), opposite);
+  }
+});
+
+test("continuous zero-export coverage accepts affirmative household use without spanning sentences", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  );
+  const turn = loaded.fixture.turns.find((item) => item.id === "t23-zero-export");
+  const affirmative = "Zero export means the system cannot send surplus electricity to the grid. The system may generate for household use, while any extra is curtailed.";
+  const opposites = [
+    "Zero export means the system cannot send surplus electricity to the grid. The system cannot generate for household use.",
+    "Your home cannot use the solar generation. A later sentence mentions home use and solar without affirming either.",
+    "Zero export means the system cannot send surplus electricity to the grid. You cannot use it directly.",
+    "Zero export means the system cannot send surplus electricity to the grid. It is not still useful.",
+  ];
+  const solarContinuation = {
+    ...trajectoryObservation("context").continuation,
+    activeTopic: "solar",
+    goal: "Check what zero export changes for the solar quote",
+  };
+
+  assert.deepEqual(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+    visibleAnswer: affirmative,
+    directAnswer: affirmative,
+    assistant: affirmative,
+    continuation: solarContinuation,
+  }), "paid"), []);
+  for (const opposite of opposites) {
+    assert.ok(evaluateSurgeTrajectoryTurn(turn, trajectoryObservation(turn.id, {
+      visibleAnswer: opposite,
+      directAnswer: opposite,
+      assistant: opposite,
+      continuation: solarContinuation,
+    }), "paid").some((failure) => failure === "clause:solar-still-useful" || failure.startsWith("forbidden:")), opposite);
   }
 });
 
@@ -585,6 +626,92 @@ test("quantity grounding treats hyphenated number-word durations as supplied val
     evaluateSurgeConversationAssertions(fixture, observations).map((item) => item.code),
     ["quantity_not_grounded"],
   );
+});
+
+test("quantity grounding recognises a unitless HVAC setpoint across its immediate follow-up only", async () => {
+  const loaded = await loadSurgeConversationTrajectoryFixture(
+    "test/fixtures/surge-conversation-trajectory-50.json",
+  );
+  const assertion = loaded.fixture.conversationAssertions.find((item) => (
+    item.id === "no-invented-quantities"
+  ));
+  const turns = loaded.fixture.turns.filter((item) => (
+    ["t17-back-home-split-bill", "t18-filter-clean-24", "t19-replace-working-split"].includes(item.id)
+  ));
+  const fixture = { ...loaded.fixture, turns, conversationAssertions: [assertion] };
+  const rcacContinuation = {
+    ...trajectoryObservation("context").continuation,
+    activeTopic: "rcac",
+    goal: "Check whether the reverse-cycle split is faulty or simply running more",
+  };
+  const observations = [
+    trajectoryObservation(turns[0].id, {
+      message: turns[0].message,
+      visibleAnswer: "The bill increase alone does not prove the reverse-cycle split is faulty.",
+      continuation: rcacContinuation,
+    }),
+    trajectoryObservation(turns[1].id, {
+      message: turns[1].message,
+      visibleAnswer: "Check the indoor and outdoor airflow, then watch for icing, noise or error codes.",
+      continuation: rcacContinuation,
+    }),
+    trajectoryObservation(turns[2].id, {
+      message: turns[2].message,
+      visibleAnswer: "No, not yet. The 24°C setting can increase consumption even when the unit is working normally.",
+      continuation: rcacContinuation,
+    }),
+  ];
+  assert.deepEqual(evaluateSurgeConversationAssertions(fixture, observations), []);
+
+  const rejectedContexts = [
+    {
+      messages: ["I set the reverse-cycle timer to 24 minutes.", "Should I replace it?"],
+      activeTopic: "rcac",
+      goal: "Check the reverse-cycle timer",
+    },
+    {
+      messages: ["I set the battery reserve to 24.", "Should I replace it?"],
+      activeTopic: "battery_vpp",
+      goal: "Choose a battery reserve setting",
+    },
+    {
+      messages: [
+        "My reverse-cycle split is working normally.",
+        "New topic: my home battery. I set it to 24.",
+        "Should I replace it?",
+      ],
+      activeTopic: "rcac",
+      goal: "Check whether the reverse-cycle split should be replaced",
+    },
+  ];
+  for (const [index, item] of rejectedContexts.entries()) {
+    const negativeFixture = {
+      ...loaded.fixture,
+      turns: item.messages.map((_, messageIndex) => ({
+        id: `negative-${index}-${messageIndex + 1}`,
+      })),
+      conversationAssertions: [assertion],
+    };
+    const negativeObservations = item.messages.map((message, messageIndex) => trajectoryObservation(
+      `negative-${index}-${messageIndex + 1}`,
+      {
+        message,
+        visibleAnswer: messageIndex < item.messages.length - 1
+          ? "That setting needs context."
+          : "Check whether the room reaches 24°C.",
+        continuation: {
+          ...trajectoryObservation("context").continuation,
+          activeTopic: item.activeTopic,
+          goal: item.goal,
+        },
+      },
+    ));
+    assert.deepEqual(
+      evaluateSurgeConversationAssertions(negativeFixture, negativeObservations).map((failure) => failure.code),
+      ["quantity_not_grounded"],
+      item.messages[0],
+    );
+  }
 });
 
 test("trajectory rejection diagnostics are bounded and redact credential-shaped text", () => {

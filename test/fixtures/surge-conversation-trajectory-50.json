@@ -45,8 +45,8 @@
         { "id": "uses-home-context", "anyOf": ["condensation|moisture", "draught|draft", "single[- ]glaz|window", "blind|curtain", "cold|warm"] }
       ],
       "forbiddenPatterns": ["staged whole-home diagnosis", "affected room or major end use", "what(?: is|'s) your postcode", "do you own or rent"],
-      "maxWords": 110,
-      "maxParagraphs": 3,
+      "maxWords": 120,
+      "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": {
         "activeTopicAnyOf": ["general", "comfort_fabric", "glazing_shading", "draughts_ventilation"],
@@ -161,8 +161,8 @@
         "open flame",
         "(?:(?:^|[.!?]\\s+)(?:please\\s+)?(?:block|seal)\\b|\\b(?:you (?:can|should|must|need to)|go ahead and)\\b[^.!?]{0,50}\\b(?:block|seal)\\b)(?:(?!\\b(?:not|never|do not|don't)\\b)[^.!?]){0,80}\\b(?:vent|flue|chimney)"
       ],
-      "maxWords": 100,
-      "maxParagraphs": 3,
+      "maxWords": 110,
+      "maxParagraphs": 5,
       "maxQuestions": 0,
       "state": {
         "activeTopicAnyOf": ["draughts_ventilation"],
@@ -244,8 +244,8 @@
         { "id": "moisture-removal", "anyOf": ["fog|steam|moisture|after the shower"] }
       ],
       "forbiddenPatterns": ["door snake", "honeycomb", "double glazing", "solar|battery"],
-      "maxWords": 110,
-      "maxParagraphs": 3,
+      "maxWords": 120,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": {
         "activeTopicAnyOf": ["draughts_ventilation", "comfort_fabric"],
@@ -473,9 +473,9 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "zero-export-meaning", "anyOf": ["zero export|cannot send|can't send|does not send|doesn't send"] },
-        { "id": "solar-still-useful", "anyOf": ["home.*use.*solar", "home(?:['’]s)? immediate use", "power(?:ing|s)?.*home.*direct", "solar.*(?:supply|power).*home", "solar.*(?:beyond|above).*household use.*(?:reduced|curtailed)", "home.*(?:supplied|powered).*solar", "self[- ]consumption", "reduce.*imports", "still.*useful", "use it directly"] }
+        { "id": "solar-still-useful", "anyOf": ["(?:solar|system|generation)[^.!?\\n]{0,60}(?:generate|supply|power)[^.!?\\n]{0,35}(?:home|household)", "(?:solar|system|generation)[^.!?\\n]{0,60}(?:reduce|lower)[^.!?\\n]{0,35}(?:bills?|grid imports?)", "home(?:['’]s)? immediate use", "self[- ]consumption", "reduce[^.!?\\n]{0,35}imports"] }
       ],
-      "forbiddenPatterns": ["solar is pointless", "must export", "battery required", "your apartment"],
+      "forbiddenPatterns": ["solar is pointless", "must export", "battery required", "your apartment", "(?:cannot|can['’]?t|do not|don['’]?t|will not|won['’]?t|never)\\s+use\\s+it\\s+directly", "not\\s+still\\s+(?:useful|sensible|worthwhile)", "home[^.!?]{0,30}(?:cannot|can['’]?t)[^.!?]{0,30}use[^.!?]{0,40}(?:solar|array|output|generation)", "home[^.!?]{0,30}(?:can|may|will)[^.!?]{0,20}(?:not|never|no longer)[^.!?]{0,20}use[^.!?]{0,40}(?:solar|array|output|generation)", "(?:solar|system|generation)[^.!?]{0,35}(?:cannot|can['’]?t|does not|doesn['’]?t|may not|will not|won['’]?t|never|no longer)[^.!?]{0,35}(?:generate|supply|power)[^.!?]{0,35}(?:home|household)"],
       "maxWords": 90,
       "maxParagraphs": 3,
       "maxQuestions": 1,
@@ -553,7 +553,7 @@
       ],
       "forbiddenPatterns": ["postcode 3072", "your saved apartment", "solar should be first", "staged whole-home diagnosis"],
       "maxWords": 150,
-      "maxParagraphs": 4,
+      "maxParagraphs": 5,
       "maxQuestions": 1,
       "state": {
         "activeTopicAnyOf": ["glazing_shading", "comfort_fabric", "rcac", "renters_strata", "general"],

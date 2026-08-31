@@ -319,10 +319,16 @@ function text(value: unknown, maximum: number) {
   return clipSurgeTextAtBoundary(clean, maximum);
 }
 
-function modelVisibleFieldsFitCharacterLimits(record: Record<string, unknown>) {
+function modelVisibleFieldsFitCharacterLimits(
+  record: Record<string, unknown>,
+  stripValidatedOfficialCitations = false,
+) {
   const fits = (value: unknown, maximum: number) => (
     typeof value !== "string"
-    || value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().length <= maximum
+    || (stripValidatedOfficialCitations ? stripSurgePublicLinksAndCitationLines(value) : value)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+      .trim()
+      .length <= maximum
   );
   return fits(record.verdict, 360)
     && fits(record.reason, 700)
@@ -536,28 +542,34 @@ type ValidatedOfficialWebEvidence = {
 
 function citationEvidenceText(citation: ProviderUrlCitation) {
   const value = citation.annotationText;
-  const sentenceBoundaryBefore = (fromIndex: number) => Math.max(
-    value.lastIndexOf(".", fromIndex),
-    value.lastIndexOf("!", fromIndex),
-    value.lastIndexOf("?", fromIndex),
-    value.lastIndexOf("\n", fromIndex),
-  );
+  const annotatedSpan = value.slice(citation.startIndex, citation.endIndex).trim();
+  const annotationIsCitationMarker = /^\(?\s*\[[^\]\r\n]{1,200}\]\(\s*https?:\/\//i.test(annotatedSpan);
+  if (!annotationIsCitationMarker) {
+    return stripSurgePublicLinksAndCitationLines(annotatedSpan).trim();
+  }
+  const sentenceBoundaryBefore = (fromIndex: number) => {
+    for (let index = Math.min(fromIndex, value.length - 1); index >= 0; index -= 1) {
+      const candidate = value[index];
+      if (
+        candidate === "!"
+        || candidate === "?"
+        || candidate === "\n"
+        || candidate === '"'
+      ) return index;
+      if (
+        candidate === "."
+        && !(/\d/.test(value[index - 1] || "") && /\d/.test(value[index + 1] || ""))
+      ) return index;
+    }
+    return -1;
+  };
   let start = sentenceBoundaryBefore(citation.startIndex - 1) + 1;
   if (!value.slice(start, citation.startIndex).trim()) {
     start = sentenceBoundaryBefore(start - 2) + 1;
   }
-  const annotationEndsAtBoundary = /[.!?\n]/.test(value[citation.endIndex - 1] || "");
-  const boundaryCandidates = annotationEndsAtBoundary
-    ? []
-    : [".", "!", "?", "\n"]
-        .map((boundary) => value.indexOf(boundary, citation.endIndex))
-        .filter((index) => index >= 0);
-  const end = annotationEndsAtBoundary
-    ? citation.endIndex
-    : boundaryCandidates.length
-      ? Math.min(...boundaryCandidates) + 1
-      : citation.endIndex;
-  return value.slice(start, Math.max(end, citation.endIndex)).trim();
+  // A marker following a claim authorizes only the immediately preceding
+  // sentence. Exclude the marker URL itself so path numbers cannot become evidence.
+  return value.slice(start, citation.startIndex).trim();
 }
 
 function validatedOfficialWebEvidence(
@@ -618,17 +630,14 @@ function validatedOfficialWebEvidence(
           .join("\n"),
         citedClaimText: validatedCitations
           .filter(({ canonicalUrl }) => seen.has(canonicalUrl))
-          .map(({ citation }) => citation.annotationText.slice(
-            citation.startIndex,
-            citation.endIndex,
-          ).trim())
+          .map(({ citation }) => citationEvidenceText(citation))
           .filter(Boolean)
           .join("\n"),
       }
     : null;
 }
 
-function sentenceMakesExternallyVerifiableCurrentClaim(value: string) {
+function clauseMakesExternallyVerifiableCurrentClaim(value: string) {
   const sentence = value.trim();
   if (!sentence) return false;
   if (/^(?:check|confirm|ask|compare|read|review|look|contact|make sure)\b/i.test(sentence)) {
@@ -657,6 +666,16 @@ function sentenceMakesExternallyVerifiableCurrentClaim(value: string) {
     /\b(?:scheme|program(?:me)?|rebate|applications?|round|offer|registration|product|model|installer|provider|assessor|activity|upgrade)\b[^.!?]{0,55}\b(?:is|are|remains?|has been|have been|was|were)\s+(?:not\s+)?(?:open|closed|accepted|available|unavailable|approved|accredited|authorised|registered|recalled|suspended|paused|ended|active|inactive)\b/i.test(sentence)
   ) return true;
   return /\b(?:scheme|program(?:me)?|rebate|certificate|tariff|feed[- ]?in rate)\b[^.!?]{0,80}\b(?:covers?|includes?|excludes?|requires?|offers?|provides?|pays?|applies?|accepts?|allows?)\b/i.test(sentence);
+}
+
+function sentenceMakesExternallyVerifiableCurrentClaim(value: string) {
+  const sentence = value.trim();
+  if (!sentence) return false;
+  const lookupInability = /\b(?:(?:I|we|it|this|that|the (?:value|price|rate|status|date|detail|information))\s+)?(?:could not|couldn['’]?t|cannot|can['’]?t|unable to|not able to|did not|didn['’]?t)\s+(?:be\s+)?(?:confirm(?:ed)?|verif(?:y|ied)|find|establish(?:ed)?)\b/i;
+  return sentence
+    .split(/\s*(?:;|,\s*(?:but|and|so)|\b(?:but|however|although|while|so)\b)\s*/i)
+    .some((clause) => !lookupInability.test(clause)
+      && clauseMakesExternallyVerifiableCurrentClaim(clause));
 }
 
 function officialCurrentClaimsHaveCitationSupport(
@@ -823,6 +842,10 @@ function modelRepairInstructions(
 - Coverage repair: answer every requested part. For ways, options or tips, rank the practical choices and give the action, why it helps and its main fit or limit.`;
   }
   if (stage !== "quantity_grounding") return MODEL_REPAIR_INSTRUCTIONS;
+  if (request?.officialWebSearch) {
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Official quantity repair: search the same allowed official domains again. Put each numeric claim and its web citation in the same sentence. If one source supports several numeric sentences, cite every sentence separately or combine the supported values into one cited sentence. Omit any value that is not directly supported by its adjacent citation.`;
+  }
   return `${MODEL_REPAIR_INSTRUCTIONS}
 - Quantity repair: remove every number not explicitly supplied or evidenced. Do not derive a percentage, ratio, difference, total or average unless currentQuestion explicitly asks for that calculation.`;
 }
@@ -2537,12 +2560,32 @@ function controlledArithmeticOperandText(
     : resolvedArithmeticOperandText(request);
 }
 
-function questionSuppliesImplicitCelsiusSetpoint(
-  request: SurgeModelRequest,
+export function surgeTextsSupplyImplicitCelsiusSetpoint(
+  sourceTexts: readonly string[],
+  decisionContext: string,
   claimedValue: number,
 ) {
   if (claimedValue < 10 || claimedValue > 35) return false;
   const settingPattern = /\b(?:set(?:ting)?(?:\s+(?:it|the (?:heater|air ?con|thermostat|temperature)))?\s*(?:to|at|on)|thermostat(?:\s+(?:is|at|to))?|temperature setting(?:\s+(?:is|at|to))?)\s*(-?\d+(?:\.\d+)?)\b/gi;
+  const suppliedSetpoint = sourceTexts.some((source) => {
+    if (/\btimer\b/i.test(source)) return false;
+    return [...source.matchAll(settingPattern)].some((match) => {
+      const value = Number(match[1]);
+      if (!Number.isFinite(value) || !closeQuantity(value, claimedValue)) return false;
+      const suffix = source.slice((match.index || 0) + match[0].length, (match.index || 0) + match[0].length + 20);
+      return !/^\s*(?:minutes?|mins?|hours?|days?|%|kW|kWh|L|litres?|amps?|volts?)\b/i.test(suffix);
+    });
+  });
+  if (!suppliedSetpoint) return false;
+  return /\b(?:reverse[- ]?cycle|split(?: system)?|air ?con(?:ditioner)?|heater|heating|cooling|thermostat|room temperature)\b/i.test(
+    `${sourceTexts.join("\n")}\n${decisionContext}`,
+  );
+}
+
+function questionSuppliesImplicitCelsiusSetpoint(
+  request: SurgeModelRequest,
+  claimedValue: number,
+) {
   const resolution = resolveSurgeConversationReference(
     request.message,
     request.recentTurns,
@@ -2554,21 +2597,11 @@ function questionSuppliesImplicitCelsiusSetpoint(
       ? resolution.anchorUserMessages
       : []),
   ];
-  const suppliedSetpoint = setpointTexts.some((source) => {
-    if (/\btimer\b/i.test(source)) return false;
-    return [...source.matchAll(settingPattern)].some((match) => {
-      const value = Number(match[1]);
-      if (!Number.isFinite(value) || !closeQuantity(value, claimedValue)) return false;
-      const suffix = source.slice((match.index || 0) + match[0].length, (match.index || 0) + match[0].length + 20);
-      return !/^\s*(?:minutes?|mins?|hours?|days?|%|kW|kWh|L|litres?|amps?|volts?)\b/i.test(suffix);
-    });
-  });
-  if (!suppliedSetpoint) return false;
-  const decisionContext = [
-    ...setpointTexts,
+  return surgeTextsSupplyImplicitCelsiusSetpoint(
+    setpointTexts,
     request.continuation?.goal || "",
-  ].join("\n");
-  return /\b(?:reverse[- ]?cycle|split(?: system)?|air ?con(?:ditioner)?|heater|heating|cooling|thermostat|room temperature)\b/i.test(decisionContext);
+    claimedValue,
+  );
 }
 
 function controlledQuantityIsGrounded(
@@ -3010,8 +3043,7 @@ function providerBody(
   };
 }
 
-function modelRepairIsAllowed(request: SurgeModelRequest) {
-  if (request.officialWebSearch) return false;
+function modelRepairIsPossible(request: SurgeModelRequest) {
   if (isSurgeImplementationIdentityQuestion(request.message)) return false;
   if (isSurgeExplicitlyOutsideScope(request.message)) return false;
   return !composeSurgeSafetyAnswer(
@@ -3020,6 +3052,16 @@ function modelRepairIsAllowed(request: SurgeModelRequest) {
       .filter((turn) => turn.role === "user")
       .map((turn) => turn.content),
   );
+}
+
+function modelRepairIsAllowed(
+  request: SurgeModelRequest,
+  stage?: SurgeModelFailureStage,
+) {
+  if (request.officialWebSearch) {
+    return stage === "quantity_grounding" && modelRepairIsPossible(request);
+  }
+  return modelRepairIsPossible(request);
 }
 
 function safeModelRepairStage(
@@ -3048,16 +3090,25 @@ function prepareProviderRequest(
   );
   let repairSerializedBodyBytes = 0;
   let repairCallMicroUsd = 0;
-  const maxProviderCalls: 1 | 2 = !selectedRepairStage && modelRepairIsAllowed(request)
+  const maxProviderCalls: 1 | 2 = !selectedRepairStage && modelRepairIsPossible(request)
     ? 2
     : 1;
   if (maxProviderCalls === 2) {
-    repairSerializedBodyBytes = Math.max(...SAFE_MODEL_REPAIR_STAGES.map((stage) => (
+    const repairStages = request.officialWebSearch
+      ? ["quantity_grounding"] as const
+      : SAFE_MODEL_REPAIR_STAGES;
+    repairSerializedBodyBytes = Math.max(...repairStages.map((stage) => (
       new TextEncoder().encode(JSON.stringify(providerBody(request, context, stage))).byteLength
     )));
     if (repairSerializedBodyBytes > MAX_PROVIDER_INPUT_BYTES) return null;
+    const repairMaxOutputTokens = request.officialWebSearch
+      ? MAX_OFFICIAL_WEB_OUTPUT_TOKENS
+      : MAX_PROVIDER_OUTPUT_TOKENS;
     repairCallMicroUsd = repairSerializedBodyBytes * SOL_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE
-      + MAX_PROVIDER_OUTPUT_TOKENS * SOL_OUTPUT_MICRO_USD_PER_TOKEN;
+      + repairMaxOutputTokens * SOL_OUTPUT_MICRO_USD_PER_TOKEN
+      + (request.officialWebSearch
+        ? WEB_SEARCH_MICRO_USD_PER_CALL * MAX_WEB_SEARCH_TOOL_CALLS
+        : 0);
   }
   const estimate: SurgeModelRequestEstimate = {
     model: SUPPORTED_MODEL,
@@ -3150,7 +3201,7 @@ export async function generateSurgeModelAnswer(
     reportCandidate?: () => void,
   ): Promise<SurgeModelResult | null> => {
     if (!internalDependencies[SURGE_MODEL_REJECTION_REPORTED]) reportCandidate?.();
-    if (!secondAttemptUsed && safeModelRepairStage(stage) && modelRepairIsAllowed(request)) {
+    if (!secondAttemptUsed && safeModelRepairStage(stage) && modelRepairIsAllowed(request, stage)) {
       clearTimeout(timeout);
       return generateSurgeModelAnswer(request, {
         ...dependencies,
@@ -3267,27 +3318,39 @@ export async function generateSurgeModelAnswer(
       return retryInvalidProviderOutput("response_output_object");
     }
     const record = parsed as Record<string, unknown>;
-    const visibleFieldsFitCharacterLimits = modelVisibleFieldsFitCharacterLimits(record);
+    const visibleFieldsFitCharacterLimits = modelVisibleFieldsFitCharacterLimits(
+      record,
+      Boolean(officialWebEvidence),
+    );
     const identityQuestion = isSurgeImplementationIdentityQuestion(request.message);
-    const legacyAnswerText = text(record.answer, MAX_MODEL_ANSWER_CHARS);
-    const rawVerdict = text(record.verdict, 360);
-    const rawReason = text(record.reason, 700);
-    const rawSteps = textList(record.steps, 3, 360);
-    const rawExtraDetail = text(record.extraDetail, 1_200);
-    const rawFollowUp = oneFollowUp(record.followUpQuestion);
+    const visibleFieldValue = (value: unknown) => (
+      officialWebEvidence && typeof value === "string"
+        ? stripSurgePublicLinksAndCitationLines(value)
+        : value
+    );
+    const legacyAnswerText = text(visibleFieldValue(record.answer), MAX_MODEL_ANSWER_CHARS);
+    const rawVerdict = text(visibleFieldValue(record.verdict), 360);
+    const rawReason = text(visibleFieldValue(record.reason), 700);
+    const rawSteps = textList(
+      Array.isArray(record.steps) ? record.steps.map(visibleFieldValue) : record.steps,
+      3,
+      360,
+    );
+    const rawExtraDetail = text(visibleFieldValue(record.extraDetail), 1_200);
+    const rawFollowUp = oneFollowUp(visibleFieldValue(record.followUpQuestion));
     const coveredQuestionPartIndexes = Array.isArray(record.coveredQuestionPartIndexes)
       ? record.coveredQuestionPartIndexes
       : [];
     const continuation = parseSurgeConversationState(record.state);
     const continuationText = continuation ? JSON.stringify(continuation) : "";
     const rawGeneratedText = [
-      rawVerdict,
-      legacyAnswerText,
-      rawReason,
-      ...rawSteps,
-      rawExtraDetail,
-      rawFollowUp,
-    ].join("\n");
+      record.verdict,
+      record.answer,
+      record.reason,
+      ...(Array.isArray(record.steps) ? record.steps : []),
+      record.extraDetail,
+      record.followUpQuestion,
+    ].filter((value): value is string => typeof value === "string").join("\n");
     const normalizedGeneratedText = rawGeneratedText.toLowerCase().replace(/\s+/g, " ");
     if (prepared.context.privateReferenceNames.some((name) => (
       normalizedGeneratedText.includes(name.toLowerCase().replace(/\s+/g, " "))
