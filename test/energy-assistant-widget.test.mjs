@@ -1035,6 +1035,8 @@ test("page navigation stays restricted and validated official citations render a
   assert.match(answerCards, /singleParagraphAnswerFor\(message, context\.audience\)/);
   assert.match(widget, /function usesSingleParagraphAnswer\(message: AssistantMessage\) \{[\s\S]{0,180}message\.practicalSteps\.length < 2/);
   assert.match(answerCards, /<ol className=\{styles\.practicalSteps\}>[\s\S]{0,180}message\.practicalSteps\.map/);
+  assert.match(styles, /\.practicalSteps\s*\{[^}]*list-style:\s*decimal outside;/);
+  assert.match(styles, /\.practicalSteps > li::marker\s*\{/);
   assert.match(answerCards, /message\.citations\.length > 0/);
   assert.match(answerCards, /className=\{styles\.officialSources\}/);
   assert.match(answerCards, /aria-label="Official sources"/);

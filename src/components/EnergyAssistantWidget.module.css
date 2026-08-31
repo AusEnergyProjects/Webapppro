@@ -1095,8 +1095,14 @@
 .practicalSteps {
   display: grid;
   gap: 7px;
+  list-style: decimal outside;
   margin: 0;
-  padding-left: 20px;
+  padding-left: 28px;
+}
+
+.practicalSteps > li::marker {
+  color: #087757;
+  font-weight: 850;
 }
 
 .extraDetail {
