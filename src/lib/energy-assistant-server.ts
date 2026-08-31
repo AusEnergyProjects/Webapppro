@@ -996,6 +996,10 @@ function hasExactProductDetail(message: string) {
 
 const OFFICIAL_SOURCE_DIRECTORY_REQUEST = /\b(?:official|government|scheme administrator)\b[^?]{0,55}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b|\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b[^?]{0,55}\b(?:official|government|scheme administrator)\b/i;
 
+function explainsBothStcsAndVeecs(value: string) {
+  return /\bSTCs?\b/i.test(value) && /\bVEECs?\b/i.test(value);
+}
+
 function maintainedEvidenceAnswersMutableQuestion(
   kind: SurgeOfficialWebSearchPlan["kind"],
   message: string,
@@ -1994,11 +1998,17 @@ async function ask(request: Request, dependencies: ServerDependencies) {
                  planPriorityAnswer,
               )
               && !isGenericNonAnswer(generated.answer, generated.presentation || null)) {
+              const attachDualCertificateReferences = !officialWebSearch
+                && explainsBothStcsAndVeecs(message)
+                && explainsBothStcsAndVeecs(policyText(generated.answer));
               const maintainedDirectoryCitations = !officialWebSearch
-                && OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message)
-                ? referenceAnswer.citations.filter((citation) => (
-                    citation.sourceTier === "primary_official" && !citation.stale
-                  ))
+                && (OFFICIAL_SOURCE_DIRECTORY_REQUEST.test(message) || attachDualCertificateReferences)
+                ? [...referenceAnswer.citations, ...composedAnswer.citations]
+                    .filter((citation, index, all) => (
+                      citation.sourceTier === "primary_official"
+                      && !citation.stale
+                      && all.findIndex((candidate) => candidate.url === citation.url) === index
+                    ))
                 : [];
               answer = maintainedDirectoryCitations.length
                 ? {
@@ -2006,7 +2016,9 @@ async function ask(request: Request, dependencies: ServerDependencies) {
                     citations: [
                       ...generated.answer.citations,
                       ...maintainedDirectoryCitations,
-                    ].slice(0, 8),
+                    ].filter((citation, index, all) => (
+                      all.findIndex((candidate) => candidate.url === citation.url) === index
+                    )).slice(0, 8),
                   }
                 : generated.answer;
               presentation = generated.presentation || null;

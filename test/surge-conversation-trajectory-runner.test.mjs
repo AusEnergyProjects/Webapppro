@@ -562,8 +562,15 @@ test("long-range recall asserts structured practical steps rather than rendered 
   ));
   const turn = loaded.fixture.turns.find((item) => item.id === assertion.turn);
   const fixture = { ...loaded.fixture, turns: [turn], conversationAssertions: [assertion] };
+  const moisturePriorityClause = turn.clauses.find((item) => item.id === "retains-moisture-first-priority");
+  assert.equal(moisturePriorityClause.anyOf.some((pattern) => (
+    new RegExp(pattern, "i").test("For your apartment, start with the windows, then moisture control, then the front-door gap.")
+  )), false);
+  assert.equal(moisturePriorityClause.anyOf.some((pattern) => (
+    new RegExp(pattern, "i").test("For your apartment, start by checking the bathroom fan and condensation first.")
+  )), true);
   const answer = trajectoryObservation(turn.id, {
-    visibleAnswer: "Seal under the front door. Add honeycomb blinds. Keep the working split.",
+    visibleAnswer: "Start with moisture control within the $1,500 budget. Seal under the front door. Add honeycomb blinds. Keep the working split.",
     practicalStepCount: 3,
   });
   assert.deepEqual(evaluateSurgeConversationAssertions(fixture, [answer]), []);

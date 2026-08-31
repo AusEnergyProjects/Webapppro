@@ -5413,6 +5413,11 @@ export function composeEnergyAssistantAnswer(
   const asksForOfficialCertificateSources = /\b(?:official|government|scheme administrator)\b[^?]{0,55}\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b|\b(?:sources?|links?|pages?|websites?|registers?|calculators?|guidance)\b[^?]{0,55}\b(?:official|government|scheme administrator)\b/i.test(query)
     && /\bSTCs?\b/i.test(userConversation)
     && /\b(?:VEECs?|Victorian Energy Upgrades?|VEU)\b/i.test(userConversation);
+  const asksForPlainDualCertificateDefinition = /\bSTCs?\b/i.test(query)
+    && /\b(?:VEECs?|Victorian Energy Upgrades?|VEU)\b/i.test(query)
+    && /\b(?:what are|what do[^?]{0,30}mean|explain|normal words?|plain (?:english|words?)|simple words?)\b/i.test(query)
+    && !/\b(?:current|today|latest|now|values?|worth|prices?|rates?|trading|market|how much|dollars?|per certificate|clearing house|spot|gross|net|eligib(?:le|ility)|qualif(?:y|ies|ication)|calculat(?:e|es|ion)|how many|quotes?|quoted|discounts?)\b/i.test(query)
+    && !asksForOfficialCertificateSources;
   const duplicateStcDiscountQuestion = /\bSTCs?\b/i.test(query)
     && (/\b(?:another|second|twice|double|duplicat(?:e|ed|ion)|two|both|again|already)\b[\s\S]{0,120}\b(?:rebate|discount|benefit|deduct|deducted|subtract|subtracts|subtracted|subtraction|line item|quote line|amount|value|GST)\b/i.test(query)
       || /\b(?:before|pre)\s+GST\b[\s\S]{0,100}\b(?:after|post)\s+GST\b/i.test(query)
@@ -5480,6 +5485,23 @@ export function composeEnergyAssistantAnswer(
         "Which appliance or tariff is driving my bill?",
         "What do I need before requesting an upgrade quote?",
       ],
+    });
+  }
+
+  if (asksForPlainDualCertificateDefinition) {
+    return structured("rebates_certificates", {
+      directAnswer:
+        "STCs and VEECs are certificates that can reduce the upfront price of eligible home-energy work. STCs come from the national Small-scale Renewable Energy Scheme for eligible renewable systems. VEECs come from Victorian Energy Upgrades for eligible efficiency work in Victoria. An installer or certificate provider usually creates or assigns them and shows their value as a quote discount. They are not fixed cash rebates: eligibility, certificate numbers and the customer's net discount depend on the exact product, installation, date, location, scheme rules and provider fees.",
+      status: "answered",
+      citations: officialCitationsById([
+        "cer-stc-entitlement-calculation",
+        "veu-water-space-activity-guide-v3-19",
+      ]),
+      confidence: "high",
+      assumptions: ["The question asks for a plain definition, not a current certificate price or eligibility decision."],
+      practicalSteps: [],
+      toolActions: [],
+      suggestedQuestions: [],
     });
   }
 

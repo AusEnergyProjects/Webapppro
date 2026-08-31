@@ -1864,21 +1864,21 @@ test("a returned prior comparison may answer every remembered option without a f
   assert.equal(result.answer.directAnswer, candidate);
 });
 
-test("a whole-home action order may use retained same-home decisions without opening unrelated topic drift", async () => {
+test("a whole-home action order repairs stale budget and retained moisture-priority drift", async () => {
   const message = "Back to my home only: give me the top three actions in order using what I told you. No jargon and no more questions.";
   const continuation = state({
     activeTopic: "rcac",
     goal: "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
     lastAnswerSummary: "Keep the working reverse-cycle split and spend first on the apartment's comfort problems.",
     ledger: {
-      turn: 3,
-      activeDecisionId: "decision_split",
+      turn: 5,
+      activeDecisionId: "decision_fan_persistence",
       subjects: [{
         id: "saved_home",
         kind: "saved_home",
         label: "Saved home",
         facts: [{ key: "postcode", value: "3072", source: "plan", updatedTurn: 1 }],
-        lastTouchedTurn: 3,
+        lastTouchedTurn: 5,
       }],
       decisions: [
         {
@@ -1891,7 +1891,7 @@ test("a whole-home action order may use retained same-home decisions without ope
           openItems: [],
           pendingQuestion: "",
           status: "resolved",
-          lastTouchedTurn: 3,
+          lastTouchedTurn: 4,
         },
         {
           id: "decision_windows",
@@ -1899,14 +1899,52 @@ test("a whole-home action order may use retained same-home decisions without ope
           topic: "glazing_shading",
           goal: "Stop air under the front door and improve the single-glazed windows within the $1,500 budget",
           facts: [
-            { key: "budget", value: "$1,500", source: "chat", updatedTurn: 1 },
-            { key: "glazing", value: "mostly_single_glazed", source: "chat", updatedTurn: 1 },
+            { key: "budget", value: "$1,500", source: "chat", updatedTurn: 3 },
+            { key: "glazing", value: "mostly_single_glazed", source: "chat", updatedTurn: 3 },
           ],
           outcomeSummary: "Use a reversible door snake, then close-fitting honeycomb blinds or thermal curtains.",
           openItems: [],
           pendingQuestion: "",
           status: "resolved",
+          lastTouchedTurn: 3,
+        },
+        {
+          id: "decision_initial_priority",
+          subjectIds: ["saved_home"],
+          topic: "general",
+          goal: "Where should I start based on the answers I already gave you?",
+          facts: [
+            { key: "comfort_concerns", value: "condensation_damp_or_mould", source: "chat", updatedTurn: 1 },
+          ],
+          outcomeSummary: "Start with moisture control before sealing gaps or upgrading windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
           lastTouchedTurn: 1,
+        },
+        {
+          id: "decision_old_budget",
+          subjectIds: ["saved_home"],
+          topic: "rcac",
+          goal: "Check the working split within the first-stage budget",
+          facts: [{ key: "first_stage_budget", value: "Under $2,000", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Keep the working split rather than replacing it.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+        {
+          id: "decision_fan_persistence",
+          subjectIds: ["saved_home"],
+          topic: "draughts_ventilation",
+          goal: "I fixed the bathroom fan, but the condensation remains",
+          facts: [{ key: "comfort_concerns", value: "condensation remains", source: "chat", updatedTurn: 5 }],
+          outcomeSummary: "The fan was fixed, but the condensation remains and still needs moisture control.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 5,
         },
       ],
     },
@@ -1917,44 +1955,63 @@ test("a whole-home action order may use retained same-home decisions without ope
     { role: "user", content: "Briefly, Mum says her gas heater is expensive. Does that change what I should do at my apartment?" },
     { role: "assistant", content: "No. Mum's home is separate and does not change the plan for your apartment." },
   ];
-  const candidate = "Start with moisture control, then improve the windows, while keeping your working reverse-cycle split.\n\nThis order targets your condensation, winter discomfort and bills without wasting money replacing effective heating.\n\nUse the bathroom exhaust fan whenever showering, check that it removes air properly, and clean visible condensation promptly.\n\nAdd close-fitting honeycomb blinds or thermal curtains with pelmets to the single-glazed windows, and safely seal obvious window and door gaps without blocking vents.\n\nKeep using the reverse-cycle split. Clean its filters and arrange servicing only if performance declines.";
-  let acceptedCalls = 0;
-  const acceptedFailures = [];
-  const accepted = await generateSurgeModelAnswer(request({
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
     message,
     continuation,
     recentTurns,
-  }), {
-    apiKey: "test-api-key",
-    fetch: async () => {
-      acceptedCalls += 1;
-      return jsonResponse(modelPayload({ answer: candidate, state: continuation }));
+    planContext: {
+      version: 1,
+      source: "home_energy_plan",
+      facts: [{ key: "first_stage_budget", value: "Under $2,000" }],
     },
-    onFailure: (failure) => acceptedFailures.push(failure),
-  });
-
-  assert.ok(accepted, JSON.stringify(acceptedFailures));
-  assert.equal(acceptedCalls, 1);
-
-  const rejectedFailures = [];
-  const rejected = await generateSurgeModelAnswer(request({
-    message,
-    continuation,
-    recentTurns,
   }), {
     apiKey: "test-api-key",
-    fetch: async () => jsonResponse(modelPayload({
-      answer: "Install rooftop solar first. Then add close-fitting honeycomb blinds or thermal curtains to the single-glazed windows and seal the front-door draught. Third, keep using the working reverse-cycle split rather than replacing it.",
-      state: continuation,
-    })),
-    onFailure: (failure) => rejectedFailures.push(failure),
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload(calls.length === 1 ? {
+        answerType: "starting_plan",
+        verdict: "Start with the windows, then moisture control, then the front-door gap.",
+        reason: "This order targets winter cold and condensation within the older under-$2,000 budget while keeping the working split.",
+        steps: [
+          "Add close-fitting honeycomb blinds or thermal curtains to the single-glazed windows.",
+          "Check the bathroom fan and clean visible condensation.",
+          "Use a removable door snake at the front door.",
+        ],
+        state: continuation,
+      } : {
+        answerType: "starting_plan",
+        verdict: "Start with moisture control, then seal the front-door gap, then improve the windows.",
+        reason: "That keeps the unresolved condensation risk first and uses your latest $1,500 budget without replacing the working split.",
+        steps: [
+          "Check that the bathroom fan moves air properly and clear persistent condensation.",
+          "Use a removable door snake, then fit a suitable door seal if the breeze remains.",
+          "Add close-fitting honeycomb blinds or thermal curtains to the cold single-glazed windows.",
+        ],
+        extraDetail: "Keep using the reverse-cycle split while it still heats properly.",
+        state: continuation,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
   });
 
-  assert.equal(rejected, null);
-  assert.deepEqual(rejectedFailures, [{
-    code: "provider_output_rejected",
-    stage: "topic_drift",
-  }]);
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 2);
+  const initialContext = JSON.parse(calls[0].input[1].content[0].text);
+  const repairContext = JSON.parse(calls[1].input[1].content[0].text);
+  assert.deepEqual(initialContext.conversationSynthesis, {
+    latestExplicitBudget: "$1,500",
+    supersededBudgets: ["Under $2,000"],
+    retainedFirstPriority: "moisture_before_windows",
+  });
+  assert.equal(repairContext.repair.failureStage, "priority_drift");
+  assert.match(calls[1].input[0].content[0].text, /obey conversationSynthesis/i);
+  assert.match(result.answer.directAnswer, /^Start with moisture control/i);
+  assert.match(result.answer.directAnswer, /\$1,500/);
+  assert.doesNotMatch(result.answer.directAnswer, /\$2,000/);
+  assert.equal(result.presentation.steps.length, 3);
+  assert.deepEqual(failures, []);
 });
 
 test("an RCAC feasibility answer may check electrical supply but cannot direct an unrelated switchboard upgrade", async () => {
@@ -3597,25 +3654,39 @@ test("a structured plan keeps separate list items without losing material conten
 
 test("an explicitly requested three-action plan preserves all three structured steps", async () => {
   const failures = [];
+  const calls = [];
   const result = await generateSurgeModelAnswer(request({
     message: "Give me exactly three actions to reduce winter energy use.",
   }), {
     apiKey: "test-api-key",
-    fetch: async () => jsonResponse(structuredModelPayload({
-      answerType: "starting_plan",
-      verdict: "Start with the three changes that address the largest avoidable winter loads.",
-      reason: "They improve comfort before you spend money on larger equipment.",
-      steps: [
-        "Seal confirmed draughts without blocking required ventilation.",
-        "Check ceiling insulation coverage and repair safe accessible gaps.",
-        "Heat occupied rooms with an efficient reverse-cycle system.",
-      ],
-      extraDetail: "Measure the result before choosing the next upgrade.",
-    })),
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        answerType: "starting_plan",
+        verdict: "Start with the changes that address the largest avoidable winter loads.",
+        reason: "They improve comfort before you spend money on larger equipment.",
+        steps: calls.length === 1
+          ? [
+              "Seal confirmed draughts without blocking required ventilation.",
+              "Check ceiling insulation, then heat occupied rooms with an efficient reverse-cycle system.",
+            ]
+          : [
+              "Seal confirmed draughts without blocking required ventilation.",
+              "Check ceiling insulation coverage and repair safe accessible gaps.",
+              "Heat occupied rooms with an efficient reverse-cycle system.",
+            ],
+        extraDetail: "Measure the result before choosing the next upgrade.",
+      }));
+    },
     onFailure: (failure) => failures.push(failure),
   });
 
   assert.ok(result, JSON.stringify({ failures }));
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
   assert.equal(result.presentation.steps.length, 3);
   assert.deepEqual(result.answer.practicalSteps, [
     "Seal confirmed draughts without blocking required ventilation.",
@@ -3674,6 +3745,78 @@ test("a useful 127-word budget comparison is accepted instead of returning a val
   assert.match(result.answer.directAnswer, /existing split/i);
   assert.match(result.answer.directAnswer, /solar deposit/i);
   assert.deepEqual(failures, []);
+});
+
+test("named energy alternatives are repaired into one distinct step per option", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Ok, I have $1,500. Blinds, a solar deposit, or a new split?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse(structuredModelPayload({
+        answerType: "comparison",
+        verdict: "The three options solve different problems, and the $1,500 limit matters.",
+        reason: "Blinds address window comfort now, while solar approval and replacement of a working split need separate evidence.",
+        steps: calls.length === 1
+          ? ["Compare fitted blinds, a solar deposit and the existing reverse-cycle split before spending."]
+          : [
+              "Blinds or fitted thermal curtains can reduce discomfort at the cold windows.",
+              "A solar deposit should wait until roof rights, approval and the complete proposal are confirmed.",
+              "Keep the reverse-cycle split unless testing finds a fault or weak performance.",
+            ],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.equal(calls.length, 2);
+  assert.equal(
+    JSON.parse(calls[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.equal(result.presentation.steps.length, 3);
+  assert.deepEqual(failures, []);
+});
+
+test("an ordinary two-cause question may remain a short prose explanation", async () => {
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Can heat escape through a cold window or a draughty front door?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({
+      answer: "Yes. Heat can pass through cold window glass even when no air is moving, while a draughty front door lets warmed indoor air escape and cold outdoor air enter through the gap.",
+    })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify({ failures }));
+  assert.equal(result.presentation.steps.length, 0);
+  assert.deepEqual(failures, []);
+});
+
+test("mentioning three earlier actions does not force a new three-item answer", async () => {
+  for (const message of [
+    "Should I do those three things at once?",
+    "Tell me whether those three upgrades are safe.",
+  ]) {
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({ message }), {
+      apiKey: "test-api-key",
+      fetch: async () => jsonResponse(modelPayload({
+        answer: "Not necessarily. Stage and verify the work so each change is safe and its effect is clear before moving to the next one.",
+      })),
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, `${message}: ${JSON.stringify({ failures })}`);
+    assert.equal(result.presentation.steps.length, 0, message);
+    assert.deepEqual(failures, [], message);
+  }
 });
 
 test("structured compaction does not hide a missing battery quote facet", async () => {
@@ -4824,7 +4967,7 @@ test("an overall quote return repairs an answer that omits corrected finance and
       calls.push(calls.length + 1);
       return jsonResponse(modelPayload({
         answer: calls.length === 1
-          ? "No, the $5,900 hot-water quote is not clearly a good deal while switchboard work is extra."
+          ? "Not enough evidence to call it a good deal yet. The $5,900 after-rebate price does not reconcile with $68 a month for seven years totalling $5,712. The $330 fee may also be included or additional, while switchboard work is extra. Value also depends on the exact model, warranty, suitability for two people and complete installation scope."
           : "No, because the corrected finance is $188 short of $5,900, the $330 admin fee still needs a clear breakdown, and switchboard work is extra.",
         state: state({ activeTopic: "heat_pump_hot_water", goal: "Review the complete hot-water quote" }),
       }));
@@ -6448,8 +6591,15 @@ test("joined multi-topic explanations require every named topic without treating
     message: "Ok, I have $1,500. Blinds, a solar deposit, or a new split?",
   }), {
     apiKey: "test-api-key",
-    fetch: async () => jsonResponse(modelPayload({
-      answer: "Blinds first, unless the existing reverse-cycle unit cannot heat the main living area adequately. Put the $1,500 toward close-fitting honeycomb blinds or thermal curtains on the worst single-glazed windows. Do not pay a solar deposit until apartment roof, metering and owners-corporation feasibility are confirmed. Replace the split only if effective heating is missing or testing finds a costly fault.",
+    fetch: async () => jsonResponse(structuredModelPayload({
+      answerType: "comparison",
+      verdict: "Blinds address the immediate comfort issue within the $1,500 limit.",
+      reason: "The solar deposit and replacement split need separate evidence before spending.",
+      steps: [
+        "Use close-fitting honeycomb blinds or thermal curtains on the worst single-glazed windows.",
+        "Hold the solar deposit until apartment roof, metering and owners-corporation feasibility are confirmed.",
+        "Keep the reverse-cycle split unless effective heating is missing or testing finds a costly fault.",
+      ],
     })),
     onFailure: (failure) => everydayOptionFailures.push(failure),
   });

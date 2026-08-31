@@ -852,7 +852,7 @@
         "activeTopicAnyOf": ["products_ratings", "rebates_certificates", "heat_pump_hot_water"],
         "goalAnyOf": ["330|admin fee|quote|reasonable"],
         "factsExclude": [],
-        "pendingQuestion": "required_material"
+        "pendingQuestion": "optional_material"
       }
     },
     {
@@ -870,7 +870,7 @@
         "activeTopicAnyOf": ["products_ratings", "rebates_certificates", "heat_pump_hot_water"],
         "goalAnyOf": ["330|admin fee|quote|reasonable"],
         "factsExclude": [],
-        "pendingQuestion": "required_material"
+        "pendingQuestion": "optional_material"
       }
     },
     {
@@ -989,7 +989,7 @@
       "maxQuestions": 0,
       "state": {
         "activeTopicAnyOf": ["service_enquiry"],
-        "goalAnyOf": ["installer|best|enquiry|trade"],
+        "goalAnyOf": ["installer|best|enquir(?:y|ies)|trade"],
         "factsExclude": [],
         "pendingQuestion": "empty"
       }
@@ -999,11 +999,13 @@
       "message": "Back to my home, not Mum's: based on my saved answers and what I told you earlier, give me the top three things to do in order. No jargon and no more questions.",
       "sourcePolicy": "model_required",
       "clauses": [
+        { "id": "retains-moisture-first-priority", "anyOf": ["^(?:For[^.!?]{0,80}[,.]\\s*)?(?:Start|First)(?:\\s+by)?\\s+(?:with\\s+)?(?:checking\\s+)?(?:the\\s+)?(?:moisture|condensation|bathroom fan|airflow)", "^(?:Moisture|Condensation|The bathroom fan|Check (?:the )?bathroom fan|Control moisture|Address (?:the )?(?:moisture|condensation))"] },
+        { "id": "uses-latest-budget", "anyOf": ["\\$\\s*1,?500"] },
         { "id": "door-draught-memory", "anyOf": ["front door|door snake|door seal|under the door|door draught|door draft"] },
         { "id": "cold-window-memory", "anyOf": ["honeycomb|thermal curtain|window covering|single[- ]glaz"] },
         { "id": "working-split-or-moisture-memory", "anyOf": ["keep.*split|working split|split.*works|bathroom fan|airflow|condensation|moisture"] }
       ],
-      "forbiddenPatterns": ["Mum|3073|gas heater|her bedroom|replace the split|solar first|staged diagnosis|affected room or major end use"],
+      "forbiddenPatterns": ["Mum|3073|gas heater|her bedroom|replace the split|solar first|staged diagnosis|affected room or major end use", "(?:under[- ]?)?\\$\\s*2,?000"],
       "maxWords": 120,
       "maxParagraphs": 5,
       "maxQuestions": 0,
@@ -1150,9 +1152,10 @@
       "requiredSemanticGroups": [
         ["front door", "door snake", "door seal", "door draught", "door draft"],
         ["honeycomb", "thermal curtain", "window covering", "single glazed"],
-        ["working split", "keep the split", "bathroom fan", "condensation", "moisture"]
+        ["working split", "keep the split", "bathroom fan", "condensation", "moisture"],
+        ["\\$\\s*1,?500"]
       ],
-      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first"],
+      "forbidden": ["Mum", "3073", "gas heater", "replace the split", "solar first", "(?:under[- ]?)?\\$\\s*2,?000"],
       "exactActionCount": 3,
       "maximumQuestions": 0
     },
