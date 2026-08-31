@@ -1180,7 +1180,7 @@ const SUPPORTING_ANSWER_TOPICS: Partial<
 > = {
   battery: ["solar", "phase"],
   comfort: ["draught", "windows", "insulation", "rcac", "condensation", "ventilation"],
-  condensation: ["windows", "ventilation", "insulation"],
+  condensation: ["windows", "ventilation", "insulation", "comfort"],
   draught: ["windows", "gas", "ventilation"],
   ev: ["solar", "battery", "phase"],
   gas: ["rcac", "hot_water", "induction"],
@@ -1191,7 +1191,7 @@ const SUPPORTING_ANSWER_TOPICS: Partial<
   rcac: ["gas", "insulation", "windows", "draught", "ventilation", "phase"],
   solar: ["battery"],
   ventilation: ["condensation", "windows", "draught"],
-  windows: ["draught", "condensation", "insulation"],
+  windows: ["draught", "condensation", "insulation", "comfort"],
 };
 
 const ACTIONABLE_SUPPORTING_ANSWER_TOPICS: Partial<

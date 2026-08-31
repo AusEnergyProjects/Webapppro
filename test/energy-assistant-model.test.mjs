@@ -1754,6 +1754,21 @@ test("ordinary window cooling language is not mistaken for an air-conditioning t
   assert.equal(result.answer.directAnswer, candidate);
 });
 
+test("window-moisture advice may explain the comfort benefit without triggering topic drift", async () => {
+  const candidate = "Yes, honeycomb blinds can make the bedroom warmer, but they can worsen condensation on already cold glass. They reduce heat loss into the room, while the glass behind them stays colder and receives less airflow. Moisture can then collect unseen, especially overnight. Open them each morning, wipe and dry the glass, and avoid leaving them tightly closed against a wet window. They will not fix water between panes or a rain leak.";
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Would honeycomb blinds help her, or could they trap moisture?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => jsonResponse(modelPayload({ answer: candidate })),
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(result.answer.directAnswer, candidate);
+});
+
 test("the exact pelmet follow-up uses semantic coverage while declared indexes remain telemetry", async () => {
   const message = "why does the pelmet matter, and which of those would you try first in my home?";
   const declaredCoveredQuestionPartIndexes = [0];
