@@ -83,7 +83,7 @@ function requestWasSuperseded(value: unknown) {
   );
 }
 
-function registryQuotePlanningNotice(value: unknown) {
+function registryAvailabilityNotice(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const registry = value as Record<string, unknown>;
   if (registry.status !== "stale") return "";
@@ -250,7 +250,6 @@ export function CreditexOfficialProductPicker({
     const timer = window.setTimeout(() => {
       setBusy(true);
       setError("");
-      setRegistryNotice("");
       const parameters = new URLSearchParams({
         productKind: kind,
         installationDate,
@@ -270,7 +269,7 @@ export function CreditexOfficialProductPicker({
           if (requestRef.current !== requestVersion) return;
           const nextProducts = (result.products || []) as CreditexOfficialProductOption[];
           const nextFacets = productFacets(result.facets);
-          setRegistryNotice(registryQuotePlanningNotice(result.registry));
+          setRegistryNotice(registryAvailabilityNotice(result.registry));
           setProducts(nextProducts);
           setFacets(nextFacets);
           if (

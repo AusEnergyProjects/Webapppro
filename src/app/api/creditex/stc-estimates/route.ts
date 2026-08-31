@@ -136,8 +136,12 @@ export async function POST(request: Request) {
       }
     }
     const estimate = estimatePurpose === "quote"
-      ? await estimateCreditexSresQuote(database, body)
-      : await estimateCreditexStcsFromRegistry(database, body);
+      ? await estimateCreditexSresQuote(database, body, {
+          allowStaleAcceptedSnapshot: true,
+        })
+      : await estimateCreditexStcsFromRegistry(database, body, {
+          allowStaleAcceptedSnapshot: true,
+        });
     return json({ ok: true, estimate });
   } catch (error) {
     return errorResponse(error);

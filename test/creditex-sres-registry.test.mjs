@@ -17,6 +17,7 @@ import {
   validateCerSresPostcodeRanges,
 } from "../src/lib/creditex-sres-registry.ts";
 import {
+  creditexSresRegistryCanServeCalculator,
   estimateCreditexStcsFromRegistry,
   loadCerSresRegistryStatus,
   parseCerSresRegisterMetadataXlsx,
@@ -1615,7 +1616,7 @@ test("schema drift is quarantined without replacing a valid current snapshot", a
   );
 });
 
-test("a future-dated SRES registry check is never treated as current", async () => {
+test("a future-dated SRES registry check is never calculator-usable", async () => {
   const { d1, artifactStore } = fixture();
   const checkedAt = new Date("2026-08-08T00:00:00.000Z");
   await syncCerSresProductRegistry(d1, {
@@ -1634,7 +1635,9 @@ test("a future-dated SRES registry check is never treated as current", async () 
       technology: "air_source_heat_pump",
       installationDate: "2026-08-08",
       query: "Aestiva",
-    }, { now: beforeCheck }),
+      now: beforeCheck,
+      allowStaleAcceptedSnapshot: true,
+    }),
     expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
   );
 });
@@ -2037,9 +2040,9 @@ test("an expired older refresh cannot replace a newer activated snapshot", async
   );
 });
 
-test("stale or date-ineligible registry data blocks product-backed estimates", async () => {
+test("calculator paths use an accepted stale snapshot but retain date eligibility", async () => {
   const { d1, artifactStore } = fixture();
-  await syncCerSresProductRegistry(d1, {
+  const accepted = await syncCerSresProductRegistry(d1, {
     fetchImpl: fetchFixture(),
     artifactStore,
     now: new Date("2026-08-08T00:00:00.000Z"),
@@ -2055,6 +2058,50 @@ test("stale or date-ineligible registry data blocks product-backed estimates", a
     }),
     expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
   );
+  const staleNow = new Date("2026-08-11T00:00:01.000Z");
+  const calculatorSearch = await searchCerSresProducts(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-08",
+    cascade: true,
+    now: staleNow,
+    allowStaleAcceptedSnapshot: true,
+  });
+  assert.equal(calculatorSearch.registry.status, "stale");
+  assert.equal(calculatorSearch.registry.snapshot.id, accepted.snapshotId);
+  assert.ok(calculatorSearch.facets.categories.length > 0);
+  assert.equal(
+    creditexSresRegistryCanServeCalculator(calculatorSearch.registry, staleNow),
+    true,
+  );
+  assert.equal(creditexSresRegistryCanServeCalculator({
+    ...calculatorSearch.registry,
+    status: "current",
+    snapshot: {
+      ...calculatorSearch.registry.snapshot,
+      sourceSha256: "malformed",
+    },
+  }, staleNow), false);
+  assert.equal(creditexSresRegistryCanServeCalculator({
+    ...calculatorSearch.registry,
+    snapshot: {
+      ...calculatorSearch.registry.snapshot,
+      activatedAt: "2026-08-12T00:00:00.000Z",
+    },
+  }, staleNow), false);
+  assert.equal(creditexSresRegistryCanServeCalculator({
+    ...calculatorSearch.registry,
+    snapshot: {
+      ...calculatorSearch.registry.snapshot,
+      activatedAt: "2026-08-08T01:00:00.000Z",
+    },
+  }, staleNow), false);
+  assert.equal(creditexSresRegistryCanServeCalculator({
+    ...calculatorSearch.registry,
+    snapshot: {
+      ...calculatorSearch.registry.snapshot,
+      activatedOn: "not-a-date",
+    },
+  }, staleNow), false);
   await assert.rejects(
     estimateCreditexStcsFromRegistry(d1, {
       technology: "air_source_heat_pump",
@@ -2064,13 +2111,40 @@ test("stale or date-ineligible registry data blocks product-backed estimates", a
     }, { now: new Date("2026-08-11T00:00:01.000Z") }),
     expectedRegistryError("SRES_PRODUCT_REGISTRY_STALE"),
   );
+  const calculatorEstimate = await estimateCreditexStcsFromRegistry(d1, {
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-08",
+    postcode: "3000",
+    productKey: "cer-ashp:1",
+  }, {
+    now: staleNow,
+    allowStaleAcceptedSnapshot: true,
+  });
+  assert.deepEqual(calculatorEstimate.output, { quantity: "16", unit: "STC" });
+  assert.equal(calculatorEstimate.resolution.snapshotId, accepted.snapshotId);
+  const calculatorQuote = await estimateCreditexSresQuote(d1, {
+    estimatePurpose: "quote",
+    technology: "air_source_heat_pump",
+    installationDate: "2026-08-08",
+    postcode: "3000",
+    productKey: "cer-ashp:1",
+    unitQuantity: "1",
+  }, {
+    now: staleNow,
+    allowStaleAcceptedSnapshot: true,
+  });
+  assert.deepEqual(calculatorQuote.output, { quantity: "16", unit: "STC" });
+  assert.equal(calculatorQuote.resolution.snapshotId, accepted.snapshotId);
   await assert.rejects(
     estimateCreditexStcsFromRegistry(d1, {
       technology: "air_source_heat_pump",
       installationDate: "2031-01-01",
       postcode: "3000",
       productKey: "cer-ashp:1",
-    }, { now: new Date("2026-08-08T01:00:00.000Z") }),
+    }, {
+      now: new Date("2026-08-11T00:00:01.000Z"),
+      allowStaleAcceptedSnapshot: true,
+    }),
     expectedRegistryError("SRES_PRODUCT_INELIGIBLE"),
   );
 });
@@ -2091,7 +2165,10 @@ test("protected APIs, bounded scheduled Worker and UI enforce server-derived reg
   assert.match(productRouteSource, /brand: parameters\.get\("brand"\)/);
   assert.match(productRouteSource, /model: parameters\.get\("model"\)/);
   assert.match(productRouteSource, /parameters\.get\("mode"\) === "cascade"/);
-  assert.match(estimateRouteSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
+  assert.match(
+    estimateRouteSource,
+    /estimateCreditexStcsFromRegistry\(database, body, \{\s*allowStaleAcceptedSnapshot: true/,
+  );
   assert.match(
     estimateRouteSource,
     /allowPublicQuote: estimatePurpose === "quote"/,

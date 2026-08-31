@@ -198,7 +198,10 @@ test("strict SRES paths fail closed while quote mode uses the bounded quote esti
   assert.match(route, /creditexSresCalculationBlocker\(technology\)/);
   assert.match(route, /OFFICIAL_PRODUCT_REGISTRY_UNAVAILABLE/);
   assert.match(route, /estimatePurpose !== "quote"/);
-  assert.match(route, /estimateCreditexSresQuote\(database, body\)/);
+  assert.match(
+    route,
+    /estimateCreditexSresQuote\(database, body, \{\s*allowStaleAcceptedSnapshot: true/,
+  );
   assert.match(ui, /estimatePurpose: "quote"/);
   assert.match(ui, /productKey: productCascade\.productKey/);
   assert.match(

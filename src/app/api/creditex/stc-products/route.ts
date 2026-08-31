@@ -166,7 +166,10 @@ export async function GET(request: Request) {
     };
     let result;
     try {
-      result = await searchCerSresProducts(database, searchInput);
+      result = await searchCerSresProducts(database, {
+        ...searchInput,
+        allowStaleAcceptedSnapshot: true,
+      });
     } catch (error) {
       const recoveryRequired = error instanceof CreditexSresRegistryError
         && (
