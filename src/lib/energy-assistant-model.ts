@@ -59,7 +59,10 @@ import {
   sanitizeSurgeCustomerOfficialCitation,
   sanitizeSurgeCustomerOfficialUrl,
 } from "./surge-official-citation.ts";
-import { isSurgeBroadCheapWindowHeatLossOptionsRequest } from "./surge-window-advice.ts";
+import {
+  isSurgeBroadCheapWindowHeatLossOptionsRequest,
+  isSurgePelmetWhyAndFirstStepFollowUp,
+} from "./surge-window-advice.ts";
 
 export type SurgeModelTurn = {
   role: "user" | "assistant";
@@ -146,6 +149,7 @@ export type SurgeModelFailure = {
     | "provider_response_invalid"
     | "provider_output_rejected";
   providerStatus?: number;
+  providerCode?: string;
   stage?: SurgeModelFailureStage;
 };
 
@@ -167,7 +171,7 @@ export type SurgeModelRequestEstimate = {
   serializedBodyBytes: number;
   repairSerializedBodyBytes: number;
   maxProviderCalls: 1 | 2;
-  maxOutputTokens: 1_200 | 2_000;
+  maxOutputTokens: 1_600 | 2_000;
   worstCaseMicroUsd: number;
 };
 
@@ -176,7 +180,7 @@ const SUPPORTED_MODEL = "gpt-5.6-sol" as const;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_OFFICIAL_WEB_TIMEOUT_MS = 30_000;
 const MAX_PROVIDER_INPUT_BYTES = 72_000;
-const MAX_PROVIDER_OUTPUT_TOKENS = 1_200 as const;
+const MAX_PROVIDER_OUTPUT_TOKENS = 1_600 as const;
 const MAX_OFFICIAL_WEB_OUTPUT_TOKENS = 2_000 as const;
 const SOL_INPUT_MICRO_USD_PER_TOKEN_EQUIVALENT_BYTE = 4;
 const SOL_OUTPUT_MICRO_USD_PER_TOKEN = 20;
@@ -187,6 +191,11 @@ const MAX_MODEL_ANSWER_CHARS = 2_000;
 const MAX_FOLLOW_UP_CHARS = 220;
 
 const SAFE_MODEL_REPAIR_STAGES = [
+  "response_body_json",
+  "response_output_missing",
+  "response_output_incomplete_max_tokens",
+  "response_output_json",
+  "response_output_object",
   "answer_missing",
   "conversation_state",
   "public_policy",
@@ -207,10 +216,12 @@ type SafeModelRepairStage = (typeof SAFE_MODEL_REPAIR_STAGES)[number];
 const SAFE_MODEL_REPAIR_STAGE_SET = new Set<SurgeModelFailureStage>(SAFE_MODEL_REPAIR_STAGES);
 const SURGE_MODEL_REPAIR_STAGE = Symbol("surge-model-repair-stage");
 const SURGE_MODEL_REJECTION_REPORTED = Symbol("surge-model-rejection-reported");
+const SURGE_MODEL_SECOND_ATTEMPT_USED = Symbol("surge-model-second-attempt-used");
 
 type SurgeInternalModelDependencies = SurgeModelDependencies & {
   [SURGE_MODEL_REPAIR_STAGE]?: SafeModelRepairStage;
   [SURGE_MODEL_REJECTION_REPORTED]?: boolean;
+  [SURGE_MODEL_SECOND_ATTEMPT_USED]?: boolean;
 };
 
 const RESPONSE_SCHEMA = {
@@ -457,7 +468,9 @@ function providerResponseEnvelope(payload: unknown): ProviderResponseEnvelope {
   return envelope;
 }
 
-function missingProviderOutputStage(payload: unknown): SurgeModelFailureStage {
+function missingProviderOutputStage(
+  payload: unknown,
+): "response_output_missing" | "response_output_incomplete_max_tokens" {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return "response_output_missing";
   }
@@ -679,7 +692,7 @@ Response contract:
 - Categories route evidence; they are not answers. Treat the current question or symptom as the request; keep confirmed facts if the same-home problem broadens.
 - If one message contains several material questions, use questionParts as a coverage checklist and answer every part. Set each coveredQuestionPartIndexes value exactly once.
 - Return the required fields, no more than three steps and one followUpQuestion. quickReplies must always be empty.
-- Default to one natural 35 to 100 word paragraph. For requested ways, options or tips, use up to three ranked steps; each says what to do, why it helps and its main fit or limit. Keep those answers under 160 words. For a short follow-up asking what to do first, give one first action. Use steps only for a list, plan, checklist or safety sequence. Keep the visible answer complete, useful and understandable.
+- Default to one natural 35 to 100 word paragraph. For requested ways, options or tips, put each option in its own steps array item, with no number or bullet prefix; each says what to do, why it helps and its main fit or limit. Use up to three ranked steps and keep those answers under 160 words. For a short follow-up asking what to do first, give one first action. Use steps only for a list, plan, checklist or safety sequence. Keep the visible answer complete, useful and understandable.
 - Keep the decision visible, not only followUpQuestion. Retain supplied options and quantities; a difference never replaces its inputs.
 - Use supplied or evidenced quantities only unless the user explicitly asks for a calculation. Never calculate or mention a percentage, ratio, difference, total or average merely because two numbers are available. Never invent capacities, prices or rates. If a process duration or data interval was not supplied or evidenced, add no number. Do not invent warranties, savings or payback. Never name an EV charger capacity unless that exact capacity was supplied.
 - Use ordinary words, not industry shorthand.
@@ -735,15 +748,23 @@ Use industryLibrary and maintainedEvidence when relevant. deterministicReference
 }
 
 function requestSpecificModelInstructions(request: SurgeModelRequest) {
-  if (!isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)) return "";
-  return `
+  if (isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)) return `
 
 Current-question content requirements:
 - Give exactly three ranked practical steps in 110 to 150 words.
+- Put each action in a separate steps array item. Leave number and bullet prefixes out because the interface numbers the items.
 - Step 1 covers draught or weather seals around actual moving-air gaps.
 - Step 2 covers both clear heat-shrink window-insulation film and bubble wrap. Explain that each traps an insulating still-air layer, and say bubble wrap suits a window where an obscured view or reduced daylight is acceptable.
 - Step 3 covers close-fitting honeycomb blinds or lined curtains plus a pelmet. Explain that closing the top gap slows warm-air circulation past cold glass.
 - Keep opening windows and required ventilation usable. Do not replace these actions with bills, measurements, shopping advice or a generic whole-home plan.`;
+  if (isSurgePelmetWhyAndFirstStepFollowUp(request.message)) return `
+
+Current-question content requirements:
+- Answer both parts directly in 55 to 110 words: explain why a pelmet matters, then name the first practical action for this home using only confirmed context.
+- Explain the convection loop plainly: without the pelmet, warm room air can pass behind the curtain, cool against the cold glass and fall back into the room; closing the top gap slows that circulation.
+- Use only confirmed retained window facts and the earlier options. Check for an actual moving-air gap first and seal it if present; if there is no draught, trial a close-fitting honeycomb blind or lined curtain with a pelmet on the coldest problem window. Mention single glazing only when the user or saved plan confirms it.
+- Keep opening windows and required ventilation usable. Do not restart a generic whole-home checklist.`;
+  return "";
 }
 
 const OFFICIAL_WEB_SEARCH_INSTRUCTIONS = `
@@ -765,10 +786,22 @@ Local output-validator repair:
 - Do not mention the validator, the failed draft or internal reasoning. Do not reproduce or infer the failed draft.
 - Recheck the complete response contract and return only the required JSON object.`;
 
+function isFormatRepairStage(stage: SafeModelRepairStage | undefined) {
+  return stage === "response_body_json"
+    || stage === "response_output_missing"
+    || stage === "response_output_incomplete_max_tokens"
+    || stage === "response_output_json"
+    || stage === "response_output_object";
+}
+
 function modelRepairInstructions(
   stage: SafeModelRepairStage,
   request?: SurgeModelRequest,
 ) {
+  if (isFormatRepairStage(stage)) {
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Format repair: return one complete JSON object matching the supplied schema. Keep the customer answer concise enough to finish every required field. Do not add markdown fences or text outside the JSON object.`;
+  }
   if (stage === "public_policy") {
     return `${MODEL_REPAIR_INSTRUCTIONS}
 - Public-boundary repair: give a neutral comparison only. Never tell the user to choose, pick, buy or go with an option. Do not mention internal systems, providers, protected references or source metadata. Retain every supplied option and quantity needed to answer the question.`;
@@ -1869,9 +1902,6 @@ function cheapWindowHeatLossOptionsAreComplete(message: string, answer: string) 
     .replace(/[‐‑‒–—]/gu, "-")
     .replace(/\s+/gu, " ")
     .trim();
-  const hasEnoughDepth = normalizedAnswer.split(/\s+/u).filter(Boolean).length >= 90;
-  const ranksActions = /\b(?:start|first)\b/i.test(normalizedAnswer)
-    && /\b(?:second|next|then|after(?: that)?|third|finally|at night)\b/i.test(normalizedAnswer);
   const coversDraughts = /\b(?:weather ?stripping|weather ?strips?|weather ?seals?|draught ?seals?|draft ?seals?|sealing strips?|seal(?:ing)? (?:air )?(?:leaks?|gaps?)|air leaks?)\b/i.test(normalizedAnswer);
   const coversClearFilm = /\b(?:heat[- ]?shrink|shrink|window[- ]insulation|clear plastic|secondary[- ]glazing) (?:window )?film\b|\bwindow (?:insulation )?(?:film|kit)\b/i.test(normalizedAnswer);
   const coversBubbleWrap = /\bbubble wrap\b/i.test(normalizedAnswer);
@@ -1883,11 +1913,16 @@ function cheapWindowHeatLossOptionsAreComplete(message: string, answer: string) 
     && /\b(?:air circulation|convection|air movement|warm[- ]air|cold glass|fall(?:s|ing)? behind|circulat(?:e|es|ing) past)\b/i.test(normalizedAnswer);
   const explainsBubbleWrapFit = /\bbubble wrap\b/i.test(normalizedAnswer)
     && /\b(?:view|visibility|outlook|daylight|light|blur(?:red)?|obscur(?:e|ed|ing)|privacy|laundry|bathroom|utility|rarely used)\b/i.test(normalizedAnswer);
-  const preservesWindowUse = /\b(?:opening|openable|operable) windows?\b/i.test(normalizedAnswer)
-    && /\b(?:required|necessary) ventilation\b/i.test(normalizedAnswer);
-  return hasEnoughDepth
-    && ranksActions
-    && coversDraughts
+  const preservesWindowUse = (
+    /\b(?:opening|openable|operable) windows?\b/i.test(normalizedAnswer)
+      || /\b(?:keep|leave)\b[^.!?]{0,45}\bwindows?\b[^.!?]{0,35}\b(?:usable|openable|operable|clear|working)\b/i.test(normalizedAnswer)
+      || /\bwindows?\b[^.!?]{0,35}\b(?:remain|stay)\b[^.!?]{0,25}\b(?:usable|openable|operable|clear|working)\b/i.test(normalizedAnswer)
+  ) && (
+    /\b(?:required|necessary) ventilation\b/i.test(normalizedAnswer)
+      || /\b(?:required|necessary) vents?\b/i.test(normalizedAnswer)
+      || /\b(?:keep|leave)\b[^.!?]{0,45}\b(?:ventilation|vents?)\b[^.!?]{0,30}\b(?:usable|open|clear|working|unblocked)\b/i.test(normalizedAnswer)
+  );
+  return coversDraughts
     && coversClearFilm
     && coversBubbleWrap
     && coversFittedCoverings
@@ -1912,6 +1947,8 @@ function causalQuestionGetsExplanation(message: string, answer: string) {
 function modelAnswerConversationQualityFailure(
   answer: string,
   request: SurgeModelRequest,
+  visibleCoreAnswer = answer,
+  maximumVisibleParagraphs = 3,
 ): SurgeModelFailureStage | "" {
   const turnIntent = classifySurgeConversationTurn(
     request.message,
@@ -1927,7 +1964,9 @@ function modelAnswerConversationQualityFailure(
   const maximumWords = turnIntent === "clarification" ? 100 : 180;
   if (wordCount > maximumWords) return "answer_too_long";
   const paragraphCount = answer.split(/\n\s*\n/u).map((part) => part.trim()).filter(Boolean).length;
-  const maximumParagraphs = explicitlyRequestsThreeActions(request.message) ? 5 : 3;
+  const maximumParagraphs = explicitlyRequestsThreeActions(request.message)
+    ? 5
+    : maximumVisibleParagraphs;
   if (paragraphCount > maximumParagraphs) return "answer_too_long";
   if (/\[\s*\]\s*\(|\(\s*\[\s*\]\s*\(/u.test(answer)) return "everyday_language";
   if (surgeAnswerIsGenericBoilerplate(answer)) return "generic_restart";
@@ -1938,7 +1977,7 @@ function modelAnswerConversationQualityFailure(
   if (!causalQuestionGetsExplanation(request.message, answer)) {
     return "question_coverage";
   }
-  if (!cheapWindowHeatLossOptionsAreComplete(request.message, answer)) {
+  if (!cheapWindowHeatLossOptionsAreComplete(request.message, visibleCoreAnswer)) {
     return "question_coverage";
   }
   const asksForBatteryQuoteJudgement = /\bbatter(?:y|ies)\b[^.!?\n]{0,55}\b(?:quote|quoted|fair|good value|price|cost)\b|\b(?:quote|quoted|fair|good value|price|cost)\b[^.!?\n]{0,55}\bbatter(?:y|ies)\b/i.test(request.message);
@@ -2916,10 +2955,11 @@ function providerBody(
   const body = {
     model: SUPPORTED_MODEL,
     store: false,
-    reasoning: { effort: "medium" },
+    reasoning: { effort: isFormatRepairStage(repairStage) ? "low" : "medium" },
     max_output_tokens: maxOutputTokens,
     text: {
       verbosity: isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)
+        || isSurgePelmetWhyAndFirstStepFollowUp(request.message)
         ? "medium"
         : "low",
       format: {
@@ -3078,6 +3118,7 @@ export async function generateSurgeModelAnswer(
   request = scopedSurgeModelRequest(request);
   const internalDependencies = dependencies as SurgeInternalModelDependencies;
   const repairStage = internalDependencies[SURGE_MODEL_REPAIR_STAGE];
+  const secondAttemptUsed = Boolean(internalDependencies[SURGE_MODEL_SECOND_ATTEMPT_USED]);
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY;
   const enabled = dependencies.enabled ?? modelEnabled(process.env.SURGE_AI_ENABLED);
   if (!enabled) {
@@ -3109,18 +3150,49 @@ export async function generateSurgeModelAnswer(
     reportCandidate?: () => void,
   ): Promise<SurgeModelResult | null> => {
     if (!internalDependencies[SURGE_MODEL_REJECTION_REPORTED]) reportCandidate?.();
-    if (!repairStage && safeModelRepairStage(stage) && modelRepairIsAllowed(request)) {
+    if (!secondAttemptUsed && safeModelRepairStage(stage) && modelRepairIsAllowed(request)) {
       clearTimeout(timeout);
       return generateSurgeModelAnswer(request, {
         ...dependencies,
         [SURGE_MODEL_REPAIR_STAGE]: stage,
         [SURGE_MODEL_REJECTION_REPORTED]: true,
+        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
       } as SurgeInternalModelDependencies);
     }
     reportFailure(dependencies, {
       code: "provider_output_rejected",
       stage,
     });
+    return null;
+  };
+  const retryInvalidProviderOutput = async (
+    stage: SafeModelRepairStage,
+  ): Promise<SurgeModelResult | null> => {
+    if (!secondAttemptUsed && modelRepairIsAllowed(request)) {
+      clearTimeout(timeout);
+      return generateSurgeModelAnswer(request, {
+        ...dependencies,
+        [SURGE_MODEL_REPAIR_STAGE]: stage,
+        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
+      } as SurgeInternalModelDependencies);
+    }
+    reportFailure(dependencies, {
+      code: "provider_response_invalid",
+      stage,
+    });
+    return null;
+  };
+  const retryTransientProviderFailure = async (
+    failure: SurgeModelFailure,
+  ): Promise<SurgeModelResult | null> => {
+    if (!secondAttemptUsed && modelRepairIsAllowed(request)) {
+      clearTimeout(timeout);
+      return generateSurgeModelAnswer(request, {
+        ...dependencies,
+        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
+      } as SurgeInternalModelDependencies);
+    }
+    reportFailure(dependencies, failure);
     return null;
   };
   try {
@@ -3134,30 +3206,44 @@ export async function generateSurgeModelAnswer(
       signal: controller.signal,
     });
     if (!response.ok) {
-      reportFailure(dependencies, {
+      let providerCode: string | undefined;
+      try {
+        const providerError = await response.clone().json() as unknown;
+        const providerErrorRecord = providerError && typeof providerError === "object"
+          ? providerError as Record<string, unknown>
+          : null;
+        const nestedError = providerErrorRecord?.error && typeof providerErrorRecord.error === "object"
+          ? providerErrorRecord.error as Record<string, unknown>
+          : null;
+        const candidateCode = nestedError?.code ?? providerErrorRecord?.code;
+        if (typeof candidateCode === "string" && /^[a-z0-9_]{1,64}$/i.test(candidateCode)) {
+          providerCode = candidateCode;
+        }
+      } catch {
+        providerCode = undefined;
+      }
+      const failure: SurgeModelFailure = {
         code: "provider_http_error",
         providerStatus: response.status,
-      });
+        ...(providerCode ? { providerCode } : {}),
+      };
+      if ([408, 409, 429, 500, 502, 503, 504].includes(response.status)
+        && providerCode !== "insufficient_quota") {
+        return retryTransientProviderFailure(failure);
+      }
+      reportFailure(dependencies, failure);
       return null;
     }
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
-      reportFailure(dependencies, {
-        code: "provider_response_invalid",
-        stage: "response_body_json",
-      });
-      return null;
+      return retryInvalidProviderOutput("response_body_json");
     }
     const providerEnvelope = providerResponseEnvelope(payload);
     const raw = providerEnvelope.text;
     if (!raw) {
-      reportFailure(dependencies, {
-        code: "provider_response_invalid",
-        stage: missingProviderOutputStage(payload),
-      });
-      return null;
+      return retryInvalidProviderOutput(missingProviderOutputStage(payload));
     }
     const officialWebEvidence = request.officialWebSearch
       ? validatedOfficialWebEvidence(providerEnvelope, request.officialWebSearch)
@@ -3175,18 +3261,10 @@ export async function generateSurgeModelAnswer(
     try {
       parsed = JSON.parse(raw);
     } catch {
-      reportFailure(dependencies, {
-        code: "provider_response_invalid",
-        stage: "response_output_json",
-      });
-      return null;
+      return retryInvalidProviderOutput("response_output_json");
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      reportFailure(dependencies, {
-        code: "provider_output_rejected",
-        stage: "response_output_object",
-      });
-      return null;
+      return retryInvalidProviderOutput("response_output_object");
     }
     const record = parsed as Record<string, unknown>;
     const visibleFieldsFitCharacterLimits = modelVisibleFieldsFitCharacterLimits(record);
@@ -3271,9 +3349,7 @@ export async function generateSurgeModelAnswer(
       const candidateAnswerText = surgePresentationText(candidate);
       const customerVisibleCandidateText = surgePresentationText(candidate, true);
       const completeQuestionCoverage = identityQuestion || (
-        coveredQuestionPartIndexes.length === requiredQuestionPartIndexes.length
-        && coveredQuestionPartIndexes.every((value, index) => value === requiredQuestionPartIndexes[index])
-        && answerCoversEveryQuestionPart(
+        answerCoversEveryQuestionPart(
           prepared.context.payload.questionParts,
           candidateAnswerText,
           selectedDecisionContext,
@@ -3302,7 +3378,15 @@ export async function generateSurgeModelAnswer(
       const conversationQualityFailure = modelAnswerConversationQualityFailure(
         candidateAnswerText,
         request,
+        legacyPresentation
+          ? candidateAnswerText
+          : [candidate.verdict, candidate.reason, ...candidate.steps]
+              .filter(Boolean)
+              .join(" "),
+        candidate.steps.length >= 2 ? 5 : 3,
       );
+      const requiredWindowStepStructurePassed = !isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)
+        || candidate.steps.length === 3;
       const deniesRetainedConversation = deniesAvailableRetainedConversationContext(
         customerVisibleCandidateText,
         request,
@@ -3319,6 +3403,7 @@ export async function generateSurgeModelAnswer(
       else if (publicContinuationLeaksInternalPlatform) stage = "internal_platform_reference";
       else if (deniesRetainedConversation) stage = "contextual_restart";
       else if (!completeQuestionCoverage) stage = "question_coverage";
+      else if (!requiredWindowStepStructurePassed) stage = "question_coverage";
       else if (!quantitiesAreGrounded || !suppliedQuestionQuantitiesArePreserved) stage = "quantity_grounding";
       else if (!officialCurrentClaimsAreSupported) stage = "official_web_evidence";
       else if (repeatsPreviousReply(candidateAnswerText, request)) stage = "repeated_answer";
@@ -3372,7 +3457,7 @@ export async function generateSurgeModelAnswer(
     if (validation.stage === "answer_too_long" && !legacyPresentation) {
       presentation = compactStructuredModelPresentation(
         presentation,
-        explicitlyRequestsThreeActions(request.message),
+        presentation.steps.length === 3,
       );
       validation = validatePresentation(presentation);
     }
@@ -3421,13 +3506,12 @@ export async function generateSurgeModelAnswer(
       officialCitations,
     };
   } catch (error) {
-    reportFailure(dependencies, {
+    return retryTransientProviderFailure({
       code: controller.signal.aborted
         || (error instanceof DOMException && error.name === "AbortError")
         ? "provider_timeout"
         : "provider_request_failed",
     });
-    return null;
   } finally {
     clearTimeout(timeout);
   }

@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   clipSurgeTextAtBoundary,
   deriveSurgeAnswerPresentation,
+  normalizeSurgeAnswerPresentation,
   surgePlainLanguageMetrics,
   surgePresentationPassesEverydayLanguage,
+  surgePresentationText,
   surgeTextHasIncompleteTrailingFragment,
 } from "../src/lib/surge-everyday-answer.ts";
 
@@ -121,6 +123,32 @@ test("a grounded answer does not repeat the same advice as a practical step", ()
     suggestedQuestions: [],
   }), "What heating should I use?");
   assert.deepEqual(presentation.steps, ["Clean the accessible filter."]);
+});
+
+test("multi-step answers keep one clean numbered-list item per action", () => {
+  const presentation = normalizeSurgeAnswerPresentation({
+    answerType: "explanation",
+    verdict: "Start with the cheapest direct fixes.",
+    reason: "These address separate ways heat leaves the window.",
+    steps: [
+      "1. Seal only actual moving-air gaps.",
+      "2) Add a removable still-air layer.",
+      "• Fit a close covering and pelmet.",
+    ],
+    extraDetail: "",
+    followUpQuestion: "",
+    quickReplies: [],
+  });
+
+  assert.deepEqual(presentation.steps, [
+    "Seal only actual moving-air gaps.",
+    "Add a removable still-air layer.",
+    "Fit a close covering and pelmet.",
+  ]);
+  assert.equal(
+    surgePresentationText(presentation),
+    [presentation.verdict, presentation.reason, ...presentation.steps].join("\n\n"),
+  );
 });
 
 test("three-phase answers keep at most a plain follow-up question", () => {

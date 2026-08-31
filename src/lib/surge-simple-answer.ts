@@ -14,7 +14,9 @@ import {
 } from "./energy-assistant-plan-priority.ts";
 import {
   isSurgeBroadCheapWindowHeatLossOptionsRequest,
+  isSurgePelmetWhyAndFirstStepFollowUp,
   SURGE_CHEAP_WINDOW_HEAT_LOSS_EXPLAINER,
+  SURGE_PELMET_WHY_AND_FIRST_STEP_EXPLAINER,
 } from "./surge-window-advice.ts";
 
 type RecentTurn = {
@@ -495,6 +497,13 @@ export function composeSurgeSimpleAnswer(
     && /\b(?:expensive|costly|dear|high[- ]?priced|cost|price)\b/i.test(cleanMessage)
     && !/\b(?:quote|proposal)\b|\$/i.test(cleanMessage);
   const priorQuestionWasAboutCost = /\b(?:expensive|costly|dear|high[- ]?priced|cost|price)\b/i.test(priorUserText);
+
+  if (isSurgePelmetWhyAndFirstStepFollowUp(message)) {
+    return answer(base, {
+      directAnswer: SURGE_PELMET_WHY_AND_FIRST_STEP_EXPLAINER,
+      practicalSteps: [],
+    });
+  }
 
   if (isSurgeBroadCheapWindowHeatLossOptionsRequest(message)) {
     return answer(base, {

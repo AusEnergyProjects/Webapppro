@@ -276,6 +276,19 @@ function structuredModelPayload(overrides = {}) {
   };
 }
 
+function completeCheapWindowPayload(overrides = {}) {
+  return structuredModelPayload({
+    verdict: "Start with actual moving-air gaps, then add a low-cost insulating layer and fitted coverings.",
+    reason: "These measures address air leakage and heat transfer through the window.",
+    steps: [
+      "Fit removable weather seals around opening windows where air is moving, because stopping draughts is the cheapest immediate gain.",
+      "On suitable single glazing, clear heat-shrink window-insulation film traps still air like temporary secondary glazing. Bubble wrap uses the same idea for a laundry, bathroom or rarely used window where losing the view or daylight is acceptable.",
+      "Use close-fitting honeycomb blinds or lined curtains overlapping the frame, with a pelmet over the top gap to slow warm air circulating past cold glass. Keep opening windows and required ventilation usable.",
+    ],
+    ...overrides,
+  });
+}
+
 function jsonResponse(output, options = {}) {
   const responseBody = options.nested
     ? {
@@ -369,7 +382,7 @@ test("model adapter sends a stateless strict Responses request with bounded sche
   assert.equal(body.model, "gpt-5.6-sol");
   assert.equal(body.store, false);
   assert.deepEqual(body.reasoning, { effort: "medium" });
-  assert.equal(body.max_output_tokens, 1_200);
+  assert.equal(body.max_output_tokens, 1_600);
   assert.equal(body.text.verbosity, "low");
   assert.equal(body.text.format.type, "json_schema");
   assert.equal(body.text.format.name, "surge_energy_answer");
@@ -1741,6 +1754,56 @@ test("ordinary window cooling language is not mistaken for an air-conditioning t
   assert.equal(result.answer.directAnswer, candidate);
 });
 
+test("the exact pelmet follow-up uses semantic coverage while declared indexes remain telemetry", async () => {
+  const message = "why does the pelmet matter, and which of those would you try first in my home?";
+  const declaredCoveredQuestionPartIndexes = [0];
+  let observedBody;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message,
+    recentTurns: [
+      {
+        role: "user",
+        content: "What are some cheap ways to reduce heat loss from my windows?",
+      },
+      {
+        role: "assistant",
+        content: "Check for draughts first, then compare close-fitting honeycomb blinds with lined curtains and a pelmet on the coldest single-glazed window.",
+      },
+    ],
+    continuation: state({
+      activeTopic: "glazing_shading",
+      goal: "Reduce heat loss through the saved home's cold single-glazed windows",
+      facts: [{ key: "glazing", value: "mostly single-glazed" }],
+      lastAnswerSummary: "Compared draught seals, honeycomb blinds and lined curtains with a pelmet.",
+    }),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      observedBody = JSON.parse(options.body);
+      return jsonResponse(structuredModelPayload({
+        verdict: "A pelmet matters because it closes the gap above the curtain.",
+        reason: "Without it, warm room air can pass behind the curtain, cool against the cold glass and fall back into the room. Closing that top gap slows the convection loop.",
+        steps: [
+          "First check the opening sash and frame for moving air, and fit removable weather seals only where there is a real leak.",
+          "If there is no draught, trial a close-fitting honeycomb blind or lined curtain with a pelmet on the coldest single-glazed window.",
+        ],
+        extraDetail: "Keep opening windows and required ventilation usable.",
+        coveredQuestionPartIndexes: declaredCoveredQuestionPartIndexes,
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(context.questionParts.length, 2);
+  assert.deepEqual(declaredCoveredQuestionPartIndexes, [0]);
+  assert.match(result.answer.directAnswer, /warm room air.*cold glass.*fall back.*top gap.*convection loop/is);
+  assert.match(result.answer.directAnswer, /First check.*moving air.*weather seals/is);
+  assert.deepEqual(failures, []);
+});
+
 test("a working-heater fault question accepts a direct answer grounded in electricity use and fault symptoms", async () => {
   const candidate = "Not necessarily. Heating can noticeably lift electricity use. A fault is more likely if consumption has suddenly increased under similar weather and settings, or the unit runs continuously, has weak airflow, ices up or shows errors. Clean the filters, then compare smart-meter usage during similar periods with the split on and off.";
   const failures = [];
@@ -2364,13 +2427,17 @@ test("cheap window heat-loss advice combines ranked actions, mechanisms and fit 
       providerCalls += 1;
       observedBodies.push(JSON.parse(options.body));
       if (providerCalls === 1) {
-        return jsonResponse(modelPayload({
-          answer: "Start by sealing air leaks around opening windows. Cheap weather seals can reduce cold draughts immediately. After that, use close-fitting honeycomb blinds or thick curtains with a pelmet. Removable clear window-insulation film can also help on rarely opened single-glazed windows.",
+        return jsonResponse(structuredModelPayload({
+          verdict: "Start by sealing actual air leaks around opening windows.",
+          reason: "Cheap weather seals can reduce cold draughts immediately.",
+          steps: [
+            "Fit removable weather seals where air is moving.",
+            "Add clear heat-shrink window-insulation film on suitable single glazing.",
+            "Use close-fitting honeycomb blinds or lined curtains with a pelmet.",
+          ],
         }));
       }
-      return jsonResponse(modelPayload({
-        answer: "Start with moving-air gaps: fit removable weather seals around opening windows, because stopping draughts is the cheapest immediate gain. On suitable single-glazed windows, clear heat-shrink film creates a trapped air layer like temporary secondary glazing. Bubble wrap uses the same still-air idea and makes sense for a bathroom, laundry or rarely used window where losing the view is acceptable. At night, close-fitting honeycomb blinds or lined curtains that overlap the frame, with a pelmet over the top gap, slow air circulation past the cold glass. Keep opening windows and required ventilation usable.",
-      }));
+      return jsonResponse(completeCheapWindowPayload());
     },
     onFailure: (failure) => failures.push(failure),
   });
@@ -2386,9 +2453,9 @@ test("cheap window heat-loss advice combines ranked actions, mechanisms and fit 
   assert.match(observedBodies[0].input[0].content[0].text, /exactly three ranked practical steps/i);
   assert.match(observedBodies[1].input[0].content[0].text, /Window-options repair/i);
   assert.match(observedBodies[1].input[0].content[0].text, /draught seals.*window-insulation film.*bubble wrap.*pelmet/is);
-  assert.match(result.answer.directAnswer, /weather seals.*heat-shrink film.*bubble wrap.*pelmet/is);
-  assert.match(result.answer.directAnswer, /trapped air layer.*slow air circulation/is);
-  assert.match(result.answer.directAnswer, /losing the view is acceptable/i);
+  assert.match(result.answer.directAnswer, /weather seals.*heat-shrink(?: window-insulation)? film.*bubble wrap.*pelmet/is);
+  assert.match(result.answer.directAnswer, /(?:trapped air layer|traps still air).*slow warm air circulating/is);
+  assert.match(result.answer.directAnswer, /losing the view or daylight is acceptable/i);
   assert.deepEqual(failures, []);
 });
 
@@ -2402,8 +2469,12 @@ test("cheap window validation accepts complete expert wording across sentence bo
     apiKey: "test-api-key",
     fetch: async () => {
       providerCalls += 1;
-      return jsonResponse(modelPayload({
-        answer: "For low-cost window heat-loss reduction, first stop moving air with removable weatherstripping around opening sashes because draught control gives an immediate comfort gain. Second, use a clear plastic window kit on single glazing, with bubble wrap as a removable alternative. Both create an insulating air pocket. Bubble wrap suits a utility window where reduced daylight and obscured visibility are acceptable. Third, close cellular shades or thick curtains over the frame and cap the top gap with a pelmet. That slows warm-air circulation past cold glass instead of letting room heat fall behind the covering. Keep required ventilation and opening windows usable.",
+      return jsonResponse(completeCheapWindowPayload({
+        steps: [
+          "Stop moving air with removable weatherstripping around opening sashes because draught control gives an immediate comfort gain.",
+          "Use a clear plastic window kit on single glazing, with bubble wrap as a removable alternative. Both create an insulating air pocket, and bubble wrap suits a utility window where reduced daylight and obscured visibility are acceptable.",
+          "Close cellular shades or thick curtains over the frame and cap the top gap with a pelmet. That slows warm-air circulation past cold glass. Keep required ventilation and opening windows usable.",
+        ],
       }));
     },
     onFailure: (failure) => failures.push(failure),
@@ -2429,11 +2500,15 @@ test("cheap window validation repairs a shallow answer that omits operability gu
     fetch: async (_url, options) => {
       providerCalls += 1;
       observedBodies.push(JSON.parse(options.body));
-      return jsonResponse(modelPayload({
-        answer: providerCalls === 1
-          ? "Cheap window heat-loss options include weather seals on gaps. Clear heat-shrink film and bubble wrap trap still air; bubble wrap suits windows where reduced light is acceptable. Use honeycomb blinds and a pelmet because the top gap lets warm air circulate past cold glass."
-          : "Start with moving-air gaps: fit removable weather seals around opening windows, because stopping draughts is the cheapest immediate gain. On suitable single-glazed windows, clear heat-shrink film creates a trapped air layer like temporary secondary glazing. Bubble wrap uses the same still-air idea and makes sense for a bathroom, laundry or rarely used window where losing the view is acceptable. At night, close-fitting honeycomb blinds or lined curtains that overlap the frame, with a pelmet over the top gap, slow air circulation past the cold glass. Keep opening windows and required ventilation usable.",
-      }));
+      return jsonResponse(providerCalls === 1
+        ? completeCheapWindowPayload({
+            steps: [
+              "Fit removable weather seals around opening windows where air is moving, because stopping draughts is the cheapest immediate gain.",
+              "Use clear heat-shrink film or bubble wrap to trap still air; bubble wrap suits windows where reduced light or an obscured view is acceptable.",
+              "Use close-fitting honeycomb blinds or lined curtains with a pelmet, because the top gap otherwise lets warm air circulate past cold glass.",
+            ],
+          })
+        : completeCheapWindowPayload());
     },
     onFailure: (failure) => failures.push(failure),
   });
@@ -3084,7 +3159,7 @@ test("an overlong model answer is rejected before it reaches the customer", asyn
   assert.equal(result, null);
 });
 
-test("a structured plan is compacted to three visible blocks without losing material content", async () => {
+test("a structured plan keeps separate list items without losing material content", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "My reverse-cycle use rose from 240 kWh to 520 kWh. What should I check?",
@@ -3103,7 +3178,8 @@ test("a structured plan is compacted to three visible blocks without losing mate
     onFailure: (failure) => failures.push(failure),
   });
   assert.ok(result, JSON.stringify({ failures }));
-  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 3);
+  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 5);
+  assert.equal(result.presentation.steps.length, 2);
   assert.match(result.answer.directAnswer, /240 kWh to 520 kWh/);
   assert.match(result.answer.directAnswer, /colder weather and heating hours/);
   assert.match(result.answer.directAnswer, /thermostat setting/);
@@ -3141,7 +3217,7 @@ test("an explicitly requested three-action plan preserves all three structured s
   assert.deepEqual(failures, []);
 });
 
-test("structured compaction reruns the remaining validators before accepting the answer", async () => {
+test("structured multi-step layout still runs remaining validators before acceptance", async () => {
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "Is $8,500 installed for a 5 kWh home battery a fair quote?",
@@ -3160,7 +3236,8 @@ test("structured compaction reruns the remaining validators before accepting the
     onFailure: (failure) => failures.push(failure),
   });
   assert.ok(result, JSON.stringify({ failures }));
-  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 3);
+  assert.equal(result.answer.directAnswer.split(/\n\s*\n/u).length, 5);
+  assert.equal(result.presentation.steps.length, 2);
   assert.match(result.answer.directAnswer, /circuits work during an outage/i);
   assert.match(result.answer.directAnswer, /bill reduction/i);
 });
@@ -3286,14 +3363,14 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   assert.equal(estimate.serializedBodyBytes, exactBytes);
   assert.equal(estimate.maxProviderCalls, 2);
   assert.ok(estimate.repairSerializedBodyBytes > exactBytes);
-  assert.equal(estimate.maxOutputTokens, 1_200);
+  assert.equal(estimate.maxOutputTokens, 1_600);
   assert.equal(
     estimate.worstCaseMicroUsd,
     Math.ceil((
       (exactBytes * 4)
-      + (1_200 * 20)
+      + (1_600 * 20)
       + (estimate.repairSerializedBodyBytes * 4)
-      + (1_200 * 20)
+      + (1_600 * 20)
     ) * 1.25),
   );
   assert.equal(
@@ -4534,23 +4611,6 @@ test("an accepted first draft remains a single provider call", async () => {
   assert.equal(calls, 1);
 });
 
-test("a transport failure remains a single provider call and is never repaired", async () => {
-  let calls = 0;
-  const failures = [];
-  const result = await generateSurgeModelAnswer(request(), {
-    apiKey: "test-api-key",
-    fetch: async () => {
-      calls += 1;
-      throw new Error("network unavailable");
-    },
-    onFailure: (failure) => failures.push(failure),
-  });
-
-  assert.equal(result, null);
-  assert.equal(calls, 1);
-  assert.deepEqual(failures, [{ code: "provider_request_failed" }]);
-});
-
 test("official lookups and protected safety answers never enter model repair", async () => {
   let officialCalls = 0;
   const officialResult = await generateSurgeModelAnswer(request({
@@ -4587,53 +4647,161 @@ test("official lookups and protected safety answers never enter model repair", a
   assert.equal(safetyCalls, 1);
 });
 
-test("provider errors and timeout make one attempt and fail soft with null", async (t) => {
-  for (const status of [500, 429]) {
-    await t.test(`provider status ${status}`, async () => {
-      let calls = 0;
-      const result = await generateSurgeModelAnswer(request(), {
-        apiKey: "test-api-key",
-        model: "gpt-5.6-sol",
-        fetch: async () => {
-          calls += 1;
-          return new Response("unavailable", { status });
-        },
-      });
-      assert.equal(result, null);
-      assert.equal(calls, 1);
-    });
-  }
+test("transient provider failures retry the same paid model once and can recover", async (t) => {
+  const scenarios = [
+    {
+      name: "HTTP 500",
+      fail: async () => new Response("unavailable", { status: 500 }),
+    },
+    {
+      name: "HTTP 429",
+      fail: async () => new Response("rate limited", { status: 429 }),
+    },
+    {
+      name: "network error",
+      fail: async () => {
+        throw new Error("network unavailable");
+      },
+    },
+    {
+      name: "timeout",
+      fail: async () => {
+        throw new DOMException("Timed out", "AbortError");
+      },
+    },
+  ];
 
-  for (const abortError of [
-    new DOMException("Timed out", "AbortError"),
-    new Error("The operation was aborted"),
-  ]) {
-    await t.test(`provider timeout via ${abortError.constructor.name}`, async () => {
-      let calls = 0;
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const bodies = [];
       const failures = [];
       const result = await generateSurgeModelAnswer(request(), {
         apiKey: "test-api-key",
         model: "gpt-5.6-sol",
-        timeoutMs: 1,
         fetch: async (_url, options) => {
-          calls += 1;
-          return new Promise((_resolve, reject) => {
-            options.signal.addEventListener("abort", () => {
-              reject(abortError);
-            }, { once: true });
-          });
+          bodies.push(JSON.parse(options.body));
+          if (bodies.length === 1) return scenario.fail();
+          return jsonResponse(modelPayload());
         },
         onFailure: (failure) => failures.push(failure),
       });
-      assert.equal(result, null);
-      assert.equal(calls, 1);
-      assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+
+      assert.ok(result, JSON.stringify(failures));
+      assert.equal(bodies.length, 2);
+      assert.deepEqual(bodies.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol"]);
+      assert.deepEqual(failures, []);
     });
   }
 });
 
-test("malformed model output fails soft with null", async (t) => {
-  await t.test("invalid JSON output", async () => {
+test("repeated transient provider failures stop after one same-model retry", async (t) => {
+  const scenarios = [
+    {
+      name: "HTTP 500",
+      fail: async () => new Response("unavailable", { status: 500 }),
+      expectedFailure: { code: "provider_http_error", providerStatus: 500 },
+    },
+    {
+      name: "HTTP 429",
+      fail: async () => new Response("rate limited", { status: 429 }),
+      expectedFailure: { code: "provider_http_error", providerStatus: 429 },
+    },
+    {
+      name: "network error",
+      fail: async () => {
+        throw new Error("network unavailable");
+      },
+      expectedFailure: { code: "provider_request_failed" },
+    },
+    {
+      name: "timeout",
+      fail: async () => {
+        throw new DOMException("Timed out", "AbortError");
+      },
+      expectedFailure: { code: "provider_timeout" },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const bodies = [];
+      const failures = [];
+      const result = await generateSurgeModelAnswer(request(), {
+        apiKey: "test-api-key",
+        model: "gpt-5.6-sol",
+        fetch: async (_url, options) => {
+          bodies.push(JSON.parse(options.body));
+          return scenario.fail();
+        },
+        onFailure: (failure) => failures.push(failure),
+      });
+
+      assert.equal(result, null);
+      assert.equal(bodies.length, 2);
+      assert.deepEqual(bodies.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol"]);
+      assert.deepEqual(failures, [scenario.expectedFailure]);
+    });
+  }
+});
+
+test("an insufficient-quota 429 is terminal and retains its safe provider code", async () => {
+  let calls = 0;
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request(), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async () => {
+      calls += 1;
+      return Response.json({
+        error: {
+          code: "insufficient_quota",
+          message: "quota exhausted",
+        },
+      }, { status: 429 });
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.equal(result, null);
+  assert.equal(calls, 1);
+  assert.deepEqual(failures, [{
+    code: "provider_http_error",
+    providerStatus: 429,
+    providerCode: "insufficient_quota",
+  }]);
+});
+
+test("malformed and incomplete provider output gets one bounded format repair", async (t) => {
+  await t.test("malformed JSON first then valid output succeeds on the low-reasoning repair", async () => {
+    const failures = [];
+    const bodies = [];
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async (_url, options) => {
+        bodies.push(JSON.parse(options.body));
+        if (bodies.length === 1) {
+          return new Response(JSON.stringify({ output_text: "{not-json" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return jsonResponse(modelPayload());
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, JSON.stringify(failures));
+    assert.equal(bodies.length, 2);
+    assert.equal(
+      JSON.parse(bodies[1].input[1].content[0].text).repair.failureStage,
+      "response_output_json",
+    );
+    assert.deepEqual(bodies[1].reasoning, { effort: "low" });
+    assert.deepEqual(failures, []);
+  });
+
+  await t.test("repeated malformed JSON fails closed after exactly two calls", async () => {
     const failures = [];
     let calls = 0;
     const result = await generateSurgeModelAnswer(request(), {
@@ -4649,7 +4817,7 @@ test("malformed model output fails soft with null", async (t) => {
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null);
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
     assert.deepEqual(failures, [{
       code: "provider_response_invalid",
       stage: "response_output_json",
@@ -4693,19 +4861,54 @@ test("malformed model output fails soft with null", async (t) => {
     }]);
   });
 
-  await t.test("output exhausted by the shared reasoning and answer limit", async () => {
+  await t.test("incomplete max-output response first then valid output succeeds", async () => {
     const failures = [];
+    const bodies = [];
     const result = await generateSurgeModelAnswer(request(), {
       apiKey: "test-api-key",
       model: "gpt-5.6-sol",
-      fetch: async () => Response.json({
-        status: "incomplete",
-        incomplete_details: { reason: "max_output_tokens" },
-        output: [{ type: "reasoning" }],
-      }),
+      fetch: async (_url, options) => {
+        bodies.push(JSON.parse(options.body));
+        if (bodies.length === 1) {
+          return Response.json({
+            status: "incomplete",
+            incomplete_details: { reason: "max_output_tokens" },
+            output: [{ type: "reasoning" }],
+          });
+        }
+        return jsonResponse(modelPayload());
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, JSON.stringify(failures));
+    assert.equal(bodies.length, 2);
+    assert.equal(
+      JSON.parse(bodies[1].input[1].content[0].text).repair.failureStage,
+      "response_output_incomplete_max_tokens",
+    );
+    assert.deepEqual(bodies[1].reasoning, { effort: "low" });
+    assert.deepEqual(failures, []);
+  });
+
+  await t.test("repeated incomplete max-output responses fail closed after exactly two calls", async () => {
+    const failures = [];
+    let calls = 0;
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async () => {
+        calls += 1;
+        return Response.json({
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output: [{ type: "reasoning" }],
+        });
+      },
       onFailure: (failure) => failures.push(failure),
     });
     assert.equal(result, null);
+    assert.equal(calls, 2);
     assert.deepEqual(failures, [{
       code: "provider_response_invalid",
       stage: "response_output_incomplete_max_tokens",

@@ -36,6 +36,7 @@ import {
   mergeSurgeConversationFacts,
   parseSurgeConversationState,
   projectSurgeConversationStateToFrame,
+  resolveSurgeConversationReference,
   selectSurgeConversationFrame,
   surgeConversationDecisionContext,
   surgeConversationCorrectionReframesDecision,
@@ -459,7 +460,19 @@ function recentTurnsForActiveDecision(
   if (continuation?.ledger) {
     const frame = selectSurgeConversationFrame(message, continuation, false);
     if (!frame.decision) {
-      return /\b(?:too|as well)\s*[?.!]*$/i.test(message) ? recentTurns.slice(-2) : [];
+      const resolvedReference = resolveSurgeConversationReference(
+        message,
+        recentTurns,
+        continuation,
+      ).status === "resolved_from_recent_context";
+      const contextualFollowUp = intent === "answer_to_follow_up"
+        || intent === "contextual_follow_up"
+        || intent === "clarification"
+        || intent === "correction";
+      return /\b(?:too|as well)\s*[?.!]*$/i.test(message)
+        || (resolvedReference && contextualFollowUp)
+        ? recentTurns.slice(-2)
+        : [];
     }
   }
   const currentTopic = surgeConversationTopicFor(message);
