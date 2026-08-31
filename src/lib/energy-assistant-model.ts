@@ -51,7 +51,10 @@ import {
   surgePresentationText,
   type SurgeAnswerPresentation,
 } from "./surge-everyday-answer.ts";
-import { surgeAnswerMatchesQuestionIntent } from "./surge-simple-answer.ts";
+import {
+  surgeAnswerIsGenericBoilerplate,
+  surgeAnswerMatchesQuestionIntent,
+} from "./surge-simple-answer.ts";
 import {
   sanitizeSurgeCustomerOfficialCitation,
   sanitizeSurgeCustomerOfficialUrl,
@@ -728,7 +731,19 @@ State contract:
 - inactiveConversationIndex shows other contexts exist but is not evidence.
 - A correction replaces the old value within the selected decision. Never move facts between homes or ask for a fact already in the selected frame or device plan.
 
-Use industryLibrary and maintainedEvidence when relevant. deterministicReference is a boundary, not prose to copy. Return only the required JSON object.`;
+Use industryLibrary and maintainedEvidence when relevant. deterministicReference is the expert content floor: preserve its material decision, practical options, mechanisms and limits, then rewrite it naturally for this question. Never replace it with generic triage. Return only the required JSON object.`;
+}
+
+function requestSpecificModelInstructions(request: SurgeModelRequest) {
+  if (!isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)) return "";
+  return `
+
+Current-question content requirements:
+- Give exactly three ranked practical steps in 110 to 150 words.
+- Step 1 covers draught or weather seals around actual moving-air gaps.
+- Step 2 covers both clear heat-shrink window-insulation film and bubble wrap. Explain that each traps an insulating still-air layer, and say bubble wrap suits a window where an obscured view or reduced daylight is acceptable.
+- Step 3 covers close-fitting honeycomb blinds or lined curtains plus a pelmet. Explain that closing the top gap slows warm-air circulation past cold glass.
+- Keep opening windows and required ventilation usable. Do not replace these actions with bills, measurements, shopping advice or a generic whole-home plan.`;
 }
 
 const OFFICIAL_WEB_SEARCH_INSTRUCTIONS = `
@@ -1850,25 +1865,48 @@ function isResolvedRetainedDecisionRecall(request: SurgeModelRequest) {
 function cheapWindowHeatLossOptionsAreComplete(message: string, answer: string) {
   if (!isSurgeBroadCheapWindowHeatLossOptionsRequest(message)) return true;
 
-  const coversDraughts = /\b(?:weather ?seals?|draught ?seals?|draft ?seals?|seal(?:ing)? (?:air )?(?:leaks?|gaps?)|air leaks?)\b/i.test(answer);
-  const coversClearFilm = /\b(?:heat[- ]?shrink|shrink|window[- ]insulation|clear) film\b|\bfilm\b[^.!?]{0,35}\bwindow/i.test(answer);
-  const coversBubbleWrap = /\bbubble wrap\b/i.test(answer);
+  const normalizedAnswer = answer
+    .replace(/[‐‑‒–—]/gu, "-")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const hasEnoughDepth = normalizedAnswer.split(/\s+/u).filter(Boolean).length >= 90;
+  const ranksActions = /\b(?:start|first)\b/i.test(normalizedAnswer)
+    && /\b(?:second|next|then|after(?: that)?|third|finally|at night)\b/i.test(normalizedAnswer);
+  const coversDraughts = /\b(?:weather ?stripping|weather ?strips?|weather ?seals?|draught ?seals?|draft ?seals?|sealing strips?|seal(?:ing)? (?:air )?(?:leaks?|gaps?)|air leaks?)\b/i.test(normalizedAnswer);
+  const coversClearFilm = /\b(?:heat[- ]?shrink|shrink|window[- ]insulation|clear plastic|secondary[- ]glazing) (?:window )?film\b|\bwindow (?:insulation )?(?:film|kit)\b/i.test(normalizedAnswer);
+  const coversBubbleWrap = /\bbubble wrap\b/i.test(normalizedAnswer);
   const coversFittedCoverings = (
-    /\b(?:honeycomb|cellular) blinds?\b|\b(?:lined|heavy|thermal|close[- ]fitting|floor[- ]length) curtains?\b/i.test(answer)
-  ) && /\bpelmet\b/i.test(answer);
-  const explainsTemporaryGlazing = /\b(?:film|bubble wrap)\b[^.!?]{0,150}\b(?:air layer|air gap|still air|trap(?:s|ping)? air|temporary (?:double|secondary) glazing)\b/i.test(answer)
-    || /\b(?:air layer|air gap|still air|trap(?:s|ping)? air|temporary (?:double|secondary) glazing)\b[^.!?]{0,150}\b(?:film|bubble wrap)\b/i.test(answer);
-  const explainsCoverings = /\b(?:curtains?|blinds?|pelmet)\b[^.!?]{0,150}\b(?:air circulation|convection|top gap|trap(?:s|ping)? air|slow(?:s|ing)? heat|reduce(?:s|ing)? heat loss)\b/i.test(answer)
-    || /\b(?:air circulation|convection|top gap|trap(?:s|ping)? air|slow(?:s|ing)? heat|reduce(?:s|ing)? heat loss)\b[^.!?]{0,150}\b(?:curtains?|blinds?|pelmet)\b/i.test(answer);
-  const explainsBubbleWrapFit = /\bbubble wrap\b[^.!?]{0,120}\b(?:view|outlook|light|privacy|laundry|bathroom|utility|rarely used)\b/i.test(answer)
-    || /\b(?:view|outlook|light|privacy|laundry|bathroom|utility|rarely used)\b[^.!?]{0,120}\bbubble wrap\b/i.test(answer);
-  return coversDraughts
+    /\b(?:honeycomb|cellular|close[- ]fitting) (?:blinds?|shades?)\b|\b(?:lined|heavy|thick|thermal|close[- ]fitting|floor[- ]length) (?:curtains?|drapes?)\b/i.test(normalizedAnswer)
+  ) && /\bpelmet\b/i.test(normalizedAnswer);
+  const explainsTemporaryGlazing = /\b(?:(?:still|trapped|insulating) air(?: (?:layer|gap|pockets?))?|air (?:layer|gap|pockets?)|trap(?:s|ping|ped)? (?:a layer of )?(?:still )?air|temporary (?:double|secondary) glazing)\b/i.test(normalizedAnswer);
+  const explainsCoverings = /\b(?:pelmet|top gap)\b/i.test(normalizedAnswer)
+    && /\b(?:air circulation|convection|air movement|warm[- ]air|cold glass|fall(?:s|ing)? behind|circulat(?:e|es|ing) past)\b/i.test(normalizedAnswer);
+  const explainsBubbleWrapFit = /\bbubble wrap\b/i.test(normalizedAnswer)
+    && /\b(?:view|visibility|outlook|daylight|light|blur(?:red)?|obscur(?:e|ed|ing)|privacy|laundry|bathroom|utility|rarely used)\b/i.test(normalizedAnswer);
+  const preservesWindowUse = /\b(?:opening|openable|operable) windows?\b/i.test(normalizedAnswer)
+    && /\b(?:required|necessary) ventilation\b/i.test(normalizedAnswer);
+  return hasEnoughDepth
+    && ranksActions
+    && coversDraughts
     && coversClearFilm
     && coversBubbleWrap
     && coversFittedCoverings
     && explainsTemporaryGlazing
     && explainsCoverings
-    && explainsBubbleWrapFit;
+    && explainsBubbleWrapFit
+    && preservesWindowUse;
+}
+
+function causalQuestionGetsExplanation(message: string, answer: string) {
+  const asksForCause = /\bwhy (?:does|do|did|is|are|would|will|can|could)\b|\bwhat caus(?:e|es|ed)\b|\bhow come\b/i.test(message);
+  if (!asksForCause) return true;
+  const hasCausalExplanation = /\b(?:because|due to|caus(?:e|ed|es|ing)|the reason|means? that|so (?:it|the|your|this|that)|therefore|leads? to|results? in|makes?|forces?|requires?|increases?|raises?|reduces?|lowers?|worsens?|happens? when|which (?:increases?|raises?|reduces?|lowers?|makes?|forces?|causes?))\b/i.test(answer);
+  if (!hasCausalExplanation) return false;
+  const asksAboutNightReverseCycleUse = /\b(?:reverse[- ]?cycle|air ?con(?:ditioner|ditioning)?|heat pump)\b/i.test(message)
+    && /\b(?:power|energy|electricity|kWh|consumption|use|usage)\b/i.test(message)
+    && /\b(?:night|overnight|after dark)\b/i.test(message);
+  if (!asksAboutNightReverseCycleUse) return true;
+  return /\b(?:outside|outdoor|ambient|colder|temperature difference|heat loss|defrost|compressor(?: runs?| runtime)?|runs? longer|work(?:s|ing)? harder|setpoint|solar)\b/i.test(answer);
 }
 
 function modelAnswerConversationQualityFailure(
@@ -1892,9 +1930,13 @@ function modelAnswerConversationQualityFailure(
   const maximumParagraphs = explicitlyRequestsThreeActions(request.message) ? 5 : 3;
   if (paragraphCount > maximumParagraphs) return "answer_too_long";
   if (/\[\s*\]\s*\(|\(\s*\[\s*\]\s*\(/u.test(answer)) return "everyday_language";
+  if (surgeAnswerIsGenericBoilerplate(answer)) return "generic_restart";
   if (/^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i.test(answer)
     && /\b(?:energy|solar|battery|heating|air ?con|hot water|insulation|glazing|draught|draft|rebate|certificate|tariff|quote|upgrade)\b/i.test(decisionContext)) {
     return "topic_drift";
+  }
+  if (!causalQuestionGetsExplanation(request.message, answer)) {
+    return "question_coverage";
   }
   if (!cheapWindowHeatLossOptionsAreComplete(request.message, answer)) {
     return "question_coverage";
@@ -2877,7 +2919,9 @@ function providerBody(
     reasoning: { effort: "medium" },
     max_output_tokens: maxOutputTokens,
     text: {
-      verbosity: "low",
+      verbosity: isSurgeBroadCheapWindowHeatLossOptionsRequest(request.message)
+        ? "medium"
+        : "low",
       format: {
         type: "json_schema",
         name: "surge_energy_answer",
@@ -2891,6 +2935,7 @@ function providerBody(
         content: [{
           type: "input_text",
           text: instructions(request.audience)
+            + requestSpecificModelInstructions(request)
             + (request.officialWebSearch ? OFFICIAL_WEB_SEARCH_INSTRUCTIONS : "")
             + (repairStage ? modelRepairInstructions(repairStage, request) : ""),
         }],

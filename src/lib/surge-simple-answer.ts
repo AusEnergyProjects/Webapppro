@@ -31,6 +31,29 @@ type SimpleAnswer = {
 
 const NUMBER_WORD_PATTERN = "one|two|three|four|five|six|seven|eight|nine|ten";
 const COLD_HOME_SYMPTOM = SURGE_HOME_COMFORT_INTENT_PATTERN;
+const SURGE_GENERIC_BOILERPLATE_PATTERNS = [
+  /\b(?:question|request|query) is not specific enough\b/i,
+  /\bI (?:found|have) (?:a )?related (?:current )?official source\b/i,
+  /\bname the exact home-energy decision\b/i,
+  /\btell me the home or trade decision\b/i,
+  /\bwhat topic would you like (?:covered|recreated)\b/i,
+  /\bgoverned (?:product )?evidence could not be verified\b/i,
+  /\btry again (?:later|after (?:current )?official (?:product )?evidence)\b/i,
+  /\bmatched your [a-z -]+ question\b/i,
+  /\bstart with (?:the )?(?:problem|issue|thing) (?:you )?(?:notice|feel|see) most\b/i,
+  /\bnot (?:a|another) shopping list\b/i,
+  /\b(?:write|note) down (?:the )?(?:worst|main|biggest) (?:room|problem|issue|appliance|area)\b/i,
+  /\bcompare (?:your )?(?:actual )?(?:bill|energy) (?:usage|use) before (?:choosing|buying|deciding)\b/i,
+  /\bwhich (?:room|appliance|area|issue|problem) is causing (?:the )?(?:biggest|main|worst) (?:problem|issue)?\b/i,
+  /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
+  /^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i,
+  /^\s*(?:this|that) (?:does not|doesn't) (?:appear to )?(?:be|relate to) (?:an? )?(?:Australian )?home[- ]energy\b/i,
+] as const;
+
+export function surgeAnswerIsGenericBoilerplate(value: string) {
+  return SURGE_GENERIC_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 const DOOR_DRAUGHT_REPORT = /\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,36}\b(?:under|around|through)\b[^.!?\n]{0,18}\b(?:(?:my|our|the)\s+)?(?:(?:front|back|external)\s+)?door\b|\b(?:(?:my|our|the)\s+)?(?:(?:front|back|external)\s+)?door\b[^.!?\n]{0,24}\b(?:is|feels?)\s+(?:very\s+)?(?:draughty|drafty)\b/i;
 const DOOR_DRAUGHT_DENIAL = /\b(?:no|not|never|no longer|don['’]?t|do not|isn['’]?t|is not|wasn['’]?t|was not|can['’]?t|cannot)\b[^.!?\n]{0,45}\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,45}\bdoor\b|\bdoor\b[^.!?\n]{0,35}\b(?:isn['’]?t|is not|wasn['’]?t|was not|no longer)\b[^.!?\n]{0,18}\b(?:draughty|drafty)|\b(?:draught|draft|breeze|cold air|air leak)\b[^.!?\n]{0,45}\bdoor\b[^.!?\n]{0,24}\b(?:gone|stopped|fixed|sealed)\b/i;
 const DOOR_DRAUGHT_NON_ASSERTION = /\?\s*$|^\s*(?:could|would|can|might|may|is|are|was|were|do|does|did)\b|\b(?:wonder(?:ing)?\s+(?:if|whether)|asked?\s+(?:if|whether)|asks?\s+(?:if|whether)|might|maybe|perhaps|possibly)\b/i;
