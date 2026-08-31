@@ -223,6 +223,7 @@ function handleEnergyAssistantRequest(
     ...dependencies,
     generateAnswer: (modelRequest) => generateHostedModelAnswer(modelRequest, requestId),
     qualityMetadata: hostedQualityMetadata(),
+    requireValidatedModelForOrdinaryAdvice: true,
   });
 }
 

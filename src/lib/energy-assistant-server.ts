@@ -90,6 +90,7 @@ import {
 } from "./surge-everyday-answer.ts";
 import {
   surgeAnswerSharesQuestionIntent,
+  surgeAnswerIsGenericBoilerplate,
   composeSurgeSimpleAnswer,
   surgeAnswerMatchesQuestionIntent,
 } from "./surge-simple-answer.ts";
@@ -845,26 +846,12 @@ function generatedResultIsPolicySafe(
   );
 }
 
-const SURGE_GENERIC_NON_ANSWER_PATTERNS = [
-  /\b(?:question|request|query) is not specific enough\b/i,
-  /\bI (?:found|have) (?:a )?related (?:current )?official source\b/i,
-  /\bname the exact home-energy decision\b/i,
-  /\btell me the home or trade decision\b/i,
-  /\bwhat topic would you like (?:covered|recreated)\b/i,
-  /\bgoverned (?:product )?evidence could not be verified\b/i,
-  /\btry again (?:later|after (?:current )?official (?:product )?evidence)\b/i,
-  /\bmatched your [a-z -]+ question\b/i,
-  /^\s*(?:it depends|that depends|I need more (?:details|information|context)|please provide more (?:details|information|context))[.!?]*\s*$/i,
-  /^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i,
-  /^\s*(?:this|that) (?:does not|doesn't) (?:appear to )?(?:be|relate to) (?:an? )?(?:Australian )?home[- ]energy\b/i,
-] as const;
-
 function isGenericNonAnswer(
   answer: EnergyAssistantAnswer,
   presentation: SurgeAnswerPresentation | null = null,
 ) {
   const visibleText = `${answer.directAnswer}\n${presentation ? surgePresentationText(presentation, true) : ""}`;
-  return SURGE_GENERIC_NON_ANSWER_PATTERNS.some((pattern) => pattern.test(visibleText));
+  return surgeAnswerIsGenericBoilerplate(visibleText);
 }
 
 function groundedAnswerNeedsDirectDelivery(answer: EnergyAssistantAnswer) {
@@ -1836,6 +1823,8 @@ async function ask(request: Request, dependencies: ServerDependencies) {
     .filter((turn) => turn.role === "assistant")
     .map((turn) => turn.content);
   if (planContext) priorUserMessages.unshift(surgePlanContextSummary(planContext));
+  const governedFinanceFacts = surgeRecurringFinanceConversationFacts(message, fullRecentUserMessages);
+  const requiresGovernedFinanceCalculation = governedFinanceFacts.length > 0;
   const now = dateFrom(dependencies);
   const deterministicMessage = compose === composeEnergyAssistantAnswer
     ? needsFullDeterministicHistory
@@ -1918,7 +1907,9 @@ async function ask(request: Request, dependencies: ServerDependencies) {
   let answerSource: "deterministic" | "grounded" | "model" = "deterministic";
   let nextContinuation: SurgeConversationState = framedContinuation || emptySurgeConversationState();
   let officialCitations: SurgeOfficialWebCitation[] = [];
-  if (!requiresDeterministicSafety && !requiresDeterministicDocumentAnswer
+  if (!requiresDeterministicSafety
+    && (!requiresDeterministicDocumentAnswer
+      || (dependencies.requireValidatedModelForOrdinaryAdvice && !requiresGovernedFinanceCalculation))
     && !requiresDeterministicScopeBoundary
     && !requiresDeterministicServiceAnswer && !protectedAnswer) {
     const modelRequest: SurgeModelRequest = {
@@ -1949,7 +1940,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       planContext,
       referenceAnswer,
     );
-    const deliverGroundedDirectly = groundedAnswer
+    const deliverGroundedDirectly = !dependencies.requireValidatedModelForOrdinaryAdvice && groundedAnswer
       ? groundedAnswerNeedsDirectDelivery(groundedAnswer) && !officialWebSearch
       : false;
     if (deliverGroundedDirectly && groundedAnswer) {
@@ -2056,10 +2047,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
           : null;
       if (evidenceAnswer) answer = mergePlanPriorityWithEvidenceAnswer(planPriorityAnswer, evidenceAnswer);
     }
-    if (dependencies.requireValidatedModelForOrdinaryAdvice
-      && !deliverGroundedDirectly
-      && !officialWebSearch
-      && answerSource !== "model") {
+    if (dependencies.requireValidatedModelForOrdinaryAdvice && answerSource !== "model") {
       throw new EnergyAssistantServerError(
         503,
         "SURGE_AI_TEMPORARILY_UNAVAILABLE",
@@ -2125,7 +2113,7 @@ async function ask(request: Request, dependencies: ServerDependencies) {
       ? "topic_change"
     : conversationIntent;
   const derivedFacts = answerSource === "deterministic"
-    ? surgeRecurringFinanceConversationFacts(message, priorUserMessages)
+    ? governedFinanceFacts
     : [];
   const ledgerStateBeforePlanCorrections = requiresDeterministicScopeBoundary
     ? deliveredState

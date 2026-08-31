@@ -1230,6 +1230,53 @@ test("safety and document quote routes bypass the model while service intent can
   if (serviceModelRequest) assert.equal(serviceModelRequest.officialWebSearch, null);
 });
 
+test("strict ordinary-advice mode sends quote judgement through the paid model and fails closed without it", async () => {
+  for (const succeeds of [true, false]) {
+    let modelCalls = 0;
+    const response = await handleEnergyAssistantRequest(request({
+      action: "ask",
+      requestId: `strict-document-quote-${succeeds ? "success" : "failure"}-0001`,
+      message: "Does it seem like a good quote?",
+      recentTurns: [{
+        role: "user",
+        content: "Uploaded energy quote summary for follow-up: solar and battery installation quote, apparent total $12,000.",
+      }],
+      pageContext: "/surge",
+      audience: "public",
+    }, { qualityRehearsal: true }), {
+      now: () => new Date(NOW),
+      reserveModelCall: allowModelCall,
+      requireValidatedModelForOrdinaryAdvice: true,
+      generateAnswer: async (modelRequest) => {
+        modelCalls += 1;
+        assert.match(modelRequest.deterministicAnswer.directAnswer, /\$12,000|quote/i);
+        return succeeds
+          ? {
+              answer: fixedAnswer("The $12,000 total alone is not enough to call the quote good value. Compare the exact solar and usable battery capacity, installed scope, backup circuits, warranties, exclusions and conservative annual bill saving against another itemised quote."),
+              continuation: continuation({
+                activeTopic: "quotes_costs",
+                goal: "Assess the solar and battery quote",
+                lastAnswerSummary: "Requested the material scope and value details.",
+              }),
+            }
+          : null;
+      },
+    });
+
+    assert.equal(modelCalls, 1);
+    const payload = await body(response);
+    if (succeeds) {
+      assert.equal(response.status, 200);
+      assert.equal(payload.quality.answerSource, "model");
+      assert.match(payload.reply.directAnswer, /\$12,000.*not enough.*installed scope.*warranties/is);
+    } else {
+      assert.equal(response.status, 503);
+      assert.equal(payload.error.code, "SURGE_AI_TEMPORARILY_UNAVAILABLE");
+      assert.equal("reply" in payload, false);
+    }
+  }
+});
+
 test("registry-grounded product guidance bypasses the general model and records its source", async () => {
   const qualityEvents = [];
   let modelCalls = 0;
@@ -4482,7 +4529,7 @@ test("a generic bills-first paid result cannot replace the moisture priority fro
   assert.doesNotMatch(payload.reply.directAnswer, /start by comparing your electricity and gas bills/i);
 });
 
-test("a rejected paid window answer falls back to the complete window explainer with a completed planner", async () => {
+test("a rejected paid window answer fails closed while retaining the expert reference with a completed planner", async () => {
   const planContext = completedMoisturePlannerContext();
   assert.ok(planContext);
   assert.ok(planContext.facts.length >= 45);
@@ -4498,6 +4545,7 @@ test("a rejected paid window answer falls back to the complete window explainer 
   }, { qualityRehearsal: true }), {
     now: () => new Date(NOW),
     reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
     generateAnswer: async (modelRequest) => {
       modelCalls += 1;
       assert.match(modelRequest.deterministicAnswer.directAnswer, /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is);
@@ -4506,14 +4554,49 @@ test("a rejected paid window answer falls back to the complete window explainer 
     },
   });
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 503);
   assert.equal(modelCalls, 1, "the paid model remains the first attempted answer path");
   const payload = await body(response);
-  assert.equal(payload.quality.answerSource, "deterministic");
-  assert.match(payload.reply.directAnswer, /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is);
-  assert.match(payload.reply.directAnswer, /still-air layer.*slows air circulation/is);
-  assert.match(payload.reply.directAnswer, /losing a clear view and some daylight is acceptable/i);
-  assert.doesNotMatch(payload.reply.directAnswer, /start with the problem you notice most|compare actual bill usage|which room or appliance/i);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, "SURGE_AI_TEMPORARILY_UNAVAILABLE");
+  assert.equal("reply" in payload, false);
+});
+
+test("a validated paid window answer is the only customer-visible ordinary answer", async () => {
+  const planContext = completedMoisturePlannerContext();
+  let modelCalls = 0;
+  const response = await handleEnergyAssistantRequest(request({
+    action: "ask",
+    requestId: "cheap-window-paid-success-0001",
+    message: "what are some cheap ways to reduce heat loss from my windows",
+    recentTurns: [],
+    planContext,
+    pageContext: "/surge",
+    audience: "public",
+  }, { qualityRehearsal: true }), {
+    now: () => new Date(NOW),
+    reserveModelCall: allowModelCall,
+    requireValidatedModelForOrdinaryAdvice: true,
+    generateAnswer: async (modelRequest) => {
+      modelCalls += 1;
+      assert.match(modelRequest.deterministicAnswer.directAnswer, /weather seals.*heat-shrink window-insulation film.*bubble wrap.*pelmet/is);
+      return {
+        answer: fixedAnswer("Start with removable weather seals where opening windows leak air. For single glazing, clear heat-shrink film traps a still-air layer while keeping the view; bubble wrap uses the same idea where reduced daylight and an obscured view are acceptable. At night, close-fitting honeycomb blinds or lined curtains with a pelmet slow warm-air circulation past the cold glass. Keep opening windows and required ventilation usable."),
+        continuation: continuation({
+          activeTopic: "windows_glazing",
+          goal: "Reduce heat loss through windows cheaply",
+          lastAnswerSummary: "Ranked seals, removable glazing layers and fitted coverings.",
+        }),
+      };
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(modelCalls, 1);
+  const payload = await body(response);
+  assert.equal(payload.quality.answerSource, "model");
+  assert.match(payload.reply.directAnswer, /weather seals.*heat-shrink film.*bubble wrap.*pelmet/is);
+  assert.doesNotMatch(payload.reply.directAnswer, /start with the problem you notice most|not a shopping list|which room or appliance/i);
 });
 
 test("a generic paid result cannot replace roof water-entry control when moisture and roof damage are both reported", async () => {

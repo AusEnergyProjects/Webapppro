@@ -22,7 +22,7 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /networkKey: identity\.networkKey/);
   assert.match(source, /requestKey: requestId/);
   assert.match(source, /estimatedMicroUsd/);
-  assert.doesNotMatch(source, /requireValidatedModelForOrdinaryAdvice:\s*true/);
+  assert.match(source, /requireValidatedModelForOrdinaryAdvice:\s*true/);
   assert.match(source, /failure\.stage \? \{ stage: failure\.stage \}/);
   assert.match(source, /prepareBoundedRequest\(request\)/);
   assert.match(source, /byteLength > ENERGY_ASSISTANT_MAX_BODY_BYTES/);

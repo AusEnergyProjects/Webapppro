@@ -2381,11 +2381,70 @@ test("cheap window heat-loss advice combines ranked actions, mechanisms and fit 
     JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
     "question_coverage",
   );
+  assert.equal(observedBodies[0].text.verbosity, "medium");
+  assert.match(observedBodies[0].input[0].content[0].text, /Current-question content requirements/i);
+  assert.match(observedBodies[0].input[0].content[0].text, /exactly three ranked practical steps/i);
   assert.match(observedBodies[1].input[0].content[0].text, /Window-options repair/i);
   assert.match(observedBodies[1].input[0].content[0].text, /draught seals.*window-insulation film.*bubble wrap.*pelmet/is);
   assert.match(result.answer.directAnswer, /weather seals.*heat-shrink film.*bubble wrap.*pelmet/is);
   assert.match(result.answer.directAnswer, /trapped air layer.*slow air circulation/is);
   assert.match(result.answer.directAnswer, /losing the view is acceptable/i);
+  assert.deepEqual(failures, []);
+});
+
+test("cheap window validation accepts complete expert wording across sentence boundaries", async () => {
+  const failures = [];
+  const diagnostics = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are some cheap ways to reduce heat loss from my windows?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      providerCalls += 1;
+      return jsonResponse(modelPayload({
+        answer: "For low-cost window heat-loss reduction, first stop moving air with removable weatherstripping around opening sashes because draught control gives an immediate comfort gain. Second, use a clear plastic window kit on single glazing, with bubble wrap as a removable alternative. Both create an insulating air pocket. Bubble wrap suits a utility window where reduced daylight and obscured visibility are acceptable. Third, close cellular shades or thick curtains over the frame and cap the top gap with a pelmet. That slows warm-air circulation past cold glass instead of letting room heat fall behind the covering. Keep required ventilation and opening windows usable.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+    syntheticEvaluation: {
+      onRejectedCandidate: (diagnostic) => diagnostics.push(diagnostic),
+    },
+  });
+
+  assert.ok(result, JSON.stringify({ failures, diagnostics }));
+  assert.equal(providerCalls, 1);
+  assert.match(result.answer.directAnswer, /weatherstripping.*clear plastic window kit.*bubble wrap.*cellular shades.*pelmet/is);
+  assert.deepEqual(failures, []);
+});
+
+test("cheap window validation repairs a shallow answer that omits operability guidance", async () => {
+  const failures = [];
+  const observedBodies = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are some cheap ways to reduce heat loss from my windows?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: providerCalls === 1
+          ? "Cheap window heat-loss options include weather seals on gaps. Clear heat-shrink film and bubble wrap trap still air; bubble wrap suits windows where reduced light is acceptable. Use honeycomb blinds and a pelmet because the top gap lets warm air circulate past cold glass."
+          : "Start with moving-air gaps: fit removable weather seals around opening windows, because stopping draughts is the cheapest immediate gain. On suitable single-glazed windows, clear heat-shrink film creates a trapped air layer like temporary secondary glazing. Bubble wrap uses the same still-air idea and makes sense for a bathroom, laundry or rarely used window where losing the view is acceptable. At night, close-fitting honeycomb blinds or lined curtains that overlap the frame, with a pelmet over the top gap, slow air circulation past the cold glass. Keep opening windows and required ventilation usable.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 2);
+  assert.equal(
+    JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(result.answer.directAnswer, /opening windows and required ventilation usable/i);
   assert.deepEqual(failures, []);
 });
 
@@ -2922,6 +2981,96 @@ test("a contextual follow-up rejects a generic whole-home restart", async () => 
     code: "provider_output_rejected",
     stage: "question_coverage",
   }]);
+});
+
+test("live whole-home boilerplate is repaired before it can reach a customer", async () => {
+  const failures = [];
+  const observedBodies = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "Where should I start to reduce my home energy bill?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: providerCalls === 1
+          ? "Start with the problem you notice most, not a shopping list. Compare your actual bill usage before choosing anything. Which room or appliance is causing the biggest problem?"
+          : "Start with the largest controllable load shown on your seasonal energy bill. Check heating and cooling filters, setpoint and operating pattern first, then hot-water and pool-pump timing before spending on equipment.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 2);
+  assert.equal(
+    JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+    "generic_restart",
+  );
+  assert.doesNotMatch(result.answer.directAnswer, /problem you notice most|shopping list|which room or appliance/i);
+  assert.deepEqual(failures, []);
+});
+
+test("a reverse-cycle night-use question cannot pass with generic efficiency advice", async () => {
+  const failures = [];
+  const observedBodies = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "Why does my reverse-cycle unit use more power at night?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: providerCalls === 1
+          ? "Reverse-cycle air conditioners are efficient, but their performance depends on the room, climate, insulation, thermostat setting and installation. Check your bills and operating times before making changes."
+          : "At night it can draw more electricity because colder outdoor air lowers heat-pump efficiency, so the compressor runs longer to maintain the same setpoint. In cold weather, occasional defrost cycles also add short periods of use. Compare similar nights at the same setpoint and fan mode; a large unexplained change after that could justify a service check.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 2);
+  assert.equal(
+    JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(result.answer.directAnswer, /colder outdoor air.*heat-pump efficiency.*compressor runs longer/is);
+  assert.deepEqual(failures, []);
+});
+
+test("a reverse-cycle night-use question rejects a tautology without a physical mechanism", async () => {
+  const failures = [];
+  const observedBodies = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "Why does my reverse-cycle unit use more power at night?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      return jsonResponse(modelPayload({
+        answer: providerCalls === 1
+          ? "At night, a reverse-cycle unit can use more electricity because its power consumption increases after dark. Check the timer and compare your bills before making changes."
+          : "At night it can draw more electricity because colder outdoor air lowers heat-pump efficiency, so the compressor runs longer to maintain the same setpoint. In cold weather, occasional defrost cycles also add short periods of use. Compare similar nights at the same setpoint and fan mode; a large unexplained change after that could justify a service check.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 2);
+  assert.equal(
+    JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(result.answer.directAnswer, /colder outdoor air.*compressor runs longer/is);
+  assert.deepEqual(failures, []);
 });
 
 test("an overlong model answer is rejected before it reaches the customer", async () => {
