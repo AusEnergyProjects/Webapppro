@@ -997,6 +997,71 @@ test("Victorian ducted-gas replacement support names VEU even when the official 
   assert.deepEqual(failures, []);
 });
 
+test("Victorian ducted-gas support repairs a VEU answer that drops the reverse-cycle replacement context", async () => {
+  const sourceUrl = "https://www.energy.vic.gov.au/victorian-energy-upgrades/products/heating-and-cooling-discounts";
+  const officialCitation = {
+    id: "veu-heating-and-cooling-discounts",
+    title: "Heating and cooling discounts",
+    publisher: "Victorian Government",
+    url: sourceUrl,
+    sourceTier: "primary_official",
+    jurisdiction: "VIC",
+    effectiveFrom: null,
+    effectiveTo: null,
+    lastChecked: "2026-09-01",
+    reviewDue: "2026-12-01",
+    storagePolicy: "link_only",
+    stale: false,
+  };
+  const deficientCandidate = "Current Victorian Energy Upgrades support and the available discount could not be verified just now. The official programme to check is Victorian Energy Upgrades (VEU). Ask for any VEU discount to be itemised before accepting the quote. What type and model of ducted gas heater is being replaced?";
+  const compliantCandidate = "I could not verify the current Victorian Energy Upgrades offer or eligibility for replacing ducted gas heating with reverse-cycle air conditioning just now. Victorian Energy Upgrades (VEU) is the official programme to check. Before relying on a discount, confirm the exact existing ducted-gas heater, proposed reverse-cycle model, accredited provider, decommissioning work and itemised installed quote.";
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "What current Victorian support may apply if I replace ducted gas heating with reverse-cycle air conditioning?",
+    deterministicAnswer: {
+      ...deterministicAnswer("Check Victorian Energy Upgrades using the exact old heater, replacement model and installation details."),
+      citations: [officialCitation],
+    },
+    officialWebSearch: {
+      kind: "rebate_program",
+      jurisdiction: "Victoria",
+      allowedDomains: ["energy.vic.gov.au"],
+    },
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) throw new DOMException("Timed out", "AbortError");
+      return jsonResponse(structuredModelPayload(calls.length === 2 ? {
+        verdict: "Current Victorian Energy Upgrades support and the available discount could not be verified just now.",
+        reason: "The official programme to check is Victorian Energy Upgrades (VEU).",
+        steps: ["Ask for any VEU discount to be itemised before accepting the quote."],
+        followUpQuestion: "What type and model of ducted gas heater is being replaced?",
+      } : {
+        verdict: "I could not verify the current Victorian Energy Upgrades offer or eligibility for replacing ducted gas heating with reverse-cycle air conditioning just now.",
+        reason: "Victorian Energy Upgrades (VEU) is the official programme to check.",
+        steps: ["Before relying on a discount, confirm the exact existing ducted-gas heater, proposed reverse-cycle model, accredited provider, decommissioning work and itemised installed quote."],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.equal(
+    JSON.parse(calls[2].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(calls[2].input[0].content[0].text, /existing ducted-gas heating with proposed reverse-cycle air conditioning/i);
+  assert.match(calls[2].input[0].content[0].text, /exact existing ducted-gas heater, proposed reverse-cycle model, installation scope and itemised quote details/i);
+  assert.equal(result.officialEvidenceMode, "maintained_recovery");
+  assert.equal(result.answer.directAnswer, compliantCandidate);
+  assert.notEqual(result.answer.directAnswer, deficientCandidate);
+  assert.deepEqual(result.answer.citations.map((citation) => citation.url), [sourceUrl]);
+  assert.deepEqual(failures, []);
+});
+
 test("official recovery accepts specific eligibility checks when the equipment wording is in the follow-up", async () => {
   const calls = [];
   const failures = [];

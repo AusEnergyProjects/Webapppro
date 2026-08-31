@@ -2892,7 +2892,9 @@ export function updateSurgeConversationLedger(
     const correctionDecision = ledgerDecisions.find((candidate) => candidate.id === correctionTargetId);
     for (const fact of correctionDecision?.facts || []) {
       if (!/^quote_[a-z0-9]+$/i.test(fact.key)) continue;
-      const priorPrice = fact.value.match(/\$\s*[\d,]+(?:\.\d+)?/)?.[0]?.replace(/^\$\s+/, "$");
+      const priorPrice = fact.value
+        .match(/\$\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/)?.[0]
+        ?.replace(/^\$\s+/, "$");
       if (priorPrice && priorPrice !== sharedQuotePrice) {
         replacements.push({
           subjectId: identity.id,

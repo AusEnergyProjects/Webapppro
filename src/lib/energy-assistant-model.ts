@@ -1288,7 +1288,8 @@ Current-question content requirements:
 
 Current-question content requirements:
 - Explicitly name Victorian Energy Upgrades (VEU) as the official programme to check for this ducted-gas to reverse-cycle replacement. A correct official URL does not replace naming the programme in the customer-visible answer.
-- Keep current availability, discount and eligibility claims conditional on verified official evidence and the exact old heater, replacement model and installation details.`;
+- Keep the replacement context explicit in the customer-visible answer: the existing ducted-gas heating and the proposed reverse-cycle air conditioning.
+- Keep current availability, discount and eligibility claims conditional on verified official evidence. If the current support cannot be verified, say so without claiming eligibility, then name the exact existing ducted-gas heater, proposed reverse-cycle model and installation scope the customer should verify.`;
   if (asksWhichVictorianProgramsToCheck(request)) return `
 
 Current-question content requirements:
@@ -1392,7 +1393,7 @@ function modelRepairInstructions(
   if (stage === "question_coverage") {
     if (request && asksAboutVictorianDuctedGasToReverseCycleSupport(request)) {
       return `${MODEL_REPAIR_INSTRUCTIONS}
-- Victorian heating-support repair: explicitly name Victorian Energy Upgrades (VEU) in the customer-visible answer. Do not rely on an attached official URL to supply the programme name, and do not claim current eligibility or a discount without verified evidence.`;
+- Victorian heating-support repair: explicitly name Victorian Energy Upgrades (VEU) in the customer-visible answer and state that this check concerns replacing existing ducted-gas heating with proposed reverse-cycle air conditioning. Name the exact existing ducted-gas heater, proposed reverse-cycle model, installation scope and itemised quote details the customer should verify. Do not rely on an attached official URL to supply the programme name, and do not claim current eligibility or a discount without verified evidence.`;
     }
     if (request && asksWhichVictorianProgramsToCheck(request)) {
       return `${MODEL_REPAIR_INSTRUCTIONS}

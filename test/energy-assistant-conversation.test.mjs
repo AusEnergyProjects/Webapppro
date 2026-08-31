@@ -4041,6 +4041,52 @@ test("labelled quote follow-ups retain prices and warranties through an equal-pr
   assert.doesNotMatch(JSON.stringify(correctedDespiteGenericIntent), /\$7,400/);
 });
 
+test("an equal-price correction removes stale composite details when model quote facts are already corrected", () => {
+  const firstMessage = "Quote A is $6,900 with a five-year warranty. Quote B is $7,400 with a seven-year warranty. How should I compare them?";
+  let current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: firstMessage,
+    activeTopic: "products_ratings",
+    goal: firstMessage,
+    facts: [
+      { key: "quote_a", value: "$6,900, five-year warranty" },
+      { key: "quote_b", value: "$7,400, seven-year warranty" },
+      { key: "proposed_or_quoted_details", value: firstMessage },
+    ],
+  });
+  current = recordLedgerTurn(current, {
+    message: "Is B worth the extra money just for the longer warranty?",
+    activeTopic: "products_ratings",
+    goal: `${firstMessage} | Is B worth the extra money just for the longer warranty?`,
+    intent: "contextual_follow_up",
+  });
+
+  const correctionMessage = "Correction: they are both $6,900. I copied B's price incorrectly.";
+  current = recordLedgerTurn(current, {
+    message: correctionMessage,
+    activeTopic: "products_ratings",
+    goal: current.goal,
+    answerSummary: "Both quotes are now $6,900, so compare scope and warranty coverage.",
+    intent: "correction",
+    facts: [
+      { key: "quote_a", value: "$6,900 five-year warranty" },
+      { key: "quote_b", value: "$6,900 seven-year warranty" },
+      { key: "proposed_or_quoted_details", value: firstMessage },
+    ],
+  });
+
+  assert.doesNotMatch(JSON.stringify(current), /\$7,400/);
+  assert.match(JSON.stringify(current), /\$6,900/);
+  assert.match(JSON.stringify(current), /five-year warranty/i);
+  assert.match(JSON.stringify(current), /seven-year warranty/i);
+
+  const frame = selectSurgeConversationFrame(
+    "At the same price, which one would you choose now?",
+    current,
+    true,
+  );
+  assert.doesNotMatch(JSON.stringify(frame), /\$7,400/);
+});
+
 test("a declarative same-home constraint keeps the active decision in the answer frame without merging the new topic", () => {
   const firstMessage = "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?";
   const current = recordLedgerTurn(emptySurgeConversationState(), {
