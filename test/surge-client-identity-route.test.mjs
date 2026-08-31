@@ -26,6 +26,9 @@ test("energy assistant route gates JSON before server handling and wires anonymo
   assert.match(source, /failure\.stage \? \{ stage: failure\.stage \}/);
   assert.match(source, /prepareBoundedRequest\(request\)/);
   assert.match(source, /byteLength > ENERGY_ASSISTANT_MAX_BODY_BYTES/);
+  assert.match(source, /Promise\.allSettled\(\[\s*reader\.cancel\(\),\s*request\.body\?\.cancel\(\)/);
+  assert.match(source, /return \{\s*request,\s*requestId: boundedRequestId\(source\),\s*\}/);
+  assert.doesNotMatch(source, /new Request\(request,\s*\{\s*body:/);
   assert.match(source, /if \(!preparedRequest\) return requestTooLarge\(\)/);
   assert.ok(
     source.indexOf("await prepareBoundedRequest(request)")
