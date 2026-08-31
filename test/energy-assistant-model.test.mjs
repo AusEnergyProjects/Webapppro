@@ -2078,7 +2078,7 @@ test("returning to the saved home supplies its prior decision without leaking Mu
   assert.doesNotMatch(serializedContext, /\$7,400|8\.5 kW|3350/);
 });
 
-test("returning to a prior door fix after a solar detour keeps the paid model on the recalled decision", async () => {
+test("returning to a prior door fix repairs a paid-model memory denial and keeps the recalled decision", async () => {
   const continuation = state({
     activeTopic: "products_ratings",
     goal: "Compare solar quotes and the inverter warranty",
@@ -2131,7 +2131,8 @@ test("returning to a prior door fix after a solar detour keeps the paid model on
     },
   });
   const failures = [];
-  let observedBody;
+  const observedBodies = [];
+  let providerCalls = 0;
   const result = await generateSurgeModelAnswer(request({
     message: "back to the front door, what lasting fix did you recommend?",
     recentTurns: [
@@ -2150,10 +2151,24 @@ test("returning to a prior door fix after a solar detour keeps the paid model on
   }), {
     apiKey: "test-api-key",
     fetch: async (_url, options) => {
-      observedBody = JSON.parse(options.body);
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      if (providerCalls === 1) {
+        return jsonResponse(structuredModelPayload({
+          verdict: "The lasting fix was a correctly sized door-bottom weather seal.",
+          reason: "Confirm the gap with a door snake first. I cannot reliably see the earlier front-door discussion here.",
+          followUpQuestion: "Was the draught coming from underneath the door or around its edges?",
+          state: state({
+            activeTopic: "comfort_fabric",
+            goal: "Stop the draught under the front door",
+            lastAnswerSummary: "Recalled the durable door-bottom weather seal.",
+          }),
+        }));
+      }
       return jsonResponse(structuredModelPayload({
         verdict: "The lasting fix was a correctly sized door-bottom weather seal.",
         reason: "Confirm the gap with a door snake first, then fit the seal without blocking required ventilation.",
+        followUpQuestion: "Was the draught coming from underneath the door or around its edges?",
         state: state({
           activeTopic: "comfort_fabric",
           goal: "Stop the draught under the front door",
@@ -2166,7 +2181,14 @@ test("returning to a prior door fix after a solar detour keeps the paid model on
 
   assert.ok(result, JSON.stringify(failures));
   assert.deepEqual(failures, []);
-  const context = JSON.parse(observedBody.input[1].content[0].text);
+  assert.equal(providerCalls, 2);
+  assert.equal(result.presentation.followUpQuestion, "");
+  assert.deepEqual(result.answer.suggestedQuestions, []);
+  const context = JSON.parse(observedBodies[0].input[1].content[0].text);
+  const repairContext = JSON.parse(observedBodies[1].input[1].content[0].text);
+  assert.equal(repairContext.repair.failureStage, "contextual_restart");
+  assert.match(observedBodies[1].input[0].content[0].text, /conversationFrame and priorTurns as retained context/i);
+  assert.match(observedBodies[1].input[0].content[0].text, /Never deny access to retained chat/i);
   assert.equal(context.conversationFrame.subject.id, "saved_home");
   assert.deepEqual(
     context.conversationFrame.decisions.map((decision) => decision.id),
@@ -2176,6 +2198,223 @@ test("returning to a prior door fix after a solar detour keeps the paid model on
   assert.match(JSON.stringify(context.conversationFrame), /door-bottom weather seal/i);
   assert.match(JSON.stringify(context.priorTurns), /draft under my front door|door-bottom weather seal/i);
   assert.doesNotMatch(JSON.stringify(context.priorTurns), /solar|inverter/i);
+});
+
+test("missing retained history permits a specific clarification without inventing recall", async () => {
+  const failures = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What did you recommend earlier?",
+    recentTurns: [],
+    continuation: null,
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      providerCalls += 1;
+      return jsonResponse(structuredModelPayload({
+        verdict: "I cannot tell which earlier recommendation you mean from that question alone.",
+        reason: "Name the home-energy topic so I can answer the right decision.",
+        followUpQuestion: "Was it about solar, heating or draught sealing?",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 1);
+  assert.match(result.answer.directAnswer, /cannot tell which earlier recommendation/i);
+  assert.match(result.presentation.followUpQuestion, /solar, heating or draught sealing/i);
+  assert.deepEqual(failures, []);
+});
+
+test("retained legacy turns repair common provider claims that previous conversations are inaccessible", async () => {
+  for (const denial of [
+    "I don't have access to previous conversations or messages.",
+    "I don't retain previous chat history.",
+    "I don't remember our earlier conversation.",
+    "I can't find the earlier answer.",
+    "I have no record of our earlier conversation.",
+    "The previous chat history is not available to me.",
+  ]) {
+    const failures = [];
+    const observedBodies = [];
+    let providerCalls = 0;
+    const result = await generateSurgeModelAnswer(request({
+      message: "What lasting fix did you recommend?",
+      recentTurns: [
+        { role: "user", content: "There is a draught under my front door." },
+        { role: "assistant", content: "Use a door snake first, then fit a correctly sized door-bottom weather seal." },
+      ],
+      continuation: state({
+        activeTopic: "comfort_fabric",
+        goal: "Stop the draught under the front door",
+        lastAnswerSummary: "Recommended a door snake and a durable door-bottom seal.",
+      }),
+    }), {
+      apiKey: "test-api-key",
+      fetch: async (_url, options) => {
+        providerCalls += 1;
+        observedBodies.push(JSON.parse(options.body));
+        if (providerCalls === 1) {
+          return jsonResponse(structuredModelPayload({
+            verdict: denial,
+            reason: "Please restate the earlier recommendation.",
+            followUpQuestion: "What home-energy topic were we discussing?",
+          }));
+        }
+        return jsonResponse(structuredModelPayload({
+          verdict: "The lasting fix was a correctly sized door-bottom weather seal.",
+          reason: "Use the door snake only as the immediate test and temporary measure.",
+        }));
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, `${denial}: ${JSON.stringify(failures)}`);
+    assert.equal(providerCalls, 2, denial);
+    assert.equal(
+      JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+      "contextual_restart",
+      denial,
+    );
+    assert.match(result.answer.directAnswer, /door-bottom weather seal/i, denial);
+    assert.deepEqual(failures, [], denial);
+  }
+});
+
+test("two matching retained decisions permit a specific ambiguity clarification", async () => {
+  const doorDecision = {
+    id: "decision_1_door",
+    subjectIds: ["saved_home"],
+    topic: "comfort_fabric",
+    goal: "Stop the draught under the front door",
+    facts: [],
+    outcomeSummary: "Use a door snake first, then fit a correctly sized door-bottom weather seal.",
+    openItems: [],
+    pendingQuestion: "",
+    status: "resolved",
+    lastTouchedTurn: 1,
+  };
+  const ambiguousContinuation = state({
+    activeTopic: "solar",
+    goal: "Compare the solar quotes",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_2_solar",
+      subjects: [
+        { id: "saved_home", kind: "saved_home", label: "Saved home", facts: [], lastTouchedTurn: 3 },
+        { id: "general_advice", kind: "general", label: "General advice", facts: [], lastTouchedTurn: 2 },
+      ],
+      decisions: [
+        doorDecision,
+        {
+          id: "decision_2_solar",
+          subjectIds: ["general_advice"],
+          topic: "solar",
+          goal: "Compare the solar quotes",
+          facts: [],
+          outcomeSummary: "Compare the same site design and installed scope.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+        {
+          ...doorDecision,
+          id: "decision_3_duplicate_front_door",
+          lastTouchedTurn: 3,
+        },
+      ],
+    },
+  });
+  const failures = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "Back to the front door, what lasting fix did you recommend?",
+    continuation: ambiguousContinuation,
+    planContext: savedHomePlanContext(),
+  }), {
+    apiKey: "test-api-key",
+    fetch: async () => {
+      providerCalls += 1;
+      return jsonResponse(structuredModelPayload({
+        verdict: "I cannot reliably recall one earlier front-door recommendation because two retained front-door decisions match.",
+        reason: "Specify the first or second front-door decision.",
+        followUpQuestion: "Do you mean the first or second front-door decision?",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 1);
+  assert.match(result.presentation.followUpQuestion, /first or second front-door decision/i);
+  assert.deepEqual(failures, []);
+});
+
+test("cheap window heat-loss advice combines ranked actions, mechanisms and fit limits", async () => {
+  const failures = [];
+  const observedBodies = [];
+  let providerCalls = 0;
+  const result = await generateSurgeModelAnswer(request({
+    message: "What are some cheap ways to reduce heat loss from my windows?",
+  }), {
+    apiKey: "test-api-key",
+    fetch: async (_url, options) => {
+      providerCalls += 1;
+      observedBodies.push(JSON.parse(options.body));
+      if (providerCalls === 1) {
+        return jsonResponse(modelPayload({
+          answer: "Start by sealing air leaks around opening windows. Cheap weather seals can reduce cold draughts immediately. After that, use close-fitting honeycomb blinds or thick curtains with a pelmet. Removable clear window-insulation film can also help on rarely opened single-glazed windows.",
+        }));
+      }
+      return jsonResponse(modelPayload({
+        answer: "Start with moving-air gaps: fit removable weather seals around opening windows, because stopping draughts is the cheapest immediate gain. On suitable single-glazed windows, clear heat-shrink film creates a trapped air layer like temporary secondary glazing. Bubble wrap uses the same still-air idea and makes sense for a bathroom, laundry or rarely used window where losing the view is acceptable. At night, close-fitting honeycomb blinds or lined curtains that overlap the frame, with a pelmet over the top gap, slow air circulation past the cold glass. Keep opening windows and required ventilation usable.",
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(providerCalls, 2);
+  assert.equal(
+    JSON.parse(observedBodies[1].input[1].content[0].text).repair.failureStage,
+    "question_coverage",
+  );
+  assert.match(observedBodies[1].input[0].content[0].text, /Window-options repair/i);
+  assert.match(observedBodies[1].input[0].content[0].text, /draught seals.*window-insulation film.*bubble wrap.*pelmet/is);
+  assert.match(result.answer.directAnswer, /weather seals.*heat-shrink film.*bubble wrap.*pelmet/is);
+  assert.match(result.answer.directAnswer, /trapped air layer.*slow air circulation/is);
+  assert.match(result.answer.directAnswer, /losing the view is acceptable/i);
+  assert.deepEqual(failures, []);
+});
+
+test("narrow bubble-wrap questions do not require every cheap window option", async () => {
+  for (const { message, answer } of [
+    {
+      message: "Is bubble wrap a cheap way to keep this room warmer through the window?",
+      answer: "Yes. Bubble wrap is a cheap option that can add a still-air layer to single glazing and reduce heat loss. It suits a laundry, bathroom or other window where a blurred view and less daylight are acceptable. Keep the window operable if it is needed for ventilation or escape.",
+    },
+    {
+      message: "How can I use cheap bubble wrap to keep this room warmer through the window?",
+      answer: "Mist the clean glass lightly with water, then press bubble wrap onto it with the bubbles facing the glass. This cheap, removable layer traps still air and can reduce heat loss through single glazing. Use it where a blurred view and less daylight are acceptable, and keep any window needed for ventilation or escape operable.",
+    },
+  ]) {
+    const failures = [];
+    let providerCalls = 0;
+    const result = await generateSurgeModelAnswer(request({ message }), {
+      apiKey: "test-api-key",
+      fetch: async () => {
+        providerCalls += 1;
+        return jsonResponse(modelPayload({ answer }));
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, `${message}: ${JSON.stringify(failures)}`);
+    assert.equal(providerCalls, 1, message);
+    assert.match(result.answer.directAnswer, /(?:still-air layer|traps still air).*blurred view/is, message);
+  }
 });
 
 test("same-home constraint prompt history removes an intervening Mum decision", async () => {

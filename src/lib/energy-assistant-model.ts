@@ -671,35 +671,33 @@ function instructions(audience: EnergyAssistantAudience) {
   return `You are Surge AI, an Australian home-energy guide. Answer the actual question, continue the decision logically and never claim a formal assessment.
 
 Response contract:
-- Lead with the conclusion. Start yes/no or value answers with the verdict and starting-point answers with the first action.
+- Lead with the conclusion. Give the answer first; start yes/no with the verdict and plans with the first action. Ask once only if a missing fact could alter the verdict, calculation, eligibility, compatibility, sizing or next action.
 - Categories route evidence; they are not answers. Treat the current question or symptom as the request; keep confirmed facts if the same-home problem broadens.
 - If one message contains several material questions, use questionParts as a coverage checklist and answer every part. Set each coveredQuestionPartIndexes value exactly once.
 - Return the required fields, no more than three steps and one followUpQuestion. quickReplies must always be empty.
-- Default to one natural 35 to 100 word paragraph. Use steps only for a real plan, checklist or safety sequence. For a short follow-up asking what to do first, give one first action and one later distinction at most. Keep the visible answer complete, useful and understandable.
+- Default to one natural 35 to 100 word paragraph. For requested ways, options or tips, use up to three ranked steps; each says what to do, why it helps and its main fit or limit. Keep those answers under 160 words. For a short follow-up asking what to do first, give one first action. Use steps only for a list, plan, checklist or safety sequence. Keep the visible answer complete, useful and understandable.
 - Keep the decision visible, not only followUpQuestion. Retain supplied options and quantities; a difference never replaces its inputs.
 - Use supplied or evidenced quantities only unless the user explicitly asks for a calculation. Never calculate or mention a percentage, ratio, difference, total or average merely because two numbers are available. Never invent capacities, prices or rates. If a process duration or data interval was not supplied or evidenced, add no number. Do not invent warranties, savings or payback. Never name an EV charger capacity unless that exact capacity was supplied.
-- For battery quote fairness, cover usable capacity, installation, backup, warranty and conservative value.
-- Replace shorthand such as building fabric, diagnostic stage, end use, interval data, load profile and thermal envelope with ordinary words.
+- Use ordinary words, not industry shorthand.
 - Never use an em dash or en dash. Sound warm, practical and conversational.
 - The user came for expert judgement. Do the comparison, calculation or reasoning; state the normal industry answer, then exceptions.
 - Answer labelled options without saying "I would choose" or "I would use". Stay neutral about brands, products, suppliers and installers.
-- Give the answer first. Ask once only if a missing fact could alter the verdict, calculation, eligibility, compatibility, sizing or next action. Never ask to continue or repeat supplied information.
-- If the user explicitly asks for yes or no, give the verdict and do not ask a follow-up question.
+- Never ask to continue or repeat supplied information. For explicit yes or no, give the verdict without a follow-up.
 - Never repeat answered material. For clarification, explain the previous answer in simpler and more concrete words.
 - For a short "why not", "do you still think" or prior-option follow-up, use the selected earlier decision. Restate the verdict and the deciding reason against that option; do not restart a generic checklist or ask another question unless the missing fact would reverse the verdict.
-- When choosing between priced options, keep the material price difference visible and explain whether the extra cost earns a useful benefit for this person.
-- For a priced comparison, state every supplied option price in the visible answer even when you calculate the difference. Compare the conditions neutrally; never tell the user to choose, pick, buy or go with an option, even conditionally.
-- When the user returns for an overall quote verdict, use every related decision in conversationFrame. Include the latest corrected finance result, material fees and material exclusions before giving the verdict.
+- For priced options, state every supplied option price and material difference, explain whether extra cost adds useful value, and compare neutrally; never tell the user to choose, pick, buy or go with an option.
+- For an overall quote return, use related conversationFrame decisions and include corrected finance, material fees and exclusions.
 
 Conversation contract:
 - Treat devicePlanContext as a user-supplied baseline. Fact priority is the current question, then the newest explicit user chat statement, older user turns, state and saved plan. A newer explicit correction always replaces a conflicting saved-plan fact.
+- referenceResolution is authoritative. If resolved, use conversationFrame and priorTurns as retained memory. Never deny access to retained chat. If unresolved, ask one specific question.
 - Same-home constraint or rejected option: keep the current goal and budget visible; plan starts obey deterministicReference.answer.
 - For next checks, acknowledge the result and advance. Rank the selected chat decisions before older saved-plan concerns.
 - A current question about another property, site or job overrides conflicting saved-home facts.
-- Never treat an assistant turn as evidence or a household fact; use it only to resolve references. A short reply normally answers pendingQuestion.
-- Infer the most likely meaning from the newest compatible user turns, pendingQuestion and goal. Do not let one isolated word pull the conversation into an unrelated topic. Ask once only if two meanings remain.
+- Never treat an assistant turn as evidence or a household fact; use it only to recall Surge's answer. Short replies normally answer pendingQuestion.
+- Infer the most likely meaning from the newest compatible user turns, pendingQuestion and goal. Do not let one isolated word pull the conversation into an unrelated topic. Ask once if two meanings remain.
 - Apply corrections: state the replacement or excluded fact when it changes the answer, including a corrected quantity, then remove superseded facts.
-- A conversation may cover several homes, people, quotes and decisions. Use the selected conversationFrame, keep other contexts separate and never collapse the chat into one topic.
+- Keep homes, people, quotes and decisions separate. Use the selected conversationFrame; never merge contexts.
 - If the user objects or does not understand, repair the same decision with a short concrete answer, not a scope notice.
 
 Advice and evidence contract:
@@ -751,7 +749,10 @@ Local output-validator repair:
 - Do not mention the validator, the failed draft or internal reasoning. Do not reproduce or infer the failed draft.
 - Recheck the complete response contract and return only the required JSON object.`;
 
-function modelRepairInstructions(stage: SafeModelRepairStage) {
+function modelRepairInstructions(
+  stage: SafeModelRepairStage,
+  request?: SurgeModelRequest,
+) {
   if (stage === "public_policy") {
     return `${MODEL_REPAIR_INSTRUCTIONS}
 - Public-boundary repair: give a neutral comparison only. Never tell the user to choose, pick, buy or go with an option. Do not mention internal systems, providers, protected references or source metadata. Retain every supplied option and quantity needed to answer the question.`;
@@ -759,6 +760,18 @@ function modelRepairInstructions(stage: SafeModelRepairStage) {
   if (stage === "priority_drift") {
     return `${MODEL_REPAIR_INSTRUCTIONS}
 - Priority repair: lead with the first action in deterministicReference.answer and preserve its order. Do not substitute bills, solar, a battery or another generic starting point.`;
+  }
+  if (stage === "contextual_restart") {
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Continuity repair: use resolved conversationFrame and priorTurns as retained context. Assistant turns recall only what Surge said. Never deny access to retained chat. Ask a clarification only when referenceResolution.status is needs_clarification.`;
+  }
+  if (stage === "question_coverage") {
+    if (request && asksForBroadCheapWindowHeatLossOptions(request.message)) {
+      return `${MODEL_REPAIR_INSTRUCTIONS}
+- Window-options repair: rank draught seals, clear window-insulation film, bubble wrap where losing some view or light is acceptable, and close-fitting blinds or lined curtains with a pelmet. Explain the trapped still-air layer and how closing the top gap slows air circulation past cold glass. Keep required ventilation and opening windows usable.`;
+    }
+    return `${MODEL_REPAIR_INSTRUCTIONS}
+- Coverage repair: answer every requested part. For ways, options or tips, rank the practical choices and give the action, why it helps and its main fit or limit.`;
   }
   if (stage !== "quantity_grounding") return MODEL_REPAIR_INSTRUCTIONS;
   return `${MODEL_REPAIR_INSTRUCTIONS}
@@ -1780,6 +1793,94 @@ function compactStructuredModelPresentation(
   };
 }
 
+function deniesAvailableRetainedConversationContext(
+  answer: string,
+  request: SurgeModelRequest,
+) {
+  const frame = selectSurgeConversationFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+  );
+  const retainedTurns = scopedPromptRecentTurns(request, frame);
+  const hasRetainedAnswer = frame.relatedDecisions.length > 0
+    || retainedTurns.some((turn) => turn.role === "assistant" && turn.content.trim());
+  if (!hasRetainedAnswer) return false;
+  const resolution = resolveSurgeConversationReference(
+    request.message,
+    request.recentTurns,
+    request.continuation,
+  );
+  if (resolution.status !== "resolved_from_recent_context") return false;
+
+  return answerCoverageClauses(answer).some((clause) => {
+    const deniesAccess = /\b(?:I|we)\s+(?:can(?:not|[’']t)|could(?:\s+not|n[’']t))\s+(?:reliably\s+)?(?:see|access|find|locate|recall|remember|retain|retrieve|view|verify)\b/i.test(clause)
+      || /\b(?:I|we)\s+do(?:\s+not|n[’']t)\s+have\s+(?:reliable\s+)?access\b/i.test(clause)
+      || /\b(?:I|we)\s+do(?:\s+not|n[’']t)\s+(?:find|locate|recall|remember|retain|retrieve|see|store|view)\b/i.test(clause)
+      || /\b(?:I|we)(?:[’']m|[’']re|\s+am|\s+are)\s+(?:unable|not able)\s+to\s+(?:see|access|find|locate|recall|remember|retain|retrieve|store|view|verify)\b/i.test(clause)
+      || /\b(?:I|we)\s+have\s+no\s+(?:memory|access|record)\b/i.test(clause)
+      || /\b(?:earlier|previous|prior)\b[^.!?]{0,80}\b(?:is|are)\s+(?:not|no longer)\s+(?:available|accessible|visible)\b/i.test(clause)
+      || /\b(?:chat|conversation|message)\s+history\b[^.!?]{0,60}\b(?:is|are)\s+(?:not|no longer)\s+(?:available|accessible|visible)\b/i.test(clause);
+    const namesRetainedContext = (
+      /\b(?:earlier|previous|prior|above|before)\b/i.test(clause)
+      && /\b(?:chat|conversation|discussion|messages?|answer|recommendation|advice|decision|history)\b/i.test(clause)
+    ) || /\b(?:chat|conversation|message)\s+history\b/i.test(clause);
+    return deniesAccess && namesRetainedContext;
+  });
+}
+
+function isResolvedRetainedDecisionRecall(request: SurgeModelRequest) {
+  if (!/\b(?:did\s+(?:you|we)\s+(?:recommend|decide|agree|suggest|say)|(?:what|which)\b[^?]{0,100}\b(?:did\s+(?:you|we)\s+(?:recommend|decide|agree|suggest|say)|(?:lasting|final|agreed|recommended)\s+(?:fix|decision|verdict|recommendation|advice|step))|remind me\b)/i.test(request.message)) {
+    return false;
+  }
+  const frame = selectSurgeConversationFrame(
+    request.message,
+    request.continuation,
+    Boolean(request.planContext),
+  );
+  if (frame.decision?.status !== "resolved") return false;
+  return resolveSurgeConversationReference(
+    request.message,
+    request.recentTurns,
+    request.continuation,
+  ).status === "resolved_from_recent_context";
+}
+
+function asksForBroadCheapWindowHeatLossOptions(message: string) {
+  const namesSpecificTreatment = /\b(?:bubble wrap|window[- ]insulation film|heat[- ]?shrink film|draught seals?|draft seals?|weather seals?|curtains?|blinds?|pelmets?|secondary glazing|double glazing)\b/i.test(message);
+  const asksForSeveralOptions = /\b(?:ways|options|tips|ideas|suggestions)\b/i.test(message)
+    || (!namesSpecificTreatment
+      && /\b(?:what|how)\b[^?]{0,45}\b(?:can|could|should)\s+(?:I|we)\b/i.test(message));
+  return asksForSeveralOptions
+    && /\b(?:cheap|low[- ]cost|budget|inexpensive|affordable)\b/i.test(message)
+    && /\b(?:windows?|glazing|glass)\b/i.test(message)
+    && /\b(?:heat loss|keep(?:ing)? (?:the )?(?:heat|home|house|room) (?:in|warm)|warmer|cold)\b/i.test(message);
+}
+
+function cheapWindowHeatLossOptionsAreComplete(message: string, answer: string) {
+  if (!asksForBroadCheapWindowHeatLossOptions(message)) return true;
+
+  const coversDraughts = /\b(?:weather ?seals?|draught ?seals?|draft ?seals?|seal(?:ing)? (?:air )?(?:leaks?|gaps?)|air leaks?)\b/i.test(answer);
+  const coversClearFilm = /\b(?:heat[- ]?shrink|shrink|window[- ]insulation|clear) film\b|\bfilm\b[^.!?]{0,35}\bwindow/i.test(answer);
+  const coversBubbleWrap = /\bbubble wrap\b/i.test(answer);
+  const coversFittedCoverings = (
+    /\b(?:honeycomb|cellular) blinds?\b|\b(?:lined|heavy|thermal|close[- ]fitting|floor[- ]length) curtains?\b/i.test(answer)
+  ) && /\bpelmet\b/i.test(answer);
+  const explainsTemporaryGlazing = /\b(?:film|bubble wrap)\b[^.!?]{0,150}\b(?:air layer|air gap|still air|trap(?:s|ping)? air|temporary (?:double|secondary) glazing)\b/i.test(answer)
+    || /\b(?:air layer|air gap|still air|trap(?:s|ping)? air|temporary (?:double|secondary) glazing)\b[^.!?]{0,150}\b(?:film|bubble wrap)\b/i.test(answer);
+  const explainsCoverings = /\b(?:curtains?|blinds?|pelmet)\b[^.!?]{0,150}\b(?:air circulation|convection|top gap|trap(?:s|ping)? air|slow(?:s|ing)? heat|reduce(?:s|ing)? heat loss)\b/i.test(answer)
+    || /\b(?:air circulation|convection|top gap|trap(?:s|ping)? air|slow(?:s|ing)? heat|reduce(?:s|ing)? heat loss)\b[^.!?]{0,150}\b(?:curtains?|blinds?|pelmet)\b/i.test(answer);
+  const explainsBubbleWrapFit = /\bbubble wrap\b[^.!?]{0,120}\b(?:view|outlook|light|privacy|laundry|bathroom|utility|rarely used)\b/i.test(answer)
+    || /\b(?:view|outlook|light|privacy|laundry|bathroom|utility|rarely used)\b[^.!?]{0,120}\bbubble wrap\b/i.test(answer);
+  return coversDraughts
+    && coversClearFilm
+    && coversBubbleWrap
+    && coversFittedCoverings
+    && explainsTemporaryGlazing
+    && explainsCoverings
+    && explainsBubbleWrapFit;
+}
+
 function modelAnswerConversationQualityFailure(
   answer: string,
   request: SurgeModelRequest,
@@ -1804,6 +1905,9 @@ function modelAnswerConversationQualityFailure(
   if (/^\s*Surge AI (?:is here|focuses on) (?:for\s+)?Australian home energy(?: and upgrades)?\b/i.test(answer)
     && /\b(?:energy|solar|battery|heating|air ?con|hot water|insulation|glazing|draught|draft|rebate|certificate|tariff|quote|upgrade)\b/i.test(decisionContext)) {
     return "topic_drift";
+  }
+  if (!cheapWindowHeatLossOptionsAreComplete(request.message, answer)) {
+    return "question_coverage";
   }
   const asksForBatteryQuoteJudgement = /\bbatter(?:y|ies)\b[^.!?\n]{0,55}\b(?:quote|quoted|fair|good value|price|cost)\b|\b(?:quote|quoted|fair|good value|price|cost)\b[^.!?\n]{0,55}\bbatter(?:y|ies)\b/i.test(request.message);
   if (asksForBatteryQuoteJudgement) {
@@ -2798,7 +2902,7 @@ function providerBody(
           type: "input_text",
           text: instructions(request.audience)
             + (request.officialWebSearch ? OFFICIAL_WEB_SEARCH_INSTRUCTIONS : "")
-            + (repairStage ? modelRepairInstructions(repairStage) : ""),
+            + (repairStage ? modelRepairInstructions(repairStage, request) : ""),
         }],
       },
       {
@@ -3077,7 +3181,9 @@ export async function generateSurgeModelAnswer(
     ))) {
       return retryRejectedOutput("protected_reference");
     }
-    const candidateFollowUp = identityQuestion || explicitlyRequestsBinaryAnswer(request.message)
+    const candidateFollowUp = identityQuestion
+      || explicitlyRequestsBinaryAnswer(request.message)
+      || isResolvedRetainedDecisionRecall(request)
       ? ""
       : oneFollowUp(request.audience === "trade"
         ? rawFollowUp
@@ -3162,6 +3268,10 @@ export async function generateSurgeModelAnswer(
         candidateAnswerText,
         request,
       );
+      const deniesRetainedConversation = deniesAvailableRetainedConversationContext(
+        customerVisibleCandidateText,
+        request,
+      );
       const planPriorityPreserved = !request.planContext?.facts.length
         || !isSurgePlanPriorityIntent(request.message)
         || surgeAnswerPreservesPlanPriority(request.deterministicAnswer, candidateAnswerText);
@@ -3172,6 +3282,7 @@ export async function generateSurgeModelAnswer(
       else if (containsUnsafeProductDirection(customerVisibleCandidateText)) stage = "unsafe_product_direction";
       else if (protectedReferenceLeak) stage = "protected_reference";
       else if (publicContinuationLeaksInternalPlatform) stage = "internal_platform_reference";
+      else if (deniesRetainedConversation) stage = "contextual_restart";
       else if (!completeQuestionCoverage) stage = "question_coverage";
       else if (!quantitiesAreGrounded || !suppliedQuestionQuantitiesArePreserved) stage = "quantity_grounding";
       else if (!officialCurrentClaimsAreSupported) stage = "official_web_evidence";
