@@ -139,7 +139,7 @@ test("production configuration exposes the exact fixed default ceilings", () => 
     globalMinuteLimit: 120,
     globalInFlightLimit: 20,
     globalDailyMicroUsdLimit: 100_000_000,
-    inFlightLeaseMs: 70_000,
+    inFlightLeaseMs: 120_000,
     requestIdempotencyMs: 600_000,
   });
   assert.equal(SURGE_USAGE_GUARD_ENV.globalInFlightLimit, "SURGE_GLOBAL_INFLIGHT_LIMIT");
@@ -315,7 +315,7 @@ test("global in-flight denial does not consume client or network quota", async (
   await retry.release();
 });
 
-test("the default in-flight lease covers a slow call plus its one permitted repair", async () => {
+test("the default in-flight lease covers three slow paid attempts", async () => {
   const { clock, guard } = fixture({ env: {
     SURGE_CLIENT_MINUTE_LIMIT: "1000",
     SURGE_CLIENT_DAILY_LIMIT: "1000",
@@ -328,12 +328,12 @@ test("the default in-flight lease covers a slow call plus its one permitted repa
   const slow = await guard.reserve(reservation(1));
   assert.equal(slow.allowed, true);
 
-  clock.value += 60_001;
-  const duringRepairWindow = await guard.reserve(reservation(2));
-  assert.equal(duringRepairWindow.allowed, false);
-  assert.equal(duringRepairWindow.reason, "global_in_flight");
+  clock.value += 90_001;
+  const duringThirdAttemptWindow = await guard.reserve(reservation(2));
+  assert.equal(duringThirdAttemptWindow.allowed, false);
+  assert.equal(duringThirdAttemptWindow.reason, "global_in_flight");
 
-  clock.value += 10_000;
+  clock.value += 30_000;
   const afterLease = await guard.reserve(reservation(3));
   assert.equal(afterLease.allowed, true);
   await afterLease.release();
@@ -384,7 +384,6 @@ test("expired leases free capacity but neither refund cost nor erase request ide
     SURGE_GLOBAL_MINUTE_LIMIT: "10",
     SURGE_GLOBAL_INFLIGHT_LIMIT: "1",
     SURGE_GLOBAL_DAILY_MICRO_USD: "1000",
-    SURGE_IN_FLIGHT_LEASE_MS: "1000",
   } });
   const firstInput = reservation(1, { estimatedMicroUsd: 100 });
   const first = await guard.reserve(firstInput);
@@ -392,7 +391,7 @@ test("expired leases free capacity but neither refund cost nor erase request ide
   const blocked = await guard.reserve(reservation(2, { estimatedMicroUsd: 100 }));
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.reason, "global_in_flight");
-  clock.value += 1_001;
+  clock.value += SURGE_USAGE_GUARD_DEFAULTS.inFlightLeaseMs + 1;
   const afterExpiry = await guard.reserve(reservation(3, { estimatedMicroUsd: 100 }));
   assert.equal(afterExpiry.allowed, true);
   assert.equal(database.globalState().leases.length, 1);
@@ -400,6 +399,27 @@ test("expired leases free capacity but neither refund cost nor erase request ide
   const duplicate = await guard.reserve(firstInput);
   assert.equal(duplicate.allowed, false);
   assert.equal(duplicate.reason, "duplicate_request");
+});
+
+test("an in-flight lease override cannot be shorter than the three-attempt provider window", async () => {
+  const { clock, guard } = fixture({ env: {
+    SURGE_CLIENT_MINUTE_LIMIT: "10",
+    SURGE_CLIENT_DAILY_LIMIT: "10",
+    SURGE_NETWORK_MINUTE_LIMIT: "10",
+    SURGE_NETWORK_DAILY_LIMIT: "10",
+    SURGE_GLOBAL_MINUTE_LIMIT: "10",
+    SURGE_GLOBAL_INFLIGHT_LIMIT: "1",
+    SURGE_GLOBAL_DAILY_MICRO_USD: "1000",
+    SURGE_IN_FLIGHT_LEASE_MS: "1000",
+  } });
+  const first = await guard.reserve(reservation(1));
+  assert.equal(first.allowed, true);
+  clock.value += 1_001;
+  const beforeSafeExpiry = await guard.reserve(reservation(2));
+  assert.equal(beforeSafeExpiry.allowed, false);
+  assert.equal(beforeSafeExpiry.reason, "global_in_flight");
+  clock.value += SURGE_USAGE_GUARD_DEFAULTS.inFlightLeaseMs;
+  assert.equal((await guard.reserve(reservation(3))).allowed, true);
 });
 
 test("D1 contains only second-stage HMAC identifiers and bounded JSON state", async () => {

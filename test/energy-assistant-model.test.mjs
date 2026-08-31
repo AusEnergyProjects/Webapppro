@@ -3795,21 +3795,36 @@ test("cost estimator exactly matches the serialized provider body and reviewed w
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.model, "gpt-5.6-sol");
   assert.equal(estimate.serializedBodyBytes, exactBytes);
-  assert.equal(estimate.maxProviderCalls, 2);
+  assert.equal(estimate.maxProviderCalls, 3);
   assert.ok(estimate.repairSerializedBodyBytes > exactBytes);
   assert.equal(estimate.maxOutputTokens, 1_600);
+  const firstCallMicroUsd = (exactBytes * 4) + (1_600 * 20);
+  const repairCallMicroUsd = (estimate.repairSerializedBodyBytes * 4) + (1_600 * 20);
   assert.equal(
     estimate.worstCaseMicroUsd,
     Math.ceil((
-      (exactBytes * 4)
-      + (1_600 * 20)
-      + (estimate.repairSerializedBodyBytes * 4)
-      + (1_600 * 20)
+      firstCallMicroUsd
+      + repairCallMicroUsd
+      + Math.max(firstCallMicroUsd, repairCallMicroUsd)
     ) * 1.25),
   );
   assert.equal(
     estimateSurgeModelReservationMicroUsd(modelRequest),
     estimate.worstCaseMicroUsd,
+  );
+});
+
+test("a non-repairable identity request reserves exactly one paid provider call", () => {
+  const estimate = estimateSurgeModelRequest(request({
+    message: "What model powers Surge AI?",
+  }));
+
+  assert.ok(estimate);
+  assert.equal(estimate.maxProviderCalls, 1);
+  assert.equal(estimate.repairSerializedBodyBytes, 0);
+  assert.equal(
+    estimate.worstCaseMicroUsd,
+    Math.ceil(((estimate.serializedBodyBytes * 4) + (1_600 * 20)) * 1.25),
   );
 });
 
@@ -3957,18 +3972,21 @@ test("official web lookup reservation covers one fully searched quantity repair"
   assert.ok(estimate);
   const exactBytes = new TextEncoder().encode(serializedBody).byteLength;
   assert.equal(estimate.serializedBodyBytes, exactBytes);
-  assert.equal(estimate.maxProviderCalls, 2);
+  assert.equal(estimate.maxProviderCalls, 3);
   assert.ok(estimate.repairSerializedBodyBytes > exactBytes);
   assert.equal(estimate.maxOutputTokens, 2_000);
+  const firstCallMicroUsd = (exactBytes * 4) + (2_000 * 20) + 20_000;
+  const repairCallMicroUsd = (
+    (estimate.repairSerializedBodyBytes * 4)
+    + (2_000 * 20)
+    + 20_000
+  );
   assert.equal(
     estimate.worstCaseMicroUsd,
     Math.ceil((
-      (exactBytes * 4)
-      + (2_000 * 20)
-      + 20_000
-      + (estimate.repairSerializedBodyBytes * 4)
-      + (2_000 * 20)
-      + 20_000
+      firstCallMicroUsd
+      + repairCallMicroUsd
+      + Math.max(firstCallMicroUsd, repairCallMicroUsd)
     ) * 1.25),
   );
 });
@@ -4820,11 +4838,11 @@ test("an overall quote return repairs an answer that omits corrected finance and
   assert.match(result.answer.directAnswer, /switchboard.*extra/i);
 });
 
-test("an exact contextual quote verdict beginning not yet remains covered", async () => {
+test("an exact contextual quote verdict with a natural overall lead remains covered", async () => {
   const calls = [];
   const failures = [];
   const message = "Right, back to the hot-water quote. Overall, is it a good deal?";
-  const exactCandidate = "Not yet a clearly good deal. The finance totals $5,712, which is $188 below the stated $5,900 after-rebate price, so the figures need reconciling. The $330 administration fees may be reasonable if itemised, but switchboard work is extra and could materially raise the cost. Before signing, confirm the exact model, usable capacity, complete installation scope, warranty, local service, apartment approval requirements and a fixed switchboard price.";
+  const exactCandidate = "Overall, it is not yet clearly a good deal. The quoted price is $5,900 after rebates, while $68 a month for seven years totals $5,712, leaving the confirmed $188 mismatch. The $330 fee is not clearly included, switchboard work costs extra, and the exact model and complete installation scope are unknown. Those gaps could materially increase the final cost, especially in an apartment where approval may apply. Can you attach the quote, or provide the exact model, what the $330 fee covers, and whether it is included in repayments?";
   const result = await generateSurgeModelAnswer(request({
     message,
     continuation: projectSurgeConversationStateToFrame(
@@ -4954,6 +4972,149 @@ test("a safe validator rejection gets one fresh Sol repair using the same ground
     calls[1].input[1].content[0].text,
     /Solar can reduce daytime grid imports when the roof and daytime use suit it\./,
   );
+});
+
+test("a transient failure during validation repair gets one paid retry without losing repair context", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Should I get solar or a battery?",
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse(modelPayload({
+          answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      }
+      if (calls.length === 2) {
+        throw new DOMException("Timed out", "AbortError");
+      }
+      return jsonResponse(modelPayload({
+        answer: "Solar can reduce daytime grid imports, while a battery can shift stored solar into the evening. Solar is usually the better first step when daytime use and roof conditions suit it. A battery is a separate decision based on evening use, exports and tariff.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol", "gpt-5.6-sol"]);
+  assert.deepEqual(calls[2], calls[1]);
+  const firstContext = JSON.parse(calls[0].input[1].content[0].text);
+  const repairContext = JSON.parse(calls[1].input[1].content[0].text);
+  const retriedRepairContext = JSON.parse(calls[2].input[1].content[0].text);
+  assert.deepEqual(repairContext.repair, {
+    attempt: 1,
+    failureStage: "question_coverage",
+  });
+  assert.deepEqual(retriedRepairContext, repairContext);
+  delete repairContext.repair;
+  assert.deepEqual(repairContext, firstContext);
+  assert.deepEqual(failures, []);
+});
+
+test("a validation repair remains available after one transient paid retry", async () => {
+  const calls = [];
+  const failures = [];
+  const result = await generateSurgeModelAnswer(request({
+    message: "Should I get solar or a battery?",
+  }), {
+    apiKey: "test-api-key",
+    model: "gpt-5.6-sol",
+    fetch: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        throw new Error("network unavailable");
+      }
+      if (calls.length === 2) {
+        return jsonResponse(modelPayload({
+          answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      }
+      return jsonResponse(modelPayload({
+        answer: "Solar can reduce daytime grid imports, while a battery can shift stored solar into the evening. Solar is usually the better first step when daytime use and roof conditions suit it. A battery is a separate decision based on evening use, exports and tariff.",
+        coveredQuestionPartIndexes: [0],
+      }));
+    },
+    onFailure: (failure) => failures.push(failure),
+  });
+
+  assert.ok(result, JSON.stringify(failures));
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls.map((body) => body.model), ["gpt-5.6-sol", "gpt-5.6-sol", "gpt-5.6-sol"]);
+  assert.deepEqual(calls[1], calls[0]);
+  const firstContext = JSON.parse(calls[0].input[1].content[0].text);
+  const retriedContext = JSON.parse(calls[1].input[1].content[0].text);
+  const repairContext = JSON.parse(calls[2].input[1].content[0].text);
+  assert.deepEqual(retriedContext, firstContext);
+  assert.deepEqual(repairContext.repair, {
+    attempt: 1,
+    failureStage: "question_coverage",
+  });
+  delete repairContext.repair;
+  assert.deepEqual(repairContext, firstContext);
+  assert.deepEqual(failures, []);
+});
+
+test("mixed validation and transient failures remain bounded to three provider calls", async (t) => {
+  await t.test("validation rejection then two transient failures", async () => {
+    let calls = 0;
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message: "Should I get solar or a battery?",
+    }), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return jsonResponse(modelPayload({
+            answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+            coveredQuestionPartIndexes: [0],
+          }));
+        }
+        throw new DOMException("Timed out", "AbortError");
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.equal(result, null);
+    assert.equal(calls, 3);
+    assert.deepEqual(failures, [{ code: "provider_timeout" }]);
+  });
+
+  await t.test("transient failure then two validation rejections", async () => {
+    let calls = 0;
+    const failures = [];
+    const result = await generateSurgeModelAnswer(request({
+      message: "Should I get solar or a battery?",
+    }), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("network unavailable");
+        return jsonResponse(modelPayload({
+          answer: "Solar can reduce daytime grid imports when the roof and daytime use suit it.",
+          coveredQuestionPartIndexes: [0],
+        }));
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.equal(result, null);
+    assert.equal(calls, 3);
+    assert.deepEqual(failures, [{
+      code: "provider_output_rejected",
+      stage: "question_coverage",
+    }]);
+  });
 });
 
 test("an over-limit structured field is repaired instead of being cut into a visible fragment", async () => {
@@ -5545,6 +5706,39 @@ test("malformed and incomplete provider output gets one bounded format repair", 
       "response_output_json",
     );
     assert.deepEqual(bodies[1].reasoning, { effort: "low" });
+    assert.deepEqual(failures, []);
+  });
+
+  await t.test("a transient failure during malformed-output repair retries the same repair body", async () => {
+    const failures = [];
+    const bodies = [];
+    const result = await generateSurgeModelAnswer(request(), {
+      apiKey: "test-api-key",
+      model: "gpt-5.6-sol",
+      fetch: async (_url, options) => {
+        bodies.push(JSON.parse(options.body));
+        if (bodies.length === 1) {
+          return new Response(JSON.stringify({ output_text: "{not-json" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (bodies.length === 2) {
+          throw new DOMException("Timed out", "AbortError");
+        }
+        return jsonResponse(modelPayload());
+      },
+      onFailure: (failure) => failures.push(failure),
+    });
+
+    assert.ok(result, JSON.stringify(failures));
+    assert.equal(bodies.length, 3);
+    assert.deepEqual(bodies[2], bodies[1]);
+    assert.equal(
+      JSON.parse(bodies[2].input[1].content[0].text).repair.failureStage,
+      "response_output_json",
+    );
+    assert.deepEqual(bodies[2].reasoning, { effort: "low" });
     assert.deepEqual(failures, []);
   });
 
