@@ -541,36 +541,101 @@ type ValidatedOfficialWebEvidence = {
   citedClaimText: string;
 };
 
-function citationEvidenceText(citation: ProviderUrlCitation) {
+type CitedCertificateKind = "stc" | "veec" | "esc" | "prc";
+
+function jsonStringStartBefore(value: string, beforeIndex: number) {
+  for (let index = Math.min(beforeIndex - 1, value.length - 1); index >= 0; index -= 1) {
+    if (value[index] !== '"') continue;
+    let backslashes = 0;
+    for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 0) return index + 1;
+  }
+  return 0;
+}
+
+function citedCertificateKinds(value: string) {
+  return new Set<CitedCertificateKind>(
+    [...value.matchAll(/\b(STCs?|VEECs?|ESCs?|PRCs?)\b/gi)]
+      .map((match) => match[1].toLowerCase().replace(/s$/, "") as CitedCertificateKind),
+  );
+}
+
+function citationSourceCertificateKinds(citation: ProviderUrlCitation) {
+  const source = `${citation.title} ${citation.url}`;
+  const kinds = new Set<CitedCertificateKind>();
+  if (/\bSTCs?\b|small[-_/ ]scale[-_/ ](?:renewable|technology)|https:\/\/(?:[^/]+\.)?cer\.gov\.au\//i.test(source)) kinds.add("stc");
+  if (/\bVEECs?\b|victorian[-_/ ]energy[-_/ ]upgrades?/i.test(source)) kinds.add("veec");
+  if (/\bESCs?\b|energy[-_/ ]savings[-_/ ]scheme/i.test(source)) kinds.add("esc");
+  if (/\bPRCs?\b|peak[-_/ ]demand[-_/ ]reduction/i.test(source)) kinds.add("prc");
+  return kinds;
+}
+
+function precedingSentenceSharesCitation(
+  preceding: string,
+  immediate: string,
+  citation: ProviderUrlCitation,
+) {
+  const precedingKinds = citedCertificateKinds(preceding);
+  const immediateKinds = citedCertificateKinds(immediate);
+  if (precedingKinds.size !== 1) return false;
+  const [precedingKind] = precedingKinds;
+  if (immediateKinds.size) {
+    return immediateKinds.size === 1 && immediateKinds.has(precedingKind);
+  }
+  if (!/^(?:the|this|that|its)\b[^.!?]{0,100}\b(?:price|value|figure|rate|status|update|report|market)\b/i.test(immediate)) {
+    return false;
+  }
+  const sourceKinds = citationSourceCertificateKinds(citation);
+  return sourceKinds.size === 1 && sourceKinds.has(precedingKind);
+}
+
+function sentenceFitsCitationCertificateSource(
+  sentence: string,
+  citation: ProviderUrlCitation,
+) {
+  const sentenceKinds = citedCertificateKinds(sentence);
+  if (sentenceKinds.size > 1) return false;
+  if (!sentenceKinds.size) return true;
+  const sourceKinds = citationSourceCertificateKinds(citation);
+  return !sourceKinds.size || [...sentenceKinds].every((kind) => sourceKinds.has(kind));
+}
+
+function boundedCitationMarkerEvidence(value: string, citation: ProviderUrlCitation) {
+  const sentences = value
+    .split(/\n+|(?<=[.!?])\s+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const immediate = sentences.at(-1) || "";
+  const preceding = sentences.at(-2) || "";
+  if (!sentenceFitsCitationCertificateSource(immediate, citation)) return "";
+  return preceding && precedingSentenceSharesCitation(preceding, immediate, citation)
+    ? `${preceding} ${immediate}`
+    : immediate;
+}
+
+function citationEvidenceText(
+  citation: ProviderUrlCitation,
+  priorCitationEnd = 0,
+) {
   const value = citation.annotationText;
   const annotatedSpan = value.slice(citation.startIndex, citation.endIndex).trim();
   const annotationIsCitationMarker = /^\(?\s*\[[^\]\r\n]{1,200}\]\(\s*https?:\/\//i.test(annotatedSpan);
   if (!annotationIsCitationMarker) {
     return stripSurgePublicLinksAndCitationLines(annotatedSpan).trim();
   }
-  const sentenceBoundaryBefore = (fromIndex: number) => {
-    for (let index = Math.min(fromIndex, value.length - 1); index >= 0; index -= 1) {
-      const candidate = value[index];
-      if (
-        candidate === "!"
-        || candidate === "?"
-        || candidate === "\n"
-        || candidate === '"'
-      ) return index;
-      if (
-        candidate === "."
-        && !(/\d/.test(value[index - 1] || "") && /\d/.test(value[index + 1] || ""))
-      ) return index;
-    }
-    return -1;
-  };
-  let start = sentenceBoundaryBefore(citation.startIndex - 1) + 1;
-  if (!value.slice(start, citation.startIndex).trim()) {
-    start = sentenceBoundaryBefore(start - 2) + 1;
-  }
-  // A marker following a claim authorizes only the immediately preceding
-  // sentence. Exclude the marker URL itself so path numbers cannot become evidence.
-  return value.slice(start, citation.startIndex).trim();
+  const fieldStart = jsonStringStartBefore(value, citation.startIndex);
+  const start = Math.max(fieldStart, Math.min(priorCitationEnd, citation.startIndex));
+  const precedingText = stripSurgePublicLinksAndCitationLines(
+    value.slice(start, citation.startIndex),
+  ).trim();
+  // A marker normally supports the immediately preceding sentence. One
+  // additional certificate sentence is admitted only when it names the same
+  // certificate (or anchors an unlabelled continuation) and the official URL
+  // identifies that certificate. Never include an unrelated earlier price,
+  // following text, another JSON field or the marker URL/path itself.
+  return boundedCitationMarkerEvidence(precedingText, citation);
 }
 
 function validatedOfficialWebEvidence(
@@ -622,20 +687,30 @@ function validatedOfficialWebEvidence(
     });
     if (citations.length >= 4) break;
   }
-  return citations.length
-    ? {
-        citations,
-        annotatedText: validatedCitations
-          .filter(({ canonicalUrl }) => seen.has(canonicalUrl))
-          .map(({ citation }) => citationEvidenceText(citation))
-          .join("\n"),
-        citedClaimText: validatedCitations
-          .filter(({ canonicalUrl }) => seen.has(canonicalUrl))
-          .map(({ citation }) => citationEvidenceText(citation))
-          .filter(Boolean)
-          .join("\n"),
-      }
-    : null;
+  if (!citations.length) return null;
+  const priorCitationEnds = new Map<string, number>();
+  const citationEvidence = validatedCitations
+    .filter(({ canonicalUrl }) => seen.has(canonicalUrl))
+    .sort((left, right) => (
+      left.citation.annotationText === right.citation.annotationText
+        ? left.citation.startIndex - right.citation.startIndex
+        : 0
+    ))
+    .map(({ citation }) => {
+      const priorEnd = priorCitationEnds.get(citation.annotationText) || 0;
+      const evidenceText = citationEvidenceText(citation, priorEnd);
+      priorCitationEnds.set(
+        citation.annotationText,
+        Math.max(priorEnd, citation.endIndex),
+      );
+      return evidenceText;
+    })
+    .filter(Boolean);
+  return {
+    citations,
+    annotatedText: citationEvidence.join("\n"),
+    citedClaimText: citationEvidence.join("\n"),
+  };
 }
 
 function clauseMakesExternallyVerifiableCurrentClaim(value: string) {
@@ -690,6 +765,49 @@ function officialCurrentClaimsHaveCitationSupport(
       const normalizedClaim = normalizedReply(claim);
       return Boolean(normalizedClaim) && normalizedEvidence.includes(normalizedClaim);
     });
+}
+
+function currentCertificateValueContextIsClear(
+  answer: string,
+  request: SurgeModelRequest,
+) {
+  const question = request.message;
+  const technicalRateQuestion = /\b(?:creation|deeming|surrender|conversion|multiplier)\s+rates?\b|\brates?\b[^.!?]{0,35}\b(?:creation|deeming|surrender|conversion|multiplier)\b/i.test(question);
+  const explicitMoneyQuestion = /\b(?:worth|value|price|how much|cash|discount|credit)\b/i.test(question);
+  const marketVerbQuestion = /\b(?:trad(?:e|es|ed|ing)|sell(?:s|ing)?|sold|go(?:es|ing)?|fetch(?:es|ing)?)\b[^.!?]{0,12}\b(?:for|at)\b/i.test(question);
+  const monetaryRateQuestion = !technicalRateQuestion
+    && (/\b(?:market|spot|trading|cash|price|value)\b[^.!?]{0,30}\brates?\b|\brates?\b[^.!?]{0,30}\b(?:market|spot|trading|cash|price|value)\b/i.test(question));
+  const asksForCurrentCertificateValue = request.officialWebSearch?.kind === "certificate"
+    && (explicitMoneyQuestion || marketVerbQuestion || monetaryRateQuestion);
+  if (!asksForCurrentCertificateValue) return true;
+  const sentences = answer
+    .split(/\n+|(?<=[.!?])\s+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const marketReference = /\b(?:gross|market|spot|clearing[- ]house|reference)\b/i;
+  const customerValue = String.raw`(?:customer(?:'s)?|household(?:'s)?)[^.!?]{0,25}(?:net|discount|credit|amount|receiv\w*)|net (?:discount|credit)|discount|credit|what (?:the customer|you) receiv(?:e|es)|amount received|your actual (?:discount|credit|amount|certificate benefit)`;
+  const customerOutcome = new RegExp(`\\b(?:${customerValue})\\b`, "i");
+  const grossBeforeCustomer = new RegExp(
+    `\\b(?:gross|market|spot|clearing[- ]house|reference)\\b[^.!?]{0,180}(?:\\b(?:before|different(?: from)?|differs? from|rather than|less|minus)\\b[^.!?]{0,140}\\b(?:${customerValue})\\b|(?:\\b(?:is|are)\\s+)?\\b(?:not|isn['’]?t|aren['’]?t)\\s+(?:the\\s+|a\\s+|your\\s+)?(?:${customerValue})\\b)`,
+    "i",
+  );
+  const customerComparedWithGross = new RegExp(
+    `\\b(?:${customerValue})\\b[^.!?]{0,180}(?:\\b(?:after|different(?: from)?|differs? from|rather than|less|lower|minus)\\b[^.!?]{0,140}\\b(?:gross|market|spot|clearing[- ]house|reference)\\b|(?:\\b(?:is|are)\\s+)?\\b(?:not|isn['’]?t|aren['’]?t)\\s+(?:the\\s+|a\\s+)?(?:gross|market|spot|clearing[- ]house|reference)\\b)`,
+    "i",
+  );
+  const providerCost = /\b(?:providers?|administrators?|installers?|administration|admin)\b[^.!?]{0,100}\b(?:fees?|costs?|deduct(?:s|ed|ion)?)\b|\b(?:fees?|costs?|deduct(?:s|ed|ion)?)\b[^.!?]{0,100}\b(?:providers?|administrators?|installers?|administration|admin)\b/i;
+  const costEffect = /\b(?:after|deduct|reduce|lower|affect|change|subtract|minus|less)\w*\b/i;
+  const explicitlyContrastsValues = sentences.some((sentence) => (
+    grossBeforeCustomer.test(sentence) || customerComparedWithGross.test(sentence)
+  ));
+  const identifiesMarketReference = sentences.some((sentence) => marketReference.test(sentence));
+  const explainsCustomerAdjustment = sentences.some((sentence) => (
+    customerOutcome.test(sentence)
+    && providerCost.test(sentence)
+    && costEffect.test(sentence)
+  ));
+  return explicitlyContrastsValues
+    || (identifiesMarketReference && explainsCustomerAdjustment);
 }
 
 function publicAnswer(value: string, audience: EnergyAssistantAudience, message: string) {
@@ -794,6 +912,7 @@ Live official-source lookup for this request:
 - Use the currentQuestion, jurisdiction and exact programme, certificate, product, model or standard details already supplied. Do not broaden the answer into general category advice.
 - Keep the complete customer-visible answer under 110 words in one paragraph. Use verdict and reason only; leave steps and extraDetail empty unless one short caveat is essential.
 - Answer only claims supported by the returned official pages. If the search does not establish the requested current fact, say plainly which fact could not be confirmed and do not guess.
+- For certificate values, distinguish a gross market or clearing-house reference from the customer discount or net credit after provider and administration costs.
 - Describe eligibility factually, for example "Eligibility requires..." or "Check...". Do not use first-person recommendations or phrases such as "you should choose", "you should use" or "you should hire" in scheme guidance.
 - Every factual sentence taken from the web lookup must carry the web tool's official URL citation annotation. An answer without a validated allowed-domain annotation is discarded.
 - Keep URLs, publisher names and a source list out of the JSON answer. The application attaches validated official links separately.`;
@@ -845,7 +964,7 @@ function modelRepairInstructions(
   if (stage !== "quantity_grounding") return MODEL_REPAIR_INSTRUCTIONS;
   if (request?.officialWebSearch) {
     return `${MODEL_REPAIR_INSTRUCTIONS}
-- Official quantity repair: search the same allowed official domains again. Put each numeric claim and its web citation in the same sentence. If one source supports several numeric sentences, cite every sentence separately or combine the supported values into one cited sentence. Omit any value that is not directly supported by its adjacent citation.`;
+- Official quantity repair: search the same allowed official domains again. Put each numeric claim and its web citation in the same sentence. If one source supports several numeric sentences, cite every sentence separately or combine the supported values into one cited sentence. Omit any value that is not directly supported by its adjacent citation. For a certificate value, state that market or clearing-house figures are gross references, not the customer's net discount after provider and administration costs.`;
   }
   return `${MODEL_REPAIR_INSTRUCTIONS}
 - Quantity repair: remove every number not explicitly supplied or evidenced. Do not derive a percentage, ratio, difference, total or average unless currentQuestion explicitly asks for that calculation.`;
@@ -3428,6 +3547,10 @@ export async function generateSurgeModelAnswer(
         candidateAnswerText,
         request.message,
       );
+      const certificateValueContextPassed = currentCertificateValueContextIsClear(
+        candidateAnswerText,
+        request,
+      );
       const officialCurrentClaimsAreSupported = !officialWebEvidence
         || officialCurrentClaimsHaveCitationSupport(
           candidateAnswerText,
@@ -3462,7 +3585,11 @@ export async function generateSurgeModelAnswer(
       else if (deniesRetainedConversation) stage = "contextual_restart";
       else if (!completeQuestionCoverage) stage = "question_coverage";
       else if (!requiredWindowStepStructurePassed) stage = "question_coverage";
-      else if (!quantitiesAreGrounded || !suppliedQuestionQuantitiesArePreserved) stage = "quantity_grounding";
+      else if (
+        !quantitiesAreGrounded
+        || !suppliedQuestionQuantitiesArePreserved
+        || !certificateValueContextPassed
+      ) stage = "quantity_grounding";
       else if (!officialCurrentClaimsAreSupported) stage = "official_web_evidence";
       else if (repeatsPreviousReply(candidateAnswerText, request)) stage = "repeated_answer";
       else if (!planPriorityPreserved) stage = "priority_drift";
@@ -3473,6 +3600,7 @@ export async function generateSurgeModelAnswer(
         completeQuestionCoverage,
         quantitiesAreGrounded,
         suppliedQuestionQuantitiesArePreserved,
+        certificateValueContextPassed,
         everydayLanguagePassed,
         stage,
       };
