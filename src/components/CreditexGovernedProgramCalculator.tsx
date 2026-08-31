@@ -970,6 +970,34 @@ export function creditexVeuShouldApplyProductResponse(
   return requestGeneration === currentGeneration;
 }
 
+export function creditexGovernedRegistryCanServeCalculator(
+  value: unknown,
+  now = new Date(),
+) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const registry = value as Record<string, unknown>;
+  if (
+    (registry.status !== "current" && registry.status !== "stale")
+    || typeof registry.snapshotId !== "string"
+    || !registry.snapshotId.trim()
+    || typeof registry.sourceSha256 !== "string"
+    || !/^[a-f0-9]{64}$/.test(registry.sourceSha256)
+    || !Number.isSafeInteger(registry.recordCount)
+    || Number(registry.recordCount) < 1
+    || typeof registry.lastCheckedAt !== "string"
+    || !registry.lastCheckedAt.trim()
+  ) {
+    return false;
+  }
+  const checkedAt = Date.parse(registry.lastCheckedAt);
+  const currentTime = now.getTime();
+  return Number.isFinite(checkedAt)
+    && Number.isFinite(currentTime)
+    && checkedAt <= currentTime;
+}
+
 export function creditexVeuRegistryCodeForProductKind(productKind: string) {
   const registryCode = CREDITEX_PRODUCT_KIND_REGISTRY[
     productKind as CreditexOfficialProductKind
@@ -1237,16 +1265,14 @@ function CreditexVeuCalculator({
       }
       const registry = result.registry as Record<string, unknown> | undefined;
       const registryCode = String(registry?.registryCode || "");
-      const registryStatus = String(registry?.status || "");
       const snapshotId = String(registry?.snapshotId || "");
       if (
         !expectedRegistryCode
         || registryCode !== expectedRegistryCode
-        || registryStatus !== "current"
-        || !snapshotId
+        || !creditexGovernedRegistryCanServeCalculator(registry)
       ) {
         throw new Error(
-          `The current ${registryLabel} snapshot is stale or unavailable.`,
+          `No accepted ${registryLabel} snapshot is available.`,
         );
       }
       const previousSnapshotId = registrySnapshotIdsRef.current[kind];

@@ -186,6 +186,111 @@ test("SRES registry completion requires an empty queue and a current successful 
   }, false), "failed");
 });
 
+test("SRES calculator accepts only a valid non-future accepted registry snapshot", () => {
+  const canServe = calculatorModule.creditexSresRegistryCanServeCalculator;
+  const now = new Date("2026-08-17T00:00:00.000Z");
+  const accepted = {
+    status: "stale",
+    lastCheckedAt: "2026-08-16T00:00:00.000Z",
+    snapshot: {
+      id: "accepted-snapshot",
+      sourceSha256: "a".repeat(64),
+      recordCount: 100,
+      activatedAt: "2026-08-16T00:00:00.000Z",
+    },
+    lastAttempt: {
+      status: "failed",
+      checkedAt: "2026-08-17T00:00:00.000Z",
+      message: "Refresh failed after the accepted snapshot was retained.",
+    },
+  };
+
+  assert.equal(canServe(accepted, now), true);
+  assert.equal(canServe({ ...accepted, status: "current" }, now), true);
+  assert.equal(canServe({ ...accepted, status: "unavailable" }, now), false);
+  assert.equal(canServe({ ...accepted, snapshot: null }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, id: " " },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, sourceSha256: " " },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, sourceSha256: "not-a-sha256" },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, recordCount: 0 },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, recordCount: Number.MAX_SAFE_INTEGER + 1 },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, activatedAt: null },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, activatedAt: "not-a-date" },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, activatedAt: "2026-08-18T00:00:00.000Z" },
+  }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    snapshot: { ...accepted.snapshot, activatedAt: "2026-08-16T12:00:00.000Z" },
+  }, now), false);
+  assert.equal(canServe({ ...accepted, lastCheckedAt: "not-a-date" }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    lastCheckedAt: "2026-08-18T00:00:00.000Z",
+  }, now), false);
+  assert.equal(canServe(null, now), false);
+});
+
+test("SRES stale-snapshot controls and notice remain available to every role", () => {
+  const source = fs.readFileSync(
+    path.resolve("src/components/CreditexSresCalculator.tsx"),
+    "utf8",
+  );
+  const productPicker = source.slice(
+    source.indexOf("<legend>Approved product"),
+    source.indexOf(': form.technology === "solar_battery"'),
+  );
+  assert.doesNotMatch(productPicker, /registry\?\.status !== "current"/);
+  assert.equal(
+    productPicker.match(/!creditexSresRegistryCanServeCalculator\(registry\)/g)?.length,
+    4,
+  );
+  assert.match(source, /last accepted CER snapshot checked/);
+  assert.match(source, /calculator stays available during refresh/);
+  assert.match(
+    source,
+    /final certificate and eligibility checks remain separate/,
+  );
+  assert.match(
+    source,
+    /<small className=\{styles\.productRegistryNotice\} role="status">/,
+  );
+  assert.doesNotMatch(
+    source.slice(
+      source.indexOf("setLookupBusy(true)"),
+      source.indexOf("try {", source.indexOf("setLookupBusy(true)")),
+    ),
+    /setRegistryNotice\(""\)/,
+  );
+  const failedLookup = source.slice(
+    source.indexOf("const markRegistryUnverified"),
+    source.indexOf("useEffect(() =>", source.indexOf("const markRegistryUnverified")),
+  );
+  assert.match(failedLookup, /setProducts\(\[\]\);[\s\S]*setRegistryNotice\(""\)/);
+});
+
 test("accepted SRES refreshes poll durably before reloading product choices", () => {
   const source = fs.readFileSync(
     path.resolve("src/components/CreditexSresCalculator.tsx"),

@@ -89,6 +89,18 @@ test("the calculator remains available from the last accepted registry snapshot"
     programEstimates.match(/allowStaleAcceptedSnapshot: true/g)?.length,
     4,
   );
+  assert.match(
+    stcProducts,
+    /searchCerSresProducts\(database, \{[\s\S]*allowStaleAcceptedSnapshot: true/,
+  );
+  assert.equal(
+    stcEstimates.match(/allowStaleAcceptedSnapshot: true/g)?.length,
+    2,
+  );
+  assert.match(
+    officialProducts,
+    /creditexSresRegistryCanServeCalculator\(status\)/,
+  );
   assert.match(productPicker, /result\.registry/);
   assert.match(productPicker, /last accepted official product snapshot checked/);
   assert.match(productPicker, /The calculator remains available/);

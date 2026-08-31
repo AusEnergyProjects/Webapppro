@@ -40,6 +40,7 @@ import {
   creditexCecBatteryConnectorConfigurationIssue,
 } from "@/lib/creditex-official-product-registry-definitions";
 import {
+  creditexSresRegistryCanServeCalculator,
   loadCerSresRegistryStatus,
   syncCerSresProductRegistry,
   type CreditexSresArtifactStore,
@@ -232,7 +233,7 @@ export async function GET(request: Request) {
               readiness: {
                 calculatorReady: isOfficialProductRegistryStatus(status)
                   ? creditexOfficialProductRegistryCanServeCalculator(status)
-                  : status.status === "current",
+                  : creditexSresRegistryCanServeCalculator(status),
                 refreshReady: registryCode === "cec-products"
                   ? creditexCecBatteryConnectorConfigurationIssue(
                       runtimeEnvironment,

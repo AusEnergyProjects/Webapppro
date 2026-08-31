@@ -73,6 +73,54 @@ type RegistryStatus = {
   } | null;
 };
 
+export function creditexSresRegistryCanServeCalculator(
+  registry: RegistryStatus | null,
+  now = new Date(),
+) {
+  if (
+    !registry
+    || (registry.status !== "current" && registry.status !== "stale")
+    || !registry.snapshot
+    || typeof registry.snapshot.id !== "string"
+    || !registry.snapshot.id.trim()
+    || typeof registry.snapshot.sourceSha256 !== "string"
+    || !/^[a-f0-9]{64}$/.test(registry.snapshot.sourceSha256)
+    || !Number.isSafeInteger(registry.snapshot.recordCount)
+    || registry.snapshot.recordCount < 1
+    || typeof registry.snapshot.activatedAt !== "string"
+    || !registry.snapshot.activatedAt.trim()
+    || typeof registry.lastCheckedAt !== "string"
+    || !registry.lastCheckedAt.trim()
+  ) {
+    return false;
+  }
+  const checkedAt = Date.parse(registry.lastCheckedAt);
+  const activatedAt = Date.parse(registry.snapshot.activatedAt);
+  const currentTime = now.getTime();
+  return Number.isFinite(checkedAt)
+    && Number.isFinite(activatedAt)
+    && Number.isFinite(currentTime)
+    && checkedAt <= currentTime
+    && activatedAt <= checkedAt;
+}
+
+function sresRegistryAvailabilityNotice(registry: RegistryStatus | null) {
+  if (
+    registry?.status !== "stale"
+    || !registry.lastCheckedAt
+    || !creditexSresRegistryCanServeCalculator(registry)
+  ) {
+    return "";
+  }
+  const checkedDate = new Date(registry.lastCheckedAt)
+    .toLocaleDateString("en-AU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  return `Using the last accepted CER snapshot checked ${checkedDate}. The calculator stays available during refresh; final certificate and eligibility checks remain separate.`;
+}
+
 type SresRegistryStatusPoll = Readonly<{
   generation: number;
   deadlineAt: number;
@@ -336,6 +384,7 @@ export function CreditexSresCalculator({
   );
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [registry, setRegistry] = useState<RegistryStatus | null>(null);
+  const [registryNotice, setRegistryNotice] = useState("");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [lookupVersion, setLookupVersion] = useState(0);
@@ -405,6 +454,7 @@ export function CreditexSresCalculator({
     dispatchProductCascade({ type: "reset", reason: "registry_error" });
     setProductFacets(EMPTY_PRODUCT_FACETS);
     setProducts([]);
+    setRegistryNotice("");
     setRegistry((current) => current
       ? { ...current, status: "stale" }
       : {
@@ -451,6 +501,7 @@ export function CreditexSresCalculator({
         );
         if (nextSnapshotId) registrySnapshotRef.current = nextSnapshotId;
         setRegistry(nextRegistry);
+        setRegistryNotice(sresRegistryAvailabilityNotice(nextRegistry));
         const rawFacets = result.facets as Partial<ProductFacets> | undefined;
         const nextFacets: ProductFacets = registeredTechnology(form.technology)
           ? {
@@ -628,6 +679,7 @@ export function CreditexSresCalculator({
         const nextRegistry = (statusResult.registry || null) as
           RegistryStatus | null;
         setRegistry(nextRegistry);
+        setRegistryNotice(sresRegistryAvailabilityNotice(nextRegistry));
         const pollState = creditexSresRegistryPollState(
           nextRegistry,
           continuationResult.refreshQueued,
@@ -704,6 +756,7 @@ export function CreditexSresCalculator({
         setProducts([]);
       }
       setRegistry(nextRegistry);
+      setRegistryNotice(sresRegistryAvailabilityNotice(nextRegistry));
       setRefreshNotice(
         nextRegistry?.status === "current"
           ? "The official CER product update was accepted. Current approved rows remain available while status checks continue automatically."
@@ -958,12 +1011,20 @@ export function CreditexSresCalculator({
         {registeredTechnology(form.technology) ? (
           <fieldset className={styles.officialProductPicker}>
             <legend>Approved product {waterHeaterItems.length + 1}</legend>
+            {registryNotice && (
+              <small className={styles.productRegistryNotice} role="status">
+                {registryNotice}
+              </small>
+            )}
             {productFacets.categories.length > 1 && (
               <label>
                 Product type
                 <select
                   required
-                  disabled={lookupBusy || registry?.status !== "current"}
+                  disabled={
+                    lookupBusy
+                    || !creditexSresRegistryCanServeCalculator(registry)
+                  }
                   value={productCascade.category}
                   onChange={(event) => updateProductCascade({
                     type: "category",
@@ -985,7 +1046,7 @@ export function CreditexSresCalculator({
                 required
                 disabled={
                   lookupBusy
-                  || registry?.status !== "current"
+                  || !creditexSresRegistryCanServeCalculator(registry)
                   || !productCascade.category
                   || productFacets.brands.length === 0
                 }
@@ -1009,7 +1070,7 @@ export function CreditexSresCalculator({
                 required
                 disabled={
                   lookupBusy
-                  || registry?.status !== "current"
+                  || !creditexSresRegistryCanServeCalculator(registry)
                   || !productCascade.brand
                   || productFacets.models.length === 0
                 }
@@ -1032,7 +1093,10 @@ export function CreditexSresCalculator({
                 Approval
                 <select
                   required
-                  disabled={lookupBusy || registry?.status !== "current"}
+                  disabled={
+                    lookupBusy
+                    || !creditexSresRegistryCanServeCalculator(registry)
+                  }
                   value={productCascade.productKey}
                   onChange={(event) => updateProductCascade({
                     type: "record",

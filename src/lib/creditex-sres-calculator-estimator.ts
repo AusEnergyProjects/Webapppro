@@ -356,7 +356,10 @@ function quoteEstimate(
 export async function estimateCreditexSresQuote(
   db: D1Database,
   requestValue: unknown,
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    allowStaleAcceptedSnapshot?: boolean;
+  } = {},
 ): Promise<CreditexSresQuoteEstimate> {
   if (!isRecord(requestValue) || requestValue.estimatePurpose !== "quote") {
     requestError("Choose the quote estimate purpose.");

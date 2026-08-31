@@ -1667,17 +1667,52 @@ export async function ensureCerSresProductRegistryCurrent(
   return status;
 }
 
-type CurrentRegistryStatus = CreditexSresRegistryStatus & {
-  status: "current";
+type AcceptedRegistryStatus = CreditexSresRegistryStatus & {
+  status: "current" | "stale";
+  lastCheckedAt: string;
   snapshot: NonNullable<CreditexSresRegistryStatus["snapshot"]>;
 };
 
-async function requireCurrentRegistry(
+export function creditexSresRegistryCanServeCalculator(
+  status: CreditexSresRegistryStatus,
+  now = new Date(),
+) {
+  if (
+    (status.status !== "current" && status.status !== "stale")
+    || !status.snapshot
+    || !status.snapshot.id
+    || !/^[a-f0-9]{64}$/.test(status.snapshot.sourceSha256)
+    || !Number.isSafeInteger(status.snapshot.recordCount)
+    || status.snapshot.recordCount < 1
+    || !status.snapshot.activatedAt
+    || !DATE_PATTERN.test(status.snapshot.activatedOn || "")
+    || !status.lastCheckedAt
+  ) {
+    return false;
+  }
+  const checkedAt = Date.parse(status.lastCheckedAt);
+  const activatedAt = Date.parse(status.snapshot.activatedAt);
+  const currentTime = now.getTime();
+  return Number.isFinite(checkedAt)
+    && Number.isFinite(activatedAt)
+    && Number.isFinite(currentTime)
+    && checkedAt <= currentTime
+    && activatedAt <= checkedAt;
+}
+
+async function requireRegistrySnapshot(
   db: D1Database,
   now?: Date,
-): Promise<CurrentRegistryStatus> {
+  options: { allowStaleAcceptedSnapshot?: boolean } = {},
+): Promise<AcceptedRegistryStatus> {
   const status = await loadCerSresRegistryStatus(db, { now });
-  if (status.status !== "current" || !status.snapshot) {
+  if (
+    !creditexSresRegistryCanServeCalculator(status, now)
+    || (
+      status.status === "stale"
+      && !options.allowStaleAcceptedSnapshot
+    )
+  ) {
     return fail(
       status.status === "stale"
         ? "SRES_PRODUCT_REGISTRY_STALE"
@@ -1688,7 +1723,7 @@ async function requireCurrentRegistry(
         : "No current official product registry is available yet.",
     );
   }
-  return status as CurrentRegistryStatus;
+  return status as AcceptedRegistryStatus;
 }
 
 const SRES_PRODUCT_CATEGORIES = {
@@ -1824,6 +1859,7 @@ export async function searchCerSresProducts(
     limit?: number;
     now?: Date;
     cascade?: boolean;
+    allowStaleAcceptedSnapshot?: boolean;
   },
 ) {
   await ensureCreditexProductRegistrySchemaGuards(db);
@@ -1877,7 +1913,9 @@ export async function searchCerSresProducts(
     EXACT_PRODUCT_MAXIMUM_RECORDS,
     Math.max(1, Math.floor(input.limit || 30)),
   );
-  const registry = await requireCurrentRegistry(db, input.now);
+  const registry = await requireRegistrySnapshot(db, input.now, {
+    allowStaleAcceptedSnapshot: input.allowStaleAcceptedSnapshot,
+  });
   const bindings = effectiveProductBindings(
     input.technology,
     installationDate,
@@ -2037,10 +2075,15 @@ async function resolveRegisteredProduct(
     productKey: string;
     installationDate: string;
     now?: Date;
+    allowStaleAcceptedSnapshot?: boolean;
   },
-  currentRegistry?: CurrentRegistryStatus,
+  currentRegistry?: AcceptedRegistryStatus,
 ) {
-  const registry = currentRegistry || await requireCurrentRegistry(db, input.now);
+  const registry = currentRegistry || await requireRegistrySnapshot(
+    db,
+    input.now,
+    { allowStaleAcceptedSnapshot: input.allowStaleAcceptedSnapshot },
+  );
   const productKey = String(input.productKey || "").trim();
   if (!/^cer-[a-z0-9-]+:\d+$/.test(productKey) || productKey.length > 100) {
     return fail(
@@ -2383,7 +2426,7 @@ export async function searchCerSresOfficialProducts(
       sourceArtifact: await artifact,
     });
   }));
-  const verifiedRegistry = await requireCurrentRegistry(db, input.now);
+  const verifiedRegistry = await requireRegistrySnapshot(db, input.now);
   if (
     verifiedRegistry.snapshot.id !== registry.snapshot.id
     || verifiedRegistry.lastCheckedAt !== registry.lastCheckedAt
@@ -2419,7 +2462,10 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]) 
 export async function estimateCreditexStcsFromRegistry(
   db: D1Database,
   requestValue: unknown,
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    allowStaleAcceptedSnapshot?: boolean;
+  } = {},
 ): Promise<CreditexStcEstimate & {
   resolution?: Record<string, unknown>;
   resolvedReceiptHash?: string;
@@ -2440,7 +2486,9 @@ export async function estimateCreditexStcsFromRegistry(
       "ratedCapacityKw",
       "postcode",
     ]);
-    const registry = await requireCurrentRegistry(db, options.now);
+    const registry = await requireRegistrySnapshot(db, options.now, {
+      allowStaleAcceptedSnapshot: options.allowStaleAcceptedSnapshot,
+    });
     const postcode = resolveCerSresPostcode("solar_pv", requestValue.postcode);
     const estimate = estimateCreditexStcs({
       technology,
@@ -2485,6 +2533,7 @@ export async function estimateCreditexStcsFromRegistry(
       productKey: String(requestValue.productKey || ""),
       installationDate: String(requestValue.installationDate || ""),
       now: options.now,
+      allowStaleAcceptedSnapshot: options.allowStaleAcceptedSnapshot,
     });
     const postcode = resolveCerSresPostcode(
       typedTechnology,

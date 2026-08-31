@@ -206,6 +206,30 @@ test("input invalidation clears stale certificate value and trade action state",
   );
 });
 
+test("governed calculators retain a verified accepted snapshot during refresh", () => {
+  const canServe = governedModule.creditexGovernedRegistryCanServeCalculator;
+  const now = new Date("2026-08-17T00:00:00.000Z");
+  const accepted = {
+    registryCode: "veu-approved-products",
+    status: "stale",
+    snapshotId: "accepted-snapshot",
+    sourceSha256: "a".repeat(64),
+    recordCount: 76_328,
+    lastCheckedAt: "2026-08-16T00:00:00.000Z",
+  };
+  assert.equal(canServe(accepted, now), true);
+  assert.equal(canServe({ ...accepted, status: "current" }, now), true);
+  assert.equal(canServe({ ...accepted, status: "unavailable" }, now), false);
+  assert.equal(canServe({ ...accepted, snapshotId: "" }, now), false);
+  assert.equal(canServe({ ...accepted, sourceSha256: "accepted" }, now), false);
+  assert.equal(canServe({ ...accepted, recordCount: 0 }, now), false);
+  assert.equal(canServe({ ...accepted, lastCheckedAt: "not-a-date" }, now), false);
+  assert.equal(canServe({
+    ...accepted,
+    lastCheckedAt: "2026-08-18T00:00:00.000Z",
+  }, now), false);
+});
+
 test("BESS2 asks for the onboarding date while every other NSW activity keeps the installation date", () => {
   const activities = nswCatalogueModule.CREDITEX_NSW_PROGRAM_DEFINITIONS
     .flatMap((program) => program.activities);

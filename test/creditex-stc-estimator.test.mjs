@@ -528,9 +528,15 @@ test("the protected estimate route is same-origin, authenticated, bounded and no
     routeSource,
     /requireCreditexCalculatorAccess\(request, database, \{\s*allowPublicQuote: estimatePurpose === "quote",\s*\}\)/,
   );
-  assert.match(routeSource, /estimateCreditexStcsFromRegistry\(database, body\)/);
+  assert.match(
+    routeSource,
+    /estimateCreditexStcsFromRegistry\(database, body, \{\s*allowStaleAcceptedSnapshot: true/,
+  );
   assert.match(routeSource, /estimatePurpose === "quote"/);
-  assert.match(routeSource, /estimateCreditexSresQuote\(database, body\)/);
+  assert.match(
+    routeSource,
+    /estimateCreditexSresQuote\(database, body, \{\s*allowStaleAcceptedSnapshot: true/,
+  );
   assert.doesNotMatch(routeSource, /export async function (GET|PUT|PATCH|DELETE)/);
   assert.doesNotMatch(
     routeSource,
