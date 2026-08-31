@@ -4,6 +4,7 @@ const MAX_CAS_ATTEMPTS = 16;
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const REQUEST_IDEMPOTENCY_MS = 10 * MINUTE_MS;
+const MIN_IN_FLIGHT_LEASE_MS = 120_000;
 
 export const SURGE_USAGE_GUARD_ENV = {
   secret: "SURGE_USAGE_GUARD_SECRET",
@@ -25,7 +26,7 @@ export const SURGE_USAGE_GUARD_DEFAULTS = {
   globalMinuteLimit: 120,
   globalInFlightLimit: 20,
   globalDailyMicroUsdLimit: 100_000_000,
-  inFlightLeaseMs: 70_000,
+  inFlightLeaseMs: MIN_IN_FLIGHT_LEASE_MS,
   requestIdempotencyMs: REQUEST_IDEMPOTENCY_MS,
 } as const;
 
@@ -187,7 +188,7 @@ function usageConfiguration(env: SurgeUsageEnvironment): SurgeUsageConfiguration
     SURGE_USAGE_GUARD_DEFAULTS.globalDailyMicroUsdLimit,
     production,
   );
-  const inFlightLeaseMs = positiveInteger(
+  const configuredInFlightLeaseMs = positiveInteger(
     env,
     SURGE_USAGE_GUARD_ENV.inFlightLeaseMs,
     SURGE_USAGE_GUARD_DEFAULTS.inFlightLeaseMs,
@@ -201,8 +202,9 @@ function usageConfiguration(env: SurgeUsageEnvironment): SurgeUsageConfiguration
     || globalMinuteLimit === null
     || globalInFlightLimit === null
     || globalDailyMicroUsdLimit === null
-    || inFlightLeaseMs === null
+    || configuredInFlightLeaseMs === null
   ) return null;
+  const inFlightLeaseMs = Math.max(configuredInFlightLeaseMs, MIN_IN_FLIGHT_LEASE_MS);
   return {
     secret,
     clientMinuteLimit,

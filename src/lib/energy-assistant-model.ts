@@ -170,7 +170,7 @@ export type SurgeModelRequestEstimate = {
   model: "gpt-5.6-sol";
   serializedBodyBytes: number;
   repairSerializedBodyBytes: number;
-  maxProviderCalls: 1 | 2;
+  maxProviderCalls: 1 | 3;
   maxOutputTokens: 1_600 | 2_000;
   worstCaseMicroUsd: number;
 };
@@ -217,12 +217,14 @@ type SafeModelRepairStage = (typeof SAFE_MODEL_REPAIR_STAGES)[number];
 const SAFE_MODEL_REPAIR_STAGE_SET = new Set<SurgeModelFailureStage>(SAFE_MODEL_REPAIR_STAGES);
 const SURGE_MODEL_REPAIR_STAGE = Symbol("surge-model-repair-stage");
 const SURGE_MODEL_REJECTION_REPORTED = Symbol("surge-model-rejection-reported");
-const SURGE_MODEL_SECOND_ATTEMPT_USED = Symbol("surge-model-second-attempt-used");
+const SURGE_MODEL_REPAIR_ATTEMPT_USED = Symbol("surge-model-repair-attempt-used");
+const SURGE_MODEL_TRANSIENT_RETRY_USED = Symbol("surge-model-transient-retry-used");
 
 type SurgeInternalModelDependencies = SurgeModelDependencies & {
   [SURGE_MODEL_REPAIR_STAGE]?: SafeModelRepairStage;
   [SURGE_MODEL_REJECTION_REPORTED]?: boolean;
-  [SURGE_MODEL_SECOND_ATTEMPT_USED]?: boolean;
+  [SURGE_MODEL_REPAIR_ATTEMPT_USED]?: boolean;
+  [SURGE_MODEL_TRANSIENT_RETRY_USED]?: boolean;
 };
 
 const RESPONSE_SCHEMA = {
@@ -1690,7 +1692,7 @@ function answerMisattributesBetweenPaneMoistureToVentilation(
 }
 
 const DECISION_VERDICT_QUESTION_PATTERN = /\b(?:worth(?:while)?|fair|good (?:value|deal|idea)|better|best|should (?:i|we) (?:get|buy|install|add|choose|replace|upgrade|switch))\b/i;
-const DECISION_VERDICT_ANSWER_PATTERN = /(?:^|[.!?]\s+)(?:possibl(?:e|y)|not yet\b[^.!?]{0,45}\b(?:good (?:value|deal|idea)|fair|reasonable|worth(?:while)?))\b|\b(?:yes|no|worth(?:while)?|fair|reasonable|good value|suit(?:able)?|sensible|make sense|better|best|likely|unlikely|only if|depends?|not (?:automatically|usually)|usually not|cheaper|dearer|adequate|generous|oversized|larger|smaller|choose|install|start with)\b/i;
+const DECISION_VERDICT_ANSWER_PATTERN = /(?:^|[.!?]\s+)(?:(?:overall[,:]?\s+)?(?:it\s+(?:is|looks)\s+)?(?:possibl(?:e|y)|not yet\b[^.!?]{0,45}\b(?:good (?:value|deal|idea)|fair|reasonable|worth(?:while)?)))\b|\b(?:yes|no|worth(?:while)?|fair|reasonable|good value|suit(?:able)?|sensible|make sense|better|best|likely|unlikely|only if|depends?|not (?:automatically|usually)|usually not|cheaper|dearer|adequate|generous|oversized|larger|smaller|choose|install|start with)\b/i;
 const INFORMATION_RETRIEVAL_QUESTION_PATTERN = /\bwhat\b[^.!?]{0,80}\b(?:details?|documents?|information|records?|specifications?)\b[^.!?]{0,45}\bshould (?:i|we) get\b/i;
 const VALUE_RETRIEVAL_QUESTION_PATTERN = /\bwhat(?:'s| is| are)\b[^.!?]{0,100}\bworth\b|\bhow much\b[^.!?]{0,100}\bworth\b/i;
 
@@ -3211,10 +3213,10 @@ function prepareProviderRequest(
   );
   let repairSerializedBodyBytes = 0;
   let repairCallMicroUsd = 0;
-  const maxProviderCalls: 1 | 2 = !selectedRepairStage && modelRepairIsPossible(request)
-    ? 2
+  const maxProviderCalls: 1 | 3 = !selectedRepairStage && modelRepairIsPossible(request)
+    ? 3
     : 1;
-  if (maxProviderCalls === 2) {
+  if (maxProviderCalls === 3) {
     repairSerializedBodyBytes = Math.max(...SAFE_MODEL_REPAIR_STAGES.map((stage) => (
       new TextEncoder().encode(JSON.stringify(providerBody(request, context, stage))).byteLength
     )));
@@ -3228,6 +3230,9 @@ function prepareProviderRequest(
         ? WEB_SEARCH_MICRO_USD_PER_CALL * MAX_WEB_SEARCH_TOOL_CALLS
         : 0);
   }
+  const reservedProviderCallsMicroUsd = maxProviderCalls === 3
+    ? firstCallMicroUsd + repairCallMicroUsd + Math.max(firstCallMicroUsd, repairCallMicroUsd)
+    : firstCallMicroUsd;
   const estimate: SurgeModelRequestEstimate = {
     model: SUPPORTED_MODEL,
     serializedBodyBytes,
@@ -3235,7 +3240,7 @@ function prepareProviderRequest(
     maxProviderCalls,
     maxOutputTokens,
     worstCaseMicroUsd: Math.ceil(
-      (firstCallMicroUsd + repairCallMicroUsd) * COST_SAFETY_MARGIN_MULTIPLIER,
+      reservedProviderCallsMicroUsd * COST_SAFETY_MARGIN_MULTIPLIER,
     ),
   };
   return { context, estimate, serializedBody };
@@ -3287,7 +3292,8 @@ export async function generateSurgeModelAnswer(
   request = scopedSurgeModelRequest(request);
   const internalDependencies = dependencies as SurgeInternalModelDependencies;
   const repairStage = internalDependencies[SURGE_MODEL_REPAIR_STAGE];
-  const secondAttemptUsed = Boolean(internalDependencies[SURGE_MODEL_SECOND_ATTEMPT_USED]);
+  const repairAttemptUsed = Boolean(internalDependencies[SURGE_MODEL_REPAIR_ATTEMPT_USED]);
+  const transientRetryUsed = Boolean(internalDependencies[SURGE_MODEL_TRANSIENT_RETRY_USED]);
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY;
   const enabled = dependencies.enabled ?? modelEnabled(process.env.SURGE_AI_ENABLED);
   if (!enabled) {
@@ -3319,13 +3325,13 @@ export async function generateSurgeModelAnswer(
     reportCandidate?: () => void,
   ): Promise<SurgeModelResult | null> => {
     if (!internalDependencies[SURGE_MODEL_REJECTION_REPORTED]) reportCandidate?.();
-    if (!secondAttemptUsed && safeModelRepairStage(stage) && modelRepairIsAllowed(request, stage)) {
+    if (!repairAttemptUsed && safeModelRepairStage(stage) && modelRepairIsAllowed(request, stage)) {
       clearTimeout(timeout);
       return generateSurgeModelAnswer(request, {
         ...dependencies,
         [SURGE_MODEL_REPAIR_STAGE]: stage,
         [SURGE_MODEL_REJECTION_REPORTED]: true,
-        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
+        [SURGE_MODEL_REPAIR_ATTEMPT_USED]: true,
       } as SurgeInternalModelDependencies);
     }
     reportFailure(dependencies, {
@@ -3337,12 +3343,12 @@ export async function generateSurgeModelAnswer(
   const retryInvalidProviderOutput = async (
     stage: SafeModelRepairStage,
   ): Promise<SurgeModelResult | null> => {
-    if (!secondAttemptUsed && modelRepairIsAllowed(request)) {
+    if (!repairAttemptUsed && modelRepairIsAllowed(request)) {
       clearTimeout(timeout);
       return generateSurgeModelAnswer(request, {
         ...dependencies,
         [SURGE_MODEL_REPAIR_STAGE]: stage,
-        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
+        [SURGE_MODEL_REPAIR_ATTEMPT_USED]: true,
       } as SurgeInternalModelDependencies);
     }
     reportFailure(dependencies, {
@@ -3354,11 +3360,11 @@ export async function generateSurgeModelAnswer(
   const retryTransientProviderFailure = async (
     failure: SurgeModelFailure,
   ): Promise<SurgeModelResult | null> => {
-    if (!secondAttemptUsed && modelRepairIsAllowed(request)) {
+    if (!transientRetryUsed && modelRepairIsAllowed(request)) {
       clearTimeout(timeout);
       return generateSurgeModelAnswer(request, {
         ...dependencies,
-        [SURGE_MODEL_SECOND_ATTEMPT_USED]: true,
+        [SURGE_MODEL_TRANSIENT_RETRY_USED]: true,
       } as SurgeInternalModelDependencies);
     }
     reportFailure(dependencies, failure);
