@@ -22,7 +22,6 @@ import {
   surgeProfileFieldValue,
   surgeProfileKnownAnswerCount,
   surgeProfileReviewedAnswerCount,
-  surgeStarterProfileContext,
   updateSurgeProfileField,
 } from "../src/lib/surge-assessor-profile.ts";
 
@@ -57,13 +56,14 @@ test("a fresh Surge profile asserts no material home facts", () => {
   assert.deepEqual(EMPTY_SURGE_STARTER_PROFILE.goals, []);
   assert.deepEqual(EMPTY_SURGE_STARTER_PROFILE.features, []);
   assert.deepEqual(EMPTY_SURGE_STARTER_PROFILE.reviewed, []);
+  assert.equal(EMPTY_SURGE_STARTER_PROFILE.timing, "not-sure");
   assert.equal(surgeProfileKnownAnswerCount(EMPTY_SURGE_STARTER_PROFILE), 0);
   assert.equal(surgeProfileReviewedAnswerCount(EMPTY_SURGE_STARTER_PROFILE), 0);
-  assert.equal(surgeStarterProfileContext(EMPTY_SURGE_STARTER_PROFILE), "");
   const session = surgeHomeEnergyPlannerSession(EMPTY_SURGE_STARTER_PROFILE);
   assert.equal(session.stage, 0);
   assert.equal(session.draft.postcode, "");
   assert.deepEqual(session.draft.features, []);
+  assert.equal(session.draft.timing, "");
   for (const profileField of SURGE_PROFILE_FIELDS) {
     assert.equal(surgeProfileFieldIsUnknown(EMPTY_SURGE_STARTER_PROFILE, profileField), true);
   }
@@ -224,6 +224,82 @@ test("planner restoration fills gaps without replacing reviewed Surge answers", 
   assert.ok(surgeProfileReviewedAnswerCount(restored) > reviewedBefore);
 });
 
+test("planner restoration stage-gates the seven shared answers and keeps reviewed Surge values", () => {
+  const draft = surgeHomeEnergyPlannerSession(EMPTY_SURGE_STARTER_PROFILE).draft;
+  const answers = {
+    ...draft,
+    postcode: "3006",
+    situation: "owner",
+    propertyType: "house",
+    occupants: "two",
+    occupancyPattern: "mostly-home",
+    energyUsePattern: "all-day",
+    gasConnection: "connected",
+    timing: "within_3_months",
+    billPressure: "higher-than-expected",
+    disruption: "some-work",
+    plannedWorks: "maintenance",
+  };
+
+  const stageOne = mergeHomeEnergyPlannerSessionIntoSurgeProfile(
+    EMPTY_SURGE_STARTER_PROFILE,
+    createHomeEnergyPlannerSession(answers, 1),
+  );
+  assert.equal(stageOne.occupancyPattern, "mostly-home");
+  assert.equal(stageOne.energyUsePattern, "not-sure");
+
+  const stageThree = mergeHomeEnergyPlannerSessionIntoSurgeProfile(
+    EMPTY_SURGE_STARTER_PROFILE,
+    createHomeEnergyPlannerSession(answers, 3),
+  );
+  assert.equal(stageThree.energyUsePattern, "all-day");
+  assert.equal(stageThree.gasConnection, "connected");
+  assert.equal(stageThree.timing, "not-sure");
+
+  let reviewed = answer(EMPTY_SURGE_STARTER_PROFILE, "supplemental:gasConnection", "bottled-lpg");
+  reviewed = mergeHomeEnergyPlannerSessionIntoSurgeProfile(
+    reviewed,
+    createHomeEnergyPlannerSession(answers, 4),
+  );
+  assert.equal(reviewed.gasConnection, "bottled-lpg");
+  assert.equal(reviewed.timing, "within_3_months");
+  assert.equal(reviewed.billPressure, "higher-than-expected");
+  assert.equal(reviewed.disruption, "some-work");
+  assert.equal(reviewed.plannedWorks, "maintenance");
+});
+
+test("an old completed v1 planner imports core facts without inventing supplemental answers", () => {
+  const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(
+    EMPTY_SURGE_STARTER_PROFILE,
+    {
+      version: 1,
+      stage: 4,
+      draft: {
+        postcode: "3006",
+        situation: "owner",
+        approvalContext: "not_sure",
+        propertyType: "house",
+        occupants: "two",
+        goals: ["lower-bills"],
+        features: ["comfort-too-cold", "single-glazing"],
+      },
+    },
+  );
+  assert.equal(restored.postcode, "3006");
+  assert.equal(restored.situation, "owner");
+  assert.equal(restored.propertyType, "house");
+  assert.deepEqual(restored.goals, ["lower-bills"]);
+  for (const key of [
+    "timing",
+    "occupancyPattern",
+    "energyUsePattern",
+    "billPressure",
+    "gasConnection",
+    "disruption",
+    "plannedWorks",
+  ]) assert.ok(restored[key] === "" || restored[key] === "not-sure", key);
+});
+
 test("planner restoration replaces reviewed placeholders when a real planner answer survives", () => {
   let reviewedEmpty = EMPTY_SURGE_STARTER_PROFILE;
   for (const step of SURGE_PROFILE_STEPS) reviewedEmpty = markSurgeProfileStepReviewed(reviewedEmpty, step);
@@ -264,7 +340,7 @@ test("only 45 confirmed answers complete Surge context, including after a planne
   const plannerDraft = surgeHomeEnergyPlannerSession(plannerProfile).draft;
   const plannerSession = createHomeEnergyPlannerSession(plannerDraft, 4);
   const restored = mergeHomeEnergyPlannerSessionIntoSurgeProfile(EMPTY_SURGE_STARTER_PROFILE, plannerSession);
-  assert.equal(restored.completed, false, "planner answers do not manufacture the remaining Surge-only context");
+  assert.equal(restored.completed, true, "the shared planner preserves every confirmed Surge context answer");
   assert.equal(restored.postcode, plannerDraft.postcode);
 });
 
@@ -292,32 +368,4 @@ test("a gas appliance infers mains gas until the customer explicitly selects bot
   profile = answer(profile, "feature:heating-cooling-systems", "gas-heating");
   assert.equal(profile.gasConnection, "bottled-lpg");
   assert.equal(surgeProfileFieldWasReviewed(profile, field("supplemental:gasConnection")), true);
-});
-
-test("the transmitted profile summary keeps whole critical facts inside its hard bound", () => {
-  let profile = EMPTY_SURGE_STARTER_PROFILE;
-  const critical = [
-    ["postcode", "3006"], ["situation", "owner"], ["goals", "improve-comfort"],
-    ["budgetRange", "2_10k"], ["supplemental:timing", "within_3_months"],
-    ["approvalContext", "strata"], ["supplemental:disruption", "minimal"],
-    ["supplemental:plannedWorks", "renovation"],
-  ];
-  for (const [id, value] of critical) profile = answer(profile, id, value);
-  for (const profileField of SURGE_PROFILE_FIELDS) {
-    if (profile.reviewed.includes(profileField.id)) continue;
-    if (profileField.kind === "postcode" || !profileField.options?.length) continue;
-    const value = profileField.options.find((option) =>
-      option.value !== profileField.unknownValue && option.value !== "not-sure")?.value;
-    if (value) profile = answer(profile, profileField.id, value);
-  }
-  profile = { ...profile, completed: true };
-  const context = surgeStarterProfileContext(profile);
-  assert.ok(context.length <= 1_050, `context is ${context.length} characters`);
-  for (const fact of [
-    "postcode=3006", "situation=owner", "goals=improve-comfort", "budgetRange=2_10k",
-    "timing=within_3_months", "approvalContext=strata", "disruption=minimal", "plannedWorks=renovation",
-  ]) assert.ok(context.includes(fact), `missing critical fact ${fact}`);
-  const factText = context.replace(/^Customer supplied home context: /, "")
-    .replace(/\. Treat newer chat details as corrections\.$/, "");
-  assert.ok(factText.split("; ").every((fact) => /^[A-Za-z0-9:-]+=[^;]+$/.test(fact)), "all facts remain whole");
 });

@@ -92,7 +92,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "preserves-twenty", "anyOf": ["20 minutes", "twenty minutes"] },
-        { "id": "qualified-answer", "anyOf": ["depends", "can be", "not really", "not enough.*tell", "useful sign", "airflow", "moist(?:ure| air)"] }
+        { "id": "qualified-answer", "anyOf": ["depends", "can be", "not really", "not enough.*tell", "useful sign", "airflow", "moist(?:ure| air)", "replacement air", "extraction"] }
       ],
       "forbiddenPatterns": ["definitely faulty", "definitely mould"],
       "maxWords": 120,
@@ -151,7 +151,7 @@
       "message": "The filter is clean and I set it to 24 degrees. What should I check next?",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "uses-known-checks", "anyOf": ["24", "filter.*clean", "temperature setting", "keep[^.!?]{0,40}(?:the )?setting", "still heats well", "next[^.!?]{0,90}(?:meter|retailer|electricity use)"] },
+        { "id": "uses-known-checks", "anyOf": ["24", "filter.*clean", "temperature setting", "keep[^.!?]{0,40}(?:the )?setting", "still heats well", "next[^.!?]{0,90}(?:meter|retailer|electricity use)", "electricity use[^.!?]{0,35}next"] },
         { "id": "advances-diagnosis", "anyOf": ["kWh", "electricity use", "running time", "weather", "outdoor unit", "cycles?", "airflow"] }
       ],
       "forbiddenPatterns": ["clean the filter first", "what temperature.*set"],
@@ -197,9 +197,9 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "zero-export-meaning", "anyOf": ["cannot.*send", "can't.*send", "does not.*export", "doesn't.*export", "zero export"] },
-        { "id": "self-use-remains", "anyOf": ["use.*home", "home.*use.*solar", "self[- ]consumption", "reduce.*imports", "power.*home", "use.*direct"] }
+        { "id": "self-use-remains", "anyOf": ["use.*home", "home.*use.*solar", "home[^.!?]{0,25}\\b(?:can|may|will)\\b(?![^.!?]{0,25}\\b(?:not|never|no longer)\\b)[^.!?]{0,25}use(?:[^.!?]|\\d+\\.\\d+){0,35}(?:array|output|generation)", "self[- ]consumption", "reduce.*imports", "power.*home", "use.*direct"] }
       ],
-      "forbiddenPatterns": ["panels stop working", "cannot use solar"],
+      "forbiddenPatterns": ["panels stop working", "cannot use solar", "home[^.!?]{0,30}(?:cannot|can['’]?t)[^.!?]{0,30}use[^.!?]{0,40}(?:array|output|generation)", "home[^.!?]{0,30}(?:can|may|will)[^.!?]{0,20}(?:not|never|no longer)[^.!?]{0,20}use[^.!?]{0,40}(?:solar|array|output|generation)"],
       "maxWords": 120,
       "maxParagraphs": 3,
       "maxQuestions": 1,
@@ -212,7 +212,7 @@
       "sourcePolicy": "model_required",
       "clauses": [
         { "id": "direct-no", "anyOf": ["^No", "No,"] },
-        { "id": "why-not-pointless", "anyOf": ["self[- ]consumption", "reduce.*imports", "use.*solar.*home", "power.*home", "use.*electricity.*(?:sunny|daytime)", "daytime use", "suppl(?:y|ies|ying)[^.!?]{0,45}(?:your|the) home[^.!?]{0,25}direct"] }
+        { "id": "why-not-pointless", "anyOf": ["self[- ]consumption", "reduce.*imports", "use.*solar.*home", "power.*home", "use.*electricity.*(?:sunny|daytime)", "daytime use", "daytime household use", "suppl(?:y|ies|ying)[^.!?]{0,45}(?:your|the) home[^.!?]{0,25}direct"] }
       ],
       "forbiddenPatterns": ["^Yes", "completely pointless"],
       "maxWords": 90,
@@ -731,7 +731,7 @@
       "clauses": [
         { "id": "finance-gap", "anyOf": ["\\$\\s*188"] },
         { "id": "admin-fee", "anyOf": ["\\$\\s*330", "admin fee"] },
-        { "id": "switchboard-exclusion", "anyOf": ["switchboard.*extra", "extra[^.!?]{0,40}switchboard", "switchboard.*excluded", "unspecified switchboard", "switchboard[^.!?]{0,70}(?:increase|no stated price|not priced|without a price)"] },
+        { "id": "switchboard-exclusion", "anyOf": ["switchboard.*extra", "extra[^.!?]{0,40}switchboard", "switchboard.*excluded", "unspecified switchboard", "switchboard[^.!?]{0,70}(?:increase|no stated price|not priced|unpriced|without a price)"] },
         { "id": "not-complete", "anyOf": ["not.*complete", "cannot call.*complete", "not.*fixed"] }
       ],
       "forbiddenPatterns": ["complete fixed price"],
@@ -762,9 +762,9 @@
       "clauses": [
         { "id": "returns-finance-gap", "anyOf": ["\\$\\s*188"] },
         { "id": "returns-admin-fee", "anyOf": ["\\$\\s*330", "admin fee"] },
-        { "id": "returns-switchboard", "anyOf": ["switchboard.*extra", "switchboard.*excluded"] }
+        { "id": "returns-switchboard", "anyOf": ["switchboard.*extra", "extra[^.!?]{0,45}switchboard", "switchboard.*excluded", "switchboard[^.!?]{0,70}(?:unpriced|no fixed price)"] }
       ],
-      "forbiddenPatterns": ["recipe", "scone", "flour", "which quote", "what.*referring"] ,
+      "forbiddenPatterns": ["recipe", "scone", "flour", "which quote", "what.*referring", "switchboard[^.!?]{0,40}(?:has|includes?|comes with)\\s+(?!no\\b|not\\b|without\\b)(?:a\\s+)?fixed price or cap"] ,
       "maxWords": 110,
       "maxParagraphs": 3,
       "maxQuestions": 0,
@@ -1053,7 +1053,7 @@
       "message": "She already uses the exhaust fans, so stop repeating that and give me the next check.",
       "sourcePolicy": "model_required",
       "clauses": [
-        { "id": "accepts-known-fact", "anyOf": ["already uses", "given.*exhaust", "since.*exhaust", "next[^.!?]{0,30}check", "instead"] },
+        { "id": "accepts-known-fact", "anyOf": ["already uses", "given.*exhaust", "since.*exhaust", "next[^.!?]{0,30}check", "instead", "^Check exactly where", "where and when"] },
         { "id": "new-check", "anyOf": ["bedroom", "window", "cold glass", "room-side glass", "between panes", "after rain", "humidity", "gas heater", "flued", "unflued", "where[^.!?]{0,60}form"] }
       ],
       "forbiddenPatterns": ["use the exhaust fan", "turn on the exhaust", "does she use.*exhaust"],

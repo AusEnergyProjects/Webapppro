@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   classifySurgeConversationTurn,
   emptySurgeConversationState,
+  filterSurgeRecentTurnsForFrame,
   isSurgeContextDependentMessage,
   mergeSurgeConversationFacts,
   parseSurgeConversationState,
@@ -15,10 +16,12 @@ import {
   surgeConversationTopicFor,
   surgeConversationTopicsAreCompatible,
   SURGE_CONVERSATION_STATE_VERSION,
+  SURGE_HOME_COMFORT_INTENT_PATTERN,
   SURGE_MAX_FACTS,
   SURGE_MAX_LEDGER_BYTES,
   SURGE_MAX_LEDGER_DECISIONS,
   SURGE_MAX_LEDGER_OPEN_ITEMS,
+  SURGE_PLAN_CONTEXT_CORRECTION_VALUES,
   updateSurgeConversationLedger,
 } from "../src/lib/energy-assistant-conversation.ts";
 import { surgeRecurringFinanceConversationFacts } from "../src/lib/energy-assistant.ts";
@@ -45,6 +48,7 @@ function recordLedgerTurn(current, {
   planFacts = [],
   facts = [],
   derivedFacts = [],
+  savedHomeCorrectionFacts = [],
 }) {
   return updateSurgeConversationLedger(current, {
     message,
@@ -59,6 +63,7 @@ function recordLedgerTurn(current, {
       facts,
     },
     derivedFacts,
+    savedHomeCorrectionFacts,
   });
 }
 
@@ -128,6 +133,24 @@ test("conversation parser accepts bounded state and the latest duplicate fact wi
     pendingQuestion: "What is the postcode?",
     lastAnswerSummary: "Explained why location changes the answer.",
   });
+});
+
+test("conversation parser accepts only bounded plan-context correction tombstones", () => {
+  const corrections = ["comfort_moisture_resolved", "glazing_changed"];
+  const parsed = parseSurgeConversationState(state({ planContextCorrections: corrections }));
+  assert.deepEqual(parsed.planContextCorrections, corrections);
+
+  for (const planContextCorrections of [
+    ["comfort_moisture_resolved", "comfort_moisture_resolved"],
+    ["unknown_correction"],
+    [...SURGE_PLAN_CONTEXT_CORRECTION_VALUES, "unknown_correction"],
+  ]) {
+    assert.equal(
+      parseSurgeConversationState(state({ planContextCorrections })),
+      null,
+    );
+  }
+  assert.equal(parseSurgeConversationState(state()).planContextCorrections, undefined);
 });
 
 test("conversation parser trims values and normalises an empty active topic to general", () => {
@@ -482,6 +505,24 @@ test("bathroom and extractor fan wording routes to ventilation", () => {
   ]) {
     assert.equal(surgeConversationTopicFor(message), "draughts_ventilation", message);
   }
+});
+
+test("whole-home warmth symptoms route to the broader comfort decision", () => {
+  for (const message of [
+    "great idea, also i find it hard to keep the house warm sometimes",
+    "The home won't stay warm",
+    "This room always feels cold",
+    "How do I keep my house warm?",
+    "My house is cold",
+    "We can't keep our house warm",
+    "Why is my bedroom freezing?",
+  ]) {
+    assert.equal(surgeConversationTopicFor(message), "comfort_fabric", message);
+    assert.equal(SURGE_HOME_COMFORT_INTENT_PATTERN.test(message), true, message);
+  }
+  const batteryMessage = "My home battery sometimes gets cold outside. Is that normal?";
+  assert.equal(SURGE_HOME_COMFORT_INTENT_PATTERN.test(batteryMessage), false);
+  assert.equal(surgeConversationTopicFor(batteryMessage), "battery_vpp");
 });
 
 test("a next-check question keeps the corrected bathroom-fan decision and pending airflow check", () => {
@@ -2633,6 +2674,80 @@ test("max-shaped typed ledgers prune resolved history to the serialized byte bou
   assert.ok(parseSurgeConversationState(compacted));
 });
 
+test("ledger compaction pins exact saved-home updates through fact and decision limits", () => {
+  const savedPlanUpdate = {
+    key: "saved_plan_update_solar_changed",
+    value: "We installed a 6.6 kW solar system last month.",
+    source: "chat",
+    updatedTurn: 1,
+  };
+  const subjects = [
+    {
+      id: "saved_home",
+      kind: "saved_home",
+      label: "Saved home",
+      facts: [
+        savedPlanUpdate,
+        ...Array.from({ length: 117 }, (_, index) => ({
+          key: `fact_${String(index + 1).padStart(3, "0")}`,
+          value: `value_${String(index + 1).padStart(3, "0")}`,
+          source: "chat",
+          updatedTurn: index + 2,
+        })),
+      ],
+      lastTouchedTurn: 1,
+    },
+    ...Array.from({ length: 49 }, (_, index) => ({
+      id: `property_${index + 2}`,
+      kind: "property",
+      label: `Property ${index + 2}`,
+      facts: [],
+      lastTouchedTurn: index + 2,
+    })),
+  ];
+  const decisions = Array.from({ length: 50 }, (_, index) => ({
+    id: `decision_${index + 1}_solar`,
+    subjectIds: [subjects[index].id],
+    topic: "solar",
+    goal: `Review solar decision ${index + 1}`,
+    facts: [],
+    outcomeSummary: `Reviewed solar decision ${index + 1}.`,
+    openItems: [],
+    pendingQuestion: "",
+    status: "resolved",
+    lastTouchedTurn: index + 1,
+  }));
+  const atLimit = state({
+    planContextCorrections: ["solar_changed"],
+    ledger: {
+      turn: 50,
+      activeDecisionId: "decision_50_solar",
+      subjects,
+      decisions,
+    },
+  });
+
+  const compacted = recordLedgerTurn(atLimit, {
+    message: "Mum's home needs separate battery advice.",
+    activeTopic: "battery_vpp",
+    goal: "Review a battery for Mum's home",
+    answerSummary: "Started the separate battery review.",
+    intent: "topic_change",
+  });
+  const savedHome = compacted.ledger.subjects.find((subject) => subject.id === "saved_home");
+  const aggregateFacts = compacted.ledger.subjects.reduce(
+    (count, subject) => count + subject.facts.length,
+    compacted.ledger.decisions.reduce((count, decision) => count + decision.facts.length, 0),
+  );
+
+  assert.equal(compacted.ledger.decisions.some((decision) => decision.id === "decision_1_solar"), false);
+  assert.deepEqual(savedHome?.facts.find((fact) => fact.key === savedPlanUpdate.key), savedPlanUpdate);
+  assert.deepEqual(compacted.planContextCorrections, ["solar_changed"]);
+  assert.ok(aggregateFacts <= 120, `${aggregateFacts} exceeds the fact cap`);
+  assert.ok(new TextEncoder().encode(JSON.stringify(compacted.ledger)).byteLength <= SURGE_MAX_LEDGER_BYTES);
+  assert.ok(parseSurgeConversationState(compacted));
+});
+
 test("I rent rather than own is a correction that reuses the current decision", () => {
   let current = recordLedgerTurn(emptySurgeConversationState(), {
     message: "I own the home and I am reviewing a battery quote.",
@@ -3381,4 +3496,121 @@ test("labelled quote follow-ups retain prices and warranties through an equal-pr
     ],
   });
   assert.doesNotMatch(JSON.stringify(correctedDespiteGenericIntent), /\$7,400/);
+});
+
+test("a declarative same-home constraint keeps the active decision in the answer frame without merging the new topic", () => {
+  const firstMessage = "At my saved apartment, air comes under the front door and the single-glazed windows feel cold. I have $1,500. What should come first?";
+  const current = recordLedgerTurn(emptySurgeConversationState(), {
+    message: firstMessage,
+    activeTopic: "glazing_shading",
+    goal: firstMessage,
+    answerSummary: "Use the budget on the front-door draught and cold windows.",
+    planFacts: [{ key: "property_type", value: "Apartment or unit" }],
+    facts: [{ key: "budget", value: "$1,500" }],
+  });
+  const originalDecisionId = current.ledger.activeDecisionId;
+  const constraint = "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.";
+  const frame = selectSurgeConversationFrame(constraint, current, true);
+  const projected = projectSurgeConversationStateToFrame(constraint, current, true);
+
+  assert.equal(frame.decision?.id, originalDecisionId);
+  assert.match(frame.decision?.goal || "", /front door/i);
+  assert.match(JSON.stringify(frame.relatedDecisions), /\$1,500/);
+  assert.equal(projected?.goal, firstMessage);
+
+  const generalKnowledgeFrame = selectSurgeConversationFrame("What is an STC?", current, true);
+  assert.equal(generalKnowledgeFrame.decision, null);
+
+  const newHomeFrame = selectSurgeConversationFrame("Our new home already has solar.", current, true);
+  assert.equal(newHomeFrame.decision, null);
+  assert.deepEqual(newHomeFrame.subjects, []);
+
+  const updated = recordLedgerTurn(current, {
+    message: constraint,
+    activeTopic: "rcac",
+    goal: constraint,
+    answerSummary: "Keep the working split and retain the door and window priorities.",
+    intent: "new_question",
+  });
+  assert.notEqual(updated.ledger.activeDecisionId, originalDecisionId);
+  assert.equal(updated.ledger.decisions.some((decision) => decision.id === originalDecisionId), true);
+
+  const newHomeState = recordLedgerTurn(current, {
+    message: "Our new home already has solar.",
+    activeTopic: "solar",
+    goal: "Review solar at our new home",
+    answerSummary: "Kept the new home separate from the saved apartment.",
+    intent: "new_question",
+  });
+  const newHomeDecision = newHomeState.ledger.decisions.find(
+    (decision) => decision.id === newHomeState.ledger.activeDecisionId,
+  );
+  assert.deepEqual(newHomeDecision?.subjectIds, ["new_home"]);
+  assert.equal(newHomeState.ledger.decisions.some((decision) => decision.id === originalDecisionId), true);
+});
+
+test("same-home constraint history removes intervening inactive-property turns", () => {
+  const savedGoal = "Fix the saved-home door and windows within $1,500";
+  const current = state({
+    activeTopic: "glazing_shading",
+    goal: savedGoal,
+    pendingQuestion: "",
+    ledger: {
+      turn: 3,
+      activeDecisionId: "decision_saved_comfort",
+      subjects: [
+        { id: "saved_home", kind: "saved_home", label: "Saved home", facts: [], lastTouchedTurn: 3 },
+        { id: "mums_home", kind: "property", label: "Mum's home", facts: [], lastTouchedTurn: 2 },
+      ],
+      decisions: [
+        {
+          id: "decision_saved_comfort",
+          subjectIds: ["saved_home"],
+          topic: "glazing_shading",
+          goal: savedGoal,
+          facts: [{ key: "budget", value: "$1,500", source: "chat", updatedTurn: 1 }],
+          outcomeSummary: "Use the budget on the door and windows.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 3,
+        },
+        {
+          id: "decision_mum_battery",
+          subjectIds: ["mums_home"],
+          topic: "battery_vpp",
+          goal: "Review Mum's $9,000 battery quote",
+          facts: [{ key: "quoted_price", value: "$9,000", source: "chat", updatedTurn: 2 }],
+          outcomeSummary: "Kept Mum's battery quote separate.",
+          openItems: [],
+          pendingQuestion: "",
+          status: "resolved",
+          lastTouchedTurn: 2,
+        },
+      ],
+    },
+  });
+  const recentTurns = [
+    { role: "user", content: savedGoal },
+    { role: "assistant", content: "Use $1,500 on the saved-home door and windows." },
+    { role: "user", content: "Mum's home has a $9,000 battery quote." },
+    { role: "assistant", content: "I will keep Mum's battery quote separate." },
+    { role: "user", content: "Back to the first one." },
+    { role: "assistant", content: "Back to your saved home's door and windows." },
+    { role: "user", content: "Mum says her gas heater is expensive. Does that change what I should do at my apartment?" },
+    { role: "assistant", content: "No. Mum's heating is separate from your apartment." },
+    { role: "user", content: "Back to my home only." },
+    { role: "assistant", content: "Back to your saved-home plan only." },
+  ];
+  const filtered = filterSurgeRecentTurnsForFrame(
+    "My existing reverse-cycle split still heats properly, so I do not want to replace a working unit.",
+    current,
+    true,
+    recentTurns,
+  );
+  const text = JSON.stringify(filtered);
+  assert.match(text, /\$1,500/);
+  assert.match(text, /Back to the first one/i);
+  assert.match(text, /Back to my home only/i);
+  assert.doesNotMatch(text, /Mum|\$9,000|battery|gas heater/i);
 });
